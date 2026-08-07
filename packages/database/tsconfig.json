@@ -1,5 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "module": "CommonJS", "moduleResolution": "Node", "outDir": "dist", "rootDir": "." },
-  "include": ["src/**/*.ts", "prisma/seed.ts"]
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": [
+    "src/**/*.ts",
+    "prisma/seed.ts",
+    "prisma/seed-product-catalog.ts",
+    "prisma/seed-product-catalog-runner.ts"
+  ]
 }

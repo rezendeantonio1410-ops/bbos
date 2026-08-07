@@ -10,14 +10,22 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed-product-catalog-runner.ts",
+    "seed:demo": "tsx prisma/seed.ts",
+    "seed:cost-engine": "tsx prisma/seed-cost-engine.ts",
+    "report:production-variants": "tsx prisma/report-production-variant-backfill.ts",
+    "test:catalog": "tsx --test prisma/seed-product-catalog.test.ts"
   },
-  "dependencies": { "@prisma/client": "^6.14.0" },
+  "dependencies": {
+    "@prisma/client": "^6.14.0"
+  },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "prisma": "^6.14.0",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2"
   },
-  "prisma": { "seed": "tsx prisma/seed.ts" }
+  "prisma": {
+    "seed": "tsx prisma/seed-product-catalog-runner.ts"
+  }
 }

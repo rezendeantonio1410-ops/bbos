@@ -1,10 +1,24 @@
-node_modules
-.next
-dist
-.turbo
+node_modules/
+.next/
+dist/
+.turbo/
+coverage/
+packages/database/generated/
+
+# Local environment and credentials (keep .env.example tracked)
 .env
 .env.local
-coverage
+.env.*.local
+!.env.example
+
+# Logs and temporary artifacts
 *.log
+*.tmp
+*.temp
 *.tsbuildinfo
-packages/database/generated
+*.swp
+*.swo
+
+# macOS metadata
+.DS_Store
+docs/brand/bispo-brand-guidelines.pdf

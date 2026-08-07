@@ -3,13 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "types": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./product-presentation": {
+      "types": "./dist/product-presentation.d.ts",
+      "default": "./dist/product-presentation.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:cost-v2": "node --test tests/cost-engine-v2.mjs",
+    "test:products": "node --test tests/product-presentation.mjs",
+    "test:finished-goods": "node --test tests/finished-goods-inventory.mjs"
+    ,"test:sales-inventory": "node --test tests/sales-inventory-engine.mjs",
+    "test:cost-period": "node --test tests/cost-period-engine.mjs"
   },
-  "devDependencies": { "typescript": "^5.9.2" }
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
 }

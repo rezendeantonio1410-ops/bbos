@@ -1,5 +1,5 @@
-import { Coffee } from 'lucide-react';
+import Image from 'next/image';
 
 export function Logo({ compact = false }: { compact?: boolean }) {
-  return <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-forest-900 text-white"><Coffee size={20} strokeWidth={1.8} /></span>{!compact && <div><p className="font-[var(--font-manrope)] text-lg font-bold tracking-tight text-forest-950">BBOS</p><p className="text-[10px] font-semibold uppercase tracking-[.19em] text-stone-500">Bispo Coffees</p></div>}</div>;
+  return <div className="inline-flex bg-[#fff] px-3 py-2" aria-label="Bispo Coffee"><Image src="/brand/logo/bispo-logo-official.jpg" alt="Bispo Coffee - True Coffee" width={860} height={240} priority className={`${compact ? 'w-20' : 'w-36'} h-auto object-contain`} /></div>;
 }

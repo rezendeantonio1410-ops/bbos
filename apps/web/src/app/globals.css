@@ -5,12 +5,73 @@
 :root {
   color-scheme: light;
   --font-inter: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-manrope: Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-manrope: Montserrat, Inter, ui-sans-serif, system-ui, sans-serif;
+  --brand-ritual-black: #0A0A0A;
+  --brand-chinese-black: #0E191D;
+  --brand-whitt-sand: #EBEBEB;
+  --brand-platinum: #E0EAE9;
+  --surface-base: #FFFFFF;
+  --surface-card: #FFFFFF;
+  --surface-header: #FFFFFF;
+  --surface-sidebar: #FFFFFF;
+  --surface-page: #F3FAF8;
+  --surface-muted: #F7F9F8;
+  --surface-border: #E7ECEA;
+  --analytic-identity: #087568;
+  --analytic-positive: #16A06A;
+  --analytic-coffee: #C8923E;
+  --analytic-finance: #3E73A8;
+  --analytic-projection: #7867A9;
+  --analytic-attention: #E99A35;
+  --analytic-critical: #D95757;
 }
 * { border-color: theme('colors.stone.200'); }
-body { margin: 0; background: #f7f7f4; color: #1c211e; }
+body { margin: 0; background: var(--brand-platinum); color: var(--brand-ritual-black); }
 button, input { font: inherit; }
-::selection { background: #d7e5db; color: #10271d; }
+::selection { background: var(--brand-chinese-black); color: var(--brand-whitt-sand); }
+
+.executive-dashboard {
+  color: #111514;
+}
+
+.executive-dashboard [data-ui-card] {
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 6px 20px rgba(15, 30, 28, 0.04);
+}
+
+.executive-dashboard :is(.text-stone-950, .text-stone-900, .text-stone-800) {
+  color: #111514;
+}
+
+.executive-dashboard :is(.text-stone-600, .text-stone-500) {
+  color: #626b69;
+}
+
+.executive-dashboard .text-stone-400 {
+  color: #7a8381;
+}
+
+.industrial-dashboard {
+  color: #111514;
+}
+
+.industrial-dashboard [data-ui-card] {
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 6px 20px rgba(15, 30, 28, 0.04);
+}
+
+.industrial-dashboard :is(.text-stone-950, .text-stone-900, .text-stone-800) { color: #111514; }
+.industrial-dashboard :is(.text-stone-600, .text-stone-500) { color: #626b69; }
+.industrial-dashboard .text-stone-400 { color: #7a8381; }
+
+.home-command { color: #111514; }
+.home-command [data-ui-card] {
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 6px 20px rgba(15, 30, 28, 0.04);
+}
 
 @layer utilities {
   .text-balance { text-wrap: balance; }

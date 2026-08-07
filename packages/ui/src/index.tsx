@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
 const cx = (...values: Array<string | undefined | false>) => values.filter(Boolean).join(' ');
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cx('rounded-2xl border border-stone-200 bg-white shadow-card', className)} {...props} />;
+  return <div data-ui-card className={cx('rounded-2xl border border-stone-200 bg-white shadow-card', className)} {...props} />;
 }
 
 export function Button({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
