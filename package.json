@@ -1,0 +1,21 @@
+{
+  "name": "bbos",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write .",
+    "db:generate": "corepack pnpm --filter @bbos/database generate",
+    "db:migrate": "corepack pnpm --filter @bbos/database migrate",
+    "db:seed": "corepack pnpm --filter @bbos/database seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2"
+  }
+}

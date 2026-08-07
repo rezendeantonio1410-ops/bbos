@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  EXECUTIVE
+  INDUSTRIAL
+  FINANCE
+  SALES
+}
+
+enum CoffeeLotStatus {
+  RECEIVED
+  QUALITY_REVIEW
+  APPROVED
+  BLOCKED
+  CONSUMED
+}
+
+enum ProductionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum EventType {
+  RECEIPT
+  QUALITY_TEST
+  TRANSFER
+  ROAST
+  GRIND
+  PACK
+  LOSS
+  ADJUSTMENT
+}
+
+enum CostType {
+  RAW_MATERIAL
+  FREIGHT
+  LABOR
+  ENERGY
+  PACKAGING
+  TAX
+  OVERHEAD
+  OTHER
+}
+
+model Company {
+  id               String             @id @default(cuid())
+  name             String
+  tradeName        String
+  taxId            String             @unique
+  currency         String             @default("BRL")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  users            User[]
+  suppliers        Supplier[]
+  customers        Customer[]
+  coffeeLots       CoffeeLot[]
+  warehouses       Warehouse[]
+  blends           Blend[]
+  productionOrders ProductionOrder[]
+  products         FinishedProduct[]
+  salesOrders      SalesOrder[]
+  industrialEvents IndustrialEvent[]
+  costEvents       CostEvent[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(INDUSTRIAL)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+model Supplier {
+  id         String      @id @default(cuid())
+  companyId  String
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String
+  taxId      String?
+  city       String?
+  state      String?
+  coffeeLots CoffeeLot[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([companyId])
+}
+
+model Customer {
+  id          String       @id @default(cuid())
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  taxId       String?
+  segment     String?
+  salesOrders SalesOrder[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([companyId])
+}
+
+model Warehouse {
+  id               String             @id @default(cuid())
+  companyId        String
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name             String
+  code             String
+  type             String
+  coffeeLots       CoffeeLot[]
+  finishedProducts FinishedProduct[]
+  industrialEvents IndustrialEvent[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([companyId, code])
+}
+
+model CoffeeLot {
+  id               String             @id @default(cuid())
+  companyId        String
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId       String
+  supplier         Supplier           @relation(fields: [supplierId], references: [id])
+  warehouseId      String
+  warehouse        Warehouse          @relation(fields: [warehouseId], references: [id])
+  code             String
+  origin           String
+  harvest          String?
+  variety          String?
+  qualityScore     Decimal?            @db.Decimal(5, 2)
+  initialWeightKg  Decimal             @db.Decimal(14, 3)
+  currentWeightKg  Decimal             @db.Decimal(14, 3)
+  purchaseCost     Decimal             @db.Decimal(14, 2)
+  landedCost       Decimal             @db.Decimal(14, 2)
+  status           CoffeeLotStatus     @default(RECEIVED)
+  blendComponents  BlendComponent[]
+  industrialEvents IndustrialEvent[]
+  costEvents       CostEvent[]
+  receivedAt       DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([companyId, code])
+  @@index([supplierId, warehouseId])
+}
+
+model Blend {
+  id               String             @id @default(cuid())
+  companyId        String
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name             String
+  code             String
+  version          Int                @default(1)
+  active           Boolean            @default(true)
+  components       BlendComponent[]
+  productionOrders ProductionOrder[]
+  products         FinishedProduct[]
+  costEvents       CostEvent[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([companyId, code, version])
+}
+
+model BlendComponent {
+  id           String    @id @default(cuid())
+  blendId      String
+  blend        Blend     @relation(fields: [blendId], references: [id], onDelete: Cascade)
+  coffeeLotId  String
+  coffeeLot    CoffeeLot @relation(fields: [coffeeLotId], references: [id])
+  percentage   Decimal   @db.Decimal(5, 2)
+  createdAt    DateTime  @default(now())
+
+  @@unique([blendId, coffeeLotId])
+}
+
+model ProductionOrder {
+  id               String             @id @default(cuid())
+  companyId        String
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  blendId          String
+  blend            Blend              @relation(fields: [blendId], references: [id])
+  code             String
+  status           ProductionStatus   @default(PLANNED)
+  plannedWeightKg  Decimal            @db.Decimal(14, 3)
+  actualInputKg    Decimal?           @db.Decimal(14, 3)
+  actualOutputKg   Decimal?           @db.Decimal(14, 3)
+  plannedAt        DateTime
+  startedAt        DateTime?
+  completedAt      DateTime?
+  industrialEvents IndustrialEvent[]
+  costEvents       CostEvent[]
+  productLots      FinishedProduct[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([companyId, code])
+  @@index([blendId, status])
+}
+
+model FinishedProduct {
+  id                String            @id @default(cuid())
+  companyId         String
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  blendId           String
+  blend             Blend             @relation(fields: [blendId], references: [id])
+  productionOrderId String?
+  productionOrder   ProductionOrder?  @relation(fields: [productionOrderId], references: [id])
+  warehouseId       String
+  warehouse         Warehouse         @relation(fields: [warehouseId], references: [id])
+  sku               String
+  name              String
+  packageWeightG    Int
+  quantityOnHand    Int               @default(0)
+  standardPrice     Decimal           @db.Decimal(14, 2)
+  salesOrders       SalesOrder[]
+  costEvents        CostEvent[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([companyId, sku])
+}
+
+model SalesOrder {
+  id                String           @id @default(cuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId        String
+  customer          Customer         @relation(fields: [customerId], references: [id])
+  finishedProductId String?
+  finishedProduct   FinishedProduct? @relation(fields: [finishedProductId], references: [id])
+  code              String
+  status            SalesOrderStatus @default(DRAFT)
+  quantity          Int
+  unitPrice         Decimal          @db.Decimal(14, 2)
+  totalAmount       Decimal          @db.Decimal(14, 2)
+  orderedAt         DateTime         @default(now())
+  deliveredAt       DateTime?
+  costEvents        CostEvent[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([companyId, code])
+  @@index([customerId, status])
+}
+
+model IndustrialEvent {
+  id                String           @id @default(cuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productionOrderId String?
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  coffeeLotId       String?
+  coffeeLot         CoffeeLot?       @relation(fields: [coffeeLotId], references: [id])
+  warehouseId       String?
+  warehouse         Warehouse?       @relation(fields: [warehouseId], references: [id])
+  type              EventType
+  quantityKg        Decimal?         @db.Decimal(14, 3)
+  metadata          Json?
+  occurredAt        DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+
+  @@index([companyId, occurredAt])
+  @@index([productionOrderId])
+}
+
+model CostEvent {
+  id                String           @id @default(cuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  coffeeLotId       String?
+  coffeeLot         CoffeeLot?       @relation(fields: [coffeeLotId], references: [id])
+  blendId           String?
+  blend             Blend?           @relation(fields: [blendId], references: [id])
+  productionOrderId String?
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  finishedProductId String?
+  finishedProduct   FinishedProduct? @relation(fields: [finishedProductId], references: [id])
+  salesOrderId      String?
+  salesOrder        SalesOrder?      @relation(fields: [salesOrderId], references: [id])
+  type              CostType
+  amount            Decimal          @db.Decimal(14, 2)
+  quantityBasis     Decimal?         @db.Decimal(14, 3)
+  description       String
+  occurredAt        DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+
+  @@index([companyId, occurredAt])
+  @@index([coffeeLotId, blendId, productionOrderId, finishedProductId, salesOrderId])
+}
