@@ -13,6 +13,7 @@ import {
   Factory,
   FlaskConical,
   Gauge,
+  Globe2,
   House,
   LayoutDashboard,
   Menu,
@@ -40,6 +41,7 @@ const nav = [
   { href: "/produtos", label: "Produtos", icon: PackageCheck },
   { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { href: "/vendas", label: "Vendas", icon: BarChart3 },
+  { href: "/commerce", label: "Commerce", icon: Globe2 },
   { href: "/bi", label: "BI Executivo", icon: BrainCircuit },
   { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
   { href: "/custos", label: "Custos", icon: Calculator },
@@ -47,11 +49,9 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isExecutiveDashboard = pathname === "/dashboard";
-  const usesApprovedDashboardSurfaces = isExecutiveDashboard || pathname === "/dashboard-industrial" || pathname === "/home";
   return (
-    <div className={`min-h-screen lg:grid lg:grid-cols-[264px_1fr] ${usesApprovedDashboardSurfaces ? "bg-[#F3FAF8]" : "bg-[#E0EAE9]"}`}>
-      <aside className={`hidden border-r lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto ${usesApprovedDashboardSurfaces ? "border-[#E7ECEA] bg-white" : "border-stone-200 bg-white"}`}>
+    <div className="min-h-screen bg-[var(--surface-page)] lg:grid lg:grid-cols-[264px_1fr]">
+      <aside className="hidden border-r border-[var(--surface-border)] bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-6">
           <Logo />
           <button
@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active ? (usesApprovedDashboardSurfaces ? "bg-[#EDF7F5] text-forest-900" : "bg-forest-50 text-forest-900") : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"}`}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active ? "bg-[#F0F0ED] text-stone-950" : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"}`}
               >
                 <Icon size={18} strokeWidth={active ? 2.1 : 1.7} />
                 {label}
@@ -104,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
       </aside>
       <div className="min-w-0">
-        <header className={`sticky top-0 z-20 flex h-[72px] items-center justify-between border-b px-4 backdrop-blur md:px-8 ${usesApprovedDashboardSurfaces ? "border-[#E7ECEA] bg-white shadow-[0_1px_8px_rgba(15,30,28,.025)]" : "bg-white/90"}`}>
+        <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-[var(--surface-border)] bg-white px-4 shadow-[0_1px_8px_rgba(15,30,28,.025)] backdrop-blur md:px-8">
           <div className="flex items-center gap-3 lg:hidden">
             <button
               aria-label="Abrir menu"

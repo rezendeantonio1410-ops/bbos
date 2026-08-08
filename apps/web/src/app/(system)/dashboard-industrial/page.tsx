@@ -211,7 +211,7 @@ function MetricCard({
 
 function IndustrialKpi({ label, value, reference, change, icon: Icon, status = "on-track", href = "/producao" }: { label: string; value: string; reference: string; change: string; icon: typeof Factory; status?: PerformanceStatus; href?: string }) {
   const style = statuses[status];
-  return <Link href={href} className="group min-w-0"><Card className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><span className="grid size-8 place-items-center rounded-lg bg-[#EDF7F5] text-forest-800"><Icon size={15} strokeWidth={1.7}/></span><span className={`text-[10px] font-bold ${style.text}`}>{change}</span></div><p className="mt-3 truncate text-[11px] font-semibold text-stone-600">{label}</p><p className="mt-1 text-xl font-bold tracking-tight">{value}</p><div className="mt-2 flex items-end justify-between gap-2"><p className="truncate text-[10px] text-stone-500">{reference}</p><svg viewBox="0 0 50 14" className="h-3.5 w-12" aria-hidden="true"><polyline points="1,11 9,9 17,10 25,5 33,7 41,3 49,4" fill="none" stroke="#0D1B1E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div></Card></Link>;
+  return <Link href={href} className="group min-w-0"><Card className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><span className="grid size-8 place-items-center rounded-lg bg-[#F0F0ED] text-forest-800"><Icon size={15} strokeWidth={1.7}/></span><span className={`text-[10px] font-bold ${style.text}`}>{change}</span></div><p className="mt-3 truncate text-[11px] font-semibold text-stone-600">{label}</p><p className="mt-1 text-xl font-bold tracking-tight">{value}</p><div className="mt-2 flex items-end justify-between gap-2"><p className="truncate text-[10px] text-stone-500">{reference}</p><svg viewBox="0 0 50 14" className="h-3.5 w-12" aria-hidden="true"><polyline points="1,11 9,9 17,10 25,5 33,7 41,3 49,4" fill="none" stroke="#0D1B1E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div></Card></Link>;
 }
 
 function ProductionChart() {
@@ -437,7 +437,7 @@ export default function IndustrialDashboardPage() {
             Visão consolidada da operação industrial
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2"><div className="flex w-fit rounded-xl border border-[#E7ECEA] bg-white p-1">
+        <div className="flex flex-wrap items-center justify-end gap-2"><div className="flex w-fit rounded-xl border border-[#E7E7E3] bg-white p-1">
           {periodOptions.map((item) => (
             <button
               key={item.key}
@@ -448,7 +448,7 @@ export default function IndustrialDashboardPage() {
               {item.label}
             </button>
           ))}
-        </div><button className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><SlidersHorizontal size={14}/>Filtros</button><button className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><Download size={14}/>Exportar</button></div>
+        </div><button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><SlidersHorizontal size={14}/>Filtros</button><button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><Download size={14}/>Exportar</button></div>
       </div>
 
       <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -485,7 +485,7 @@ export default function IndustrialDashboardPage() {
         </Link>
         <Link
           href="/estoque"
-          className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-[#F7F9F8]"
+          className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-[#F7F9F8]"
         >
           <AlertTriangle size={15} />
           Lotes em atenção
@@ -540,7 +540,7 @@ export default function IndustrialDashboardPage() {
               </div>
               <Status status={activeGoal.status} />
             </div>
-            <div className="mt-8 h-2 overflow-hidden rounded-full bg-[#E7ECEA]">
+            <div className="mt-8 h-2 overflow-hidden rounded-full bg-[#E7E7E3]">
               <div
                 className="h-full rounded-full bg-coffee-400"
                 style={{ width: `${Math.min(activeGoal.attainment, 100)}%` }}
@@ -592,10 +592,10 @@ export default function IndustrialDashboardPage() {
         <Card className="p-6">
           <div className="flex items-start justify-between"><div><h2 className="font-[var(--font-manrope)] text-base font-bold">Produção por linha</h2><p className="mt-1 text-xs text-stone-500">Leitura baseada nas OPs identificadas no histórico disponível</p></div><Badge tone="neutral">Período atual</Badge></div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {productionByLine.map((line) => { const share = classifiedProduction ? line.producedKg / classifiedProduction * 100 : 0; return <Link href="/producao" key={line.name} className="rounded-xl border border-[#E7ECEA] bg-white p-4 transition hover:bg-[#F7F9F8]"><div className="flex items-center justify-between"><p className="text-sm font-bold">{line.name}</p><span className="text-[10px] font-semibold text-stone-500">{share.toLocaleString("pt-BR",{maximumFractionDigits:1})}%</span></div><p className="mt-3 text-lg font-bold">{kg.format(line.producedKg)} kg</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E7ECEA]"><div className="h-full rounded-full bg-forest-800" style={{width:`${Math.min(share,100)}%`}}/></div><div className="mt-3 flex justify-between text-[10px] text-stone-500"><span>Rendimento {line.yieldPercent ? `${line.yieldPercent.toLocaleString("pt-BR",{maximumFractionDigits:1})}%` : "sem dados"}</span><span>{line.averageCost ? `${currency.format(line.averageCost)}/kg` : "Custo pendente"}</span></div></Link> })}
+            {productionByLine.map((line) => { const share = classifiedProduction ? line.producedKg / classifiedProduction * 100 : 0; return <Link href="/producao" key={line.name} className="rounded-xl border border-[#E7E7E3] bg-white p-4 transition hover:bg-[#F7F9F8]"><div className="flex items-center justify-between"><p className="text-sm font-bold">{line.name}</p><span className="text-[10px] font-semibold text-stone-500">{share.toLocaleString("pt-BR",{maximumFractionDigits:1})}%</span></div><p className="mt-3 text-lg font-bold">{kg.format(line.producedKg)} kg</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E7E7E3]"><div className="h-full rounded-full bg-forest-800" style={{width:`${Math.min(share,100)}%`}}/></div><div className="mt-3 flex justify-between text-[10px] text-stone-500"><span>Rendimento {line.yieldPercent ? `${line.yieldPercent.toLocaleString("pt-BR",{maximumFractionDigits:1})}%` : "sem dados"}</span><span>{line.averageCost ? `${currency.format(line.averageCost)}/kg` : "Custo pendente"}</span></div></Link> })}
           </div>
         </Card>
-        <Link href="/custos" className="group"><Card className="h-full p-6 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><div><h2 className="font-[var(--font-manrope)] text-base font-bold">Cost Engine</h2><p className="mt-1 text-xs text-stone-500">Resumo industrial — leitura, sem duplicar o módulo</p></div><CircleDollarSign size={18} className="text-forest-700"/></div><div className="mt-5 space-y-4">{[["Energia",costSummary?.metrics.energy??0],["Gás",costSummary?.metrics.gas??0],["Máquina",0],["Manutenção",costSummary?.metrics.maintenance??0]].map(([label,value])=><div key={String(label)} className="flex items-center justify-between border-t border-[#E7ECEA] pt-3 first:border-0 first:pt-0"><span className="text-xs text-stone-600">{label}</span><strong className="text-sm">{currency.format(Number(value))}</strong></div>)}<div className="flex items-center justify-between border-t border-[#E7ECEA] pt-3"><span className="text-xs text-stone-600">Perdas</span><strong className="text-sm">{data.metrics[2]?.value}</strong></div></div><p className="mt-5 inline-flex items-center gap-1 text-[11px] font-bold text-forest-700">Abrir Custos <ChevronRight size={12}/></p></Card></Link>
+        <Link href="/custos" className="group"><Card className="h-full p-6 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><div><h2 className="font-[var(--font-manrope)] text-base font-bold">Cost Engine</h2><p className="mt-1 text-xs text-stone-500">Resumo industrial — leitura, sem duplicar o módulo</p></div><CircleDollarSign size={18} className="text-forest-700"/></div><div className="mt-5 space-y-4">{[["Energia",costSummary?.metrics.energy??0],["Gás",costSummary?.metrics.gas??0],["Máquina",0],["Manutenção",costSummary?.metrics.maintenance??0]].map(([label,value])=><div key={String(label)} className="flex items-center justify-between border-t border-[#E7E7E3] pt-3 first:border-0 first:pt-0"><span className="text-xs text-stone-600">{label}</span><strong className="text-sm">{currency.format(Number(value))}</strong></div>)}<div className="flex items-center justify-between border-t border-[#E7E7E3] pt-3"><span className="text-xs text-stone-600">Perdas</span><strong className="text-sm">{data.metrics[2]?.value}</strong></div></div><p className="mt-5 inline-flex items-center gap-1 text-[11px] font-bold text-forest-700">Abrir Custos <ChevronRight size={12}/></p></Card></Link>
       </section>
 
       <section className="mt-6">
@@ -726,7 +726,7 @@ export default function IndustrialDashboardPage() {
             </button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] border-t border-[#E7ECEA] text-left">
+            <table className="w-full min-w-[1120px] border-t border-[#E7E7E3] text-left">
               <thead className="bg-[#F7F9F8] text-[11px] uppercase tracking-wider text-stone-500">
                 <tr>
                   <th className="px-6 py-3 font-semibold">Ordem</th>

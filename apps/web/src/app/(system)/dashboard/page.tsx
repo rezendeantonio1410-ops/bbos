@@ -412,7 +412,7 @@ function SalesMapCard({ onOpen }: { onOpen: () => void }) {
             {regions.map((region) => (
               <div
                 key={region.id}
-                className="rounded-xl border border-[#E7ECEA] bg-[#F7F9F8] p-3"
+                className="rounded-xl border border-[#E7E7E3] bg-[#F7F9F8] p-3"
               >
                 <div className="flex items-start justify-between">
                   <p className="text-xs font-bold">{region.name}</p>
@@ -423,7 +423,7 @@ function SalesMapCard({ onOpen }: { onOpen: () => void }) {
                 <p className="mt-2 text-sm font-bold">
                   {currency.format(region.revenue)}
                 </p>
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#E7ECEA]">
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#E7E7E3]">
                   <div
                     className={`h-full rounded-full ${region.revenue ? "bg-coffee-300" : "bg-stone-500"}`}
                     style={{ width: `${Math.min(region.attainment, 100)}%` }}
@@ -948,7 +948,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div
-            className="flex w-fit rounded-xl border border-[#E7ECEA] bg-white p-1"
+            className="flex w-fit rounded-xl border border-[#E7E7E3] bg-white p-1"
             aria-label="Período do dashboard"
           >
             {periods.map((item) => (
@@ -964,14 +964,14 @@ export default function DashboardPage() {
           </div>
           <button
             title="Filtrar dashboard"
-            className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
+            className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
           >
             <SlidersHorizontal size={14} />
             Filtros
           </button>
           <button
             title="Exportar visão executiva"
-            className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
+            className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
           >
             <Download size={14} />
             Exportar
@@ -1051,7 +1051,7 @@ export default function DashboardPage() {
         <Link href="/pedidos" className="h-full text-left">
           <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
             <div className="flex items-center justify-between">
-              <span className="grid size-9 place-items-center rounded-xl bg-[#edf4f5] text-[#4d7b82]">
+              <span className="grid size-9 place-items-center rounded-xl bg-[#F0F0ED] text-[#4d7b82]">
                 <ShoppingBag size={17} />
               </span>
               <MiniTrend
@@ -1103,7 +1103,7 @@ export default function DashboardPage() {
             {data.alerts.slice(0, 3).map((alert, index) => (
               <div
                 key={alert.id}
-                className="flex gap-3 border-t border-[#E7ECEA] pt-3 first:border-0 first:pt-0"
+                className="flex gap-3 border-t border-[#E7E7E3] pt-3 first:border-0 first:pt-0"
               >
                 <span className="text-[10px] font-bold text-[#7A8381]">
                   0{index + 1}
@@ -1605,10 +1605,10 @@ export default function DashboardPage() {
               {v3.aiInsights.map((insight, index) => (
                 <div
                   key={insight.id}
-                  className="border-t border-[#E7ECEA] pt-4 first:border-0 first:pt-0"
+                  className="border-t border-[#E7E7E3] pt-4 first:border-0 first:pt-0"
                 >
                   <div className="flex gap-3">
-                    <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-[#EDF7F5] text-[9px] font-bold text-forest-800">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-[#F0F0ED] text-[9px] font-bold text-forest-800">
                       0{index + 1}
                     </span>
                     <div>

@@ -39,7 +39,7 @@ const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const lineTone: Record<ProductLine, string> = {
   RAROS: "bg-[#eef2eb] text-forest-800",
   EPICOS: "bg-[#f4eee7] text-coffee-700",
-  CLASSICOS: "bg-[#edf4f5] text-[#4d7b82]",
+  CLASSICOS: "bg-[#F0F0ED] text-[#4d7b82]",
   GOURMET: "bg-stone-100 text-stone-700",
 };
 

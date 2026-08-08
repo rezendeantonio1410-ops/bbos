@@ -14,6 +14,10 @@ import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
 import { FinanceService } from "./finance.service";
+import { ReconciliationController } from "./reconciliation.controller";
+import { ReconciliationService } from "./reconciliation.service";
+import { CommerceController } from "./commerce.controller";
+import { CommerceService } from "./commerce.service";
 
 @Module({
   controllers: [
@@ -26,7 +30,9 @@ import { FinanceService } from "./finance.service";
     CostingController,
     SalesOrdersController,
     FinanceController,
+    ReconciliationController,
+    CommerceController,
   ],
-  providers: [ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService],
+  providers: [ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService],
 })
 export class AppModule {}

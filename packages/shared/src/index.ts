@@ -614,6 +614,7 @@ export * from "./analytics-contract.js";
 
 export * from "./inventory-engine.js";
 export * from "./sales-inventory-engine.js";
+export * from "./reconciliation-engine.js";
 
 export const BRL = new Intl.NumberFormat("pt-BR", {
   style: "currency",

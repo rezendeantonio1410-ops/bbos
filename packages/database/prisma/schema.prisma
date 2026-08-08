@@ -66,6 +66,16 @@ enum SalesOrderStatus {
   CANCELLED
 }
 
+enum SalesChannelType {
+  ECOMMERCE
+  B2B
+  DISTRIBUIDOR
+  CAFETERIA
+  ESCRITORIO
+  EXPORTACAO
+  OUTRO
+}
+
 enum FinancialAccountType {
   CASH
   BANK
@@ -95,6 +105,33 @@ enum FinancialTransactionType {
   TRANSFER_IN
   TRANSFER_OUT
   ADJUSTMENT
+}
+
+enum ReconciliationStatus {
+  PENDING
+  MATCHED
+  PARTIALLY_MATCHED
+  DIVERGENT
+  IGNORED
+}
+
+enum ReconciliationDirection {
+  IN
+  OUT
+}
+
+enum BankTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+enum BankTransactionSource {
+  MANUAL
+  CSV
+  OFX
+  API
+  OPEN_BANKING
+  OTHER
 }
 
 enum InventoryReservationStatus {
@@ -222,10 +259,16 @@ model Company {
   costSnapshots          CostCalculationSnapshot[]
   costTariffs            CostTariff[]
   financialAccounts      FinancialAccount[]
+  salesChannels          SalesChannel[]
+  productPrices          ProductPrice[]
   accountsReceivable     AccountsReceivable[]
   accountsPayable        AccountsPayable[]
   financialTransactions  FinancialTransaction[]
   payments               Payment[]
+  reconciliationItems    ReconciliationItem[]
+  reconciliationEvents   ReconciliationEvent[]
+  financialInstitutions  FinancialInstitution[]
+  bankTransactions       BankTransaction[]
 }
 
 model User {
@@ -244,34 +287,36 @@ model User {
 }
 
 model Supplier {
-  id          String       @id @default(cuid())
-  companyId   String
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name        String
-  taxId       String?
-  city        String?
-  state       String?
-  coffeeLots  CoffeeLot[]
-  costEvents  CostEvent[]
-  costTariffs CostTariff[]
-  accountsPayable AccountsPayable[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                  String               @id @default(cuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  taxId               String?
+  city                String?
+  state               String?
+  coffeeLots          CoffeeLot[]
+  costEvents          CostEvent[]
+  costTariffs         CostTariff[]
+  accountsPayable     AccountsPayable[]
+  reconciliationItems ReconciliationItem[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([companyId])
 }
 
 model Customer {
-  id          String       @id @default(cuid())
-  companyId   String
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name        String
-  taxId       String?
-  segment     String?
-  salesOrders SalesOrder[]
-  accountsReceivable AccountsReceivable[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                  String               @id @default(cuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  taxId               String?
+  segment             String?
+  salesOrders         SalesOrder[]
+  accountsReceivable  AccountsReceivable[]
+  reconciliationItems ReconciliationItem[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([companyId])
 }
@@ -586,9 +631,50 @@ model ProductVariant {
   salesOrderItems        SalesOrderItem[]
   inventoryReservations  InventoryReservation[]
   costEvents             CostEvent[]
+  channelPrices          ProductPrice[]
 
   @@unique([productId, netWeightGrams])
   @@index([productId, active])
+}
+
+model SalesChannel {
+  id        String           @id @default(cuid())
+  companyId String
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  type      SalesChannelType
+  active    Boolean          @default(true)
+  country   String?
+  currency  String?
+  orders    SalesOrder[]
+  prices    ProductPrice[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, active])
+}
+
+model ProductPrice {
+  id               String         @id @default(cuid())
+  companyId        String
+  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  salesChannelId   String
+  salesChannel     SalesChannel   @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+  currency         String
+  price            Decimal        @db.Decimal(14, 2)
+  active           Boolean        @default(true)
+  validFrom        DateTime?
+  validUntil       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([productVariantId, salesChannelId, currency, validFrom])
+  @@index([companyId, salesChannelId, active])
+  @@index([productVariantId, active])
 }
 
 model SalesOrder {
@@ -597,6 +683,8 @@ model SalesOrder {
   company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customerId             String
   customer               Customer                @relation(fields: [customerId], references: [id])
+  salesChannelId         String?
+  salesChannel           SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
   finishedProductId      String?
   finishedProduct        FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
   code                   String
@@ -624,115 +712,232 @@ model SalesOrder {
 
   @@unique([companyId, code])
   @@index([customerId, status])
+  @@index([salesChannelId, status])
 }
 
 model FinancialAccount {
-  id                     String                   @id @default(cuid())
+  id                     String                 @id @default(cuid())
   companyId              String
-  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company                Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  financialInstitutionId String?
+  financialInstitution   FinancialInstitution?  @relation(fields: [financialInstitutionId], references: [id], onDelete: SetNull)
   name                   String
   type                   FinancialAccountType
-  currency               String                   @default("BRL")
-  openingBalance         Decimal                  @default(0) @db.Decimal(14, 2)
-  active                 Boolean                  @default(true)
+  currency               String                 @default("BRL")
+  bankCode               String?
+  branch                 String?
+  accountNumberMasked    String?
+  ibanMasked             String?
+  country                String                 @default("BR")
+  openingBalance         Decimal                @default(0) @db.Decimal(14, 2)
+  active                 Boolean                @default(true)
   transactions           FinancialTransaction[]
   payments               Payment[]
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
+  bankTransactions       BankTransaction[]
+  reconciliationItems    ReconciliationItem[]
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
+  @@index([companyId, active])
+  @@index([financialInstitutionId, active])
+}
+
+model FinancialInstitution {
+  id               String             @id @default(cuid())
+  companyId        String
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name             String
+  code             String?
+  country          String             @default("BR")
+  active           Boolean            @default(true)
+  accounts         FinancialAccount[]
+  bankTransactions BankTransaction[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([companyId, code])
   @@index([companyId, active])
 }
 
-model AccountsReceivable {
+model BankTransaction {
   id                     String                   @id @default(cuid())
   companyId              String
   company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerId             String
-  customer               Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  salesOrderId           String?
-  salesOrder             SalesOrder?              @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
-  invoiceId              String?
-  issueDate              DateTime
-  dueDate                DateTime
+  financialAccountId     String
+  financialAccount       FinancialAccount         @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  financialInstitutionId String?
+  financialInstitution   FinancialInstitution?    @relation(fields: [financialInstitutionId], references: [id], onDelete: SetNull)
+  externalId             String?
+  transactionDate        DateTime
+  postingDate            DateTime?
+  description            String
+  reference              String?
+  counterparty           String?
+  direction              BankTransactionDirection
   amount                 Decimal                  @db.Decimal(14, 2)
-  openAmount             Decimal                  @db.Decimal(14, 2)
-  status                 ReceivableStatus         @default(OPEN)
-  paymentDate            DateTime?
-  notes                  String?
-  payments               Payment[]
+  currency               String
+  balanceAfter           Decimal?                 @db.Decimal(14, 2)
+  source                 BankTransactionSource
+  importedAt             DateTime                 @default(now())
+  rawMetadata            Json?
+  reconciliationStatus   ReconciliationStatus     @default(PENDING)
+  reconciliationItem     ReconciliationItem?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 
+  @@unique([financialAccountId, externalId])
+  @@index([companyId, transactionDate])
+  @@index([financialAccountId, transactionDate])
+  @@index([financialAccountId, reconciliationStatus])
+}
+
+model AccountsReceivable {
+  id           String           @id @default(cuid())
+  companyId    String
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesOrderId String?
+  salesOrder   SalesOrder?      @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  invoiceId    String?
+  issueDate    DateTime
+  dueDate      DateTime
+  amount       Decimal          @db.Decimal(14, 2)
+  openAmount   Decimal          @db.Decimal(14, 2)
+  status       ReceivableStatus @default(OPEN)
+  paymentDate  DateTime?
+  notes        String?
+  payments     Payment[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([salesOrderId])
   @@index([companyId, status, dueDate])
   @@index([customerId, dueDate])
-  @@unique([salesOrderId])
 }
 
 model AccountsPayable {
-  id                     String                   @id @default(cuid())
-  companyId              String
-  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplierId             String?
-  supplier               Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  costCenterId           String?
-  costCenter             CostCenter?               @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  description            String
-  issueDate              DateTime
-  dueDate                DateTime
-  amount                 Decimal                  @db.Decimal(14, 2)
-  openAmount             Decimal                  @db.Decimal(14, 2)
-  status                 PayableStatus             @default(OPEN)
-  category               String
-  paymentDate            DateTime?
-  notes                  String?
-  payments               Payment[]
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
+  id           String        @id @default(cuid())
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId   String?
+  supplier     Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  costCenterId String?
+  costCenter   CostCenter?   @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  description  String
+  issueDate    DateTime
+  dueDate      DateTime
+  amount       Decimal       @db.Decimal(14, 2)
+  openAmount   Decimal       @db.Decimal(14, 2)
+  status       PayableStatus @default(OPEN)
+  category     String
+  paymentDate  DateTime?
+  notes        String?
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@index([companyId, status, dueDate])
   @@index([costCenterId, dueDate])
 }
 
 model Payment {
-  id                     String                   @id @default(cuid())
-  companyId              String
-  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  accountsReceivableId   String?
-  accountsReceivable     AccountsReceivable?      @relation(fields: [accountsReceivableId], references: [id], onDelete: SetNull)
-  accountsPayableId      String?
-  accountsPayable        AccountsPayable?         @relation(fields: [accountsPayableId], references: [id], onDelete: SetNull)
-  financialAccountId     String
-  financialAccount       FinancialAccount         @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
-  amount                 Decimal                  @db.Decimal(14, 2)
-  paidAt                 DateTime
-  method                 String
-  notes                  String?
-  idempotencyKey         String                   @unique
-  transaction            FinancialTransaction?
-  createdAt              DateTime                 @default(now())
+  id                   String                @id @default(cuid())
+  companyId            String
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountsReceivableId String?
+  accountsReceivable   AccountsReceivable?   @relation(fields: [accountsReceivableId], references: [id], onDelete: SetNull)
+  accountsPayableId    String?
+  accountsPayable      AccountsPayable?      @relation(fields: [accountsPayableId], references: [id], onDelete: SetNull)
+  financialAccountId   String
+  financialAccount     FinancialAccount      @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  amount               Decimal               @db.Decimal(14, 2)
+  paidAt               DateTime
+  method               String
+  notes                String?
+  idempotencyKey       String                @unique
+  transaction          FinancialTransaction?
+  createdAt            DateTime              @default(now())
 
   @@index([companyId, paidAt])
 }
 
 model FinancialTransaction {
-  id                     String                   @id @default(cuid())
-  companyId              String
-  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  financialAccountId     String
-  financialAccount       FinancialAccount         @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
-  paymentId              String?                  @unique
-  payment               Payment?                 @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  costCenterId           String?
-  costCenter             CostCenter?              @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  type                   FinancialTransactionType
-  amount                 Decimal                  @db.Decimal(14, 2)
-  category               String
-  description            String
-  occurredAt             DateTime                 @default(now())
-  createdAt              DateTime                 @default(now())
+  id                 String                   @id @default(cuid())
+  companyId          String
+  company            Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  financialAccountId String
+  financialAccount   FinancialAccount         @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  paymentId          String?                  @unique
+  payment            Payment?                 @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  costCenterId       String?
+  costCenter         CostCenter?              @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  type               FinancialTransactionType
+  amount             Decimal                  @db.Decimal(14, 2)
+  category           String
+  description        String
+  occurredAt         DateTime                 @default(now())
+  createdAt          DateTime                 @default(now())
+  reconciliationItem ReconciliationItem?
 
   @@index([companyId, occurredAt])
   @@index([financialAccountId, occurredAt])
+}
+
+model ReconciliationItem {
+  id                     String                  @id @default(cuid())
+  companyId              String
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  financialAccountId     String?
+  financialAccount       FinancialAccount?       @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+  financialTransactionId String?                 @unique
+  financialTransaction   FinancialTransaction?   @relation(fields: [financialTransactionId], references: [id], onDelete: SetNull)
+  bankTransactionId      String?                 @unique
+  bankTransaction        BankTransaction?        @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
+  customerId             String?
+  customer               Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  supplierId             String?
+  supplier               Supplier?               @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  occurredAt             DateTime
+  description            String
+  documentReference      String?
+  counterpartyName       String?
+  direction              ReconciliationDirection
+  amount                 Decimal                 @db.Decimal(14, 2)
+  currency               String                  @default("BRL")
+  matchedAmount          Decimal                 @default(0) @db.Decimal(14, 2)
+  difference             Decimal                 @default(0) @db.Decimal(14, 2)
+  status                 ReconciliationStatus    @default(PENDING)
+  matchedAt              DateTime?
+  notes                  String?
+  events                 ReconciliationEvent[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@index([companyId, status, occurredAt])
+  @@index([financialAccountId, occurredAt])
+  @@index([customerId, occurredAt])
+  @@index([supplierId, occurredAt])
+  @@index([documentReference])
+}
+
+model ReconciliationEvent {
+  id                     String                @id @default(cuid())
+  companyId              String
+  company                Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reconciliationItemId   String
+  reconciliationItem     ReconciliationItem    @relation(fields: [reconciliationItemId], references: [id], onDelete: Cascade)
+  financialTransactionId String?
+  statusFrom             ReconciliationStatus?
+  statusTo               ReconciliationStatus
+  matchedAmount          Decimal               @default(0) @db.Decimal(14, 2)
+  difference             Decimal               @default(0) @db.Decimal(14, 2)
+  action                 String
+  actor                  String?
+  createdAt              DateTime              @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([reconciliationItemId, createdAt])
 }
 
 model SalesOrderItem {
@@ -851,24 +1056,24 @@ model CostEvent {
 }
 
 model CostCenter {
-  id               String               @id @default(cuid())
-  companyId        String
-  company          Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code             String
-  name             String
-  category         CostCenterCategory
-  description      String
-  active           Boolean              @default(true)
-  allocationMethod AllocationMethod
-  monthlyBudget    Decimal              @default(0) @db.Decimal(14, 2)
-  costEvents       CostEvent[]
-  resources        ProductiveResource[]
-  allocationRules  AllocationRule[]
-  tariffs          CostTariff[]
-  accountsPayable  AccountsPayable[]
+  id                    String                 @id @default(cuid())
+  companyId             String
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code                  String
+  name                  String
+  category              CostCenterCategory
+  description           String
+  active                Boolean                @default(true)
+  allocationMethod      AllocationMethod
+  monthlyBudget         Decimal                @default(0) @db.Decimal(14, 2)
+  costEvents            CostEvent[]
+  resources             ProductiveResource[]
+  allocationRules       AllocationRule[]
+  tariffs               CostTariff[]
+  accountsPayable       AccountsPayable[]
   financialTransactions FinancialTransaction[]
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, category, active])
