@@ -11,6 +11,7 @@ import {
   PrismaClient,
   SalesOrderStatus,
 } from "@bbos/database";
+import { CommercialPriceService } from "./commercial-price.service";
 import {
   releaseSalesStock,
   reserveSalesStock,
@@ -33,11 +34,15 @@ export type CreateSalesOrderInput = {
     quantity: number;
     unitPrice: number;
   }>;
+  salesPersonId?: string;
+  confirmPrice?: boolean;
 };
 
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
   readonly database = new PrismaClient();
+
+  constructor(private readonly priceResolver: CommercialPriceService) {}
 
   onModuleDestroy() {
     return this.database.$disconnect();
@@ -145,12 +150,18 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Cliente e produtos devem pertencer à mesma empresa.",
           );
+        const resolvedPrices = await Promise.all(input.items.map((item) => this.priceResolver.resolve({ companyId: customer.companyId, customerId: customer.id, salesPersonId: input.salesPersonId, productVariantId: item.productVariantId, channel: salesChannel?.type })));
+        const priceChanged = resolvedPrices.find((resolved, index) => resolved.price != null && Number(resolved.price) !== Number(input.items[index]!.unitPrice));
+        if (priceChanged && !input.confirmPrice) {
+          throw new BadRequestException({ code: "PRICE_CHANGED_DURING_ORDER", message: "Um ou mais preços foram atualizados.", prices: resolvedPrices.map((resolved, index) => ({ productVariantId: input.items[index]!.productVariantId, previous: input.items[index]!.unitPrice, current: resolved.price, priceTableId: resolved.priceTableId, validFrom: resolved.validFrom })) });
+        }
+        const appliedItems = input.items.map((item, index) => ({ item, resolved: resolvedPrices[index]!, unitPrice: resolvedPrices[index]!.price ?? item.unitPrice }));
         const totalQuantity = input.items.reduce(
           (sum, item) => sum + item.quantity,
           0,
         );
-        const totalAmount = input.items.reduce(
-          (sum, item) => sum + item.quantity * item.unitPrice,
+        const totalAmount = appliedItems.reduce(
+          (sum, entry) => sum + entry.item.quantity * Number(entry.unitPrice),
           0,
         );
         return transaction.salesOrder.create({
@@ -173,8 +184,9 @@ export class SalesOrdersService implements OnModuleDestroy {
               ? new Date(input.expectedDeliveryDate)
               : undefined,
             status: SalesOrderStatus.DRAFT,
+            salesPersonId: input.salesPersonId,
             items: {
-              create: input.items.map((item) => {
+              create: appliedItems.map(({ item, resolved, unitPrice }) => {
                 const variant = variants.find(
                   (candidate) => candidate.id === item.productVariantId,
                 )!;
@@ -184,8 +196,11 @@ export class SalesOrdersService implements OnModuleDestroy {
                   productName: variant.product.name,
                   sku: variant.sku,
                   quantity: item.quantity,
-                  unitPrice: item.unitPrice,
-                  totalAmount: item.quantity * item.unitPrice,
+                  unitPrice,
+                  totalAmount: item.quantity * Number(unitPrice),
+                  priceTableId: resolved.priceTableId,
+                  priceValidAt: resolved.validFrom ?? new Date(),
+                  promotionId: resolved.promotion?.id,
                 };
               }),
             },

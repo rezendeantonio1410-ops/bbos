@@ -11,7 +11,10 @@
     "format": "prettier --write .",
     "db:generate": "corepack pnpm --filter @bbos/database generate",
     "db:migrate": "corepack pnpm --filter @bbos/database migrate",
-    "db:seed": "corepack pnpm --filter @bbos/database seed"
+    "db:seed": "corepack pnpm --filter @bbos/database seed",
+    "seed:lab-demo": "corepack pnpm --filter @bbos/database seed:lab-demo",
+    "seed:lab-demo:cleanup": "corepack pnpm --filter @bbos/database seed:lab-demo:cleanup",
+    "seed:cupping-mobile-demo": "corepack pnpm --filter @bbos/database seed:lab-demo"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

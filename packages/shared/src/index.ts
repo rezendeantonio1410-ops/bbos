@@ -1,4 +1,5 @@
 export type Period = "day" | "week" | "month" | "year";
+export * from "./commercial-manager-engine.js";
 export type PerformanceStatus = "on-track" | "attention" | "off-track";
 
 export type ExecutiveMetric = {
@@ -615,6 +616,9 @@ export * from "./analytics-contract.js";
 export * from "./inventory-engine.js";
 export * from "./sales-inventory-engine.js";
 export * from "./reconciliation-engine.js";
+export * from "./laboratory-engine.js";
+export * from "./cupping-mobile.js";
+export * from "./cupping-scoring.js";
 
 export const BRL = new Intl.NumberFormat("pt-BR", {
   style: "currency",

@@ -24,6 +24,9 @@
     "test:finished-goods": "node --test tests/finished-goods-inventory.mjs"
     ,"test:sales-inventory": "node --test tests/sales-inventory-engine.mjs",
     "test:cost-period": "node --test tests/cost-period-engine.mjs"
+    ,"test:commercial-manager": "node --test tests/commercial-manager-engine.mjs"
+    ,"test:laboratory": "node tests/laboratory-engine.mjs"
+    ,"test:cupping-mobile": "node --test tests/cupping-mobile.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2"

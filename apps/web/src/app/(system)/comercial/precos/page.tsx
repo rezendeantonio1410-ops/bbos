@@ -1,0 +1,10 @@
+"use client";
+import * as React from "react";
+import Link from "next/link";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+type PriceTable = { id: string; code: string; name: string; status: string; currency: string; channel: string; items?: unknown[] };
+export default function CommercialPricesPage() {
+  const [tables, setTables] = React.useState<PriceTable[]>([]);
+  React.useEffect(() => { fetch(`${API}/commerce/price-tables`).then((r) => r.ok ? r.json() : []).then(setTables).catch(() => setTables([])); }, []);
+  return <div className="mx-auto max-w-[1500px]"><div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-forest-700">Comercial</p><h1 className="mt-2 text-3xl font-bold">Tabelas de preço</h1><p className="mt-2 text-sm text-stone-500">Vigências e preços autorizados por canal, região e carteira.</p></div><Link href="/comercial" className="text-xs font-bold text-forest-700">Voltar ao Comercial</Link></div><div className="mt-6 grid gap-4 md:grid-cols-2">{tables.length ? tables.map((table) => <div key={table.id} className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-forest-700">{table.code}</p><h2 className="mt-1 text-lg font-bold">{table.name}</h2></div><span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-bold">{table.status}</span></div><div className="mt-4 grid grid-cols-3 gap-3 text-xs"><div><p className="text-stone-500">Moeda</p><strong>{table.currency}</strong></div><div><p className="text-stone-500">Canal</p><strong>{table.channel}</strong></div><div><p className="text-stone-500">SKUs</p><strong>{table.items?.length ?? 0}</strong></div></div></div>) : <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-12 text-center text-sm text-stone-500 md:col-span-2">Nenhuma tabela cadastrada. As tabelas vigentes aparecerão aqui.</div>}</div></div>;
+}

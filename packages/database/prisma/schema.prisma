@@ -76,6 +76,32 @@ enum SalesChannelType {
   OUTRO
 }
 
+enum PriceTableStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum CommercialPromotionStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum CreditRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  PENDING_DOCUMENTS
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum FinancialAccountType {
   CASH
   BANK
@@ -226,62 +252,255 @@ enum AllocationRuleStatus {
   CANCELLED
 }
 
+enum LabSampleType {
+  ENTRY
+  CONTROL
+  RETEST
+  PRE_PRODUCTION
+  OTHER
+}
+
+enum LabSampleStatus {
+  PENDING
+  ASSIGNED
+  EVALUATED
+  CONSOLIDATED
+  APPROVED
+  BLOCKED
+}
+
+enum CuppingSessionStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  PAUSED
+  CONSOLIDATING
+  CLOSED
+  CANCELLED
+}
+
+enum CuppingSessionMode {
+  CUPPING
+  TRAINING
+}
+
+enum CuppingProtocol {
+  TRADITIONAL_100
+  CVA_EXPERIENCE
+}
+
+enum CuppingDefectSeverity {
+  TAINT
+  FAULT
+}
+
+enum CuppingParticipantRole {
+  COORDINATOR
+  CUPPER
+  OBSERVER
+}
+
+enum CuppingDecisionType {
+  APPROVED
+  APPROVED_WITH_OBSERVATION
+  RETEST_REQUIRED
+  REJECTED
+}
+
+enum CuppingEvaluationStatus {
+  DRAFT
+  COMPLETED
+}
+
+enum CuppingParticipantStatus {
+  INVITED
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PreferredCuppingChannel {
+  QR
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum CuppingDescriptorContext {
+  AROMA
+  FLAVOR
+  AFTERTASTE
+  ACIDITY
+  BODY
+}
+
+enum CuppingCupAttribute {
+  UNIFORMITY
+  SWEETNESS
+  CLEAN_CUP
+}
+
+enum SalesPersonType {
+  INTERNAL_SELLER
+  FIELD_SELLER
+  SALES_REPRESENTATIVE
+  SALES_MANAGER
+}
+
+enum SalesPersonStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum SalesTargetType {
+  REVENUE
+  VOLUME
+  MARGIN
+  NEW_CUSTOMERS
+  PRODUCT
+  MIX
+}
+
+enum SalesVisitStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum SalesOpportunityStage {
+  PROSPECT
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum CommissionEntryStatus {
+  ESTIMATED
+  ACCRUED
+  RELEASED
+  PAID
+  REVERSED
+}
+
+enum CommercialNotificationType {
+  PRICE_CHANGED
+  PROMOTION_STARTED
+  PROMOTION_ENDING
+  PRODUCT_AVAILABLE
+  PRODUCT_UNAVAILABLE
+  ORDER_STATUS_CHANGED
+  COMMISSION_RELEASED
+  TARGET_ALERT
+  CUSTOMER_REACTIVATION
+  CREDIT_SUBMITTED
+  CREDIT_UNDER_REVIEW
+  CREDIT_DOCUMENT_REQUESTED
+  CREDIT_APPROVED
+  CREDIT_PARTIALLY_APPROVED
+  CREDIT_REJECTED
+  DOCUMENT_REQUESTED
+  DOCUMENT_RECEIVED
+  DOCUMENT_REJECTED
+}
+
 model Company {
-  id                     String                    @id @default(cuid())
-  name                   String
-  tradeName              String
-  taxId                  String                    @unique
-  currency               String                    @default("BRL")
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
-  users                  User[]
-  suppliers              Supplier[]
-  customers              Customer[]
-  coffeeLots             CoffeeLot[]
-  warehouses             Warehouse[]
-  blends                 Blend[]
-  productionOrders       ProductionOrder[]
-  products               FinishedProduct[]
-  productLines           ProductLine[]
-  salesOrders            SalesOrder[]
-  industrialEvents       IndustrialEvent[]
-  costEvents             CostEvent[]
-  productionBatches      ProductionBatch[]
-  productionConsumptions ProductionConsumption[]
-  packagingConsumptions  PackagingConsumption[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  salesOrderItems        SalesOrderItem[]
-  inventoryReservations  InventoryReservation[]
-  costCenters            CostCenter[]
-  productiveResources    ProductiveResource[]
-  allocationPeriods      AllocationPeriod[]
-  allocationRules        AllocationRule[]
-  costSnapshots          CostCalculationSnapshot[]
-  costTariffs            CostTariff[]
-  financialAccounts      FinancialAccount[]
-  salesChannels          SalesChannel[]
-  productPrices          ProductPrice[]
-  accountsReceivable     AccountsReceivable[]
-  accountsPayable        AccountsPayable[]
-  financialTransactions  FinancialTransaction[]
-  payments               Payment[]
-  reconciliationItems    ReconciliationItem[]
-  reconciliationEvents   ReconciliationEvent[]
-  financialInstitutions  FinancialInstitution[]
-  bankTransactions       BankTransaction[]
+  id                      String                        @id @default(cuid())
+  name                    String
+  tradeName               String
+  taxId                   String                        @unique
+  currency                String                        @default("BRL")
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+  users                   User[]
+  suppliers               Supplier[]
+  customers               Customer[]
+  coffeeLots              CoffeeLot[]
+  warehouses              Warehouse[]
+  blends                  Blend[]
+  productionOrders        ProductionOrder[]
+  products                FinishedProduct[]
+  productLines            ProductLine[]
+  salesOrders             SalesOrder[]
+  industrialEvents        IndustrialEvent[]
+  costEvents              CostEvent[]
+  productionBatches       ProductionBatch[]
+  productionConsumptions  ProductionConsumption[]
+  packagingConsumptions   PackagingConsumption[]
+  finishedGoodsMovements  FinishedGoodsMovement[]
+  salesOrderItems         SalesOrderItem[]
+  inventoryReservations   InventoryReservation[]
+  costCenters             CostCenter[]
+  productiveResources     ProductiveResource[]
+  allocationPeriods       AllocationPeriod[]
+  allocationRules         AllocationRule[]
+  costSnapshots           CostCalculationSnapshot[]
+  costTariffs             CostTariff[]
+  financialAccounts       FinancialAccount[]
+  salesChannels           SalesChannel[]
+  productPrices           ProductPrice[]
+  priceTables             PriceTable[]
+  priceTableAssignments   SalesPriceTableAssignment[]
+  commercialPromotions    CommercialPromotion[]
+  accountsReceivable      AccountsReceivable[]
+  accountsPayable         AccountsPayable[]
+  financialTransactions   FinancialTransaction[]
+  payments                Payment[]
+  reconciliationItems     ReconciliationItem[]
+  reconciliationEvents    ReconciliationEvent[]
+  financialInstitutions   FinancialInstitution[]
+  bankTransactions        BankTransaction[]
+  salesPeople             SalesPerson[]
+  customerPortfolios      CustomerPortfolioAssignment[]
+  salesTargets            SalesTarget[]
+  salesVisits             SalesVisit[]
+  salesOpportunities      SalesOpportunity[]
+  commissionPlans         CommissionPlan[]
+  commissionEntries       CommissionEntry[]
+  commercialNotifications CommercialNotification[]
+  catalogDocuments       CommercialCatalogDocument[]
+  labSamples              LabSample[]
+  cuppingSessions         CuppingSession[]
+  cuppingEvaluations      CuppingEvaluation[]
+  cuppingDescriptors      CuppingDescriptor[]
+  cuppingDecisions        CuppingDecision[]
+  sensoryProfiles         SensoryProfile[]
+  customerDocuments       CustomerDocument[]
+  customerAddresses       CustomerAddress[]
+  customerContacts        CustomerContact[]
+  creditRequests          CreditRequest[]
+  customerActivities      CustomerActivity[]
 }
 
 model User {
-  id           String   @id @default(cuid())
-  companyId    String
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         UserRole @default(INDUSTRIAL)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                        String                   @id @default(cuid())
+  companyId                 String
+  company                   Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                      String
+  email                     String                   @unique
+  passwordHash              String
+  role                      UserRole                 @default(INDUSTRIAL)
+  active                    Boolean                  @default(true)
+  phoneE164                 String?
+  preferredCuppingChannel   PreferredCuppingChannel @default(QR)
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+  createdLabSamples         LabSample[]              @relation("SampleCreator")
+  coordinatedSessions       CuppingSession[]         @relation("SessionCoordinator")
+  cuppingParticipations     CuppingParticipant[]
+  cuppingEvaluations        CuppingEvaluation[]      @relation("EvaluationAuthor")
+  labDecisions              CuppingDecision[]        @relation("DecisionAuthor")
+  salesPerson               SalesPerson?
+  commercialNotifications   CommercialNotification[]
+  catalogDocuments          CommercialCatalogDocument[]
+  uploadedCustomerDocuments CustomerDocument[]
+  reviewedCreditRequests    CreditRequest[]          @relation("CreditReviewer")
+  customerActivities        CustomerActivity[]
 
   @@index([companyId])
 }
@@ -306,19 +525,138 @@ model Supplier {
 }
 
 model Customer {
-  id                  String               @id @default(cuid())
-  companyId           String
-  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                String
-  taxId               String?
-  segment             String?
-  salesOrders         SalesOrder[]
-  accountsReceivable  AccountsReceivable[]
-  reconciliationItems ReconciliationItem[]
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                    String                        @id @default(cuid())
+  companyId             String
+  company               Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                  String
+  taxId                 String?
+  segment               String?
+  salesOrders           SalesOrder[]
+  accountsReceivable    AccountsReceivable[]
+  portfolioAssignments  CustomerPortfolioAssignment[]
+  priceTableAssignments SalesPriceTableAssignment[]
+  commercialPromotions  CommercialPromotion[]
+  contacts              CustomerContact[]
+  addresses             CustomerAddress[]
+  documents             CustomerDocument[]
+  creditRequests        CreditRequest[]
+  activities            CustomerActivity[]
+  salesVisits           SalesVisit[]
+  opportunities         SalesOpportunity[]
+  reconciliationItems   ReconciliationItem[]
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
 
   @@index([companyId])
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name       String
+  role       String
+  phone      String?
+  whatsapp   String?
+  email      String?
+  primary    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId, role])
+}
+
+model CustomerAddress {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type       String
+  street     String
+  number     String?
+  complement String?
+  district   String?
+  city       String
+  state      String
+  postalCode String?
+  country    String   @default("BR")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId, type])
+}
+
+model CustomerDocument {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  name         String
+  type         String
+  storageKey   String
+  mimeType     String?
+  sizeBytes    Int?
+  version      Int      @default(1)
+  status       String   @default("RECEIVED")
+  createdAt    DateTime @default(now())
+
+  @@index([customerId, type, version])
+}
+
+model CreditRequest {
+  id                   String              @id @default(cuid())
+  companyId            String
+  company              Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId           String
+  customer             Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  requestedById        String
+  requestedBy          SalesPerson         @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedById         String?
+  reviewedBy           User?               @relation("CreditReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  status               CreditRequestStatus @default(DRAFT)
+  requestedLimit       Decimal             @db.Decimal(14, 2)
+  approvedLimit        Decimal?            @db.Decimal(14, 2)
+  requestedTermDays    Int
+  approvedTermDays     Int?
+  expectedMonthlyBuy   Decimal?            @db.Decimal(14, 2)
+  paymentMethod        String?
+  commercialReferences String?
+  justification        String?
+  reviewNote           String?
+  analystUserId        String?
+  decisionReason       String?
+  internalNotes        String?
+  submittedAt          DateTime?
+  reviewedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([companyId, status, createdAt])
+  @@index([customerId, status])
+}
+
+model CustomerActivity {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  type        String
+  title       String
+  description String?
+  metadata    Json?
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([customerId, occurredAt])
 }
 
 model Warehouse {
@@ -365,6 +703,9 @@ model CoffeeLot {
   receivedAt             DateTime                @default(now())
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+  labSamples             LabSample[]
+  cuppingDecisions       CuppingDecision[]
+  sensoryProfiles        SensoryProfile[]
 
   @@unique([companyId, code])
   @@index([supplierId, warehouseId])
@@ -632,25 +973,29 @@ model ProductVariant {
   inventoryReservations  InventoryReservation[]
   costEvents             CostEvent[]
   channelPrices          ProductPrice[]
+  priceTableItems        PriceTableItem[]
+  commercialPromotions   CommercialPromotion[]
+  commissionRules        CommissionRule[]
 
   @@unique([productId, netWeightGrams])
   @@index([productId, active])
 }
 
 model SalesChannel {
-  id        String           @id @default(cuid())
-  companyId String
-  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code      String
-  name      String
-  type      SalesChannelType
-  active    Boolean          @default(true)
-  country   String?
-  currency  String?
-  orders    SalesOrder[]
-  prices    ProductPrice[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id          String           @id @default(cuid())
+  companyId   String
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  type        SalesChannelType
+  active      Boolean          @default(true)
+  country     String?
+  currency    String?
+  orders      SalesOrder[]
+  prices      ProductPrice[]
+  priceTables PriceTable[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, active])
@@ -675,6 +1020,102 @@ model ProductPrice {
   @@unique([productVariantId, salesChannelId, currency, validFrom])
   @@index([companyId, salesChannelId, active])
   @@index([productVariantId, active])
+}
+
+model PriceTable {
+  id              String                      @id @default(cuid())
+  companyId       String
+  company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  currency        String
+  channel         SalesChannelType
+  salesChannelId  String?
+  salesChannel    SalesChannel?               @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
+  region          String?
+  territory       String?
+  validFrom       DateTime
+  validTo         DateTime?
+  status          PriceTableStatus            @default(DRAFT)
+  items           PriceTableItem[]
+  assignments     SalesPriceTableAssignment[]
+  promotions      CommercialPromotion[]
+  catalogDocuments CommercialCatalogDocument[]
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  salesOrderItems SalesOrderItem[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status, validFrom, validTo])
+}
+
+model PriceTableItem {
+  id               String         @id @default(cuid())
+  priceTableId     String
+  priceTable       PriceTable     @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  price            Decimal        @db.Decimal(14, 2)
+  minimumPrice     Decimal?       @db.Decimal(14, 2)
+  promotionalPrice Decimal?       @db.Decimal(14, 2)
+  validFrom        DateTime
+  validTo          DateTime?
+  active           Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([priceTableId, productVariantId, active])
+  @@index([productVariantId, validFrom, validTo])
+}
+
+model SalesPriceTableAssignment {
+  id            String            @id @default(cuid())
+  companyId     String
+  company       Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  priceTableId  String
+  priceTable    PriceTable        @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+  salesPersonId String?
+  salesPerson   SalesPerson?      @relation(fields: [salesPersonId], references: [id], onDelete: Cascade)
+  customerId    String?
+  customer      Customer?         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  region        String?
+  territory     String?
+  channel       SalesChannelType?
+  validFrom     DateTime
+  validTo       DateTime?
+  createdAt     DateTime          @default(now())
+
+  @@index([companyId, validFrom, validTo])
+  @@index([salesPersonId, validFrom, validTo])
+  @@index([customerId, validFrom, validTo])
+}
+
+model CommercialPromotion {
+  id               String                    @id @default(cuid())
+  companyId        String
+  company          Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name             String
+  status           CommercialPromotionStatus @default(DRAFT)
+  validFrom        DateTime
+  validTo          DateTime
+  productVariantId String?
+  productVariant   ProductVariant?           @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  priceTableId     String?
+  priceTable       PriceTable?               @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+  customerId       String?
+  customer         Customer?                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salesPersonId    String?
+  salesPerson      SalesPerson?              @relation(fields: [salesPersonId], references: [id], onDelete: Cascade)
+  region           String?
+  promotionalPrice Decimal?                  @db.Decimal(14, 2)
+  discountPercent  Decimal?                  @db.Decimal(7, 3)
+  description      String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  salesOrderItems  SalesOrderItem[]
+
+  @@index([companyId, status, validFrom, validTo])
+  @@index([productVariantId, validFrom, validTo])
 }
 
 model SalesOrder {
@@ -707,12 +1148,228 @@ model SalesOrder {
   reservations           InventoryReservation[]
   finishedGoodsMovements FinishedGoodsMovement[]
   accountsReceivable     AccountsReceivable[]
+  salesPersonId          String?
+  salesPerson            SalesPerson?            @relation(fields: [salesPersonId], references: [id], onDelete: SetNull)
+  commissionEntries      CommissionEntry[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 
   @@unique([companyId, code])
   @@index([customerId, status])
   @@index([salesChannelId, status])
+}
+
+model SalesPerson {
+  id                         String                        @id @default(cuid())
+  companyId                  String
+  company                    Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId                     String                        @unique
+  user                       User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                       SalesPersonType
+  status                     SalesPersonStatus             @default(ACTIVE)
+  managerId                  String?
+  manager                    SalesPerson?                  @relation("SalesTeam", fields: [managerId], references: [id], onDelete: SetNull)
+  team                       SalesPerson[]                 @relation("SalesTeam")
+  territory                  String?
+  region                     String?
+  startDate                  DateTime?
+  endDate                    DateTime?
+  discountLimit              Decimal                       @default(0) @db.Decimal(7, 3)
+  notes                      String?
+  portfolioAssignments       CustomerPortfolioAssignment[]
+  targets                    SalesTarget[]
+  visits                     SalesVisit[]
+  opportunities              SalesOpportunity[]
+  orders                     SalesOrder[]
+  commissionEntries          CommissionEntry[]
+  commissionRules            CommissionRule[]
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+  salesPriceTableAssignments SalesPriceTableAssignment[]
+  commercialPromotions       CommercialPromotion[]
+  creditRequests             CreditRequest[]
+
+  @@index([companyId, status])
+}
+
+model CustomerPortfolioAssignment {
+  id            String      @id @default(cuid())
+  companyId     String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salesPersonId String
+  salesPerson   SalesPerson @relation(fields: [salesPersonId], references: [id], onDelete: Restrict)
+  validFrom     DateTime    @default(now())
+  validTo       DateTime?
+  isPrimary     Boolean     @default(true)
+  territory     String?
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  @@index([companyId, salesPersonId, validTo])
+  @@index([customerId, validFrom])
+}
+
+model SalesTarget {
+  id            String          @id @default(cuid())
+  companyId     String
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesPersonId String
+  salesPerson   SalesPerson     @relation(fields: [salesPersonId], references: [id], onDelete: Cascade)
+  period        String
+  targetType    SalesTargetType
+  targetValue   Decimal         @db.Decimal(14, 2)
+  actualValue   Decimal         @default(0) @db.Decimal(14, 2)
+  status        String          @default("OPEN")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([salesPersonId, period, targetType])
+}
+
+model SalesVisit {
+  id             String           @id @default(cuid())
+  companyId      String
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesPersonId  String
+  salesPerson    SalesPerson      @relation(fields: [salesPersonId], references: [id], onDelete: Restrict)
+  customerId     String
+  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  scheduledAt    DateTime
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  status         SalesVisitStatus @default(SCHEDULED)
+  purpose        String?
+  notes          String?
+  nextAction     String?
+  nextActionDate DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([companyId, salesPersonId, scheduledAt])
+}
+
+model SalesOpportunity {
+  id                String                @id @default(cuid())
+  companyId         String
+  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId        String
+  customer          Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesPersonId     String
+  salesPerson       SalesPerson           @relation(fields: [salesPersonId], references: [id], onDelete: Restrict)
+  title             String
+  stage             SalesOpportunityStage @default(PROSPECT)
+  estimatedValue    Decimal               @default(0) @db.Decimal(14, 2)
+  estimatedVolume   Decimal               @default(0) @db.Decimal(14, 2)
+  probability       Decimal               @default(0) @db.Decimal(5, 2)
+  expectedCloseDate DateTime?
+  lossReason        String?
+  notes             String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([companyId, salesPersonId, stage])
+}
+
+model CommissionPlan {
+  id          String            @id @default(cuid())
+  companyId   String
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  validFrom   DateTime?
+  validTo     DateTime?
+  status      String            @default("ACTIVE")
+  description String?
+  rules       CommissionRule[]
+  entries     CommissionEntry[]
+  createdAt   DateTime          @default(now())
+}
+
+model CommissionRule {
+  id               String          @id @default(cuid())
+  commissionPlanId String
+  commissionPlan   CommissionPlan  @relation(fields: [commissionPlanId], references: [id], onDelete: Cascade)
+  salesPersonId    String?
+  salesPerson      SalesPerson?    @relation(fields: [salesPersonId], references: [id], onDelete: SetNull)
+  productVariantId String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  region           String?
+  channel          String?
+  percentage       Decimal?        @db.Decimal(7, 3)
+  fixedValue       Decimal?        @db.Decimal(14, 2)
+  priority         Int             @default(0)
+  validFrom        DateTime?
+  validTo          DateTime?
+}
+
+model CommissionEntry {
+  id               String                @id @default(cuid())
+  companyId        String
+  company          Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesPersonId    String
+  salesPerson      SalesPerson           @relation(fields: [salesPersonId], references: [id], onDelete: Restrict)
+  salesOrderId     String?
+  salesOrder       SalesOrder?           @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  invoiceId        String?
+  paymentId        String?
+  commissionPlanId String?
+  commissionPlan   CommissionPlan?       @relation(fields: [commissionPlanId], references: [id], onDelete: SetNull)
+  baseAmount       Decimal               @db.Decimal(14, 2)
+  rate             Decimal               @default(0) @db.Decimal(7, 3)
+  commissionAmount Decimal               @db.Decimal(14, 2)
+  status           CommissionEntryStatus @default(ESTIMATED)
+  calculatedAt     DateTime              @default(now())
+  releasedAt       DateTime?
+  paidAt           DateTime?
+  reversedAt       DateTime?
+  reason           String?
+
+  @@index([companyId, salesPersonId, status])
+}
+
+model CommercialNotification {
+  id             String                     @id @default(cuid())
+  companyId      String
+  company        Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           CommercialNotificationType
+  title          String
+  message        String
+  entityType     String?
+  entityId       String?
+  metadata       Json?
+  createdAt      DateTime                   @default(now())
+  readAt         DateTime?
+  acknowledgedAt DateTime?
+
+  @@index([userId, readAt, createdAt])
+  @@index([companyId, type, createdAt])
+}
+
+model CommercialCatalogDocument {
+  id            String      @id @default(cuid())
+  companyId     String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  priceTableId  String?
+  priceTable    PriceTable? @relation(fields: [priceTableId], references: [id], onDelete: SetNull)
+  version       String
+  generatedAt   DateTime    @default(now())
+  validFrom     DateTime
+  validUntil    DateTime?
+  options       Json
+  status        String      @default("VIGENTE")
+  documentHash  String?
+  revokedAt     DateTime?
+  supersededAt  DateTime?
+  validationUrl String?
+
+  @@index([companyId, generatedAt])
+  @@index([priceTableId, status])
+  @@index([userId, generatedAt])
 }
 
 model FinancialAccount {
@@ -956,6 +1613,11 @@ model SalesOrderItem {
   unitPrice              Decimal                 @db.Decimal(14, 2)
   discount               Decimal                 @default(0) @db.Decimal(14, 2)
   totalAmount            Decimal                 @db.Decimal(14, 2)
+  priceTableId           String?
+  priceTable             PriceTable?             @relation(fields: [priceTableId], references: [id], onDelete: SetNull)
+  priceValidAt           DateTime?
+  promotionId            String?
+  promotion              CommercialPromotion?    @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   reservations           InventoryReservation[]
   finishedGoodsMovements FinishedGoodsMovement[]
   createdAt              DateTime                @default(now())
@@ -1227,4 +1889,251 @@ model CostTariff {
 
   @@index([companyId, type, validFrom])
   @@index([costCenterId, active])
+}
+
+model LabSample {
+  id          String                 @id @default(cuid())
+  companyId   String
+  company     Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lotId       String
+  lot         CoffeeLot              @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  sampleCode  String
+  sampleType  LabSampleType          @default(ENTRY)
+  status      LabSampleStatus        @default(PENDING)
+  notes       String?
+  createdById String
+  createdBy   User                   @relation("SampleCreator", fields: [createdById], references: [id])
+  sessions    CuppingSessionSample[]
+  evaluations CuppingEvaluation[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([companyId, sampleCode])
+  @@index([lotId, status])
+}
+
+model CuppingSession {
+  id              String                 @id @default(cuid())
+  companyId       String
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code            String
+  status          CuppingSessionStatus   @default(DRAFT)
+  mode            CuppingSessionMode     @default(CUPPING)
+  startedAt       DateTime?
+  closedAt        DateTime?
+  coordinatorId   String
+  coordinator     User                   @relation("SessionCoordinator", fields: [coordinatorId], references: [id])
+  protocol        CuppingProtocol        @default(TRADITIONAL_100)
+  protocolVersion String                 @default("1.0")
+  accessToken     String?                @unique
+  accessExpiresAt DateTime?
+  notes           String?
+  samples         CuppingSessionSample[]
+  participants    CuppingParticipant[]
+  evaluations     CuppingEvaluation[]
+  decisions       CuppingDecision[]
+  invitations     CuppingInvitation[]
+  profiles        SensoryProfile[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+model CuppingSessionSample {
+  id        String         @id @default(cuid())
+  sessionId String
+  session   CuppingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sampleId  String
+  sample    LabSample      @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  position  Int            @default(0)
+  createdAt DateTime       @default(now())
+
+  @@unique([sessionId, sampleId])
+}
+
+model CuppingParticipant {
+  id          String                 @id @default(cuid())
+  sessionId   String
+  session     CuppingSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id])
+  role        CuppingParticipantRole @default(CUPPER)
+  status      CuppingParticipantStatus @default(NOT_STARTED)
+  startedAt   DateTime?
+  completedAt DateTime?
+  joinedAt    DateTime               @default(now())
+  evaluations CuppingEvaluation[]
+  invitations CuppingInvitation[]
+
+  @@unique([sessionId, userId])
+}
+
+model CuppingEvaluation {
+  id              String                        @id @default(cuid())
+  companyId       String
+  company         Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionId       String
+  session         CuppingSession                @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sampleId        String
+  sample          LabSample                     @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  participantId   String
+  participant     CuppingParticipant            @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User                          @relation("EvaluationAuthor", fields: [authorId], references: [id])
+  fragrance       Decimal?                      @db.Decimal(5, 2)
+  flavor          Decimal?                      @db.Decimal(5, 2)
+  finish          Decimal?                      @db.Decimal(5, 2)
+  acidity         Decimal?                      @db.Decimal(5, 2)
+  body            Decimal?                      @db.Decimal(5, 2)
+  balance         Decimal?                      @db.Decimal(5, 2)
+  sweetness       Decimal?                      @db.Decimal(5, 2)
+  uniformity      Decimal?                      @db.Decimal(5, 2)
+  cleanliness     Decimal?                      @db.Decimal(5, 2)
+  overall         Decimal?                      @db.Decimal(5, 2)
+  rawScore        Decimal?                      @db.Decimal(5, 2)
+  defectPenalty   Decimal?                      @db.Decimal(5, 2)
+  finalScore      Decimal?                      @db.Decimal(5, 2)
+  totalScore      Decimal?                      @db.Decimal(5, 2)
+  acidityType     String?
+  bodyType        String?
+  aftertastePersistence String?
+  affectiveMemory String?
+  finalImpression String?
+  stageData       Json?
+  notes           String?
+  status          CuppingEvaluationStatus       @default(DRAFT)
+  cupStates       Json?
+  autosaveVersion Int                           @default(1)
+  savedAt         DateTime                      @updatedAt
+  finalizedAt     DateTime?
+  reopenedAt      DateTime?
+  reopenedById    String?
+  descriptors     CuppingEvaluationDescriptor[]
+  descriptorSelections CuppingDescriptorSelection[]
+  cupEvaluations  CuppingCupEvaluation[]
+  createdAt       DateTime                      @default(now())
+
+  @@unique([sessionId, sampleId, participantId])
+  @@index([companyId, sessionId])
+}
+
+model CuppingDescriptorSelection {
+  id           String                   @id @default(cuid())
+  evaluationId String
+  evaluation   CuppingEvaluation        @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  context      CuppingDescriptorContext
+  family       String
+  subfamily    String?
+  descriptor   String?
+  level        Int
+  intensity    Int
+  imageKey     String?
+  createdAt    DateTime                 @default(now())
+
+  @@index([evaluationId, context])
+}
+
+model CuppingCupEvaluation {
+  id           String              @id @default(cuid())
+  evaluationId String
+  evaluation   CuppingEvaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  attribute    CuppingCupAttribute
+  cupNumber    Int
+  selected     Boolean             @default(true)
+  notes        String?
+  defect       CuppingCupDefect?
+
+  @@unique([evaluationId, attribute, cupNumber])
+}
+
+model CuppingCupDefect {
+  id              String               @id @default(cuid())
+  cupEvaluationId String               @unique
+  cupEvaluation   CuppingCupEvaluation @relation(fields: [cupEvaluationId], references: [id], onDelete: Cascade)
+  defectType      String
+  defectSeverity  CuppingDefectSeverity
+  defectDescription String?
+  notes           String?
+  createdAt       DateTime             @default(now())
+}
+
+model CuppingInvitation {
+  id            String             @id @default(cuid())
+  sessionId     String
+  session       CuppingSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   CuppingParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  tokenHash     String             @unique
+  expiresAt     DateTime
+  usedAt        DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@index([sessionId, participantId, expiresAt])
+}
+
+model CuppingDescriptor {
+  id          String                        @id @default(cuid())
+  companyId   String
+  company     Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  category    String
+  type        String                        @default("FLAVOR")
+  group       String?
+  subgroup    String?
+  parentId    String?
+  source      String                        @default("SCA_REFERENCE")
+  sortOrder   Int                           @default(0)
+  active      Boolean                       @default(true)
+  evaluations CuppingEvaluationDescriptor[]
+  createdAt   DateTime                      @default(now())
+
+  @@unique([companyId, name])
+}
+
+model CuppingEvaluationDescriptor {
+  evaluationId String
+  evaluation   CuppingEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  descriptorId String
+  descriptor   CuppingDescriptor @relation(fields: [descriptorId], references: [id], onDelete: Restrict)
+
+  @@id([evaluationId, descriptorId])
+}
+
+model CuppingDecision {
+  id           String              @id @default(cuid())
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lotId        String
+  lot          CoffeeLot           @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  sessionId    String
+  session      CuppingSession      @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  decision     CuppingDecisionType
+  decisionAt   DateTime            @default(now())
+  decisionById String
+  decisionBy   User                @relation("DecisionAuthor", fields: [decisionById], references: [id])
+  notes        String?
+  createdAt    DateTime            @default(now())
+
+  @@index([lotId, decisionAt])
+}
+
+model SensoryProfile {
+  id           String          @id @default(cuid())
+  companyId    String
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lotId        String
+  lot          CoffeeLot       @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  sessionId    String?
+  session      CuppingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  score        Decimal?        @db.Decimal(5, 2)
+  attributes   Json
+  acidityTypes Json
+  descriptors  Json
+  notes        String?
+  createdAt    DateTime        @default(now())
+
+  @@index([lotId, createdAt])
 }

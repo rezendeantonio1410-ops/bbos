@@ -1,0 +1,13 @@
+"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import * as React from "react";
+import { currentUser } from "@/lib/current-user";
+import { SalesEmptyState, SalesKpi, SalesPageHeader } from "@/components/sales-components";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+const money = (value: number) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+export default function SalesCommissions() {
+  const [items, setItems] = React.useState<any[]>([]);
+  React.useEffect(() => { fetch(`${API}/commercial/commissions`, { headers: { "x-user-id": currentUser.id } }).then((r) => r.ok ? r.json() : []).then(setItems).catch(() => setItems([])); }, []);
+  const totals = items.reduce((acc, item) => ({ ...acc, [item.status]: acc[item.status] + Number(item.commissionAmount) }), { ESTIMATED: 0, ACCRUED: 0, RELEASED: 0, PAID: 0 } as Record<string, number>);
+  return <main className="min-h-screen bg-[#F7F7F5] px-5 py-7"><div className="mx-auto max-w-7xl"><SalesPageHeader title="Minhas comissões" description="Acompanhe suas comissões previstas, liberadas e pagas." /><section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><SalesKpi label="Previstas" value={money(totals.ESTIMATED + totals.ACCRUED)} tone="info"/><SalesKpi label="Liberadas" value={money(totals.RELEASED)} tone="success"/><SalesKpi label="Pagas" value={money(totals.PAID)} tone="success"/><SalesKpi label="A liberar" value={money(totals.ACCRUED)} tone="warning"/></section>{items.length ? <section className="mt-5 overflow-x-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-sm"><h2 className="mb-4 text-lg font-bold">Detalhamento</h2><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-xs text-stone-500"><tr><th className="pb-3">Pedido</th><th className="pb-3">Base</th><th className="pb-3">%</th><th className="pb-3">Comissão</th><th className="pb-3">Situação</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-t border-stone-100"><td className="py-3">{item.salesOrder?.orderNumber ?? "Pedido"}</td><td className="py-3">{money(Number(item.baseAmount))}</td><td className="py-3">{item.rate}%</td><td className="py-3 font-semibold">{money(Number(item.commissionAmount))}</td><td className="py-3 text-xs font-bold text-stone-600">{item.status}</td></tr>)}</tbody></table></section> : <div className="mt-5"><SalesEmptyState title="Nenhuma comissão registrada neste período." description="Suas comissões aparecerão aqui conforme pedidos elegíveis forem faturados ou liberados conforme a política comercial." /></div>}</div></main>;
+}

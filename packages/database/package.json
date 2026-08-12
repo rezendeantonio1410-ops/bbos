@@ -8,12 +8,17 @@
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "generate": "prisma generate",
-    "migrate": "prisma migrate dev",
-    "seed": "tsx prisma/seed-product-catalog-runner.ts",
-    "seed:demo": "tsx prisma/seed.ts",
-    "seed:cost-engine": "tsx prisma/seed-cost-engine.ts",
-    "report:production-variants": "tsx prisma/report-production-variant-backfill.ts",
+    "generate": "dotenv -e ../../.env -- prisma generate",
+    "validate": "dotenv -e ../../.env -- prisma validate",
+    "migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed-product-catalog-runner.ts",
+    "seed:demo": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "seed:cost-engine": "dotenv -e ../../.env -- tsx prisma/seed-cost-engine.ts",
+    "seed:laboratory": "dotenv -e ../../.env -- tsx prisma/seed-laboratory.ts",
+    "seed:lab-demo": "BBOS_ALLOW_DEMO_SEED=1 dotenv -e ../../.env -- tsx prisma/seed-laboratory.ts",
+    "seed:lab-demo:cleanup": "BBOS_ALLOW_DEMO_SEED=1 dotenv -e ../../.env -- tsx prisma/cleanup-laboratory-demo.ts",
+    "seed:commercial": "dotenv -e ../../.env -- tsx prisma/seed-commercial.ts",
+    "report:production-variants": "dotenv -e ../../.env -- tsx prisma/report-production-variant-backfill.ts",
     "test:catalog": "tsx --test prisma/seed-product-catalog.test.ts"
   },
   "dependencies": {
@@ -21,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "dotenv-cli": "^11.0.0",
     "prisma": "^6.14.0",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2"

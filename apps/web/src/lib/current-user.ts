@@ -8,11 +8,11 @@ export type CurrentUser = {
 
 /** Mock de sessão única; a autenticação real poderá substituí-lo sem alterar os componentes. */
 export const currentUser: CurrentUser = {
-  id: "user-jose-rezende",
-  name: "José Rezende",
-  initials: "JR",
-  corporateTitle: "Sócio Administrador",
-  systemRole: "ADMIN",
+  id: "cmsmiob920005i9mvbm3027rt",
+  name: "Rafael Lima",
+  initials: "RL",
+  corporateTitle: "Representante Comercial · DEMO",
+  systemRole: "SALES",
 };
 
 export const availableUsers: CurrentUser[] = [

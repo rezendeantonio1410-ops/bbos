@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BriefcaseBusiness,
   Bell,
   BrainCircuit,
   Boxes,
@@ -41,6 +42,7 @@ const nav = [
   { href: "/produtos", label: "Produtos", icon: PackageCheck },
   { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { href: "/vendas", label: "Vendas", icon: BarChart3 },
+  { href: "/comercial", label: "Comercial", icon: BriefcaseBusiness },
   { href: "/commerce", label: "Commerce", icon: Globe2 },
   { href: "/bi", label: "BI Executivo", icon: BrainCircuit },
   { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
