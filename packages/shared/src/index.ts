@@ -329,7 +329,7 @@ export type LabAnalysis = {
   densityGPerL: number;
   screen: string;
   defects: number;
-  scaScore: number;
+  scaScore?: number;
   approval: ReceiptApproval;
 };
 

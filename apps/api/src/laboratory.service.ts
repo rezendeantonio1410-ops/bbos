@@ -21,7 +21,7 @@ export class LaboratoryService implements OnModuleDestroy {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const month = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [sessions, samples, decisions, profiles] = await Promise.all([
+    const [sessions, samples, queue, decisions, profiles] = await Promise.all([
       this.database.cuppingSession.findMany({
         include: {
           coordinator: { select: { id: true, name: true } },
@@ -33,6 +33,28 @@ export class LaboratoryService implements OnModuleDestroy {
       }),
       this.database.labSample.findMany({
         include: { lot: { include: { supplier: { select: { id: true, name: true } } } } },
+        orderBy: { createdAt: "asc" },
+        take: 200,
+      }),
+      this.database.labSample.findMany({
+        where: { status: { in: [LabSampleStatus.PENDING, LabSampleStatus.ASSIGNED] } },
+        select: {
+          id: true,
+          sampleCode: true,
+          sampleType: true,
+          status: true,
+          createdAt: true,
+          lotId: true,
+          lot: {
+            select: {
+              code: true,
+              origin: true,
+              variety: true,
+              receivedAt: true,
+              supplier: { select: { name: true } },
+            },
+          },
+        },
         orderBy: { createdAt: "asc" },
         take: 200,
       }),
@@ -52,7 +74,6 @@ export class LaboratoryService implements OnModuleDestroy {
         take: 100,
       }),
     ]);
-    const queue = samples.filter((item) => item.status === LabSampleStatus.PENDING || item.status === LabSampleStatus.ASSIGNED);
     const terminalSessionStatuses: CuppingSessionStatus[] = [CuppingSessionStatus.CLOSED, CuppingSessionStatus.CANCELLED];
     const analysisSampleStatuses: LabSampleStatus[] = [LabSampleStatus.ASSIGNED, LabSampleStatus.EVALUATED, LabSampleStatus.CONSOLIDATED];
     const activeSessions = sessions.filter((item) => !terminalSessionStatuses.includes(item.status));
@@ -74,7 +95,7 @@ export class LaboratoryService implements OnModuleDestroy {
       inAnalysis: samples.filter((item) => analysisSampleStatuses.includes(item.status)).length,
       approved: decisions.filter((item) => item.decision === CuppingDecisionType.APPROVED || item.decision === CuppingDecisionType.APPROVED_WITH_OBSERVATION).length,
       pending: decisions.filter((item) => item.decision === CuppingDecisionType.RETEST_REQUIRED).length + awaitingDecision,
-      queue: queue.slice(0, 20),
+      queue,
       activeSession: activeSessions[0] ?? null,
       sessions: sessions.slice(0, 8),
       decisions: {

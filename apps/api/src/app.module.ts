@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DashboardController } from "./dashboard.controller";
 import { HealthController } from "./health.controller";
 import { ReceiptsController } from "./receipts.controller";
+import { ReceiptsService } from "./receipts.service";
 import { InventoryController } from "./inventory.controller";
 import { ProductionController } from "./production.controller";
 import { ProductsController } from "./products.controller";
@@ -54,6 +55,6 @@ import { CuppingInvitationDeliveryService } from "./cupping-invitation-delivery.
     CommercialController,
     CuppingMobileController,
   ],
-  providers: [ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, LaboratoryService, CommercialService, CommercialPriceService, LocalDocumentStorageProvider, SalesNextActionService, CuppingMobileService, CuppingInvitationDeliveryService],
+  providers: [ProductsService, ProductsRepository, ProductionService, ReceiptsService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, LaboratoryService, CommercialService, CommercialPriceService, LocalDocumentStorageProvider, SalesNextActionService, CuppingMobileService, CuppingInvitationDeliveryService],
 })
 export class AppModule {}
