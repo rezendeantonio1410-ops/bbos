@@ -15,9 +15,9 @@ O fluxo mobile permanece sob `/cupping/mobile/...`. O convite é individual, exp
 
 - `DATABASE_URL`: PostgreSQL do ambiente.
 - `PUBLIC_WEB_URL`: origem usada pela API nos magic links; padrão local `http://localhost:3000`.
-- `NEXT_PUBLIC_API_URL`: base pública da API; padrão local `http://localhost:3001/api`.
+- `API_INTERNAL_URL`: endereço da API visto pelo servidor Next; em desenvolvimento, use `http://127.0.0.1:3001`. O navegador mobile usa o proxy same-origin `/api` e não depende do IP atual da API.
 
-Para testar no iPhone, `NEXT_PUBLIC_API_URL` também precisa usar o IP do Mac, não `localhost`.
+Para testar no iPhone, somente a URL aberta precisa usar o endereço alcançável do Web. O bundle não incorpora o IP LAN da API.
 
 ## Produção
 

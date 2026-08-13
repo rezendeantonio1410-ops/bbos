@@ -19,9 +19,12 @@ import {
 import {
   deriveCuppingSensoryProfile,
   olfactoryLibrary,
+  removeOlfactoryPerception,
   sensoryLibrary,
   toggleSensorySelection,
+  upsertOlfactoryPerception,
   type CuppingSensorySelection,
+  type OlfactoryStageSelection,
   type SensoryFamily,
 } from "@bbos/shared";
 import {
@@ -49,13 +52,18 @@ export function CuppingScorePicker({
   onChange,
   label,
   grid = false,
+  maximum = 10,
 }: {
   value?: number;
   onChange(value: number): void;
   label: string;
   grid?: boolean;
+  maximum?: number;
 }) {
-  const scores = Array.from({ length: 17 }, (_, index) => 6 + index * 0.25);
+  const scores = Array.from(
+    { length: Math.round((maximum - 6) / 0.25) + 1 },
+    (_, index) => 6 + index * 0.25,
+  );
   return (
     <div
       aria-label={`Nota de ${label}`}
@@ -170,6 +178,8 @@ export function CuppingSensoryLibrary({
   const [subfamily, setSubfamily] = React.useState<
     SensoryFamily["subfamilies"][number] | null
   >(null);
+  const [pending, setPending] = React.useState<MobileSelection | null>(null);
+  const olfactory = context === "AROMA" || context === "FRAGRANCE";
   const activeLibrary = context === "AROMA" || context === "FRAGRANCE" ? olfactoryLibrary : sensoryLibrary;
   const toggle = (selection: MobileSelection) =>
     onChange(toggleSensorySelection(value, selection));
@@ -186,6 +196,8 @@ export function CuppingSensoryLibrary({
   const selectedNames = contextSelections
     .map((item) => item.descriptor)
     .filter((item): item is string => Boolean(item));
+  if (pending?.descriptor && !selectedNames.includes(pending.descriptor))
+    selectedNames.push(pending.descriptor);
   const level = subfamily ? "descriptor" : family ? "subfamily" : "family";
   React.useEffect(() => {
     onDepthChange?.(subfamily ? 2 : family ? 1 : 0);
@@ -200,8 +212,9 @@ export function CuppingSensoryLibrary({
         breadcrumb={[family?.name, subfamily?.name].filter((item): item is string => Boolean(item))}
         selected={selectedNames}
         immersive={context === "FRAGRANCE" || context === "AROMA"}
-        onBack={family ? () => (subfamily ? setSubfamily(null) : setFamily(null)) : undefined}
+        onBack={family ? () => { setPending(null); if (subfamily) setSubfamily(null); else setFamily(null); } : undefined}
         onItem={(wheelItem) => {
+          setPending(null);
           if (!family) {
             setFamily(activeLibrary.find((item) => item.name === wheelItem.name) ?? null);
             return;
@@ -211,22 +224,33 @@ export function CuppingSensoryLibrary({
             return;
           }
           const descriptor = subfamily.descriptors.find((item) => item.name === wheelItem.name);
-          if (descriptor) toggle({
-            context,
-            family: family.name,
-            subfamily: subfamily.name,
-            descriptor: descriptor.name,
-            level: 3,
-            intensity: 3,
-            imageKey: descriptor.imageKey,
-          });
+          if (descriptor) {
+            const existing = contextSelections.find((item) => item.descriptor === descriptor.name && item.family === family.name && item.subfamily === subfamily.name);
+            const selection = existing ?? { context, family: family.name, subfamily: subfamily.name, descriptor: descriptor.name, level: 3, intensity: 3, imageKey: descriptor.imageKey };
+            if (olfactory) setPending(selection);
+            else toggle(selection);
+          }
         }}
       />
+      {olfactory && pending && (
+        <section className="mt-4 rounded-[2rem] border border-amber-200 bg-white/90 p-4 shadow-sm" aria-label={`Intensidade de ${pending.descriptor}`}>
+          <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-800">{pending.family} › {pending.subfamily}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pending.descriptor}</h3><p className="mt-1 text-xs text-slate-500">Quanto você percebe?</p></div><button type="button" onClick={() => setPending(null)} className="min-h-11 px-2 text-xs font-bold text-slate-500">Cancelar</button></div>
+          <div className="mt-4 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Intensidade do aroma">
+            {["Muito baixa", "Baixa", "Média", "Marcante", "Muito marcante"].map((label, index) => {
+              const intensity = index + 1;
+              const active = pending.intensity === intensity;
+              return <button type="button" role="radio" aria-checked={active} aria-label={`${label}: ${intensity} de 5`} key={label} onClick={() => setPending({ ...pending, intensity })} className={`min-h-14 rounded-xl border px-1 text-[9px] font-bold leading-3 transition active:scale-95 ${active ? "border-orange-500 bg-orange-500 text-white shadow-md" : "border-amber-100 bg-amber-50 text-slate-700"}`}><span className="mb-1 block text-base">{intensity}</span>{label}</button>;
+            })}
+          </div>
+          <button type="button" onClick={() => { onChange(upsertOlfactoryPerception(contextSelections as OlfactoryStageSelection[], pending as OlfactoryStageSelection) as MobileSelection[]); setPending(null); }} className="mt-4 min-h-12 w-full rounded-xl bg-[#512b1a] px-4 text-sm font-black text-white shadow-md active:scale-[.99]">Adicionar à xícara</button>
+        </section>
+      )}
       {contextSelections.length > 0 && <div className="mt-4 rounded-3xl border border-orange-100 bg-white/70 p-3">
-        <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-500">{context === "FLAVOR" ? "Sua xícara" : "Percepções aromáticas"}</p><span className="text-[10px] font-bold text-orange-700">{contextSelections.length} selecionado{contextSelections.length === 1 ? "" : "s"}</span></div>
-        <div className="mt-2 flex flex-wrap gap-2">{contextSelections.map((selection, index) => <button type="button" onClick={() => toggle(selection)} aria-label={`Remover ${selection.descriptor ?? selection.family}`} key={`${selection.family}-${selection.descriptor}-${index}`} className="inline-flex min-h-8 items-center rounded-full border border-orange-200 bg-orange-50 px-3 text-[11px] font-bold text-slate-700">{selection.descriptor ?? selection.subfamily ?? selection.family} <span className="ml-1" aria-hidden="true">×</span></button>)}</div>
+        <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-500">{context === "FLAVOR" ? "Sua xícara" : "Sua taça — Aroma"}</p><span className="text-[10px] font-bold text-orange-700">{contextSelections.length} aroma{contextSelections.length === 1 ? "" : "s"}</span></div>
+        <div className="mt-3 space-y-2">{contextSelections.map((selection, index) => <div key={`${selection.family}-${selection.descriptor}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-3"><button type="button" onClick={() => olfactory ? setPending(selection) : undefined} className="min-h-11 flex-1 text-left"><strong className="block text-xs text-slate-800">{selection.descriptor ?? selection.subfamily ?? selection.family}</strong><span className="mt-1 block text-[10px] text-slate-500">{selection.family} › {selection.subfamily} · Intensidade {selection.intensity}/5</span></button><button type="button" onClick={() => onChange(olfactory ? removeOlfactoryPerception(contextSelections as OlfactoryStageSelection[], selection as OlfactoryStageSelection) as MobileSelection[] : toggleSensorySelection(value, selection))} aria-label={`Remover ${selection.descriptor ?? selection.family}`} className="min-h-11 rounded-xl px-3 text-xs font-black text-red-700">Remover</button></div>)}</div>
+        {olfactory && <button type="button" onClick={() => { if (window.confirm("Remover todos os aromas desta taça?")) onChange([]); }} className="mt-3 min-h-11 w-full rounded-xl border border-red-100 text-xs font-bold text-red-700">Limpar todos</button>}
       </div>}
-      {contextSelections.map((selection, index) => (
+      {!olfactory && contextSelections.map((selection, index) => (
           <div
             key={`${selection.family}-${selection.descriptor}-${index}`}
             className="mt-3 grid gap-3 rounded-2xl bg-white/80 p-3 text-xs sm:grid-cols-[1fr_auto] sm:items-center"

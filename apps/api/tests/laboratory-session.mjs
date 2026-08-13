@@ -58,6 +58,42 @@ function sessionHarness(options = {}) {
   return { service, committed };
 }
 
+test("contexto retorna usuários ativos autorizados e somente amostras pendentes livres", async () => {
+  const service = new LaboratoryService();
+  service.database = {
+    company: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.users.some.active, true);
+        assert.ok(where.users.some.role.in.includes("ADMIN"));
+        return { id: "company-1", name: "BBOS Demo", tradeName: "BBOS" };
+      },
+    },
+    user: {
+      findMany: async ({ where }) => {
+        assert.equal(where.companyId, "company-1");
+        assert.equal(where.active, true);
+        assert.ok(where.role.in.includes("INDUSTRIAL"));
+        return [{ id: "user-cupper", name: "Provador", email: "provador@demo.local", role: "INDUSTRIAL", preferredCuppingChannel: "QR" }];
+      },
+    },
+    labSample: {
+      findMany: async ({ where }) => {
+        assert.equal(where.companyId, "company-1");
+        assert.equal(where.status, "PENDING");
+        assert.ok(where.sessions.none.session.status.in.includes("IN_PROGRESS"));
+        return [{ id: "sample-1", sampleCode: "DEMO-001", status: "PENDING", companyId: "company-1" }];
+      },
+    },
+  };
+
+  const context = await service.sessionContext();
+  assert.equal(context.company.id, "company-1");
+  assert.deepEqual(context.users.map((user) => user.id), ["user-cupper"]);
+  assert.deepEqual(context.samples.map((sample) => sample.sampleCode), ["DEMO-001"]);
+  assert.equal(context.defaultProtocol, "TRADITIONAL_100");
+  assert.equal(context.protocolVersion, "1.0");
+});
+
 test("fluxo válido cria sessão, participantes e muda PENDING para ASSIGNED", async () => {
   const { service, committed } = sessionHarness();
   const session = await service.createSession(baseInput);

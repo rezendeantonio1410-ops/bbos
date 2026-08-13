@@ -4,21 +4,67 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Check, ChevronRight, Clock3, Sparkles } from "lucide-react";
+import { Check, ChevronRight, Clock3, RefreshCw, Sparkles } from "lucide-react";
+import { cacheCuppingSession, cuppingFetch, CUPPING_API, maskCuppingToken, readCachedCuppingSession, recoverCuppingToken, traceCuppingAccess } from "@/lib/cupping-mobile-access";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+const API = CUPPING_API;
 
 export default function MobileSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [data, setData] = React.useState<any>(null);
+  const [accessError, setAccessError] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [connectionWarning, setConnectionWarning] = React.useState("");
+  const [attempt, setAttempt] = React.useState(0);
   React.useEffect(() => {
-    const token = sessionStorage.getItem(`cupping-token:${sessionId}`);
-    fetch(`${API}/cupping/mobile/sessions/${sessionId}`, {
+    let active = true;
+    const token = recoverCuppingToken(sessionId);
+    const cached = readCachedCuppingSession<any>(sessionId);
+    if (cached) setData(cached);
+    if (!token) {
+      traceCuppingAccess("session:missing-token", { url: window.location.href, pathname: window.location.pathname, sessionId, hashPresent: Boolean(window.location.hash), apiBase: API });
+      setAccessError("Acesso não encontrado. Abra novamente o convite enviado pelo laboratório.");
+      setLoading(false);
+      return () => { active = false; };
+    }
+    setLoading(true);
+    setAccessError("");
+    const endpoint = `${API}/cupping/mobile/sessions/${sessionId}`;
+    traceCuppingAccess("session:start", { url: window.location.href, pathname: window.location.pathname, sessionId, token: maskCuppingToken(token), endpoint, apiBase: API });
+    cuppingFetch(endpoint, {
       headers: { authorization: `Bearer ${token ?? ""}` },
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(setData);
-  }, [sessionId]);
+    }, { retries: 1, timeoutMs: 8_000 })
+      .then(async (response) => {
+        const responseBody = await response.clone().json().catch(() => null);
+        traceCuppingAccess("session:response", { status: response.status, endpoint, body: response.ok ? { sessionId: responseBody?.session?.id, participantId: responseBody?.participant?.id } : responseBody });
+        if (!response.ok) {
+          const body = responseBody;
+          throw new Error(body?.message ?? "Não foi possível validar o acesso a esta sessão.");
+        }
+        return response.json();
+      })
+      .then((context) => {
+        if (!active) return;
+        setData(context);
+        cacheCuppingSession(sessionId, context);
+        setAccessError("");
+        setConnectionWarning("");
+      })
+      .catch((cause) => {
+        if (!active) return;
+        if (cached) {
+          setAccessError("");
+          setConnectionWarning("Sem conexão — você pode continuar com os dados salvos neste dispositivo.");
+        } else if (cause instanceof DOMException && cause.name === "AbortError") setAccessError("A API demorou para responder. Verifique a rede e tente novamente.");
+        else setAccessError(cause instanceof Error ? cause.message : "Não foi possível carregar a sessão.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt, sessionId]);
   const progressBySample = new Map(
     (data?.progress?.samples ?? []).map((item: any) => [item.sampleId, item]),
   );
@@ -58,7 +104,9 @@ export default function MobileSessionPage() {
           );
         })}
       </div>
-      {!data && <div className="mt-8 rounded-3xl bg-white/70 p-6 text-center text-sm text-slate-500"><Sparkles className="mx-auto mb-2 animate-pulse" />Validando acesso…</div>}
+      {data && connectionWarning && <p role="status" className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-xs font-semibold text-amber-800">{connectionWarning}</p>}
+      {loading && <div className="mt-8 rounded-3xl bg-white/70 p-6 text-center text-sm text-slate-500"><Sparkles className="mx-auto mb-2 animate-pulse" />Validando acesso…</div>}
+      {!loading && !data && accessError && <div className="mt-8 rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center"><p className="text-sm font-black text-rose-800">Não foi possível carregar sua sessão</p><p className="mt-2 text-xs leading-5 text-rose-700">{accessError}</p><button type="button" onClick={() => setAttempt((value) => value + 1)} className="mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#572f1d] px-5 text-sm font-black text-white"><RefreshCw size={16} /> Tentar novamente</button></div>}
     </main>
   );
 }

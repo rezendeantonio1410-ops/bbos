@@ -2,22 +2,31 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import { cuppingFetch, CUPPING_API, maskCuppingToken, persistCuppingAccess, traceCuppingAccess } from "@/lib/cupping-mobile-access";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+const API = CUPPING_API;
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
   const [accessError, setAccessError] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [attempt, setAttempt] = React.useState(0);
 
   React.useEffect(() => {
-    fetch(`${API}/cupping/invitations/accept`, {
+    let active = true;
+    setLoading(true);
+    setAccessError("");
+    const endpoint = `${API}/cupping/invitations/accept`;
+    traceCuppingAccess("invite:start", { url: window.location.href, pathname: window.location.pathname, token: maskCuppingToken(token), endpoint, apiBase: API });
+    cuppingFetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token }),
-    })
+    }, { retries: 0, timeoutMs: 8_000 })
       .then(async (response) => {
+        traceCuppingAccess("invite:response", { status: response.status, endpoint });
         if (!response.ok) {
           const body = await response.json().catch(() => null);
           throw new Error(
@@ -28,18 +37,23 @@ export default function InvitePage() {
         return response.json();
       })
       .then((data) => {
-        sessionStorage.setItem(
-          `cupping-token:${data.sessionId}`,
-          data.accessToken,
-        );
-        sessionStorage.setItem(
-          `cupping-participant:${data.sessionId}`,
-          data.participantId,
-        );
-        router.replace(`/cupping/mobile/session/${data.sessionId}`);
+        if (!active) return;
+        traceCuppingAccess("invite:accepted", { sessionId: data.sessionId, participantId: data.participantId, token: maskCuppingToken(data.accessToken) });
+        persistCuppingAccess(data.sessionId, data.accessToken, data.participantId);
+        router.replace(`/cupping/mobile/session/${data.sessionId}#access=${encodeURIComponent(data.accessToken)}`);
       })
-      .catch((error) => setAccessError(error.message));
-  }, [router, token]);
+      .catch((cause) => {
+        if (!active) return;
+        if (cause instanceof DOMException && cause.name === "AbortError") setAccessError("A API demorou para responder. Verifique a rede e tente novamente.");
+        else setAccessError(cause instanceof Error ? cause.message : "Não foi possível validar este convite.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt, router, token]);
 
   return (
     <main className="grid min-h-screen place-items-center p-6">
@@ -52,13 +66,14 @@ export default function InvitePage() {
               Não foi possível validar seu acesso
             </p>
             <p className="mt-2 text-xs text-slate-600">{accessError}</p>
+            <button type="button" onClick={() => setAttempt((value) => value + 1)} className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#572f1d] px-5 text-sm font-black text-white"><RefreshCw size={16} /> Tentar novamente</button>
           </>
-        ) : (
+        ) : loading ? (
           <p className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-500">
             <LoaderCircle className="animate-spin" size={17} />
             Preparando sua experiência sensorial…
           </p>
-        )}
+        ) : null}
       </section>
     </main>
   );

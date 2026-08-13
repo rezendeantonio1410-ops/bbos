@@ -100,9 +100,20 @@ export async function seedLaboratoryDemo(client: PrismaClient) {
     update: { coordinatorId: coordinator.id, mode: CuppingSessionMode.TRAINING, status: CuppingSessionStatus.IN_PROGRESS, protocol: CuppingProtocol.TRADITIONAL_100, protocolVersion: "1.0" },
     create: { companyId: company.id, code: "DEMO-CUP-2026-002", coordinatorId: coordinator.id, mode: CuppingSessionMode.TRAINING, status: CuppingSessionStatus.IN_PROGRESS, protocol: CuppingProtocol.TRADITIONAL_100, protocolVersion: "1.0", startedAt: new Date(), notes: "DEMO · Sessão de treinamento em andamento" },
   });
+  await client.cuppingSession.updateMany({
+    where: {
+      companyId: company.id,
+      code: { startsWith: "DEMO-CUP-", not: "DEMO-CUP-2026-002" },
+      status: { in: [CuppingSessionStatus.DRAFT, CuppingSessionStatus.OPEN, CuppingSessionStatus.IN_PROGRESS, CuppingSessionStatus.PAUSED, CuppingSessionStatus.CONSOLIDATING] },
+    },
+    data: { status: CuppingSessionStatus.CANCELLED, closedAt: new Date() },
+  });
   for (const [position, item] of samples.entries())
     await client.cuppingSessionSample.upsert({ where: { sessionId_sampleId: { sessionId: closedSession.id, sampleId: item.sample.id } }, update: { position }, create: { sessionId: closedSession.id, sampleId: item.sample.id, position } });
-  for (const [position, item] of [samples[0]!, samples[3]!, samples[5]!].entries())
+  await client.cuppingSessionSample.deleteMany({
+    where: { sessionId: activeSession.id, sampleId: { not: samples[3]!.sample.id } },
+  });
+  for (const [position, item] of [samples[3]!].entries())
     await client.cuppingSessionSample.upsert({ where: { sessionId_sampleId: { sessionId: activeSession.id, sampleId: item.sample.id } }, update: { position }, create: { sessionId: activeSession.id, sampleId: item.sample.id, position } });
 
   const closedParticipant = await client.cuppingParticipant.upsert({ where: { sessionId_userId: { sessionId: closedSession.id, userId: cupper.id } }, update: { role: CuppingParticipantRole.CUPPER }, create: { sessionId: closedSession.id, userId: cupper.id, role: CuppingParticipantRole.CUPPER } });

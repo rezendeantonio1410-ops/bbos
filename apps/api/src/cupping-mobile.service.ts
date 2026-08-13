@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   GoneException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
   type OnModuleDestroy,
@@ -54,7 +55,7 @@ type CupInput = {
   notes?: string;
 };
 type SelectionInput = {
-  context: keyof typeof CuppingDescriptorContext;
+  context: keyof typeof CuppingDescriptorContext | "FRAGRANCE";
   family: string;
   subfamily?: string;
   descriptor?: string;
@@ -62,10 +63,15 @@ type SelectionInput = {
   intensity: number;
   imageKey?: string;
 };
+const descriptorContext = (context: SelectionInput["context"]) =>
+  context === "FRAGRANCE"
+    ? CuppingDescriptorContext.AROMA
+    : context as CuppingDescriptorContext;
 
 @Injectable()
 export class CuppingMobileService implements OnModuleDestroy {
   readonly database = new PrismaClient();
+  private readonly logger = new Logger(CuppingMobileService.name);
   private readonly traditional100 = new Traditional100ScoringEngine();
   constructor(private readonly delivery: CuppingInvitationDeliveryService) {}
   onModuleDestroy() {
@@ -174,12 +180,18 @@ export class CuppingMobileService implements OnModuleDestroy {
   }
 
   private async invitation(token: string, sessionId?: string) {
+    const tokenFingerprint = token ? `${token.slice(0, 6)}…${token.slice(-4)}` : "ausente";
+    this.logger.debug(`invite lookup token=${tokenFingerprint} session=${sessionId ?? "não informada"}`);
     if (!token) throw new UnauthorizedException("Convite obrigatório.");
     const invitation = await this.database.cuppingInvitation.findUnique({
       where: { tokenHash: hash(token) },
       include: { participant: { include: { user: true } }, session: true },
     });
-    if (!invitation) throw new UnauthorizedException("Convite inválido.");
+    if (!invitation) {
+      this.logger.warn(`invite not found token=${tokenFingerprint}`);
+      throw new UnauthorizedException("Convite inválido.");
+    }
+    this.logger.debug(`invite found id=${invitation.id} session=${invitation.sessionId} participant=${invitation.participantId} expires=${invitation.expiresAt.toISOString()} revoked=${Boolean(invitation.revokedAt)}`);
     if (invitation.revokedAt) throw new ForbiddenException("Convite revogado.");
     if (invitation.expiresAt <= new Date())
       throw new GoneException(
@@ -363,7 +375,7 @@ export class CuppingMobileService implements OnModuleDestroy {
               in: [
                 ...new Set(
                   input.selections.map(
-                    (item) => item.context as CuppingDescriptorContext,
+                    (item) => descriptorContext(item.context),
                   ),
                 ),
               ],
@@ -373,7 +385,7 @@ export class CuppingMobileService implements OnModuleDestroy {
         await tx.cuppingDescriptorSelection.createMany({
           data: input.selections.map((item) => ({
             evaluationId: evaluation.id,
-            context: item.context as CuppingDescriptorContext,
+            context: descriptorContext(item.context),
             family: item.family,
             subfamily: item.subfamily,
             descriptor: item.descriptor,

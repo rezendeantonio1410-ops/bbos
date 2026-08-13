@@ -19,7 +19,10 @@ export default function NewCuppingSessionPage() {
   React.useEffect(() => {
     fetch(`${API}/laboratory/sessions/context`)
       .then(async (response) => {
-        if (!response.ok) throw new Error("Contexto indisponível");
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(body?.message ?? "Contexto indisponível");
+        }
         return response.json();
       })
       .then((sessionContext) => {
@@ -40,8 +43,8 @@ export default function NewCuppingSessionPage() {
               : [],
         );
       })
-      .catch(() =>
-        setError("Não foi possível carregar o contexto do laboratório."),
+      .catch((cause) =>
+        setError(cause instanceof Error ? cause.message : "Não foi possível carregar o contexto do laboratório."),
       );
   }, []);
   async function create() {
@@ -73,7 +76,8 @@ export default function NewCuppingSessionPage() {
       }),
     });
     if (!response.ok) {
-      setError("Não foi possível criar a sessão.");
+      const body = await response.json().catch(() => null);
+      setError(body?.message ?? "Não foi possível criar a sessão.");
       return;
     }
     const session = await response.json();
