@@ -402,10 +402,11 @@ export default function CuppingStepPage() {
       { method: "POST", headers: { authorization: `Bearer ${token ?? ""}` } },
     );
     if (response.ok) {
+      const finalizedResult = await response.json();
       localStorage.removeItem(key);
-      router.replace(
-        `/cupping/mobile/session/${sessionId}/sample/${sampleId}/result`,
-      );
+      router.replace(finalizedResult.navigation?.nextSampleId
+        ? `/cupping/mobile/session/${sessionId}/sample/${finalizedResult.navigation.nextSampleId}/aroma`
+        : `/cupping/mobile/session/${sessionId}?completed=1`);
     } else
       setError(
         (await response.json().catch(() => null))?.message ??

@@ -111,3 +111,54 @@ test("protocolo diferente de TRADITIONAL_100 é bloqueado", async () => {
   const { service } = sessionHarness();
   await assert.rejects(() => service.createSession({ ...baseInput, protocol: "CVA_EXPERIENCE" }), /Somente o protocolo TRADITIONAL_100/);
 });
+
+function consolidationHarness(evaluations) {
+  const service = new LaboratoryService();
+  service.database = {
+    cuppingSession: {
+      findUnique: async () => ({
+        id: "session-1",
+        samples: [{ sampleId: "sample-1" }, { sampleId: "sample-2" }],
+        participants: [{ id: "participant-1" }],
+        evaluations,
+      }),
+      update: async ({ data }) => ({ id: "session-1", ...data }),
+    },
+  };
+  return service;
+}
+
+const completedEvaluation = (sampleId, status = "COMPLETED") => ({
+  sampleId,
+  participantId: "participant-1",
+  status,
+  fragrance: 8,
+  flavor: 8,
+  acidity: 8,
+  finish: 8,
+  body: 8,
+  balance: 8,
+  sweetness: 10,
+  uniformity: 10,
+  cleanliness: 10,
+  descriptors: [],
+});
+
+test("consolidação não conta rascunho como avaliação concluída", async () => {
+  const service = consolidationHarness([
+    completedEvaluation("sample-1"),
+    completedEvaluation("sample-2", "DRAFT"),
+  ]);
+  await assert.rejects(() => service.consolidate("session-1"), /1 avaliações concluídas/);
+});
+
+test("consolidação mantém resultados separados por amostra", async () => {
+  const service = consolidationHarness([
+    completedEvaluation("sample-1"),
+    { ...completedEvaluation("sample-2"), fragrance: 9 },
+  ]);
+  const result = await service.consolidate("session-1");
+  assert.equal(result.samples.length, 2);
+  assert.equal(result.samples[0].averages.fragrance, 8);
+  assert.equal(result.samples[1].averages.fragrance, 9);
+});

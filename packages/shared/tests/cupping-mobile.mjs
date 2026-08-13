@@ -7,6 +7,7 @@ import {
   aftertastePersistenceOptions,
   buildAcidityPersistence,
   buildBodyPersistence,
+  buildCuppingSessionProgress,
   bodyTextureOptions,
   bodyWeightOptions,
   canContinueSensoryStep,
@@ -18,6 +19,7 @@ import {
   deriveCuppingSensoryProfile,
   invitationState,
   isValidCuppingScore,
+  nextPendingCuppingSample,
   olfactoryLibrary,
   olfactorySelectionsFromStage,
   priorScoresInitiallyExpanded,
@@ -33,6 +35,36 @@ import {
   validateCleanCup,
   validateCleanCupState,
 } from "../dist/cupping-mobile.js";
+
+test("progresso 1x1 distingue não iniciada, andamento e concluída", () => {
+  assert.equal(buildCuppingSessionProgress(["s1"], ["p1"], []).overall.state, "NOT_STARTED");
+  assert.equal(buildCuppingSessionProgress(["s1"], ["p1"], [{ sampleId: "s1", participantId: "p1", status: "DRAFT" }]).overall.state, "IN_PROGRESS");
+  const completed = buildCuppingSessionProgress(["s1"], ["p1"], [{ sampleId: "s1", participantId: "p1", status: "COMPLETED" }]);
+  assert.equal(completed.overall.state, "COMPLETED");
+  assert.equal(completed.overall.percent, 100);
+});
+test("matriz de múltiplas amostras e provadores calcula progresso parcial real", () => {
+  const progress = buildCuppingSessionProgress(["s1", "s2"], ["p1", "p2"], [
+    { sampleId: "s1", participantId: "p1", status: "COMPLETED" },
+    { sampleId: "s2", participantId: "p1", status: "DRAFT" },
+    { sampleId: "s1", participantId: "p2", status: "COMPLETED" },
+  ]);
+  assert.deepEqual(progress.overall, { total: 4, completed: 2, inProgress: 1, notStarted: 1, percent: 50, state: "IN_PROGRESS" });
+  assert.equal(progress.samples.find((item) => item.sampleId === "s1").percent, 100);
+  assert.equal(progress.participants.find((item) => item.participantId === "p1").completed, 1);
+});
+test("mobile avança à próxima amostra pendente e isola outro provador", () => {
+  const evaluations = [
+    { sampleId: "s1", participantId: "p1", status: "COMPLETED" },
+    { sampleId: "s2", participantId: "p2", status: "COMPLETED" },
+  ];
+  assert.equal(nextPendingCuppingSample(["s1", "s2"], "p1", evaluations, "s1"), "s2");
+  assert.equal(nextPendingCuppingSample(["s1", "s2"], "p2", evaluations, "s2"), "s1");
+});
+test("mobile encerra somente quando todas as amostras do provador concluíram", () => {
+  const evaluations = ["s1", "s2"].map((sampleId) => ({ sampleId, participantId: "p1", status: "COMPLETED" }));
+  assert.equal(nextPendingCuppingSample(["s1", "s2"], "p1", evaluations, "s1"), null);
+});
 import { Traditional100ScoringEngine } from "../dist/cupping-scoring.js";
 test("score aceita somente 6–10 em passos de 0,25", () => {
   for (let value = 6; value <= 10; value += 0.25)

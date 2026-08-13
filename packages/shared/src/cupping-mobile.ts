@@ -108,6 +108,101 @@ export const canReopenCuppingEvaluation = (
   sameCompany: boolean,
 ) => sameCompany && ["ADMIN", "INDUSTRIAL"].includes(role);
 
+export type CuppingProgressState =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "COMPLETED";
+export type CuppingProgressEvaluation = {
+  sampleId: string;
+  participantId: string;
+  status: string;
+};
+
+const progressSummary = (states: CuppingProgressState[]) => {
+  const completed = states.filter((state) => state === "COMPLETED").length;
+  const inProgress = states.filter((state) => state === "IN_PROGRESS").length;
+  const total = states.length;
+  return {
+    total,
+    completed,
+    inProgress,
+    notStarted: total - completed - inProgress,
+    percent: total ? Math.round((completed / total) * 100) : 0,
+    state: (total > 0 && completed === total
+      ? "COMPLETED"
+      : completed > 0 || inProgress > 0
+        ? "IN_PROGRESS"
+        : "NOT_STARTED") as CuppingProgressState,
+  };
+};
+
+export function buildCuppingSessionProgress(
+  sampleIds: string[],
+  participantIds: string[],
+  evaluations: CuppingProgressEvaluation[],
+) {
+  const stateFor = (sampleId: string, participantId: string) => {
+    const evaluation = evaluations.find(
+      (item) =>
+        item.sampleId === sampleId && item.participantId === participantId,
+    );
+    return (!evaluation
+      ? "NOT_STARTED"
+      : evaluation.status === "COMPLETED"
+        ? "COMPLETED"
+        : "IN_PROGRESS") as CuppingProgressState;
+  };
+  const matrix = participantIds.flatMap((participantId) =>
+    sampleIds.map((sampleId) => ({
+      participantId,
+      sampleId,
+      state: stateFor(sampleId, participantId),
+    })),
+  );
+  return {
+    matrix,
+    overall: progressSummary(matrix.map((item) => item.state)),
+    participants: participantIds.map((participantId) => ({
+      participantId,
+      ...progressSummary(
+        matrix
+          .filter((item) => item.participantId === participantId)
+          .map((item) => item.state),
+      ),
+    })),
+    samples: sampleIds.map((sampleId) => ({
+      sampleId,
+      ...progressSummary(
+        matrix
+          .filter((item) => item.sampleId === sampleId)
+          .map((item) => item.state),
+      ),
+    })),
+  };
+}
+
+export function nextPendingCuppingSample(
+  sampleIds: string[],
+  participantId: string,
+  evaluations: CuppingProgressEvaluation[],
+  currentSampleId?: string,
+) {
+  const completed = new Set(
+    evaluations
+      .filter(
+        (item) =>
+          item.participantId === participantId && item.status === "COMPLETED",
+      )
+      .map((item) => item.sampleId),
+  );
+  const currentIndex = currentSampleId ? sampleIds.indexOf(currentSampleId) : -1;
+  const ordered = [
+    ...sampleIds.slice(currentIndex + 1),
+    ...sampleIds.slice(0, currentIndex + 1),
+  ];
+  return ordered.find((sampleId) => !completed.has(sampleId)) ?? null;
+}
+
 export type SensoryDescriptor = {
   name: string;
   imageKey: string;

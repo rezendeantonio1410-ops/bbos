@@ -16,6 +16,6 @@ export class LaboratoryController {
   @Post("sessions/:id/evaluations") evaluation(@Param("id") id: string, @Body() body: any) { return this.service.saveEvaluation(id, body); }
   @Post("descriptors") descriptor(@Body() body: any) { return this.service.createDescriptor(body); }
   @Post("sessions/:id/consolidate") consolidate(@Param("id") id: string) { return this.service.consolidate(id); }
-  @Post("sessions/:id/decision") decision(@Param("id") id: string, @Body() body: { lotId: string; companyId: string; decision: CuppingDecisionType; decisionById: string; notes?: string; averages?: Record<string, number>; descriptors?: string[] }) { return this.service.decide(id, body); }
+  @Post("sessions/:id/decision") decision(@Param("id") id: string, @Body() body: { sampleId: string; lotId: string; companyId: string; decision: CuppingDecisionType; decisionById: string; notes?: string; averages?: Record<string, number>; descriptors?: string[] }) { return this.service.decide(id, body); }
   @Get("mobile/:token") mobile(@Param("token") token: string, @Query("participantId") participantId?: string) { return this.service.getByToken(token, participantId); }
 }

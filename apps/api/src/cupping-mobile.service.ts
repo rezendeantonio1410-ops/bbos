@@ -22,6 +22,8 @@ import {
   canEditCuppingEvaluation,
   canReopenCuppingEvaluation,
   isValidCuppingScore,
+  buildCuppingSessionProgress,
+  nextPendingCuppingSample,
   Traditional100ScoringEngine,
   validateCleanCup,
   validateCleanCupState,
@@ -228,8 +230,14 @@ export class CuppingMobileService implements OnModuleDestroy {
       },
     });
     if (!session) throw new NotFoundException("Sessão não encontrada.");
+    const progress = buildCuppingSessionProgress(
+      session.samples.map((item) => item.sampleId),
+      [invitation.participantId],
+      session.evaluations,
+    );
     return {
       session,
+      progress,
       participant: {
         id: invitation.participantId,
         name: invitation.participant.user.name,
@@ -310,6 +318,10 @@ export class CuppingMobileService implements OnModuleDestroy {
     if (input.scores?.cleanCup != null)
       scoreData.cleanliness = input.scores.cleanCup;
     return this.database.$transaction(async (tx) => {
+      await tx.cuppingSession.updateMany({
+        where: { id: sessionId, status: CuppingSessionStatus.OPEN },
+        data: { status: CuppingSessionStatus.IN_PROGRESS },
+      });
       const evaluation = await tx.cuppingEvaluation.upsert({
         where: {
           sessionId_sampleId_participantId: {
@@ -475,39 +487,54 @@ export class CuppingMobileService implements OnModuleDestroy {
       attributes: scores,
       defects,
     });
-    await this.database.cuppingEvaluation.update({
-      where: { id: evaluation.id },
-      data: {
-        rawScore: result.rawScore,
-        defectPenalty: result.defectPenalty,
-        finalScore: result.finalScore,
-        totalScore: result.finalScore,
-        status: CuppingEvaluationStatus.COMPLETED,
-        finalizedAt: new Date(),
-      },
-    });
-    const remaining = await this.database.cuppingSessionSample.count({
-      where: {
-        sessionId,
-        sample: {
-          evaluations: {
-            none: {
-              participantId: invitation.participantId,
-              status: CuppingEvaluationStatus.COMPLETED,
-            },
-          },
-        },
-      },
-    });
-    if (!remaining)
-      await this.database.cuppingParticipant.update({
-        where: { id: invitation.participantId },
+    return this.database.$transaction(async (tx) => {
+      await tx.cuppingEvaluation.update({
+        where: { id: evaluation.id },
         data: {
-          status: CuppingParticipantStatus.COMPLETED,
-          completedAt: new Date(),
+          rawScore: result.rawScore,
+          defectPenalty: result.defectPenalty,
+          finalScore: result.finalScore,
+          totalScore: result.finalScore,
+          status: CuppingEvaluationStatus.COMPLETED,
+          finalizedAt: new Date(),
         },
       });
-    return result;
+      const [memberships, evaluations, participantCount] = await Promise.all([
+        tx.cuppingSessionSample.findMany({
+          where: { sessionId },
+          orderBy: { position: "asc" },
+          select: { sampleId: true },
+        }),
+        tx.cuppingEvaluation.findMany({
+          where: { sessionId, participantId: invitation.participantId },
+          select: { sampleId: true, participantId: true, status: true },
+        }),
+        tx.cuppingParticipant.count({ where: { sessionId } }),
+      ]);
+      const sampleIds = memberships.map((item) => item.sampleId);
+      const nextSampleId = nextPendingCuppingSample(
+        sampleIds,
+        invitation.participantId,
+        evaluations,
+        sampleId,
+      );
+      const allCompleted = nextSampleId === null;
+      const sampleCompleted = await tx.cuppingEvaluation.count({
+        where: { sessionId, sampleId, status: CuppingEvaluationStatus.COMPLETED },
+      });
+      if (sampleCompleted === participantCount)
+        await tx.labSample.update({
+          where: { id: sampleId },
+          data: { status: "EVALUATED" },
+        });
+      await tx.cuppingParticipant.update({
+        where: { id: invitation.participantId },
+        data: allCompleted
+          ? { status: CuppingParticipantStatus.COMPLETED, completedAt: new Date() }
+          : { status: CuppingParticipantStatus.IN_PROGRESS, completedAt: null },
+      });
+      return { ...result, navigation: { nextSampleId, allCompleted } };
+    });
   }
 
   async reopen(evaluationId: string, userId?: string) {

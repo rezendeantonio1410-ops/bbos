@@ -1905,6 +1905,7 @@ model LabSample {
   createdBy   User                   @relation("SampleCreator", fields: [createdById], references: [id])
   sessions    CuppingSessionSample[]
   evaluations CuppingEvaluation[]
+  decisions   CuppingDecision[]
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
 
@@ -2110,6 +2111,8 @@ model CuppingDecision {
   lot          CoffeeLot           @relation(fields: [lotId], references: [id], onDelete: Restrict)
   sessionId    String
   session      CuppingSession      @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  sampleId     String?
+  sample       LabSample?          @relation(fields: [sampleId], references: [id], onDelete: Restrict)
   decision     CuppingDecisionType
   decisionAt   DateTime            @default(now())
   decisionById String
@@ -2118,6 +2121,7 @@ model CuppingDecision {
   createdAt    DateTime            @default(now())
 
   @@index([lotId, decisionAt])
+  @@index([sessionId, sampleId])
 }
 
 model SensoryProfile {

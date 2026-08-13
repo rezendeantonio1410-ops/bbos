@@ -19,24 +19,12 @@ import { SensoryWheelHint } from "@/components/sensory-illustrated-wheel";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
 
-function participantProgress(
-  participant: any,
-  sampleCount: number,
-  evaluations: any[],
-) {
-  return (
-    evaluations.filter(
-      (evaluation) => evaluation.participantId === participant.id,
-    ).length >= sampleCount
-  );
-}
-
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = React.useState<any>(null);
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState("");
-  const [decisionNotes, setDecisionNotes] = React.useState("");
+  const [decisionNotes, setDecisionNotes] = React.useState<Record<string, string>>({});
   const [invitations, setInvitations] = React.useState<any[]>([]);
 
   const load = React.useCallback(() => {
@@ -56,16 +44,12 @@ export default function SessionDetailPage() {
         <p className="text-sm text-stone-500">Carregando sessão...</p>
       </div>
     );
-  const sampleCount = data.samples?.length ?? 0;
-  const evaluations = data.evaluations ?? [];
-  const completed = (data.participants ?? []).filter((participant: any) =>
-    participantProgress(participant, sampleCount, evaluations),
-  ).length;
+  const progress = data.progress;
+  const completed = progress?.participants?.filter((item: any) => item.state === "COMPLETED").length ?? 0;
   const allCompleted =
     data.status === "CONSOLIDATING" ||
     data.status === "CLOSED" ||
-    (data.participants?.length > 0 && completed === data.participants.length);
-  const primarySample = data.samples?.[0]?.sample;
+    progress?.overall?.state === "COMPLETED";
 
   async function copyLink(link: string) {
     await navigator.clipboard?.writeText(link);
@@ -108,10 +92,12 @@ export default function SessionDetailPage() {
     load();
   }
   async function decide(
+    sample: any,
     decision:
       "APPROVED" | "APPROVED_WITH_OBSERVATION" | "RETEST_REQUIRED" | "REJECTED",
   ) {
-    if (decision !== "APPROVED" && !decisionNotes.trim()) {
+    const notes = decisionNotes[sample.id]?.trim() ?? "";
+    if (decision !== "APPROVED" && !notes) {
       setNotice(
         "Informe o motivo ou observação antes de registrar esta decisão.",
       );
@@ -122,14 +108,15 @@ export default function SessionDetailPage() {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        lotId: primarySample?.lotId,
+        sampleId: sample.id,
+        lotId: sample.lotId,
         companyId: data.companyId,
         decision,
         decisionById: data.coordinatorId,
         notes:
           decision === "APPROVED"
             ? "Liberado após consolidação da sessão."
-            : decisionNotes.trim(),
+            : notes,
       }),
     });
     setBusy(false);
@@ -208,6 +195,10 @@ export default function SessionDetailPage() {
                   Processo: {item.sample.lot?.process ?? "Não informado"} ·
                   Safra: {item.sample.lot?.harvest ?? "—"}
                 </p>
+                {(() => {
+                  const itemProgress = progress?.samples?.find((row: any) => row.sampleId === item.sampleId);
+                  return <div className="mt-3"><div className="flex justify-between text-[10px] font-bold text-stone-500"><span>{itemProgress?.completed ?? 0}/{itemProgress?.total ?? 0} avaliações concluídas</span><span>{itemProgress?.percent ?? 0}%</span></div><div className="mt-1 h-2 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-forest-700" style={{ width: `${itemProgress?.percent ?? 0}%` }} /></div></div>;
+                })()}
               </div>
             ))}
           </div>
@@ -296,14 +287,9 @@ export default function SessionDetailPage() {
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-2">
           {data.participants.map((participant: any) => {
-            const done = participantProgress(
-              participant,
-              sampleCount,
-              evaluations,
-            );
-            const started = evaluations.some(
-              (evaluation: any) => evaluation.participantId === participant.id,
-            );
+            const itemProgress = progress?.participants?.find((item: any) => item.participantId === participant.id);
+            const done = itemProgress?.state === "COMPLETED";
+            const started = itemProgress?.state === "IN_PROGRESS";
             return (
               <div
                 key={participant.id}
@@ -315,15 +301,13 @@ export default function SessionDetailPage() {
                     {participant.role}
                   </span>
                 </span>
-                <Badge
-                  tone={done ? "success" : started ? "warning" : "neutral"}
-                >
+                <span className="flex items-center gap-2"><span className="text-stone-500">{itemProgress?.completed ?? 0}/{itemProgress?.total ?? 0}</span><Badge tone={done ? "success" : started ? "warning" : "neutral"}>
                   {done
                     ? "CONCLUÍDO"
                     : started
                       ? "EM ANDAMENTO"
                       : "NÃO INICIADO"}
-                </Badge>
+                </Badge></span>
               </div>
             );
           })}
@@ -341,8 +325,9 @@ export default function SessionDetailPage() {
               Encerramento
             </p>
             <h2 className="mt-1 text-lg font-bold">Consolidar e decidir</h2>
+            <div className="mt-3 flex items-center gap-3"><div className="h-2 w-48 overflow-hidden rounded-full bg-stone-100"><div className="h-full bg-forest-700" style={{ width: `${progress?.overall?.percent ?? 0}%` }} /></div><strong className="text-xs">{progress?.overall?.completed ?? 0}/{progress?.overall?.total ?? 0} · {progress?.overall?.percent ?? 0}%</strong></div>
             <p className="mt-1 text-xs text-stone-500">
-              {data.status === "OPEN" && !allCompleted
+              {["OPEN", "IN_PROGRESS"].includes(data.status) && !allCompleted
                 ? `Aguarde ${Math.max((data.participants?.length ?? 0) - completed, 0)} provador(es) concluírem.`
                 : data.status === "CLOSED"
                   ? "Sessão encerrada e auditável."
@@ -350,7 +335,7 @@ export default function SessionDetailPage() {
             </p>
           </div>
           <button
-            disabled={busy || data.status !== "OPEN" || !allCompleted}
+            disabled={busy || !["OPEN", "IN_PROGRESS"].includes(data.status) || !allCompleted}
             onClick={consolidate}
             className="inline-flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-2.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -358,50 +343,39 @@ export default function SessionDetailPage() {
           </button>
         </div>
         {data.status === "CONSOLIDATING" && (
-          <div className="mt-5 border-t border-stone-100 pt-4">
-            <label className="block text-xs font-semibold text-stone-600">
-              Motivo / observação para decisão condicionada, reanálise ou
-              bloqueio
-              <textarea
-                value={decisionNotes}
-                onChange={(event) => setDecisionNotes(event.target.value)}
-                className="mt-2 min-h-20 w-full rounded-xl border border-stone-200 p-3 font-normal"
-                placeholder="Registre a justificativa rastreável da decisão."
-              />
-            </label>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="mr-2 self-center text-xs font-semibold text-stone-500">
-                Decisão do lote:
-              </span>
+          <div className="mt-5 space-y-4 border-t border-stone-100 pt-4">
+            {data.samples.map((item: any) => {
+              const decided = data.decisions?.find((decision: any) => decision.sampleId === item.sampleId);
+              return <div key={item.sampleId} className="rounded-xl border border-stone-200 p-4"><div className="flex items-center justify-between"><strong>{item.sample.sampleCode}</strong>{decided && <Badge tone="success">{decided.decision}</Badge>}</div>{!decided && <><textarea value={decisionNotes[item.sampleId] ?? ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [item.sampleId]: event.target.value }))} className="mt-3 min-h-20 w-full rounded-xl border border-stone-200 p-3 text-xs" placeholder="Motivo/observação para decisão condicionada, reanálise ou bloqueio." /><div className="mt-3 flex flex-wrap gap-2">
               <button
                 disabled={busy}
-                onClick={() => decide("APPROVED")}
+                onClick={() => decide(item.sample, "APPROVED")}
                 className="rounded-lg bg-forest-700 px-3 py-2 text-xs font-bold text-white"
               >
                 Liberar para produção
               </button>
               <button
                 disabled={busy}
-                onClick={() => decide("APPROVED_WITH_OBSERVATION")}
+                onClick={() => decide(item.sample, "APPROVED_WITH_OBSERVATION")}
                 className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800"
               >
                 Liberar com observação
               </button>
               <button
                 disabled={busy}
-                onClick={() => decide("RETEST_REQUIRED")}
+                onClick={() => decide(item.sample, "RETEST_REQUIRED")}
                 className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800"
               >
                 Manter em análise
               </button>
               <button
                 disabled={busy}
-                onClick={() => decide("REJECTED")}
+                onClick={() => decide(item.sample, "REJECTED")}
                 className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700"
               >
                 Bloquear/Reprovar
               </button>
-            </div>
+            </div></>}</div>;})}
           </div>
         )}
       </Card>

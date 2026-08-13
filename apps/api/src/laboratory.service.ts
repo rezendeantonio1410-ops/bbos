@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, type OnModuleDestroy } from "@nestjs/common";
 import { CoffeeLotStatus, CuppingDecisionType, CuppingEvaluationStatus, CuppingParticipantRole, CuppingProtocol, CuppingSessionMode, CuppingSessionStatus, LabSampleStatus, Prisma, PrismaClient, UserRole } from "@bbos/database";
 import { randomUUID } from "node:crypto";
-import { qualityDecisionTransition, sensoryIntelligence } from "@bbos/shared";
+import { buildCuppingSessionProgress, qualityDecisionTransition, sensoryIntelligence } from "@bbos/shared";
 
 const ATTRIBUTES = ["fragrance", "flavor", "acidity", "finish", "body", "balance", "sweetness", "uniformity", "cleanliness"] as const;
 const SENSORY_ATTRIBUTES = ["fragrance", "flavor", "acidity", "finish", "body", "balance"] as const;
@@ -204,10 +204,11 @@ export class LaboratoryService implements OnModuleDestroy {
   }
 
   async getSession(id: string, revealScores = false) {
-    const session = await this.database.cuppingSession.findUnique({ where: { id }, include: { samples: { include: { sample: { include: { lot: true } } } }, participants: { include: { user: { select: { id: true, name: true, email: true, preferredCuppingChannel: true } }, invitations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, expiresAt: true, usedAt: true, revokedAt: true, createdAt: true } } } }, evaluations: { include: { descriptors: { include: { descriptor: true } }, descriptorSelections: true, cupEvaluations: { include: { defect: true } } } } } });
+    const session = await this.database.cuppingSession.findUnique({ where: { id }, include: { samples: { include: { sample: { include: { lot: true } } }, orderBy: { position: "asc" } }, participants: { include: { user: { select: { id: true, name: true, email: true, preferredCuppingChannel: true } }, invitations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, expiresAt: true, usedAt: true, revokedAt: true, createdAt: true } } } }, evaluations: { include: { descriptors: { include: { descriptor: true } }, descriptorSelections: true, cupEvaluations: { include: { defect: true } } } }, decisions: true } });
     if (!session) throw new NotFoundException("Sessão de cupping não encontrada.");
-    if (revealScores || session.status === CuppingSessionStatus.CONSOLIDATING || session.status === CuppingSessionStatus.CLOSED) return session;
-    return { ...session, evaluations: session.evaluations.map((evaluation) => ({ id: evaluation.id, sampleId: evaluation.sampleId, participantId: evaluation.participantId, savedAt: evaluation.savedAt, descriptors: evaluation.descriptors })) };
+    const progress = buildCuppingSessionProgress(session.samples.map((item) => item.sampleId), session.participants.map((item) => item.id), session.evaluations);
+    if (revealScores || session.status === CuppingSessionStatus.CONSOLIDATING || session.status === CuppingSessionStatus.CLOSED) return { ...session, progress };
+    return { ...session, progress, evaluations: session.evaluations.map((evaluation) => ({ id: evaluation.id, sampleId: evaluation.sampleId, participantId: evaluation.participantId, status: evaluation.status, savedAt: evaluation.savedAt, descriptors: evaluation.descriptors })) };
   }
 
   addParticipant(sessionId: string, input: { userId: string; role?: CuppingParticipantRole }) { return this.database.cuppingParticipant.create({ data: { sessionId, userId: input.userId, role: input.role ?? CuppingParticipantRole.CUPPER } }); }
@@ -242,26 +243,35 @@ export class LaboratoryService implements OnModuleDestroy {
   async consolidate(sessionId: string) {
     const session = await this.database.cuppingSession.findUnique({ where: { id: sessionId }, include: { samples: true, participants: true, evaluations: { include: { descriptors: { include: { descriptor: true } } } } } });
     if (!session) throw new NotFoundException("Sessão não encontrada.");
-    const evaluations = session.evaluations;
+    const evaluations = session.evaluations.filter((evaluation) => evaluation.status === CuppingEvaluationStatus.COMPLETED);
     if (!evaluations.length) throw new BadRequestException("Não há avaliações para consolidar.");
     const expected = session.samples.length * session.participants.length;
-    if (session.participants.length === 0 || evaluations.length < expected) throw new BadRequestException(`Ainda faltam ${Math.max(expected - evaluations.length, 0)} avaliações para consolidar.`);
-    const averages = Object.fromEntries(ATTRIBUTES.map((key) => [key, Number((evaluations.reduce((sum, row) => sum + (Number(row[key]) || 0), 0) / evaluations.length).toFixed(2))]));
-    const descriptors = new Map<string, number>();
-    evaluations.forEach((row) => row.descriptors.forEach(({ descriptor }) => descriptors.set(descriptor.name, (descriptors.get(descriptor.name) ?? 0) + 1)));
-    return this.database.cuppingSession.update({ where: { id: sessionId }, data: { status: CuppingSessionStatus.CONSOLIDATING }, include: { evaluations: true } }).then((updated) => ({ session: updated, averages, recurringDescriptors: [...descriptors.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count })) }));
+    if (session.participants.length === 0 || evaluations.length !== expected) throw new BadRequestException(`Ainda faltam ${Math.max(expected - evaluations.length, 0)} avaliações concluídas para consolidar.`);
+    const samples = session.samples.map(({ sampleId }) => {
+      const rows = evaluations.filter((evaluation) => evaluation.sampleId === sampleId);
+      const averages = Object.fromEntries(ATTRIBUTES.map((key) => [key, Number((rows.reduce((sum, row) => sum + (Number(row[key]) || 0), 0) / rows.length).toFixed(2))]));
+      const descriptors = new Map<string, number>();
+      rows.forEach((row) => row.descriptors.forEach(({ descriptor }) => descriptors.set(descriptor.name, (descriptors.get(descriptor.name) ?? 0) + 1)));
+      return { sampleId, averages, recurringDescriptors: [...descriptors.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count })) };
+    });
+    return this.database.cuppingSession.update({ where: { id: sessionId }, data: { status: CuppingSessionStatus.CONSOLIDATING }, include: { evaluations: true } }).then((updated) => ({ session: updated, samples }));
   }
 
-  async decide(sessionId: string, input: { lotId: string; companyId: string; decision: CuppingDecisionType; decisionById: string; notes?: string; averages?: Record<string, number>; descriptors?: string[] }) {
+  async decide(sessionId: string, input: { sampleId: string; lotId: string; companyId: string; decision: CuppingDecisionType; decisionById: string; notes?: string; averages?: Record<string, number>; descriptors?: string[] }) {
     const transition = qualityDecisionTransition(input.decision);
     if (transition.requiresReason && !input.notes?.trim()) throw new BadRequestException("A decisão selecionada exige motivo ou observação.");
     return this.database.$transaction(async (tx) => {
-      const decision = await tx.cuppingDecision.create({ data: { companyId: input.companyId, lotId: input.lotId, sessionId, decision: input.decision, decisionById: input.decisionById, notes: input.notes } });
+      const membership = await tx.cuppingSessionSample.findUnique({ where: { sessionId_sampleId: { sessionId, sampleId: input.sampleId } }, include: { session: true, sample: true } });
+      if (!membership || membership.session.companyId !== input.companyId || membership.sample.companyId !== input.companyId || membership.sample.lotId !== input.lotId) throw new BadRequestException("Amostra, lote e sessão não pertencem ao mesmo contexto.");
+      const existing = await tx.cuppingDecision.findFirst({ where: { sessionId, sampleId: input.sampleId } });
+      if (existing) throw new BadRequestException("Esta amostra já possui decisão nesta sessão.");
+      const decision = await tx.cuppingDecision.create({ data: { companyId: input.companyId, lotId: input.lotId, sampleId: input.sampleId, sessionId, decision: input.decision, decisionById: input.decisionById, notes: input.notes } });
       const approved = input.decision === CuppingDecisionType.APPROVED || input.decision === CuppingDecisionType.APPROVED_WITH_OBSERVATION;
       await tx.coffeeLot.update({ where: { id: input.lotId }, data: { status: transition.lotStatus as CoffeeLotStatus } });
-      await tx.labSample.updateMany({ where: { sessions: { some: { sessionId } } }, data: { status: transition.sampleStatus as LabSampleStatus } });
+      await tx.labSample.update({ where: { id: input.sampleId }, data: { status: transition.sampleStatus as LabSampleStatus } });
       if (approved) await tx.sensoryProfile.create({ data: { companyId: input.companyId, lotId: input.lotId, sessionId, score: input.averages ? Object.values(input.averages).reduce((sum, value) => sum + value, 0) / Math.max(Object.values(input.averages).length, 1) : undefined, attributes: input.averages ?? {}, acidityTypes: [], descriptors: input.descriptors ?? [], notes: input.notes } });
-      await tx.cuppingSession.update({ where: { id: sessionId }, data: { status: CuppingSessionStatus.CLOSED, closedAt: new Date() } });
+      const undecided = await tx.cuppingSessionSample.count({ where: { sessionId, sample: { decisions: { none: { sessionId } } } } });
+      if (!undecided) await tx.cuppingSession.update({ where: { id: sessionId }, data: { status: CuppingSessionStatus.CLOSED, closedAt: new Date() } });
       return decision;
     });
   }
