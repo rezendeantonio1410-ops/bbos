@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException, type OnModuleDestroy } from "@nestjs/common";
-import { CoffeeLotStatus, CuppingDecisionType, CuppingEvaluationStatus, CuppingParticipantRole, CuppingSessionMode, CuppingSessionStatus, LabSampleStatus, Prisma, PrismaClient } from "@bbos/database";
+import { CoffeeLotStatus, CuppingDecisionType, CuppingEvaluationStatus, CuppingParticipantRole, CuppingProtocol, CuppingSessionMode, CuppingSessionStatus, LabSampleStatus, Prisma, PrismaClient, UserRole } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { qualityDecisionTransition, sensoryIntelligence } from "@bbos/shared";
 
 const ATTRIBUTES = ["fragrance", "flavor", "acidity", "finish", "body", "balance", "sweetness", "uniformity", "cleanliness"] as const;
 const SENSORY_ATTRIBUTES = ["fragrance", "flavor", "acidity", "finish", "body", "balance"] as const;
+const LAB_USER_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.INDUSTRIAL];
+const ACTIVE_SESSION_STATUSES: CuppingSessionStatus[] = [CuppingSessionStatus.DRAFT, CuppingSessionStatus.OPEN, CuppingSessionStatus.IN_PROGRESS, CuppingSessionStatus.PAUSED, CuppingSessionStatus.CONSOLIDATING];
 
 function validateScore(value: unknown, field: string, minimum: number, maximum: number) {
   if (value === null || value === undefined) return;
@@ -111,17 +113,86 @@ export class LaboratoryService implements OnModuleDestroy {
 
   listSessions() { return this.database.cuppingSession.findMany({ include: { samples: { include: { sample: { include: { lot: true } } } }, participants: { include: { user: { select: { id: true, name: true } } } } }, orderBy: { createdAt: "desc" } }); }
 
+  async sessionContext(companyId?: string) {
+    const company = companyId
+      ? await this.database.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, tradeName: true } })
+      : await this.database.company.findFirst({
+          where: { users: { some: { active: true, role: { in: LAB_USER_ROLES } } } },
+          select: { id: true, name: true, tradeName: true },
+          orderBy: { createdAt: "asc" },
+        });
+    if (!company) throw new NotFoundException("Empresa atual não encontrada ou sem usuários autorizados para o laboratório.");
+    const [users, samples] = await Promise.all([
+      this.database.user.findMany({
+        where: { companyId: company.id, active: true, role: { in: LAB_USER_ROLES } },
+        select: { id: true, name: true, email: true, role: true, preferredCuppingChannel: true },
+        orderBy: { name: "asc" },
+      }),
+      this.database.labSample.findMany({
+        where: {
+          companyId: company.id,
+          status: LabSampleStatus.PENDING,
+          sessions: { none: { session: { status: { in: ACTIVE_SESSION_STATUSES } } } },
+        },
+        include: { lot: { include: { supplier: { select: { id: true, name: true } } } } },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+    return { company, users, samples, protocols: [CuppingProtocol.TRADITIONAL_100], defaultProtocol: CuppingProtocol.TRADITIONAL_100, protocolVersion: "1.0" };
+  }
+
   async createSample(input: { companyId: string; lotId: string; sampleCode: string; sampleType?: "ENTRY" | "CONTROL" | "RETEST" | "PRE_PRODUCTION" | "OTHER"; createdById: string; notes?: string }) {
     const lot = await this.database.coffeeLot.findUnique({ where: { id: input.lotId } });
     if (!lot) throw new NotFoundException("Lote não encontrado.");
     return this.database.labSample.create({ data: { companyId: input.companyId, lotId: input.lotId, sampleCode: input.sampleCode, sampleType: input.sampleType, createdById: input.createdById, notes: input.notes } });
   }
 
-  async createSession(input: { companyId: string; code: string; coordinatorId: string; sampleIds?: string[]; protocol?: "TRADITIONAL_100" | "CVA_EXPERIENCE"; protocolVersion?: string; notes?: string; mode?: CuppingSessionMode }) {
+  async createSession(input: { companyId: string; code: string; coordinatorId: string; participantUserIds: string[]; sampleIds: string[]; protocol?: CuppingProtocol; protocolVersion?: string; notes?: string; mode?: CuppingSessionMode }) {
     const mode = input.mode ?? CuppingSessionMode.CUPPING;
     if (!Object.values(CuppingSessionMode).includes(mode)) throw new BadRequestException("Modo de sessão inválido.");
-    const token = randomUUID().replaceAll("-", "");
-    return this.database.cuppingSession.create({ data: { companyId: input.companyId, code: input.code, coordinatorId: input.coordinatorId, mode, protocol: input.protocol ?? "TRADITIONAL_100", protocolVersion: input.protocolVersion ?? "1.0", notes: input.notes, accessToken: token, accessExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24), samples: input.sampleIds?.length ? { create: input.sampleIds.map((sampleId, position) => ({ sampleId, position })) } : undefined }, include: { samples: true } });
+    if (!input.companyId) throw new BadRequestException("Empresa é obrigatória.");
+    if (!input.code?.trim()) throw new BadRequestException("Código da sessão é obrigatório.");
+    const sampleIds = [...new Set(input.sampleIds ?? [])];
+    const participantUserIds = [...new Set(input.participantUserIds ?? [])];
+    if (!sampleIds.length) throw new BadRequestException("Selecione ao menos uma amostra.");
+    if (!participantUserIds.length) throw new BadRequestException("Selecione ao menos um provador.");
+    if (input.protocol && input.protocol !== CuppingProtocol.TRADITIONAL_100) throw new BadRequestException("Somente o protocolo TRADITIONAL_100 está disponível neste fluxo.");
+
+    return this.database.$transaction(async (tx) => {
+      const company = await tx.company.findUnique({ where: { id: input.companyId }, select: { id: true } });
+      if (!company) throw new BadRequestException("Empresa inválida.");
+      const coordinator = await tx.user.findFirst({ where: { id: input.coordinatorId, companyId: input.companyId, active: true, role: { in: LAB_USER_ROLES } }, select: { id: true } });
+      if (!coordinator) throw new BadRequestException("Coordenador inválido ou não autorizado para esta empresa.");
+      const participants = await tx.user.findMany({ where: { id: { in: participantUserIds }, companyId: input.companyId, active: true, role: { in: LAB_USER_ROLES } }, select: { id: true } });
+      if (participants.length !== participantUserIds.length) throw new BadRequestException("Um ou mais provadores são inválidos ou não pertencem à empresa.");
+      const samples = await tx.labSample.findMany({
+        where: { id: { in: sampleIds } },
+        select: { id: true, companyId: true, status: true, sessions: { where: { session: { status: { in: ACTIVE_SESSION_STATUSES } } }, select: { sessionId: true } } },
+      });
+      if (samples.length !== sampleIds.length || samples.some((sample) => sample.companyId !== input.companyId)) throw new BadRequestException("Uma ou mais amostras são inválidas ou pertencem a outra empresa.");
+      if (samples.some((sample) => sample.sessions.length > 0)) throw new BadRequestException("Uma ou mais amostras já estão vinculadas a uma sessão ativa.");
+      if (samples.some((sample) => sample.status !== LabSampleStatus.PENDING)) throw new BadRequestException("Somente amostras pendentes podem iniciar uma nova sessão.");
+
+      const assigned = await tx.labSample.updateMany({ where: { id: { in: sampleIds }, companyId: input.companyId, status: LabSampleStatus.PENDING }, data: { status: LabSampleStatus.ASSIGNED } });
+      if (assigned.count !== sampleIds.length) throw new BadRequestException("As amostras mudaram durante a preparação. Recarregue a fila e tente novamente.");
+      const token = randomUUID().replaceAll("-", "");
+      return tx.cuppingSession.create({
+        data: {
+          companyId: input.companyId,
+          code: input.code.trim(),
+          coordinatorId: input.coordinatorId,
+          mode,
+          protocol: CuppingProtocol.TRADITIONAL_100,
+          protocolVersion: input.protocolVersion ?? "1.0",
+          notes: input.notes,
+          accessToken: token,
+          accessExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+          samples: { create: sampleIds.map((sampleId, position) => ({ sampleId, position })) },
+          participants: { create: participantUserIds.map((userId) => ({ userId, role: userId === input.coordinatorId ? CuppingParticipantRole.COORDINATOR : CuppingParticipantRole.CUPPER })) },
+        },
+        include: { samples: true, participants: true },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async updateSessionMode(sessionId: string, mode: CuppingSessionMode) {

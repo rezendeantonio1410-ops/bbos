@@ -12,29 +12,26 @@ export default function NewCuppingSessionPage() {
   const [code, setCode] = React.useState("");
   const [mode, setMode] = React.useState<"CUPPING" | "TRAINING">("CUPPING");
   const [sampleIds, setSampleIds] = React.useState<string[]>([]);
+  const [coordinatorId, setCoordinatorId] = React.useState("");
   const [participantUserIds, setParticipantUserIds] = React.useState<string[]>([]);
-  const [protocol, setProtocol] = React.useState("SCA");
   const [purpose, setPurpose] = React.useState("");
   const [error, setError] = React.useState("");
   React.useEffect(() => {
-    Promise.all([
-      fetch(`${API}/laboratory/dashboard`).then((r) => r.json()),
-      fetch(`${API}/laboratory/sessions`).then((r) => r.json()),
-    ])
-      .then(([dashboard, sessions]) => {
-        const base = sessions[0];
-        const queue = dashboard.queue ?? [];
-        const users = Array.from(new Map(sessions.flatMap((session: any) => session.participants ?? []).map((participant: any) => [participant.user.id, participant.user])).values());
+    fetch(`${API}/laboratory/sessions/context`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Contexto indisponível");
+        return response.json();
+      })
+      .then((sessionContext) => {
+        const queue = sessionContext.samples ?? [];
+        const users = sessionContext.users ?? [];
         const requested = new URLSearchParams(window.location.search).get(
           "sampleId",
         );
-        setContext({
-          companyId: base?.companyId,
-          coordinatorId: base?.coordinatorId,
-          coordinatorName: base?.coordinator?.name,
-          samples: queue,
-          users,
-        });
+        setContext({ ...sessionContext, companyId: sessionContext.company?.id, samples: queue, users });
+        const initialCoordinator = users[0]?.id ?? "";
+        setCoordinatorId(initialCoordinator);
+        setParticipantUserIds(initialCoordinator ? [initialCoordinator] : []);
         setSampleIds(
           requested && queue.some((sample: any) => sample.id === requested)
             ? [requested]
@@ -50,9 +47,10 @@ export default function NewCuppingSessionPage() {
   async function create() {
     if (
       !context?.companyId ||
-      !context?.coordinatorId ||
+      !coordinatorId ||
       !code.trim() ||
-      !sampleIds.length
+      !sampleIds.length ||
+      !participantUserIds.length
     ) {
       setError(
         "Informe o código, selecione ao menos uma amostra e mantenha o laboratório configurado.",
@@ -64,12 +62,14 @@ export default function NewCuppingSessionPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         companyId: context.companyId,
-        coordinatorId: context.coordinatorId,
+        coordinatorId,
         code: code.trim(),
         mode,
-        protocol: protocol.trim() || "SCA",
+        protocol: "TRADITIONAL_100",
+        protocolVersion: context.protocolVersion ?? "1.0",
         notes: purpose.trim() || undefined,
         sampleIds,
+        participantUserIds,
       }),
     });
     if (!response.ok) {
@@ -77,7 +77,6 @@ export default function NewCuppingSessionPage() {
       return;
     }
     const session = await response.json();
-    await Promise.all(participantUserIds.map((userId) => fetch(`${API}/laboratory/sessions/${session.id}/participants`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, role: "CUPPER" }) })));
     router.push(`/laboratorio/sessoes/${session.id}`);
   }
   return (
@@ -113,20 +112,22 @@ export default function NewCuppingSessionPage() {
           </label>
           <label className="text-xs font-bold text-stone-600">
             Responsável
-            <input
-              readOnly
-              value={
-                context?.coordinatorName ?? "Responsável configurado na sessão"
-              }
+            <select
+              value={coordinatorId}
+              onChange={(event) => {
+                const next = event.target.value;
+                setCoordinatorId(next);
+                setParticipantUserIds((current) => current.includes(next) ? current : [...current, next]);
+              }}
               className="mt-2 min-h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 text-sm"
-            />
+            >{context?.users?.map((user: any) => <option key={user.id} value={user.id}>{user.name} · {user.role}</option>)}</select>
           </label>
           <label className="text-xs font-bold text-stone-600">
             Método / protocolo
             <input
-              value={protocol}
-              onChange={(event) => setProtocol(event.target.value)}
-              className="mt-2 min-h-11 w-full rounded-xl border border-stone-200 px-3 text-sm"
+              readOnly
+              value="Traditional 100 · v1.0"
+              className="mt-2 min-h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 text-sm"
             />
           </label>
         </div>
@@ -210,7 +211,7 @@ export default function NewCuppingSessionPage() {
             )}
           </div>
         </fieldset>
-        <fieldset className="mt-5"><legend className="text-xs font-bold text-stone-600">Provadores</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{context?.users?.length ? context.users.map((user: any) => <label key={user.id} className="flex min-h-11 items-center gap-3 rounded-xl border border-stone-200 p-3 text-xs"><input type="checkbox" checked={participantUserIds.includes(user.id)} onChange={(event) => setParticipantUserIds((current) => event.target.checked ? [...current, user.id] : current.filter((id) => id !== user.id))}/><strong>{user.name}</strong></label>) : <p className="text-xs text-stone-500">Nenhum provador cadastrado em sessões anteriores.</p>}</div></fieldset>
+        <fieldset className="mt-5"><legend className="text-xs font-bold text-stone-600">Provadores ativos autorizados</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{context?.users?.length ? context.users.map((user: any) => <label key={user.id} className="flex min-h-11 items-center gap-3 rounded-xl border border-stone-200 p-3 text-xs"><input type="checkbox" checked={participantUserIds.includes(user.id)} disabled={user.id === coordinatorId} onChange={(event) => setParticipantUserIds((current) => event.target.checked ? [...new Set([...current, user.id])] : current.filter((id) => id !== user.id))}/><span><strong>{user.name}</strong><small className="ml-2 text-stone-400">{user.role}{user.id === coordinatorId ? " · coordenador" : ""}</small></span></label>) : <p className="text-xs text-stone-500">Nenhum usuário ativo autorizado está disponível nesta empresa.</p>}</div></fieldset>
         {error && (
           <p className="mt-4 text-xs font-semibold text-red-600">{error}</p>
         )}

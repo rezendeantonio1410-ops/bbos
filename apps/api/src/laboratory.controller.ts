@@ -7,6 +7,7 @@ export class LaboratoryController {
   constructor(private readonly service: LaboratoryService) {}
   @Get("dashboard") dashboard() { return this.service.dashboard(); }
   @Get("sessions") sessions() { return this.service.listSessions(); }
+  @Get("sessions/context") context(@Query("companyId") companyId?: string) { return this.service.sessionContext(companyId); }
   @Post("samples") sample(@Body() body: any) { return this.service.createSample(body); }
   @Post("sessions") session(@Body() body: any) { return this.service.createSession(body); }
   @Patch("sessions/:id/mode") mode(@Param("id") id: string, @Body() body: { mode: CuppingSessionMode }) { return this.service.updateSessionMode(id, body.mode); }

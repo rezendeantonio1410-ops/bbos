@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test:receipts-laboratory": "node --test tests/receipts-laboratory.mjs"
+    "test:receipts-laboratory": "node --test tests/*.mjs"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",
