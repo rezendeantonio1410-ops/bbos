@@ -37,3 +37,23 @@ test("matching respeita moeda", () => {
   assert.equal(result.status, "DIVERGENT");
   assert.match(result.reasons[0], /Moedas/);
 });
+
+test("sugestão por cliente e data não confirma automaticamente", () => {
+  const result = evaluateReconciliationMatch({ ...base, externalAmount: 125, transactionAmount: 100, externalReference: undefined, transactionReference: undefined });
+  assert.equal(result.status, "DIVERGENT");
+  assert.equal(result.confidence, "divergent");
+  assert.ok(result.reasons.includes("cliente/fornecedor correspondente"));
+});
+
+test("movimentos de entrada e saída nunca são conciliados entre si", () => {
+  const result = evaluateReconciliationMatch({ ...base, externalDirection: "OUT", externalAmount: 100, transactionAmount: 100 });
+  assert.equal(result.status, "DIVERGENT");
+  assert.equal(result.matchedAmount, 0);
+});
+
+test("valor parcial preserva diferença auditável", () => {
+  const result = evaluateReconciliationMatch({ ...base, externalAmount: 250, transactionAmount: 250, matchedAmount: 175 });
+  assert.equal(result.status, "PARTIALLY_MATCHED");
+  assert.equal(result.matchedAmount, 175);
+  assert.equal(result.difference, 75);
+});
