@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
@@ -28,17 +28,13 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
-import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL ?? `${typeof window === "undefined" ? "http://localhost:3001" : `${window.location.protocol}//${window.location.hostname}:3001`}/api`;
+import { fetchSessionIdentity, getApiRoot, type SessionIdentity, SessionError } from "@/lib/auth-session";
 
 const nav = [
   { href: "/home", label: "Início", icon: House },
   { href: "/dashboard", label: "Dashboard Executivo", icon: LayoutDashboard },
   { href: "/dashboard-industrial", label: "Dashboard Industrial", icon: Gauge },
-  { href: "/recebimento", label: "Recebimento", icon: PackageOpen },
-  { href: "/compras-cafe-verde", label: "Compras Café Verde", icon: PackageOpen },
-  { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
-  { href: "/estoque", label: "Estoque", icon: Warehouse },
+  { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
   { href: "/producao", label: "Produção", icon: Factory },
   { href: "/blends", label: "Blends", icon: Boxes },
   { href: "/produtos", label: "Produtos", icon: PackageCheck },
@@ -52,16 +48,47 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sessionUser, setSessionUser] = useState<(SessionIdentity & { initials: string; corporateTitle: string }) | null>(null);
+  const [sessionState, setSessionState] = useState<"checking" | "authenticated" | "unauthenticated" | "unavailable">("checking");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   useEffect(() => {
-    void fetchSessionIdentity(API_ROOT).then((identity) => setSessionUser({
-      ...identity,
-      initials: identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-      corporateTitle: identity.role === "ADMIN" ? "Sócio Administrador" : identity.role === "EXECUTIVE" ? "Diretor" : identity.role === "SALES" ? "Comercial" : identity.role,
-    })).catch(() => setSessionUser(null));
-  }, []);
+    let cancelled = false;
+    setSessionState("checking");
+    void fetchSessionIdentity(getApiRoot()).then((identity) => {
+      if (cancelled) return;
+      setSessionUser({
+        ...identity,
+        initials: identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+        corporateTitle: identity.role === "ADMIN" ? "Sócio Administrador" : identity.role === "EXECUTIVE" ? "Diretor" : identity.role === "SALES" ? "Comercial" : identity.role,
+      });
+      setSessionState("authenticated");
+    }).catch((cause) => {
+      if (cancelled) return;
+      setSessionUser(null);
+      setSessionState(cause instanceof SessionError && cause.kind === "unavailable" ? "unavailable" : "unauthenticated");
+    });
+    return () => { cancelled = true; };
+  }, [sessionAttempt]);
+  useEffect(() => {
+    if (sessionState !== "unauthenticated" || pathname === "/login") return;
+    const returnTo = `${pathname}${window.location.search}`;
+    router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [pathname, router, sessionState]);
+  if (sessionState !== "authenticated") {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[var(--surface-page)] p-6">
+        <div className="text-center">
+          <p className="text-sm text-stone-500">
+            {sessionState === "checking" ? "Verificando sessão…" : sessionState === "unavailable" ? "Não foi possível conectar ao BBOS." : "Redirecionando para o login…"}
+          </p>
+          {sessionState === "unavailable" && <button type="button" onClick={() => setSessionAttempt((attempt) => attempt + 1)} className="mt-4 rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-900">Tentar novamente</button>}
+        </div>
+      </div>
+    );
+  }
   const user = sessionUser;
-  const logout = async () => { await fetch(`${API_ROOT}/auth/logout`, { method: "POST", credentials: "include" }); window.location.href = "/login"; };
+  const logout = async () => { await fetch(`${getApiRoot()}/auth/logout`, { method: "POST", credentials: "include" }); window.location.href = "/login"; };
   return (
     <div className="min-h-screen bg-[var(--surface-page)] lg:grid lg:grid-cols-[264px_1fr]">
       <aside className="hidden border-r border-[var(--surface-border)] bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto">

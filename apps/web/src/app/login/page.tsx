@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@bbos/ui";
 import { Logo } from "@/components/logo";
-
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL ?? `${typeof window === "undefined" ? "http://localhost:3001" : `${window.location.protocol}//${window.location.hostname}:3001`}/api`;
+import { getApiRoot } from "@/lib/auth-session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,10 +16,12 @@ export default function LoginPage() {
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response = await fetch(`${API_ROOT}/auth/login`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const response = await fetch(`${getApiRoot()}/auth/login`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message ?? "Não foi possível entrar.");
-      router.replace("/home");
+      const requestedReturnTo = new URLSearchParams(window.location.search).get("returnTo");
+      const destination = requestedReturnTo && requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//") ? requestedReturnTo : "/home";
+      router.replace(destination);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível entrar."); }
     finally { setBusy(false); }
   }

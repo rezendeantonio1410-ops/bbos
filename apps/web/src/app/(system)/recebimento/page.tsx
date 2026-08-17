@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Check,
   PackageOpen,
-  Plus,
   X,
 } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
@@ -32,12 +31,14 @@ type P = {
   harvest: string;
   variety?: string;
   process?: string;
+  qualityCategory?: string;
   supplierLotCode?: string;
   packagingType: string;
   volumeQuantity: number;
   nominalUnitWeightKg: string;
   contractedWeightKg: string;
   maxMoisturePercent?: string;
+  expectedAt?: string;
   receivedKg: number;
   balanceKg: number;
   supplier: O;
@@ -84,16 +85,20 @@ const steps = [
   "Documentos",
   "Conferência",
 ];
+const displayEnum = (value?: string | null) => value ? value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "—";
+const speciesDisplay: Record<string, string> = { ARABICA: "Arábica", ROBUSTA_CONILON: "Robusta/Conilon" };
 function Wizard({
   o,
   close,
   done,
+  initialPurchaseId,
 }: {
   o: Opt;
   close: () => void;
   done: (x: ReceiptResult) => void;
+  initialPurchaseId: string;
 }) {
-  const first = o.purchases[0];
+  const first = o.purchases.find((purchase) => purchase.id === initialPurchaseId) ?? o.purchases[0];
   const base = (p: P) => ({
     purchaseId: p.id,
     supplierId: p.supplierId,
@@ -579,7 +584,8 @@ export default function Page() {
     [rows, setRows] = useState<Row[]>([]),
     [open, setOpen] = useState(false),
     [msg, setMsg] = useState(""),
-    [err, setErr] = useState("");
+    [err, setErr] = useState(""),
+    [selectedPurchaseId, setSelectedPurchaseId] = useState("");
   const load = () =>
     Promise.all([
       req<Opt>(`${API}/options`, { credentials: "include" }),
@@ -606,14 +612,8 @@ export default function Page() {
             <PackageOpen className="inline" size={15} /> Processo operacional
           </p>
           <h1 className="mt-2 text-3xl font-bold">Recebimento de café verde</h1>
-          <p className="mt-2 text-sm text-stone-500">
-            Compra → conferência → lote em quarentena → laboratório.
-          </p>
+          <p className="mt-2 text-sm text-stone-500">Fila operacional de entradas vinculadas a compras confirmadas.</p>
         </div>
-        <Button disabled={!o?.purchases.length} onClick={() => setOpen(true)}>
-          <Plus />
-          Novo recebimento
-        </Button>
       </header>
       {msg && (
         <p className="mt-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -625,7 +625,8 @@ export default function Page() {
           {err}
         </p>
       )}
-      <div className="mt-7 grid gap-4 sm:grid-cols-3">
+      <div className="mt-7 flex flex-wrap gap-2"><button className="min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Aguardando entrada ({o?.purchases.length ?? 0})</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Recebimento parcial</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Em quarentena</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Laboratório</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Concluídos</button></div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
         <Card className="p-5">
           Recebimentos<b className="mt-2 block text-xl">{rows.length}</b>
         </Card>
@@ -639,6 +640,7 @@ export default function Page() {
           </b>
         </Card>
       </div>
+      <section className="mt-7"><div className="mb-3"><h2 className="text-lg font-bold">Aguardando entrada</h2><p className="text-sm text-stone-500">Compras aprovadas, confirmadas e com saldo físico disponível.</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{o?.purchases.map((purchase) => <button key={purchase.id} type="button" onClick={() => { setSelectedPurchaseId(purchase.id); setOpen(true); }} className="rounded-2xl border border-amber-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-forest-700">{purchase.purchaseNumber}</p><h3 className="mt-1 text-lg font-bold">{purchase.supplier.name}</h3></div><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">Pronto para recebimento</span></div><p className="mt-3 text-sm text-stone-600">{displayEnum(purchase.qualityCategory)} · {speciesDisplay[purchase.species] ?? displayEnum(purchase.species)} · {displayEnum(purchase.variety)}</p><div className="mt-4 grid grid-cols-3 gap-3 text-xs"><span><small className="block text-stone-500">Contratado</small><b>{purchase.contractedWeightKg} kg · {purchase.volumeQuantity} volumes</b></span><span><small className="block text-stone-500">Recebido</small><b>{purchase.receivedKg} kg</b></span><span><small className="block text-stone-500">Saldo</small><b>{purchase.balanceKg} kg</b></span></div><p className="mt-4 text-xs text-stone-500">{purchase.expectedAt ? `Entrega prevista: ${new Date(purchase.expectedAt).toLocaleDateString("pt-BR")}` : "Entrega ainda não programada"}</p></button>)}</div>{o && o.purchases.length === 0 && <Card className="p-6 text-sm text-stone-500">Nenhuma compra elegível aguardando entrada.</Card>}</section>
       <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((r) => (
           <Card key={r.id} className="p-5">
@@ -665,6 +667,7 @@ export default function Page() {
       {open && o && (
         <Wizard
           o={o}
+          initialPurchaseId={selectedPurchaseId}
           close={() => setOpen(false)}
           done={(x: ReceiptResult) => {
             setOpen(false);

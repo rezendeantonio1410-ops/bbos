@@ -128,6 +128,12 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 const brl = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const label = (value: string) => value.replaceAll("_", " ");
+const coffeeSpeciesLabel: Record<string, string> = {
+  ARABICA: "Arábica",
+  ROBUSTA: "Robusta",
+  ROBUSTA_CONILON: "Robusta/Conilon",
+  CANEPHORA: "Canephora/Robusta/Conilon",
+};
 const approvalLabel: Record<string, string> = {
   DRAFT: "Rascunho",
   PENDING_APPROVAL: "Pendente de aprovação",
@@ -170,13 +176,32 @@ const externalAcceptanceLabel: Record<string, string> = {
   EXPIRED: "Expirado",
 };
 
+type CardStatus = {
+  label: string;
+  marker: string;
+  surface: string;
+  nextAction: string;
+};
+
+function cardStatus(row: Purchase): CardStatus {
+  if (row.approvalStatus === "REJECTED") return { label: "Reprovada", marker: "bg-rose-600", surface: "bg-rose-50/50", nextAction: "Ver detalhes" };
+  if (row.operationalStatus === "CANCELLED") return { label: "Cancelada", marker: "bg-rose-600", surface: "bg-rose-50/50", nextAction: "Ver detalhes" };
+  if (row.operationalStatus === "RECEIVED" || row.balanceKg <= 0) return { label: "Concluída", marker: "bg-emerald-600", surface: "bg-emerald-50/50", nextAction: "Ver detalhes" };
+  if (row.approvalStatus === "DRAFT" || row.approvalStatus === "PENDING_APPROVAL") return { label: "Em aprovação", marker: "bg-amber-700", surface: "bg-amber-50/50", nextAction: "Revisar compra" };
+  if (row.approvalStatus === "APPROVED" && row.externalAcceptanceStatus !== "ACCEPTED") return { label: "Aguardando confirmação", marker: "bg-amber-600", surface: "bg-amber-50/50", nextAction: "Ver confirmação" };
+  if (row.operationalStatus === "PARTIALLY_RECEIVED") return { label: "Em recebimento", marker: "bg-blue-600", surface: "bg-blue-50/50", nextAction: "Continuar recebimento" };
+  return { label: "Aguardando entrega", marker: "bg-amber-600", surface: "bg-amber-50/50", nextAction: "Registrar recebimento" };
+}
+
 export default function Page() {
   const [options, setOptions] = useState<Options | null>(null),
     [catalog, setCatalog] = useState<Catalog>([]),
     [rows, setRows] = useState<Purchase[]>([]),
     [open, setOpen] = useState(false),
     [message, setMessage] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [filter, setFilter] = useState("ALL"),
+    [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState(""),
     [speciesCode, setSpeciesCode] = useState("ARABICA"),
     [volumes, setVolumes] = useState(1),
@@ -238,6 +263,15 @@ export default function Page() {
       ),
     [rows],
   );
+  const filteredRows = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase();
+    return rows.filter((row) => {
+      const status = cardStatus(row).label;
+      const matchesFilter = filter === "ALL" || (filter === "APPROVAL" && status === "Em aprovação") || (filter === "DELIVERY" && status === "Aguardando entrega") || (filter === "RECEIVING" && status === "Em recebimento") || (filter === "DONE" && status === "Concluída");
+      const matchesSearch = !term || row.purchaseNumber.toLocaleLowerCase().includes(term) || row.supplier.name.toLocaleLowerCase().includes(term);
+      return matchesFilter && matchesSearch;
+    });
+  }, [filter, rows, search]);
 
   const addSupplierContact = async () => {
     if (!contactDraft.name.trim()) return setContactMessage("Informe o nome do contato.");
@@ -405,7 +439,7 @@ export default function Page() {
         </div>
         <Button onClick={() => setOpen(true)}>
           <Plus size={16} />
-          Nova ficha de compra
+          Nova compra
         </Button>
       </header>
       {message && (
@@ -419,7 +453,7 @@ export default function Page() {
           {error}
         </p>
       )}
-      <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
           ["Compras", rows.length.toString()],
           ["Contratado", `${totals.contracted.toLocaleString("pt-BR")} kg`],
@@ -433,11 +467,19 @@ export default function Page() {
           </Card>
         ))}
       </div>
+      <div className="mt-7 flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+          {[['ALL', `Todas · ${rows.length}`], ['APPROVAL', `Em aprovação · ${rows.filter((row) => cardStatus(row).label === "Em aprovação").length}`], ['DELIVERY', `Aguardando entrega · ${rows.filter((row) => cardStatus(row).label === "Aguardando entrega").length}`], ['RECEIVING', `Em recebimento · ${rows.filter((row) => cardStatus(row).label === "Em recebimento").length}`], ['DONE', `Concluídas · ${rows.filter((row) => cardStatus(row).label === "Concluída").length}`]].map(([value, text]) => <button key={value} type="button" onClick={() => setFilter(value ?? "ALL")} className={`rounded-lg px-3 py-2 transition ${filter === value ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-100"}`}>{text}</button>)}
+        </div>
+        <input aria-label="Buscar compra ou fornecedor" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar CP ou fornecedor" className="w-full rounded-xl border bg-stone-50 px-3 py-2.5 text-sm outline-none focus:border-forest-700 sm:max-w-xs" />
+      </div>
       <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {rows.map((row) => (
+        {filteredRows.map((row) => {
+          const status = cardStatus(row);
+          return (
           <Card
             key={row.id}
-            className="cursor-pointer p-5 transition hover:-translate-y-0.5 hover:shadow-lg"
+            className={`cursor-pointer p-5 transition hover:-translate-y-0.5 hover:shadow-lg ${status.surface}`}
             role="button"
             tabIndex={0}
             aria-label={`Abrir ficha da compra ${row.purchaseNumber}`}
@@ -449,34 +491,14 @@ export default function Page() {
               }
             }}
           >
-            <div className="flex flex-wrap justify-between gap-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <b>{row.purchaseNumber}</b>
-              <div className="flex gap-2">
-                <Badge
-                  tone={
-                    row.approvalStatus === "APPROVED" ? "success" : "warning"
-                  }
-                >
-                  {approvalLabel[row.approvalStatus] ?? row.approvalStatus}
-                </Badge>
-                <Badge>
-                  {row.approvalStatus === "APPROVED" && row.externalAcceptanceStatus !== "ACCEPTED"
-                    ? "Aguardando aceite"
-                    : deliveryLabel[row.operationalStatus] ?? row.operationalStatus}
-                </Badge>
-                <Badge>
-                  {financialLabel[row.financialStatus] ?? row.financialStatus}
-                </Badge>
-                <Badge>
-                  {externalAcceptanceLabel[row.externalAcceptanceStatus] ??
-                    row.externalAcceptanceStatus}
-                </Badge>
-              </div>
+              <span className="inline-flex items-center gap-2 text-xs font-bold text-stone-800"><i className={`size-2 rounded-full ${status.marker}`} />{status.label}</span>
             </div>
             <p className="mt-3 font-semibold">{row.supplier.name}</p>
             <p className="mt-1 text-xs text-stone-500">
               {row.farmName ? `${row.farmName} · ` : ""}
-              {row.species} · {row.originRegion} · Safra {row.harvest}
+              {coffeeSpeciesLabel[row.species] ?? label(row.species)} · {row.originRegion} · Safra {row.harvest}
             </p>
             <div className="mt-4 grid grid-cols-3 gap-2 border-t pt-4 text-xs">
               <span>
@@ -516,6 +538,11 @@ export default function Page() {
                 <br />
                 <b>{brl(row.financial.balance)}</b>
               </span>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-stone-200/70 pt-3 text-xs text-stone-600">
+              {row.approvalStatus === "APPROVED" && <span>✓ Compra aprovada</span>}
+              {row.externalAcceptanceStatus === "ACCEPTED" && <span>✓ Contrato confirmado</span>}
+              <span className="ml-auto font-bold text-forest-800">{status.nextAction} →</span>
             </div>
             {row.approvalStatus === "PENDING_APPROVAL" &&
               ["EXECUTIVE", "ADMIN"].includes(
@@ -577,7 +604,8 @@ export default function Page() {
               </div>
             )}
           </Card>
-        ))}
+          );
+        })}
       </div>
       {open && options && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-3">

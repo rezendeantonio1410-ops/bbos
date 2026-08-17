@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "db:generate": "corepack pnpm --filter @bbos/database generate",
     "db:migrate": "corepack pnpm --filter @bbos/database migrate",
+    "db:migrate:deploy": "corepack pnpm --filter @bbos/database migrate:deploy",
     "db:seed": "corepack pnpm --filter @bbos/database seed"
   },
   "devDependencies": {
