@@ -15,11 +15,13 @@ import {
   PurchaseInstallmentStatus,
   PurchaseExternalAcceptanceStatus,
 } from "@bbos/database";
+import { Public } from "./auth.guard";
 
 const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 
 @Controller("purchase-acceptance")
+@Public()
 export class PurchaseAcceptanceController {
   private readonly db = new PrismaClient();
 

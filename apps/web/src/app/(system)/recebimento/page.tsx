@@ -47,6 +47,7 @@ type Opt = {
   warehouses: O[];
   users: O[];
   purchases: P[];
+  currentUser?: { id: string; name: string; role: string; companyId: string };
 };
 type Row = {
   id: string;
@@ -61,7 +62,7 @@ type Row = {
 };
 type ReceiptResult = { receiptNumber: string; lotCode: string; sampleNumber: string };
 async function req<T>(u: string, i?: RequestInit): Promise<T> {
-  const r = await fetch(u, i),
+  const r = await fetch(u, { credentials: "include", ...i }),
     d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.message ?? "Falha");
   return d;
@@ -91,14 +92,11 @@ function Wizard({
   close: () => void;
   done: (x: ReceiptResult) => void;
 }) {
-  const first = o.purchases[0],
-    user = o.users[0];
+  const first = o.purchases[0];
   const base = (p: P) => ({
     purchaseId: p.id,
     supplierId: p.supplierId,
     warehouseId: o.warehouses[0]?.id ?? "",
-    responsibleUserId: user?.id ?? "",
-    responsibleName: user?.name ?? "",
     species: p.species === "ARABICA" ? "ARABICA" : "ROBUSTA_CONILON",
     origin: p.originRegion,
     farmName: p.farmName ?? "",
@@ -138,7 +136,7 @@ function Wizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...d,
-          companyId: o.company?.id,
+          companyId: o.currentUser?.companyId,
           idempotencyKey: crypto.randomUUID(),
           netWeightKg: net,
           qualityStatus: "AWAITING_ANALYSIS",
@@ -220,7 +218,7 @@ function Wizard({
                     <input
                       disabled
                       className={css}
-                      value={user?.name ?? "Usuário logado"}
+                      value={o.currentUser?.name ?? "Usuário logado"}
                     />
                   }
                 />
@@ -583,9 +581,15 @@ export default function Page() {
     [msg, setMsg] = useState(""),
     [err, setErr] = useState("");
   const load = () =>
-    Promise.all([req<Opt>(`${API}/options`), req<Row[]>(API)])
-      .then(([a, b]) => {
-        setO(a);
+    Promise.all([
+      req<Opt>(`${API}/options`, { credentials: "include" }),
+      req<Row[]>(API, { credentials: "include" }),
+      fetch(`${ROOT}/auth/me`, { credentials: "include" }),
+    ])
+      .then(async ([a, b, sessionResponse]) => {
+        const session = sessionResponse.ok ? await sessionResponse.json() : null;
+        if (!session?.user?.id || !session.user.companyId) throw new Error("Sessão não autenticada.");
+        setO({ ...a, currentUser: session.user });
         setRows(b);
       })
       .catch((e) => setErr(String(e)));

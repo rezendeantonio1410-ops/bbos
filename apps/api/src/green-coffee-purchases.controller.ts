@@ -31,7 +31,7 @@ import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
 
-type Actor = { userId: string; userName: string; userRole: string };
+type Actor = { userId: string; userName: string; userRole: string; companyId: string };
 type InstallmentInput = {
   installmentNumber: number;
   percentage: number;
@@ -175,8 +175,10 @@ export class GreenCoffeePurchasesController {
   };
 
   @Get()
-  async list() {
+  async list(@Req() request: any) {
+    const actor = await this.sessionActor(request);
     const rows = await this.db.greenCoffeePurchase.findMany({
+      where: { companyId: actor.companyId },
       include: this.include,
       orderBy: { purchasedAt: "desc" },
     });
@@ -184,8 +186,10 @@ export class GreenCoffeePurchasesController {
   }
 
   @Get("catalog")
-  async catalog(@Query("companyId") companyId: string) {
-    if (!companyId) throw new BadRequestException("Empresa obrigatória.");
+  async catalog(@Req() request: any, @Query("companyId") companyId?: string) {
+    const actor = await this.sessionActor(request);
+    if (companyId && companyId !== actor.companyId) throw new ForbiddenException("Acesso negado para esta empresa.");
+    companyId = actor.companyId;
     return this.db.coffeeSpecies.findMany({
       where: { companyId, active: true },
       include: {
@@ -199,9 +203,12 @@ export class GreenCoffeePurchasesController {
   async bankAccounts(
     @Param("supplierId") supplierId: string,
     @Query("userId") userId: string,
+    @Req() request: any,
   ) {
+    const actor = await this.sessionActor(request);
+    userId = actor.userId;
     const rows = await this.db.supplierBankAccount.findMany({
-      where: { supplierId, active: true },
+      where: { supplierId, active: true, companyId: actor.companyId },
     });
     const user = userId
       ? await this.db.user.findUnique({ where: { id: userId } })
@@ -221,14 +228,18 @@ export class GreenCoffeePurchasesController {
   }
 
   @Get("suppliers/:supplierId/contacts")
-  async supplierContacts(@Param("supplierId") supplierId: string) {
+  async supplierContacts(@Param("supplierId") supplierId: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId }, select: { id: true } });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
     return this.db.supplierContact.findMany({ where: { supplierId, active: true }, orderBy: [{ isPrimary: "desc" }, { name: "asc" }] });
   }
 
   @Post("suppliers/:supplierId/contacts")
-  async createSupplierContact(@Param("supplierId") supplierId: string, @Body() body: { name: string; role?: string; whatsapp?: string; email?: string; isPrimary?: boolean; canConfirmBusiness?: boolean; active?: boolean }) {
+  async createSupplierContact(@Param("supplierId") supplierId: string, @Body() body: { name: string; role?: string; whatsapp?: string; email?: string; isPrimary?: boolean; canConfirmBusiness?: boolean; active?: boolean }, @Req() request: any) {
+    const actor = await this.sessionActor(request);
     if (!body.name?.trim()) throw new BadRequestException("Nome do contato é obrigatório.");
-    const supplier = await this.db.supplier.findUnique({ where: { id: supplierId } });
+    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
     return this.db.$transaction(async (tx) => {
       if (body.isPrimary) await tx.supplierContact.updateMany({ where: { supplierId }, data: { isPrimary: false } });
@@ -255,7 +266,12 @@ export class GreenCoffeePurchasesController {
       swiftBic?: string;
       country?: string;
     },
+    @Req() request: any,
   ) {
+    const session = await this.sessionActor(request);
+    body.companyId = session.companyId;
+    body.userId = session.userId;
+    body.userName = session.userName;
     if (!body.bankName || !body.holderName || !body.holderTaxId)
       throw new BadRequestException(
         "Banco, titular e documento são obrigatórios.",
@@ -309,8 +325,8 @@ export class GreenCoffeePurchasesController {
 
   @Get(":id/contract.pdf")
   async contractPdf(@Param("id") id: string, @Req() request: any, @Res() response: any) {
-    await this.sessionActor(request);
-    const purchase = await this.db.greenCoffeePurchase.findUnique({ where: { id }, include: { externalAcceptances: { where: { status: "ACCEPTED" }, orderBy: { acceptedAt: "desc" }, take: 1 } } });
+    const actor = await this.sessionActor(request);
+    const purchase = await this.db.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId }, include: { externalAcceptances: { where: { status: "ACCEPTED" }, orderBy: { acceptedAt: "desc" }, take: 1 } } });
     const acceptance = purchase?.externalAcceptances[0];
     if (!purchase || !acceptance) throw new BadRequestException("O PDF só está disponível após o aceite do fornecedor.");
     const snapshot: any = acceptance.snapshot;
@@ -330,9 +346,10 @@ export class GreenCoffeePurchasesController {
   }
 
   @Get(":id")
-  async get(@Param("id") id: string) {
-    const row = await this.db.greenCoffeePurchase.findUnique({
-      where: { id },
+  async get(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const row = await this.db.greenCoffeePurchase.findFirst({
+      where: { id, companyId: actor.companyId },
       include: {
         ...this.include,
         notifications: true,
@@ -347,7 +364,7 @@ export class GreenCoffeePurchasesController {
   async updateDraft(@Param("id") id: string, @Req() request: any, @Body() body: Partial<PurchaseBody>) {
     const actor = await this.sessionActor(request);
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findUnique({ where: { id } });
+      const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
       if (purchase.approvalStatus !== PurchaseApprovalStatus.DRAFT) throw new BadRequestException("Somente rascunhos podem ser editados.");
       const data: Prisma.GreenCoffeePurchaseUpdateInput = {};
@@ -358,12 +375,12 @@ export class GreenCoffeePurchasesController {
       if (body.totalValue !== undefined) data.totalValue = body.totalValue;
       if (Object.keys(data).length) await tx.greenCoffeePurchase.update({ where: { id }, data });
       await tx.greenCoffeeAuditEvent.create({ data: { companyId: purchase.companyId, purchaseId: id, action: "PURCHASE_UPDATED", actorId: actor.userId, actorName: actor.userName, metadata: { fields: Object.keys(data) } } });
-      return tx.greenCoffeePurchase.findUnique({ where: { id }, include: this.include });
+      return tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId }, include: this.include });
     });
   }
 
   @Post("suppliers")
-  createSupplier(
+  async createSupplier(
     @Body()
     body: {
       companyId: string;
@@ -384,14 +401,45 @@ export class GreenCoffeePurchasesController {
       whatsapp?: string;
       contactEmail?: string;
     },
+    @Req() request: any,
   ) {
+    // A supplier is always created in the authenticated user's company;
+    // client-provided company/actor fields are deliberately ignored.
+    return this.createSupplierForSession(body, request);
+  }
+
+  private async createSupplierForSession(body: {
+    companyId: string;
+    supplierType: GreenCoffeeSupplierType;
+    name: string;
+    legalName?: string;
+    taxId: string;
+    ruralRegistration?: string;
+    stateRegistration?: string;
+    farmName?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    address?: string;
+    contactName?: string;
+    contactRole?: string;
+    contactPhone?: string;
+    whatsapp?: string;
+    contactEmail?: string;
+  }, request: any) {
+    const actor = await this.sessionActor(request);
     if (!body.name || !body.taxId)
       throw new BadRequestException("Nome e CPF/CNPJ são obrigatórios.");
-    return this.db.supplier.create({ data: body });
+    return this.db.supplier.create({ data: { ...body, companyId: actor.companyId } });
   }
 
   @Post()
-  async create(@Body() body: PurchaseBody) {
+  async create(@Body() body: PurchaseBody, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    body.companyId = actor.companyId;
+    body.buyerId = actor.userId;
+    body.buyerName = actor.userName;
+    body.actorRole = actor.userRole;
     this.validate(body);
     const duplicate = await this.db.greenCoffeePurchase.findUnique({
       where: { idempotencyKey: body.idempotencyKey },
@@ -556,8 +604,8 @@ export class GreenCoffeePurchasesController {
   async submit(@Param("id") id: string, @Req() request: any) {
     const actor = await this.sessionActor(request);
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findUnique({
-        where: { id },
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
         include: { supplier: true },
       });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
@@ -588,8 +636,8 @@ export class GreenCoffeePurchasesController {
     const actor = await this.sessionActor(request);
     return this.db.$transaction(
       async (tx) => {
-        const purchase = await tx.greenCoffeePurchase.findUnique({
-          where: { id },
+        const purchase = await tx.greenCoffeePurchase.findFirst({
+          where: { id, companyId: actor.companyId },
           include: { supplier: true },
         });
         if (!purchase) throw new NotFoundException("Compra não encontrada.");
@@ -644,8 +692,8 @@ export class GreenCoffeePurchasesController {
   ) {
     const sessionActor = await this.sessionActor(request);
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findUnique({
-        where: { id },
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: sessionActor.companyId },
         include: {
           supplier: {
             include: {
@@ -753,7 +801,7 @@ export class GreenCoffeePurchasesController {
   async revokeAcceptance(@Param("id") id: string, @Req() request: any) {
     const actor = await this.sessionActor(request);
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findUnique({ where: { id } });
+      const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
       await this.requireApprover(tx, purchase.companyId, actor);
       const active = await tx.greenCoffeePurchaseAcceptance.findFirst({
@@ -793,8 +841,8 @@ export class GreenCoffeePurchasesController {
     if (!body.reason?.trim())
       throw new BadRequestException("Reprovação exige motivo.");
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findUnique({
-        where: { id },
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
         include: { installments: true },
       });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
@@ -854,7 +902,7 @@ export class GreenCoffeePurchasesController {
     if (!returnReason || !correctionRequest)
       throw new BadRequestException("Motivo da devolução e correção solicitada são obrigatórios.");
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findUnique({ where: { id } });
+      const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
       await this.requireApprover(tx, purchase.companyId, actor);
       if (purchase.approvalStatus !== PurchaseApprovalStatus.PENDING_APPROVAL)
@@ -896,21 +944,24 @@ export class GreenCoffeePurchasesController {
       userRole: string;
       justification: string;
     },
+    @Req() requestContext: any,
   ) {
     if (!body.justification)
       throw new BadRequestException(
         "Decisão exige justificativa.",
       );
+    const session = await this.sessionActor(requestContext);
     return this.db.$transaction(async (tx) => {
       const request = await tx.greenCoffeeApprovalRequest.findUnique({
         where: { id },
         include: { receipt: true },
       });
       if (!request) throw new NotFoundException("Aprovação não encontrada.");
+      if (request.companyId !== session.companyId) throw new ForbiddenException("Acesso negado para esta empresa.");
       if (request.status !== GreenCoffeeApprovalStatus.PENDING)
         throw new BadRequestException("Solicitação já decidida.");
       const actor = await tx.user.findFirst({
-        where: { id: body.userId, companyId: request.companyId, active: true },
+        where: { id: session.userId, companyId: session.companyId, active: true },
       });
       if (!actor || !canApprove(actor.role))
         throw new BadRequestException(
@@ -920,7 +971,7 @@ export class GreenCoffeePurchasesController {
         where: { id },
         data: {
           status: body.decision,
-          decidedById: body.userId,
+          decidedById: actor.id,
           decidedByName: actor.name,
           justification: body.justification,
           decidedAt: new Date(),
@@ -936,7 +987,7 @@ export class GreenCoffeePurchasesController {
           purchaseId: request.purchaseId,
           receiptId: request.receiptId,
           action: `APPROVAL_${body.decision}`,
-          actorId: body.userId,
+          actorId: actor.id,
           actorName: actor.name,
           metadata: { justification: body.justification },
         },
@@ -1035,7 +1086,7 @@ export class GreenCoffeePurchasesController {
   private async sessionActor(request: any): Promise<Actor> {
     const user = await this.auth.resolve(this.auth.readToken(request));
     if (!user) throw new ForbiddenException("Sessão autenticada obrigatória.");
-    return { userId: user.id, userName: user.name, userRole: user.role };
+    return { userId: user.id, userName: user.name, userRole: user.role, companyId: user.companyId };
   }
 
   private view(row: any) {

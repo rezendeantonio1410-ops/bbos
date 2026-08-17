@@ -43,6 +43,7 @@ type Options = {
   suppliers: Supplier[];
   users: { id: string; name: string; role: string }[];
 };
+type SessionIdentity = { id: string; name: string; role: string; companyId: string };
 type Catalog = {
   id: string;
   code: string;
@@ -119,7 +120,7 @@ type Purchase = {
   };
 };
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await fetch(url, { credentials: "include", ...init });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message ?? "Falha na operação.");
   return data;
@@ -185,19 +186,23 @@ export default function Page() {
   const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([]);
   const [contactDraft, setContactDraft] = useState({ name: "", role: "", whatsapp: "", email: "", isPrimary: false, canConfirmBusiness: true, active: true });
   const [contactMessage, setContactMessage] = useState("");
+  const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
   const router = useRouter();
   const load = async () => {
     try {
-      const currentOptions = await req<Options>(`${ROOT}/receipts/options`);
+      const [currentOptions, sessionResponse] = await Promise.all([
+        req<Options>(`${ROOT}/receipts/options`, { credentials: "include" }),
+        fetch(`${ROOT}/auth/me`, { credentials: "include" }),
+      ]);
+      const session = sessionResponse.ok ? await sessionResponse.json() : null;
+      const identity = session?.user as SessionIdentity | null;
+      if (!identity?.id || !identity.companyId) throw new Error("Sessão não autenticada.");
+      setSessionUser(identity);
       setOptions(currentOptions);
       setSupplierId((value) => value || currentOptions.suppliers[0]?.id || "");
       const [purchases, species] = await Promise.all([
-        req<Purchase[]>(API),
-        currentOptions.company
-          ? req<Catalog>(
-              `${API}/catalog?companyId=${currentOptions.company.id}`,
-            )
-          : Promise.resolve([]),
+        req<Purchase[]>(API, { credentials: "include" }),
+        req<Catalog>(`${API}/catalog?companyId=${encodeURIComponent(identity.companyId)}`, { credentials: "include" }),
       ]);
       setRows(purchases);
       setCatalog(species);
@@ -253,10 +258,7 @@ export default function Page() {
   };
 
   const act = async (purchase: Purchase, action: "approve" | "reject") => {
-    const user = options?.users.find((item) =>
-      ["EXECUTIVE", "ADMIN"].includes(item.role),
-    );
-    if (!user)
+    if (!sessionUser || !["EXECUTIVE", "ADMIN"].includes(sessionUser.role))
       return setError(
         "Nenhum Diretor/Administrador ativo disponível para esta decisão.",
       );
@@ -264,14 +266,11 @@ export default function Page() {
       await req(`${API}/${purchase.id}/${action}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          userName: user.name,
-          userRole: user.role,
-          ...(action === "reject"
+        body: JSON.stringify(
+          action === "reject"
             ? { reason: "Reprovada na revisão de governança" }
-            : {}),
-        }),
+            : {},
+        ),
       });
       setMessage(
         `${purchase.purchaseNumber} ${action === "approve" ? "aprovada e comprometida no financeiro" : "reprovada"}.`,
@@ -283,17 +282,14 @@ export default function Page() {
   };
 
   const sendAcceptance = async (purchase: Purchase) => {
-    const user = options?.users.find((item) =>
-      ["EXECUTIVE", "ADMIN"].includes(item.role),
-    );
-    if (!user) return setError("Somente Diretor/Administrador pode enviar para aceite.");
+    if (!sessionUser || !["EXECUTIVE", "ADMIN"].includes(sessionUser.role)) return setError("Somente Diretor/Administrador pode enviar para aceite.");
     try {
       const result = await req<{ url: string; whatsappUrl?: string | null }>(
         `${API}/${purchase.id}/acceptance/send`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, userName: user.name, userRole: user.role, channel: "WHATSAPP" }),
+          body: JSON.stringify({ channel: "WHATSAPP" }),
         },
       );
       if (result.whatsappUrl && typeof window !== "undefined")
@@ -310,10 +306,9 @@ export default function Page() {
     action: "DRAFT" | "SUBMIT" | "APPROVE",
   ) => {
     event.preventDefault();
-    if (!options?.company || !supplier) return;
+    if (!sessionUser || !supplier) return;
     const form = new FormData(event.currentTarget);
-    const user = options.users[0];
-    if (!user) return setError("Usuário responsável não encontrado.");
+    if (!sessionUser) return setError("Sessão não autenticada.");
     const due = String(form.get("firstDueDate"));
     const amountBase = Math.floor((totalValue * 100) / installmentCount) / 100;
     let allocated = 0;
@@ -344,12 +339,8 @@ export default function Page() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: options.company.id,
           supplierId,
           idempotencyKey: crypto.randomUUID(),
-          buyerId: user.id,
-          buyerName: user.name,
-          actorRole: user.role,
           action,
           department: form.get("department"),
           approverName: form.get("approverName"),
@@ -530,7 +521,7 @@ export default function Page() {
             </div>
             {row.approvalStatus === "PENDING_APPROVAL" &&
               ["EXECUTIVE", "ADMIN"].includes(
-                options?.users[0]?.role ?? "",
+                sessionUser?.role ?? "",
               ) && (
                 <div className="mt-3 flex gap-2">
                   <button
@@ -555,7 +546,7 @@ export default function Page() {
               )}
             {row.approvalStatus === "PENDING_APPROVAL" &&
               !["EXECUTIVE", "ADMIN"].includes(
-                options?.users[0]?.role ?? "",
+                sessionUser?.role ?? "",
               ) && (
                 <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
                   Aguardando aprovação da diretoria
@@ -885,9 +876,9 @@ export default function Page() {
                 <span className="text-xs text-stone-500">
                   Comprador responsável
                 </span>
-                <b className="mt-1 block">{options.users[0]?.name ?? "—"}</b>
+                <b className="mt-1 block">{sessionUser?.name ?? "—"}</b>
                 <span className="text-xs text-stone-500">
-                  {options.users[0]?.role ?? "—"}
+                  {sessionUser?.role ?? "—"}
                 </span>
               </div>
               <Field label="Departamento">
@@ -928,7 +919,7 @@ export default function Page() {
               </Button>
               <Button type="submit">Enviar para aprovação</Button>
               {["EXECUTIVE", "ADMIN"].includes(
-                options.users[0]?.role ?? "",
+                sessionUser?.role ?? "",
               ) && (
                 <Button
                   type="button"

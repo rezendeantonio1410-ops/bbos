@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
 import { AuthService, SESSION_COOKIE } from "./auth.service";
+import { Public } from "./auth.guard";
 
 @Controller("auth")
+@Public()
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 

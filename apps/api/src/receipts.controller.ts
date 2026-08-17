@@ -7,7 +7,9 @@ import {
   Param,
   Patch,
   Post,
+  Req,
 } from "@nestjs/common";
+import type { Request } from "express";
 import {
   CoffeeLotStatus,
   CostType,
@@ -16,6 +18,8 @@ import {
   Prisma,
   PrismaClient,
 } from "@bbos/database";
+import { AuthService } from "./auth.service";
+import { assertCompany, requireSession } from "./auth-context";
 
 type ConfirmReceiptBody = {
   companyId: string;
@@ -74,11 +78,11 @@ const lotStatusFor = (quality: GreenCoffeeQualityStatus): CoffeeLotStatus => {
 @Controller("receipts")
 export class ReceiptsController {
   private readonly database = new PrismaClient();
+  constructor(private readonly auth: AuthService) {}
   @Get("options")
-  async options() {
-    const company = await this.database.company.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
+  async options(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const company = await this.database.company.findUnique({ where: { id: actor.companyId } });
     if (!company)
       return { company: null, suppliers: [], warehouses: [], users: [] };
     const [suppliers, warehouses, users, purchases] = await Promise.all([
@@ -134,8 +138,10 @@ export class ReceiptsController {
   }
 
   @Get()
-  async list() {
+  async list(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
     const rows = await this.database.greenCoffeeReceipt.findMany({
+      where: { companyId: actor.companyId },
       include: {
         supplier: true,
         warehouse: true,
@@ -165,9 +171,10 @@ export class ReceiptsController {
   }
 
   @Get(":id")
-  async get(@Param("id") id: string) {
+  async get(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
     const receipt = await this.database.greenCoffeeReceipt.findUnique({
-      where: { id },
+      where: { id, companyId: actor.companyId },
       include: {
         supplier: true,
         warehouse: true,
@@ -184,7 +191,12 @@ export class ReceiptsController {
   }
 
   @Post()
-  async confirm(@Body() body: ConfirmReceiptBody) {
+  async confirm(@Body() body: ConfirmReceiptBody, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const companyId = assertCompany(actor, body.companyId);
+    body.companyId = companyId;
+    body.responsibleUserId = actor.id;
+    body.responsibleName = actor.name;
     this.validate(body);
     const existing = await this.database.greenCoffeeReceipt.findUnique({
       where: { idempotencyKey: body.idempotencyKey },
@@ -474,10 +486,14 @@ export class ReceiptsController {
       responsibleName: string;
       notes?: string;
     },
+    @Req() req: Request,
   ) {
+    const actor = await requireSession(req, this.auth);
+    body.responsibleUserId = actor.id;
+    body.responsibleName = actor.name;
     return this.database.$transaction(async (transaction) => {
       const receipt = await transaction.greenCoffeeReceipt.findUnique({
-        where: { id },
+        where: { id, companyId: actor.companyId },
       });
       if (!receipt) throw new NotFoundException("Recebimento não encontrado.");
       if (

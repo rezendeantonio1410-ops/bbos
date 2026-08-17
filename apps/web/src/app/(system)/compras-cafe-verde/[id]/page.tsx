@@ -86,7 +86,7 @@ type Purchase = {
   termsVersion?: string;
   termsDocumentUrl?: string | null;
   acceptanceConditionText?: string | null;
-  externalAcceptance?: { channel?: string; destinationMasked?: string; contactName?: string; sentAt?: string; viewedAt?: string; acceptedAt?: string; termsVersion?: string; snapshot?: unknown; acceptedByName?: string | null; acceptedByRole?: string | null; documentHash?: string } | null;
+  externalAcceptance?: { status?: string; channel?: string; destinationMasked?: string; contactName?: string; sentAt?: string; viewedAt?: string; acceptedAt?: string; termsVersion?: string; snapshot?: unknown; acceptedByName?: string | null; acceptedByRole?: string | null; documentHash?: string } | null;
 };
 type User = { id: string; name: string; role: string };
 type SessionIdentity = { id: string; name: string; role: string; companyId: string };
@@ -182,7 +182,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     if (!activeUser) return setError("Usuário responsável não encontrado.");
     setBusy(true);
     try {
-      const response = await fetch(`${API_ROOT}/green-coffee-purchases/${purchase.id}/acceptance/send`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: activeUser.id, userName: activeUser.name, userRole: activeUser.role, channel: "WHATSAPP", ...(selectedContactId ? { supplierContactId: selectedContactId } : {}) }) });
+      const response = await fetch(`${API_ROOT}/green-coffee-purchases/${purchase.id}/acceptance/send`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel: "WHATSAPP", ...(selectedContactId ? { supplierContactId: selectedContactId } : {}) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message ?? "Falha ao enviar para aceite.");
       setAcceptanceUrl(data.url ?? "");

@@ -94,7 +94,7 @@ export default function InventoryPage() {
   const [finishedGoods, setFinishedGoods] = useState<FinishedGoodsStock[]>([]);
   useEffect(() => {
     const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-    void fetch(`${api}/inventory/finished-goods`, { cache: 'no-store' })
+    void fetch(`${api}/inventory/finished-goods`, { cache: 'no-store', credentials: 'include' })
       .then(response => response.ok ? response.json() as Promise<FinishedGoodsStock[]> : [])
       .then(setFinishedGoods)
       .catch(() => setFinishedGoods([]));

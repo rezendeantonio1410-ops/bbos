@@ -19,7 +19,7 @@ export class FinanceService implements OnModuleDestroy {
     return this.database.$disconnect();
   }
 
-  async summary() {
+  async summary(companyId?: string) {
     const [
       accounts,
       receivables,
@@ -27,15 +27,15 @@ export class FinanceService implements OnModuleDestroy {
       transactions,
       purchaseInstallments,
     ] = await Promise.all([
-      this.database.financialAccount.findMany({ where: { active: true } }),
-      this.database.accountsReceivable.findMany(),
-      this.database.accountsPayable.findMany(),
-      this.database.financialTransaction.findMany({
+      this.database.financialAccount.findMany({ where: { active: true, ...(companyId ? { companyId } : {}) } }),
+      this.database.accountsReceivable.findMany({ where: companyId ? { companyId } : undefined }),
+      this.database.accountsPayable.findMany({ where: companyId ? { companyId } : undefined }),
+      this.database.financialTransaction.findMany({ where: companyId ? { companyId } : undefined,
         orderBy: { occurredAt: "desc" },
         take: 200,
       }),
       this.database.greenCoffeePurchaseInstallment.findMany({
-        where: { status: { in: ["PLANNED", "COMMITTED"] } },
+        where: { status: { in: ["PLANNED", "COMMITTED"] }, ...(companyId ? { purchase: { companyId } } : {}) },
         include: {
           purchase: {
             select: {
@@ -121,21 +121,23 @@ export class FinanceService implements OnModuleDestroy {
       greenCoffeePurchaseProjection,
     };
   }
-  listReceivables() {
+  listReceivables(companyId?: string) {
     return this.database.accountsReceivable.findMany({
+      where: companyId ? { companyId } : undefined,
       include: { customer: true, salesOrder: true, payments: true },
       orderBy: { dueDate: "asc" },
     });
   }
-  listPayables() {
+  listPayables(companyId?: string) {
     return this.database.accountsPayable.findMany({
+      where: companyId ? { companyId } : undefined,
       include: { supplier: true, costCenter: true, payments: true },
       orderBy: { dueDate: "asc" },
     });
   }
-  listAccounts() {
+  listAccounts(companyId?: string) {
     return this.database.financialAccount.findMany({
-      where: { active: true },
+      where: { active: true, ...(companyId ? { companyId } : {}) },
       orderBy: { name: "asc" },
     });
   }
@@ -189,12 +191,13 @@ export class FinanceService implements OnModuleDestroy {
       method?: string;
       idempotencyKey: string;
     },
+    companyId?: string,
   ) {
     if (input.amount <= 0)
       throw new BadRequestException("Valor recebido deve ser maior que zero.");
     return this.database.$transaction(
       async (tx) => {
-        const item = await tx.accountsReceivable.findUnique({ where: { id } });
+        const item = await tx.accountsReceivable.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
         if (!item)
           throw new NotFoundException("Conta a receber não encontrada.");
         const existing = await tx.payment.findUnique({
@@ -254,12 +257,13 @@ export class FinanceService implements OnModuleDestroy {
       method?: string;
       idempotencyKey: string;
     },
+    companyId?: string,
   ) {
     if (input.amount <= 0)
       throw new BadRequestException("Valor pago deve ser maior que zero.");
     return this.database.$transaction(
       async (tx) => {
-        const item = await tx.accountsPayable.findUnique({ where: { id } });
+        const item = await tx.accountsPayable.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
         if (!item) throw new NotFoundException("Conta a pagar não encontrada.");
         const existing = await tx.payment.findUnique({
           where: { idempotencyKey: input.idempotencyKey },

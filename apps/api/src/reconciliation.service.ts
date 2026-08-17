@@ -119,16 +119,16 @@ export class ReconciliationService implements OnModuleDestroy {
     return { bank: account.financialInstitution?.name ?? "Instituição não informada", account: account.name, accountId: account.id, currency: account.currency, format: input.format, fileName: input.fileName, period: { from: dates[0], to: dates.at(-1) }, total: rows.length, imported, duplicates: rows.length - imported };
   }
 
-  async suggestions(id: string) {
-    const item = await this.database.reconciliationItem.findUnique({ where: { id }, include: { financialAccount: true } });
+  async suggestions(id: string, companyId?: string) {
+    const item = await this.database.reconciliationItem.findFirst({ where: { id, ...(companyId ? { companyId } : {}) }, include: { financialAccount: true } });
     if (!item) throw new NotFoundException("Item de conciliação não encontrado.");
     const transactions = await this.database.financialTransaction.findMany({ where: { companyId: item.companyId, reconciliationItem: null, occurredAt: { gte: new Date(item.occurredAt.getTime() - 7 * 86400000), lte: new Date(item.occurredAt.getTime() + 7 * 86400000) } }, include: { financialAccount: true, costCenter: true, payment: { include: { accountsReceivable: { include: { customer: true, salesOrder: true } }, accountsPayable: { include: { supplier: true } } } } } });
     return transactions.map((transaction) => { const counterparty = transaction.payment?.accountsReceivable?.customer.name ?? transaction.payment?.accountsPayable?.supplier?.name; const result = evaluateReconciliationMatch({ externalAmount: Number(item.amount), externalDirection: item.direction, externalDate: item.occurredAt, externalReference: item.documentReference, externalCounterparty: item.counterpartyName, externalAccountId: item.financialAccountId, transactionAccountId: transaction.financialAccountId, externalCurrency: item.currency, transactionCurrency: transaction.financialAccount.currency, transactionAmount: Number(transaction.amount), transactionDirection: financialTransactionDirection(transaction.type), transactionDate: transaction.occurredAt, transactionReference: transaction.payment?.accountsReceivable?.salesOrder?.code ?? transaction.description, transactionCounterparty: counterparty }); const score = (result.reasons.length * 20) + (Number(transaction.amount) === Number(item.amount) ? 40 : 0) + (financialTransactionDirection(transaction.type) === item.direction ? 20 : 0); return { id: transaction.id, occurredAt: transaction.occurredAt, amount: transaction.amount, direction: financialTransactionDirection(transaction.type), category: transaction.category, description: transaction.description, counterparty, document: transaction.payment?.accountsReceivable?.salesOrder?.code, score: Math.min(score, 100), reasons: result.reasons }; }).filter((candidate) => candidate.score >= 40).sort((a, b) => b.score - a.score).slice(0, 5);
   }
 
-  async match(id: string, financialTransactionId: string, matchedAmount?: number) {
+  async match(id: string, financialTransactionId: string, matchedAmount?: number, companyId?: string) {
     return this.database.$transaction(async (tx) => {
-      const item = await tx.reconciliationItem.findUnique({ where: { id }, include: { financialTransaction: true } });
+      const item = await tx.reconciliationItem.findFirst({ where: { id, ...(companyId ? { companyId } : {}) }, include: { financialTransaction: true } });
       if (!item) throw new NotFoundException("Item de conciliação não encontrado.");
       if (item.financialTransactionId === financialTransactionId) return { item, idempotent: true };
       if (item.financialTransactionId) throw new BadRequestException("Este item já está conciliado com outro lançamento.");
@@ -146,19 +146,19 @@ export class ReconciliationService implements OnModuleDestroy {
     });
   }
 
-  async autoMatch(id: string) {
-    const item = await this.database.reconciliationItem.findUnique({ where: { id } });
+  async autoMatch(id: string, companyId?: string) {
+    const item = await this.database.reconciliationItem.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
     if (!item) throw new NotFoundException("Item de conciliação não encontrado.");
     if (item.financialTransactionId) return { idempotent: true, item };
     const transactions = await this.database.financialTransaction.findMany({ where: { companyId: item.companyId, financialAccountId: item.financialAccountId ?? undefined, occurredAt: { gte: new Date(item.occurredAt.getTime() - 3 * 24 * 60 * 60 * 1000), lte: new Date(item.occurredAt.getTime() + 3 * 24 * 60 * 60 * 1000) }, reconciliationItem: null }, include: { financialAccount: true, payment: { include: { accountsReceivable: { include: { customer: true } }, accountsPayable: { include: { supplier: true } } } } }, orderBy: { occurredAt: "asc" } });
     const candidate = transactions.find((transaction) => financialTransactionDirection(transaction.type) === item.direction && transaction.financialAccount.currency.toUpperCase() === item.currency.toUpperCase() && Number(transaction.amount) === Number(item.amount) && (!item.documentReference || transaction.description.includes(item.documentReference)));
     if (!candidate) return { item, matched: false, reason: "Nenhum match determinístico encontrado." };
-    return this.match(id, candidate.id);
+    return this.match(id, candidate.id, undefined, companyId);
   }
 
-  async unmatch(id: string) {
+  async unmatch(id: string, companyId?: string) {
     return this.database.$transaction(async (tx) => {
-      const item = await tx.reconciliationItem.findUnique({ where: { id } });
+      const item = await tx.reconciliationItem.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
       if (!item) throw new NotFoundException("Item de conciliação não encontrado.");
       if (!item.financialTransactionId) return { item, idempotent: true };
       const updated = await tx.reconciliationItem.update({ where: { id }, data: { financialTransactionId: null, matchedAmount: 0, difference: item.amount, status: "PENDING", matchedAt: null }, include: { events: true } });
@@ -168,9 +168,9 @@ export class ReconciliationService implements OnModuleDestroy {
     });
   }
 
-  async ignore(id: string) {
+  async ignore(id: string, companyId?: string) {
     return this.database.$transaction(async (tx) => {
-      const item = await tx.reconciliationItem.findUnique({ where: { id } });
+      const item = await tx.reconciliationItem.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
       if (!item) throw new NotFoundException("Item de conciliação não encontrado.");
       if (item.financialTransactionId) throw new BadRequestException("Desconcilie o item antes de ignorá-lo.");
       const updated = await tx.reconciliationItem.update({ where: { id }, data: { status: "IGNORED" } });
