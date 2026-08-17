@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { DashboardController } from "./dashboard.controller";
 import { HealthController } from "./health.controller";
 import { ReceiptsController } from "./receipts.controller";
+import { GreenCoffeePurchasesController } from './green-coffee-purchases.controller';
+import { PurchaseAcceptanceController } from './purchase-acceptance.controller';
 import { InventoryController } from "./inventory.controller";
 import { ProductionController } from "./production.controller";
 import { ProductsController } from "./products.controller";
@@ -18,12 +20,16 @@ import { ReconciliationController } from "./reconciliation.controller";
 import { ReconciliationService } from "./reconciliation.service";
 import { CommerceController } from "./commerce.controller";
 import { CommerceService } from "./commerce.service";
+import { AuthController } from "./auth.controller";
+import { AuthService } from "./auth.service";
 
 @Module({
   controllers: [
     HealthController,
     DashboardController,
     ReceiptsController,
+    GreenCoffeePurchasesController,
+    PurchaseAcceptanceController,
     InventoryController,
     ProductionController,
     ProductsController,
@@ -32,7 +38,8 @@ import { CommerceService } from "./commerce.service";
     FinanceController,
     ReconciliationController,
     CommerceController,
+    AuthController,
   ],
-  providers: [ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService],
+  providers: [ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService],
 })
 export class AppModule {}

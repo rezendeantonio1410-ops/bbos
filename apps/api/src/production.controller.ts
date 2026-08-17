@@ -241,8 +241,8 @@ export class ProductionController {
           );
         for (const allocation of body.allocations) {
           const lot = lots.find((item) => item.id === allocation.coffeeLotId)!;
-          if (lot.status === "BLOCKED")
-            throw new BadRequestException(`Lote ${lot.code} está bloqueado.`);
+          if (lot.status !== "APPROVED")
+            throw new BadRequestException(`Lote ${lot.code} não está liberado pela Qualidade.`);
           if (Number(lot.currentWeightKg) < allocation.reservedKg)
             throw new BadRequestException(
               `Saldo insuficiente no lote ${lot.code}.`,

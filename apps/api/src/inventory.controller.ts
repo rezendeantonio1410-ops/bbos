@@ -145,7 +145,8 @@ export class InventoryController implements OnModuleDestroy {
       if (!lot) throw new NotFoundException('Lote não encontrado.');
       const available = Number(lot.currentWeightKg);
       const reserved = Number(lot.reservedWeightKg);
-      if (lot.status === 'BLOCKED' && (body.type === 'exit' || body.type === 'production-reservation')) throw new BadRequestException('Lote bloqueado não pode sair nem ser reservado.');
+      if (lot.status !== 'APPROVED' && body.type === 'production-reservation') throw new BadRequestException('Somente lote liberado pela Qualidade pode ser reservado para produção.');
+      if (lot.status === 'BLOCKED' && body.type === 'exit') throw new BadRequestException('Lote bloqueado não pode sair.');
       let nextAvailable = available;
       let nextReserved = reserved;
       if (body.type === 'entry') nextAvailable += body.quantityKg;

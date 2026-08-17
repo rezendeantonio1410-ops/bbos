@@ -1,0 +1,1181 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Res,
+  Post,
+  Query,
+  Req,
+} from "@nestjs/common";
+import {
+  GreenCoffeeApprovalStatus,
+  GreenCoffeePackagingType,
+  GreenCoffeePurchaseStatus,
+  GreenCoffeeSupplierType,
+  PayableStatus,
+  Prisma,
+  PrismaClient,
+  PurchaseApprovalStatus,
+  PurchaseInstallmentStatus,
+  PurchaseOperationalStatus,
+  PurchasePaymentTermType,
+} from "@bbos/database";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { AuthService } from "./auth.service";
+import { missingPurchaseApprovalFields } from "./purchase-validation";
+
+type Actor = { userId: string; userName: string; userRole: string };
+type InstallmentInput = {
+  installmentNumber: number;
+  percentage: number;
+  amount: number;
+  dueDate: string;
+};
+type PurchaseBody = {
+  companyId: string;
+  supplierId: string;
+  idempotencyKey: string;
+  buyerId: string;
+  buyerName: string;
+  actorRole?: string;
+  action?: "DRAFT" | "SUBMIT" | "APPROVE";
+  department?: string;
+  approverName?: string;
+  purchasedAt: string;
+  species: string;
+  originRegion: string;
+  municipality?: string;
+  state?: string;
+  country?: string;
+  farmName?: string;
+  harvest: string;
+  variety?: string;
+  process?: string;
+  supplierLotCode?: string;
+  qualityCategory: string;
+  qualityDescription?: string;
+  additionalSpecification?: string;
+  contractedScreen?: string;
+  maxDefects?: number;
+  maxMoisturePercent?: number;
+  beverageClassification?: string;
+  minimumScore?: number;
+  technicalSpecifications?: string;
+  packagingType: GreenCoffeePackagingType;
+  volumeQuantity: number;
+  nominalUnitWeightKg: number;
+  contractedWeightKg: number;
+  weightTolerancePercent?: number;
+  pricePerKg?: number;
+  pricePerBag?: number;
+  currency?: string;
+  totalValue: number;
+  paymentTermType: PurchasePaymentTermType;
+  paymentTermData?: Prisma.InputJsonValue;
+  installments: InstallmentInput[];
+  expectedAt?: string;
+  contractReference?: string;
+  commercialNotes?: string;
+};
+
+const DEFAULT_ACCEPTANCE_TEXT =
+  "O café entregue estará sujeito à conferência de quantidade, documentação e análise de qualidade pela Compradora. A aceitação definitiva ocorrerá após a verificação de conformidade com as especificações desta Ficha de Compra. Eventuais divergências poderão resultar em reclassificação, ajuste comercial, substituição ou recusa, conforme aplicável e de acordo com os Termos Gerais de Compra.";
+const hashToken = (token: string) =>
+  createHash("sha256").update(token).digest("hex");
+const maskDestination = (value?: string | null) => {
+  if (!value) return null;
+  const normalized = value.replace(/\s+/g, "");
+  if (normalized.includes("@")) {
+    const [name = "", domain = ""] = normalized.split("@");
+    return `${name.slice(0, 2)}•••@${domain}`;
+  }
+  return `${normalized.slice(0, 3)}••••${normalized.slice(-2)}`;
+};
+
+function simplePdf(lines: string[]) {
+  const escape = (value: string) => value.replace(/\\/g, "\\\\").replace(/[()]/g, "\\$&").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const logoCandidates = [
+    join(process.cwd(), "../web/public/brand/logo/bispo-logo-official.jpg"),
+    join(process.cwd(), "../../apps/web/public/brand/logo/bispo-logo-official.jpg"),
+  ];
+  const logoPath = logoCandidates.find((candidate) => existsSync(candidate));
+  const logo = logoPath ? readFileSync(logoPath) : null;
+  const content = [
+    ...(logo ? ["q", "160 0 0 45 50 770 cm", "/Im1 Do", "Q"] : []),
+    "BT", "/F1 10 Tf", logo ? "50 750 Td" : "50 790 Td",
+    ...lines.flatMap((line) => [`(${escape(line.slice(0, 110))}) Tj`, "0 -15 Td"]), "ET",
+  ].join("\n");
+  const pageResources = logo ? "/Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >>" : "/Resources << /Font << /F1 5 0 R >> >>";
+  const objects: Buffer[] = [
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] ${pageResources} /Contents 4 0 R >>`),
+    Buffer.from(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+  ];
+  if (logo) {
+    const logoBytes = logo;
+    objects.push(Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 860 /Height 240 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBytes.length} >>\nstream\n`), logoBytes, Buffer.from("\nendstream")]));
+  }
+  const chunks: Buffer[] = [Buffer.from("%PDF-1.4\n")];
+  const offsets: number[] = [0];
+  for (let index = 0; index < objects.length; index += 1) {
+    const object = objects[index];
+    if (!object) continue;
+    offsets[index + 1] = Buffer.concat(chunks).length;
+    chunks.push(Buffer.from(`${index + 1} 0 obj\n`), object, Buffer.from("\nendobj\n"));
+  }
+  const xref = Buffer.concat(chunks).length;
+  chunks.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`));
+  return Buffer.concat(chunks);
+}
+
+const canApprove = (role?: string) => role === "EXECUTIVE" || role === "ADMIN";
+const money = (value: number) => Math.round(value * 100) / 100;
+const contractLabel = (value?: unknown) => {
+  if (value === null || value === undefined || value === "") return "—";
+  const labels: Record<string, string> = {
+    ARABICA: "Arábica",
+    ROBUSTA: "Robusta",
+    ROBUSTA_CONILON: "Robusta/Conilon",
+    CANEPHORA: "Canephora/Robusta/Conilon",
+    BAG_30_KG: "Sacas de 30 kg",
+    BAG_60_KG: "Sacas de 60 kg",
+    BIG_BAG: "Big Bag",
+    NATURAL: "Natural",
+    CEREJA_DESCASCADO: "Cereja descascado",
+    HONEY: "Honey",
+    LAVADO: "Lavado",
+    FERMENTADO: "Fermentado",
+  };
+  return labels[String(value)] ?? String(value).replaceAll("_", " ");
+};
+
+@Controller("green-coffee-purchases")
+export class GreenCoffeePurchasesController {
+  private readonly db = new PrismaClient();
+  constructor(private readonly auth: AuthService) {}
+
+  private readonly include = {
+    supplier: { include: { contacts: { where: { active: true, canConfirmBusiness: true }, orderBy: [{ isPrimary: "desc" as const }, { name: "asc" as const }] } } },
+    receipts: { include: { coffeeLot: true, labSample: true } },
+    approvalRequests: true,
+    installments: {
+      include: { accountsPayable: { include: { payments: true } } },
+      orderBy: { installmentNumber: "asc" as const },
+    },
+    externalAcceptances: { orderBy: { createdAt: "desc" as const } },
+  };
+
+  @Get()
+  async list() {
+    const rows = await this.db.greenCoffeePurchase.findMany({
+      include: this.include,
+      orderBy: { purchasedAt: "desc" },
+    });
+    return rows.map((row) => this.view(row));
+  }
+
+  @Get("catalog")
+  async catalog(@Query("companyId") companyId: string) {
+    if (!companyId) throw new BadRequestException("Empresa obrigatória.");
+    return this.db.coffeeSpecies.findMany({
+      where: { companyId, active: true },
+      include: {
+        varieties: { where: { active: true }, orderBy: { name: "asc" } },
+      },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  @Get("suppliers/:supplierId/bank-accounts")
+  async bankAccounts(
+    @Param("supplierId") supplierId: string,
+    @Query("userId") userId: string,
+  ) {
+    const rows = await this.db.supplierBankAccount.findMany({
+      where: { supplierId, active: true },
+    });
+    const user = userId
+      ? await this.db.user.findUnique({ where: { id: userId } })
+      : null;
+    if (user && ["FINANCE", "EXECUTIVE", "ADMIN"].includes(user.role))
+      return rows;
+    const mask = (value?: string | null) =>
+      value ? `••••${value.slice(-4)}` : null;
+    return rows.map((row) => ({
+      ...row,
+      agency: mask(row.agency),
+      accountNumber: mask(row.accountNumber),
+      holderTaxId: mask(row.holderTaxId),
+      pixKey: mask(row.pixKey),
+      iban: mask(row.iban),
+    }));
+  }
+
+  @Get("suppliers/:supplierId/contacts")
+  async supplierContacts(@Param("supplierId") supplierId: string) {
+    return this.db.supplierContact.findMany({ where: { supplierId, active: true }, orderBy: [{ isPrimary: "desc" }, { name: "asc" }] });
+  }
+
+  @Post("suppliers/:supplierId/contacts")
+  async createSupplierContact(@Param("supplierId") supplierId: string, @Body() body: { name: string; role?: string; whatsapp?: string; email?: string; isPrimary?: boolean; canConfirmBusiness?: boolean; active?: boolean }) {
+    if (!body.name?.trim()) throw new BadRequestException("Nome do contato é obrigatório.");
+    const supplier = await this.db.supplier.findUnique({ where: { id: supplierId } });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+    return this.db.$transaction(async (tx) => {
+      if (body.isPrimary) await tx.supplierContact.updateMany({ where: { supplierId }, data: { isPrimary: false } });
+      return tx.supplierContact.create({ data: { supplierId, name: body.name.trim(), role: body.role?.trim() || null, whatsapp: body.whatsapp?.trim() || null, email: body.email?.trim() || null, isPrimary: body.isPrimary ?? false, canConfirmBusiness: body.canConfirmBusiness ?? false, active: body.active ?? true } });
+    });
+  }
+
+  @Post("suppliers/:supplierId/bank-accounts")
+  async createBankAccount(
+    @Param("supplierId") supplierId: string,
+    @Body()
+    body: Actor & {
+      companyId: string;
+      bankName: string;
+      bankCode?: string;
+      agency?: string;
+      accountNumber?: string;
+      accountType?: string;
+      holderName: string;
+      holderTaxId: string;
+      pixKey?: string;
+      pixType?: string;
+      iban?: string;
+      swiftBic?: string;
+      country?: string;
+    },
+  ) {
+    if (!body.bankName || !body.holderName || !body.holderTaxId)
+      throw new BadRequestException(
+        "Banco, titular e documento são obrigatórios.",
+      );
+    return this.db.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({
+        where: { id: body.userId, companyId: body.companyId, active: true },
+      });
+      if (!actor || !["FINANCE", "EXECUTIVE", "ADMIN"].includes(actor.role))
+        throw new BadRequestException(
+          "Dados bancários exigem permissão financeira.",
+        );
+      const supplier = await tx.supplier.findFirst({
+        where: { id: supplierId, companyId: body.companyId },
+      });
+      if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+      const account = await tx.supplierBankAccount.create({
+        data: {
+          companyId: body.companyId,
+          supplierId,
+          bankName: body.bankName,
+          bankCode: body.bankCode,
+          agency: body.agency,
+          accountNumber: body.accountNumber,
+          accountType: body.accountType,
+          holderName: body.holderName,
+          holderTaxId: body.holderTaxId,
+          pixKey: body.pixKey,
+          pixType: body.pixType,
+          iban: body.iban,
+          swiftBic: body.swiftBic,
+          country: body.country ?? "Brasil",
+        },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: body.companyId,
+          action: "SUPPLIER_BANK_ACCOUNT_CREATED",
+          actorId: body.userId,
+          actorName: body.userName,
+          metadata: {
+            supplierId,
+            bankAccountId: account.id,
+            bankName: account.bankName,
+          },
+        },
+      });
+      return account;
+    });
+  }
+
+  @Get(":id/contract.pdf")
+  async contractPdf(@Param("id") id: string, @Req() request: any, @Res() response: any) {
+    await this.sessionActor(request);
+    const purchase = await this.db.greenCoffeePurchase.findUnique({ where: { id }, include: { externalAcceptances: { where: { status: "ACCEPTED" }, orderBy: { acceptedAt: "desc" }, take: 1 } } });
+    const acceptance = purchase?.externalAcceptances[0];
+    if (!purchase || !acceptance) throw new BadRequestException("O PDF só está disponível após o aceite do fornecedor.");
+    const snapshot: any = acceptance.snapshot;
+    const lines = [
+      "CONTRATO DE COMPRA DE CAFE VERDE", `Contrato: ${snapshot.purchaseNumber}`, "",
+      `COMPRADOR: ${snapshot.company?.name ?? "Bispo Coffees"}`, `VENDEDOR: ${snapshot.supplier?.name ?? "—"}`, `DOCUMENTO: ${snapshot.supplier?.taxId ?? "—"}`,
+      `ORIGEM: ${snapshot.coffee?.originRegion ?? "—"}`, `ESPECIE: ${contractLabel(snapshot.coffee?.species)}`, `VARIEDADE: ${contractLabel(snapshot.coffee?.variety)}`, `SAFRA: ${snapshot.coffee?.harvest ?? "—"}`, `PROCESSO: ${contractLabel(snapshot.coffee?.process)}`,
+      `QUALIDADE: ${contractLabel(snapshot.specification?.qualityCategory)}`, `PENEIRA: ${snapshot.specification?.contractedScreen ?? "—"}`, `UMIDADE MAXIMA: ${snapshot.specification?.maxMoisturePercent ?? "—"}`, `QUANTIDADE: ${snapshot.quantity?.contractedWeightKg ?? "—"} kg`, `VOLUMES: ${snapshot.quantity?.volumeQuantity ?? "—"}`, `ACONDICIONAMENTO: ${contractLabel(snapshot.quantity?.packagingType)}`,
+      `PRECO/KG: ${snapshot.commercial?.pricePerKg ?? "—"}`, `VALOR TOTAL: ${snapshot.commercial?.totalValue ?? "—"}`, `ENTREGA: ${snapshot.commercial?.expectedAt ?? "—"}`, `REFERENCIA: ${snapshot.commercial?.contractReference ?? "—"}`,
+      "", "PROTECAO DE DADOS PESSOAIS", "As partes comprometem-se a tratar os dados pessoais relacionados a este Contrato em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os para finalidades legitimas da relacao contratual, cumprimento de obrigacoes legais e exercicio regular de direitos, observados seguranca, necessidade e confidencialidade.",
+      "", "CONFIRMACOES DAS PARTES", `BISPO COFFEES: ${purchase.approvedByName ?? "—"} · ${purchase.approvedAt?.toISOString() ?? "—"}`, `ENVIADO PARA: ${acceptance.contactName ?? "—"} · ${acceptance.contactRole ?? "—"} · ${acceptance.destinationMasked ?? "—"}`, `FORNECEDOR: ${acceptance.acceptedByName ?? "—"} · ${acceptance.acceptedAt?.toISOString() ?? "—"}`, "Metodo: Confirmacao eletronica registrada pelo BBOs",
+      `Versao do documento: ${acceptance.termsVersion}`, `Versao dos Termos Gerais: ${acceptance.termsVersion}`, `Hash do documento: ${acceptance.documentHash}`, "", "Documento gerado eletronicamente pelo BBOs a partir da versao contratual confirmada pelas partes.",
+    ];
+    const pdf = simplePdf(lines);
+    response.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${purchase.purchaseNumber}-contrato.pdf"`, "Content-Length": pdf.length });
+    response.send(pdf);
+  }
+
+  @Get(":id")
+  async get(@Param("id") id: string) {
+    const row = await this.db.greenCoffeePurchase.findUnique({
+      where: { id },
+      include: {
+        ...this.include,
+        notifications: true,
+        auditEvents: { orderBy: { occurredAt: "asc" } },
+      },
+    });
+    if (!row) throw new NotFoundException("Compra não encontrada.");
+    return this.view(row);
+  }
+
+  @Patch(":id")
+  async updateDraft(@Param("id") id: string, @Req() request: any, @Body() body: Partial<PurchaseBody>) {
+    const actor = await this.sessionActor(request);
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findUnique({ where: { id } });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.DRAFT) throw new BadRequestException("Somente rascunhos podem ser editados.");
+      const data: Prisma.GreenCoffeePurchaseUpdateInput = {};
+      for (const key of ["originRegion", "municipality", "state", "country", "farmName", "harvest", "variety", "process", "supplierLotCode", "qualityCategory", "qualityDescription", "additionalSpecification", "contractedScreen", "maxDefects", "maxMoisturePercent", "minimumScore", "technicalSpecifications", "expectedAt", "contractReference", "commercialNotes"] as const) {
+        if (body[key] !== undefined) (data as any)[key] = key === "expectedAt" && body[key] ? new Date(String(body[key])) : body[key];
+      }
+      if (body.pricePerKg !== undefined) data.pricePerKg = body.pricePerKg;
+      if (body.totalValue !== undefined) data.totalValue = body.totalValue;
+      if (Object.keys(data).length) await tx.greenCoffeePurchase.update({ where: { id }, data });
+      await tx.greenCoffeeAuditEvent.create({ data: { companyId: purchase.companyId, purchaseId: id, action: "PURCHASE_UPDATED", actorId: actor.userId, actorName: actor.userName, metadata: { fields: Object.keys(data) } } });
+      return tx.greenCoffeePurchase.findUnique({ where: { id }, include: this.include });
+    });
+  }
+
+  @Post("suppliers")
+  createSupplier(
+    @Body()
+    body: {
+      companyId: string;
+      supplierType: GreenCoffeeSupplierType;
+      name: string;
+      legalName?: string;
+      taxId: string;
+      ruralRegistration?: string;
+      stateRegistration?: string;
+      farmName?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      address?: string;
+      contactName?: string;
+      contactRole?: string;
+      contactPhone?: string;
+      whatsapp?: string;
+      contactEmail?: string;
+    },
+  ) {
+    if (!body.name || !body.taxId)
+      throw new BadRequestException("Nome e CPF/CNPJ são obrigatórios.");
+    return this.db.supplier.create({ data: body });
+  }
+
+  @Post()
+  async create(@Body() body: PurchaseBody) {
+    this.validate(body);
+    const duplicate = await this.db.greenCoffeePurchase.findUnique({
+      where: { idempotencyKey: body.idempotencyKey },
+    });
+    if (duplicate) return { ...duplicate, duplicate: true };
+    const action = body.action ?? "DRAFT";
+    return this.db.$transaction(
+      async (tx) => {
+        const actor = await tx.user.findFirst({
+          where: { id: body.buyerId, companyId: body.companyId, active: true },
+        });
+        if (!actor)
+          throw new BadRequestException("Usuário responsável inválido.");
+        if (action === "APPROVE" && !canApprove(actor.role))
+          throw new BadRequestException(
+            "Seu perfil pode criar e editar, mas não aprovar compras.",
+          );
+        const supplier = await tx.supplier.findFirst({
+          where: { id: body.supplierId, companyId: body.companyId },
+        });
+        if (!supplier)
+          throw new BadRequestException("Fornecedor inválido para a empresa.");
+        if (action === "SUBMIT") {
+          const missingFields = missingPurchaseApprovalFields({ ...body, supplier });
+          if (missingFields.length)
+            throw new BadRequestException({ message: "A compra ainda não pode ser enviada para aprovação.", missingFields });
+        }
+        const sequence =
+          (await tx.greenCoffeePurchase.count({
+            where: { companyId: body.companyId },
+          })) + 1;
+        const purchaseNumber = `CP-${new Date().getFullYear()}-${sequence.toString().padStart(6, "0")}`;
+        const approved = action === "APPROVE";
+        const approvalStatus =
+          action === "DRAFT"
+            ? PurchaseApprovalStatus.DRAFT
+            : approved
+              ? PurchaseApprovalStatus.APPROVED
+              : PurchaseApprovalStatus.PENDING_APPROVAL;
+        const purchase = await tx.greenCoffeePurchase.create({
+          data: {
+            companyId: body.companyId,
+            supplierId: body.supplierId,
+            purchaseNumber,
+            status: approved
+              ? GreenCoffeePurchaseStatus.CONFIRMED
+              : GreenCoffeePurchaseStatus.DRAFT,
+            approvalStatus,
+            operationalStatus: approved
+              ? PurchaseOperationalStatus.AWAITING_DELIVERY
+              : PurchaseOperationalStatus.NOT_STARTED,
+            purchasedAt: new Date(body.purchasedAt),
+            buyerId: body.buyerId,
+            buyerName: body.buyerName,
+            createdByUserId: body.buyerId,
+            createdByName: body.buyerName,
+            approvedByUserId: approved ? body.buyerId : undefined,
+            approvedByName: approved ? body.buyerName : undefined,
+            approvedAt: approved ? new Date() : undefined,
+            submittedForApprovalAt: action === "SUBMIT" ? new Date() : undefined,
+            submittedForApprovalByUserId: action === "SUBMIT" ? body.buyerId : undefined,
+            department: body.department,
+            approverName: body.approverName,
+            species: body.species,
+            originRegion: body.originRegion,
+            municipality: body.municipality,
+            state: body.state,
+            country: body.country ?? "Brasil",
+            farmName: body.farmName,
+            harvest: body.harvest,
+            variety: body.variety,
+            process: body.process,
+            supplierLotCode: body.supplierLotCode,
+            qualityCategory: body.qualityCategory,
+            qualityDescription: body.qualityDescription,
+            additionalSpecification: body.additionalSpecification,
+            contractedScreen: body.contractedScreen,
+            maxDefects: body.maxDefects,
+            maxMoisturePercent: body.maxMoisturePercent,
+            beverageClassification: body.beverageClassification,
+            minimumScore: body.minimumScore,
+            technicalSpecifications: body.technicalSpecifications,
+            packagingType: body.packagingType,
+            volumeQuantity: body.volumeQuantity,
+            nominalUnitWeightKg: body.nominalUnitWeightKg,
+            contractedWeightKg: body.contractedWeightKg,
+            weightTolerancePercent: body.weightTolerancePercent ?? 0,
+            pricePerKg: body.pricePerKg,
+            pricePerBag: body.pricePerBag,
+            currency: body.currency ?? "BRL",
+            totalValue: body.totalValue,
+            paymentTerms: body.paymentTermType,
+            paymentTermType: body.paymentTermType,
+            paymentTermData: body.paymentTermData ?? {},
+            expectedAt: body.expectedAt ? new Date(body.expectedAt) : undefined,
+            contractReference: body.contractReference,
+            commercialNotes: body.commercialNotes,
+            idempotencyKey: body.idempotencyKey,
+            confirmedAt: approved ? new Date() : undefined,
+            supplierSnapshot: {
+              id: supplier.id,
+              name: supplier.name,
+              legalName: supplier.legalName,
+              taxId: supplier.taxId,
+              supplierType: supplier.supplierType,
+              farmName: supplier.farmName,
+              municipality: supplier.city,
+              state: supplier.state,
+              country: supplier.country,
+              address: supplier.address,
+              contactName: supplier.contactName,
+              contactPhone: supplier.contactPhone,
+              contactEmail: supplier.contactEmail,
+            },
+            installments: {
+              create: body.installments.map((item) => ({
+                installmentNumber: item.installmentNumber,
+                percentage: item.percentage,
+                amount: item.amount,
+                dueDate: new Date(item.dueDate),
+                status: approved
+                  ? PurchaseInstallmentStatus.COMMITTED
+                  : PurchaseInstallmentStatus.PLANNED,
+              })),
+            },
+          },
+          include: { installments: true },
+        });
+        await tx.greenCoffeeAuditEvent.create({
+          data: {
+            companyId: body.companyId,
+            purchaseId: purchase.id,
+            action: "PURCHASE_CREATED",
+            actorId: body.buyerId,
+            actorName: body.buyerName,
+            metadata: {
+              purchaseNumber,
+              approvalStatus,
+              contractedWeightKg: body.contractedWeightKg,
+              totalValue: body.totalValue,
+            },
+          },
+        });
+        if (action === "SUBMIT") {
+          await tx.greenCoffeeAuditEvent.create({
+            data: {
+              companyId: body.companyId,
+              purchaseId: purchase.id,
+              action: "PURCHASE_SUBMITTED_FOR_APPROVAL",
+              actorId: body.buyerId,
+              actorName: body.buyerName,
+            },
+          });
+        }
+        return { ...purchase, duplicate: false };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  @Patch(":id/submit")
+  async submit(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findUnique({
+        where: { id },
+        include: { supplier: true },
+      });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.DRAFT)
+        throw new BadRequestException("Somente rascunhos podem ser enviados.");
+      const missingFields = missingPurchaseApprovalFields(purchase);
+      if (missingFields.length)
+        throw new BadRequestException({ message: "A compra ainda não pode ser enviada para aprovação.", missingFields });
+      const result = await tx.greenCoffeePurchase.update({
+        where: { id },
+        data: { approvalStatus: PurchaseApprovalStatus.PENDING_APPROVAL, submittedForApprovalAt: new Date(), submittedForApprovalByUserId: actor.userId },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: purchase.companyId,
+          purchaseId: id,
+          action: "PURCHASE_SUBMITTED_FOR_APPROVAL",
+          actorId: actor.userId,
+          actorName: actor.userName,
+        },
+      });
+      return result;
+    });
+  }
+
+  @Patch(":id/approve")
+  async approve(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    return this.db.$transaction(
+      async (tx) => {
+        const purchase = await tx.greenCoffeePurchase.findUnique({
+          where: { id },
+          include: { supplier: true },
+        });
+        if (!purchase) throw new NotFoundException("Compra não encontrada.");
+        await this.requireApprover(tx, purchase.companyId, actor);
+        const missingFields = missingPurchaseApprovalFields(purchase);
+        if (missingFields.length)
+          throw new BadRequestException({ message: "Esta compra ainda não pode ser aprovada.", missingFields });
+        if (purchase.approvalStatus === PurchaseApprovalStatus.APPROVED)
+          return purchase;
+        if (purchase.approvalStatus === PurchaseApprovalStatus.REJECTED)
+          throw new BadRequestException(
+            "Compra rejeitada não pode ser aprovada sem nova revisão.",
+          );
+        await tx.greenCoffeePurchase.update({
+          where: { id },
+          data: {
+            approvalStatus: PurchaseApprovalStatus.APPROVED,
+            operationalStatus: PurchaseOperationalStatus.NOT_STARTED,
+            status: GreenCoffeePurchaseStatus.CONFIRMED,
+            approvedByUserId: actor.userId,
+            approvedByName: actor.userName,
+            approvedAt: new Date(),
+            rejectedByUserId: null,
+            rejectedAt: null,
+            rejectionReason: null,
+            confirmedAt: new Date(),
+          },
+        });
+        await tx.greenCoffeeAuditEvent.create({
+          data: {
+            companyId: purchase.companyId,
+            purchaseId: id,
+            action: "PURCHASE_APPROVED",
+            actorId: actor.userId,
+            actorName: actor.userName,
+          },
+        });
+        return tx.greenCoffeePurchase.findUnique({
+          where: { id },
+          include: this.include,
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  @Post(":id/acceptance/send")
+  async sendAcceptance(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Actor & { channel?: string; expiresInDays?: number; supplierContactId?: string },
+  ) {
+    const sessionActor = await this.sessionActor(request);
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findUnique({
+        where: { id },
+        include: {
+          supplier: {
+            include: {
+              contacts: {
+                where: { active: true, canConfirmBusiness: true },
+                orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+              },
+            },
+          },
+          installments: { orderBy: { installmentNumber: "asc" } },
+        },
+      });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.APPROVED)
+        throw new BadRequestException(
+          "Somente compras aprovadas internamente podem ser enviadas para aceite.",
+        );
+      if (purchase.externalAcceptanceStatus === "ACCEPTED")
+        throw new BadRequestException(
+          "Esta compra já foi aceita. Uma alteração material exige nova versão da ficha.",
+        );
+      const actor = await tx.user.findFirst({
+        where: { id: sessionActor.userId, companyId: purchase.companyId, active: true },
+      });
+      if (!actor) throw new BadRequestException("Usuário responsável inválido.");
+      const previous = await tx.greenCoffeePurchaseAcceptance.findMany({
+        where: { purchaseId: id, status: { in: ["SENT", "VIEWED"] } },
+      });
+      if (previous.length)
+        await tx.greenCoffeePurchaseAcceptance.updateMany({
+          where: { id: { in: previous.map((item) => item.id) } },
+          data: { status: "EXPIRED", tokenRevokedAt: new Date() },
+        });
+      const token = randomBytes(32).toString("base64url");
+      const tokenExpiresAt = new Date(
+        Date.now() + Math.max(1, Math.min(90, body.expiresInDays ?? 14)) * 86400000,
+      );
+      const snapshot = this.acceptanceSnapshot(purchase);
+      const documentHash = createHash("sha256")
+        .update(JSON.stringify(snapshot))
+        .digest("hex");
+      const selectedContact = body.supplierContactId ? purchase.supplier.contacts.find((item) => item.id === body.supplierContactId) : purchase.supplier.contacts[0];
+      if (body.supplierContactId && !selectedContact) throw new BadRequestException("Contato não autorizado para confirmação.");
+      const contact = selectedContact?.name ?? purchase.supplier.contactName ?? purchase.supplier.name;
+      const destination = selectedContact?.whatsapp ?? selectedContact?.email ?? purchase.supplier.whatsapp ?? purchase.supplier.contactPhone ?? purchase.supplier.contactEmail;
+      const acceptance = await tx.greenCoffeePurchaseAcceptance.create({
+        data: {
+          purchaseId: id,
+          supplierId: purchase.supplierId,
+          supplierContactId: selectedContact?.id,
+          status: "SENT",
+          channel: body.channel ?? "WHATSAPP",
+          destinationMasked: maskDestination(destination),
+          contactName: contact,
+          contactRole: selectedContact?.role ?? purchase.supplier.contactRole,
+          contactPhoneSnapshot: selectedContact?.whatsapp ?? purchase.supplier.whatsapp ?? purchase.supplier.contactPhone,
+          contactEmailSnapshot: selectedContact?.email ?? purchase.supplier.contactEmail,
+          tokenHash: hashToken(token),
+          tokenExpiresAt,
+          sentAt: new Date(),
+          termsVersion: purchase.termsVersion,
+          termsDocumentUrl: purchase.termsDocumentUrl,
+          documentHash,
+          snapshot,
+        },
+      });
+      await tx.greenCoffeePurchase.update({
+        where: { id },
+        data: {
+          externalAcceptanceStatus: "SENT",
+          acceptanceConditionText:
+            purchase.acceptanceConditionText ?? DEFAULT_ACCEPTANCE_TEXT,
+        },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: purchase.companyId,
+          purchaseId: id,
+          action: "PURCHASE_ACCEPTANCE_SENT",
+          actorId: actor.id,
+          actorName: actor.name,
+          metadata: { acceptanceId: acceptance.id, channel: body.channel ?? "WHATSAPP" },
+        },
+      });
+      const base =
+        process.env.PUBLIC_APP_URL ??
+        process.env.PUBLIC_WEB_URL ??
+        process.env.WEB_URL?.split(",")[0] ??
+        "http://localhost:3000";
+      const url = `${base.replace(/\/$/, "")}/aceite-compra/${token}`;
+      const message = `Olá, ${contact}.\n\nA Bispo Coffees disponibilizou a Ficha de Compra ${purchase.purchaseNumber} para sua conferência.\n\nAcesse o link abaixo para revisar as condições e confirmar seu aceite:\n\n${url}\n\nBispo Coffees`;
+      return {
+        acceptanceId: acceptance.id,
+        status: "SENT",
+        url,
+        whatsappUrl: destination
+          ? `https://wa.me/${destination.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`
+          : null,
+        expiresAt: tokenExpiresAt,
+      };
+    });
+  }
+
+  @Post(":id/acceptance/revoke")
+  async revokeAcceptance(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findUnique({ where: { id } });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      await this.requireApprover(tx, purchase.companyId, actor);
+      const active = await tx.greenCoffeePurchaseAcceptance.findFirst({
+        where: { purchaseId: id, status: { in: ["SENT", "VIEWED"] } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!active) return { status: "NOT_SENT" };
+      await tx.greenCoffeePurchaseAcceptance.update({
+        where: { id: active.id },
+        data: { status: "EXPIRED", tokenRevokedAt: new Date() },
+      });
+      await tx.greenCoffeePurchase.update({
+        where: { id },
+        data: { externalAcceptanceStatus: "EXPIRED" },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: purchase.companyId,
+          purchaseId: id,
+          action: "PURCHASE_ACCEPTANCE_REVOKED",
+          actorId: actor.userId,
+          actorName: actor.userName,
+          metadata: { acceptanceId: active.id },
+        },
+      });
+      return { status: "EXPIRED" };
+    });
+  }
+
+  @Patch(":id/reject")
+  async reject(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { reason: string },
+  ) {
+    const actor = await this.sessionActor(request);
+    if (!body.reason?.trim())
+      throw new BadRequestException("Reprovação exige motivo.");
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findUnique({
+        where: { id },
+        include: { installments: true },
+      });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      await this.requireApprover(tx, purchase.companyId, actor);
+      for (const installment of purchase.installments)
+        if (installment.accountsPayableId) {
+          const payable = await tx.accountsPayable.findUnique({
+            where: { id: installment.accountsPayableId },
+          });
+          if (payable && Number(payable.openAmount) < Number(payable.amount))
+            throw new BadRequestException(
+              "Compra com parcela paga exige estorno financeiro antes da reprovação.",
+            );
+          await tx.accountsPayable.update({
+            where: { id: installment.accountsPayableId },
+            data: { status: PayableStatus.CANCELLED },
+          });
+        }
+      await tx.greenCoffeePurchaseInstallment.updateMany({
+        where: { purchaseId: id },
+        data: { status: PurchaseInstallmentStatus.CANCELLED },
+      });
+      const result = await tx.greenCoffeePurchase.update({
+        where: { id },
+        data: {
+          approvalStatus: PurchaseApprovalStatus.REJECTED,
+          operationalStatus: PurchaseOperationalStatus.CANCELLED,
+          status: GreenCoffeePurchaseStatus.CANCELLED,
+          rejectedByUserId: actor.userId,
+          rejectedAt: new Date(),
+          rejectionReason: body.reason,
+        },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: purchase.companyId,
+          purchaseId: id,
+          action: "PURCHASE_REJECTED",
+          actorId: actor.userId,
+          actorName: actor.userName,
+          metadata: { reason: body.reason },
+        },
+      });
+      return result;
+    });
+  }
+
+  @Patch(":id/return-adjustment")
+  async returnForAdjustment(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { returnReason?: string; correctionRequest?: string },
+  ) {
+    const actor = await this.sessionActor(request);
+    const returnReason = body.returnReason?.trim() ?? "";
+    const correctionRequest = body.correctionRequest?.trim() ?? "";
+    if (!returnReason || !correctionRequest)
+      throw new BadRequestException("Motivo da devolução e correção solicitada são obrigatórios.");
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findUnique({ where: { id } });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      await this.requireApprover(tx, purchase.companyId, actor);
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.PENDING_APPROVAL)
+        throw new BadRequestException("Somente compras pendentes de aprovação podem ser devolvidas para ajuste.");
+      const result = await tx.greenCoffeePurchase.update({
+        where: { id },
+        data: {
+          approvalStatus: PurchaseApprovalStatus.DRAFT,
+          operationalStatus: PurchaseOperationalStatus.NOT_STARTED,
+          status: GreenCoffeePurchaseStatus.DRAFT,
+          returnedByUserId: actor.userId,
+          returnedAt: new Date(),
+          returnReason,
+          correctionRequest,
+        },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: purchase.companyId,
+          purchaseId: id,
+          action: "PURCHASE_RETURNED_FOR_ADJUSTMENT",
+          actorId: actor.userId,
+          actorName: actor.userName,
+          metadata: { returnReason, correctionRequest },
+        },
+      });
+      return result;
+    });
+  }
+
+  @Patch("approvals/:id/decision")
+  async decide(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      decision: GreenCoffeeApprovalStatus;
+      userId: string;
+      userName: string;
+      userRole: string;
+      justification: string;
+    },
+  ) {
+    if (!body.justification)
+      throw new BadRequestException(
+        "Decisão exige justificativa.",
+      );
+    return this.db.$transaction(async (tx) => {
+      const request = await tx.greenCoffeeApprovalRequest.findUnique({
+        where: { id },
+        include: { receipt: true },
+      });
+      if (!request) throw new NotFoundException("Aprovação não encontrada.");
+      if (request.status !== GreenCoffeeApprovalStatus.PENDING)
+        throw new BadRequestException("Solicitação já decidida.");
+      const actor = await tx.user.findFirst({
+        where: { id: body.userId, companyId: request.companyId, active: true },
+      });
+      if (!actor || !canApprove(actor.role))
+        throw new BadRequestException(
+          "Somente Diretor ou Administrador ativo pode decidir.",
+        );
+      const decided = await tx.greenCoffeeApprovalRequest.update({
+        where: { id },
+        data: {
+          status: body.decision,
+          decidedById: body.userId,
+          decidedByName: actor.name,
+          justification: body.justification,
+          decidedAt: new Date(),
+        },
+      });
+      await tx.greenCoffeeReceipt.update({
+        where: { id: request.receiptId },
+        data: { approvalStatus: body.decision },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: request.companyId,
+          purchaseId: request.purchaseId,
+          receiptId: request.receiptId,
+          action: `APPROVAL_${body.decision}`,
+          actorId: body.userId,
+          actorName: actor.name,
+          metadata: { justification: body.justification },
+        },
+      });
+      return decided;
+    });
+  }
+
+  private validate(body: PurchaseBody) {
+    if (
+      !body.companyId ||
+      !body.supplierId ||
+      !body.buyerId ||
+      !body.harvest ||
+      !body.originRegion ||
+      !body.species ||
+      !body.qualityCategory ||
+      body.contractedWeightKg <= 0 ||
+      body.totalValue <= 0
+    )
+      throw new BadRequestException("Preencha os campos obrigatórios.");
+    if (!body.installments?.length)
+      throw new BadRequestException("Informe ao menos uma parcela.");
+    const amount = money(
+      body.installments.reduce((sum, item) => sum + item.amount, 0),
+    );
+    const percentage = money(
+      body.installments.reduce((sum, item) => sum + item.percentage, 0),
+    );
+    if (amount !== money(body.totalValue) || Math.abs(percentage - 100) > 0.01)
+      throw new BadRequestException(
+        "Parcelas devem somar exatamente 100% e o valor contratado.",
+      );
+  }
+
+  private async commitInstallments(
+    tx: Prisma.TransactionClient,
+    purchaseId: string,
+  ) {
+    const purchase = await tx.greenCoffeePurchase.findUnique({
+      where: { id: purchaseId },
+      include: { installments: true },
+    });
+    if (!purchase) throw new NotFoundException("Compra não encontrada.");
+    for (const installment of purchase.installments) {
+      if (installment.accountsPayableId) continue;
+      const payable = await tx.accountsPayable.create({
+        data: {
+          companyId: purchase.companyId,
+          supplierId: purchase.supplierId,
+          description: `${purchase.purchaseNumber} · parcela ${installment.installmentNumber}`,
+          issueDate: purchase.purchasedAt,
+          dueDate: installment.dueDate,
+          amount: installment.amount,
+          openAmount: installment.amount,
+          purchaseId: purchase.id,
+          category: "COMPRA_CAFE_VERDE",
+          notes: `Gerado automaticamente pela aprovação da compra ${purchase.purchaseNumber}`,
+        },
+      });
+      await tx.greenCoffeePurchaseInstallment.update({
+        where: { id: installment.id },
+        data: {
+          status: PurchaseInstallmentStatus.COMMITTED,
+          accountsPayableId: payable.id,
+        },
+      });
+    }
+    await tx.greenCoffeeAuditEvent.create({
+      data: {
+        companyId: purchase.companyId,
+        purchaseId: purchase.id,
+        action: "FINANCIAL_COMMITMENT_CREATED",
+        actorId: purchase.createdByUserId,
+        actorName: purchase.createdByName,
+        metadata: { installmentCount: purchase.installments.length },
+      },
+    });
+  }
+
+  private async requireApprover(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    actor: Actor,
+  ) {
+    const user = await tx.user.findFirst({
+      where: { id: actor.userId, companyId, active: true },
+    });
+    if (!user || !canApprove(user.role))
+      throw new ForbiddenException(
+        "Somente Diretor ou Administrador ativo pode aprovar.",
+      );
+    return user;
+  }
+
+  private async sessionActor(request: any): Promise<Actor> {
+    const user = await this.auth.resolve(this.auth.readToken(request));
+    if (!user) throw new ForbiddenException("Sessão autenticada obrigatória.");
+    return { userId: user.id, userName: user.name, userRole: user.role };
+  }
+
+  private view(row: any) {
+    const returnEvent = row.auditEvents?.find(
+      (event: any) => event.action === "PURCHASE_RETURNED_FOR_ADJUSTMENT",
+    );
+    const receivedKg =
+      row.receipts?.reduce(
+        (sum: number, receipt: any) => sum + Number(receipt.netWeightKg),
+        0,
+      ) ?? 0;
+    const installments = row.installments ?? [];
+    const committed = installments
+      .filter((item: any) => ["COMMITTED", "PAID"].includes(item.status))
+      .reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+    const paid = installments.reduce(
+      (sum: number, item: any) =>
+        sum +
+        (item.accountsPayable?.payments?.reduce(
+          (paymentSum: number, payment: any) =>
+            paymentSum + Number(payment.amount),
+          0,
+        ) ?? 0),
+      0,
+    );
+    const financialStatus =
+      row.approvalStatus === "REJECTED" || row.operationalStatus === "CANCELLED"
+        ? "CANCELLED"
+        : committed <= 0
+          ? "NOT_COMMITTED"
+          : paid <= 0
+            ? "SCHEDULED"
+            : paid < committed
+              ? "PARTIALLY_PAID"
+              : "PAID";
+    const next = installments
+      .filter(
+        (item: any) =>
+          item.status === "COMMITTED" &&
+          (!item.accountsPayable ||
+            Number(item.accountsPayable.openAmount) > 0),
+      )
+      .sort((a: any, b: any) => +new Date(a.dueDate) - +new Date(b.dueDate))[0];
+    return {
+      ...row,
+      contractedWeightKg: Number(row.contractedWeightKg),
+      totalValue: Number(row.totalValue),
+      receivedKg,
+      receivedPercent: Number(row.contractedWeightKg)
+        ? Math.min(100, (receivedKg / Number(row.contractedWeightKg)) * 100)
+        : 0,
+      balanceKg: Math.max(0, Number(row.contractedWeightKg) - receivedKg),
+      financialStatus,
+      financial: {
+        contracted: Number(row.totalValue),
+        committed,
+        paid,
+        balance: Math.max(0, Number(row.totalValue) - paid),
+        nextPayment: next
+          ? { dueDate: next.dueDate, amount: Number(next.amount) }
+          : null,
+      },
+      externalAcceptanceStatus: row.externalAcceptanceStatus ?? "NOT_SENT",
+      returnedByName: returnEvent?.actorName ?? null,
+      externalAcceptance: row.externalAcceptances?.[0]
+        ? {
+            id: row.externalAcceptances[0].id,
+            status: row.externalAcceptances[0].status,
+            channel: row.externalAcceptances[0].channel,
+            destinationMasked: row.externalAcceptances[0].destinationMasked,
+            contactName: row.externalAcceptances[0].contactName,
+            contactRole: row.externalAcceptances[0].contactRole,
+            sentAt: row.externalAcceptances[0].sentAt,
+            viewedAt: row.externalAcceptances[0].viewedAt,
+            acceptedAt: row.externalAcceptances[0].acceptedAt,
+            termsVersion: row.externalAcceptances[0].termsVersion,
+            snapshot: row.externalAcceptances[0].snapshot,
+            acceptedByName: row.externalAcceptances[0].acceptedByName,
+            acceptedByRole: row.externalAcceptances[0].acceptedByRole,
+            documentHash: row.externalAcceptances[0].documentHash,
+          }
+        : null,
+    };
+  }
+
+  private acceptanceSnapshot(purchase: any) {
+    return {
+      purchaseNumber: purchase.purchaseNumber,
+      companyId: purchase.companyId,
+      company: { name: "Bispo Coffees" },
+      supplier: {
+        name: purchase.supplier.name,
+        taxId: purchase.supplier.taxId,
+        farmName: purchase.farmName ?? purchase.supplier.farmName,
+        municipality: purchase.municipality ?? purchase.supplier.city,
+        state: purchase.state ?? purchase.supplier.state,
+      },
+      coffee: {
+        species: purchase.species,
+        harvest: purchase.harvest,
+        variety: purchase.variety,
+        process: purchase.process,
+        originRegion: purchase.originRegion,
+      },
+      specification: {
+        qualityCategory: purchase.qualityCategory,
+        contractedScreen: purchase.contractedScreen,
+        maxDefects: purchase.maxDefects,
+        maxMoisturePercent: purchase.maxMoisturePercent,
+        minimumScore: purchase.minimumScore,
+        additionalSpecification: purchase.additionalSpecification,
+      },
+      quantity: {
+        packagingType: purchase.packagingType,
+        volumeQuantity: purchase.volumeQuantity,
+        nominalUnitWeightKg: Number(purchase.nominalUnitWeightKg),
+        contractedWeightKg: Number(purchase.contractedWeightKg),
+        tolerancePercent: Number(purchase.weightTolerancePercent),
+      },
+      commercial: {
+        pricePerKg: purchase.pricePerKg ? Number(purchase.pricePerKg) : null,
+        totalValue: Number(purchase.totalValue),
+        currency: purchase.currency,
+        expectedAt: purchase.expectedAt,
+        contractReference: purchase.contractReference,
+      },
+      payment: {
+        type: purchase.paymentTermType,
+        installments: purchase.installments?.map((item: any) => ({
+          number: item.installmentNumber,
+          amount: Number(item.amount),
+          dueDate: item.dueDate,
+        })),
+      },
+      terms: {
+        version: purchase.termsVersion,
+        documentUrl: purchase.termsDocumentUrl,
+        acceptanceConditionText:
+          purchase.acceptanceConditionText ?? DEFAULT_ACCEPTANCE_TEXT,
+      },
+    };
+  }
+}

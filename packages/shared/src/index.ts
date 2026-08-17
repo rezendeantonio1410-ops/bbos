@@ -1,4 +1,5 @@
 export type Period = "day" | "week" | "month" | "year";
+export * from './green-coffee-receipt.js';
 export type PerformanceStatus = "on-track" | "attention" | "off-track";
 
 export type ExecutiveMetric = {

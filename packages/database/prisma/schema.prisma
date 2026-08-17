@@ -23,6 +23,97 @@ enum CoffeeLotStatus {
   CONSUMED
 }
 
+enum GreenCoffeeReceiptStatus {
+  DRAFT
+  CONFIRMED
+  REVERSED
+}
+
+enum GreenCoffeeQualityStatus {
+  AWAITING_ANALYSIS
+  APPROVED
+  APPROVED_WITH_RESTRICTION
+  BLOCKED
+  REJECTED
+}
+
+enum GreenCoffeePurchaseStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+  CLOSED
+}
+
+enum GreenCoffeeSupplierType {
+  RURAL_PERSON
+  COMPANY
+}
+
+enum GreenCoffeePackagingType {
+  BAG_30_KG
+  BAG_60_KG
+  BIG_BAG
+  OTHER
+}
+
+enum GreenCoffeeApprovalStatus {
+  PENDING
+  APPROVED_EXCEPTION
+  REJECTED
+  KEPT_BLOCKED
+}
+
+enum GreenCoffeeDocumentStatus {
+  RECEIVED
+  PENDING
+  NOT_APPLICABLE
+}
+
+enum PurchaseApprovalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum PurchaseOperationalStatus {
+  NOT_STARTED
+  AWAITING_DELIVERY
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+enum PurchasePaymentTermType {
+  CASH
+  DAYS_AFTER_PURCHASE
+  FIXED_DATE
+  INSTALLMENTS
+  ADVANCE_AND_BALANCE
+  AFTER_RECEIPT
+  CUSTOM
+}
+
+enum PurchaseInstallmentStatus {
+  PLANNED
+  COMMITTED
+  PAID
+  CANCELLED
+}
+
+enum PurchaseExternalAcceptanceStatus {
+  NOT_SENT
+  SENT
+  VIEWED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
 enum ProductionStatus {
   PLANNED
   RESERVED
@@ -227,82 +318,139 @@ enum AllocationRuleStatus {
 }
 
 model Company {
-  id                     String                    @id @default(cuid())
-  name                   String
-  tradeName              String
-  taxId                  String                    @unique
-  currency               String                    @default("BRL")
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
-  users                  User[]
-  suppliers              Supplier[]
-  customers              Customer[]
-  coffeeLots             CoffeeLot[]
-  warehouses             Warehouse[]
-  blends                 Blend[]
-  productionOrders       ProductionOrder[]
-  products               FinishedProduct[]
-  productLines           ProductLine[]
-  salesOrders            SalesOrder[]
-  industrialEvents       IndustrialEvent[]
-  costEvents             CostEvent[]
-  productionBatches      ProductionBatch[]
-  productionConsumptions ProductionConsumption[]
-  packagingConsumptions  PackagingConsumption[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  salesOrderItems        SalesOrderItem[]
-  inventoryReservations  InventoryReservation[]
-  costCenters            CostCenter[]
-  productiveResources    ProductiveResource[]
-  allocationPeriods      AllocationPeriod[]
-  allocationRules        AllocationRule[]
-  costSnapshots          CostCalculationSnapshot[]
-  costTariffs            CostTariff[]
-  financialAccounts      FinancialAccount[]
-  salesChannels          SalesChannel[]
-  productPrices          ProductPrice[]
-  accountsReceivable     AccountsReceivable[]
-  accountsPayable        AccountsPayable[]
-  financialTransactions  FinancialTransaction[]
-  payments               Payment[]
-  reconciliationItems    ReconciliationItem[]
-  reconciliationEvents   ReconciliationEvent[]
-  financialInstitutions  FinancialInstitution[]
-  bankTransactions       BankTransaction[]
+  id                       String                       @id @default(cuid())
+  name                     String
+  tradeName                String
+  taxId                    String                       @unique
+  currency                 String                       @default("BRL")
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  users                    User[]
+  suppliers                Supplier[]
+  customers                Customer[]
+  coffeeLots               CoffeeLot[]
+  warehouses               Warehouse[]
+  blends                   Blend[]
+  productionOrders         ProductionOrder[]
+  products                 FinishedProduct[]
+  productLines             ProductLine[]
+  salesOrders              SalesOrder[]
+  industrialEvents         IndustrialEvent[]
+  costEvents               CostEvent[]
+  productionBatches        ProductionBatch[]
+  productionConsumptions   ProductionConsumption[]
+  packagingConsumptions    PackagingConsumption[]
+  finishedGoodsMovements   FinishedGoodsMovement[]
+  salesOrderItems          SalesOrderItem[]
+  inventoryReservations    InventoryReservation[]
+  costCenters              CostCenter[]
+  productiveResources      ProductiveResource[]
+  allocationPeriods        AllocationPeriod[]
+  allocationRules          AllocationRule[]
+  costSnapshots            CostCalculationSnapshot[]
+  costTariffs              CostTariff[]
+  financialAccounts        FinancialAccount[]
+  salesChannels            SalesChannel[]
+  productPrices            ProductPrice[]
+  accountsReceivable       AccountsReceivable[]
+  accountsPayable          AccountsPayable[]
+  financialTransactions    FinancialTransaction[]
+  payments                 Payment[]
+  reconciliationItems      ReconciliationItem[]
+  reconciliationEvents     ReconciliationEvent[]
+  financialInstitutions    FinancialInstitution[]
+  bankTransactions         BankTransaction[]
+  greenCoffeeReceipts      GreenCoffeeReceipt[]
+  greenCoffeePurchases     GreenCoffeePurchase[]
+  greenCoffeeApprovals     GreenCoffeeApprovalRequest[]
+  operationalNotifications OperationalNotification[]
+  greenCoffeeAuditEvents   GreenCoffeeAuditEvent[]
+  coffeeSpecies            CoffeeSpecies[]
+  supplierBankAccounts     SupplierBankAccount[]
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   companyId    String
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name         String
-  email        String   @unique
+  email        String        @unique
   passwordHash String
-  role         UserRole @default(INDUSTRIAL)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         UserRole      @default(INDUSTRIAL)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     AuthSession[]
 
   @@index([companyId])
 }
 
+model AuthSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
 model Supplier {
-  id                  String               @id @default(cuid())
-  companyId           String
-  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                String
-  taxId               String?
-  city                String?
-  state               String?
-  coffeeLots          CoffeeLot[]
-  costEvents          CostEvent[]
-  costTariffs         CostTariff[]
-  accountsPayable     AccountsPayable[]
-  reconciliationItems ReconciliationItem[]
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                   String                          @id @default(cuid())
+  companyId            String
+  company              Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                 String
+  taxId                String?
+  city                 String?
+  state                String?
+  coffeeLots           CoffeeLot[]
+  costEvents           CostEvent[]
+  costTariffs          CostTariff[]
+  accountsPayable      AccountsPayable[]
+  reconciliationItems  ReconciliationItem[]
+  greenCoffeeReceipts  GreenCoffeeReceipt[]
+  supplierType         GreenCoffeeSupplierType         @default(COMPANY)
+  legalName            String?
+  stateRegistration    String?
+  ruralRegistration    String?
+  farmName             String?
+  country              String?                         @default("Brasil")
+  address              String?
+  contactName          String?
+  contactRole          String?
+  contactPhone         String?
+  whatsapp             String?
+  contactEmail         String?
+  greenCoffeePurchases GreenCoffeePurchase[]
+  purchaseAcceptances  GreenCoffeePurchaseAcceptance[]
+  bankAccounts         SupplierBankAccount[]
+  contacts             SupplierContact[]
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
 
   @@index([companyId])
+}
+
+model SupplierContact {
+  id                  String                          @id @default(cuid())
+  supplierId          String
+  supplier            Supplier                        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name                String
+  role                String?
+  whatsapp            String?
+  email               String?
+  isPrimary           Boolean                         @default(false)
+  canConfirmBusiness  Boolean                         @default(false)
+  active              Boolean                         @default(true)
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  purchaseAcceptances GreenCoffeePurchaseAcceptance[]
+
+  @@index([supplierId, active, canConfirmBusiness])
 }
 
 model Customer {
@@ -333,6 +481,7 @@ model Warehouse {
   industrialEvents       IndustrialEvent[]
   finishedGoodsMovements FinishedGoodsMovement[]
   inventoryReservations  InventoryReservation[]
+  greenCoffeeReceipts    GreenCoffeeReceipt[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 
@@ -365,9 +514,334 @@ model CoffeeLot {
   receivedAt             DateTime                @default(now())
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+  receipt                GreenCoffeeReceipt?
 
   @@unique([companyId, code])
   @@index([supplierId, warehouseId])
+}
+
+model GreenCoffeeReceipt {
+  id                  String                       @id @default(cuid())
+  companyId           String
+  company             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId          String
+  supplier            Supplier                     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouseId         String
+  warehouse           Warehouse                    @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  coffeeLotId         String                       @unique
+  coffeeLot           CoffeeLot                    @relation(fields: [coffeeLotId], references: [id], onDelete: Restrict)
+  receiptNumber       String
+  idempotencyKey      String                       @unique
+  status              GreenCoffeeReceiptStatus     @default(CONFIRMED)
+  qualityStatus       GreenCoffeeQualityStatus     @default(AWAITING_ANALYSIS)
+  species             String
+  farmName            String?
+  municipality        String?
+  state               String?
+  country             String?
+  origin              String
+  harvest             String?
+  variety             String?
+  process             String?
+  supplierLotCode     String?
+  invoiceNumber       String?
+  transportDocument   String?
+  purchaseOrderNumber String?
+  notes               String?
+  unit                String                       @default("KG")
+  bagQuantity         Int?
+  bagWeightKg         Decimal?                     @db.Decimal(14, 3)
+  grossWeightKg       Decimal                      @db.Decimal(14, 3)
+  tareWeightKg        Decimal                      @default(0) @db.Decimal(14, 3)
+  netWeightKg         Decimal                      @db.Decimal(14, 3)
+  moisturePercent     Decimal?                     @db.Decimal(5, 2)
+  screen              String?
+  defects             Int?
+  classification      String?
+  qualityNotes        String?
+  confirmedById       String
+  confirmedByName     String
+  confirmedAt         DateTime                     @default(now())
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  purchaseId          String?
+  purchase            GreenCoffeePurchase?         @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  packagingType       GreenCoffeePackagingType     @default(OTHER)
+  volumeQuantity      Int?
+  nominalWeightKg     Decimal?                     @db.Decimal(14, 3)
+  sampleCollected     Boolean                      @default(false)
+  visualCondition     String?
+  approvalStatus      GreenCoffeeApprovalStatus?
+  labSample           GreenCoffeeLabSample?
+  approvalRequests    GreenCoffeeApprovalRequest[]
+  auditEvents         GreenCoffeeAuditEvent[]
+
+  @@unique([companyId, receiptNumber])
+  @@index([companyId, confirmedAt])
+  @@index([supplierId])
+  @@index([qualityStatus])
+  @@index([purchaseId])
+}
+
+model GreenCoffeePurchase {
+  id                           String                           @id @default(cuid())
+  companyId                    String
+  company                      Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId                   String
+  supplier                     Supplier                         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseNumber               String
+  status                       GreenCoffeePurchaseStatus        @default(DRAFT)
+  purchasedAt                  DateTime
+  buyerId                      String
+  buyerName                    String
+  species                      String
+  originRegion                 String
+  municipality                 String?
+  state                        String?
+  country                      String                           @default("Brasil")
+  farmName                     String?
+  harvest                      String
+  variety                      String?
+  process                      String?
+  supplierLotCode              String?
+  qualityDescription           String?
+  contractedScreen             String?
+  maxDefects                   Int?
+  maxMoisturePercent           Decimal?                         @db.Decimal(5, 2)
+  beverageClassification       String?
+  minimumScore                 Decimal?                         @db.Decimal(5, 2)
+  technicalSpecifications      String?
+  packagingType                GreenCoffeePackagingType
+  volumeQuantity               Int
+  nominalUnitWeightKg          Decimal                          @db.Decimal(14, 3)
+  contractedWeightKg           Decimal                          @db.Decimal(14, 3)
+  weightTolerancePercent       Decimal                          @default(0) @db.Decimal(7, 3)
+  pricePerKg                   Decimal?                         @db.Decimal(14, 4)
+  pricePerBag                  Decimal?                         @db.Decimal(14, 2)
+  currency                     String                           @default("BRL")
+  totalValue                   Decimal                          @db.Decimal(14, 2)
+  paymentTerms                 String?
+  expectedAt                   DateTime?
+  commercialNotes              String?
+  idempotencyKey               String                           @unique
+  confirmedAt                  DateTime?
+  createdAt                    DateTime                         @default(now())
+  updatedAt                    DateTime                         @updatedAt
+  receipts                     GreenCoffeeReceipt[]
+  approvalRequests             GreenCoffeeApprovalRequest[]
+  notifications                OperationalNotification[]
+  auditEvents                  GreenCoffeeAuditEvent[]
+  approvalStatus               PurchaseApprovalStatus           @default(DRAFT)
+  operationalStatus            PurchaseOperationalStatus        @default(NOT_STARTED)
+  createdByUserId              String
+  createdByName                String
+  approvedByUserId             String?
+  approvedByName               String?
+  approvedAt                   DateTime?
+  submittedForApprovalAt       DateTime?
+  submittedForApprovalByUserId String?
+  rejectedByUserId             String?
+  rejectedAt                   DateTime?
+  rejectionReason              String?
+  returnedByUserId             String?
+  returnedAt                   DateTime?
+  returnReason                 String?
+  correctionRequest            String?
+  department                   String?
+  approverName                 String?
+  supplierSnapshot             Json
+  qualityCategory              String
+  additionalSpecification      String?
+  contractReference            String?
+  paymentTermType              PurchasePaymentTermType
+  paymentTermData              Json
+  installments                 GreenCoffeePurchaseInstallment[]
+  accountsPayable              AccountsPayable[]
+  externalAcceptanceStatus     PurchaseExternalAcceptanceStatus @default(NOT_SENT)
+  termsVersion                 String                           @default("2026.08")
+  termsDocumentUrl             String?
+  acceptanceConditionText      String?
+  externalAcceptances          GreenCoffeePurchaseAcceptance[]
+
+  @@unique([companyId, purchaseNumber])
+  @@index([companyId, status])
+  @@index([supplierId])
+}
+
+model GreenCoffeePurchaseAcceptance {
+  id                   String                           @id @default(cuid())
+  purchaseId           String
+  purchase             GreenCoffeePurchase              @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supplierId           String
+  supplier             Supplier                         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierContactId    String?
+  supplierContact      SupplierContact?                 @relation(fields: [supplierContactId], references: [id], onDelete: SetNull)
+  status               PurchaseExternalAcceptanceStatus @default(NOT_SENT)
+  channel              String?
+  destinationMasked    String?
+  contactName          String?
+  contactRole          String?
+  contactPhoneSnapshot String?
+  contactEmailSnapshot String?
+  tokenHash            String                           @unique
+  tokenExpiresAt       DateTime
+  tokenRevokedAt       DateTime?
+  sentAt               DateTime?
+  viewedAt             DateTime?
+  acceptedAt           DateTime?
+  declinedAt           DateTime?
+  termsVersion         String
+  termsDocumentUrl     String?
+  documentHash         String
+  snapshot             Json
+  acceptedByName       String?
+  acceptedByRole       String?
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+
+  @@index([purchaseId, status])
+  @@index([tokenExpiresAt])
+}
+
+model GreenCoffeePurchaseInstallment {
+  id                String                    @id @default(cuid())
+  purchaseId        String
+  purchase          GreenCoffeePurchase       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  installmentNumber Int
+  percentage        Decimal                   @db.Decimal(7, 4)
+  amount            Decimal                   @db.Decimal(14, 2)
+  dueDate           DateTime
+  status            PurchaseInstallmentStatus @default(PLANNED)
+  accountsPayableId String?                   @unique
+  accountsPayable   AccountsPayable?          @relation(fields: [accountsPayableId], references: [id], onDelete: SetNull)
+  paidAt            DateTime?
+  paymentReference  String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@unique([purchaseId, installmentNumber])
+  @@index([status, dueDate])
+}
+
+model SupplierBankAccount {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  bankName      String
+  bankCode      String?
+  agency        String?
+  accountNumber String?
+  accountType   String?
+  holderName    String
+  holderTaxId   String
+  pixKey        String?
+  pixType       String?
+  iban          String?
+  swiftBic      String?
+  country       String   @default("Brasil")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([supplierId, active])
+}
+
+model CoffeeSpecies {
+  id        String          @id @default(cuid())
+  companyId String
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  active    Boolean         @default(true)
+  varieties CoffeeVariety[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([companyId, code])
+}
+
+model CoffeeVariety {
+  id        String        @id @default(cuid())
+  speciesId String
+  species   CoffeeSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([speciesId, code])
+  @@index([speciesId, active])
+}
+
+model GreenCoffeeLabSample {
+  id           String             @id @default(cuid())
+  receiptId    String             @unique
+  receipt      GreenCoffeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  sampleNumber String             @unique
+  status       String             @default("PENDING")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model GreenCoffeeApprovalRequest {
+  id            String                    @id @default(cuid())
+  companyId     String
+  company       Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseId    String
+  purchase      GreenCoffeePurchase       @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  receiptId     String
+  receipt       GreenCoffeeReceipt        @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  status        GreenCoffeeApprovalStatus @default(PENDING)
+  requiredRole  String
+  reason        String
+  differences   Json
+  decidedById   String?
+  decidedByName String?
+  justification String?
+  decidedAt     DateTime?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([companyId, status])
+  @@index([receiptId])
+}
+
+model OperationalNotification {
+  id         String               @id @default(cuid())
+  companyId  String
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseId String?
+  purchase   GreenCoffeePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  message    String
+  targetRole String
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+
+  @@index([companyId, readAt])
+}
+
+model GreenCoffeeAuditEvent {
+  id         String               @id @default(cuid())
+  companyId  String
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseId String?
+  purchase   GreenCoffeePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  receiptId  String?
+  receipt    GreenCoffeeReceipt?  @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  action     String
+  actorId    String
+  actorName  String
+  metadata   Json?
+  occurredAt DateTime             @default(now())
+
+  @@index([companyId, occurredAt])
+  @@index([purchaseId])
+  @@index([receiptId])
 }
 
 model Blend {
@@ -817,28 +1291,32 @@ model AccountsReceivable {
 }
 
 model AccountsPayable {
-  id           String        @id @default(cuid())
-  companyId    String
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplierId   String?
-  supplier     Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  costCenterId String?
-  costCenter   CostCenter?   @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  description  String
-  issueDate    DateTime
-  dueDate      DateTime
-  amount       Decimal       @db.Decimal(14, 2)
-  openAmount   Decimal       @db.Decimal(14, 2)
-  status       PayableStatus @default(OPEN)
-  category     String
-  paymentDate  DateTime?
-  notes        String?
-  payments     Payment[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                  String                          @id @default(cuid())
+  companyId           String
+  company             Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId          String?
+  supplier            Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  costCenterId        String?
+  costCenter          CostCenter?                     @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  description         String
+  issueDate           DateTime
+  dueDate             DateTime
+  amount              Decimal                         @db.Decimal(14, 2)
+  openAmount          Decimal                         @db.Decimal(14, 2)
+  status              PayableStatus                   @default(OPEN)
+  category            String
+  paymentDate         DateTime?
+  notes               String?
+  payments            Payment[]
+  purchaseInstallment GreenCoffeePurchaseInstallment?
+  purchaseId          String?
+  purchase            GreenCoffeePurchase?            @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
 
   @@index([companyId, status, dueDate])
   @@index([costCenterId, dueDate])
+  @@index([purchaseId, dueDate])
 }
 
 model Payment {

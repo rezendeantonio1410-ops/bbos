@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -27,13 +28,15 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
-import { currentUser } from "@/lib/current-user";
+import { currentUser as demoUser, type CurrentUser } from "@/lib/current-user";
+const API_ROOT = process.env.NEXT_PUBLIC_API_URL ?? `${typeof window === "undefined" ? "http://localhost:3001" : `${window.location.protocol}//${window.location.hostname}:3001`}/api`;
 
 const nav = [
   { href: "/home", label: "Início", icon: House },
   { href: "/dashboard", label: "Dashboard Executivo", icon: LayoutDashboard },
   { href: "/dashboard-industrial", label: "Dashboard Industrial", icon: Gauge },
   { href: "/recebimento", label: "Recebimento", icon: PackageOpen },
+  { href: "/compras-cafe-verde", label: "Compras Café Verde", icon: PackageOpen },
   { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
   { href: "/estoque", label: "Estoque", icon: Warehouse },
   { href: "/producao", label: "Produção", icon: Factory },
@@ -49,6 +52,10 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [sessionUser, setSessionUser] = useState<CurrentUser | null>(null);
+  useEffect(() => { fetch(`${API_ROOT}/auth/me`, { credentials: "include" }).then((response) => response.ok ? response.json() : null).then((data) => { if (data?.user) setSessionUser({ ...demoUser, id: data.user.id, name: data.user.name, initials: data.user.name.split(" ").map((part: string) => part[0]).join("").slice(0, 2).toUpperCase(), corporateTitle: data.user.role === "ADMIN" ? "Sócio Administrador" : data.user.role === "EXECUTIVE" ? "Diretor" : data.user.role === "SALES" ? "Comercial" : data.user.role, systemRole: data.user.role }); }).catch(() => undefined); }, []);
+  const user = sessionUser;
+  const logout = async () => { await fetch(`${API_ROOT}/auth/logout`, { method: "POST", credentials: "include" }); window.location.href = "/login"; };
   return (
     <div className="min-h-screen bg-[var(--surface-page)] lg:grid lg:grid-cols-[264px_1fr]">
       <aside className="hidden border-r border-[var(--surface-border)] bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto">
@@ -133,13 +140,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="hidden h-8 w-px bg-stone-200 sm:block" />
             <div className="hidden items-center gap-2.5 sm:flex">
               <span className="grid size-9 place-items-center rounded-full bg-forest-100 text-xs font-bold text-forest-800">
-                {currentUser.initials}
+                {user?.initials ?? "?"}
               </span>
               <div>
-                <p className="text-xs font-semibold">{currentUser.name}</p>
-                <p className="text-[11px] text-stone-500">{currentUser.corporateTitle}</p>
+                <p className="text-xs font-semibold">{user?.name ?? "Sessão não autenticada"}</p>
+                <p className="text-[11px] text-stone-500">{user?.corporateTitle ?? "Acesse o login"}</p>
               </div>
             </div>
+            {user && <button type="button" onClick={() => void logout()} className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-100 hover:text-stone-900">Sair</button>}
           </div>
         </header>
         <main className="p-4 md:p-8 xl:p-10">{children}</main>
