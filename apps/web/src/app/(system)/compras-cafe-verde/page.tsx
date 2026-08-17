@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 import { Check, Plus, ShieldCheck, X } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 
@@ -43,7 +44,6 @@ type Options = {
   suppliers: Supplier[];
   users: { id: string; name: string; role: string }[];
 };
-type SessionIdentity = { id: string; name: string; role: string; companyId: string };
 type Catalog = {
   id: string;
   code: string;
@@ -192,17 +192,15 @@ export default function Page() {
     try {
       const [currentOptions, sessionResponse] = await Promise.all([
         req<Options>(`${ROOT}/receipts/options`, { credentials: "include" }),
-        fetch(`${ROOT}/auth/me`, { credentials: "include" }),
+        fetchSessionIdentity(ROOT),
       ]);
-      const session = sessionResponse.ok ? await sessionResponse.json() : null;
-      const identity = session?.user as SessionIdentity | null;
-      if (!identity?.id || !identity.companyId) throw new Error("Sessão não autenticada.");
+      const identity = sessionResponse;
       setSessionUser(identity);
       setOptions(currentOptions);
       setSupplierId((value) => value || currentOptions.suppliers[0]?.id || "");
       const [purchases, species] = await Promise.all([
         req<Purchase[]>(API, { credentials: "include" }),
-        req<Catalog>(`${API}/catalog?companyId=${encodeURIComponent(identity.companyId)}`, { credentials: "include" }),
+        req<Catalog>(`${API}/catalog`, { credentials: "include" }),
       ]);
       setRows(purchases);
       setCatalog(species);

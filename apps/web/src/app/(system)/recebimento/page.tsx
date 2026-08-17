@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
+import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 const ROOT =
     process.env.NEXT_PUBLIC_API_URL ??
     (typeof window === "undefined"
@@ -47,7 +48,7 @@ type Opt = {
   warehouses: O[];
   users: O[];
   purchases: P[];
-  currentUser?: { id: string; name: string; role: string; companyId: string };
+  currentUser?: SessionIdentity;
 };
 type Row = {
   id: string;
@@ -136,7 +137,6 @@ function Wizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...d,
-          companyId: o.currentUser?.companyId,
           idempotencyKey: crypto.randomUUID(),
           netWeightKg: net,
           qualityStatus: "AWAITING_ANALYSIS",
@@ -584,12 +584,10 @@ export default function Page() {
     Promise.all([
       req<Opt>(`${API}/options`, { credentials: "include" }),
       req<Row[]>(API, { credentials: "include" }),
-      fetch(`${ROOT}/auth/me`, { credentials: "include" }),
-    ])
-      .then(async ([a, b, sessionResponse]) => {
-        const session = sessionResponse.ok ? await sessionResponse.json() : null;
-        if (!session?.user?.id || !session.user.companyId) throw new Error("Sessão não autenticada.");
-        setO({ ...a, currentUser: session.user });
+      fetchSessionIdentity(ROOT),
+      ])
+      .then(async ([a, b, identity]) => {
+        setO({ ...a, currentUser: identity });
         setRows(b);
       })
       .catch((e) => setErr(String(e)));

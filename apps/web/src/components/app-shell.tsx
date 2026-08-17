@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
-import { currentUser as demoUser, type CurrentUser } from "@/lib/current-user";
+import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 const API_ROOT = process.env.NEXT_PUBLIC_API_URL ?? `${typeof window === "undefined" ? "http://localhost:3001" : `${window.location.protocol}//${window.location.hostname}:3001`}/api`;
 
 const nav = [
@@ -52,8 +52,14 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [sessionUser, setSessionUser] = useState<CurrentUser | null>(null);
-  useEffect(() => { fetch(`${API_ROOT}/auth/me`, { credentials: "include" }).then((response) => response.ok ? response.json() : null).then((data) => { if (data?.user) setSessionUser({ ...demoUser, id: data.user.id, name: data.user.name, initials: data.user.name.split(" ").map((part: string) => part[0]).join("").slice(0, 2).toUpperCase(), corporateTitle: data.user.role === "ADMIN" ? "Sócio Administrador" : data.user.role === "EXECUTIVE" ? "Diretor" : data.user.role === "SALES" ? "Comercial" : data.user.role, systemRole: data.user.role }); }).catch(() => undefined); }, []);
+  const [sessionUser, setSessionUser] = useState<(SessionIdentity & { initials: string; corporateTitle: string }) | null>(null);
+  useEffect(() => {
+    void fetchSessionIdentity(API_ROOT).then((identity) => setSessionUser({
+      ...identity,
+      initials: identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+      corporateTitle: identity.role === "ADMIN" ? "Sócio Administrador" : identity.role === "EXECUTIVE" ? "Diretor" : identity.role === "SALES" ? "Comercial" : identity.role,
+    })).catch(() => setSessionUser(null));
+  }, []);
   const user = sessionUser;
   const logout = async () => { await fetch(`${API_ROOT}/auth/logout`, { method: "POST", credentials: "include" }); window.location.href = "/login"; };
   return (

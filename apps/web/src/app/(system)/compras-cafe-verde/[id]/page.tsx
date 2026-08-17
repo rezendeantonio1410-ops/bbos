@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, ExternalLink, Send } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 
 const API_ROOT = getApiBaseUrl();
 const approval: Record<string, string> = {
@@ -88,12 +89,9 @@ type Purchase = {
   acceptanceConditionText?: string | null;
   externalAcceptance?: { status?: string; channel?: string; destinationMasked?: string; contactName?: string; sentAt?: string; viewedAt?: string; acceptedAt?: string; termsVersion?: string; snapshot?: unknown; acceptedByName?: string | null; acceptedByRole?: string | null; documentHash?: string } | null;
 };
-type User = { id: string; name: string; role: string };
-type SessionIdentity = { id: string; name: string; role: string; companyId: string };
 
 export default function PurchaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [purchase, setPurchase] = useState<Purchase | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -111,20 +109,16 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
   const [validationMissing, setValidationMissing] = useState<string[]>([]);
   const load = async (id: string) => {
-    const [purchaseResponse, optionsResponse, sessionResponse] = await Promise.all([
+    const [purchaseResponse, sessionIdentity] = await Promise.all([
       fetch(`${API_ROOT}/green-coffee-purchases/${id}`, { credentials: "include" }),
-      fetch(`${API_ROOT}/receipts/options`, { credentials: "include" }),
-      fetch(`${API_ROOT}/auth/me`, { credentials: "include" }),
+      fetchSessionIdentity(API_ROOT),
     ]);
     const data = await purchaseResponse.json();
     if (!purchaseResponse.ok) throw new Error(data.message ?? "Compra não encontrada.");
-    const options = await optionsResponse.json();
-    const session = sessionResponse.ok ? await sessionResponse.json() : null;
     setPurchase(data);
     if (data.externalAcceptanceStatus === "ACCEPTED") setAcceptanceUrl("");
     if (data.supplier?.contacts?.length === 1) setSelectedContactId(data.supplier.contacts[0].id);
-    setUsers(options.users ?? []);
-    setSessionUser(session?.user ?? null);
+    setSessionUser(sessionIdentity);
   };
   useEffect(() => {
     void params.then(({ id }) => load(id)).catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar compra."));
@@ -135,9 +129,8 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const date = (value?: string) => value ? new Date(value).toLocaleString("pt-BR") : "—";
   // A identidade do shell é a fonte da sessão. A lista da API só confirma
   // que esse mesmo usuário existe, está ativo e pertence à empresa.
-  const persistedUser = sessionUser && users.find((user) => user.id === sessionUser.id && user.role === sessionUser.role);
-  const actor = persistedUser && ["EXECUTIVE", "ADMIN"].includes(persistedUser.role) ? persistedUser : null;
-  const activeUser = persistedUser;
+  const actor = sessionUser && ["EXECUTIVE", "ADMIN"].includes(sessionUser.role) ? sessionUser : null;
+  const activeUser = sessionUser;
   const returnedForAdjustment = purchase.approvalStatus === "DRAFT" && Boolean(purchase.returnReason || purchase.returnedAt);
   const operationalLabel = purchase.approvalStatus === "APPROVED" && purchase.externalAcceptanceStatus !== "ACCEPTED" ? "Aguardando aceite" : delivery[purchase.operationalStatus] ?? purchase.operationalStatus;
   const approvalMissing = () => {
