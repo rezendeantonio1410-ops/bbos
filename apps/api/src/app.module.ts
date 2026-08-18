@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DashboardController } from "./dashboard.controller";
+import { DashboardService } from "./dashboard.service";
 import { HealthController } from "./health.controller";
 import { ReceiptsController } from "./receipts.controller";
 import { GreenCoffeePurchasesController } from './green-coffee-purchases.controller';
@@ -42,6 +43,6 @@ import { APP_GUARD } from "@nestjs/core";
     CommerceController,
     AuthController,
   ],
-  providers: [ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [DashboardService, ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

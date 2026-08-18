@@ -1,49 +1,43 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, ClipboardCheck, Factory, PackageCheck, ShieldAlert, Sprout, WalletCards } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
-import { currentUser } from "@/lib/current-user";
-import { executiveV3DemoData } from "@/lib/executive-v3-demo-data";
+import { getApiRoot, fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
+import { getApiBaseUrl } from "@/lib/api-url";
 
 const kg = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
-const finishedGoods = [
-  { name: "Caramelo", presentation: "500 g", physical: 1840, reserved: 320, available: 1520, dailySales: 54, coverage: 28, trend: "↑", tone: "success" as const, suggestion: "Dentro da meta" },
-  { name: "Caramelo", presentation: "1 kg", physical: 640, reserved: 180, available: 460, dailySales: 42, coverage: 11, trend: "↓", tone: "warning" as const, suggestion: "Programar produção" },
-  { name: "Melpo", presentation: "500 g", physical: 920, reserved: 110, available: 810, dailySales: 27, coverage: 30, trend: "↑", tone: "success" as const, suggestion: "Dentro da meta" },
-  { name: "Épico", presentation: "250 g", physical: 380, reserved: 140, available: 240, dailySales: 31, coverage: 8, trend: "↓", tone: "danger" as const, suggestion: "Atenção à reposição" },
-];
-
-const greenLots = [
-  ["Cerrado · CL-2408", "Catuaí · natural", "12.480 kg", "9.200 kg", "APROVADO"],
-  ["Sul de Minas · SM-118", "Bourbon · lavado", "8.260 kg", "6.100 kg", "LABORATÓRIO"],
-  ["Matas de Minas · MM-092", "Arara · natural", "4.880 kg", "1.900 kg", "ATENÇÃO"],
-];
+type HomeData = { salesToday: number; salesMonth: number; openOrders: number; overdueOrders: number; productionActualKg: number; productionPlannedKg: number; pendingLab: number; openPurchases: number; finishedGoodsUnits: number; finishedGoodsReserved: number; greenLots: Array<{ origin: string; code: string; variety: string; currentKg: number; reservedKg: number; status: string }>; alerts: Array<{ tone: "CRÍTICO" | "ATENÇÃO" | "INFORMATIVO" | "POSITIVO"; title: string; impact: string; href: string; action: string }> };
+const emptyHome: HomeData = { salesToday: 0, salesMonth: 0, openOrders: 0, overdueOrders: 0, productionActualKg: 0, productionPlannedKg: 0, pendingLab: 0, openPurchases: 0, finishedGoodsUnits: 0, finishedGoodsReserved: 0, greenLots: [], alerts: [] };
 
 export function HomeCommandV1() {
+  const [home, setHome] = React.useState<HomeData>(emptyHome);
+  const [identity, setIdentity] = React.useState<SessionIdentity | null>(null);
+  React.useEffect(() => { const apiRoot = getApiBaseUrl(); const authRoot = getApiRoot(); void Promise.all([fetch(`${apiRoot}/dashboard/home`, { credentials: "include" }).then((r) => r.ok ? r.json() : emptyHome), fetchSessionIdentity(authRoot)]).then(([data, user]) => { setHome(data as HomeData); setIdentity(user); }).catch(() => undefined); }, []);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
-  const priorities = [
-    { tone: "CRÍTICO" as const, title: "Épico 250 g com cobertura curta", impact: "8 dias estimados de estoque disponível.", href: "/estoque", action: "Ver estoque", icon: ShieldAlert },
-    { tone: "ATENÇÃO" as const, title: "Caramelo 1 kg abaixo da cobertura", impact: "11 dias · necessidade de programação.", href: "/producao", action: "Programar produção", icon: Factory },
-    { tone: "INFORMATIVO" as const, title: "2 lotes aguardam liberação", impact: "Laboratório precisa concluir a análise.", href: "/recebimento", action: "Ver recebimento", icon: ClipboardCheck },
-    { tone: "POSITIVO" as const, title: "Receita faturada mantém tendência", impact: "Projeção do mês acima do período anterior.", href: "/dashboard", action: "Ver análise", icon: WalletCards },
-  ];
+  const priorities = home.alerts.map((item) => ({ ...item, icon: item.tone === "CRÍTICO" ? ShieldAlert : item.tone === "ATENÇÃO" ? Factory : item.tone === "POSITIVO" ? WalletCards : ClipboardCheck }));
+  const finishedGoods: Array<{ name: string; presentation: string; available: number; dailySales: number; coverage: number; trend: string; tone: "success" | "warning" | "danger"; suggestion: string }> = [];
+  const greenLots = home.greenLots.map((lot) => [`${lot.origin} · ${lot.code}`, lot.variety, `${kg.format(lot.currentKg)} kg`, `${kg.format(lot.reservedKg)} kg`, lot.status]);
+  const dashboardInventory = { finishedGoodsUnits: home.finishedGoodsUnits, greenCoffeeAvailableKg: home.greenLots.reduce((sum, lot) => sum + lot.currentKg, 0) };
+  const executiveV3Data = { inventory: dashboardInventory };
+  const executiveV3DemoData = executiveV3Data;
   return <div className="home-command mx-auto w-full max-w-[1600px] space-y-6">
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#087568]">Bispo Coffees · Central de comando</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">{greeting}, {currentUser.name.split(" ")[0]}!</h1>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">{greeting}, {identity?.name?.split(" ")[0] ?? ""}!</h1>
         <p className="mt-2 text-sm text-[#626B69]">{priorities.length ? <>Sua operação está estável. Existem <strong className="text-[#111514]">{priorities.length} pontos</strong> que merecem sua atenção hoje.</> : "Nenhuma ocorrência crítica hoje. Operação dentro dos parâmetros."}</p>
-        <p className="mt-1 text-[11px] text-[#7A8381]">{currentUser.corporateTitle}</p>
+        <p className="mt-1 text-[11px] text-[#7A8381]">{identity?.role ?? ""}</p>
       </div>
       <div className="flex items-center gap-2"><Badge tone="neutral">Visão de hoje</Badge><Link href="/dashboard" className="inline-flex items-center gap-1 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2 text-xs font-semibold text-[#626B69]">Dashboard executivo <ArrowRight size={13}/></Link></div>
     </header>
 
     <section><SectionTitle eyebrow="Prioridade" title="Atenção do gestor" subtitle="Dado → alerta → ação operacional."/><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{priorities.map((item) => <Priority key={item.title} {...item}/>)}</div></section>
 
-    <section><SectionTitle eyebrow="Operação" title="Operação do Dia" subtitle="O que precisa ser acompanhado antes do fechamento."/><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><Operation title="Vendas" icon={WalletCards} href="/vendas" value="R$ 18.420" details={["Mês: R$ 486.320", "Meta: 94,6%", "↑ 12,4%"]} color="#087568"/><Operation title="Pedidos" icon={PackageCheck} href="/pedidos" value="27 em aberto" details={["Carteira: R$ 184.600", "3 atrasados", "14 reservados"]} color="#3E73A8"/><Operation title="Produção" icon={Factory} href="/dashboard-industrial" value="1.240 kg" details={["Programado: 1.500 kg", "Eficiência: 84,5%", "8 OPs em andamento"]} color="#C8923E"/><Operation title="Qualidade" icon={ClipboardCheck} href="/recebimento" value="2 lotes em análise" details={["Aguardando liberação: 2", "Não conformidades: 0", "Última atualização hoje"]} color="#7867A9"/></div><Card className="mt-3 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#7A8381]">Próximas atividades</p><p className="mt-1 text-sm font-semibold">Liberar lotes do laboratório e revisar OPs reservadas.</p></div><Link href="/producao" className="text-xs font-bold text-[#087568]">Ver operação <ArrowRight className="inline" size={13}/></Link></div></Card></section>
+    <section><SectionTitle eyebrow="Operação" title="Operação do Dia" subtitle="O que precisa ser acompanhado antes do fechamento."/><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><Operation title="Vendas" icon={WalletCards} href="/vendas" value={new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(home.salesToday)} details={[`Mês: ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(home.salesMonth)}`, "Dados do período", "PostgreSQL"]} color="#087568"/><Operation title="Pedidos" icon={PackageCheck} href="/pedidos" value={`${home.openOrders} em aberto`} details={[`${home.overdueOrders} atrasados`, "Dados reais", "PostgreSQL"]} color="#3E73A8"/><Operation title="Produção" icon={Factory} href="/dashboard-industrial" value={`${kg.format(home.productionActualKg)} kg`} details={[`Programado: ${kg.format(home.productionPlannedKg)} kg`, "Dados reais", "PostgreSQL"]} color="#C8923E"/><Operation title="Qualidade" icon={ClipboardCheck} href="/recebimento" value={`${home.pendingLab} lotes em análise`} details={["Aguardando liberação", "Dados reais", "PostgreSQL"]} color="#7867A9"/></div><Card className="mt-3 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#7A8381]">Próximas atividades</p><p className="mt-1 text-sm font-semibold">Acompanhe as etapas pendentes da operação.</p></div><Link href="/producao" className="text-xs font-bold text-[#087568]">Ver operação <ArrowRight className="inline" size={13}/></Link></div></Card></section>
 
     <section><SectionTitle eyebrow="Estoque" title="Estoque de Produtos Acabados" subtitle="Produtos torrados prontos para venda."/><div className="mt-3 grid gap-4 xl:grid-cols-[1.35fr_.65fr]"><Card className="overflow-hidden p-0"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E7E7E3] p-5"><div><p className="text-2xl font-bold">{kg.format(executiveV3DemoData.inventory.finishedGoodsUnits)} un.</p><p className="text-xs text-[#626B69]">Disponível · cobertura média 19 dias</p></div><Link href="/estoque" className="text-xs font-bold text-[#087568]">Ver detalhes <ArrowRight className="inline" size={13}/></Link></div><div className="grid grid-cols-3 gap-3 border-b border-[#E7E7E3] p-5 text-xs"><Metric label="Físico" value="3.780 un."/><Metric label="Reservado" value="750 un."/><Metric label="SKUs críticos" value="2" tone="warning"/></div><div className="divide-y divide-[#E7E7E3]">{finishedGoods.map((item) => <Link href="/estoque" key={`${item.name}-${item.presentation}`} className="grid gap-2 px-5 py-3 transition hover:bg-[#F7F9F8] md:grid-cols-[1.2fr_.8fr_.8fr_.8fr_.8fr] md:items-center"><div><p className="text-xs font-bold">{item.name} <span className="font-medium text-[#626B69]">{item.presentation}</span></p><p className="text-[10px] text-[#7A8381]">{item.suggestion}</p></div><Metric label="Disponível" value={`${item.available} un.`}/><Metric label="Média 30d" value={`${item.dailySales}/dia`}/><Metric label="Cobertura" value={`${item.coverage} dias`} tone={item.tone}/><span className={`text-right text-sm font-bold ${item.trend === "↑" ? "text-[#16A06A]" : "text-[#D95757]"}`}>{item.trend}</span></Link>)}</div></Card><CoverageChart/></div></section>
 

@@ -29,9 +29,9 @@ import type {
   Period,
   ProductionGoal,
   ProductionHistoryItem,
+  IndustrialDashboard,
 } from "@bbos/shared";
-import { industrialDemoDashboard } from "@/lib/industrial-demo-data";
-import { inventoryDemoDashboard } from "@/lib/inventory-demo-data";
+import { getApiBaseUrl } from "@/lib/api-url";
 
 const periodOptions: Array<{ key: Period; label: string }> = [
   { key: "day", label: "Dia" },
@@ -214,8 +214,7 @@ function IndustrialKpi({ label, value, reference, change, icon: Icon, status = "
   return <Link href={href} className="group min-w-0"><Card className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><span className="grid size-8 place-items-center rounded-lg bg-[#F0F0ED] text-forest-800"><Icon size={15} strokeWidth={1.7}/></span><span className={`text-[10px] font-bold ${style.text}`}>{change}</span></div><p className="mt-3 truncate text-[11px] font-semibold text-stone-600">{label}</p><p className="mt-1 text-xl font-bold tracking-tight">{value}</p><div className="mt-2 flex items-end justify-between gap-2"><p className="truncate text-[10px] text-stone-500">{reference}</p><svg viewBox="0 0 50 14" className="h-3.5 w-12" aria-hidden="true"><polyline points="1,11 9,9 17,10 25,5 33,7 41,3 49,4" fill="none" stroke="#0D1B1E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div></Card></Link>;
 }
 
-function ProductionChart() {
-  const points = industrialDemoDashboard.productionChart;
+function ProductionChart({ points }: { points: Array<{ label: string; plannedKg: number; actualKg: number }> }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const width = 760;
   const height = 270;
@@ -400,14 +399,14 @@ function historyCatalog(item: ProductionHistoryItem) {
 
 export default function IndustrialDashboardPage() {
   const [period, setPeriod] = useState<Period>("month");
+  const [dashboardData, setData] = useState<IndustrialDashboard | null>(null);
   const [costSummary, setCostSummary] = useState<{ metrics: { energy: number; gas: number; maintenance: number; averageCostPerKg: number } } | null>(null);
-  useEffect(() => { void fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api"}/costing/summary`).then((response) => response.ok ? response.json() : null).then(setCostSummary).catch(() => undefined); }, []);
-  const data = industrialDemoDashboard;
-  const greenAvailableKg = inventoryDemoDashboard.lots
-    .filter((lot) => lot.status !== "blocked")
-    .reduce((sum, lot) => sum + lot.availableQuantityKg, 0);
-  const activeGoal =
-    data.goals.find((goal) => goal.period === period) ?? data.goals[2]!;
+  useEffect(() => { const root = getApiBaseUrl(); void Promise.all([fetch(`${root}/dashboard/industrial?period=${period}`, { credentials: "include" }).then((response) => response.ok ? response.json() : null), fetch(`${root}/costing/summary`, { credentials: "include" }).then((response) => response.ok ? response.json() : null)]).then(([dashboard, costs]) => { setData(dashboard); setCostSummary(costs); }).catch(() => undefined); }, [period]);
+  const emptyData: IndustrialDashboard = { updatedAt: new Date().toISOString(), metrics: [], goals: [], capacity: { usedKg: 0, totalKg: 0, utilization: 0, status: "attention" }, orders: { open: 0, inProgress: 0, completed: 0 }, productionChart: [], history: [], alerts: [] };
+  const current = dashboardData ?? emptyData;
+  const data = current;
+  const activeGoal = current.goals.find((goal) => goal.period === period) ?? { period, targetKg: 0, actualKg: 0, attainment: 0, differenceKg: 0, status: "attention" as const };
+  const greenAvailableKg = 0;
   const lineMatchers = [
     { name: "Raros", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("raro") },
     { name: "Épicos", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("épico") },
@@ -415,7 +414,7 @@ export default function IndustrialDashboardPage() {
     { name: "Gourmet", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("melpo") },
   ];
   const productionByLine = lineMatchers.map((line) => {
-    const orders = data.history.filter((item) => line.match(item.blend));
+    const orders = current.history.filter((item) => line.match(item.blend));
     const producedKg = orders.reduce((sum, item) => sum + item.producedKg, 0);
     const plannedKg = orders.reduce((sum, item) => sum + item.plannedKg, 0);
     const costBase = orders.filter((item) => item.costPerKg > 0);
@@ -454,11 +453,11 @@ export default function IndustrialDashboardPage() {
       <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <IndustrialKpi label="Produção realizada" value={`${kg.format(activeGoal.actualKg)} kg`} reference={`${activeGoal.attainment.toLocaleString("pt-BR")}% da meta`} change="+6,8%" icon={Factory}/>
         <IndustrialKpi label="Produção planejada" value={`${kg.format(activeGoal.targetKg)} kg`} reference={periodLabels[period]} change="Meta" icon={Target}/>
-        <IndustrialKpi label="Eficiência" value={data.metrics[0]?.value ?? "—"} reference={data.metrics[0]?.supportingText ?? ""} change="+2,4%" icon={Gauge}/>
-        <IndustrialKpi label="Rendimento" value={data.metrics[1]?.value ?? "—"} reference={data.metrics[1]?.supportingText ?? ""} change="+0,8%" icon={TrendingUp} status="attention"/>
-        <IndustrialKpi label="Perda de torra" value={data.metrics[2]?.value ?? "—"} reference={data.metrics[2]?.supportingText ?? ""} change="-0,4%" icon={ArrowDownRight}/>
-        <IndustrialKpi label="Custo médio/kg" value={data.metrics[6]?.value ?? "—"} reference={data.metrics[6]?.supportingText ?? ""} change="-1,6%" icon={CircleDollarSign} href="/custos"/>
-        <IndustrialKpi label="OPs em andamento" value={String(data.orders.inProgress)} reference={`${data.orders.open} abertas`} change="Operação" icon={Boxes}/>
+        <IndustrialKpi label="Eficiência" value={current.metrics[0]?.value ?? "—"} reference={current.metrics[0]?.supportingText ?? ""} change="" icon={Gauge}/>
+        <IndustrialKpi label="Rendimento" value={current.metrics[1]?.value ?? "—"} reference={current.metrics[1]?.supportingText ?? ""} change="" icon={TrendingUp} status="attention"/>
+        <IndustrialKpi label="Perda de torra" value={current.metrics[2]?.value ?? "—"} reference={current.metrics[2]?.supportingText ?? ""} change="" icon={ArrowDownRight}/>
+        <IndustrialKpi label="Custo médio/kg" value={current.metrics[6]?.value ?? "—"} reference={current.metrics[6]?.supportingText ?? ""} change="" icon={CircleDollarSign} href="/custos"/>
+        <IndustrialKpi label="OPs em andamento" value={String(current.orders.inProgress)} reference={`${current.orders.open} abertas`} change="Operação" icon={Boxes}/>
       </section>
 
       <section className="mt-6 flex flex-wrap gap-2">
@@ -505,7 +504,7 @@ export default function IndustrialDashboardPage() {
           <Card className="p-4 transition hover:-translate-y-0.5">
             <p className="text-[11px] text-stone-500">Cobertura</p>
             <p className="mt-2 text-lg font-bold text-amber-700">
-              {inventoryDemoDashboard.summary.estimatedCoverageDays} dias
+              —
             </p>
           </Card>
         </Link>
@@ -514,7 +513,7 @@ export default function IndustrialDashboardPage() {
             <p className="text-[11px] text-stone-500">Valor do estoque</p>
             <p className="mt-2 text-lg font-bold">
               {currency.format(
-                inventoryDemoDashboard.summary.financialStockValue,
+                0,
               )}
             </p>
           </Card>
@@ -567,23 +566,23 @@ export default function IndustrialDashboardPage() {
             </span>
           </div>
           <p className="mt-6 text-3xl font-bold tracking-tight">
-            {data.capacity.utilization.toLocaleString("pt-BR")}%
+            {current.capacity.utilization.toLocaleString("pt-BR")} %
           </p>
           <p className="mt-2 text-xs text-stone-500">
-            {kg.format(data.capacity.usedKg)} kg de{" "}
-            {kg.format(data.capacity.totalKg)} kg disponíveis
+            {kg.format(current.capacity.usedKg)} kg de{" "}
+            {kg.format(current.capacity.totalKg)} kg disponíveis
           </p>
           <div className="mt-6 h-2 overflow-hidden rounded-full bg-stone-100">
             <div
               className="h-full rounded-full bg-forest-800"
-              style={{ width: `${data.capacity.utilization}%` }}
+              style={{ width: `${current.capacity.utilization}%` }}
             />
           </div>
           <div className="mt-3 flex items-center justify-between">
             <span className="text-xs text-stone-400">
               5.580 kg de capacidade livre
             </span>
-            <Status status={data.capacity.status} compact />
+            <Status status={current.capacity.status} compact />
           </div>
         </Card>
       </section>
@@ -613,7 +612,7 @@ export default function IndustrialDashboardPage() {
           </p>
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {data.goals.map((goal) => (
+          {current.goals.map((goal) => (
             <GoalCard
               key={goal.period}
               goal={goal}
@@ -625,7 +624,7 @@ export default function IndustrialDashboardPage() {
       </section>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {data.metrics.map((item, index) => (
+        {current.metrics.map((item, index) => (
           <MetricCard key={item.id} item={item} index={index} />
         ))}
         <Card className="p-5">
@@ -639,18 +638,18 @@ export default function IndustrialDashboardPage() {
           </div>
           <div className="mt-5 grid grid-cols-3 gap-2 text-center">
             <div>
-              <p className="text-2xl font-bold">{data.orders.open}</p>
+              <p className="text-2xl font-bold">{current.orders.open}</p>
               <p className="mt-1 text-[10px] text-stone-400">Abertas</p>
             </div>
             <div className="border-x">
               <p className="text-2xl font-bold text-amber-700">
-                {data.orders.inProgress}
+                {current.orders.inProgress}
               </p>
               <p className="mt-1 text-[10px] text-stone-400">Em curso</p>
             </div>
             <div>
               <p className="text-2xl font-bold text-emerald-700">
-                {data.orders.completed}
+                {current.orders.completed}
               </p>
               <p className="mt-1 text-[10px] text-stone-400">Concluídas</p>
             </div>
@@ -659,7 +658,7 @@ export default function IndustrialDashboardPage() {
       </section>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1.65fr_1fr]">
-        <ProductionChart />
+        <ProductionChart points={current.productionChart} />
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -673,7 +672,7 @@ export default function IndustrialDashboardPage() {
             <AlertTriangle size={18} className="text-amber-600" />
           </div>
           <div className="mt-5 divide-y">
-            {data.alerts.map((alert) => {
+            {current.alerts.map((alert) => {
               const style = statuses[alert.status];
               const Icon =
                 alert.category === "raw-material"
@@ -742,7 +741,7 @@ export default function IndustrialDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {data.history.map((item) => { const catalog = historyCatalog(item); return (
+                {current.history.map((item) => { const catalog = historyCatalog(item); return (
                   <tr key={item.id} className="text-sm hover:bg-[#F7F9F8]">
                     <td className="px-6 py-4 font-semibold"><Link href="/producao" className="hover:text-forest-700">{item.code}</Link></td>
                     <td className="px-4 py-4 text-stone-600">{catalog.line}</td>
