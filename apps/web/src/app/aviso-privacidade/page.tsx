@@ -4,7 +4,7 @@ export default function PrivacyNoticePage() {
   return (
     <main className="min-h-screen bg-stone-50 px-4 py-8 text-forest-950 sm:px-6">
       <article className="mx-auto max-w-3xl rounded-3xl bg-white p-6 shadow-sm sm:p-10">
-        <Image src="/brand/logo/bispo-logo-official.jpg" alt="Bispo Coffees" width={860} height={240} className="h-auto w-44 rounded bg-white object-contain" priority />
+        <Image src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees" width={860} height={240} className="h-auto w-44 object-contain" priority />
         <p className="mt-8 text-xs font-bold uppercase tracking-[.16em] text-forest-700">Bispo Coffees</p>
         <h1 className="mt-2 text-3xl font-semibold">Aviso de Privacidade</h1>
         <p className="mt-5 leading-7 text-stone-700">
