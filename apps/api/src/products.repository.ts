@@ -12,7 +12,6 @@ import {
   // @ts-expect-error Nest uses legacy Node resolution; runtime resolves the package export.
 } from "@bbos/shared/product-presentation";
 
-const COMPANY_TAX_ID = "12.345.678/0001-90";
 const productInclude = {
   productLine: true,
   variants: { orderBy: { netWeightGrams: "asc" as const } },
@@ -30,8 +29,7 @@ export class ProductsRepository implements OnModuleDestroy {
     return this.database.$disconnect();
   }
 
-  async listCatalog(): Promise<CatalogProduct[]> {
-    const companyId = await this.companyId();
+  async listCatalog(companyId: string): Promise<CatalogProduct[]> {
     const products = await this.database.product.findMany({
       where: { productLine: { companyId } },
       include: productInclude,
@@ -40,8 +38,7 @@ export class ProductsRepository implements OnModuleDestroy {
     return products.map((product) => this.toCatalogProduct(product));
   }
 
-  async listLines() {
-    const companyId = await this.companyId();
+  async listLines(companyId: string) {
     return this.database.productLine.findMany({
       where: { companyId },
       include: {
@@ -54,19 +51,18 @@ export class ProductsRepository implements OnModuleDestroy {
     });
   }
 
-  async findProduct(id: string) {
+  async findProduct(id: string, companyId: string) {
     const product = await this.database.product.findUnique({
-      where: { id },
+      where: { id, productLine: { companyId } },
       include: productInclude,
     });
     return product ? this.toCatalogProduct(product) : null;
   }
 
-  async createProduct(input: CreateCatalogProductInput) {
+  async createProduct(input: CreateCatalogProductInput, companyId: string) {
     const valid = validateCreateProductSku(input);
     return this.database.$transaction(
       async (transaction) => {
-        const companyId = await this.companyId(transaction);
         const line = await transaction.productLine.findUnique({
           where: {
             companyId_code: { companyId, code: valid.line as ProductLineCode },
@@ -115,14 +111,14 @@ export class ProductsRepository implements OnModuleDestroy {
     );
   }
 
-  async createVariant(productId: string, input: CreateProductVariantInput) {
+  async createVariant(productId: string, input: CreateProductVariantInput, companyId: string) {
     return this.database.$transaction(
       async (transaction) => {
         const product = await transaction.product.findUnique({
           where: { id: productId },
           include: { productLine: true },
         });
-        if (!product) throw new Error("Produto não encontrado.");
+        if (!product || product.productLine.companyId !== companyId) throw new Error("Produto não encontrado.");
         assertProductPresentationAllowed(
           product.productLine.code as ProductLine,
           input.packageWeightG,
@@ -158,6 +154,7 @@ export class ProductsRepository implements OnModuleDestroy {
   async updateProduct(
     id: string,
     input: { name?: string; description?: string; active?: boolean },
+    companyId: string,
   ) {
     const data: Prisma.ProductUpdateInput = {
       active: input.active,
@@ -169,17 +166,21 @@ export class ProductsRepository implements OnModuleDestroy {
         slug: productSlug(input.name),
         code: normalizeProductCode(input.name),
       });
+    const current = await this.database.product.findFirst({ where: { id, productLine: { companyId } } });
+    if (!current) throw new Error("Produto não encontrado.");
     const result = await this.database.product.update({
-      where: { id },
+      where: { id: current.id },
       data,
       include: productInclude,
     });
     return this.toCatalogProduct(result);
   }
 
-  async updateVariant(id: string, input: { active: boolean }) {
+  async updateVariant(id: string, input: { active: boolean }, companyId: string) {
+    const current = await this.database.productVariant.findFirst({ where: { id, product: { productLine: { companyId } } } });
+    if (!current) throw new Error("Apresentação não encontrada.");
     return this.database.productVariant.update({
-      where: { id },
+      where: { id: current.id },
       data: { active: input.active },
     });
   }
@@ -208,19 +209,6 @@ export class ProductsRepository implements OnModuleDestroy {
       throw new Error(
         `${productName} já possui a apresentação ${weight === 1000 ? "1 kg" : `${weight} g`}.`,
       );
-  }
-
-  private async companyId(transaction?: Prisma.TransactionClient) {
-    const database = transaction ?? this.database;
-    const company = await database.company.findUnique({
-      where: { taxId: COMPANY_TAX_ID },
-      select: { id: true },
-    });
-    if (!company)
-      throw new Error(
-        "Empresa Bispo Coffees não encontrada. Execute o seed do catálogo.",
-      );
-    return company.id;
   }
 
   private toCatalogProduct(product: PersistedProduct): CatalogProduct {

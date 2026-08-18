@@ -5,7 +5,6 @@ import * as React from "react";
 import { ArrowRight, FlaskConical, PackageOpen, ShoppingBag, Warehouse } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
-import { fetchSessionIdentity } from "@/lib/auth-session";
 
 const API = getApiBaseUrl();
 
@@ -25,12 +24,11 @@ export default function GreenCoffeeHome() {
 
   React.useEffect(() => {
     void Promise.all([
-      fetchSessionIdentity(API),
       getJson<Purchase[]>(`${API}/green-coffee-purchases`),
       getJson<ReceiptOptions>(`${API}/receipts/options`),
       getJson<unknown[]>(`${API}/receipts`),
       getJson<StockSummary>(`${API}/inventory/summary`),
-    ]).then(([, purchases, options, receipts, stock]) => {
+    ]).then(([purchases, options, receipts, stock]) => {
       setCounts({
         purchases: purchases.length,
         delivery: options.purchases?.filter((purchase) => purchase.approvalStatus === "APPROVED" && purchase.externalAcceptanceStatus === "ACCEPTED" && purchase.operationalStatus === "AWAITING_DELIVERY" && purchase.balanceKg > 0).length ?? 0,

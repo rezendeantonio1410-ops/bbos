@@ -17,7 +17,6 @@ import { Badge, Card } from "@bbos/ui";
 import {
   assertCatalogSkuAvailable,
   getAllowedPresentations,
-  PRODUCT_CATALOG_DEMO,
   PRODUCT_LINE_LABELS,
   PRODUCT_LINE_META,
   PRODUCT_LINES,
@@ -44,11 +43,8 @@ const lineTone: Record<ProductLine, string> = {
 };
 
 export default function ProductsPage() {
-  const [catalog, setCatalog] =
-    useState<CatalogProduct[]>(PRODUCT_CATALOG_DEMO);
-  const [catalogSource, setCatalogSource] = useState<
-    "loading" | "database" | "compatibility"
-  >("loading");
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [catalogSource, setCatalogSource] = useState<"loading" | "database" | "error">("loading");
   const [line, setLine] = useState<ProductLine | null>(null);
   const [selected, setSelected] = useState<CatalogProduct | null>(null);
   const [creating, setCreating] = useState(false);
@@ -69,7 +65,7 @@ export default function ProductsPage() {
     void loadProductCatalog().then(({ products: persisted, source }) => {
       setCatalog(persisted);
       setCatalogSource(source);
-    });
+    }).catch(() => setCatalogSource("error"));
   }, []);
   const submit = async () => {
     try {
@@ -79,6 +75,7 @@ export default function ProductsPage() {
       const response = await fetch(PRODUCTS_API_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(form),
       });
       if (!response.ok)
@@ -109,12 +106,7 @@ export default function ProductsPage() {
           <p className="mt-2 text-sm text-stone-500">
             Catálogo oficial Bispo Coffees
           </p>
-          {catalogSource === "compatibility" && (
-            <p className="mt-2 text-[10px] font-semibold text-amber-700">
-              API persistente indisponível • exibindo adaptador de
-              compatibilidade
-            </p>
-          )}
+          {catalogSource === "error" && <p className="mt-2 text-[10px] font-semibold text-red-700">Não foi possível carregar o catálogo persistente.</p>}
         </div>
         <button
           onClick={() => setCreating(true)}
@@ -125,7 +117,7 @@ export default function ProductsPage() {
         </button>
       </header>
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <CatalogKpi label="Linhas ativas" value="4" />
+        <CatalogKpi label="Linhas ativas" value={String(new Set(catalog.map((item) => item.line)).size)} />
         <CatalogKpi
           label="Produtos ativos"
           value={String(catalog.filter((item) => item.active).length)}
@@ -146,7 +138,7 @@ export default function ProductsPage() {
           )}
           tone="danger"
         />
-        <CatalogKpi label="Produtos em atenção" value="1" tone="warning" />
+        <CatalogKpi label="Produtos em atenção" value="—" />
       </section>
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {PRODUCT_LINES.map((item) => {

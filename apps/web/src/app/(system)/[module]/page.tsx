@@ -8,7 +8,7 @@ const modules = {
   laboratorio: { title: 'Laboratório', description: 'Análises, provas e liberação de lotes.', icon: FlaskConical, stats: ['4 análises abertas', '85,6 nota média', '2 pendências'] },
   estoque: { title: 'Estoque', description: 'Posição e movimentação de matérias-primas e produtos.', icon: Warehouse, stats: ['42.180 kg verde', '8.640 pacotes', '52 dias cobertura'] },
   producao: { title: 'Produção', description: 'Planejamento e execução das ordens industriais.', icon: Factory, stats: ['3 ordens ativas', '18.420 kg/mês', '84,5% rendimento'] },
-  blends: { title: 'Blends', description: 'Composições, versões e custos de blends.', icon: Boxes, stats: ['8 blends ativos', '3 em revisão', 'R$ 29,42/kg médio'] },
+  blends: { title: 'Blends', description: 'Composições, versões e custos de blends.', icon: Boxes, stats: [] },
   produtos: { title: 'Produtos', description: 'Portfólio e estrutura de produto acabado.', icon: PackageCheck, stats: ['24 SKUs ativos', '18,8% margem', '2 lançamentos'] },
   pedidos: { title: 'Pedidos', description: 'Carteira comercial e atendimento.', icon: ShoppingBag, stats: ['164 no mês', '92% no prazo', 'R$ 486 mil'] },
   financeiro: { title: 'Financeiro', description: 'Resultado, custos e fluxo financeiro industrial.', icon: CircleDollarSign, stats: ['R$ 728 mil caixa', 'R$ 91 mil resultado', '18,8% margem'] },
