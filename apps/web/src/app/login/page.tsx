@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@bbos/ui";
 import { Logo } from "@/components/logo";
-import { getApiRoot } from "@/lib/auth-session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +15,7 @@ export default function LoginPage() {
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response = await fetch(`${getApiRoot()}/auth/login`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const response = await fetch("/api/auth/login", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) throw new Error("Credenciais inválidas.");
