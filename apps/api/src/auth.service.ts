@@ -5,7 +5,7 @@ import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from "node:crypt
 export const SESSION_COOKIE = "bbos_session";
 const SESSION_DAYS = 7;
 
-type SessionUser = Pick<User, "id" | "companyId" | "name" | "email" | "role" | "active"> & { company: { id: string; name: string; tradeName: string | null } };
+type SessionUser = Pick<User, "id" | "companyId" | "name" | "email" | "role" | "active" | "avatarUrl"> & { company: { id: string; name: string; tradeName: string | null } };
 
 export function hashPassword(password: string, salt = randomBytes(16).toString("hex")) {
   const iterations = 210000;
@@ -44,6 +44,6 @@ export class AuthService {
   }
 
   async revoke(token?: string) { if (token) await this.db.authSession.updateMany({ where: { tokenHash: tokenHash(token), revokedAt: null }, data: { revokedAt: new Date() } }); }
-  publicUser(user: any) { return { id: user.id, companyId: user.companyId, name: user.name, email: user.email, role: user.role, active: user.active, company: user.company ? { id: user.company.id, name: user.company.name, tradeName: user.company.tradeName } : undefined }; }
+  publicUser(user: any) { return { id: user.id, companyId: user.companyId, name: user.name, email: user.email, role: user.role, active: user.active, avatarUrl: user.avatarUrl ?? null, company: user.company ? { id: user.company.id, name: user.company.name, tradeName: user.company.tradeName } : undefined }; }
   readToken(req: { headers?: { cookie?: string } }) { const raw = req.headers?.cookie ?? ""; return raw.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${SESSION_COOKIE}=`))?.split("=").slice(1).join("="); }
 }

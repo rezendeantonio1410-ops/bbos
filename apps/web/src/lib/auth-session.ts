@@ -5,6 +5,7 @@ export type SessionIdentity = {
   email?: string;
   role: string;
   active: boolean;
+  avatarUrl?: string | null;
 };
 
 export type SessionErrorKind = "unauthenticated" | "unavailable";

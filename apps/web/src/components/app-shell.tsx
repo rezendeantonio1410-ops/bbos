@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
+import { UserAvatar } from "./user-avatar";
 import { fetchSessionIdentity, getApiRoot, type SessionIdentity, SessionError } from "@/lib/auth-session";
 
 const nav = [
@@ -172,9 +173,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <div className="hidden h-8 w-px bg-stone-200 sm:block" />
             <div className="hidden items-center gap-2.5 sm:flex">
-              <span className="grid size-9 place-items-center rounded-full bg-forest-100 text-xs font-bold text-forest-800">
-                {user?.initials ?? "?"}
-              </span>
+                <UserAvatar name={user?.name ?? "Usuário"} avatarUrl={user?.avatarUrl} size="medium" />
               <div>
                 <p className="text-xs font-semibold">{user?.name ?? "Sessão não autenticada"}</p>
                 <p className="text-[11px] text-stone-500">{user?.corporateTitle ?? "Acesse o login"}</p>
