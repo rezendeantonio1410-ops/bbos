@@ -39,6 +39,7 @@ import {
   productionDemoDashboard,
   productionOrdersDemo,
 } from "@/lib/production-demo-data";
+import { getApiBaseUrl } from "@/lib/api-url";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -816,11 +817,12 @@ function OrderDrawer({
 }
 
 export default function ProductionPage() {
-  const [orders, setOrders] = useState(productionOrdersDemo);
+  const [orders, setOrders] = useState<ProductionOrderView[]>([]);
   const [wizard, setWizard] = useState(false);
   const [selected, setSelected] = useState<ProductionOrderView | null>(null);
   const [message, setMessage] = useState("");
-  const summary = productionDemoDashboard.summary;
+  const summary = { plannedTodayKg: 0, producedTodayKg: 0, openOrders: 0, inProgressOrders: 0, delayedOrders: 0, efficiencyPercent: 0, averageRoastLossPercent: 0, averageRealCostPerKg: 0, monthlyProducedKg: 0, monthlyTargetKg: 0 };
+  useEffect(() => { void fetch(`${getApiBaseUrl()}/production/orders`, { credentials: "include" }).then((response) => response.ok ? response.json() : []).then((rows: Array<Record<string, unknown>>) => setOrders(rows.map((row) => ({ id: String(row.id), code: String(row.code), product: String(row.productName ?? "Produto não definido"), sku: String(row.sku ?? "—"), plannedQuantity: Number(row.plannedWeightKg ?? 0), producedQuantity: Number(row.actualOutputKg ?? 0), unit: String(row.unit ?? "kg"), plannedAt: String(row.plannedAt ?? ""), startedAt: row.startedAt ? String(row.startedAt) : undefined, completedAt: row.completedAt ? String(row.completedAt) : undefined, responsible: String(row.responsible ?? "—"), priority: String(row.priority ?? "normal").toLowerCase() as ProductionOrderView["priority"], status: String(row.status ?? "PLANNED").toLowerCase().replace("_", "-") as ProductionOrderView["status"], blendName: String((row.blend as { name?: string } | undefined)?.name ?? "—"), allocations: [], batches: [], packaging: undefined, costs: { greenCoffeeConsumedCost: 0, roastLossCost: 0, packagingCost: 0, suppliesCost: 0, laborCost: 0, energyCost: 0, otherIndustrialCosts: 0, roastedOutputKg: Number(row.actualOutputKg ?? 0), finishedOutputKg: 0, producedPackages: 0, totalCost: 0, costPerKg: 0, standardCostPerKg: 0, sku: String(row.sku ?? "—"), sourceCostEventIds: [] }, traceability: [] })) as unknown as ProductionOrderView[])).catch(() => setOrders([])); }, []);
   const cards = useMemo(
     () => [
       {

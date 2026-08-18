@@ -36,8 +36,10 @@ export class InventoryController implements OnModuleDestroy {
   }
 
   @Get('finished-goods')
-  async listFinishedGoods() {
+  async listFinishedGoods(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
     const balances = await this.database.finishedProduct.findMany({
+      where: { companyId: actor.companyId },
       include: {
         productVariant: {
           include: { product: { include: { productLine: true } } },
@@ -51,9 +53,10 @@ export class InventoryController implements OnModuleDestroy {
   }
 
   @Get('finished-goods/:productVariantId/movements')
-  listFinishedGoodsMovements(@Param('productVariantId') productVariantId: string) {
+  async listFinishedGoodsMovements(@Param('productVariantId') productVariantId: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
     return this.database.finishedGoodsMovement.findMany({
-      where: { productVariantId },
+      where: { productVariantId, companyId: actor.companyId },
       include: {
         productionOrder: { select: { id: true, code: true } },
         warehouse: { select: { id: true, code: true, name: true } },
@@ -65,14 +68,17 @@ export class InventoryController implements OnModuleDestroy {
   @Get('finished-goods/:productVariantId')
   async getFinishedGoodsByVariant(
     @Param('productVariantId') productVariantId: string,
+    @Req() req: Request,
   ) {
+    const actor = await requireSession(req, this.auth);
     const variant = await this.database.productVariant.findUnique({
       where: { id: productVariantId },
       include: { product: { include: { productLine: true } } },
     });
     if (!variant) throw new NotFoundException('ProductVariant não encontrado.');
+    if (variant.product.productLine.companyId !== actor.companyId) throw new NotFoundException('Produto não encontrado.');
     const balances = await this.database.finishedProduct.findMany({
-      where: { productVariantId },
+      where: { productVariantId, companyId: actor.companyId },
       include: { warehouse: true, finishedGoodsMovements: true },
     });
     const physicalUnits = balances.reduce(
@@ -141,8 +147,13 @@ export class InventoryController implements OnModuleDestroy {
     const actor = await requireSession(req, this.auth);
     const lots = await this.database.coffeeLot.findMany({ where: { companyId: actor.companyId }, select: { currentWeightKg: true, reservedWeightKg: true, landedCost: true, initialWeightKg: true, status: true } });
     const totalGreenCoffeeKg = lots.reduce((sum, lot) => sum + Number(lot.currentWeightKg) + Number(lot.reservedWeightKg), 0);
+    const availableGreenCoffeeKg = lots.filter(lot => lot.status === 'APPROVED').reduce((sum, lot) => sum + Number(lot.currentWeightKg), 0);
+    const reservedGreenCoffeeKg = lots.filter(lot => lot.status === 'APPROVED').reduce((sum, lot) => sum + Number(lot.reservedWeightKg), 0);
+    const blockedGreenCoffeeKg = lots.filter(lot => lot.status === 'BLOCKED').reduce((sum, lot) => sum + Number(lot.currentWeightKg), 0);
+    const underAnalysisGreenCoffeeKg = lots.filter(lot => lot.status === 'QUALITY_REVIEW').reduce((sum, lot) => sum + Number(lot.currentWeightKg), 0);
+    const consumedGreenCoffeeKg = lots.reduce((sum, lot) => sum + Math.max(0, Number(lot.initialWeightKg) - Number(lot.currentWeightKg) - Number(lot.reservedWeightKg)), 0);
     const financialStockValue = lots.reduce((sum, lot) => { const unitCost = Number(lot.initialWeightKg) > 0 ? Number(lot.landedCost) / Number(lot.initialWeightKg) : 0; return sum + (Number(lot.currentWeightKg) + Number(lot.reservedWeightKg)) * unitCost; }, 0);
-    return { totalGreenCoffeeKg, financialStockValue, averageCostPerKg: totalGreenCoffeeKg > 0 ? financialStockValue / totalGreenCoffeeKg : 0, activeLots: lots.filter(lot => lot.status !== 'BLOCKED' && Number(lot.currentWeightKg) > 0).length, blockedLots: lots.filter(lot => lot.status === 'BLOCKED').length, attentionLots: lots.filter(lot => lot.status === 'QUALITY_REVIEW').length, estimatedCoverageDays: Math.round(totalGreenCoffeeKg / 811) };
+    return { totalGreenCoffeeKg, availableGreenCoffeeKg, reservedGreenCoffeeKg, blockedGreenCoffeeKg, underAnalysisGreenCoffeeKg, consumedGreenCoffeeKg, financialStockValue, averageCostPerKg: totalGreenCoffeeKg > 0 ? financialStockValue / totalGreenCoffeeKg : 0, activeLots: lots.filter(lot => lot.status === 'APPROVED' && Number(lot.currentWeightKg) > 0).length, blockedLots: lots.filter(lot => lot.status === 'BLOCKED').length, attentionLots: lots.filter(lot => lot.status === 'QUALITY_REVIEW').length, estimatedCoverageDays: null };
   }
 
   @Post('lots/:id/movements')

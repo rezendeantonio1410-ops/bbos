@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { DashboardController } from "./dashboard.controller";
 import { DashboardService } from "./dashboard.service";
+import { BlendsController } from "./blends.controller";
 import { HealthController } from "./health.controller";
 import { ReceiptsController } from "./receipts.controller";
 import { GreenCoffeePurchasesController } from './green-coffee-purchases.controller';
@@ -30,6 +31,7 @@ import { APP_GUARD } from "@nestjs/core";
   controllers: [
     HealthController,
     DashboardController,
+    BlendsController,
     ReceiptsController,
     GreenCoffeePurchasesController,
     PurchaseAcceptanceController,
