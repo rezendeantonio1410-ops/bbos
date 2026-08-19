@@ -260,6 +260,9 @@ export default function GreenCoffeeHome() {
             <ShoppingBag size={16} />
             Nova compra
           </Link>
+          <Link href="/fornecedores" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700">
+            Fornecedores
+          </Link>
         </div>
       </header>
 

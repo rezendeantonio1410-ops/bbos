@@ -472,8 +472,9 @@ export class GreenCoffeePurchasesController {
       companyId: string;
       supplierType: GreenCoffeeSupplierType;
       name: string;
+      tradeName?: string;
       legalName?: string;
-      taxId: string;
+      taxId?: string;
       ruralRegistration?: string;
       stateRegistration?: string;
       farmName?: string;
@@ -498,8 +499,9 @@ export class GreenCoffeePurchasesController {
     companyId: string;
     supplierType: GreenCoffeeSupplierType;
     name: string;
+    tradeName?: string;
     legalName?: string;
-    taxId: string;
+    taxId?: string;
     ruralRegistration?: string;
     stateRegistration?: string;
     farmName?: string;
@@ -514,9 +516,83 @@ export class GreenCoffeePurchasesController {
     contactEmail?: string;
   }, request: any) {
     const actor = await this.sessionActor(request);
-    if (!body.name || !body.taxId)
-      throw new BadRequestException("Nome e CPF/CNPJ são obrigatórios.");
+    if (!body.name) throw new BadRequestException("Nome ou razão social é obrigatório.");
+    if (body.taxId) {
+      const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: body.taxId } });
+      if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
+    }
     return this.db.supplier.create({ data: { ...body, companyId: actor.companyId } });
+  }
+
+  @Get("suppliers")
+  async suppliers(@Req() request: any, @Query("state") state?: string, @Query("active") active?: string) {
+    const actor = await this.sessionActor(request);
+    return this.db.supplier.findMany({
+      where: { companyId: actor.companyId, ...(active === undefined ? {} : { active: active === "true" }), ...(state ? { state } : {}) },
+      include: { originUnits: { include: { coffeeRegion: true }, orderBy: { name: "asc" } } },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  @Patch("suppliers/:supplierId")
+  async updateSupplier(@Param("supplierId") supplierId: string, @Body() body: Record<string, unknown>, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const current = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    if (!current) throw new NotFoundException("Fornecedor não encontrado.");
+    if (body.taxId && body.taxId !== current.taxId) {
+      const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: String(body.taxId), NOT: { id: supplierId } } });
+      if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
+    }
+    const allowed = ["supplierType", "name", "tradeName", "legalName", "taxId", "ruralRegistration", "stateRegistration", "city", "state", "country", "address", "contactName", "contactRole", "contactPhone", "whatsapp", "contactEmail", "active"];
+    const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+    return this.db.supplier.update({ where: { id: supplierId }, data });
+  }
+
+  @Get("suppliers/:supplierId/origin-units")
+  async originUnits(@Param("supplierId") supplierId: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId }, select: { id: true } });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+    return this.db.supplierOriginUnit.findMany({ where: { supplierId, ...(actor.companyId ? { supplier: { companyId: actor.companyId } } : {}) }, include: { coffeeRegion: true, productions: { where: { active: true }, include: { species: true, cultivar: true } } }, orderBy: { name: "asc" } });
+  }
+
+  @Post("suppliers/:supplierId/origin-units")
+  async createOriginUnit(@Param("supplierId") supplierId: string, @Body() body: Record<string, any>, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+    if (!body.name?.trim() || !body.state) throw new BadRequestException("Nome da unidade e Estado são obrigatórios.");
+    const region = body.coffeeRegionId ? await this.db.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, state: body.state, active: true } }) : null;
+    if (body.coffeeRegionId && !region) throw new BadRequestException("Região cafeeira inválida para o Estado selecionado.");
+    return this.db.supplierOriginUnit.create({ data: { supplierId, name: body.name.trim(), taxId: body.taxId || null, stateRegistration: body.stateRegistration || null, state: body.state, municipality: body.municipality || null, country: body.country || "Brasil", address: body.address || null, latitude: body.latitude ?? null, longitude: body.longitude ?? null, altitudeMeters: body.altitudeMeters ?? null, coffeeAreaHa: body.coffeeAreaHa ?? null, coffeeRegionId: region?.id ?? null, active: body.active !== false } });
+  }
+
+  @Patch("suppliers/:supplierId/origin-units/:unitId")
+  async updateOriginUnit(@Param("supplierId") supplierId: string, @Param("unitId") unitId: string, @Body() body: Record<string, any>, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const unit = await this.db.supplierOriginUnit.findFirst({ where: { id: unitId, supplierId, supplier: { companyId: actor.companyId } } });
+    if (!unit) throw new NotFoundException("Unidade/fazenda não encontrada.");
+    if (body.coffeeRegionId) {
+      const region = await this.db.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, state: body.state ?? unit.state, active: true } });
+      if (!region) throw new BadRequestException("Região cafeeira inválida para o Estado selecionado.");
+    }
+    const allowed = ["name", "taxId", "stateRegistration", "state", "municipality", "country", "address", "latitude", "longitude", "altitudeMeters", "coffeeAreaHa", "coffeeRegionId", "active"];
+    const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+    return this.db.supplierOriginUnit.update({ where: { id: unitId }, data });
+  }
+
+  @Post("suppliers/:supplierId/origin-units/:unitId/production")
+  async createOriginProduction(@Param("supplierId") supplierId: string, @Param("unitId") unitId: string, @Body() body: { speciesId: string; cultivarIds?: string[]; harvest?: string; certifications?: unknown }, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const unit = await this.db.supplierOriginUnit.findFirst({ where: { id: unitId, supplierId, supplier: { companyId: actor.companyId } } });
+    if (!unit) throw new NotFoundException("Unidade/fazenda não encontrada.");
+    const species = await this.db.coffeeSpecies.findFirst({ where: { id: body.speciesId, companyId: actor.companyId, active: true } });
+    if (!species) throw new BadRequestException("Espécie inválida.");
+    const cultivarIds = body.cultivarIds?.length ? body.cultivarIds : [undefined];
+    for (const cultivarId of cultivarIds) {
+      if (cultivarId && !(await this.db.coffeeVariety.findFirst({ where: { id: cultivarId, speciesId: species.id, active: true } }))) throw new BadRequestException("Cultivar inválida para a espécie.");
+    }
+    return this.db.$transaction(cultivarIds.map((cultivarId) => this.db.supplierOriginProduction.create({ data: { originUnitId: unitId, speciesId: species.id, cultivarId, harvest: body.harvest || null, certifications: body.certifications as any ?? undefined } })));
   }
 
   @Post()
