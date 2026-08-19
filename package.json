@@ -13,7 +13,8 @@
     "db:generate": "corepack pnpm --filter @bbos/database generate",
     "db:migrate": "corepack pnpm --filter @bbos/database migrate",
     "db:migrate:deploy": "corepack pnpm --filter @bbos/database migrate:deploy",
-    "db:migrate:staging": "corepack pnpm --filter @bbos/database exec prisma migrate resolve --rolled-back 20260807120000_cost_engine_v2 || true && corepack pnpm --filter @bbos/database migrate:deploy",
+    "db:migrate:staging": "corepack pnpm db:migrate:deploy",
+    "db:staging:prepare": "corepack pnpm db:migrate:deploy && corepack pnpm db:seed:coffee-references",
     "db:seed": "corepack pnpm --filter @bbos/database seed",
     "db:seed:coffee-references": "corepack pnpm --filter @bbos/database seed:coffee-references"
   },

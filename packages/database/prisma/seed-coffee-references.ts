@@ -44,8 +44,11 @@ const SCREENS = [
   ["MOKA_10", "Moka 10"], ["GRINDERS", "Grinders"], ["BICA_CORRIDA", "Bica Corrida"],
 ] as const;
 
-export async function seedCoffeeReferences(client: PrismaClient) {
+export type CoffeeReferenceSeedResult = { species: number; cultivars: number; regions: number; screens: number; suppliers: number };
+
+export async function seedCoffeeReferences(client: PrismaClient, includeStagingSupplier = process.env.BBOS_STAGING_REFERENCE_SEED === "true"): Promise<CoffeeReferenceSeedResult> {
   const companies = await client.company.findMany({ select: { id: true } });
+  const result: CoffeeReferenceSeedResult = { species: 0, cultivars: 0, regions: 0, screens: 0, suppliers: 0 };
   for (const company of companies) {
     const speciesByCode = new Map<string, string>();
     for (const species of SPECIES) {
@@ -55,6 +58,7 @@ export async function seedCoffeeReferences(client: PrismaClient) {
         create: { companyId: company.id, code: species.code, name: species.name },
       });
       speciesByCode.set(species.code, row.id);
+      result.species += 1;
     }
     for (const [speciesCode, rows] of [["ARABICA", ARABICA], ["CANEPHORA", CANEPHORA]] as const) {
       const speciesId = speciesByCode.get(speciesCode);
@@ -65,6 +69,7 @@ export async function seedCoffeeReferences(client: PrismaClient) {
           update: { name: row.name, breeder: row.breeder, sortOrder: row.sortOrder, active: true },
           create: { speciesId, code: row.code, name: row.name, breeder: row.breeder, sortOrder: row.sortOrder },
         });
+        result.cultivars += 1;
       }
     }
     for (const [state, names] of REGIONS) {
@@ -74,6 +79,7 @@ export async function seedCoffeeReferences(client: PrismaClient) {
           update: { active: true, sortOrder: index + 1 },
           create: { companyId: company.id, state, name, sortOrder: index + 1 },
         });
+        result.regions += 1;
       }
     }
     for (const [index, [code, name]] of SCREENS.entries()) {
@@ -82,6 +88,17 @@ export async function seedCoffeeReferences(client: PrismaClient) {
         update: { name, active: true, sortOrder: index + 1 },
         create: { companyId: company.id, code, name, sortOrder: index + 1 },
       });
+      result.screens += 1;
+    }
+    if (includeStagingSupplier) {
+      const existingSupplier = await client.supplier.findFirst({ where: { companyId: company.id, name: "Produtor Teste BBOS", active: true }, select: { id: true } });
+      if (existingSupplier) {
+        result.suppliers += 1;
+      } else {
+        await client.supplier.create({ data: { companyId: company.id, name: "Produtor Teste BBOS", city: "Londrina", state: "PR", country: "Brasil", supplierType: "RURAL_PERSON", active: true } });
+        result.suppliers += 1;
+      }
     }
   }
+  return result;
 }

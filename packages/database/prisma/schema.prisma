@@ -428,6 +428,7 @@ model Supplier {
   contactPhone         String?
   whatsapp             String?
   contactEmail         String?
+  active               Boolean                         @default(true)
   greenCoffeePurchases GreenCoffeePurchase[]
   purchaseAcceptances  GreenCoffeePurchaseAcceptance[]
   bankAccounts         SupplierBankAccount[]
