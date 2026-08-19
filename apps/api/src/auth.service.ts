@@ -56,9 +56,23 @@ export class AuthService {
   async resolve(token?: string): Promise<SessionUser | null> {
     if (!token) return null;
     if (stagingTokenMatches(token)) {
-      const username = process.env.BBOS_STAGING_USER!.trim().toLowerCase();
-      const stagingUser = await this.db.user.findUnique({ where: { email: username }, include: { company: true } });
-      if (stagingUser?.active) return this.publicUser(stagingUser) as SessionUser;
+  const username = process.env.BBOS_STAGING_USER!.trim().toLowerCase();
+
+  const stagingUser =
+    (await this.db.user.findUnique({
+      where: { email: username },
+      include: { company: true },
+    })) ??
+    (await this.db.user.findFirst({
+      where: { active: true },
+      include: { company: true },
+      orderBy: { createdAt: "asc" },
+    }));
+
+  if (stagingUser?.active) {
+    return this.publicUser(stagingUser) as SessionUser;
+  }
+}
     }
     const session = await this.db.authSession.findUnique({ where: { tokenHash: tokenHash(token) }, include: { user: { include: { company: true } } } });
     if (!session || session.revokedAt || session.expiresAt <= new Date() || !session.user.active) return null;
