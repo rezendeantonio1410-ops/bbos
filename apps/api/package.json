@@ -8,7 +8,8 @@
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts"
+    "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts",
+    "test:admin-reference-route": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/admin-coffee-reference.controller.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",
