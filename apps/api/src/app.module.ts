@@ -26,7 +26,6 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
 import { APP_GUARD } from "@nestjs/core";
-import { CoffeeReferenceBootstrapService } from "./coffee-reference-bootstrap.service";
 
 @Module({
   controllers: [
@@ -46,6 +45,6 @@ import { CoffeeReferenceBootstrapService } from "./coffee-reference-bootstrap.se
     CommerceController,
     AuthController,
   ],
-  providers: [DashboardService, ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, CoffeeReferenceBootstrapService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [DashboardService, ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}
