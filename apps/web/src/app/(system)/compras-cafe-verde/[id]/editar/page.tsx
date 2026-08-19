@@ -4,8 +4,9 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button, Card } from "@bbos/ui";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? `${typeof window === "undefined" ? "http://localhost:3001" : `${window.location.protocol}//${window.location.hostname}:3001`}/api`;
+const API = getApiBaseUrl();
 type Purchase = { id: string; purchaseNumber: string; process?: string | null; contractedScreen?: string | null; maxMoisturePercent?: number | null; expectedAt?: string | null; pricePerKg?: number | null; totalValue: number; qualityCategory?: string | null; additionalSpecification?: string | null; returnReason?: string | null; correctionRequest?: string | null };
 const input = "mt-1 min-h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm outline-none focus:border-forest-700";
 

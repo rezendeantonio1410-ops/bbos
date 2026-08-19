@@ -9,11 +9,9 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
+import { getApiBaseUrl } from "@/lib/api-url";
 const ROOT =
-    process.env.NEXT_PUBLIC_API_URL ??
-    (typeof window === "undefined"
-      ? "http://localhost:3001/api"
-      : `${window.location.protocol}//${window.location.hostname}:3001/api`),
+    getApiBaseUrl(),
   API = `${ROOT}/receipts`,
   css =
     "w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm outline-none focus:border-forest-700";
