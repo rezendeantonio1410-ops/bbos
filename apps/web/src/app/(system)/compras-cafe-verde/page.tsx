@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
@@ -490,10 +491,18 @@ export default function Page() {
             Aquisição, governança, financeiro e rastreabilidade desde a origem.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus size={16} />
-          Nova compra
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/fornecedores"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 transition hover:border-stone-300 hover:bg-stone-50"
+          >
+            Fornecedores
+          </Link>
+          <Button onClick={() => setOpen(true)}>
+            <Plus size={16} />
+            Nova compra
+          </Button>
+        </div>
       </header>
       {message && (
         <p className="mt-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
