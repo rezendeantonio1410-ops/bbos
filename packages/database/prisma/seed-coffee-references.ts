@@ -91,13 +91,11 @@ export async function seedCoffeeReferences(client: PrismaClient, includeStagingS
       result.screens += 1;
     }
     if (includeStagingSupplier) {
-      const existingSupplier = await client.supplier.findFirst({ where: { companyId: company.id, name: "Produtor Teste BBOS", active: true }, select: { id: true } });
-      if (existingSupplier) {
-        result.suppliers += 1;
-      } else {
+      const activeSupplier = await client.supplier.findFirst({ where: { companyId: company.id, active: true }, select: { id: true } });
+      if (!activeSupplier) {
         await client.supplier.create({ data: { companyId: company.id, name: "Produtor Teste BBOS", city: "Londrina", state: "PR", country: "Brasil", supplierType: "RURAL_PERSON", active: true } });
-        result.suppliers += 1;
       }
+      result.suppliers += 1;
     }
   }
   return result;
