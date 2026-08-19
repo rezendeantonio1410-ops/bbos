@@ -19,6 +19,14 @@ services:
         sync: false
       - key: BBOS_STAGING_PASSWORD
         sync: false
+      - key: BBOS_BOOTSTRAP_ADMIN_ENABLED
+        sync: false
+      - key: BBOS_BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BBOS_BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: BBOS_BOOTSTRAP_ADMIN_NAME
+        sync: false
 
   - type: web
     name: bbos-web-staging
