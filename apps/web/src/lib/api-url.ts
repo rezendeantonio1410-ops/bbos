@@ -8,7 +8,9 @@ export function getApiBaseUrl() {
   // staging session cookie available to the API and avoids cross-origin
   // cookie/CORS differences between localhost and Render.
   if (typeof window !== "undefined") return "/api";
-  const configured = (process.env.BBOS_API_INTERNAL_URL ?? process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL)?.trim();
+  const configured = [process.env.BBOS_API_INTERNAL_URL, process.env.API_INTERNAL_URL, process.env.NEXT_PUBLIC_API_URL]
+    .map((value) => value?.trim())
+    .find((value): value is string => Boolean(value));
   if (configured) {
     const base = configured.replace(/\/$/, "");
     return base.endsWith("/api") ? base : `${base}/api`;

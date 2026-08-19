@@ -58,16 +58,10 @@ export class AuthService {
     if (stagingTokenMatches(token)) {
   const username = process.env.BBOS_STAGING_USER!.trim().toLowerCase();
 
-  const stagingUser =
-    (await this.db.user.findUnique({
-      where: { email: username },
-      include: { company: true },
-    })) ??
-    (await this.db.user.findFirst({
-      where: { active: true },
-      include: { company: true },
-      orderBy: { createdAt: "asc" },
-    }));
+  const stagingUser = await this.db.user.findUnique({
+    where: { email: username },
+    include: { company: true },
+  });
 
   if (stagingUser?.active) {
     return this.publicUser(stagingUser) as SessionUser;

@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ path: string[] }> };
 
 function apiBaseUrl() {
-  const configured = (process.env.BBOS_API_INTERNAL_URL ?? process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL)?.trim();
+  const configured = [process.env.BBOS_API_INTERNAL_URL, process.env.API_INTERNAL_URL, process.env.NEXT_PUBLIC_API_URL]
+    .map((value) => value?.trim())
+    .find((value): value is string => Boolean(value));
   if (!configured) throw new Error("API interna não configurada.");
   const base = configured.replace(/\/$/, "");
   return base.endsWith("/api") ? base : `${base}/api`;
