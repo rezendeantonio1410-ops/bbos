@@ -206,7 +206,7 @@ export class GreenCoffeePurchasesController {
   @Get("references")
   async references(@Req() request: any) {
     const actor = await this.sessionActor(request);
-    const [species, regions, screenClassifications] = await Promise.all([
+    const [species, regions, screenClassifications, suppliers] = await Promise.all([
       this.db.coffeeSpecies.findMany({
         where: { companyId: actor.companyId, active: true },
         include: { varieties: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] } },
@@ -214,8 +214,9 @@ export class GreenCoffeePurchasesController {
       }),
       this.db.coffeeRegion.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: [{ state: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
       this.db.screenClassification.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+      this.db.supplier.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: { name: "asc" } }),
     ]);
-    return { species, regions, screenClassifications };
+    return { species, regions, screenClassifications, suppliers };
   }
 
   @Get("suppliers/:supplierId/bank-accounts")

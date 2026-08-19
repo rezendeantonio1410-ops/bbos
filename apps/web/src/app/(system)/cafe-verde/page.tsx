@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 
 const API = getApiBaseUrl();
 
@@ -71,6 +72,9 @@ export default function GreenCoffeeHome() {
   const [loading, setLoading] = React.useState(true);
   const [warning, setWarning] = React.useState("");
   const [refreshing, setRefreshing] = React.useState(false);
+  const [session, setSession] = React.useState<SessionIdentity | null>(null);
+  const [referenceMessage, setReferenceMessage] = React.useState("");
+  const [initializingReferences, setInitializingReferences] = React.useState(false);
 
   const loadData = React.useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -80,10 +84,12 @@ export default function GreenCoffeeHome() {
       getJson<ReceiptOptions>(`${API}/receipts/options`),
       getJson<unknown[]>(`${API}/receipts`),
       getJson<StockSummary>(`${API}/inventory/summary`),
+      fetchSessionIdentity(API),
     ]);
 
-    const [purchasesResult, optionsResult, receiptsResult, stockResult] =
+    const [purchasesResult, optionsResult, receiptsResult, stockResult, sessionResult] =
       results;
+    if (sessionResult.status === "fulfilled") setSession(sessionResult.value);
 
     const purchases =
       purchasesResult.status === "fulfilled"
@@ -138,6 +144,22 @@ export default function GreenCoffeeHome() {
     setLoading(false);
     setRefreshing(false);
   }, []);
+
+  const initializeReferences = async () => {
+    setInitializingReferences(true);
+    setReferenceMessage("");
+    try {
+      const response = await fetch(`${API}/admin/coffee-reference-data/initialize`, { method: "POST", credentials: "include" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.success !== true) throw new Error(payload.message ?? "Não foi possível inicializar os dados mestres.");
+      setReferenceMessage("Dados mestres configurados");
+      await loadData(true);
+    } catch (error) {
+      setReferenceMessage(error instanceof Error ? error.message : "Não foi possível inicializar os dados mestres.");
+    } finally {
+      setInitializingReferences(false);
+    }
+  };
 
   React.useEffect(() => {
     void loadData();
@@ -208,6 +230,16 @@ export default function GreenCoffeeHome() {
         </div>
 
         <div className="flex items-center gap-2">
+          {(session?.role === "ADMIN" || session?.role === "EXECUTIVE") && (
+            <button
+              type="button"
+              onClick={() => void initializeReferences()}
+              disabled={initializingReferences || referenceMessage === "Dados mestres configurados"}
+              className="inline-flex min-h-11 items-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 disabled:opacity-60"
+            >
+              {referenceMessage === "Dados mestres configurados" ? "Dados mestres configurados" : "Inicializar dados mestres"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void loadData(true)}
@@ -230,6 +262,8 @@ export default function GreenCoffeeHome() {
           </Link>
         </div>
       </header>
+
+      {referenceMessage && <p className="mt-3 text-sm font-semibold text-forest-800">{referenceMessage}</p>}
 
       {warning && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
