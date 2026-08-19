@@ -31,6 +31,9 @@ import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
 import { BRAZILIAN_MUNICIPALITIES } from "./brazilian-municipalities";
+import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
+import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
+import { validateStateRegistration, validateTaxId } from "./supplier-verification";
 
 type Actor = { userId: string; userName: string; userRole: string; companyId: string };
 const normalizePostalCode = (value?: unknown) => {
@@ -171,7 +174,11 @@ const contractLabel = (value?: unknown) => {
 @Controller("green-coffee-purchases")
 export class GreenCoffeePurchasesController {
   private readonly db = new PrismaClient();
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly taxRegistry: UnconfiguredTaxRegistryProvider,
+    private readonly stateRegistration: UnconfiguredStateRegistrationProvider,
+  ) {}
 
   private readonly include = {
     supplier: { include: { contacts: { where: { active: true, canConfirmBusiness: true }, orderBy: [{ isPrimary: "desc" as const }, { name: "asc" as const }] } } },
@@ -520,6 +527,8 @@ export class GreenCoffeePurchasesController {
   }, request: any) {
     const actor = await this.sessionActor(request);
     if (!body.name) throw new BadRequestException("Nome ou razão social é obrigatório.");
+    if (body.taxId && !validateTaxId(body.taxId)) throw new BadRequestException("CPF/CNPJ inválido.");
+    if (body.stateRegistration && !validateStateRegistration(body.stateRegistration, body.state)) throw new BadRequestException("Inscrição Estadual inválida para a UF.");
     if (body.taxId) {
       const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: body.taxId } });
       if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
@@ -537,12 +546,45 @@ export class GreenCoffeePurchasesController {
     });
   }
 
+  @Post("suppliers/:supplierId/tax-id/verify")
+  async verifySupplierTaxId(@Param("supplierId") supplierId: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+    if (!supplier.taxId) throw new BadRequestException("CPF/CNPJ não informado.");
+    const checkedAt = new Date();
+    const documentType = validateTaxId(supplier.taxId);
+    if (!documentType) {
+      return this.db.supplier.update({ where: { id: supplier.id }, data: { taxIdVerificationStatus: "INVALID", taxIdVerifiedAt: checkedAt, taxIdVerificationSource: "local-format" } });
+    }
+    const result = await this.taxRegistry.lookup(supplier.taxId);
+    const status = result.registrationStatus === "ACTIVE" ? "VERIFIED_ACTIVE" : result.registrationStatus === "INACTIVE" ? "VERIFIED_INACTIVE" : "NOT_VERIFIED";
+    return this.db.supplier.update({ where: { id: supplier.id }, data: { taxIdVerificationStatus: status, taxIdVerifiedAt: checkedAt, taxIdVerificationSource: result.source } });
+  }
+
+  @Post("suppliers/:supplierId/state-registration/verify")
+  async verifySupplierStateRegistration(@Param("supplierId") supplierId: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+    if (!supplier.stateRegistration) throw new BadRequestException("Inscrição Estadual não informada.");
+    const checkedAt = new Date();
+    const valid = validateStateRegistration(supplier.stateRegistration, supplier.state);
+    if (!valid) {
+      return this.db.supplier.update({ where: { id: supplier.id }, data: { stateRegistrationVerificationStatus: "INVALID", stateRegistrationVerifiedAt: checkedAt, stateRegistrationVerificationSource: "local-format" } });
+    }
+    const result = await this.stateRegistration.lookup(supplier.stateRegistration, supplier.state ?? "");
+    const status = result.registrationStatus === "ACTIVE" ? "VERIFIED_ACTIVE" : result.registrationStatus === "INACTIVE" ? "VERIFIED_INACTIVE" : "NOT_VERIFIED";
+    return this.db.supplier.update({ where: { id: supplier.id }, data: { stateRegistrationVerificationStatus: status, stateRegistrationVerifiedAt: checkedAt, stateRegistrationVerificationSource: result.source } });
+  }
+
   @Patch("suppliers/:supplierId")
   async updateSupplier(@Param("supplierId") supplierId: string, @Body() body: Record<string, unknown>, @Req() request: any) {
     const actor = await this.sessionActor(request);
     const current = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
     if (!current) throw new NotFoundException("Fornecedor não encontrado.");
     if (body.taxId && body.taxId !== current.taxId) {
+      if (!validateTaxId(String(body.taxId))) throw new BadRequestException("CPF/CNPJ inválido.");
       const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: String(body.taxId), NOT: { id: supplierId } } });
       if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
     }
@@ -550,6 +592,9 @@ export class GreenCoffeePurchasesController {
     const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
     if (typeof data.active === "string") data.active = data.active === "true";
     if (data.postalCode !== undefined) data.postalCode = normalizePostalCode(data.postalCode);
+    if (data.stateRegistration && !validateStateRegistration(String(data.stateRegistration), String(data.state ?? current.state ?? ""))) throw new BadRequestException("Inscrição Estadual inválida para a UF.");
+    if (data.taxId !== undefined && data.taxId !== current.taxId) Object.assign(data, { taxIdVerificationStatus: "NOT_VERIFIED", taxIdVerifiedAt: null, taxIdVerificationSource: null });
+    if (data.stateRegistration !== undefined && data.stateRegistration !== current.stateRegistration) Object.assign(data, { stateRegistrationVerificationStatus: "NOT_VERIFIED", stateRegistrationVerifiedAt: null, stateRegistrationVerificationSource: null });
     return this.db.supplier.update({ where: { id: supplierId }, data });
   }
 

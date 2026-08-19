@@ -27,6 +27,8 @@ import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { APP_GUARD } from "@nestjs/core";
+import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
+import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
 
 @Module({
   controllers: [
@@ -47,6 +49,6 @@ import { APP_GUARD } from "@nestjs/core";
     AuthController,
     AdminCoffeeReferenceController,
   ],
-  providers: [DashboardService, ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [DashboardService, ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, UnconfiguredTaxRegistryProvider, UnconfiguredStateRegistrationProvider, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

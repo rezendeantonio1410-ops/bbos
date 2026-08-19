@@ -55,6 +55,14 @@ enum GreenCoffeeSupplierType {
   OTHER
 }
 
+enum TaxVerificationStatus {
+  VERIFIED_ACTIVE
+  VERIFIED_INACTIVE
+  INVALID
+  NOT_VERIFIED
+  SERVICE_UNAVAILABLE
+}
+
 enum GreenCoffeePackagingType {
   BAG_30_KG
   BAG_60_KG
@@ -432,6 +440,12 @@ model Supplier {
   district             String?
   addressComplement    String?
   ibgeCityCode         String?
+  taxIdVerificationStatus TaxVerificationStatus @default(NOT_VERIFIED)
+  taxIdVerifiedAt      DateTime?
+  taxIdVerificationSource String?
+  stateRegistrationVerificationStatus TaxVerificationStatus @default(NOT_VERIFIED)
+  stateRegistrationVerifiedAt DateTime?
+  stateRegistrationVerificationSource String?
   contactName          String?
   contactRole          String?
   contactPhone         String?
