@@ -25,6 +25,16 @@ type Supplier = {
   contactPhone?: string;
   contactEmail?: string;
   contacts?: SupplierContact[];
+  originUnits?: SupplierOriginUnit[];
+};
+type SupplierOriginUnit = {
+  id: string;
+  name: string;
+  country: string;
+  state: string;
+  municipality?: string | null;
+  coffeeRegionId?: string | null;
+  coffeeRegion?: { id: string; name: string; state: string } | null;
 };
 type SupplierContact = {
   id: string;
@@ -51,6 +61,7 @@ type ReferenceData = {
   species: SpeciesReference[];
   regions: { id: string; state: string; name: string; country: string }[];
   screenClassifications: { id: string; code: string; name: string }[];
+  suppliers: Supplier[];
 };
 type Purchase = {
   id: string;
@@ -205,8 +216,9 @@ export default function Page() {
     [filter, setFilter] = useState("ALL"),
     [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState(""),
-    [speciesCode, setSpeciesCode] = useState("ARABICA"),
-    [purchaseState, setPurchaseState] = useState("PR"),
+    [speciesCode, setSpeciesCode] = useState(""),
+    [purchaseState, setPurchaseState] = useState(""),
+    [originUnitId, setOriginUnitId] = useState(""),
     [volumes, setVolumes] = useState(1),
     [unitWeight, setUnitWeight] = useState(60),
     [priceKg, setPriceKg] = useState(0),
@@ -225,30 +237,51 @@ export default function Page() {
       const identity = sessionResponse;
       setSessionUser(identity);
       setOptions(currentOptions);
-      setSupplierId((value) => value || currentOptions.suppliers[0]?.id || "");
-      const [purchases, species] = await Promise.all([
-        req<Purchase[]>(API, { credentials: "include" }),
-        req<ReferenceData>(`${API}/references`, { credentials: "include" }),
-      ]);
+      const purchases = await req<Purchase[]>(API, { credentials: "include" });
       setRows(purchases);
-      setReferences(species);
+      setReferences(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+  const loadReferences = async (state: string) => {
+    if (!state) {
+      setReferences(null);
+      return;
+    }
+    try {
+      const next = await req<ReferenceData>(`${API}/references?state=${encodeURIComponent(state)}`, { credentials: "include" });
+      setReferences(next);
+      setSupplierId("");
+      setOriginUnitId("");
+      setSpeciesCode("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar os cadastros de origem.");
     }
   };
   useEffect(() => {
     void load();
   }, []);
   useEffect(() => {
+    if (open) void loadReferences(purchaseState);
+  }, [open, purchaseState]);
+  useEffect(() => {
     if (!supplierId) {
       setSupplierContacts([]);
+      setOriginUnitId("");
       return;
     }
+    const selected = references?.suppliers.find((item) => item.id === supplierId);
+    const units = selected?.originUnits ?? [];
+    setOriginUnitId(units.length === 1 ? units[0]!.id : "");
+    setSpeciesCode("");
     void req<SupplierContact[]>(`${API}/suppliers/${supplierId}/contacts`)
       .then(setSupplierContacts)
       .catch(() => setSupplierContacts([]));
-  }, [supplierId]);
-  const supplier = options?.suppliers.find((item) => item.id === supplierId);
+  }, [supplierId, references?.suppliers]);
+  const supplier = references?.suppliers.find((item) => item.id === supplierId);
+  const originUnits = supplier?.originUnits ?? [];
+  const originUnit = originUnits.find((item) => item.id === originUnitId) ?? (originUnits.length === 1 ? originUnits[0] : undefined);
   const species = references?.species.find((item) => item.code === speciesCode);
   const regions = references?.regions.filter((region) => region.state === purchaseState) ?? [];
   const totalWeight = volumes * unitWeight,
@@ -383,6 +416,7 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           supplierId,
+          originUnitId: originUnitId.startsWith("legacy-") ? undefined : originUnitId,
           idempotencyKey: crypto.randomUUID(),
           action,
           department: form.get("department"),
@@ -390,11 +424,11 @@ export default function Page() {
           purchasedAt: new Date().toISOString(),
           species: speciesCode,
           speciesId: selectedSpecies?.id,
-          originRegion: region?.name ?? "",
-          municipality: supplier.city,
-          state: purchaseState,
-          country: supplier.country ?? "Brasil",
-          farmName: supplier.farmName,
+          originRegion: originUnit?.coffeeRegion?.name ?? region?.name ?? "",
+          municipality: originUnit?.municipality ?? supplier.city,
+          state: originUnit?.state ?? purchaseState,
+          country: originUnit?.country ?? supplier.country ?? "Brasil",
+          farmName: originUnit?.name ?? supplier.farmName,
           harvest: form.get("harvest"),
           variety: cultivar?.code,
           cultivarId,
@@ -646,18 +680,32 @@ export default function Page() {
               </button>
             </div>
             <Section title="A · Origem">
+              <Field label="Estado">
+                <select required name="state" value={purchaseState} onChange={(event) => setPurchaseState(event.target.value)} className={input}>
+                  <option value="">Selecione o estado</option>
+                  {["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"].map((state) => <option key={state} value={state}>{state}</option>)}
+                </select>
+              </Field>
               <Field label="Fornecedor">
                 <select
                   required
+                  disabled={!purchaseState}
                   className={input}
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value)}
                 >
-                  {options.suppliers.map((item) => (
+                  <option value="">{purchaseState ? "Selecione o fornecedor" : "Selecione o estado primeiro"}</option>
+                  {references?.suppliers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name} · {item.taxId}
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field label="Unidade / Fazenda">
+                <select required name="originUnitId" disabled={!supplierId} value={originUnitId} onChange={(event) => setOriginUnitId(event.target.value)} className={input}>
+                  <option value="">{supplierId ? "Selecione a unidade" : "Selecione o fornecedor primeiro"}</option>
+                  {originUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                 </select>
               </Field>
               {supplier && (
@@ -707,16 +755,13 @@ export default function Page() {
                   </div>
                 </div>
               )}
-              <Field label="Estado">
-                <select required name="state" value={purchaseState} onChange={(event) => setPurchaseState(event.target.value)} className={input}>
-                  {["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"].map((state) => <option key={state} value={state}>{state}</option>)}
-                </select>
-              </Field>
               <Field label="Região cafeeira">
-                <select key={purchaseState} required name="coffeeRegionId" className={input} defaultValue="">
-                  <option value="" disabled>Selecione a região</option>
-                  {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
-                </select>
+                <input className={input} value={originUnit?.coffeeRegion?.name ?? "Região não cadastrada"} readOnly aria-readonly="true" />
+                <input type="hidden" name="coffeeRegionId" value={originUnit?.coffeeRegionId ?? ""} />
+              </Field>
+              <Field label="Município">
+                <input className={input} value={originUnit?.municipality ?? "Município não cadastrado"} readOnly aria-readonly="true" />
+                <input type="hidden" name="municipality" value={originUnit?.municipality ?? ""} />
               </Field>
               <Field label="Safra">
                 <input
@@ -729,10 +774,12 @@ export default function Page() {
               <Field label="Espécie">
                 <select
                   required
+                  disabled={!originUnitId}
                   className={input}
                   value={speciesCode}
                   onChange={(e) => setSpeciesCode(e.target.value)}
                 >
+                  <option value="">{originUnitId ? "Selecione a espécie" : "Selecione a unidade primeiro"}</option>
                   {references?.species.map((item) => (
                     <option key={item.id} value={item.code}>
                       {item.name}
@@ -741,7 +788,7 @@ export default function Page() {
                 </select>
               </Field>
               <Field label="Variedade/Cultivar">
-                <select key={speciesCode} required name="cultivarId" className={input} defaultValue="">
+                <select key={speciesCode} required name="cultivarId" disabled={!speciesCode} className={input} defaultValue="">
                   <option value="" disabled>Selecione a cultivar</option>
                   {species?.varieties.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -774,7 +821,6 @@ export default function Page() {
                     "Fine Cup",
                     "Good Cup",
                     "Comercial",
-                    "Robusta/Conilon",
                     "Outra",
                   ].map((value) => (
                     <option key={value}>{value}</option>

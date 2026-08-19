@@ -433,6 +433,7 @@ model Supplier {
   purchaseAcceptances  GreenCoffeePurchaseAcceptance[]
   bankAccounts         SupplierBankAccount[]
   contacts             SupplierContact[]
+  originUnits          SupplierOriginUnit[]
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @updatedAt
 
@@ -455,6 +456,26 @@ model SupplierContact {
   purchaseAcceptances GreenCoffeePurchaseAcceptance[]
 
   @@index([supplierId, active, canConfirmBusiness])
+}
+
+model SupplierOriginUnit {
+  id             String                @id @default(cuid())
+  supplierId     String
+  supplier       Supplier              @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name           String
+  country        String                @default("Brasil")
+  state          String
+  municipality   String?
+  coffeeRegionId String?
+  coffeeRegion   CoffeeRegion?         @relation(fields: [coffeeRegionId], references: [id], onDelete: SetNull)
+  active         Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  purchases      GreenCoffeePurchase[]
+
+  @@unique([supplierId, name])
+  @@index([supplierId, state, active])
+  @@index([coffeeRegionId])
 }
 
 model Customer {
@@ -593,6 +614,8 @@ model GreenCoffeePurchase {
   company                      Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   supplierId                   String
   supplier                     Supplier                         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  originUnitId                 String?
+  originUnit                   SupplierOriginUnit?              @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
   purchaseNumber               String
   status                       GreenCoffeePurchaseStatus        @default(DRAFT)
   purchasedAt                  DateTime
@@ -678,6 +701,7 @@ model GreenCoffeePurchase {
   @@unique([companyId, purchaseNumber])
   @@index([companyId, status])
   @@index([supplierId])
+  @@index([originUnitId])
   @@index([speciesId])
   @@index([cultivarId])
   @@index([coffeeRegionId])
@@ -797,17 +821,18 @@ model CoffeeVariety {
 }
 
 model CoffeeRegion {
-  id        String                @id @default(cuid())
-  companyId String
-  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  country   String                @default("Brasil")
-  state     String
-  name      String
-  active    Boolean               @default(true)
-  sortOrder Int                   @default(0)
-  createdAt DateTime              @default(now())
-  updatedAt DateTime              @updatedAt
-  purchases GreenCoffeePurchase[]
+  id          String                @id @default(cuid())
+  companyId   String
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  country     String                @default("Brasil")
+  state       String
+  name        String
+  active      Boolean               @default(true)
+  sortOrder   Int                   @default(0)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  purchases   GreenCoffeePurchase[]
+  originUnits SupplierOriginUnit[]
 
   @@unique([companyId, state, name])
   @@index([companyId, state, active])
