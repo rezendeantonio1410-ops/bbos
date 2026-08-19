@@ -30,8 +30,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
+import { BRAZILIAN_MUNICIPALITIES } from "./brazilian-municipalities";
 
 type Actor = { userId: string; userName: string; userRole: string; companyId: string };
+const normalizePostalCode = (value?: unknown) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits ? digits.padStart(8, "0").slice(0, 8) : null;
+};
 type InstallmentInput = {
   installmentNumber: number;
   percentage: number;
@@ -240,6 +245,12 @@ export class GreenCoffeePurchasesController {
       }),
     ]);
     return { species, regions, screenClassifications, suppliers: supplierRows };
+  }
+
+  @Get("references/municipalities")
+  async municipalities(@Req() request: any, @Query("state") state?: string) {
+    await this.sessionActor(request);
+    return BRAZILIAN_MUNICIPALITIES.filter((municipality) => !state || municipality.state === state);
   }
 
   @Get("suppliers/:supplierId/bank-accounts")
@@ -471,6 +482,10 @@ export class GreenCoffeePurchasesController {
       contactPhone?: string;
       whatsapp?: string;
       contactEmail?: string;
+      postalCode?: string;
+      district?: string;
+      addressComplement?: string;
+      ibgeCityCode?: string;
     },
     @Req() request: any,
   ) {
@@ -498,6 +513,10 @@ export class GreenCoffeePurchasesController {
     contactPhone?: string;
     whatsapp?: string;
     contactEmail?: string;
+    postalCode?: string;
+    district?: string;
+    addressComplement?: string;
+    ibgeCityCode?: string;
   }, request: any) {
     const actor = await this.sessionActor(request);
     if (!body.name) throw new BadRequestException("Nome ou razão social é obrigatório.");
@@ -505,7 +524,7 @@ export class GreenCoffeePurchasesController {
       const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: body.taxId } });
       if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
     }
-    return this.db.supplier.create({ data: { ...body, companyId: actor.companyId } });
+    return this.db.supplier.create({ data: { ...body, companyId: actor.companyId, postalCode: normalizePostalCode(body.postalCode) } });
   }
 
   @Get("suppliers")
@@ -527,9 +546,10 @@ export class GreenCoffeePurchasesController {
       const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: String(body.taxId), NOT: { id: supplierId } } });
       if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
     }
-    const allowed = ["supplierType", "name", "tradeName", "legalName", "taxId", "ruralRegistration", "stateRegistration", "city", "state", "country", "address", "contactName", "contactRole", "contactPhone", "whatsapp", "contactEmail", "active"];
+    const allowed = ["supplierType", "name", "tradeName", "legalName", "taxId", "ruralRegistration", "stateRegistration", "city", "state", "country", "address", "postalCode", "district", "addressComplement", "ibgeCityCode", "contactName", "contactRole", "contactPhone", "whatsapp", "contactEmail", "active"];
     const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
     if (typeof data.active === "string") data.active = data.active === "true";
+    if (data.postalCode !== undefined) data.postalCode = normalizePostalCode(data.postalCode);
     return this.db.supplier.update({ where: { id: supplierId }, data });
   }
 
@@ -549,7 +569,7 @@ export class GreenCoffeePurchasesController {
     if (!body.name?.trim() || !body.state) throw new BadRequestException("Nome da unidade e Estado são obrigatórios.");
     const region = body.coffeeRegionId ? await this.db.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, state: body.state, active: true } }) : null;
     if (body.coffeeRegionId && !region) throw new BadRequestException("Região cafeeira inválida para o Estado selecionado.");
-    return this.db.supplierOriginUnit.create({ data: { supplierId, name: body.name.trim(), taxId: body.taxId || null, stateRegistration: body.stateRegistration || null, state: body.state, municipality: body.municipality || null, country: body.country || "Brasil", address: body.address || null, latitude: body.latitude ?? null, longitude: body.longitude ?? null, altitudeMeters: body.altitudeMeters ?? null, coffeeAreaHa: body.coffeeAreaHa ?? null, coffeeRegionId: region?.id ?? null, active: body.active !== false } });
+    return this.db.supplierOriginUnit.create({ data: { supplierId, name: body.name.trim(), taxId: body.taxId || null, stateRegistration: body.stateRegistration || null, state: body.state, municipality: body.municipality || null, country: body.country || "Brasil", address: body.address || null, postalCode: normalizePostalCode(body.postalCode), district: body.district || null, addressComplement: body.addressComplement || null, ibgeCityCode: body.ibgeCityCode || null, latitude: body.latitude ?? null, longitude: body.longitude ?? null, altitudeMeters: body.altitudeMeters ?? null, coffeeAreaHa: body.coffeeAreaHa ?? null, coffeeRegionId: region?.id ?? null, active: body.active !== false } });
   }
 
   @Patch("suppliers/:supplierId/origin-units/:unitId")
@@ -561,8 +581,9 @@ export class GreenCoffeePurchasesController {
       const region = await this.db.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, state: body.state ?? unit.state, active: true } });
       if (!region) throw new BadRequestException("Região cafeeira inválida para o Estado selecionado.");
     }
-    const allowed = ["name", "taxId", "stateRegistration", "state", "municipality", "country", "address", "latitude", "longitude", "altitudeMeters", "coffeeAreaHa", "coffeeRegionId", "active"];
+    const allowed = ["name", "taxId", "stateRegistration", "state", "municipality", "country", "address", "postalCode", "district", "addressComplement", "ibgeCityCode", "latitude", "longitude", "altitudeMeters", "coffeeAreaHa", "coffeeRegionId", "active"];
     const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+    if (data.postalCode !== undefined) data.postalCode = normalizePostalCode(data.postalCode);
     return this.db.supplierOriginUnit.update({ where: { id: unitId }, data });
   }
 

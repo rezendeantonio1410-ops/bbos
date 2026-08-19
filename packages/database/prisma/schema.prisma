@@ -428,6 +428,10 @@ model Supplier {
   farmName             String?
   country              String?                         @default("Brasil")
   address              String?
+  postalCode           String?
+  district             String?
+  addressComplement    String?
+  ibgeCityCode         String?
   contactName          String?
   contactRole          String?
   contactPhone         String?
@@ -474,6 +478,10 @@ model SupplierOriginUnit {
   state             String
   municipality      String?
   address           String?
+  postalCode        String?
+  district          String?
+  addressComplement String?
+  ibgeCityCode      String?
   latitude          Decimal?                   @db.Decimal(10, 7)
   longitude         Decimal?                   @db.Decimal(10, 7)
   altitudeMeters    Decimal?                   @db.Decimal(10, 2)
