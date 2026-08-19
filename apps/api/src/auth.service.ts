@@ -73,7 +73,7 @@ export class AuthService {
     return this.publicUser(stagingUser) as SessionUser;
   }
 }
-    }
+    
     const session = await this.db.authSession.findUnique({ where: { tokenHash: tokenHash(token) }, include: { user: { include: { company: true } } } });
     if (!session || session.revokedAt || session.expiresAt <= new Date() || !session.user.active) return null;
     await this.db.authSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } });
