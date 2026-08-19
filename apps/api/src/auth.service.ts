@@ -22,24 +22,6 @@ function verifyPassword(password: string, encoded: string) {
 
 function tokenHash(token: string) { return createHash("sha256").update(token).digest("hex"); }
 
-/**
- * The staging Web app has a deliberately temporary server-side login. It
- * produces a deterministic cookie, while the API normally expects a row in
- * AuthSession. When the staging credentials are configured, resolve that
- * cookie to the real database user (and therefore its real company scope).
- * This path is disabled unless both staging secrets exist and never creates a
- * user or a company.
- */
-function stagingTokenMatches(token: string) {
-  const username = process.env.BBOS_STAGING_USER?.trim();
-  const password = process.env.BBOS_STAGING_PASSWORD;
-  if (!username || !password) return false;
-  const expected = createHash("sha256")
-    .update(`${username}\u0000${password}\u0000bbos-staging`)
-    .digest("hex");
-  return token === expected;
-}
-
 @Injectable()
 export class AuthService {
   private readonly db = new PrismaClient();
@@ -55,19 +37,6 @@ export class AuthService {
 
   async resolve(token?: string): Promise<SessionUser | null> {
     if (!token) return null;
-    if (stagingTokenMatches(token)) {
-  const username = process.env.BBOS_STAGING_USER!.trim().toLowerCase();
-
-  const stagingUser = await this.db.user.findUnique({
-    where: { email: username },
-    include: { company: true },
-  });
-
-  if (stagingUser?.active) {
-    return this.publicUser(stagingUser) as SessionUser;
-  }
-}
-    
     const session = await this.db.authSession.findUnique({ where: { tokenHash: tokenHash(token) }, include: { user: { include: { company: true } } } });
     if (!session || session.revokedAt || session.expiresAt <= new Date() || !session.user.active) return null;
     await this.db.authSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } });

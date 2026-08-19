@@ -37,6 +37,11 @@ async function proxy(request: NextRequest, context: RouteContext) {
     responseHeaders.delete("content-length");
     responseHeaders.delete("transfer-encoding");
     responseHeaders.delete("connection");
+    const getSetCookie = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+    if (getSetCookie) {
+      responseHeaders.delete("set-cookie");
+      for (const cookie of getSetCookie.call(response.headers)) responseHeaders.append("set-cookie", cookie);
+    }
     return new NextResponse(response.body, { status: response.status, statusText: response.statusText, headers: responseHeaders });
   } catch (error) {
     console.error("BBOS API proxy failed", error);
