@@ -2,18 +2,8 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { bootstrapAdminFromEnvironment } from './bootstrap-admin';
-import { execFileSync } from 'node:child_process';
-
-function prepareStagingMigrations() {
-  if (process.env.NODE_ENV !== 'production') return;
-  // Render services can retain a dashboard Build/Start command from before
-  // render.yaml changed. Running the same fail-fast preparation at startup
-  // guarantees the running API never serves an unprepared schema.
-  execFileSync('pnpm', ['db:migrate:deploy'], { stdio: 'inherit' });
-}
 
 async function bootstrap() {
-  prepareStagingMigrations();
   const bootstrapResult = await bootstrapAdminFromEnvironment();
   if (bootstrapResult) console.log(`BBOS admin bootstrap ${bootstrapResult.created ? "created" : "verified"} for configured account.`);
   const app = await NestFactory.create(AppModule);

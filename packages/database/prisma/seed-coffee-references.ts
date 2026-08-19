@@ -46,7 +46,7 @@ const SCREENS = [
 
 export type CoffeeReferenceSeedResult = { species: number; cultivars: number; regions: number; screens: number; suppliers: number };
 
-export async function seedCoffeeReferences(client: PrismaClient, includeStagingSupplier = process.env.BBOS_STAGING_REFERENCE_SEED === "true"): Promise<CoffeeReferenceSeedResult> {
+export async function seedCoffeeReferences(client: PrismaClient, includeStagingSupplier = false): Promise<CoffeeReferenceSeedResult> {
   const companies = await client.company.findMany({ select: { id: true } });
   const result: CoffeeReferenceSeedResult = { species: 0, cultivars: 0, regions: 0, screens: 0, suppliers: 0 };
   for (const company of companies) {
