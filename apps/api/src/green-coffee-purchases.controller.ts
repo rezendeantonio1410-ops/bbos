@@ -50,6 +50,7 @@ type PurchaseBody = {
   approverName?: string;
   purchasedAt: string;
   species: string;
+  speciesId?: string;
   originRegion: string;
   municipality?: string;
   state?: string;
@@ -57,12 +58,15 @@ type PurchaseBody = {
   farmName?: string;
   harvest: string;
   variety?: string;
+  cultivarId?: string;
   process?: string;
   supplierLotCode?: string;
   qualityCategory: string;
   qualityDescription?: string;
   additionalSpecification?: string;
   contractedScreen?: string;
+  coffeeRegionId?: string;
+  screenClassificationId?: string;
   maxDefects?: number;
   maxMoisturePercent?: number;
   beverageClassification?: string;
@@ -197,6 +201,21 @@ export class GreenCoffeePurchasesController {
       },
       orderBy: { name: "asc" },
     });
+  }
+
+  @Get("references")
+  async references(@Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const [species, regions, screenClassifications] = await Promise.all([
+      this.db.coffeeSpecies.findMany({
+        where: { companyId: actor.companyId, active: true },
+        include: { varieties: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] } },
+        orderBy: { name: "asc" },
+      }),
+      this.db.coffeeRegion.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: [{ state: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
+      this.db.screenClassification.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    ]);
+    return { species, regions, screenClassifications };
   }
 
   @Get("suppliers/:supplierId/bank-accounts")
@@ -363,11 +382,33 @@ export class GreenCoffeePurchasesController {
   @Patch(":id")
   async updateDraft(@Param("id") id: string, @Req() request: any, @Body() body: Partial<PurchaseBody>) {
     const actor = await this.sessionActor(request);
+    if (body.maxMoisturePercent !== undefined && body.maxMoisturePercent !== null && (body.maxMoisturePercent < 10 || body.maxMoisturePercent > 12.5))
+      throw new BadRequestException("A umidade máxima deve estar entre 10,0% e 12,5%.");
     return this.db.$transaction(async (tx) => {
       const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
       if (purchase.approvalStatus !== PurchaseApprovalStatus.DRAFT) throw new BadRequestException("Somente rascunhos podem ser editados.");
       const data: Prisma.GreenCoffeePurchaseUpdateInput = {};
+      if (body.speciesId) {
+        const species = await tx.coffeeSpecies.findFirst({ where: { id: body.speciesId, companyId: actor.companyId, active: true } });
+        if (!species) throw new BadRequestException("Espécie inválida para a empresa.");
+        data.speciesRef = { connect: { id: species.id } };
+      }
+      if (body.cultivarId) {
+        const cultivar = await tx.coffeeVariety.findFirst({ where: { id: body.cultivarId, active: true, speciesId: body.speciesId ?? purchase.speciesId ?? undefined } });
+        if (!cultivar) throw new BadRequestException("Cultivar inválida para a espécie selecionada.");
+        data.cultivarRef = { connect: { id: cultivar.id } };
+      }
+      if (body.coffeeRegionId) {
+        const region = await tx.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, active: true } });
+        if (!region) throw new BadRequestException("Região cafeeira inválida para a empresa.");
+        data.coffeeRegion = { connect: { id: region.id } };
+      }
+      if (body.screenClassificationId) {
+        const screen = await tx.screenClassification.findFirst({ where: { id: body.screenClassificationId, companyId: actor.companyId, active: true } });
+        if (!screen) throw new BadRequestException("Classificação de peneira inválida para a empresa.");
+        data.screenClassification = { connect: { id: screen.id } };
+      }
       for (const key of ["originRegion", "municipality", "state", "country", "farmName", "harvest", "variety", "process", "supplierLotCode", "qualityCategory", "qualityDescription", "additionalSpecification", "contractedScreen", "maxDefects", "maxMoisturePercent", "minimumScore", "technicalSpecifications", "expectedAt", "contractReference", "commercialNotes"] as const) {
         if (body[key] !== undefined) (data as any)[key] = key === "expectedAt" && body[key] ? new Date(String(body[key])) : body[key];
       }
@@ -462,6 +503,7 @@ export class GreenCoffeePurchasesController {
         });
         if (!supplier)
           throw new BadRequestException("Fornecedor inválido para a empresa.");
+        const references = await this.resolveReferences(tx, body, body.companyId);
         if (action === "SUBMIT") {
           const missingFields = missingPurchaseApprovalFields({ ...body, supplier });
           if (missingFields.length)
@@ -504,6 +546,7 @@ export class GreenCoffeePurchasesController {
             department: body.department,
             approverName: body.approverName,
             species: body.species,
+            speciesId: references.speciesId,
             originRegion: body.originRegion,
             municipality: body.municipality,
             state: body.state,
@@ -511,12 +554,15 @@ export class GreenCoffeePurchasesController {
             farmName: body.farmName,
             harvest: body.harvest,
             variety: body.variety,
+            cultivarId: references.cultivarId,
             process: body.process,
             supplierLotCode: body.supplierLotCode,
             qualityCategory: body.qualityCategory,
             qualityDescription: body.qualityDescription,
             additionalSpecification: body.additionalSpecification,
             contractedScreen: body.contractedScreen,
+            coffeeRegionId: references.coffeeRegionId,
+            screenClassificationId: references.screenClassificationId,
             maxDefects: body.maxDefects,
             maxMoisturePercent: body.maxMoisturePercent,
             beverageClassification: body.beverageClassification,
@@ -1011,6 +1057,8 @@ export class GreenCoffeePurchasesController {
       throw new BadRequestException("Preencha os campos obrigatórios.");
     if (!body.installments?.length)
       throw new BadRequestException("Informe ao menos uma parcela.");
+    if (body.maxMoisturePercent !== undefined && body.maxMoisturePercent !== null && (body.maxMoisturePercent < 10 || body.maxMoisturePercent > 12.5))
+      throw new BadRequestException("A umidade máxima deve estar entre 10,0% e 12,5%.");
     const amount = money(
       body.installments.reduce((sum, item) => sum + item.amount, 0),
     );
@@ -1021,6 +1069,26 @@ export class GreenCoffeePurchasesController {
       throw new BadRequestException(
         "Parcelas devem somar exatamente 100% e o valor contratado.",
       );
+  }
+
+  private async resolveReferences(tx: Prisma.TransactionClient, body: PurchaseBody, companyId: string) {
+    const species = body.speciesId
+      ? await tx.coffeeSpecies.findFirst({ where: { id: body.speciesId, companyId, active: true } })
+      : await tx.coffeeSpecies.findFirst({ where: { companyId, code: body.species, active: true } });
+    if (!species) throw new BadRequestException("Espécie inválida para a empresa.");
+    const cultivar = body.cultivarId
+      ? await tx.coffeeVariety.findFirst({ where: { id: body.cultivarId, speciesId: species.id, active: true } })
+      : body.variety ? await tx.coffeeVariety.findFirst({ where: { speciesId: species.id, code: body.variety, active: true } }) : null;
+    if (body.cultivarId && !cultivar) throw new BadRequestException("Cultivar inválida para a espécie selecionada.");
+    const region = body.coffeeRegionId
+      ? await tx.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId, active: true } })
+      : body.originRegion ? await tx.coffeeRegion.findFirst({ where: { companyId, name: body.originRegion, ...(body.state ? { state: body.state } : {}), active: true } }) : null;
+    if (body.coffeeRegionId && !region) throw new BadRequestException("Região cafeeira inválida para a empresa.");
+    const screen = body.screenClassificationId
+      ? await tx.screenClassification.findFirst({ where: { id: body.screenClassificationId, companyId, active: true } })
+      : body.contractedScreen ? await tx.screenClassification.findFirst({ where: { companyId, name: body.contractedScreen, active: true } }) : null;
+    if (body.screenClassificationId && !screen) throw new BadRequestException("Classificação de peneira inválida para a empresa.");
+    return { speciesId: species.id, cultivarId: cultivar?.id, coffeeRegionId: region?.id, screenClassificationId: screen?.id };
   }
 
   private async commitInstallments(

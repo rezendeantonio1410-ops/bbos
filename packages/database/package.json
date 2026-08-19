@@ -12,6 +12,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed-product-catalog-runner.ts",
+    "seed:coffee-references": "tsx prisma/seed-coffee-references-runner.ts",
     "seed:demo": "tsx prisma/seed.ts",
     "seed:cost-engine": "tsx prisma/seed-cost-engine.ts",
     "report:production-variants": "tsx prisma/report-production-variant-backfill.ts",

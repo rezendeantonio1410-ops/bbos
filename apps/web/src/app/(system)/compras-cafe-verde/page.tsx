@@ -41,12 +41,17 @@ type Options = {
   suppliers: Supplier[];
   users: { id: string; name: string; role: string }[];
 };
-type Catalog = {
+type SpeciesReference = {
   id: string;
   code: string;
   name: string;
-  varieties: { id: string; code: string; name: string }[];
-}[];
+  varieties: { id: string; code: string; name: string; breeder?: string | null; sortOrder?: number }[];
+};
+type ReferenceData = {
+  species: SpeciesReference[];
+  regions: { id: string; state: string; name: string; country: string }[];
+  screenClassifications: { id: string; code: string; name: string }[];
+};
 type Purchase = {
   id: string;
   purchaseNumber: string;
@@ -192,7 +197,7 @@ function cardStatus(row: Purchase): CardStatus {
 
 export default function Page() {
   const [options, setOptions] = useState<Options | null>(null),
-    [catalog, setCatalog] = useState<Catalog>([]),
+    [references, setReferences] = useState<ReferenceData | null>(null),
     [rows, setRows] = useState<Purchase[]>([]),
     [open, setOpen] = useState(false),
     [message, setMessage] = useState(""),
@@ -201,6 +206,7 @@ export default function Page() {
     [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState(""),
     [speciesCode, setSpeciesCode] = useState("ARABICA"),
+    [purchaseState, setPurchaseState] = useState("PR"),
     [volumes, setVolumes] = useState(1),
     [unitWeight, setUnitWeight] = useState(60),
     [priceKg, setPriceKg] = useState(0),
@@ -222,10 +228,10 @@ export default function Page() {
       setSupplierId((value) => value || currentOptions.suppliers[0]?.id || "");
       const [purchases, species] = await Promise.all([
         req<Purchase[]>(API, { credentials: "include" }),
-        req<Catalog>(`${API}/catalog`, { credentials: "include" }),
+        req<ReferenceData>(`${API}/references`, { credentials: "include" }),
       ]);
       setRows(purchases);
-      setCatalog(species);
+      setReferences(species);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -243,7 +249,8 @@ export default function Page() {
       .catch(() => setSupplierContacts([]));
   }, [supplierId]);
   const supplier = options?.suppliers.find((item) => item.id === supplierId);
-  const species = catalog.find((item) => item.code === speciesCode);
+  const species = references?.species.find((item) => item.code === speciesCode);
+  const regions = references?.regions.filter((region) => region.state === purchaseState) ?? [];
   const totalWeight = volumes * unitWeight,
     totalValue = totalWeight * priceKg;
   const totals = useMemo(
@@ -364,6 +371,13 @@ export default function Page() {
       },
     );
     try {
+      const cultivarId = String(form.get("cultivarId") || "");
+      const cultivar = species?.varieties.find((item) => item.id === cultivarId);
+      const regionId = String(form.get("coffeeRegionId") || "");
+      const region = regions.find((item) => item.id === regionId);
+      const screenClassificationId = String(form.get("screenClassificationId") || "");
+      const screenClassification = references?.screenClassifications.find((item) => item.id === screenClassificationId);
+      const selectedSpecies = references?.species.find((item) => item.code === speciesCode);
       const result = await req<{ purchaseNumber: string }>(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -375,18 +389,22 @@ export default function Page() {
           approverName: form.get("approverName"),
           purchasedAt: new Date().toISOString(),
           species: speciesCode,
-          originRegion: form.get("originRegion"),
+          speciesId: selectedSpecies?.id,
+          originRegion: region?.name ?? "",
           municipality: supplier.city,
-          state: supplier.state,
+          state: purchaseState,
           country: supplier.country ?? "Brasil",
           farmName: supplier.farmName,
           harvest: form.get("harvest"),
-          variety: form.get("variety"),
+          variety: cultivar?.code,
+          cultivarId,
           process: form.get("process"),
           supplierLotCode: form.get("supplierLotCode"),
           qualityCategory: form.get("qualityCategory"),
           additionalSpecification: form.get("additionalSpecification"),
-          contractedScreen: form.get("contractedScreen"),
+          contractedScreen: screenClassification?.name,
+          screenClassificationId,
+          coffeeRegionId: regionId,
           maxDefects: Number(form.get("maxDefects")) || undefined,
           maxMoisturePercent:
             Number(form.get("maxMoisturePercent")) || undefined,
@@ -689,8 +707,16 @@ export default function Page() {
                   </div>
                 </div>
               )}
-              <Field label="Região">
-                <input required name="originRegion" className={input} />
+              <Field label="Estado">
+                <select required name="state" value={purchaseState} onChange={(event) => setPurchaseState(event.target.value)} className={input}>
+                  {["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"].map((state) => <option key={state} value={state}>{state}</option>)}
+                </select>
+              </Field>
+              <Field label="Região cafeeira">
+                <select key={purchaseState} required name="coffeeRegionId" className={input} defaultValue="">
+                  <option value="" disabled>Selecione a região</option>
+                  {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+                </select>
               </Field>
               <Field label="Safra">
                 <input
@@ -702,11 +728,12 @@ export default function Page() {
               </Field>
               <Field label="Espécie">
                 <select
+                  required
                   className={input}
                   value={speciesCode}
                   onChange={(e) => setSpeciesCode(e.target.value)}
                 >
-                  {catalog.map((item) => (
+                  {references?.species.map((item) => (
                     <option key={item.id} value={item.code}>
                       {item.name}
                     </option>
@@ -714,9 +741,10 @@ export default function Page() {
                 </select>
               </Field>
               <Field label="Variedade/Cultivar">
-                <select name="variety" className={input}>
+                <select key={speciesCode} required name="cultivarId" className={input} defaultValue="">
+                  <option value="" disabled>Selecione a cultivar</option>
                   {species?.varieties.map((item) => (
-                    <option key={item.id} value={item.code}>
+                    <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
                   ))}
@@ -754,18 +782,18 @@ export default function Page() {
                 </select>
               </Field>
               <Field label="Peneira">
-                <input name="contractedScreen" className={input} />
+                <select required name="screenClassificationId" className={input} defaultValue="">
+                  <option value="" disabled>Selecione a classificação</option>
+                  {references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
               </Field>
               <Field label="Máx. defeitos">
                 <input name="maxDefects" type="number" className={input} />
               </Field>
               <Field label="Umidade máxima (%)">
-                <input
-                  name="maxMoisturePercent"
-                  type="number"
-                  step=".01"
-                  className={input}
-                />
+                <select name="maxMoisturePercent" defaultValue="12.0" className={input}>
+                  {Array.from({ length: 26 }, (_, index) => (10 + index / 10).toFixed(1)).map((value) => <option key={value} value={value}>{value.replace(".", ",")} %</option>)}
+                </select>
               </Field>
               <Field label="Pontuação mínima (opcional)">
                 <input

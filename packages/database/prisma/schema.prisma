@@ -366,6 +366,8 @@ model Company {
   operationalNotifications OperationalNotification[]
   greenCoffeeAuditEvents   GreenCoffeeAuditEvent[]
   coffeeSpecies            CoffeeSpecies[]
+  coffeeRegions            CoffeeRegion[]
+  screenClassifications    ScreenClassification[]
   supplierBankAccounts     SupplierBankAccount[]
 }
 
@@ -596,17 +598,25 @@ model GreenCoffeePurchase {
   buyerId                      String
   buyerName                    String
   species                      String
+  speciesId                    String?
+  speciesRef                   CoffeeSpecies?                   @relation("PurchaseSpecies", fields: [speciesId], references: [id], onDelete: SetNull)
   originRegion                 String
   municipality                 String?
   state                        String?
+  coffeeRegionId               String?
+  coffeeRegion                 CoffeeRegion?                    @relation(fields: [coffeeRegionId], references: [id], onDelete: SetNull)
   country                      String                           @default("Brasil")
   farmName                     String?
   harvest                      String
   variety                      String?
+  cultivarId                   String?
+  cultivarRef                  CoffeeVariety?                   @relation(fields: [cultivarId], references: [id], onDelete: SetNull)
   process                      String?
   supplierLotCode              String?
   qualityDescription           String?
   contractedScreen             String?
+  screenClassificationId       String?
+  screenClassification         ScreenClassification?            @relation(fields: [screenClassificationId], references: [id], onDelete: SetNull)
   maxDefects                   Int?
   maxMoisturePercent           Decimal?                         @db.Decimal(5, 2)
   beverageClassification       String?
@@ -667,6 +677,10 @@ model GreenCoffeePurchase {
   @@unique([companyId, purchaseNumber])
   @@index([companyId, status])
   @@index([supplierId])
+  @@index([speciesId])
+  @@index([cultivarId])
+  @@index([coffeeRegionId])
+  @@index([screenClassificationId])
 }
 
 model GreenCoffeePurchaseAcceptance {
@@ -750,31 +764,68 @@ model SupplierBankAccount {
 }
 
 model CoffeeSpecies {
-  id        String          @id @default(cuid())
+  id        String                @id @default(cuid())
   companyId String
-  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   code      String
   name      String
-  active    Boolean         @default(true)
+  active    Boolean               @default(true)
   varieties CoffeeVariety[]
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  purchases GreenCoffeePurchase[] @relation("PurchaseSpecies")
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
 
   @@unique([companyId, code])
 }
 
 model CoffeeVariety {
-  id        String        @id @default(cuid())
+  id        String                @id @default(cuid())
   speciesId String
-  species   CoffeeSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  species   CoffeeSpecies         @relation(fields: [speciesId], references: [id], onDelete: Cascade)
   code      String
   name      String
-  active    Boolean       @default(true)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  breeder   String?
+  sortOrder Int                   @default(0)
+  active    Boolean               @default(true)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  purchases GreenCoffeePurchase[]
 
   @@unique([speciesId, code])
   @@index([speciesId, active])
+}
+
+model CoffeeRegion {
+  id        String                @id @default(cuid())
+  companyId String
+  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  country   String                @default("Brasil")
+  state     String
+  name      String
+  active    Boolean               @default(true)
+  sortOrder Int                   @default(0)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  purchases GreenCoffeePurchase[]
+
+  @@unique([companyId, state, name])
+  @@index([companyId, state, active])
+}
+
+model ScreenClassification {
+  id        String                @id @default(cuid())
+  companyId String
+  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  active    Boolean               @default(true)
+  sortOrder Int                   @default(0)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  purchases GreenCoffeePurchase[]
+
+  @@unique([companyId, code])
+  @@index([companyId, active])
 }
 
 model GreenCoffeeLabSample {

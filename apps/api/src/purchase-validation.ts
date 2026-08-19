@@ -27,6 +27,7 @@ export function missingPurchaseApprovalFields(purchase: ApprovalValidationPurcha
   if ((!purchase.pricePerKg || Number(purchase.pricePerKg) <= 0) && (!purchase.totalValue || Number(purchase.totalValue) <= 0)) missing.push("Preço ou valor total");
   if (!purchase.paymentTermType) missing.push("Condição de pagamento");
   if (!purchase.expectedAt) missing.push("Data/período de entrega");
+  if (purchase.maxMoisturePercent != null && (Number(purchase.maxMoisturePercent) < 10 || Number(purchase.maxMoisturePercent) > 12.5)) missing.push("Umidade máxima entre 10,0% e 12,5%");
   const quality = (purchase.qualityCategory ?? "").toUpperCase();
   if (!purchase.process) missing.push("Processo");
   if (["ESPECIAL", "GOURMET", "SPECIAL"].some((value) => quality.includes(value))) {

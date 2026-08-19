@@ -3,7 +3,7 @@ services:
     name: bbos-api-staging
     runtime: node
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:migrate:staging && pnpm --filter @bbos/api build
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:migrate:staging && pnpm db:seed:coffee-references && pnpm --filter @bbos/api build
     startCommand: pnpm --filter @bbos/api start
     healthCheckPath: /api/health
     envVars:

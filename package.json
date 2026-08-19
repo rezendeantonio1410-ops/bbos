@@ -8,13 +8,14 @@
     "build": "turbo build",
     "lint": "corepack pnpm@10.14.0 --filter @bbos/database lint && corepack pnpm@10.14.0 --filter @bbos/shared lint && corepack pnpm@10.14.0 --filter @bbos/ui lint && corepack pnpm@10.14.0 --filter @bbos/api lint && corepack pnpm@10.14.0 --filter @bbos/web lint",
     "typecheck": "corepack pnpm@10.14.0 --filter @bbos/database typecheck && corepack pnpm@10.14.0 --filter @bbos/shared typecheck && corepack pnpm@10.14.0 --filter @bbos/ui typecheck && corepack pnpm@10.14.0 --filter @bbos/api typecheck && corepack pnpm@10.14.0 --filter @bbos/web typecheck",
-    "test": "corepack pnpm@10.14.0 --filter @bbos/database test:catalog && corepack pnpm@10.14.0 --filter @bbos/shared test:cost-v2 && corepack pnpm@10.14.0 --filter @bbos/shared test:products && corepack pnpm@10.14.0 --filter @bbos/shared test:finished-goods && corepack pnpm@10.14.0 --filter @bbos/shared test:sales-inventory && corepack pnpm@10.14.0 --filter @bbos/shared test:cost-period && corepack pnpm@10.14.0 --filter @bbos/shared build && node --test packages/shared/tests/reconciliation-engine.mjs packages/shared/tests/green-coffee-receipt.mjs",
+    "test": "corepack pnpm@10.14.0 --filter @bbos/database test:catalog && corepack pnpm@10.14.0 --filter @bbos/api test:purchase-validation && corepack pnpm@10.14.0 --filter @bbos/shared test:cost-v2 && corepack pnpm@10.14.0 --filter @bbos/shared test:products && corepack pnpm@10.14.0 --filter @bbos/shared test:finished-goods && corepack pnpm@10.14.0 --filter @bbos/shared test:sales-inventory && corepack pnpm@10.14.0 --filter @bbos/shared test:cost-period && corepack pnpm@10.14.0 --filter @bbos/shared build && node --test packages/shared/tests/reconciliation-engine.mjs packages/shared/tests/green-coffee-receipt.mjs",
     "format": "prettier --write .",
     "db:generate": "corepack pnpm --filter @bbos/database generate",
     "db:migrate": "corepack pnpm --filter @bbos/database migrate",
     "db:migrate:deploy": "corepack pnpm --filter @bbos/database migrate:deploy",
     "db:migrate:staging": "corepack pnpm --filter @bbos/database exec prisma migrate resolve --rolled-back 20260807120000_cost_engine_v2 || true && corepack pnpm --filter @bbos/database migrate:deploy",
-    "db:seed": "corepack pnpm --filter @bbos/database seed"
+    "db:seed": "corepack pnpm --filter @bbos/database seed",
+    "db:seed:coffee-references": "corepack pnpm --filter @bbos/database seed:coffee-references"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
