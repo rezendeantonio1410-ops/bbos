@@ -35,6 +35,7 @@ type SupplierOriginUnit = {
   municipality?: string | null;
   coffeeRegionId?: string | null;
   coffeeRegion?: { id: string; name: string; state: string } | null;
+  productions?: { speciesId: string; cultivarId?: string | null }[];
 };
 type SupplierContact = {
   id: string;
@@ -282,7 +283,10 @@ export default function Page() {
   const supplier = references?.suppliers.find((item) => item.id === supplierId);
   const originUnits = supplier?.originUnits ?? [];
   const originUnit = originUnits.find((item) => item.id === originUnitId) ?? (originUnits.length === 1 ? originUnits[0] : undefined);
-  const species = references?.species.find((item) => item.code === speciesCode);
+  const unitProductions = originUnit?.productions ?? [];
+  const availableSpecies = references?.species.filter((item) => !unitProductions.length || unitProductions.some((production) => production.speciesId === item.id)) ?? [];
+  const species = availableSpecies.find((item) => item.code === speciesCode);
+  const availableCultivars = species?.varieties.filter((item) => !unitProductions.length || unitProductions.some((production) => production.speciesId === species.id && production.cultivarId === item.id)) ?? [];
   const regions = references?.regions.filter((region) => region.state === purchaseState) ?? [];
   const totalWeight = volumes * unitWeight,
     totalValue = totalWeight * priceKg;
@@ -756,11 +760,11 @@ export default function Page() {
                 </div>
               )}
               <Field label="Região cafeeira">
-                <input className={input} value={originUnit?.coffeeRegion?.name ?? "Região não cadastrada"} readOnly aria-readonly="true" />
+                <input className={input} value={originUnit ? (originUnit.coffeeRegion?.name ?? "—") : "—"} readOnly aria-readonly="true" />
                 <input type="hidden" name="coffeeRegionId" value={originUnit?.coffeeRegionId ?? ""} />
               </Field>
               <Field label="Município">
-                <input className={input} value={originUnit?.municipality ?? "Município não cadastrado"} readOnly aria-readonly="true" />
+                <input className={input} value={originUnit ? (originUnit.municipality ?? "—") : "—"} readOnly aria-readonly="true" />
                 <input type="hidden" name="municipality" value={originUnit?.municipality ?? ""} />
               </Field>
               <Field label="Safra">
@@ -780,7 +784,7 @@ export default function Page() {
                   onChange={(e) => setSpeciesCode(e.target.value)}
                 >
                   <option value="">{originUnitId ? "Selecione a espécie" : "Selecione a unidade primeiro"}</option>
-                  {references?.species.map((item) => (
+                  {availableSpecies.map((item) => (
                     <option key={item.id} value={item.code}>
                       {item.name}
                     </option>
@@ -790,7 +794,7 @@ export default function Page() {
               <Field label="Variedade/Cultivar">
                 <select key={speciesCode} required name="cultivarId" disabled={!speciesCode} className={input} defaultValue="">
                   <option value="" disabled>Selecione a cultivar</option>
-                  {species?.varieties.map((item) => (
+                  {availableCultivars.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>

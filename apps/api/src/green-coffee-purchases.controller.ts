@@ -232,30 +232,14 @@ export class GreenCoffeePurchasesController {
         include: {
           originUnits: {
             where: { active: true, ...(state ? { state } : {}) },
-            include: { coffeeRegion: true },
+            include: { coffeeRegion: true, productions: { where: { active: true }, include: { species: true, cultivar: true } } },
             orderBy: { name: "asc" },
           },
         },
         orderBy: { name: "asc" },
       }),
     ]);
-    const suppliers = supplierRows.map((supplier) => ({
-      ...supplier,
-      originUnits: supplier.originUnits.length > 0
-        ? supplier.originUnits
-        : supplier.state
-          ? [{
-              id: `legacy-${supplier.id}`,
-              name: supplier.farmName ?? supplier.name,
-              country: supplier.country ?? "Brasil",
-              state: supplier.state,
-              municipality: supplier.city,
-              coffeeRegionId: null,
-              coffeeRegion: null,
-            }]
-          : [],
-    }));
-    return { species, regions, screenClassifications, suppliers };
+    return { species, regions, screenClassifications, suppliers: supplierRows };
   }
 
   @Get("suppliers/:supplierId/bank-accounts")
@@ -545,6 +529,7 @@ export class GreenCoffeePurchasesController {
     }
     const allowed = ["supplierType", "name", "tradeName", "legalName", "taxId", "ruralRegistration", "stateRegistration", "city", "state", "country", "address", "contactName", "contactRole", "contactPhone", "whatsapp", "contactEmail", "active"];
     const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+    if (typeof data.active === "string") data.active = data.active === "true";
     return this.db.supplier.update({ where: { id: supplierId }, data });
   }
 
