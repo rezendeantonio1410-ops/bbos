@@ -20,7 +20,11 @@ export interface TaxRegistryProvider {
 @Injectable()
 export class UnconfiguredTaxRegistryProvider implements TaxRegistryProvider {
   async lookup(document: string): Promise<TaxRegistryResult> {
-    return { document, source: "not-configured", checkedAt: new Date().toISOString() };
+    return {
+      document,
+      source: "not-configured",
+      checkedAt: new Date().toISOString(),
+    };
   }
 }
 import { Injectable } from "@nestjs/common";

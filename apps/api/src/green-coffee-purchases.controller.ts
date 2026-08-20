@@ -33,9 +33,17 @@ import { missingPurchaseApprovalFields } from "./purchase-validation";
 import { BRAZILIAN_MUNICIPALITIES } from "./brazilian-municipalities";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
-import { validateStateRegistration, validateTaxId } from "./supplier-verification";
+import {
+  validateStateRegistration,
+  validateTaxId,
+} from "./supplier-verification";
 
-type Actor = { userId: string; userName: string; userRole: string; companyId: string };
+type Actor = {
+  userId: string;
+  userName: string;
+  userRole: string;
+  companyId: string;
+};
 const normalizePostalCode = (value?: unknown) => {
   const digits = String(value ?? "").replace(/\D/g, "");
   return digits ? digits.padStart(8, "0").slice(0, 8) : null;
@@ -113,29 +121,57 @@ const maskDestination = (value?: string | null) => {
 };
 
 function simplePdf(lines: string[]) {
-  const escape = (value: string) => value.replace(/\\/g, "\\\\").replace(/[()]/g, "\\$&").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const escape = (value: string) =>
+    value
+      .replace(/\\/g, "\\\\")
+      .replace(/[()]/g, "\\$&")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
   const logoCandidates = [
     join(process.cwd(), "../web/public/brand/logo/bispo-logo-official.jpg"),
-    join(process.cwd(), "../../apps/web/public/brand/logo/bispo-logo-official.jpg"),
+    join(
+      process.cwd(),
+      "../../apps/web/public/brand/logo/bispo-logo-official.jpg",
+    ),
   ];
   const logoPath = logoCandidates.find((candidate) => existsSync(candidate));
   const logo = logoPath ? readFileSync(logoPath) : null;
   const content = [
     ...(logo ? ["q", "160 0 0 45 50 770 cm", "/Im1 Do", "Q"] : []),
-    "BT", "/F1 10 Tf", logo ? "50 750 Td" : "50 790 Td",
-    ...lines.flatMap((line) => [`(${escape(line.slice(0, 110))}) Tj`, "0 -15 Td"]), "ET",
+    "BT",
+    "/F1 10 Tf",
+    logo ? "50 750 Td" : "50 790 Td",
+    ...lines.flatMap((line) => [
+      `(${escape(line.slice(0, 110))}) Tj`,
+      "0 -15 Td",
+    ]),
+    "ET",
   ].join("\n");
-  const pageResources = logo ? "/Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >>" : "/Resources << /Font << /F1 5 0 R >> >>";
+  const pageResources = logo
+    ? "/Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >>"
+    : "/Resources << /Font << /F1 5 0 R >> >>";
   const objects: Buffer[] = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-    Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] ${pageResources} /Contents 4 0 R >>`),
-    Buffer.from(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`),
+    Buffer.from(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] ${pageResources} /Contents 4 0 R >>`,
+    ),
+    Buffer.from(
+      `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+    ),
     Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
   ];
   if (logo) {
     const logoBytes = logo;
-    objects.push(Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 860 /Height 240 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBytes.length} >>\nstream\n`), logoBytes, Buffer.from("\nendstream")]));
+    objects.push(
+      Buffer.concat([
+        Buffer.from(
+          `<< /Type /XObject /Subtype /Image /Width 860 /Height 240 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBytes.length} >>\nstream\n`,
+        ),
+        logoBytes,
+        Buffer.from("\nendstream"),
+      ]),
+    );
   }
   const chunks: Buffer[] = [Buffer.from("%PDF-1.4\n")];
   const offsets: number[] = [0];
@@ -143,10 +179,23 @@ function simplePdf(lines: string[]) {
     const object = objects[index];
     if (!object) continue;
     offsets[index + 1] = Buffer.concat(chunks).length;
-    chunks.push(Buffer.from(`${index + 1} 0 obj\n`), object, Buffer.from("\nendobj\n"));
+    chunks.push(
+      Buffer.from(`${index + 1} 0 obj\n`),
+      object,
+      Buffer.from("\nendobj\n"),
+    );
   }
   const xref = Buffer.concat(chunks).length;
-  chunks.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`));
+  chunks.push(
+    Buffer.from(
+      `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
+        .slice(1)
+        .map((offset) => `${String(offset).padStart(10, "0")} 00000 n `)
+        .join(
+          "\n",
+        )}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`,
+    ),
+  );
   return Buffer.concat(chunks);
 }
 
@@ -181,7 +230,14 @@ export class GreenCoffeePurchasesController {
   ) {}
 
   private readonly include = {
-    supplier: { include: { contacts: { where: { active: true, canConfirmBusiness: true }, orderBy: [{ isPrimary: "desc" as const }, { name: "asc" as const }] } } },
+    supplier: {
+      include: {
+        contacts: {
+          where: { active: true, canConfirmBusiness: true },
+          orderBy: [{ isPrimary: "desc" as const }, { name: "asc" as const }],
+        },
+      },
+    },
     originUnit: { include: { coffeeRegion: true } },
     receipts: { include: { coffeeLot: true, labSample: true } },
     approvalRequests: true,
@@ -206,7 +262,8 @@ export class GreenCoffeePurchasesController {
   @Get("catalog")
   async catalog(@Req() request: any, @Query("companyId") companyId?: string) {
     const actor = await this.sessionActor(request);
-    if (companyId && companyId !== actor.companyId) throw new ForbiddenException("Acesso negado para esta empresa.");
+    if (companyId && companyId !== actor.companyId)
+      throw new ForbiddenException("Acesso negado para esta empresa.");
     companyId = actor.companyId;
     return this.db.coffeeSpecies.findMany({
       where: { companyId, active: true },
@@ -220,44 +277,64 @@ export class GreenCoffeePurchasesController {
   @Get("references")
   async references(@Req() request: any, @Query("state") state?: string) {
     const actor = await this.sessionActor(request);
-    const [species, regions, screenClassifications, supplierRows] = await Promise.all([
-      this.db.coffeeSpecies.findMany({
-        where: { companyId: actor.companyId, active: true },
-        include: { varieties: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] } },
-        orderBy: { name: "asc" },
-      }),
-      this.db.coffeeRegion.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: [{ state: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
-      this.db.screenClassification.findMany({ where: { companyId: actor.companyId, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-      this.db.supplier.findMany({
-        where: {
-          companyId: actor.companyId,
-          active: true,
-          ...(state
-            ? {
-                OR: [
-                  { state },
-                  { originUnits: { some: { state, active: true } } },
-                ],
-              }
-            : {}),
-        },
-        include: {
-          originUnits: {
-            where: { active: true, ...(state ? { state } : {}) },
-            include: { coffeeRegion: true, productions: { where: { active: true }, include: { species: true, cultivar: true } } },
-            orderBy: { name: "asc" },
+    const [species, regions, screenClassifications, supplierRows] =
+      await Promise.all([
+        this.db.coffeeSpecies.findMany({
+          where: { companyId: actor.companyId, active: true },
+          include: {
+            varieties: {
+              where: { active: true },
+              orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+            },
           },
-        },
-        orderBy: { name: "asc" },
-      }),
-    ]);
+          orderBy: { name: "asc" },
+        }),
+        this.db.coffeeRegion.findMany({
+          where: { companyId: actor.companyId, active: true },
+          orderBy: [{ state: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+        }),
+        this.db.screenClassification.findMany({
+          where: { companyId: actor.companyId, active: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        }),
+        this.db.supplier.findMany({
+          where: {
+            companyId: actor.companyId,
+            active: true,
+            ...(state
+              ? {
+                  OR: [
+                    { state },
+                    { originUnits: { some: { state, active: true } } },
+                  ],
+                }
+              : {}),
+          },
+          include: {
+            originUnits: {
+              where: { active: true, ...(state ? { state } : {}) },
+              include: {
+                coffeeRegion: true,
+                productions: {
+                  where: { active: true },
+                  include: { species: true, cultivar: true },
+                },
+              },
+              orderBy: { name: "asc" },
+            },
+          },
+          orderBy: { name: "asc" },
+        }),
+      ]);
     return { species, regions, screenClassifications, suppliers: supplierRows };
   }
 
   @Get("references/municipalities")
   async municipalities(@Req() request: any, @Query("state") state?: string) {
     await this.sessionActor(request);
-    return BRAZILIAN_MUNICIPALITIES.filter((municipality) => !state || municipality.state === state);
+    return BRAZILIAN_MUNICIPALITIES.filter(
+      (municipality) => !state || municipality.state === state,
+    );
   }
 
   @Get("suppliers/:supplierId/bank-accounts")
@@ -289,22 +366,62 @@ export class GreenCoffeePurchasesController {
   }
 
   @Get("suppliers/:supplierId/contacts")
-  async supplierContacts(@Param("supplierId") supplierId: string, @Req() request: any) {
+  async supplierContacts(
+    @Param("supplierId") supplierId: string,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId }, select: { id: true } });
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+      select: { id: true },
+    });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
-    return this.db.supplierContact.findMany({ where: { supplierId, active: true }, orderBy: [{ isPrimary: "desc" }, { name: "asc" }] });
+    return this.db.supplierContact.findMany({
+      where: { supplierId, active: true },
+      orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+    });
   }
 
   @Post("suppliers/:supplierId/contacts")
-  async createSupplierContact(@Param("supplierId") supplierId: string, @Body() body: { name: string; role?: string; whatsapp?: string; email?: string; isPrimary?: boolean; canConfirmBusiness?: boolean; active?: boolean }, @Req() request: any) {
+  async createSupplierContact(
+    @Param("supplierId") supplierId: string,
+    @Body()
+    body: {
+      name: string;
+      role?: string;
+      whatsapp?: string;
+      email?: string;
+      isPrimary?: boolean;
+      canConfirmBusiness?: boolean;
+      active?: boolean;
+    },
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    if (!body.name?.trim()) throw new BadRequestException("Nome do contato é obrigatório.");
-    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    if (!body.name?.trim())
+      throw new BadRequestException("Nome do contato é obrigatório.");
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+    });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
     return this.db.$transaction(async (tx) => {
-      if (body.isPrimary) await tx.supplierContact.updateMany({ where: { supplierId }, data: { isPrimary: false } });
-      return tx.supplierContact.create({ data: { supplierId, name: body.name.trim(), role: body.role?.trim() || null, whatsapp: body.whatsapp?.trim() || null, email: body.email?.trim() || null, isPrimary: body.isPrimary ?? false, canConfirmBusiness: body.canConfirmBusiness ?? false, active: body.active ?? true } });
+      if (body.isPrimary)
+        await tx.supplierContact.updateMany({
+          where: { supplierId },
+          data: { isPrimary: false },
+        });
+      return tx.supplierContact.create({
+        data: {
+          supplierId,
+          name: body.name.trim(),
+          role: body.role?.trim() || null,
+          whatsapp: body.whatsapp?.trim() || null,
+          email: body.email?.trim() || null,
+          isPrimary: body.isPrimary ?? false,
+          canConfirmBusiness: body.canConfirmBusiness ?? false,
+          active: body.active ?? true,
+        },
+      });
     });
   }
 
@@ -385,24 +502,71 @@ export class GreenCoffeePurchasesController {
   }
 
   @Get(":id/contract.pdf")
-  async contractPdf(@Param("id") id: string, @Req() request: any, @Res() response: any) {
+  async contractPdf(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Res() response: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const purchase = await this.db.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId }, include: { externalAcceptances: { where: { status: "ACCEPTED" }, orderBy: { acceptedAt: "desc" }, take: 1 } } });
+    const purchase = await this.db.greenCoffeePurchase.findFirst({
+      where: { id, companyId: actor.companyId },
+      include: {
+        externalAcceptances: {
+          where: { status: "ACCEPTED" },
+          orderBy: { acceptedAt: "desc" },
+          take: 1,
+        },
+      },
+    });
     const acceptance = purchase?.externalAcceptances[0];
-    if (!purchase || !acceptance) throw new BadRequestException("O PDF só está disponível após o aceite do fornecedor.");
+    if (!purchase || !acceptance)
+      throw new BadRequestException(
+        "O PDF só está disponível após o aceite do fornecedor.",
+      );
     const snapshot: any = acceptance.snapshot;
     const lines = [
-      "CONTRATO DE COMPRA DE CAFE VERDE", `Contrato: ${snapshot.purchaseNumber}`, "",
-      `COMPRADOR: ${snapshot.company?.name ?? "Bispo Coffees"}`, `VENDEDOR: ${snapshot.supplier?.name ?? "—"}`, `DOCUMENTO: ${snapshot.supplier?.taxId ?? "—"}`,
-      `ORIGEM: ${snapshot.coffee?.originRegion ?? "—"}`, `ESPECIE: ${contractLabel(snapshot.coffee?.species)}`, `VARIEDADE: ${contractLabel(snapshot.coffee?.variety)}`, `SAFRA: ${snapshot.coffee?.harvest ?? "—"}`, `PROCESSO: ${contractLabel(snapshot.coffee?.process)}`,
-      `QUALIDADE: ${contractLabel(snapshot.specification?.qualityCategory)}`, `PENEIRA: ${snapshot.specification?.contractedScreen ?? "—"}`, `UMIDADE MAXIMA: ${snapshot.specification?.maxMoisturePercent ?? "—"}`, `QUANTIDADE: ${snapshot.quantity?.contractedWeightKg ?? "—"} kg`, `VOLUMES: ${snapshot.quantity?.volumeQuantity ?? "—"}`, `ACONDICIONAMENTO: ${contractLabel(snapshot.quantity?.packagingType)}`,
-      `PRECO/KG: ${snapshot.commercial?.pricePerKg ?? "—"}`, `VALOR TOTAL: ${snapshot.commercial?.totalValue ?? "—"}`, `ENTREGA: ${snapshot.commercial?.expectedAt ?? "—"}`, `REFERENCIA: ${snapshot.commercial?.contractReference ?? "—"}`,
-      "", "PROTECAO DE DADOS PESSOAIS", "As partes comprometem-se a tratar os dados pessoais relacionados a este Contrato em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os para finalidades legitimas da relacao contratual, cumprimento de obrigacoes legais e exercicio regular de direitos, observados seguranca, necessidade e confidencialidade.",
-      "", "CONFIRMACOES DAS PARTES", `BISPO COFFEES: ${purchase.approvedByName ?? "—"} · ${purchase.approvedAt?.toISOString() ?? "—"}`, `ENVIADO PARA: ${acceptance.contactName ?? "—"} · ${acceptance.contactRole ?? "—"} · ${acceptance.destinationMasked ?? "—"}`, `FORNECEDOR: ${acceptance.acceptedByName ?? "—"} · ${acceptance.acceptedAt?.toISOString() ?? "—"}`, "Metodo: Confirmacao eletronica registrada pelo BBOs",
-      `Versao do documento: ${acceptance.termsVersion}`, `Versao dos Termos Gerais: ${acceptance.termsVersion}`, `Hash do documento: ${acceptance.documentHash}`, "", "Documento gerado eletronicamente pelo BBOs a partir da versao contratual confirmada pelas partes.",
+      "CONTRATO DE COMPRA DE CAFE VERDE",
+      `Contrato: ${snapshot.purchaseNumber}`,
+      "",
+      `COMPRADOR: ${snapshot.company?.name ?? "Bispo Coffees"}`,
+      `VENDEDOR: ${snapshot.supplier?.name ?? "—"}`,
+      `DOCUMENTO: ${snapshot.supplier?.taxId ?? "—"}`,
+      `ORIGEM: ${snapshot.coffee?.originRegion ?? "—"}`,
+      `ESPECIE: ${contractLabel(snapshot.coffee?.species)}`,
+      `VARIEDADE: ${contractLabel(snapshot.coffee?.variety)}`,
+      `SAFRA: ${snapshot.coffee?.harvest ?? "—"}`,
+      `PROCESSO: ${contractLabel(snapshot.coffee?.process)}`,
+      `QUALIDADE: ${contractLabel(snapshot.specification?.qualityCategory)}`,
+      `PENEIRA: ${snapshot.specification?.contractedScreen ?? "—"}`,
+      `UMIDADE MAXIMA: ${snapshot.specification?.maxMoisturePercent ?? "—"}`,
+      `QUANTIDADE: ${snapshot.quantity?.contractedWeightKg ?? "—"} kg`,
+      `VOLUMES: ${snapshot.quantity?.volumeQuantity ?? "—"}`,
+      `ACONDICIONAMENTO: ${contractLabel(snapshot.quantity?.packagingType)}`,
+      `PRECO/KG: ${snapshot.commercial?.pricePerKg ?? "—"}`,
+      `VALOR TOTAL: ${snapshot.commercial?.totalValue ?? "—"}`,
+      `ENTREGA: ${snapshot.commercial?.expectedAt ?? "—"}`,
+      `REFERENCIA: ${snapshot.commercial?.contractReference ?? "—"}`,
+      "",
+      "PROTECAO DE DADOS PESSOAIS",
+      "As partes comprometem-se a tratar os dados pessoais relacionados a este Contrato em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os para finalidades legitimas da relacao contratual, cumprimento de obrigacoes legais e exercicio regular de direitos, observados seguranca, necessidade e confidencialidade.",
+      "",
+      "CONFIRMACOES DAS PARTES",
+      `BISPO COFFEES: ${purchase.approvedByName ?? "—"} · ${purchase.approvedAt?.toISOString() ?? "—"}`,
+      `ENVIADO PARA: ${acceptance.contactName ?? "—"} · ${acceptance.contactRole ?? "—"} · ${acceptance.destinationMasked ?? "—"}`,
+      `FORNECEDOR: ${acceptance.acceptedByName ?? "—"} · ${acceptance.acceptedAt?.toISOString() ?? "—"}`,
+      "Metodo: Confirmacao eletronica registrada pelo BBOs",
+      `Versao do documento: ${acceptance.termsVersion}`,
+      `Versao dos Termos Gerais: ${acceptance.termsVersion}`,
+      `Hash do documento: ${acceptance.documentHash}`,
+      "",
+      "Documento gerado eletronicamente pelo BBOs a partir da versao contratual confirmada pelas partes.",
     ];
     const pdf = simplePdf(lines);
-    response.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${purchase.purchaseNumber}-contrato.pdf"`, "Content-Length": pdf.length });
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${purchase.purchaseNumber}-contrato.pdf"`,
+      "Content-Length": pdf.length,
+    });
     response.send(pdf);
   }
 
@@ -422,48 +586,143 @@ export class GreenCoffeePurchasesController {
   }
 
   @Patch(":id")
-  async updateDraft(@Param("id") id: string, @Req() request: any, @Body() body: Partial<PurchaseBody>) {
+  async updateDraft(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Partial<PurchaseBody>,
+  ) {
     const actor = await this.sessionActor(request);
-    if (body.maxMoisturePercent !== undefined && body.maxMoisturePercent !== null && (body.maxMoisturePercent < 10 || body.maxMoisturePercent > 12.5))
-      throw new BadRequestException("A umidade máxima deve estar entre 10,0% e 12,5%.");
+    if (
+      body.maxMoisturePercent !== undefined &&
+      body.maxMoisturePercent !== null &&
+      (body.maxMoisturePercent < 10 || body.maxMoisturePercent > 12.5)
+    )
+      throw new BadRequestException(
+        "A umidade máxima deve estar entre 10,0% e 12,5%.",
+      );
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+      });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
-      if (purchase.approvalStatus !== PurchaseApprovalStatus.DRAFT) throw new BadRequestException("Somente rascunhos podem ser editados.");
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.DRAFT)
+        throw new BadRequestException("Somente rascunhos podem ser editados.");
       const data: Prisma.GreenCoffeePurchaseUpdateInput = {};
       if (body.speciesId) {
-        const species = await tx.coffeeSpecies.findFirst({ where: { id: body.speciesId, companyId: actor.companyId, active: true } });
-        if (!species) throw new BadRequestException("Espécie inválida para a empresa.");
+        const species = await tx.coffeeSpecies.findFirst({
+          where: {
+            id: body.speciesId,
+            companyId: actor.companyId,
+            active: true,
+          },
+        });
+        if (!species)
+          throw new BadRequestException("Espécie inválida para a empresa.");
         data.speciesRef = { connect: { id: species.id } };
       }
       if (body.cultivarId) {
-        const cultivar = await tx.coffeeVariety.findFirst({ where: { id: body.cultivarId, active: true, speciesId: body.speciesId ?? purchase.speciesId ?? undefined } });
-        if (!cultivar) throw new BadRequestException("Cultivar inválida para a espécie selecionada.");
+        const cultivar = await tx.coffeeVariety.findFirst({
+          where: {
+            id: body.cultivarId,
+            active: true,
+            speciesId: body.speciesId ?? purchase.speciesId ?? undefined,
+          },
+        });
+        if (!cultivar)
+          throw new BadRequestException(
+            "Cultivar inválida para a espécie selecionada.",
+          );
         data.cultivarRef = { connect: { id: cultivar.id } };
       }
       if (body.coffeeRegionId) {
-        const region = await tx.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, active: true } });
-        if (!region) throw new BadRequestException("Região cafeeira inválida para a empresa.");
+        const region = await tx.coffeeRegion.findFirst({
+          where: {
+            id: body.coffeeRegionId,
+            companyId: actor.companyId,
+            active: true,
+          },
+        });
+        if (!region)
+          throw new BadRequestException(
+            "Região cafeeira inválida para a empresa.",
+          );
         data.coffeeRegion = { connect: { id: region.id } };
       }
       if (body.screenClassificationId) {
-        const screen = await tx.screenClassification.findFirst({ where: { id: body.screenClassificationId, companyId: actor.companyId, active: true } });
-        if (!screen) throw new BadRequestException("Classificação de peneira inválida para a empresa.");
+        const screen = await tx.screenClassification.findFirst({
+          where: {
+            id: body.screenClassificationId,
+            companyId: actor.companyId,
+            active: true,
+          },
+        });
+        if (!screen)
+          throw new BadRequestException(
+            "Classificação de peneira inválida para a empresa.",
+          );
         data.screenClassification = { connect: { id: screen.id } };
       }
       if (body.originUnitId) {
-        const unit = await tx.supplierOriginUnit.findFirst({ where: { id: body.originUnitId, supplierId: purchase.supplierId, active: true, supplier: { companyId: actor.companyId, active: true } } });
-        if (!unit) throw new BadRequestException("Unidade/fazenda inválida para a compra.");
+        const unit = await tx.supplierOriginUnit.findFirst({
+          where: {
+            id: body.originUnitId,
+            supplierId: purchase.supplierId,
+            active: true,
+            supplier: { companyId: actor.companyId, active: true },
+          },
+        });
+        if (!unit)
+          throw new BadRequestException(
+            "Unidade/fazenda inválida para a compra.",
+          );
         data.originUnit = { connect: { id: unit.id } };
       }
-      for (const key of ["originRegion", "municipality", "state", "country", "farmName", "harvest", "variety", "process", "supplierLotCode", "qualityCategory", "qualityDescription", "additionalSpecification", "contractedScreen", "maxDefects", "maxMoisturePercent", "minimumScore", "technicalSpecifications", "expectedAt", "contractReference", "commercialNotes"] as const) {
-        if (body[key] !== undefined) (data as any)[key] = key === "expectedAt" && body[key] ? new Date(String(body[key])) : body[key];
+      for (const key of [
+        "originRegion",
+        "municipality",
+        "state",
+        "country",
+        "farmName",
+        "harvest",
+        "variety",
+        "process",
+        "supplierLotCode",
+        "qualityCategory",
+        "qualityDescription",
+        "additionalSpecification",
+        "contractedScreen",
+        "maxDefects",
+        "maxMoisturePercent",
+        "minimumScore",
+        "technicalSpecifications",
+        "expectedAt",
+        "contractReference",
+        "commercialNotes",
+      ] as const) {
+        if (body[key] !== undefined)
+          (data as any)[key] =
+            key === "expectedAt" && body[key]
+              ? new Date(String(body[key]))
+              : body[key];
       }
       if (body.pricePerKg !== undefined) data.pricePerKg = body.pricePerKg;
       if (body.totalValue !== undefined) data.totalValue = body.totalValue;
-      if (Object.keys(data).length) await tx.greenCoffeePurchase.update({ where: { id }, data });
-      await tx.greenCoffeeAuditEvent.create({ data: { companyId: purchase.companyId, purchaseId: id, action: "PURCHASE_UPDATED", actorId: actor.userId, actorName: actor.userName, metadata: { fields: Object.keys(data) } } });
-      return tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId }, include: this.include });
+      if (Object.keys(data).length)
+        await tx.greenCoffeePurchase.update({ where: { id }, data });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: purchase.companyId,
+          purchaseId: id,
+          action: "PURCHASE_UPDATED",
+          actorId: actor.userId,
+          actorName: actor.userName,
+          metadata: { fields: Object.keys(data) },
+        },
+      });
+      return tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+        include: this.include,
+      });
     });
   }
 
@@ -479,6 +738,7 @@ export class GreenCoffeePurchasesController {
       taxId?: string;
       ruralRegistration?: string;
       stateRegistration?: string;
+      stateRegistrationType?: string;
       farmName?: string;
       city?: string;
       state?: string;
@@ -501,149 +761,466 @@ export class GreenCoffeePurchasesController {
     return this.createSupplierForSession(body, request);
   }
 
-  private async createSupplierForSession(body: {
-    companyId: string;
-    supplierType: GreenCoffeeSupplierType;
-    name: string;
-    tradeName?: string;
-    legalName?: string;
-    taxId?: string;
-    ruralRegistration?: string;
-    stateRegistration?: string;
-    farmName?: string;
-    city?: string;
-    state?: string;
-    country?: string;
-    address?: string;
-    contactName?: string;
-    contactRole?: string;
-    contactPhone?: string;
-    whatsapp?: string;
-    contactEmail?: string;
-    postalCode?: string;
-    district?: string;
-    addressComplement?: string;
-    ibgeCityCode?: string;
-  }, request: any) {
+  private async createSupplierForSession(
+    body: {
+      companyId: string;
+      supplierType: GreenCoffeeSupplierType;
+      name: string;
+      tradeName?: string;
+      legalName?: string;
+      taxId?: string;
+      ruralRegistration?: string;
+      stateRegistration?: string;
+      stateRegistrationType?: string;
+      farmName?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      address?: string;
+      contactName?: string;
+      contactRole?: string;
+      contactPhone?: string;
+      whatsapp?: string;
+      contactEmail?: string;
+      postalCode?: string;
+      district?: string;
+      addressComplement?: string;
+      ibgeCityCode?: string;
+    },
+    request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    if (!body.name) throw new BadRequestException("Nome ou razão social é obrigatório.");
-    if (body.taxId && !validateTaxId(body.taxId)) throw new BadRequestException("CPF/CNPJ inválido.");
-    if (body.stateRegistration && !validateStateRegistration(body.stateRegistration, body.state)) throw new BadRequestException("Inscrição Estadual inválida para a UF.");
+    if (!body.name)
+      throw new BadRequestException("Nome ou razão social é obrigatório.");
+    if (body.taxId && !validateTaxId(body.taxId))
+      throw new BadRequestException("CPF/CNPJ inválido.");
+    if (
+      body.stateRegistrationType !== "EXEMPT" &&
+      body.stateRegistrationType !== "NON_TAXPAYER" &&
+      body.stateRegistration &&
+      !validateStateRegistration(body.stateRegistration, body.state)
+    )
+      throw new BadRequestException("Inscrição Estadual inválida para a UF.");
     if (body.taxId) {
-      const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: body.taxId } });
-      if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
+      const duplicate = await this.db.supplier.findFirst({
+        where: { companyId: actor.companyId, taxId: body.taxId },
+      });
+      if (duplicate)
+        throw new BadRequestException(
+          "CPF/CNPJ já cadastrado para esta empresa.",
+        );
     }
-    return this.db.supplier.create({ data: { ...body, companyId: actor.companyId, postalCode: normalizePostalCode(body.postalCode) } });
+    return this.db.supplier.create({
+      data: {
+        ...body,
+        companyId: actor.companyId,
+        stateRegistration:
+          body.stateRegistrationType === "NUMBER"
+            ? body.stateRegistration || null
+            : null,
+        stateRegistrationType: body.stateRegistrationType ?? "NUMBER",
+        postalCode: normalizePostalCode(body.postalCode),
+      },
+    });
   }
 
   @Get("suppliers")
-  async suppliers(@Req() request: any, @Query("state") state?: string, @Query("active") active?: string) {
+  async suppliers(
+    @Req() request: any,
+    @Query("state") state?: string,
+    @Query("active") active?: string,
+  ) {
     const actor = await this.sessionActor(request);
     return this.db.supplier.findMany({
-      where: { companyId: actor.companyId, ...(active === undefined ? {} : { active: active === "true" }), ...(state ? { state } : {}) },
-      include: { originUnits: { include: { coffeeRegion: true }, orderBy: { name: "asc" } } },
+      where: {
+        companyId: actor.companyId,
+        ...(active === undefined ? {} : { active: active === "true" }),
+        ...(state ? { state } : {}),
+      },
+      include: {
+        originUnits: {
+          include: { coffeeRegion: true },
+          orderBy: { name: "asc" },
+        },
+      },
       orderBy: { name: "asc" },
     });
   }
 
   @Post("suppliers/:supplierId/tax-id/verify")
-  async verifySupplierTaxId(@Param("supplierId") supplierId: string, @Req() request: any) {
+  async verifySupplierTaxId(
+    @Param("supplierId") supplierId: string,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+    });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
-    if (!supplier.taxId) throw new BadRequestException("CPF/CNPJ não informado.");
+    if (!supplier.taxId)
+      throw new BadRequestException("CPF/CNPJ não informado.");
     const checkedAt = new Date();
     const documentType = validateTaxId(supplier.taxId);
     if (!documentType) {
-      return this.db.supplier.update({ where: { id: supplier.id }, data: { taxIdVerificationStatus: "INVALID", taxIdVerifiedAt: checkedAt, taxIdVerificationSource: "local-format" } });
+      return this.db.supplier.update({
+        where: { id: supplier.id },
+        data: {
+          taxIdVerificationStatus: "INVALID",
+          taxIdVerifiedAt: checkedAt,
+          taxIdVerificationSource: "local-format",
+        },
+      });
     }
     const result = await this.taxRegistry.lookup(supplier.taxId);
-    const status = result.registrationStatus === "ACTIVE" ? "VERIFIED_ACTIVE" : result.registrationStatus === "INACTIVE" ? "VERIFIED_INACTIVE" : "NOT_VERIFIED";
-    return this.db.supplier.update({ where: { id: supplier.id }, data: { taxIdVerificationStatus: status, taxIdVerifiedAt: checkedAt, taxIdVerificationSource: result.source } });
+    const status =
+      result.registrationStatus === "ACTIVE"
+        ? "VERIFIED_ACTIVE"
+        : result.registrationStatus === "INACTIVE"
+          ? "VERIFIED_INACTIVE"
+          : "NOT_VERIFIED";
+    return this.db.supplier.update({
+      where: { id: supplier.id },
+      data: {
+        taxIdVerificationStatus: status,
+        taxIdVerifiedAt: checkedAt,
+        taxIdVerificationSource: result.source,
+      },
+    });
   }
 
   @Post("suppliers/:supplierId/state-registration/verify")
-  async verifySupplierStateRegistration(@Param("supplierId") supplierId: string, @Req() request: any) {
+  async verifySupplierStateRegistration(
+    @Param("supplierId") supplierId: string,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+    });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
-    if (!supplier.stateRegistration) throw new BadRequestException("Inscrição Estadual não informada.");
+    if (!supplier.stateRegistration)
+      throw new BadRequestException("Inscrição Estadual não informada.");
     const checkedAt = new Date();
-    const valid = validateStateRegistration(supplier.stateRegistration, supplier.state);
+    const valid = validateStateRegistration(
+      supplier.stateRegistration,
+      supplier.state,
+    );
     if (!valid) {
-      return this.db.supplier.update({ where: { id: supplier.id }, data: { stateRegistrationVerificationStatus: "INVALID", stateRegistrationVerifiedAt: checkedAt, stateRegistrationVerificationSource: "local-format" } });
+      return this.db.supplier.update({
+        where: { id: supplier.id },
+        data: {
+          stateRegistrationVerificationStatus: "INVALID",
+          stateRegistrationVerifiedAt: checkedAt,
+          stateRegistrationVerificationSource: "local-format",
+        },
+      });
     }
-    const result = await this.stateRegistration.lookup(supplier.stateRegistration, supplier.state ?? "");
-    const status = result.registrationStatus === "ACTIVE" ? "VERIFIED_ACTIVE" : result.registrationStatus === "INACTIVE" ? "VERIFIED_INACTIVE" : "NOT_VERIFIED";
-    return this.db.supplier.update({ where: { id: supplier.id }, data: { stateRegistrationVerificationStatus: status, stateRegistrationVerifiedAt: checkedAt, stateRegistrationVerificationSource: result.source } });
+    const result = await this.stateRegistration.lookup(
+      supplier.stateRegistration,
+      supplier.state ?? "",
+    );
+    const status =
+      result.registrationStatus === "ACTIVE"
+        ? "VERIFIED_ACTIVE"
+        : result.registrationStatus === "INACTIVE"
+          ? "VERIFIED_INACTIVE"
+          : "NOT_VERIFIED";
+    return this.db.supplier.update({
+      where: { id: supplier.id },
+      data: {
+        stateRegistrationVerificationStatus: status,
+        stateRegistrationVerifiedAt: checkedAt,
+        stateRegistrationVerificationSource: result.source,
+      },
+    });
   }
 
   @Patch("suppliers/:supplierId")
-  async updateSupplier(@Param("supplierId") supplierId: string, @Body() body: Record<string, unknown>, @Req() request: any) {
+  async updateSupplier(
+    @Param("supplierId") supplierId: string,
+    @Body() body: Record<string, unknown>,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const current = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    const current = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+    });
     if (!current) throw new NotFoundException("Fornecedor não encontrado.");
     if (body.taxId && body.taxId !== current.taxId) {
-      if (!validateTaxId(String(body.taxId))) throw new BadRequestException("CPF/CNPJ inválido.");
-      const duplicate = await this.db.supplier.findFirst({ where: { companyId: actor.companyId, taxId: String(body.taxId), NOT: { id: supplierId } } });
-      if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
+      if (!validateTaxId(String(body.taxId)))
+        throw new BadRequestException("CPF/CNPJ inválido.");
+      const duplicate = await this.db.supplier.findFirst({
+        where: {
+          companyId: actor.companyId,
+          taxId: String(body.taxId),
+          NOT: { id: supplierId },
+        },
+      });
+      if (duplicate)
+        throw new BadRequestException(
+          "CPF/CNPJ já cadastrado para esta empresa.",
+        );
     }
-    const allowed = ["supplierType", "name", "tradeName", "legalName", "taxId", "ruralRegistration", "stateRegistration", "city", "state", "country", "address", "postalCode", "district", "addressComplement", "ibgeCityCode", "contactName", "contactRole", "contactPhone", "whatsapp", "contactEmail", "active"];
-    const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+    const allowed = [
+      "supplierType",
+      "name",
+      "tradeName",
+      "legalName",
+      "taxId",
+      "ruralRegistration",
+      "stateRegistration",
+      "stateRegistrationType",
+      "city",
+      "state",
+      "country",
+      "address",
+      "postalCode",
+      "district",
+      "addressComplement",
+      "ibgeCityCode",
+      "contactName",
+      "contactRole",
+      "contactPhone",
+      "whatsapp",
+      "contactEmail",
+      "active",
+    ];
+    const data = Object.fromEntries(
+      Object.entries(body).filter(([key]) => allowed.includes(key)),
+    );
     if (typeof data.active === "string") data.active = data.active === "true";
-    if (data.postalCode !== undefined) data.postalCode = normalizePostalCode(data.postalCode);
-    if (data.stateRegistration && !validateStateRegistration(String(data.stateRegistration), String(data.state ?? current.state ?? ""))) throw new BadRequestException("Inscrição Estadual inválida para a UF.");
-    if (data.taxId !== undefined && data.taxId !== current.taxId) Object.assign(data, { taxIdVerificationStatus: "NOT_VERIFIED", taxIdVerifiedAt: null, taxIdVerificationSource: null });
-    if (data.stateRegistration !== undefined && data.stateRegistration !== current.stateRegistration) Object.assign(data, { stateRegistrationVerificationStatus: "NOT_VERIFIED", stateRegistrationVerifiedAt: null, stateRegistrationVerificationSource: null });
+    if (data.postalCode !== undefined)
+      data.postalCode = normalizePostalCode(data.postalCode);
+    if (
+      data.stateRegistrationType === "EXEMPT" ||
+      data.stateRegistrationType === "NON_TAXPAYER"
+    )
+      data.stateRegistration = null;
+    if (
+      data.stateRegistrationType !== undefined &&
+      data.stateRegistrationType !== current.stateRegistrationType
+    )
+      Object.assign(data, {
+        stateRegistrationVerificationStatus: "NOT_VERIFIED",
+        stateRegistrationVerifiedAt: null,
+        stateRegistrationVerificationSource: null,
+      });
+    if (
+      data.stateRegistration &&
+      !validateStateRegistration(
+        String(data.stateRegistration),
+        String(data.state ?? current.state ?? ""),
+      )
+    )
+      throw new BadRequestException("Inscrição Estadual inválida para a UF.");
+    if (data.taxId !== undefined && data.taxId !== current.taxId)
+      Object.assign(data, {
+        taxIdVerificationStatus: "NOT_VERIFIED",
+        taxIdVerifiedAt: null,
+        taxIdVerificationSource: null,
+      });
+    if (
+      data.stateRegistration !== undefined &&
+      data.stateRegistration !== current.stateRegistration
+    )
+      Object.assign(data, {
+        stateRegistrationVerificationStatus: "NOT_VERIFIED",
+        stateRegistrationVerifiedAt: null,
+        stateRegistrationVerificationSource: null,
+      });
     return this.db.supplier.update({ where: { id: supplierId }, data });
   }
 
   @Get("suppliers/:supplierId/origin-units")
-  async originUnits(@Param("supplierId") supplierId: string, @Req() request: any) {
+  async originUnits(
+    @Param("supplierId") supplierId: string,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId }, select: { id: true } });
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+      select: { id: true },
+    });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
-    return this.db.supplierOriginUnit.findMany({ where: { supplierId, ...(actor.companyId ? { supplier: { companyId: actor.companyId } } : {}) }, include: { coffeeRegion: true, productions: { where: { active: true }, include: { species: true, cultivar: true } } }, orderBy: { name: "asc" } });
+    return this.db.supplierOriginUnit.findMany({
+      where: {
+        supplierId,
+        ...(actor.companyId
+          ? { supplier: { companyId: actor.companyId } }
+          : {}),
+      },
+      include: {
+        coffeeRegion: true,
+        productions: {
+          where: { active: true },
+          include: { species: true, cultivar: true },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
   }
 
   @Post("suppliers/:supplierId/origin-units")
-  async createOriginUnit(@Param("supplierId") supplierId: string, @Body() body: Record<string, any>, @Req() request: any) {
+  async createOriginUnit(
+    @Param("supplierId") supplierId: string,
+    @Body() body: Record<string, any>,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const supplier = await this.db.supplier.findFirst({ where: { id: supplierId, companyId: actor.companyId } });
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+    });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
-    if (!body.name?.trim() || !body.state) throw new BadRequestException("Nome da unidade e Estado são obrigatórios.");
-    const region = body.coffeeRegionId ? await this.db.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, state: body.state, active: true } }) : null;
-    if (body.coffeeRegionId && !region) throw new BadRequestException("Região cafeeira inválida para o Estado selecionado.");
-    return this.db.supplierOriginUnit.create({ data: { supplierId, name: body.name.trim(), taxId: body.taxId || null, stateRegistration: body.stateRegistration || null, state: body.state, municipality: body.municipality || null, country: body.country || "Brasil", address: body.address || null, postalCode: normalizePostalCode(body.postalCode), district: body.district || null, addressComplement: body.addressComplement || null, ibgeCityCode: body.ibgeCityCode || null, latitude: body.latitude ?? null, longitude: body.longitude ?? null, altitudeMeters: body.altitudeMeters ?? null, coffeeAreaHa: body.coffeeAreaHa ?? null, coffeeRegionId: region?.id ?? null, active: body.active !== false } });
+    if (!body.name?.trim() || !body.state)
+      throw new BadRequestException(
+        "Nome da unidade e Estado são obrigatórios.",
+      );
+    const region = body.coffeeRegionId
+      ? await this.db.coffeeRegion.findFirst({
+          where: {
+            id: body.coffeeRegionId,
+            companyId: actor.companyId,
+            state: body.state,
+            active: true,
+          },
+        })
+      : null;
+    if (body.coffeeRegionId && !region)
+      throw new BadRequestException(
+        "Região cafeeira inválida para o Estado selecionado.",
+      );
+    return this.db.supplierOriginUnit.create({
+      data: {
+        supplierId,
+        name: body.name.trim(),
+        taxId: body.taxId || null,
+        stateRegistration: body.stateRegistration || null,
+        state: body.state,
+        municipality: body.municipality || null,
+        country: body.country || "Brasil",
+        address: body.address || null,
+        postalCode: normalizePostalCode(body.postalCode),
+        district: body.district || null,
+        addressComplement: body.addressComplement || null,
+        ibgeCityCode: body.ibgeCityCode || null,
+        latitude: body.latitude ?? null,
+        longitude: body.longitude ?? null,
+        altitudeMeters: body.altitudeMeters ?? null,
+        coffeeAreaHa: body.coffeeAreaHa ?? null,
+        coffeeRegionId: region?.id ?? null,
+        active: body.active !== false,
+      },
+    });
   }
 
   @Patch("suppliers/:supplierId/origin-units/:unitId")
-  async updateOriginUnit(@Param("supplierId") supplierId: string, @Param("unitId") unitId: string, @Body() body: Record<string, any>, @Req() request: any) {
+  async updateOriginUnit(
+    @Param("supplierId") supplierId: string,
+    @Param("unitId") unitId: string,
+    @Body() body: Record<string, any>,
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const unit = await this.db.supplierOriginUnit.findFirst({ where: { id: unitId, supplierId, supplier: { companyId: actor.companyId } } });
+    const unit = await this.db.supplierOriginUnit.findFirst({
+      where: {
+        id: unitId,
+        supplierId,
+        supplier: { companyId: actor.companyId },
+      },
+    });
     if (!unit) throw new NotFoundException("Unidade/fazenda não encontrada.");
     if (body.coffeeRegionId) {
-      const region = await this.db.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId: actor.companyId, state: body.state ?? unit.state, active: true } });
-      if (!region) throw new BadRequestException("Região cafeeira inválida para o Estado selecionado.");
+      const region = await this.db.coffeeRegion.findFirst({
+        where: {
+          id: body.coffeeRegionId,
+          companyId: actor.companyId,
+          state: body.state ?? unit.state,
+          active: true,
+        },
+      });
+      if (!region)
+        throw new BadRequestException(
+          "Região cafeeira inválida para o Estado selecionado.",
+        );
     }
-    const allowed = ["name", "taxId", "stateRegistration", "state", "municipality", "country", "address", "postalCode", "district", "addressComplement", "ibgeCityCode", "latitude", "longitude", "altitudeMeters", "coffeeAreaHa", "coffeeRegionId", "active"];
-    const data = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
-    if (data.postalCode !== undefined) data.postalCode = normalizePostalCode(data.postalCode);
+    const allowed = [
+      "name",
+      "taxId",
+      "stateRegistration",
+      "state",
+      "municipality",
+      "country",
+      "address",
+      "postalCode",
+      "district",
+      "addressComplement",
+      "ibgeCityCode",
+      "latitude",
+      "longitude",
+      "altitudeMeters",
+      "coffeeAreaHa",
+      "coffeeRegionId",
+      "active",
+    ];
+    const data = Object.fromEntries(
+      Object.entries(body).filter(([key]) => allowed.includes(key)),
+    );
+    if (data.postalCode !== undefined)
+      data.postalCode = normalizePostalCode(data.postalCode);
     return this.db.supplierOriginUnit.update({ where: { id: unitId }, data });
   }
 
   @Post("suppliers/:supplierId/origin-units/:unitId/production")
-  async createOriginProduction(@Param("supplierId") supplierId: string, @Param("unitId") unitId: string, @Body() body: { speciesId: string; cultivarIds?: string[]; harvest?: string; certifications?: unknown }, @Req() request: any) {
+  async createOriginProduction(
+    @Param("supplierId") supplierId: string,
+    @Param("unitId") unitId: string,
+    @Body()
+    body: {
+      speciesId: string;
+      cultivarIds?: string[];
+      harvest?: string;
+      certifications?: unknown;
+    },
+    @Req() request: any,
+  ) {
     const actor = await this.sessionActor(request);
-    const unit = await this.db.supplierOriginUnit.findFirst({ where: { id: unitId, supplierId, supplier: { companyId: actor.companyId } } });
+    const unit = await this.db.supplierOriginUnit.findFirst({
+      where: {
+        id: unitId,
+        supplierId,
+        supplier: { companyId: actor.companyId },
+      },
+    });
     if (!unit) throw new NotFoundException("Unidade/fazenda não encontrada.");
-    const species = await this.db.coffeeSpecies.findFirst({ where: { id: body.speciesId, companyId: actor.companyId, active: true } });
+    const species = await this.db.coffeeSpecies.findFirst({
+      where: { id: body.speciesId, companyId: actor.companyId, active: true },
+    });
     if (!species) throw new BadRequestException("Espécie inválida.");
-    const cultivarIds = body.cultivarIds?.length ? body.cultivarIds : [undefined];
+    const cultivarIds = body.cultivarIds?.length
+      ? body.cultivarIds
+      : [undefined];
     for (const cultivarId of cultivarIds) {
-      if (cultivarId && !(await this.db.coffeeVariety.findFirst({ where: { id: cultivarId, speciesId: species.id, active: true } }))) throw new BadRequestException("Cultivar inválida para a espécie.");
+      if (
+        cultivarId &&
+        !(await this.db.coffeeVariety.findFirst({
+          where: { id: cultivarId, speciesId: species.id, active: true },
+        }))
+      )
+        throw new BadRequestException("Cultivar inválida para a espécie.");
     }
-    return this.db.$transaction(cultivarIds.map((cultivarId) => this.db.supplierOriginProduction.create({ data: { originUnitId: unitId, speciesId: species.id, cultivarId, harvest: body.harvest || null, certifications: body.certifications as any ?? undefined } })));
+    return this.db.$transaction(
+      cultivarIds.map((cultivarId) =>
+        this.db.supplierOriginProduction.create({
+          data: {
+            originUnitId: unitId,
+            speciesId: species.id,
+            cultivarId,
+            harvest: body.harvest || null,
+            certifications: (body.certifications as any) ?? undefined,
+          },
+        }),
+      ),
+    );
   }
 
   @Post()
@@ -675,11 +1252,21 @@ export class GreenCoffeePurchasesController {
         });
         if (!supplier)
           throw new BadRequestException("Fornecedor inválido para a empresa.");
-        const references = await this.resolveReferences(tx, body, body.companyId);
+        const references = await this.resolveReferences(
+          tx,
+          body,
+          body.companyId,
+        );
         if (action === "SUBMIT") {
-          const missingFields = missingPurchaseApprovalFields({ ...body, supplier });
+          const missingFields = missingPurchaseApprovalFields({
+            ...body,
+            supplier,
+          });
           if (missingFields.length)
-            throw new BadRequestException({ message: "A compra ainda não pode ser enviada para aprovação.", missingFields });
+            throw new BadRequestException({
+              message: "A compra ainda não pode ser enviada para aprovação.",
+              missingFields,
+            });
         }
         const sequence =
           (await tx.greenCoffeePurchase.count({
@@ -714,8 +1301,10 @@ export class GreenCoffeePurchasesController {
             approvedByUserId: approved ? body.buyerId : undefined,
             approvedByName: approved ? body.buyerName : undefined,
             approvedAt: approved ? new Date() : undefined,
-            submittedForApprovalAt: action === "SUBMIT" ? new Date() : undefined,
-            submittedForApprovalByUserId: action === "SUBMIT" ? body.buyerId : undefined,
+            submittedForApprovalAt:
+              action === "SUBMIT" ? new Date() : undefined,
+            submittedForApprovalByUserId:
+              action === "SUBMIT" ? body.buyerId : undefined,
             department: body.department,
             approverName: body.approverName,
             species: body.species,
@@ -832,10 +1421,17 @@ export class GreenCoffeePurchasesController {
         throw new BadRequestException("Somente rascunhos podem ser enviados.");
       const missingFields = missingPurchaseApprovalFields(purchase);
       if (missingFields.length)
-        throw new BadRequestException({ message: "A compra ainda não pode ser enviada para aprovação.", missingFields });
+        throw new BadRequestException({
+          message: "A compra ainda não pode ser enviada para aprovação.",
+          missingFields,
+        });
       const result = await tx.greenCoffeePurchase.update({
         where: { id },
-        data: { approvalStatus: PurchaseApprovalStatus.PENDING_APPROVAL, submittedForApprovalAt: new Date(), submittedForApprovalByUserId: actor.userId },
+        data: {
+          approvalStatus: PurchaseApprovalStatus.PENDING_APPROVAL,
+          submittedForApprovalAt: new Date(),
+          submittedForApprovalByUserId: actor.userId,
+        },
       });
       await tx.greenCoffeeAuditEvent.create({
         data: {
@@ -863,7 +1459,10 @@ export class GreenCoffeePurchasesController {
         await this.requireApprover(tx, purchase.companyId, actor);
         const missingFields = missingPurchaseApprovalFields(purchase);
         if (missingFields.length)
-          throw new BadRequestException({ message: "Esta compra ainda não pode ser aprovada.", missingFields });
+          throw new BadRequestException({
+            message: "Esta compra ainda não pode ser aprovada.",
+            missingFields,
+          });
         if (purchase.approvalStatus === PurchaseApprovalStatus.APPROVED)
           return purchase;
         if (purchase.approvalStatus === PurchaseApprovalStatus.REJECTED)
@@ -907,7 +1506,12 @@ export class GreenCoffeePurchasesController {
   async sendAcceptance(
     @Param("id") id: string,
     @Req() request: any,
-    @Body() body: Actor & { channel?: string; expiresInDays?: number; supplierContactId?: string },
+    @Body()
+    body: Actor & {
+      channel?: string;
+      expiresInDays?: number;
+      supplierContactId?: string;
+    },
   ) {
     const sessionActor = await this.sessionActor(request);
     return this.db.$transaction(async (tx) => {
@@ -935,9 +1539,14 @@ export class GreenCoffeePurchasesController {
           "Esta compra já foi aceita. Uma alteração material exige nova versão da ficha.",
         );
       const actor = await tx.user.findFirst({
-        where: { id: sessionActor.userId, companyId: purchase.companyId, active: true },
+        where: {
+          id: sessionActor.userId,
+          companyId: purchase.companyId,
+          active: true,
+        },
       });
-      if (!actor) throw new BadRequestException("Usuário responsável inválido.");
+      if (!actor)
+        throw new BadRequestException("Usuário responsável inválido.");
       const previous = await tx.greenCoffeePurchaseAcceptance.findMany({
         where: { purchaseId: id, status: { in: ["SENT", "VIEWED"] } },
       });
@@ -948,16 +1557,32 @@ export class GreenCoffeePurchasesController {
         });
       const token = randomBytes(32).toString("base64url");
       const tokenExpiresAt = new Date(
-        Date.now() + Math.max(1, Math.min(90, body.expiresInDays ?? 14)) * 86400000,
+        Date.now() +
+          Math.max(1, Math.min(90, body.expiresInDays ?? 14)) * 86400000,
       );
       const snapshot = this.acceptanceSnapshot(purchase);
       const documentHash = createHash("sha256")
         .update(JSON.stringify(snapshot))
         .digest("hex");
-      const selectedContact = body.supplierContactId ? purchase.supplier.contacts.find((item) => item.id === body.supplierContactId) : purchase.supplier.contacts[0];
-      if (body.supplierContactId && !selectedContact) throw new BadRequestException("Contato não autorizado para confirmação.");
-      const contact = selectedContact?.name ?? purchase.supplier.contactName ?? purchase.supplier.name;
-      const destination = selectedContact?.whatsapp ?? selectedContact?.email ?? purchase.supplier.whatsapp ?? purchase.supplier.contactPhone ?? purchase.supplier.contactEmail;
+      const selectedContact = body.supplierContactId
+        ? purchase.supplier.contacts.find(
+            (item) => item.id === body.supplierContactId,
+          )
+        : purchase.supplier.contacts[0];
+      if (body.supplierContactId && !selectedContact)
+        throw new BadRequestException(
+          "Contato não autorizado para confirmação.",
+        );
+      const contact =
+        selectedContact?.name ??
+        purchase.supplier.contactName ??
+        purchase.supplier.name;
+      const destination =
+        selectedContact?.whatsapp ??
+        selectedContact?.email ??
+        purchase.supplier.whatsapp ??
+        purchase.supplier.contactPhone ??
+        purchase.supplier.contactEmail;
       const acceptance = await tx.greenCoffeePurchaseAcceptance.create({
         data: {
           purchaseId: id,
@@ -968,8 +1593,12 @@ export class GreenCoffeePurchasesController {
           destinationMasked: maskDestination(destination),
           contactName: contact,
           contactRole: selectedContact?.role ?? purchase.supplier.contactRole,
-          contactPhoneSnapshot: selectedContact?.whatsapp ?? purchase.supplier.whatsapp ?? purchase.supplier.contactPhone,
-          contactEmailSnapshot: selectedContact?.email ?? purchase.supplier.contactEmail,
+          contactPhoneSnapshot:
+            selectedContact?.whatsapp ??
+            purchase.supplier.whatsapp ??
+            purchase.supplier.contactPhone,
+          contactEmailSnapshot:
+            selectedContact?.email ?? purchase.supplier.contactEmail,
           tokenHash: hashToken(token),
           tokenExpiresAt,
           sentAt: new Date(),
@@ -994,7 +1623,10 @@ export class GreenCoffeePurchasesController {
           action: "PURCHASE_ACCEPTANCE_SENT",
           actorId: actor.id,
           actorName: actor.name,
-          metadata: { acceptanceId: acceptance.id, channel: body.channel ?? "WHATSAPP" },
+          metadata: {
+            acceptanceId: acceptance.id,
+            channel: body.channel ?? "WHATSAPP",
+          },
         },
       });
       const base =
@@ -1020,7 +1652,9 @@ export class GreenCoffeePurchasesController {
   async revokeAcceptance(@Param("id") id: string, @Req() request: any) {
     const actor = await this.sessionActor(request);
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+      });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
       await this.requireApprover(tx, purchase.companyId, actor);
       const active = await tx.greenCoffeePurchaseAcceptance.findFirst({
@@ -1119,13 +1753,19 @@ export class GreenCoffeePurchasesController {
     const returnReason = body.returnReason?.trim() ?? "";
     const correctionRequest = body.correctionRequest?.trim() ?? "";
     if (!returnReason || !correctionRequest)
-      throw new BadRequestException("Motivo da devolução e correção solicitada são obrigatórios.");
+      throw new BadRequestException(
+        "Motivo da devolução e correção solicitada são obrigatórios.",
+      );
     return this.db.$transaction(async (tx) => {
-      const purchase = await tx.greenCoffeePurchase.findFirst({ where: { id, companyId: actor.companyId } });
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+      });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
       await this.requireApprover(tx, purchase.companyId, actor);
       if (purchase.approvalStatus !== PurchaseApprovalStatus.PENDING_APPROVAL)
-        throw new BadRequestException("Somente compras pendentes de aprovação podem ser devolvidas para ajuste.");
+        throw new BadRequestException(
+          "Somente compras pendentes de aprovação podem ser devolvidas para ajuste.",
+        );
       const result = await tx.greenCoffeePurchase.update({
         where: { id },
         data: {
@@ -1166,9 +1806,7 @@ export class GreenCoffeePurchasesController {
     @Req() requestContext: any,
   ) {
     if (!body.justification)
-      throw new BadRequestException(
-        "Decisão exige justificativa.",
-      );
+      throw new BadRequestException("Decisão exige justificativa.");
     const session = await this.sessionActor(requestContext);
     return this.db.$transaction(async (tx) => {
       const request = await tx.greenCoffeeApprovalRequest.findUnique({
@@ -1176,11 +1814,16 @@ export class GreenCoffeePurchasesController {
         include: { receipt: true },
       });
       if (!request) throw new NotFoundException("Aprovação não encontrada.");
-      if (request.companyId !== session.companyId) throw new ForbiddenException("Acesso negado para esta empresa.");
+      if (request.companyId !== session.companyId)
+        throw new ForbiddenException("Acesso negado para esta empresa.");
       if (request.status !== GreenCoffeeApprovalStatus.PENDING)
         throw new BadRequestException("Solicitação já decidida.");
       const actor = await tx.user.findFirst({
-        where: { id: session.userId, companyId: session.companyId, active: true },
+        where: {
+          id: session.userId,
+          companyId: session.companyId,
+          active: true,
+        },
       });
       if (!actor || !canApprove(actor.role))
         throw new BadRequestException(
@@ -1230,8 +1873,14 @@ export class GreenCoffeePurchasesController {
       throw new BadRequestException("Preencha os campos obrigatórios.");
     if (!body.installments?.length)
       throw new BadRequestException("Informe ao menos uma parcela.");
-    if (body.maxMoisturePercent !== undefined && body.maxMoisturePercent !== null && (body.maxMoisturePercent < 10 || body.maxMoisturePercent > 12.5))
-      throw new BadRequestException("A umidade máxima deve estar entre 10,0% e 12,5%.");
+    if (
+      body.maxMoisturePercent !== undefined &&
+      body.maxMoisturePercent !== null &&
+      (body.maxMoisturePercent < 10 || body.maxMoisturePercent > 12.5)
+    )
+      throw new BadRequestException(
+        "A umidade máxima deve estar entre 10,0% e 12,5%.",
+      );
     const amount = money(
       body.installments.reduce((sum, item) => sum + item.amount, 0),
     );
@@ -1244,33 +1893,93 @@ export class GreenCoffeePurchasesController {
       );
   }
 
-  private async resolveReferences(tx: Prisma.TransactionClient, body: PurchaseBody, companyId: string) {
+  private async resolveReferences(
+    tx: Prisma.TransactionClient,
+    body: PurchaseBody,
+    companyId: string,
+  ) {
     if (body.originUnitId) {
       const unit = await tx.supplierOriginUnit.findFirst({
-        where: { id: body.originUnitId, supplierId: body.supplierId, state: body.state, active: true, supplier: { companyId, active: true } },
+        where: {
+          id: body.originUnitId,
+          supplierId: body.supplierId,
+          state: body.state,
+          active: true,
+          supplier: { companyId, active: true },
+        },
         include: { coffeeRegion: true },
       });
-      if (!unit) throw new BadRequestException("Unidade/fazenda inválida para o fornecedor e estado selecionados.");
-      if (unit.coffeeRegionId && body.coffeeRegionId && unit.coffeeRegionId !== body.coffeeRegionId)
-        throw new BadRequestException("A região deve corresponder à unidade/fazenda selecionada.");
+      if (!unit)
+        throw new BadRequestException(
+          "Unidade/fazenda inválida para o fornecedor e estado selecionados.",
+        );
+      if (
+        unit.coffeeRegionId &&
+        body.coffeeRegionId &&
+        unit.coffeeRegionId !== body.coffeeRegionId
+      )
+        throw new BadRequestException(
+          "A região deve corresponder à unidade/fazenda selecionada.",
+        );
     }
     const species = body.speciesId
-      ? await tx.coffeeSpecies.findFirst({ where: { id: body.speciesId, companyId, active: true } })
-      : await tx.coffeeSpecies.findFirst({ where: { companyId, code: body.species, active: true } });
-    if (!species) throw new BadRequestException("Espécie inválida para a empresa.");
+      ? await tx.coffeeSpecies.findFirst({
+          where: { id: body.speciesId, companyId, active: true },
+        })
+      : await tx.coffeeSpecies.findFirst({
+          where: { companyId, code: body.species, active: true },
+        });
+    if (!species)
+      throw new BadRequestException("Espécie inválida para a empresa.");
     const cultivar = body.cultivarId
-      ? await tx.coffeeVariety.findFirst({ where: { id: body.cultivarId, speciesId: species.id, active: true } })
-      : body.variety ? await tx.coffeeVariety.findFirst({ where: { speciesId: species.id, code: body.variety, active: true } }) : null;
-    if (body.cultivarId && !cultivar) throw new BadRequestException("Cultivar inválida para a espécie selecionada.");
+      ? await tx.coffeeVariety.findFirst({
+          where: { id: body.cultivarId, speciesId: species.id, active: true },
+        })
+      : body.variety
+        ? await tx.coffeeVariety.findFirst({
+            where: { speciesId: species.id, code: body.variety, active: true },
+          })
+        : null;
+    if (body.cultivarId && !cultivar)
+      throw new BadRequestException(
+        "Cultivar inválida para a espécie selecionada.",
+      );
     const region = body.coffeeRegionId
-      ? await tx.coffeeRegion.findFirst({ where: { id: body.coffeeRegionId, companyId, active: true } })
-      : body.originRegion ? await tx.coffeeRegion.findFirst({ where: { companyId, name: body.originRegion, ...(body.state ? { state: body.state } : {}), active: true } }) : null;
-    if (body.coffeeRegionId && !region) throw new BadRequestException("Região cafeeira inválida para a empresa.");
+      ? await tx.coffeeRegion.findFirst({
+          where: { id: body.coffeeRegionId, companyId, active: true },
+        })
+      : body.originRegion
+        ? await tx.coffeeRegion.findFirst({
+            where: {
+              companyId,
+              name: body.originRegion,
+              ...(body.state ? { state: body.state } : {}),
+              active: true,
+            },
+          })
+        : null;
+    if (body.coffeeRegionId && !region)
+      throw new BadRequestException("Região cafeeira inválida para a empresa.");
     const screen = body.screenClassificationId
-      ? await tx.screenClassification.findFirst({ where: { id: body.screenClassificationId, companyId, active: true } })
-      : body.contractedScreen ? await tx.screenClassification.findFirst({ where: { companyId, name: body.contractedScreen, active: true } }) : null;
-    if (body.screenClassificationId && !screen) throw new BadRequestException("Classificação de peneira inválida para a empresa.");
-    return { speciesId: species.id, cultivarId: cultivar?.id, coffeeRegionId: region?.id, screenClassificationId: screen?.id, originUnitId: body.originUnitId };
+      ? await tx.screenClassification.findFirst({
+          where: { id: body.screenClassificationId, companyId, active: true },
+        })
+      : body.contractedScreen
+        ? await tx.screenClassification.findFirst({
+            where: { companyId, name: body.contractedScreen, active: true },
+          })
+        : null;
+    if (body.screenClassificationId && !screen)
+      throw new BadRequestException(
+        "Classificação de peneira inválida para a empresa.",
+      );
+    return {
+      speciesId: species.id,
+      cultivarId: cultivar?.id,
+      coffeeRegionId: region?.id,
+      screenClassificationId: screen?.id,
+      originUnitId: body.originUnitId,
+    };
   }
 
   private async commitInstallments(
@@ -1336,7 +2045,12 @@ export class GreenCoffeePurchasesController {
   private async sessionActor(request: any): Promise<Actor> {
     const user = await this.auth.resolve(this.auth.readToken(request));
     if (!user) throw new ForbiddenException("Sessão autenticada obrigatória.");
-    return { userId: user.id, userName: user.name, userRole: user.role, companyId: user.companyId };
+    return {
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      companyId: user.companyId,
+    };
   }
 
   private view(row: any) {

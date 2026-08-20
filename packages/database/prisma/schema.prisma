@@ -432,6 +432,7 @@ model Supplier {
   supplierType         GreenCoffeeSupplierType         @default(COMPANY)
   legalName            String?
   stateRegistration    String?
+  stateRegistrationType String @default("NUMBER")
   ruralRegistration    String?
   farmName             String?
   country              String?                         @default("Brasil")

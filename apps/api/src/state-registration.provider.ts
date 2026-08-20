@@ -12,8 +12,16 @@ export interface StateRegistrationProvider {
 
 @Injectable()
 export class UnconfiguredStateRegistrationProvider implements StateRegistrationProvider {
-  async lookup(document: string, state: string): Promise<StateRegistrationResult> {
-    return { document, state, source: "not-configured", checkedAt: new Date().toISOString() };
+  async lookup(
+    document: string,
+    state: string,
+  ): Promise<StateRegistrationResult> {
+    return {
+      document,
+      state,
+      source: "not-configured",
+      checkedAt: new Date().toISOString(),
+    };
   }
 }
 import { Injectable } from "@nestjs/common";

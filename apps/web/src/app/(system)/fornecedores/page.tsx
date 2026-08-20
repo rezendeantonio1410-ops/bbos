@@ -5,13 +5,61 @@ import Link from "next/link";
 import { ArrowLeft, Plus, Search, X } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { lookupBrazilianCep } from "@/lib/brazil-address";
 
 const API = `${getApiBaseUrl()}/green-coffee-purchases`;
 const input =
   "w-full rounded-xl border bg-stone-50 px-3 py-2.5 text-sm outline-none focus:border-forest-700";
-const states = ["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"];
+const states = [
+  "AC",
+  "AL",
+  "AP",
+  "AM",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MT",
+  "MS",
+  "MG",
+  "PA",
+  "PB",
+  "PR",
+  "PE",
+  "PI",
+  "RJ",
+  "RN",
+  "RS",
+  "RO",
+  "RR",
+  "SC",
+  "SP",
+  "SE",
+  "TO",
+];
 const stateNames: Record<string, string> = {
   PR: "Paraná",
+  AC: "Acre",
+  AL: "Alagoas",
+  AP: "Amapá",
+  AM: "Amazonas",
+  CE: "Ceará",
+  DF: "Distrito Federal",
+  MA: "Maranhão",
+  MT: "Mato Grosso",
+  MS: "Mato Grosso do Sul",
+  PA: "Pará",
+  PB: "Paraíba",
+  PE: "Pernambuco",
+  PI: "Piauí",
+  RN: "Rio Grande do Norte",
+  RS: "Rio Grande do Sul",
+  RR: "Roraima",
+  SC: "Santa Catarina",
+  SE: "Sergipe",
+  TO: "Tocantins",
   SP: "São Paulo",
   MG: "Minas Gerais",
   ES: "Espírito Santo",
@@ -72,6 +120,7 @@ type Supplier = {
   taxIdVerificationStatus?: VerificationStatus;
   taxIdVerifiedAt?: string | null;
   stateRegistration?: string | null;
+  stateRegistrationType?: "NUMBER" | "EXEMPT" | "NON_TAXPAYER";
   stateRegistrationVerificationStatus?: VerificationStatus;
   stateRegistrationVerifiedAt?: string | null;
   active: boolean;
@@ -89,6 +138,58 @@ const verificationText: Record<VerificationStatus, string> = {
   INVALID: "❌ Inválido",
   NOT_VERIFIED: "⚠ Não verificado",
   SERVICE_UNAVAILABLE: "⚠ Serviço indisponível",
+};
+const digitsOnly = (value: string) => value.replace(/\D/g, "");
+const validCpf = (value: string) => {
+  const digits = digitsOnly(value);
+  if (digits.length !== 11 || /^(\d)\1+$/.test(digits)) return false;
+  const check = (length: number) => {
+    const sum = Array.from(
+      { length },
+      (_, index) => Number(digits[index]) * (length + 1 - index),
+    ).reduce((total, item) => total + item, 0);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return check(9) === Number(digits[9]) && check(10) === Number(digits[10]);
+};
+const validCnpj = (value: string) => {
+  const digits = digitsOnly(value);
+  if (digits.length !== 14 || /^(\d)\1+$/.test(digits)) return false;
+  const check = (length: number) => {
+    const weights =
+      length === 12
+        ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const sum = weights.reduce(
+      (total, weight, index) => total + Number(digits[index]) * weight,
+      0,
+    );
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+  return check(12) === Number(digits[12]) && check(13) === Number(digits[13]);
+};
+const formatTaxId = (value: string) => {
+  const digits = digitsOnly(value).slice(0, 14);
+  if (digits.length <= 11)
+    return digits
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  return digits
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+};
+const taxIdMessage = (value: string) => {
+  const digits = digitsOnly(value);
+  if (!digits) return "";
+  if (digits.length < 11) return "CPF/CNPJ incompleto";
+  if (digits.length === 11) return validCpf(digits) ? "" : "CPF inválido";
+  if (digits.length < 14) return "CNPJ incompleto";
+  return validCnpj(digits) ? "" : "CNPJ inválido";
 };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -111,6 +212,7 @@ export default function SuppliersPage() {
   const [unitMunicipalities, setUnitMunicipalities] = useState<Municipality[]>(
     [],
   );
+  const [municipalityLoading, setMunicipalityLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("true");
@@ -122,6 +224,19 @@ export default function SuppliersPage() {
   const [supplierState, setSupplierState] = useState("");
   const [supplierCity, setSupplierCity] = useState("");
   const [supplierIbgeCityCode, setSupplierIbgeCityCode] = useState("");
+  const [supplierTaxId, setSupplierTaxId] = useState("");
+  const [taxIdError, setTaxIdError] = useState("");
+  const [stateRegistrationType, setStateRegistrationType] = useState<
+    "NUMBER" | "EXEMPT" | "NON_TAXPAYER"
+  >("NUMBER");
+  const [supplierCep, setSupplierCep] = useState("");
+  const [supplierDistrict, setSupplierDistrict] = useState("");
+  const [supplierAddress, setSupplierAddress] = useState("");
+  const [supplierComplement, setSupplierComplement] = useState("");
+  const [supplierCountry, setSupplierCountry] = useState("Brasil");
+  const [cepStatus, setCepStatus] = useState<
+    "idle" | "loading" | "found" | "not-found" | "error"
+  >("idle");
   const [unitCity, setUnitCity] = useState("");
   const [unitIbgeCityCode, setUnitIbgeCityCode] = useState("");
   const [productionSpeciesId, setProductionSpeciesId] = useState("");
@@ -152,11 +267,22 @@ export default function SuppliersPage() {
       setMunicipalities([]);
       return;
     }
+    setMunicipalityLoading(true);
     void request<Municipality[]>(
       `${API}/references/municipalities?state=${supplierState}`,
     )
-      .then(setMunicipalities)
-      .catch(() => setMunicipalities([]));
+      .then((items) =>
+        setMunicipalities((current) =>
+          current.find(
+            (item) =>
+              item.name === supplierCity && item.state === supplierState,
+          )
+            ? [...items, current.find((item) => item.name === supplierCity)!]
+            : items,
+        ),
+      )
+      .catch(() => setMunicipalities([]))
+      .finally(() => setMunicipalityLoading(false));
   }, [supplierState]);
   useEffect(() => {
     if (!unitState) {
@@ -174,6 +300,15 @@ export default function SuppliersPage() {
       setSupplierState(editingSupplier.state ?? "");
       setSupplierCity(editingSupplier.city ?? "");
       setSupplierIbgeCityCode(editingSupplier.ibgeCityCode ?? "");
+      setSupplierTaxId(editingSupplier.taxId ?? "");
+      setStateRegistrationType(
+        editingSupplier.stateRegistrationType ?? "NUMBER",
+      );
+      setSupplierCep(editingSupplier.postalCode ?? "");
+      setSupplierDistrict(editingSupplier.district ?? "");
+      setSupplierAddress(editingSupplier.address ?? "");
+      setSupplierComplement(editingSupplier.addressComplement ?? "");
+      setSupplierCountry(editingSupplier.country ?? "Brasil");
     }
   }, [editingSupplier, supplierOpen]);
   useEffect(() => {
@@ -198,6 +333,16 @@ export default function SuppliersPage() {
     const form = new FormData(event.currentTarget);
     const values: Record<string, unknown> = Object.fromEntries(form);
     values.active = form.get("active") === "true";
+    values.taxId = supplierTaxId.replace(/\D/g, "") || undefined;
+    values.stateRegistration =
+      stateRegistrationType === "NUMBER"
+        ? form.get("stateRegistration") || undefined
+        : undefined;
+    values.stateRegistrationType = stateRegistrationType;
+    if (taxIdError) {
+      setMessage(taxIdError);
+      return;
+    }
     try {
       await request(
         `${API}${editingSupplier ? `/suppliers/${editingSupplier.id}` : "/suppliers"}`,
@@ -216,6 +361,39 @@ export default function SuppliersPage() {
       setMessage(
         error instanceof Error ? error.message : "Falha ao salvar fornecedor.",
       );
+    }
+  };
+  const handleCepLookup = async () => {
+    if (supplierCountry !== "Brasil") return;
+    const digits = supplierCep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setCepStatus("loading");
+    try {
+      const result = await lookupBrazilianCep(supplierCep);
+      if (!result) {
+        setCepStatus("not-found");
+        return;
+      }
+      setCepStatus("found");
+      setSupplierState(result.state);
+      setSupplierCity(result.city);
+      setSupplierIbgeCityCode(result.ibgeCityCode ?? "");
+      setSupplierDistrict(result.district);
+      setSupplierAddress(result.address);
+      setMunicipalities((current) =>
+        current.some((item) => item.name === result.city)
+          ? current
+          : [
+              ...current,
+              {
+                ibgeCode: result.ibgeCityCode ?? `cep-${result.city}`,
+                name: result.city,
+                state: result.state,
+              },
+            ],
+      );
+    } catch {
+      setCepStatus("error");
     }
   };
   const saveUnit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -296,6 +474,15 @@ export default function SuppliersPage() {
             setSupplierState("");
             setSupplierCity("");
             setSupplierIbgeCityCode("");
+            setSupplierTaxId("");
+            setTaxIdError("");
+            setStateRegistrationType("NUMBER");
+            setSupplierCep("");
+            setSupplierDistrict("");
+            setSupplierAddress("");
+            setSupplierComplement("");
+            setSupplierCountry("Brasil");
+            setCepStatus("idle");
             setSupplierOpen(true);
           }}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white"
@@ -356,6 +543,14 @@ export default function SuppliersPage() {
                   {supplier.legalName || supplier.name} ·{" "}
                   {supplier.taxId || "Documento não informado"}
                 </p>
+                {supplier.taxIdVerificationStatus && (
+                  <p className="mt-1 text-xs text-stone-500">
+                    {verificationText[supplier.taxIdVerificationStatus]}
+                    {supplier.taxIdVerifiedAt
+                      ? ` · Consultado em ${new Date(supplier.taxIdVerifiedAt).toLocaleString("pt-BR")}`
+                      : ""}
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-stone-500">
                   {supplier.city || "—"}/{supplier.state || "—"}
                 </p>
@@ -365,6 +560,8 @@ export default function SuppliersPage() {
                   onClick={() => {
                     setEditingSupplier(supplier);
                     setSupplierState(supplier.state ?? "");
+                    setSupplierTaxId(supplier.taxId ?? "");
+                    setSupplierCountry(supplier.country ?? "Brasil");
                     setSupplierOpen(true);
                   }}
                   className="min-h-10 rounded-xl border px-3 text-xs font-bold"
@@ -426,7 +623,7 @@ export default function SuppliersPage() {
           <form
             key={editingSupplier?.id ?? "new"}
             onSubmit={(event) => void saveSupplier(event)}
-            className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
+            className="flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white p-6 shadow-2xl"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">
@@ -442,184 +639,296 @@ export default function SuppliersPage() {
                 <X />
               </button>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <label className="text-sm font-semibold">
-                Tipo
-                <select
-                  name="supplierType"
-                  className={input}
-                  defaultValue={editingSupplier?.supplierType ?? "RURAL_PERSON"}
-                >
-                  {types.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-sm font-semibold">
-                Nome/Razão social
-                <input
-                  name="name"
-                  required
-                  defaultValue={editingSupplier?.name ?? ""}
-                  className={input}
-                />
-              </label>
-              <label className="text-sm font-semibold">
-                Nome fantasia
-                <input
-                  name="tradeName"
-                  defaultValue={editingSupplier?.tradeName ?? ""}
-                  className={input}
-                />
-              </label>
-              <label className="text-sm font-semibold">
-                CPF/CNPJ
-                <input
-                  name="taxId"
-                  defaultValue={editingSupplier?.taxId ?? ""}
-                  className={input}
-                />
-                {editingSupplier && (
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => void verify(editingSupplier.id, "tax-id")} className="text-xs font-bold text-forest-700">Consultar cadastro</button>
-                    {editingSupplier.taxIdVerificationStatus && <span className="text-xs font-medium text-stone-500">{verificationText[editingSupplier.taxIdVerificationStatus]}{editingSupplier.taxIdVerifiedAt ? ` · ${new Date(editingSupplier.taxIdVerifiedAt).toLocaleString("pt-BR")}` : ""}</span>}
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-semibold">
+                  Tipo
+                  <select
+                    name="supplierType"
+                    className={input}
+                    defaultValue={
+                      editingSupplier?.supplierType ?? "RURAL_PERSON"
+                    }
+                  >
+                    {types.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">
+                  Nome/Razão social
+                  <input
+                    name="name"
+                    required
+                    defaultValue={editingSupplier?.name ?? ""}
+                    className={input}
+                  />
+                </label>
+                <label className="text-sm font-semibold">
+                  Nome fantasia
+                  <input
+                    name="tradeName"
+                    defaultValue={editingSupplier?.tradeName ?? ""}
+                    className={input}
+                  />
+                </label>
+                <label className="text-sm font-semibold">
+                  CPF/CNPJ
+                  <input
+                    name="taxId"
+                    value={formatTaxId(supplierTaxId)}
+                    onChange={(event) => {
+                      const value = formatTaxId(event.target.value);
+                      setSupplierTaxId(value);
+                      setTaxIdError(taxIdMessage(value));
+                    }}
+                    className={input}
+                  />
+                  {taxIdError && (
+                    <span className="mt-1 block text-xs font-medium text-red-700">
+                      {taxIdError}
+                    </span>
+                  )}
+                  {editingSupplier && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void verify(editingSupplier.id, "tax-id")
+                        }
+                        className="text-xs font-bold text-forest-700"
+                      >
+                        Consultar cadastro
+                      </button>
+                      {editingSupplier.taxIdVerificationStatus && (
+                        <span className="text-xs font-medium text-stone-500">
+                          {
+                            verificationText[
+                              editingSupplier.taxIdVerificationStatus
+                            ]
+                          }
+                          {editingSupplier.taxIdVerifiedAt
+                            ? ` · ${new Date(editingSupplier.taxIdVerifiedAt).toLocaleString("pt-BR")}`
+                            : ""}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </label>
+                <label className="text-sm font-semibold">
+                  Inscrição Estadual
+                  <div className="flex gap-2">
+                    <input
+                      name="stateRegistration"
+                      defaultValue={editingSupplier?.stateRegistration ?? ""}
+                      className={input}
+                      disabled={stateRegistrationType !== "NUMBER"}
+                    />
+                    <select
+                      name="stateRegistrationType"
+                      className={input + " max-w-44"}
+                      value={stateRegistrationType}
+                      onChange={(event) =>
+                        setStateRegistrationType(
+                          event.target.value as
+                            "NUMBER" | "EXEMPT" | "NON_TAXPAYER",
+                        )
+                      }
+                    >
+                      <option value="NUMBER">Número</option>
+                      <option value="EXEMPT">Isento</option>
+                      <option value="NON_TAXPAYER">Não contribuinte</option>
+                    </select>
                   </div>
-                )}
-              </label>
-              <label className="text-sm font-semibold">
-                Inscrição Estadual
-                <input name="stateRegistration" defaultValue={editingSupplier?.stateRegistration ?? ""} className={input} />
-                {editingSupplier && (
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => void verify(editingSupplier.id, "state-registration")} className="text-xs font-bold text-forest-700">Consultar cadastro</button>
-                    {editingSupplier.stateRegistrationVerificationStatus && <span className="text-xs font-medium text-stone-500">{verificationText[editingSupplier.stateRegistrationVerificationStatus]}{editingSupplier.stateRegistrationVerifiedAt ? ` · ${new Date(editingSupplier.stateRegistrationVerifiedAt).toLocaleString("pt-BR")}` : ""}</span>}
-                  </div>
-                )}
-              </label>
-              <label className="text-sm font-semibold">
-                Telefone
-                <input name="contactPhone" className={input} />
-              </label>
-              <label className="text-sm font-semibold">
-                WhatsApp
-                <input name="whatsapp" className={input} />
-              </label>
-              <label className="text-sm font-semibold">
-                E-mail
-                <input name="contactEmail" type="email" className={input} />
-              </label>
-              <label className="text-sm font-semibold">
-                Contato principal
-                <input name="contactName" className={input} />
-              </label>
-              <label className="text-sm font-semibold">
-                País
-                <select
-                  name="country"
-                  className={input}
-                  defaultValue={editingSupplier?.country ?? "Brasil"}
-                >
-                  <option value="Brasil">Brasil</option>
-                </select>
-              </label>
-              <label className="text-sm font-semibold">
-                Estado
-                <select
-                  name="state"
-                  className={input}
-                  value={supplierState}
-                  onChange={(event) => {
-                    setSupplierState(event.target.value);
-                    setSupplierCity("");
-                    setSupplierIbgeCityCode("");
-                  }}
-                >
-                  <option value="">Selecione o estado</option>
-                  {states.map((state) => (
-                    <option key={state} value={state}>
-                      {state} — {stateNames[state]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-sm font-semibold">
-                Município
-                <select
-                  name="city"
-                  className={input}
-                  value={supplierCity}
-                  onChange={(event) => {
-                    const city = municipalities.find(
-                      (item) => item.name === event.target.value,
-                    );
-                    setSupplierCity(event.target.value);
-                    setSupplierIbgeCityCode(city?.ibgeCode ?? "");
-                  }}
-                  disabled={!supplierState}
-                >
-                  <option value="">Selecione o município</option>
-                  {municipalities.map((city) => (
-                    <option key={city.ibgeCode} value={city.name}>
-                      {city.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <input
-                type="hidden"
-                name="ibgeCityCode"
-                value={supplierIbgeCityCode}
-              />
-              <label className="text-sm font-semibold">
-                CEP
+                  {editingSupplier && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void verify(editingSupplier.id, "state-registration")
+                        }
+                        className="text-xs font-bold text-forest-700"
+                      >
+                        Consultar cadastro
+                      </button>
+                      {editingSupplier.stateRegistrationVerificationStatus && (
+                        <span className="text-xs font-medium text-stone-500">
+                          {
+                            verificationText[
+                              editingSupplier
+                                .stateRegistrationVerificationStatus
+                            ]
+                          }
+                          {editingSupplier.stateRegistrationVerifiedAt
+                            ? ` · ${new Date(editingSupplier.stateRegistrationVerifiedAt).toLocaleString("pt-BR")}`
+                            : ""}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </label>
+                <label className="text-sm font-semibold">
+                  Telefone
+                  <input name="contactPhone" className={input} />
+                </label>
+                <label className="text-sm font-semibold">
+                  WhatsApp
+                  <input name="whatsapp" className={input} />
+                </label>
+                <label className="text-sm font-semibold">
+                  E-mail
+                  <input name="contactEmail" type="email" className={input} />
+                </label>
+                <label className="text-sm font-semibold">
+                  Contato principal
+                  <input name="contactName" className={input} />
+                </label>
+                <label className="text-sm font-semibold">
+                  País
+                  <select
+                    name="country"
+                    className={input}
+                    value={supplierCountry}
+                    onChange={(event) => setSupplierCountry(event.target.value)}
+                  >
+                    <option value="Brasil">Brasil</option>
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">
+                  Estado
+                  <select
+                    name="state"
+                    className={input}
+                    value={supplierState}
+                    onChange={(event) => {
+                      setSupplierState(event.target.value);
+                      setSupplierCity("");
+                      setSupplierIbgeCityCode("");
+                    }}
+                  >
+                    <option value="">Selecione o estado</option>
+                    {states.map((state) => (
+                      <option key={state} value={state}>
+                        {state} — {stateNames[state]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">
+                  Município
+                  <select
+                    name="city"
+                    className={input}
+                    value={supplierCity}
+                    onChange={(event) => {
+                      const city = municipalities.find(
+                        (item) => item.name === event.target.value,
+                      );
+                      setSupplierCity(event.target.value);
+                      setSupplierIbgeCityCode(city?.ibgeCode ?? "");
+                    }}
+                    disabled={!supplierState}
+                  >
+                    <option value="">Selecione o município</option>
+                    {municipalities.map((city) => (
+                      <option key={city.ibgeCode} value={city.name}>
+                        {city.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <input
-                  name="postalCode"
-                  inputMode="numeric"
-                  pattern="[0-9]{5}-?[0-9]{3}"
-                  placeholder="00000-000"
-                  defaultValue={editingSupplier?.postalCode ?? ""}
-                  className={input}
+                  type="hidden"
+                  name="ibgeCityCode"
+                  value={supplierIbgeCityCode}
                 />
-              </label>
-              <label className="text-sm font-semibold">
-                Bairro / Distrito / Localidade
-                <input
-                  name="district"
-                  defaultValue={editingSupplier?.district ?? ""}
-                  className={input}
-                />
-              </label>
-              <label className="text-sm font-semibold sm:col-span-2">
-                Endereço
-                <input
-                  name="address"
-                  defaultValue={editingSupplier?.address ?? ""}
-                  className={input}
-                />
-              </label>
-              <label className="text-sm font-semibold sm:col-span-2">
-                Complemento
-                <input
-                  name="addressComplement"
-                  defaultValue={editingSupplier?.addressComplement ?? ""}
-                  className={input}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
-                <input
-                  type="checkbox"
-                  name="active"
-                  value="true"
-                  defaultChecked={editingSupplier?.active ?? true}
-                />{" "}
-                Ativo
-              </label>
+                <label className="text-sm font-semibold">
+                  CEP
+                  <input
+                    name="postalCode"
+                    inputMode="numeric"
+                    pattern="[0-9]{5}-?[0-9]{3}"
+                    placeholder="00000-000"
+                    value={supplierCep.replace(/(\d{5})(\d)/, "$1-$2")}
+                    onChange={(event) =>
+                      setSupplierCep(
+                        event.target.value.replace(/\D/g, "").slice(0, 8),
+                      )
+                    }
+                    onBlur={() => void handleCepLookup()}
+                    className={input}
+                  />
+                  {cepStatus !== "idle" && (
+                    <span className="mt-1 block text-xs text-stone-500">
+                      {cepStatus === "loading"
+                        ? "Consultando CEP..."
+                        : cepStatus === "found"
+                          ? "Endereço encontrado."
+                          : cepStatus === "not-found"
+                            ? "CEP não encontrado."
+                            : "Serviço de CEP indisponível."}
+                    </span>
+                  )}
+                </label>
+                <label className="text-sm font-semibold">
+                  Bairro / Distrito / Localidade
+                  <input
+                    name="district"
+                    value={supplierDistrict}
+                    onChange={(event) =>
+                      setSupplierDistrict(event.target.value)
+                    }
+                    className={input}
+                  />
+                </label>
+                <label className="text-sm font-semibold sm:col-span-2">
+                  Endereço
+                  <input
+                    name="address"
+                    value={supplierAddress}
+                    onChange={(event) => setSupplierAddress(event.target.value)}
+                    className={input}
+                  />
+                </label>
+                <label className="text-sm font-semibold sm:col-span-2">
+                  Complemento
+                  <input
+                    name="addressComplement"
+                    value={supplierComplement}
+                    onChange={(event) =>
+                      setSupplierComplement(event.target.value)
+                    }
+                    className={input}
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    name="active"
+                    value="true"
+                    defaultChecked={editingSupplier?.active ?? true}
+                  />{" "}
+                  Ativo
+                </label>
+              </div>
             </div>
-            <button className="mt-5 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">
-              Salvar fornecedor
-            </button>
+            <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t border-stone-200 bg-white pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setSupplierOpen(false);
+                  setEditingSupplier(null);
+                }}
+                className="min-h-11 rounded-xl border border-stone-200 px-4 text-sm font-bold text-stone-700"
+              >
+                Cancelar
+              </button>
+              <button className="min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">
+                Salvar fornecedor
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -748,7 +1057,11 @@ export default function SuppliersPage() {
                   }}
                   disabled={!unitState}
                 >
-                  <option value="">Selecione o município</option>
+                  <option value="">
+                    {municipalityLoading
+                      ? "Carregando municípios..."
+                      : "Selecione o município"}
+                  </option>
                   {unitMunicipalities.map((city) => (
                     <option key={city.ibgeCode} value={city.name}>
                       {city.name}

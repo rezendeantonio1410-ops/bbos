@@ -1,0 +1,1 @@
+ALTER TABLE "Supplier" ADD COLUMN "stateRegistrationType" TEXT NOT NULL DEFAULT 'NUMBER';
