@@ -30,7 +30,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
-import { BRAZILIAN_MUNICIPALITIES } from "./brazilian-municipalities";
+import { getBrazilianMunicipalities } from "./brazilian-municipalities";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
 import {
@@ -332,9 +332,7 @@ export class GreenCoffeePurchasesController {
   @Get("references/municipalities")
   async municipalities(@Req() request: any, @Query("state") state?: string) {
     await this.sessionActor(request);
-    return BRAZILIAN_MUNICIPALITIES.filter(
-      (municipality) => !state || municipality.state === state,
-    );
+    return getBrazilianMunicipalities(state);
   }
 
   @Get("suppliers/:supplierId/bank-accounts")

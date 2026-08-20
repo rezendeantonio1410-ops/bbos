@@ -3,7 +3,76 @@
  * The catalog is intentionally data-only so it can be expanded from the
  * IBGE reference file without changing the API contract.
  */
-export type BrazilianMunicipality = { ibgeCode: string; name: string; state: string };
+export type BrazilianMunicipality = {
+  ibgeCode: string;
+  name: string;
+  state: string;
+  stateIbgeCode?: string;
+};
+
+const STATE_IBGE_CODES: Record<string, string> = {
+  AC: "12",
+  AL: "27",
+  AP: "16",
+  AM: "13",
+  BA: "29",
+  CE: "23",
+  DF: "53",
+  ES: "32",
+  GO: "52",
+  MA: "21",
+  MT: "51",
+  MS: "50",
+  MG: "31",
+  PA: "15",
+  PB: "25",
+  PR: "41",
+  PE: "26",
+  PI: "22",
+  RJ: "33",
+  RN: "24",
+  RS: "43",
+  RO: "11",
+  RR: "14",
+  SC: "42",
+  SP: "35",
+  SE: "28",
+  TO: "17",
+};
+const cache = new Map<string, BrazilianMunicipality[]>();
+
+export async function getBrazilianMunicipalities(
+  state?: string,
+): Promise<BrazilianMunicipality[]> {
+  if (!state) return BRAZILIAN_MUNICIPALITIES;
+  const cached = cache.get(state);
+  if (cached) return cached;
+  try {
+    const response = await fetch(
+      `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${state}/municipios`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (response.ok) {
+      const rows = (await response.json()) as Array<{
+        id: number;
+        nome: string;
+      }>;
+      const municipalities = rows.map((row) => ({
+        ibgeCode: String(row.id),
+        name: row.nome,
+        state,
+        stateIbgeCode: STATE_IBGE_CODES[state],
+      }));
+      cache.set(state, municipalities);
+      return municipalities;
+    }
+  } catch {
+    // Fall back to the versioned subset when IBGE is temporarily unavailable.
+  }
+  return BRAZILIAN_MUNICIPALITIES.filter(
+    (municipality) => municipality.state === state,
+  );
+}
 
 export const BRAZILIAN_MUNICIPALITIES: BrazilianMunicipality[] = [
   { ibgeCode: "4113700", name: "Londrina", state: "PR" },

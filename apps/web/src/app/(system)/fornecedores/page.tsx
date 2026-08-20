@@ -77,7 +77,12 @@ const types = [
   ["OTHER", "Outro"],
 ];
 type Region = { id: string; state: string; name: string };
-type Municipality = { ibgeCode: string; name: string; state: string };
+type Municipality = {
+  ibgeCode: string;
+  name: string;
+  state: string;
+  stateIbgeCode?: string;
+};
 type Species = {
   id: string;
   code: string;
@@ -639,7 +644,7 @@ export default function SuppliersPage() {
                 <X />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pb-8 pr-1">
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <label className="text-sm font-semibold">
                   Tipo
@@ -686,6 +691,17 @@ export default function SuppliersPage() {
                     }}
                     className={input}
                   />
+                  <span className="mt-1 block text-xs font-medium text-stone-500">
+                    Situação cadastral:{" "}
+                    {editingSupplier?.taxIdVerificationStatus
+                      ? verificationText[
+                          editingSupplier.taxIdVerificationStatus
+                        ]
+                      : "⚠ Não verificado"}
+                    {editingSupplier?.taxIdVerifiedAt
+                      ? ` · Consultado em ${new Date(editingSupplier.taxIdVerifiedAt).toLocaleString("pt-BR")}`
+                      : ""}
+                  </span>
                   {taxIdError && (
                     <span className="mt-1 block text-xs font-medium text-red-700">
                       {taxIdError}
@@ -718,30 +734,34 @@ export default function SuppliersPage() {
                   )}
                 </label>
                 <label className="text-sm font-semibold">
-                  Inscrição Estadual
-                  <div className="flex gap-2">
-                    <input
-                      name="stateRegistration"
-                      defaultValue={editingSupplier?.stateRegistration ?? ""}
-                      className={input}
-                      disabled={stateRegistrationType !== "NUMBER"}
-                    />
-                    <select
-                      name="stateRegistrationType"
-                      className={input + " max-w-44"}
-                      value={stateRegistrationType}
-                      onChange={(event) =>
-                        setStateRegistrationType(
-                          event.target.value as
-                            "NUMBER" | "EXEMPT" | "NON_TAXPAYER",
-                        )
-                      }
-                    >
-                      <option value="NUMBER">Número</option>
-                      <option value="EXEMPT">Isento</option>
-                      <option value="NON_TAXPAYER">Não contribuinte</option>
-                    </select>
-                  </div>
+                  Situação da IE
+                  <select
+                    name="stateRegistrationType"
+                    className={input}
+                    value={stateRegistrationType}
+                    onChange={(event) =>
+                      setStateRegistrationType(
+                        event.target.value as
+                          "NUMBER" | "EXEMPT" | "NON_TAXPAYER",
+                      )
+                    }
+                  >
+                    <option value="NUMBER">Número</option>
+                    <option value="EXEMPT">Isento</option>
+                    <option value="NON_TAXPAYER">Não contribuinte</option>
+                  </select>
+                  {stateRegistrationType === "NUMBER" && (
+                    <>
+                      <span className="mt-2 block text-xs text-stone-500">
+                        Inscrição Estadual
+                      </span>
+                      <input
+                        name="stateRegistration"
+                        defaultValue={editingSupplier?.stateRegistration ?? ""}
+                        className={input}
+                      />
+                    </>
+                  )}
                   {editingSupplier && (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <button
