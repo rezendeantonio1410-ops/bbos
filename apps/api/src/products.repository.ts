@@ -21,6 +21,46 @@ type PersistedProduct = Prisma.ProductGetPayload<{
   include: typeof productInclude;
 }>;
 
+const OFFICIAL_LINES: Record<
+  ProductLine,
+  {
+    name: string;
+    slug: string;
+    description: string;
+    positioning: string;
+    sortOrder: number;
+  }
+> = {
+  RAROS: {
+    name: "Raros",
+    slug: "raros",
+    description: "Microlotes de disponibilidade excepcional e expressão singular.",
+    positioning: "Exclusividade e origem",
+    sortOrder: 1,
+  },
+  EPICOS: {
+    name: "Épicos",
+    slug: "epicos",
+    description: "Cafés de alta complexidade para experiências memoráveis.",
+    positioning: "Experiência e descoberta",
+    sortOrder: 2,
+  },
+  CLASSICOS: {
+    name: "Clássicos",
+    slug: "classicos",
+    description: "Perfis consistentes para consumo recorrente e versátil.",
+    positioning: "Consistência e equilíbrio",
+    sortOrder: 3,
+  },
+  GOURMET: {
+    name: "Gourmet",
+    slug: "gourmet",
+    description: "Cafés equilibrados com qualidade acessível e confiável.",
+    positioning: "Qualidade cotidiana",
+    sortOrder: 4,
+  },
+};
+
 @Injectable()
 export class ProductsRepository implements OnModuleDestroy {
   private readonly database = new PrismaClient();
@@ -30,6 +70,7 @@ export class ProductsRepository implements OnModuleDestroy {
   }
 
   async listCatalog(companyId: string): Promise<CatalogProduct[]> {
+    await this.ensureOfficialLines(this.database, companyId);
     const products = await this.database.product.findMany({
       where: { productLine: { companyId } },
       include: productInclude,
@@ -39,6 +80,7 @@ export class ProductsRepository implements OnModuleDestroy {
   }
 
   async listLines(companyId: string) {
+    await this.ensureOfficialLines(this.database, companyId);
     return this.database.productLine.findMany({
       where: { companyId },
       include: {
@@ -63,15 +105,12 @@ export class ProductsRepository implements OnModuleDestroy {
     const valid = validateCreateProductSku(input);
     return this.database.$transaction(
       async (transaction) => {
-        const line = await transaction.productLine.findUnique({
+        await this.ensureOfficialLines(transaction, companyId);
+        const line = await transaction.productLine.findUniqueOrThrow({
           where: {
             companyId_code: { companyId, code: valid.line as ProductLineCode },
           },
         });
-        if (!line)
-          throw new Error(
-            "Linha oficial não encontrada. Execute o seed do catálogo.",
-          );
         await this.assertVariantAvailable(
           transaction,
           valid.sku,
@@ -183,6 +222,37 @@ export class ProductsRepository implements OnModuleDestroy {
       where: { id: current.id },
       data: { active: input.active },
     });
+  }
+
+  private async ensureOfficialLines(
+    database: Pick<PrismaClient, "productLine"> | Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    for (const [code, definition] of Object.entries(OFFICIAL_LINES) as [ProductLine, (typeof OFFICIAL_LINES)[ProductLine]][]) {
+      await database.productLine.upsert({
+        where: {
+          companyId_code: { companyId, code: code as ProductLineCode },
+        },
+        update: {
+          name: definition.name,
+          slug: definition.slug,
+          description: definition.description,
+          positioning: definition.positioning,
+          sortOrder: definition.sortOrder,
+          active: true,
+        },
+        create: {
+          companyId,
+          code: code as ProductLineCode,
+          name: definition.name,
+          slug: definition.slug,
+          description: definition.description,
+          positioning: definition.positioning,
+          sortOrder: definition.sortOrder,
+          active: true,
+        },
+      });
+    }
   }
 
   private async assertVariantAvailable(
