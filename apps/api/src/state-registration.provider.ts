@@ -1,3 +1,5 @@
+import { Injectable } from "@nestjs/common";
+
 export type StateRegistrationResult = {
   document: string;
   state: string;
@@ -24,4 +26,3 @@ export class UnconfiguredStateRegistrationProvider implements StateRegistrationP
     };
   }
 }
-import { Injectable } from "@nestjs/common";

@@ -1,3 +1,5 @@
+import { Injectable } from "@nestjs/common";
+
 export type TaxRegistryResult = {
   document: string;
   legalName?: string;
@@ -27,4 +29,3 @@ export class UnconfiguredTaxRegistryProvider implements TaxRegistryProvider {
     };
   }
 }
-import { Injectable } from "@nestjs/common";
