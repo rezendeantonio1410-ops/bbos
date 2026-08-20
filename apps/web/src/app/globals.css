@@ -30,6 +30,11 @@ body { margin: 0; background: var(--surface-page); color: var(--brand-ritual-bla
 button, input { font: inherit; }
 ::selection { background: var(--brand-chinese-black); color: var(--brand-whitt-sand); }
 
+/* Safra pertence à compra/lote, não ao cadastro estrutural da fazenda. */
+label:has(input[name="productionHarvest"]) {
+  display: none;
+}
+
 .executive-dashboard {
   color: #111514;
 }
