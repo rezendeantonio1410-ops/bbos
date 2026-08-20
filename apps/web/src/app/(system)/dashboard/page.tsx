@@ -22,6 +22,9 @@ import {
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import type {
+  ExecutiveDashboard,
+  ExecutiveV3Data,
+  ExecutiveRankingItem,
   PerformanceDiagnostic,
   PerformanceStatus,
   Period,
@@ -32,8 +35,7 @@ import {
   RoiDrawer,
   SalesMapDrawer,
 } from "@/components/executive-drawers";
-import { demoDashboard } from "@/lib/demo-data";
-import { executiveV3DemoData } from "@/lib/executive-v3-demo-data";
+import { getApiBaseUrl } from "@/lib/api-url";
 import { BrazilSalesPanel } from "@/components/brazil-sales-map";
 
 const periods: Array<{ key: Period; label: string }> = [
@@ -175,18 +177,19 @@ function KpiCard({
 function RevenueChart({
   period,
   onOpen,
+  dashboard,
 }: {
   period: Period;
   onOpen: () => void;
+  dashboard: ExecutiveDashboard;
 }) {
-  const goal = demoDashboard.goals.find((item) => item.period === period)!;
-  const previous =
-    goal.actual / (1 + demoDashboard.metricsByPeriod[period][0]!.change / 100);
+  const goal = dashboard.goals.find((item) => item.period === period) ?? { actual: 0, target: 0, difference: 0, closingProjection: 0, attainment: 0, status: "attention" as const };
+  const previous = goal.actual;
   const sets: Record<Period, number[]> = {
-    day: [17, 18, 20, 19, 22, 23, 24.86],
-    week: [82, 88, 91, 98, 104, 112, 118.74],
-    month: [312, 338, 361, 397, 421, 455, 486.32],
-    year: [1.9, 2.15, 2.52, 2.81, 3.16, 3.49, 3.84],
+    day: [previous, previous, previous, previous, previous, previous, previous],
+    week: [previous, previous, previous, previous, previous, previous, previous],
+    month: [previous, previous, previous, previous, previous, previous, previous],
+    year: [previous, previous, previous, previous, previous, previous, previous],
   };
   const values = sets[period];
   const min = Math.min(...values) * 0.92;
@@ -412,7 +415,7 @@ function SalesMapCard({ onOpen }: { onOpen: () => void }) {
             {regions.map((region) => (
               <div
                 key={region.id}
-                className="rounded-xl border border-[#E7ECEA] bg-[#F7F9F8] p-3"
+                className="rounded-xl border border-[#E7E7E3] bg-[#F7F9F8] p-3"
               >
                 <div className="flex items-start justify-between">
                   <p className="text-xs font-bold">{region.name}</p>
@@ -423,7 +426,7 @@ function SalesMapCard({ onOpen }: { onOpen: () => void }) {
                 <p className="mt-2 text-sm font-bold">
                   {currency.format(region.revenue)}
                 </p>
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#E7ECEA]">
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#E7E7E3]">
                   <div
                     className={`h-full rounded-full ${region.revenue ? "bg-coffee-300" : "bg-stone-500"}`}
                     style={{ width: `${Math.min(region.attainment, 100)}%` }}
@@ -796,7 +799,7 @@ function Ranking({
   items,
   kind,
 }: {
-  items: typeof executiveV3DemoData.topCustomers;
+  items: ExecutiveRankingItem[];
   kind: "customer" | "product";
 }) {
   const max = Math.max(...items.map((item) => item.primaryValue));
@@ -855,8 +858,12 @@ export default function DashboardPage() {
   const [diagnostic, setDiagnostic] = useState<PerformanceDiagnostic | null>(
     null,
   );
-  const data = demoDashboard;
-  const v3 = executiveV3DemoData;
+  const emptyMetric = { label: "Sem dados", value: "Sem dados", change: 0, supportingText: "Nenhum registro no período" };
+  const emptyData = { updatedAt: new Date().toISOString(), metricsByPeriod: { day: [emptyMetric], week: [emptyMetric], month: [emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric], year: [emptyMetric] }, roi: { current: 0, target: 0, difference: 0, trend: 0, status: "attention" as const }, goals: [], projections: [], diagnostics: [], salesMap: { id: "company", level: "country" as const, name: "Empresa", revenue: 0, volumeKg: 0, marginPercent: 0, growthPercent: 0, target: 0, attainment: 0, salesShare: 0, status: "attention" as const }, alerts: [] } as unknown as ExecutiveDashboard;
+  const emptyV3 = { industrial: { productionTodayKg: 0, targetTodayKg: 0, efficiencyPercent: 0, capacityUsedPercent: 0, roastLossPercent: 0, realCostPerKg: 0, workOrdersInProgress: 0, delayedWorkOrders: 0 }, inventory: { greenCoffeeAvailableKg: 0, stockValue: 0, coverageDays: 0, coverageTargetDays: 0, finishedGoodsUnits: 0, attentionLots: 0, criticalItems: 0 }, topCustomers: [], topProducts: [], logistics: { containersInTransit: 0, nextArrivals: 0, openPurchases: 0, ordersAwaitingShipment: 0, criticalSupplies: 0, criticalPackaging: 0, isMock: true }, finance: { cash: 0, receivables: 0, payables: 0, marginPercent: 0, projectedProfit: 0, projectedRoiPercent: 0, cashTrend: [0] }, attention: [], aiInsights: [], meta: { generatedAt: "", source: "database" } } as unknown as ExecutiveV3Data;
+  const [data, setData] = useState<ExecutiveDashboard>(emptyData);
+  const [v3] = useState<ExecutiveV3Data>(emptyV3);
+  useEffect(() => { const root = getApiBaseUrl(); void fetch(`${root}/dashboard/executive?period=${period}`, { credentials: "include" }).then((response) => response.ok ? response.json() : null).then((payload) => { if (payload) setData(payload as ExecutiveDashboard); }).catch(() => undefined); }, [period]);
   useEffect(() => {
     const saved = window.localStorage.getItem(
       "bbos-executive-period",
@@ -948,7 +955,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div
-            className="flex w-fit rounded-xl border border-[#E7ECEA] bg-white p-1"
+            className="flex w-fit rounded-xl border border-[#E7E7E3] bg-white p-1"
             aria-label="Período do dashboard"
           >
             {periods.map((item) => (
@@ -964,14 +971,14 @@ export default function DashboardPage() {
           </div>
           <button
             title="Filtrar dashboard"
-            className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
+            className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
           >
             <SlidersHorizontal size={14} />
             Filtros
           </button>
           <button
             title="Exportar visão executiva"
-            className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
+            className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-[#F7F9F8]"
           >
             <Download size={14} />
             Exportar
@@ -984,7 +991,7 @@ export default function DashboardPage() {
         ))}
       </section>
       <section className="order-4 mt-4 grid gap-4 xl:grid-cols-[3fr_2fr]">
-        <RevenueChart period={period} onOpen={() => setCommercialOpen(true)} />
+        <RevenueChart period={period} dashboard={data} onOpen={() => setCommercialOpen(true)} />
         <SalesMapCard onOpen={() => setSalesMapOpen(true)} />
       </section>
       <section className="order-5 mt-5">
@@ -1051,7 +1058,7 @@ export default function DashboardPage() {
         <Link href="/pedidos" className="h-full text-left">
           <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
             <div className="flex items-center justify-between">
-              <span className="grid size-9 place-items-center rounded-xl bg-[#edf4f5] text-[#4d7b82]">
+              <span className="grid size-9 place-items-center rounded-xl bg-[#F0F0ED] text-[#4d7b82]">
                 <ShoppingBag size={17} />
               </span>
               <MiniTrend
@@ -1103,7 +1110,7 @@ export default function DashboardPage() {
             {data.alerts.slice(0, 3).map((alert, index) => (
               <div
                 key={alert.id}
-                className="flex gap-3 border-t border-[#E7ECEA] pt-3 first:border-0 first:pt-0"
+                className="flex gap-3 border-t border-[#E7E7E3] pt-3 first:border-0 first:pt-0"
               >
                 <span className="text-[10px] font-bold text-[#7A8381]">
                   0{index + 1}
@@ -1605,10 +1612,10 @@ export default function DashboardPage() {
               {v3.aiInsights.map((insight, index) => (
                 <div
                   key={insight.id}
-                  className="border-t border-[#E7ECEA] pt-4 first:border-0 first:pt-0"
+                  className="border-t border-[#E7E7E3] pt-4 first:border-0 first:pt-0"
                 >
                   <div className="flex gap-3">
-                    <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-[#EDF7F5] text-[9px] font-bold text-forest-800">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-[#F0F0ED] text-[9px] font-bold text-forest-800">
                       0{index + 1}
                     </span>
                     <div>

@@ -134,7 +134,7 @@ export function HomeExecutiveV3() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-xl border border-[#E7ECEA] bg-white p-1">
+          <div className="flex rounded-xl border border-[#E7E7E3] bg-white p-1">
             {(
               [
                 ["today", "Hoje"],
@@ -169,7 +169,7 @@ export function HomeExecutiveV3() {
               aria-label={
                 item.tooltip ? `${item.label}: ${item.tooltip}` : item.label
               }
-              className={`group relative p-4 transition hover:bg-[#F7F9F8] ${index ? "xl:border-l xl:border-[#E7ECEA]" : ""}`}
+              className={`group relative p-4 transition hover:bg-[#F7F9F8] ${index ? "xl:border-l xl:border-[#E7E7E3]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#626B69]">
@@ -210,7 +210,7 @@ export function HomeExecutiveV3() {
             </div>
             <Badge tone="neutral">Regras atuais</Badge>
           </div>
-          <div className="mt-4 divide-y divide-[#E7ECEA]">
+          <div className="mt-4 divide-y divide-[#E7E7E3]">
             {insights.map((i) => (
               <div key={i.title} className="py-3 first:pt-0">
                 <p
@@ -238,7 +238,7 @@ export function HomeExecutiveV3() {
               </div>
             ))}
           </div>
-          <label className="mt-3 flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-[#F7F9F8] px-3 py-2.5">
+          <label className="mt-3 flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-[#F7F9F8] px-3 py-2.5">
             <Search size={14} className="text-[#7A8381]" />
             <input
               disabled
@@ -489,7 +489,7 @@ function BusinessVision({ period }: { period: Period }) {
             </svg>
             {hover !== null && (
               <div
-                className="pointer-events-none absolute top-7 rounded-xl border border-[#E7ECEA] bg-white p-3 text-[9px] shadow-lg"
+                className="pointer-events-none absolute top-7 rounded-xl border border-[#E7E7E3] bg-white p-3 text-[9px] shadow-lg"
                 style={{
                   left: `${Math.min(72, Math.max(12, (x(hover) / 660) * 100))}%`,
                 }}
@@ -522,7 +522,7 @@ function BusinessVision({ period }: { period: Period }) {
             </span>
           </div>
         </div>
-        <div className="rounded-2xl border border-[#E7ECEA] bg-white p-4">
+        <div className="rounded-2xl border border-[#E7E7E3] bg-white p-4">
           <p className="text-[9px] font-bold uppercase tracking-[.13em] text-[var(--analytic-projection)]">
             Projeção do mês
           </p>
@@ -680,7 +680,7 @@ function Ranking({
               </span>
               <strong>{value}</strong>
             </div>
-            <div className="mt-1 h-1 rounded-full bg-[#E7ECEA]">
+            <div className="mt-1 h-1 rounded-full bg-[#E7E7E3]">
               <div
                 className="h-full rounded-full bg-[#087568]"
                 style={{ width: `${Math.min(share * 3, 100)}%` }}
@@ -756,7 +756,7 @@ function TopButton({
   children: string;
 }) {
   return (
-    <button className="flex items-center gap-2 rounded-xl border border-[#E7ECEA] bg-white px-3 py-2.5 text-xs font-semibold text-[#626B69] hover:bg-[#F7F9F8]">
+    <button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-[#626B69] hover:bg-[#F7F9F8]">
       <Icon size={14} />
       {children}
     </button>

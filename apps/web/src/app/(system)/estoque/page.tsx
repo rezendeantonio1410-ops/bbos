@@ -24,8 +24,7 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Card } from '@bbos/ui';
 import { applyInventoryMovement, calculateInventorySummary, InventoryRuleError, type InventoryAlert, type InventoryLot, type InventoryMovement, type InventoryMovementType, type ReceiptStatus } from '@bbos/shared';
-import { inventoryDemoDashboard } from '@/lib/inventory-demo-data';
-import { currentUser } from '@/lib/current-user';
+import { getApiBaseUrl } from '@/lib/api-url';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -77,13 +76,13 @@ function MovementModal({ lots, onClose, onSubmit }: { lots: InventoryLot[]; onCl
   const [direction, setDirection] = useState<'increase' | 'decrease'>('decrease');
   const [error, setError] = useState<string | null>(null);
   const selected = lots.find(item => item.id === lotId);
-  const submit = () => { if (!selected) return; try { onSubmit({ id: `mov-${Date.now()}`, type, occurredAt: new Date().toISOString(), userId: currentUser.id, userName: currentUser.name, lotId: selected.id, lotCode: selected.code, origin, destination, quantityKg: quantity, reason, adjustmentDirection: type === 'inventory-adjustment' ? direction : undefined }); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Movimentação não permitida.'); } };
+  const submit = () => { if (!selected) return; try { onSubmit({ id: `mov-${Date.now()}`, type, occurredAt: new Date().toISOString(), userId: '', userName: '', lotId: selected.id, lotCode: selected.code, origin, destination, quantityKg: quantity, reason, adjustmentDirection: type === 'inventory-adjustment' ? direction : undefined }); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Movimentação não permitida.'); } };
   return <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-4 backdrop-blur-[2px]"><div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Inventory Engine V1</p><h2 className="mt-1 text-xl font-bold">Nova movimentação</h2></div><button onClick={onClose} className="rounded-xl border p-2"><X size={18} /></button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold">Lote<select value={lotId} onChange={event => { setLotId(event.target.value); const lot = lots.find(item => item.id === event.target.value); setOrigin(lot?.location ?? ''); }} className={`mt-2 ${inputClass}`}>{lots.map(lot => <option key={lot.id} value={lot.id}>{lot.code} • {integer.format(lot.availableQuantityKg)} kg</option>)}</select></label><label className="text-xs font-semibold">Tipo<select value={type} onChange={event => setType(event.target.value as InventoryMovementType)} className={`mt-2 ${inputClass}`}>{Object.entries(movementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-semibold">Quantidade (kg)<input type="number" min="0.01" value={quantity} onChange={event => setQuantity(Number(event.target.value))} className={`mt-2 ${inputClass}`} /></label>{type === 'inventory-adjustment' && <label className="text-xs font-semibold">Direção<select value={direction} onChange={event => setDirection(event.target.value as 'increase' | 'decrease')} className={`mt-2 ${inputClass}`}><option value="decrease">Reduzir saldo</option><option value="increase">Aumentar saldo</option></select></label>}<label className="text-xs font-semibold">Origem<input value={origin} onChange={event => setOrigin(event.target.value)} className={`mt-2 ${inputClass}`} /></label><label className="text-xs font-semibold">Destino<input value={destination} onChange={event => setDestination(event.target.value)} className={`mt-2 ${inputClass}`} /></label><label className="text-xs font-semibold sm:col-span-2">Motivo<input value={reason} onChange={event => setReason(event.target.value)} className={`mt-2 ${inputClass}`} /></label></div>{selected && <div className="mt-5 flex gap-4 rounded-xl bg-stone-50 p-4 text-xs"><span>Disponível: <strong>{integer.format(selected.availableQuantityKg)} kg</strong></span><span>Reservado: <strong>{integer.format(selected.reservedQuantityKg)} kg</strong></span></div>}{error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-stone-500">Cancelar</button><Button onClick={submit}>Registrar movimentação</Button></div></div></div>;
 }
 
 export default function InventoryPage() {
-  const [lots, setLots] = useState(inventoryDemoDashboard.lots);
-  const [movements, setMovements] = useState(inventoryDemoDashboard.movements);
+  const [lots, setLots] = useState<InventoryLot[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
@@ -92,12 +91,18 @@ export default function InventoryPage() {
   const [movementOpen, setMovementOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGoodsStock[]>([]);
+  const inventoryDemoDashboard = { alerts: [] as InventoryAlert[] };
   useEffect(() => {
-    const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-    void fetch(`${api}/inventory/finished-goods`, { cache: 'no-store' })
-      .then(response => response.ok ? response.json() as Promise<FinishedGoodsStock[]> : [])
-      .then(setFinishedGoods)
-      .catch(() => setFinishedGoods([]));
+    const api = getApiBaseUrl();
+    void Promise.all([
+      fetch(`${api}/inventory/finished-goods`, { cache: 'no-store', credentials: 'include' }).then(response => response.ok ? response.json() as Promise<FinishedGoodsStock[]> : []),
+      fetch(`${api}/inventory/lots`, { cache: 'no-store', credentials: 'include' }).then(response => response.ok ? response.json() : []),
+      fetch(`${api}/inventory/movements`, { cache: 'no-store', credentials: 'include' }).then(response => response.ok ? response.json() : []),
+    ]).then(([goods, rawLots, rawMovements]) => {
+      setFinishedGoods(goods as FinishedGoodsStock[]);
+      setLots((rawLots as Array<Record<string, unknown>>).map(lot => ({ id: String(lot.id), code: String(lot.code), supplier: String((lot.supplier as { name?: string } | undefined)?.name ?? '—'), producer: '—', farm: '—', cityState: '—', origin: String(lot.origin ?? '—'), harvest: String(lot.harvest ?? '—'), variety: String(lot.variety ?? '—'), process: '—', initialQuantityKg: Number(lot.initialWeightKg ?? 0), availableQuantityKg: Number(lot.currentWeightKg ?? 0), reservedQuantityKg: Number(lot.reservedWeightKg ?? 0), realCostPerKg: Number(lot.initialWeightKg ?? 0) > 0 ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg) : 0, totalLotCost: Number(lot.landedCost ?? 0), currentStockValue: Number(lot.landedCost ?? 0), location: String((lot.warehouse as { name?: string } | undefined)?.name ?? '—'), status: lot.status === 'APPROVED' ? 'approved' : lot.status === 'BLOCKED' ? 'blocked' : 'awaiting-lab', minimumStockKg: 0, quality: {}, costs: { coffeeValue: Number(lot.purchaseCost ?? 0), freight: 0, nonRecoverableTaxes: 0, unloading: 0, initialProcessing: 0, otherDirectCosts: 0 }, traceability: [] })));
+      setMovements(rawMovements as InventoryMovement[]);
+    }).catch(() => { setFinishedGoods([]); setLots([]); setMovements([]); });
   }, []);
   const finishedGoodsByLine = useMemo(() => Object.entries(
     finishedGoods.reduce<Record<string, FinishedGoodsStock[]>>((groups, item) => {

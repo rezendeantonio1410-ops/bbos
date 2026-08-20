@@ -12,8 +12,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
-import { PRODUCT_CATALOG_DEMO } from "@bbos/shared/product-presentation";
-import { skuCostDemo } from "@/lib/costing-demo-data";
 import { PRODUCTS_API_URL } from "@/lib/product-catalog-api";
 import type { CatalogProduct } from "@bbos/shared/product-presentation";
 
@@ -22,20 +20,7 @@ const brl = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   maximumFractionDigits: 2,
 });
-const pct = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
-const parts = [
-  ["Café verde", 12.4, "Lote 2026-041"],
-  ["Perda de torra", 1.84, "OP-2026-0112 / Batch 03"],
-  ["Embalagem", 2.9, "Consumo confirmado"],
-  ["Etiqueta", 0.42, "Consumo confirmado"],
-  ["Caixa / material", 0.36, "Consumo confirmado"],
-  ["Mão de obra", 1.7, "Apontamento da OP"],
-  ["Energia", 0.64, "Medição direta"],
-  ["Gás", 0.91, "Medição da torra"],
-  ["Máquina / depreciação", 0.48, "TOR-01 • 0,38 h"],
-  ["Manutenção", 0.31, "Centro IND-MAN"],
-  ["Outros industriais", 1.28, "Rateios industriais"],
-] as const;
+const parts: ReadonlyArray<readonly [string, number, string]> = [];
 
 export default function SkuCostPage({
   params,
@@ -54,14 +39,12 @@ export default function SkuCostPage({
       })
       .catch(() => undefined);
   }, [route.id]);
-  const product =
-    persistedProduct ??
-    PRODUCT_CATALOG_DEMO.find((item) => item.id === route.id);
+  const product = persistedProduct;
   const variant = product?.skus.find(
     (item) => item.sku === decodeURIComponent(route.sku),
   );
   if (!product || !variant) return <p>SKU não encontrado.</p>;
-  const max = Math.max(...parts.map((item) => item[1]));
+  const max = Math.max(0, ...parts.map((item) => item[1]));
   return (
     <div className="mx-auto max-w-[1500px]">
       <nav className="flex items-center gap-1 text-[10px] text-stone-400">
@@ -97,22 +80,22 @@ export default function SkuCostPage({
         <Metric
           icon={CircleDollarSign}
           label="Preço líquido"
-          value={brl.format(32.9)}
+          value="Sem dados"
         />
         <Metric
           icon={Factory}
           label="Custo industrial"
-          value={brl.format(skuCostDemo.realIndustrialCost)}
+          value="Sem dados"
         />
         <Metric
           icon={Scale}
           label="Custo absorvido"
-          value={brl.format(skuCostDemo.absorbedCost)}
+          value="Sem dados"
         />
         <Metric
           icon={ShieldCheck}
           label="Margem industrial"
-          value={`${pct.format(skuCostDemo.industrialMarginPercent)}%`}
+          value="Sem dados"
         />
       </section>
       <section className="mt-6 grid gap-4 xl:grid-cols-[1.35fr_.65fr]">
@@ -124,10 +107,10 @@ export default function SkuCostPage({
                 Clique em cada componente para ver sua origem.
               </p>
             </div>
-            <Badge tone="success">CALCULATED</Badge>
+            <Badge tone="neutral">Sem dados</Badge>
           </div>
           <div className="mt-5 space-y-2">
-            {parts.map(([label, value, source]) => (
+            {parts.length ? parts.map(([label, value, source]) => (
               <button
                 key={label}
                 onClick={() => setOpened(opened === label ? null : label)}
@@ -156,20 +139,13 @@ export default function SkuCostPage({
                   </div>
                 )}
               </button>
-            ))}
+            )) : <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">Nenhum custo persistido disponível para este SKU.</p>}
           </div>
           <div className="mt-5 border-t pt-4">
-            <Total label="Custo direto" value={skuCostDemo.directCost} />
-            <Total
-              label="Custo industrial real"
-              value={skuCostDemo.realIndustrialCost}
-            />
-            <Total label="Rateio corporativo" value={1.28} />
-            <Total
-              label="Custo total absorvido"
-              value={skuCostDemo.absorbedCost}
-              strong
-            />
+            <Total label="Custo direto" value="Sem dados" />
+            <Total label="Custo industrial real" value="Sem dados" />
+            <Total label="Rateio corporativo" value="Sem dados" />
+            <Total label="Custo total absorvido" value="Sem dados" strong />
           </div>
         </Card>
         <div className="space-y-4">
@@ -178,19 +154,19 @@ export default function SkuCostPage({
             <div className="mt-4 space-y-3">
               <Margin
                 label="Margem bruta"
-                value={skuCostDemo.grossMarginPercent}
+                value="Sem dados"
               />
               <Margin
                 label="Margem industrial"
-                value={skuCostDemo.industrialMarginPercent}
+                value="Sem dados"
               />
               <Margin
                 label="Margem de contribuição"
-                value={skuCostDemo.contributionMarginPercent}
+                value="Sem dados"
               />
               <Margin
                 label="Margem após rateio"
-                value={skuCostDemo.afterAllocationMarginPercent}
+                value="Sem dados"
               />
             </div>
           </Card>
@@ -233,7 +209,7 @@ function Total({
   strong = false,
 }: {
   label: string;
-  value: number;
+  value: string;
   strong?: boolean;
 }) {
   return (
@@ -241,21 +217,21 @@ function Total({
       className={`flex justify-between py-1.5 text-xs ${strong ? "mt-2 border-t pt-3 font-bold" : ""}`}
     >
       <span>{label}</span>
-      <span>{brl.format(value)}</span>
+      <span>{value}</span>
     </div>
   );
 }
-function Margin({ label, value }: { label: string; value: number }) {
+function Margin({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="flex justify-between text-xs">
         <span className="text-stone-600">{label}</span>
-        <strong>{pct.format(value)}%</strong>
+        <strong>{value}</strong>
       </div>
       <div className="mt-1 h-1.5 rounded-full bg-stone-100">
         <div
           className="h-full rounded-full bg-forest-700"
-          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+          style={{ width: "0%" }}
         />
       </div>
     </div>

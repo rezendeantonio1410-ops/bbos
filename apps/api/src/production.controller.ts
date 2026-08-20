@@ -6,7 +6,9 @@ import {
   NotFoundException,
   Param,
   Post,
+  Req,
 } from "@nestjs/common";
+import type { Request } from "express";
 import {
   CostType,
   EventType,
@@ -21,6 +23,8 @@ import {
   type RealProductionCostInput,
 } from "@bbos/shared";
 import { ProductionService } from "./production.service";
+import { AuthService } from "./auth.service";
+import { requireSession } from "./auth-context";
 
 type CreateOrderBody = {
   code: string;
@@ -76,7 +80,7 @@ type CalculateV2Body = RealProductionCostInput & {
 
 @Controller("production")
 export class ProductionController {
-  constructor(private readonly production: ProductionService) {}
+  constructor(private readonly production: ProductionService, private readonly auth: AuthService) {}
 
   @Post("orders/:id/cost-v2")
   calculateAndSnapshotV2(
@@ -161,8 +165,10 @@ export class ProductionController {
   }
 
   @Get("orders")
-  listOrders() {
+  async listOrders(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
     return this.production.database.productionOrder.findMany({
+      where: { companyId: actor.companyId },
       include: {
         blend: true,
         productVariant: { include: { product: { include: { productLine: true } } } },
@@ -176,9 +182,10 @@ export class ProductionController {
   }
 
   @Get("orders/:id")
-  async getOrder(@Param("id") id: string) {
-    const order = await this.production.database.productionOrder.findUnique({
-      where: { id },
+  async getOrder(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const order = await this.production.database.productionOrder.findFirst({
+      where: { id, companyId: actor.companyId },
       include: {
         blend: true,
         productVariant: { include: { product: { include: { productLine: true } } } },
@@ -198,7 +205,8 @@ export class ProductionController {
   }
 
   @Post("orders")
-  createOrder(@Body() body: CreateOrderBody) {
+  async createOrder(@Body() body: CreateOrderBody, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
     if (!body.allocations.length || body.plannedWeightKg <= 0)
       throw new BadRequestException("Informe quantidade e lotes da OP.");
     const reservedTotal = body.allocations.reduce(
@@ -229,6 +237,7 @@ export class ProductionController {
           body.productVariantId,
         );
         const companyId = variant.product.productLine.companyId;
+        if (companyId !== actor.companyId) throw new BadRequestException("SKU não pertence à empresa da sessão.");
         const lots = await transaction.coffeeLot.findMany({
           where: {
             id: { in: body.allocations.map((item) => item.coffeeLotId) },
@@ -241,8 +250,8 @@ export class ProductionController {
           );
         for (const allocation of body.allocations) {
           const lot = lots.find((item) => item.id === allocation.coffeeLotId)!;
-          if (lot.status === "BLOCKED")
-            throw new BadRequestException(`Lote ${lot.code} está bloqueado.`);
+          if (lot.status !== "APPROVED")
+            throw new BadRequestException(`Lote ${lot.code} não está liberado pela Qualidade.`);
           if (Number(lot.currentWeightKg) < allocation.reservedKg)
             throw new BadRequestException(
               `Saldo insuficiente no lote ${lot.code}.`,
@@ -313,12 +322,14 @@ export class ProductionController {
   }
 
   @Post("orders/:id/batches")
-  async createBatch(@Param("id") id: string, @Body() body: CreateBatchBody) {
+  async createBatch(@Param("id") id: string, @Body() body: CreateBatchBody, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    if (body.greenInputKg <= 0 || body.roastedOutputKg <= 0) throw new BadRequestException("Pesos da torra devem ser maiores que zero.");
     const loss = calculateRoastLoss(body.greenInputKg, body.roastedOutputKg);
     return this.production.database.$transaction(
       async (transaction) => {
-        const order = await transaction.productionOrder.findUnique({
-          where: { id },
+        const order = await transaction.productionOrder.findFirst({
+          where: { id, companyId: actor.companyId },
           include: { consumptions: true },
         });
         if (!order)
@@ -330,6 +341,8 @@ export class ProductionController {
           throw new BadRequestException(
             "O batch deve utilizar lotes reservados pela OP.",
           );
+        const reservedAvailable = consumptionIds.reduce((sum, item) => sum + Number(item.reservedKg) - Number(item.consumedKg), 0);
+        if (body.greenInputKg > reservedAvailable + 0.001) throw new BadRequestException("A torra não pode consumir mais café do que o reservado pela OP.");
         const batch = await transaction.productionBatch.create({
           data: {
             companyId: order.companyId,
@@ -355,6 +368,10 @@ export class ProductionController {
             actualOutputKg: { increment: body.roastedOutputKg },
             startedAt: order.startedAt ?? new Date(body.startedAt),
           },
+        });
+        await transaction.productionConsumption.updateMany({
+          where: { id: { in: consumptionIds.map((item) => item.id) }, productionBatchId: null },
+          data: { productionBatchId: batch.id },
         });
         await transaction.industrialEvent.createMany({
           data: [
@@ -388,15 +405,17 @@ export class ProductionController {
   async completeOrder(
     @Param("id") id: string,
     @Body() body: CompleteOrderBody,
+    @Req() req: Request,
   ) {
+    const actor = await requireSession(req, this.auth);
     if (body.finishedOutputKg <= 0 || body.producedPackages <= 0)
       throw new BadRequestException(
         "Produção acabada deve ser maior que zero.",
       );
     return this.production.database.$transaction(
       async (transaction) => {
-        const order = await transaction.productionOrder.findUnique({
-          where: { id },
+        const order = await transaction.productionOrder.findFirst({
+          where: { id, companyId: actor.companyId },
           include: {
             consumptions: { include: { coffeeLot: true } },
             batches: true,
@@ -408,6 +427,8 @@ export class ProductionController {
         });
         if (!order)
           throw new NotFoundException("Ordem de produção não encontrada.");
+        const warehouse = await transaction.warehouse.findFirst({ where: { id: body.warehouseId, companyId: actor.companyId } });
+        if (!warehouse) throw new BadRequestException("Armazém não pertence à empresa da sessão.");
         const idempotencyKey = `PRODUCTION_IN:${order.id}`;
         const existingMovement =
           await transaction.finishedGoodsMovement.findUnique({
@@ -546,8 +567,8 @@ export class ProductionController {
           });
         }
         if (!finishedProduct && body.finishedProductId)
-          finishedProduct = await transaction.finishedProduct.findUnique({
-            where: { id: body.finishedProductId },
+          finishedProduct = await transaction.finishedProduct.findFirst({
+            where: { id: body.finishedProductId, companyId: actor.companyId },
           });
         if (!finishedProduct)
           throw new BadRequestException(

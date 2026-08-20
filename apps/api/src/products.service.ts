@@ -16,36 +16,37 @@ import { ProductsRepository } from "./products.repository";
 export class ProductsService {
   constructor(private readonly repository: ProductsRepository) {}
 
-  listCatalog() {
-    return this.repository.listCatalog();
+  listCatalog(companyId: string) {
+    return this.repository.listCatalog(companyId);
   }
 
-  listLines() {
-    return this.repository.listLines();
+  listLines(companyId: string) {
+    return this.repository.listLines(companyId);
   }
 
-  getProduct(id: string) {
-    return this.repository.findProduct(id);
+  getProduct(id: string, companyId: string) {
+    return this.repository.findProduct(id, companyId);
   }
 
-  createProduct(input: CreateCatalogProductInput) {
+  createProduct(input: CreateCatalogProductInput, companyId: string) {
     validateCreateProductSku(input);
-    return this.repository.createProduct(input);
+    return this.repository.createProduct(input, companyId);
   }
 
-  createVariant(productId: string, input: CreateProductVariantInput) {
-    return this.repository.createVariant(productId, input);
+  createVariant(productId: string, input: CreateProductVariantInput, companyId: string) {
+    return this.repository.createVariant(productId, input, companyId);
   }
 
   updateProduct(
     id: string,
     input: { name?: string; description?: string; active?: boolean },
+    companyId: string,
   ) {
-    return this.repository.updateProduct(id, input);
+    return this.repository.updateProduct(id, input, companyId);
   }
 
-  updateVariant(id: string, input: { active: boolean }) {
-    return this.repository.updateVariant(id, input);
+  updateVariant(id: string, input: { active: boolean }, companyId: string) {
+    return this.repository.updateVariant(id, input, companyId);
   }
 
   getPresentationRules() {

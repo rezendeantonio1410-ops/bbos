@@ -1,100 +1,681 @@
-'use client';
-
-import { useMemo, useState } from 'react';
+"use client";
+import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
-  ChevronRight,
-  CircleDollarSign,
-  ClipboardCheck,
-  FlaskConical,
-  MapPin,
   PackageOpen,
-  Plus,
-  Scale,
-  ShieldAlert,
-  Truck,
-  Warehouse,
   X,
-} from 'lucide-react';
-import { Badge, Button, Card } from '@bbos/ui';
-import type { LabAnalysis, LotCostBreakdown, ReceiptAlert, ReceiptApproval, ReceiptLot, ReceiptStatus } from '@bbos/shared';
-import { receiptDemoDashboard } from '@/lib/receipt-demo-data';
-
-const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
-const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-const steps = ['Fornecedor', 'Café/Carga', 'Peso', 'Custos', 'Laboratório', 'Aprovação', 'Estoque'];
-const statusLabels: Record<ReceiptStatus, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' }> = {
-  'awaiting-lab': { label: 'Aguardando laboratório', tone: 'neutral' }, approved: { label: 'Aprovado', tone: 'success' }, attention: { label: 'Atenção', tone: 'warning' }, blocked: { label: 'Bloqueado', tone: 'danger' },
+} from "lucide-react";
+import { Badge, Button, Card } from "@bbos/ui";
+import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
+import { getApiBaseUrl } from "@/lib/api-url";
+const ROOT =
+    getApiBaseUrl(),
+  API = `${ROOT}/receipts`,
+  css =
+    "w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm outline-none focus:border-forest-700";
+type O = { id: string; name: string };
+type P = {
+  id: string;
+  purchaseNumber: string;
+  supplierId: string;
+  species: string;
+  originRegion: string;
+  farmName?: string;
+  municipality?: string;
+  state?: string;
+  country?: string;
+  harvest: string;
+  variety?: string;
+  process?: string;
+  qualityCategory?: string;
+  supplierLotCode?: string;
+  packagingType: string;
+  volumeQuantity: number;
+  nominalUnitWeightKg: string;
+  contractedWeightKg: string;
+  maxMoisturePercent?: string;
+  expectedAt?: string;
+  receivedKg: number;
+  balanceKg: number;
+  supplier: O;
 };
-const approvalStyles: Record<ReceiptApproval, { label: string; className: string }> = {
-  approved: { label: 'APROVADO', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }, attention: { label: 'ATENÇÃO', className: 'border-amber-200 bg-amber-50 text-amber-700' }, rejected: { label: 'REPROVADO', className: 'border-red-200 bg-red-50 text-red-700' },
+type Opt = {
+  company: { id: string } | null;
+  suppliers: O[];
+  warehouses: O[];
+  users: O[];
+  purchases: P[];
+  currentUser?: SessionIdentity;
 };
-
-type ReceiptDraft = {
-  supplier: string; origin: string; variety: string; harvest: string; invoice: string; weightKg: number; costs: LotCostBreakdown; lab: Omit<LabAnalysis, 'approval'>; location: string;
+type Row = {
+  id: string;
+  receiptNumber: string;
+  qualityStatus: string;
+  netWeightKg: string;
+  origin: string;
+  stockBalanceKg: number;
+  supplier: O;
+  coffeeLot: { id: string; code: string };
+  labSample?: { sampleNumber: string };
 };
-
-const initialDraft: ReceiptDraft = {
-  supplier: 'Fazenda Boa Esperança', origin: 'Carmo de Minas, MG', variety: 'Catuaí Amarelo', harvest: '2026/27', invoice: '', weightKg: 1200,
-  costs: { coffeeValue: 33600, freight: 1600, nonRecoverableTaxes: 0, unloading: 240, initialProcessing: 420, otherDirectCosts: 0 },
-  lab: { moisturePercent: 11.5, waterActivity: 0.58, densityGPerL: 710, screen: '16 acima', defects: 6, scaScore: 85 }, location: 'ACV • Rua A-05',
-};
-
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return <label className="block"><span className="text-xs font-semibold text-stone-700">{label}</span><div className="mt-2">{children}</div>{hint && <span className="mt-1 block text-[11px] text-stone-400">{hint}</span>}</label>;
+type ReceiptResult = { receiptNumber: string; lotCode: string; sampleNumber: string };
+async function req<T>(u: string, i?: RequestInit): Promise<T> {
+  const r = await fetch(u, { credentials: "include", ...i }),
+    d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.message ?? "Falha");
+  return d;
 }
-const inputClass = 'w-full rounded-xl border bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-forest-700 focus:bg-white';
-
-function Wizard({ onClose, onComplete }: { onClose: () => void; onComplete: (lot: ReceiptLot) => void }) {
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<ReceiptDraft>(initialDraft);
-  const totalCost = Object.values(draft.costs).reduce((sum, value) => sum + value, 0);
-  const costPerKg = draft.weightKg > 0 ? totalCost / draft.weightKg : 0;
-  const approval: ReceiptApproval = draft.lab.moisturePercent > 12.3 || draft.lab.waterActivity > 0.65 ? 'rejected' : draft.lab.moisturePercent > 12 || draft.lab.waterActivity > 0.62 ? 'attention' : 'approved';
-  const updateCost = (key: keyof LotCostBreakdown, value: number) => setDraft(current => ({ ...current, costs: { ...current.costs, [key]: value } }));
-  const updateLab = (key: keyof ReceiptDraft['lab'], value: string | number) => setDraft(current => ({ ...current, lab: { ...current.lab, [key]: value } }));
-  const complete = () => {
-    const numberCode = 21 + Math.floor(Math.random() * 70);
-    const status: ReceiptStatus = approval === 'approved' ? 'approved' : approval === 'attention' ? 'attention' : 'blocked';
-    onComplete({ id: `lot-new-${Date.now()}`, code: `CV-2026-${numberCode.toString().padStart(3, '0')}`, supplier: draft.supplier, origin: draft.origin, quantityKg: draft.weightKg, totalCost, realCostPerKg: costPerKg, scaScore: draft.lab.scaScore, location: draft.location, status, receivedAt: 'Agora', costs: draft.costs, lab: { ...draft.lab, approval }, traceability: [{ id: 'r', label: 'Recebimento', occurredAt: 'Agora', status: 'complete' }, { id: 'l', label: 'Laboratório', occurredAt: 'Agora', status: 'complete' }, { id: 'a', label: 'Aprovação', occurredAt: 'Agora', status: 'complete' }, { id: 'e', label: 'Estoque', occurredAt: 'Agora', status: 'current' }, { id: 'p', label: 'Produção', occurredAt: 'Futuro', status: 'future' }] });
+function F({ l, c }: { l: string; c: React.ReactNode }) {
+  return (
+    <label>
+      <span className="text-xs font-semibold">{l}</span>
+      {c}
+    </label>
+  );
+}
+const steps = [
+  "Origem",
+  "Café",
+  "Quantidade",
+  "Triagem",
+  "Documentos",
+  "Conferência",
+];
+const displayEnum = (value?: string | null) => value ? value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "—";
+const speciesDisplay: Record<string, string> = { ARABICA: "Arábica", ROBUSTA_CONILON: "Robusta/Conilon" };
+function Wizard({
+  o,
+  close,
+  done,
+  initialPurchaseId,
+}: {
+  o: Opt;
+  close: () => void;
+  done: (x: ReceiptResult) => void;
+  initialPurchaseId: string;
+}) {
+  const first = o.purchases.find((purchase) => purchase.id === initialPurchaseId) ?? o.purchases[0];
+  const base = (p: P) => ({
+    purchaseId: p.id,
+    supplierId: p.supplierId,
+    warehouseId: o.warehouses[0]?.id ?? "",
+    species: p.species === "ARABICA" ? "ARABICA" : "ROBUSTA_CONILON",
+    origin: p.originRegion,
+    farmName: p.farmName ?? "",
+    municipality: p.municipality ?? "",
+    state: p.state ?? "",
+    country: p.country ?? "Brasil",
+    harvest: p.harvest,
+    variety: p.variety ?? "",
+    process: p.process ?? "",
+    supplierLotCode: p.supplierLotCode ?? "",
+    packagingType: p.packagingType,
+    volumeQuantity: p.volumeQuantity,
+    nominalWeightKg: Number(p.nominalUnitWeightKg),
+    grossWeightKg: 0,
+    tareWeightKg: 0,
+    moisturePercent: "",
+    sampleCollected: true,
+    visualCondition: "NORMAL",
+    invoiceNumber: "",
+    transportDocument: "",
+    notes: "",
+    unit: "KG",
+    bagQuantity: p.volumeQuantity,
+    bagWeightKg: Number(p.nominalUnitWeightKg),
+  });
+  const [d, setD] = useState(() => base(first!)),
+    [s, setS] = useState(0),
+    [busy, setBusy] = useState(false),
+    [err, setErr] = useState("");
+  const net = Math.max(0, Number(d.grossWeightKg) - Number(d.tareWeightKg));
+  const set = (k: keyof typeof d, v: (typeof d)[keyof typeof d]) => setD((x) => ({ ...x, [k]: v }));
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const x = await req<ReceiptResult>(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...d,
+          idempotencyKey: crypto.randomUUID(),
+          netWeightKg: net,
+          qualityStatus: "AWAITING_ANALYSIS",
+          moisturePercent: d.moisturePercent
+            ? Number(d.moisturePercent)
+            : undefined,
+        }),
+      });
+      done(x);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Falha");
+      setBusy(false);
+    }
   };
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-4 backdrop-blur-[2px]"><div role="dialog" aria-modal="true" className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"><header className="flex items-start justify-between border-b px-6 py-5"><div><p className="text-xs font-bold uppercase tracking-[.15em] text-forest-700">Novo recebimento</p><h2 className="mt-1 text-xl font-bold">{steps[step]}</h2></div><button onClick={onClose} aria-label="Fechar" className="rounded-xl border p-2 text-stone-500"><X size={18} /></button></header><div className="border-b px-6 py-4"><div className="flex items-center gap-1">{steps.map((item, index) => <div key={item} className="min-w-0 flex-1"><div className={`h-1.5 rounded-full ${index <= step ? 'bg-forest-800' : 'bg-stone-100'}`} /><p className={`mt-2 hidden truncate text-[10px] sm:block ${index === step ? 'font-bold text-forest-800' : 'text-stone-400'}`}>{index + 1}. {item}</p></div>)}</div></div><div className="overflow-y-auto p-6 md:p-8"><div className="mx-auto max-w-2xl">
-    {step === 0 && <div><p className="mb-6 text-sm text-stone-500">Identifique a origem comercial desta carga.</p><div className="grid gap-5 sm:grid-cols-2"><Field label="Fornecedor"><select value={draft.supplier} onChange={event => setDraft({ ...draft, supplier: event.target.value })} className={inputClass}><option>Fazenda Boa Esperança</option><option>Sítio Santa Clara</option><option>Fazenda Horizonte</option></select></Field><Field label="Documento fiscal"><input value={draft.invoice} onChange={event => setDraft({ ...draft, invoice: event.target.value })} placeholder="NF-e ou referência" className={inputClass} /></Field></div></div>}
-    {step === 1 && <div><p className="mb-6 text-sm text-stone-500">Registre somente os dados essenciais da carga.</p><div className="grid gap-5 sm:grid-cols-2"><Field label="Origem"><input value={draft.origin} onChange={event => setDraft({ ...draft, origin: event.target.value })} className={inputClass} /></Field><Field label="Variedade"><input value={draft.variety} onChange={event => setDraft({ ...draft, variety: event.target.value })} className={inputClass} /></Field><Field label="Safra"><input value={draft.harvest} onChange={event => setDraft({ ...draft, harvest: event.target.value })} className={inputClass} /></Field></div></div>}
-    {step === 2 && <div><p className="mb-6 text-sm text-stone-500">Informe o peso líquido conferido na balança.</p><div className="max-w-sm"><Field label="Peso líquido (kg)" hint="O custo real/kg será recalculado automaticamente."><input type="number" min="1" value={draft.weightKg} onChange={event => setDraft({ ...draft, weightKg: Number(event.target.value) })} className={inputClass} /></Field></div></div>}
-    {step === 3 && <div><p className="mb-6 text-sm text-stone-500">Separe cada componente para preservar o custo real e a rastreabilidade.</p><div className="grid gap-4 sm:grid-cols-2">{([['coffeeValue', 'Valor do café'], ['freight', 'Frete'], ['nonRecoverableTaxes', 'Impostos não recuperáveis'], ['unloading', 'Descarga'], ['initialProcessing', 'Beneficiamento inicial'], ['otherDirectCosts', 'Outros custos diretos']] as const).map(([key, label]) => <Field key={key} label={label}><input type="number" min="0" value={draft.costs[key]} onChange={event => updateCost(key, Number(event.target.value))} className={inputClass} /></Field>)}</div><div className="mt-6 grid gap-3 rounded-2xl bg-forest-950 p-5 text-white sm:grid-cols-2"><div><p className="text-[11px] uppercase tracking-wider text-white/50">Custo real do lote</p><p className="mt-2 text-2xl font-bold">{currency.format(totalCost)}</p></div><div><p className="text-[11px] uppercase tracking-wider text-white/50">Custo real/kg</p><p className="mt-2 text-2xl font-bold">{currency.format(costPerKg)}</p></div></div></div>}
-    {step === 4 && <div><div className="flex items-start justify-between gap-4"><p className="text-sm text-stone-500">Resultados da análise vinculada às regras configuradas.</p><Badge tone="neutral">QL-UMI-01 • QL-AW-01</Badge></div><div className="mt-6 grid gap-5 sm:grid-cols-3"><Field label="Umidade (%)" hint="Limite configurado: 12,0%"><input type="number" step="0.1" value={draft.lab.moisturePercent} onChange={event => updateLab('moisturePercent', Number(event.target.value))} className={inputClass} /></Field><Field label="Aw" hint="Limite configurado: 0,65"><input type="number" step="0.01" value={draft.lab.waterActivity} onChange={event => updateLab('waterActivity', Number(event.target.value))} className={inputClass} /></Field><Field label="Densidade (g/L)"><input type="number" value={draft.lab.densityGPerL} onChange={event => updateLab('densityGPerL', Number(event.target.value))} className={inputClass} /></Field><Field label="Peneira"><input value={draft.lab.screen} onChange={event => updateLab('screen', event.target.value)} className={inputClass} /></Field><Field label="Defeitos"><input type="number" value={draft.lab.defects} onChange={event => updateLab('defects', Number(event.target.value))} className={inputClass} /></Field><Field label="Nota SCA"><input type="number" step="0.1" value={draft.lab.scaScore} onChange={event => updateLab('scaScore', Number(event.target.value))} className={inputClass} /></Field></div></div>}
-    {step === 5 && <div className="text-center"><span className={`inline-flex rounded-2xl border px-8 py-5 text-2xl font-black tracking-wide ${approvalStyles[approval].className}`}>{approvalStyles[approval].label}</span><p className="mx-auto mt-6 max-w-md text-sm leading-6 text-stone-500">Status calculado pelas regras configuradas. A decisão será registrada com os resultados laboratoriais e a identificação do responsável.</p>{approval !== 'approved' && <div className="mx-auto mt-5 max-w-md rounded-xl bg-amber-50 p-4 text-left text-xs leading-5 text-amber-800"><strong>Ação necessária:</strong> manter em quarentena e solicitar decisão do responsável técnico. Nenhuma recomendação de tratamento é aplicada automaticamente.</div>}</div>}
-    {step === 6 && <div><p className="mb-6 text-sm text-stone-500">Defina o endereço inicial. Ao concluir, os eventos de estoque e custo serão registrados juntos.</p><Field label="Localização de estoque"><select value={draft.location} onChange={event => setDraft({ ...draft, location: event.target.value })} className={inputClass}><option>ACV • Rua A-05</option><option>ACV • Rua B-02</option><option>Quarentena • Q-04</option><option>Bloqueados • B-02</option></select></Field><div className="mt-6 rounded-2xl bg-stone-50 p-5"><p className="text-sm font-bold">Registros gerados na conclusão</p><div className="mt-4 grid gap-3 text-xs text-stone-600 sm:grid-cols-2">{['Lote e código único', 'Entrada no estoque', 'IndustrialEvent de recebimento', 'CostEvents por componente', `Custo real: ${currency.format(costPerKg)}/kg`, 'Atualização dos indicadores'].map(item => <span key={item} className="flex items-center gap-2"><Check size={14} className="text-emerald-700" />{item}</span>)}</div></div></div>}
-  </div></div><footer className="flex items-center justify-between border-t px-6 py-4"><button disabled={step === 0} onClick={() => setStep(value => value - 1)} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-stone-600 disabled:opacity-30"><ArrowLeft size={16} />Voltar</button>{step < steps.length - 1 ? <Button onClick={() => setStep(value => value + 1)} className="flex items-center gap-2">Continuar <ArrowRight size={16} /></Button> : <Button onClick={complete} className="flex items-center gap-2"><Check size={16} />Concluir recebimento</Button>}</footer></div></div>;
+  const purchase = o.purchases.find((p) => p.id === d.purchaseId);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-2">
+      <div className="flex max-h-[96vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white">
+        <header className="flex justify-between border-b p-5">
+          <div>
+            <p className="text-xs font-bold uppercase text-forest-700">
+              Novo recebimento · {s + 1}/6
+            </p>
+            <h2 className="text-xl font-bold">{steps[s]}</h2>
+          </div>
+          <button onClick={close}>
+            <X />
+          </button>
+        </header>
+        <div className="grid grid-cols-6 gap-1 px-5 py-3">
+          {steps.map((x, i) => (
+            <div
+              key={x}
+              className={`h-1.5 rounded ${i <= s ? "bg-forest-800" : "bg-stone-100"}`}
+            />
+          ))}
+        </div>
+        <main className="overflow-y-auto p-5 sm:p-8">
+          <div className="mx-auto grid max-w-2xl gap-4 sm:grid-cols-2">
+            {s === 0 && (
+              <>
+                <div className="sm:col-span-2">
+                  <F
+                    l="Compra vinculada"
+                    c={
+                      <select
+                        className={css}
+                        value={d.purchaseId}
+                        onChange={(e) => {
+                          const p = o.purchases.find(
+                            (x) => x.id === e.target.value,
+                          );
+                          if (p) setD(base(p));
+                        }}
+                      >
+                        {o.purchases.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.purchaseNumber} · {p.supplier.name} · saldo{" "}
+                            {p.balanceKg} kg
+                          </option>
+                        ))}
+                      </select>
+                    }
+                  />
+                </div>
+                <F
+                  l="Fornecedor"
+                  c={
+                    <input
+                      disabled
+                      className={css}
+                      value={purchase?.supplier.name ?? ""}
+                    />
+                  }
+                />
+                <F
+                  l="Responsável"
+                  c={
+                    <input
+                      disabled
+                      className={css}
+                      value={o.currentUser?.name ?? "Usuário logado"}
+                    />
+                  }
+                />
+                <F
+                  l="Armazém"
+                  c={
+                    <select
+                      className={css}
+                      value={d.warehouseId}
+                      onChange={(e) => set("warehouseId", e.target.value)}
+                    >
+                      {o.warehouses.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  }
+                />
+                <F
+                  l="Região de origem"
+                  c={
+                    <input
+                      className={css}
+                      value={d.origin}
+                      onChange={(e) => set("origin", e.target.value)}
+                    />
+                  }
+                />
+                <F
+                  l="Fazenda"
+                  c={
+                    <input
+                      className={css}
+                      value={d.farmName}
+                      onChange={(e) => set("farmName", e.target.value)}
+                    />
+                  }
+                />
+                <F
+                  l="Município / Estado / País"
+                  c={
+                    <input
+                      className={css}
+                      value={`${d.municipality} / ${d.state} / ${d.country}`}
+                      readOnly
+                    />
+                  }
+                />
+              </>
+            )}
+            {s === 1 && (
+              <>
+                <F
+                  l="Espécie *"
+                  c={
+                    <select
+                      className={css}
+                      value={d.species}
+                      onChange={(e) => set("species", e.target.value)}
+                    >
+                      <option value="ARABICA">Arábica</option>
+                      <option value="ROBUSTA_CONILON">
+                        Canephora / Robusta / Conilon
+                      </option>
+                    </select>
+                  }
+                />
+                <F
+                  l="Safra *"
+                  c={
+                    <input
+                      className={css}
+                      value={d.harvest}
+                      onChange={(e) => set("harvest", e.target.value)}
+                    />
+                  }
+                />
+                <F
+                  l="Variedade/Cultivar"
+                  c={
+                    <input
+                      className={css}
+                      value={d.variety}
+                      onChange={(e) => set("variety", e.target.value)}
+                    />
+                  }
+                />
+                <F
+                  l="Processo"
+                  c={
+                    <select
+                      className={css}
+                      value={d.process}
+                      onChange={(e) => set("process", e.target.value)}
+                    >
+                      {[
+                        "Natural",
+                        "Cereja Descascado",
+                        "Honey",
+                        "Lavado",
+                        "Fermentado",
+                        "Outro",
+                      ].map((x) => (
+                        <option key={x}>{x}</option>
+                      ))}
+                    </select>
+                  }
+                />
+                <F
+                  l="Lote fornecedor"
+                  c={
+                    <input
+                      className={css}
+                      value={d.supplierLotCode}
+                      onChange={(e) => set("supplierLotCode", e.target.value)}
+                    />
+                  }
+                />
+              </>
+            )}
+            {s === 2 && (
+              <>
+                <F
+                  l="Acondicionamento"
+                  c={
+                    <select
+                      className={css}
+                      value={d.packagingType}
+                      onChange={(e) => set("packagingType", e.target.value)}
+                    >
+                      <option value="BAG_30_KG">Saca 30 kg</option>
+                      <option value="BAG_60_KG">Saca 60 kg</option>
+                      <option value="BIG_BAG">Big Bag</option>
+                      <option value="OTHER">Outro</option>
+                    </select>
+                  }
+                />
+                <F
+                  l="Volumes"
+                  c={
+                    <input
+                      type="number"
+                      className={css}
+                      value={d.volumeQuantity}
+                      onChange={(e) =>
+                        set("volumeQuantity", Number(e.target.value))
+                      }
+                    />
+                  }
+                />
+                <F
+                  l="Peso nominal/volume"
+                  c={
+                    <input
+                      type="number"
+                      className={css}
+                      value={d.nominalWeightKg}
+                      onChange={(e) =>
+                        set("nominalWeightKg", Number(e.target.value))
+                      }
+                    />
+                  }
+                />
+                <F
+                  l="Peso bruto real"
+                  c={
+                    <input
+                      type="number"
+                      className={css}
+                      value={d.grossWeightKg || ""}
+                      onChange={(e) =>
+                        set("grossWeightKg", Number(e.target.value))
+                      }
+                    />
+                  }
+                />
+                <F
+                  l="Tara"
+                  c={
+                    <input
+                      type="number"
+                      className={css}
+                      value={d.tareWeightKg || ""}
+                      onChange={(e) =>
+                        set("tareWeightKg", Number(e.target.value))
+                      }
+                    />
+                  }
+                />
+                <Card className="bg-forest-950 p-4 text-white">
+                  <small>Peso líquido oficial</small>
+                  <b className="block text-xl">{net} kg</b>
+                </Card>
+              </>
+            )}
+            {s === 3 && (
+              <>
+                <div className="sm:col-span-2 rounded-xl bg-amber-50 p-4 text-sm">
+                  <b>Status: AGUARDANDO ANÁLISE</b>
+                  <br />A triagem cria uma amostra LAB e mantém o lote em
+                  quarentena.
+                </div>
+                <F
+                  l="Umidade inicial (%)"
+                  c={
+                    <input
+                      type="number"
+                      step=".1"
+                      className={css}
+                      value={d.moisturePercent}
+                      onChange={(e) => set("moisturePercent", e.target.value)}
+                    />
+                  }
+                />
+                <F
+                  l="Amostra coletada"
+                  c={
+                    <select className={css} value="SIM">
+                      <option>SIM</option>
+                    </select>
+                  }
+                />
+                <F
+                  l="Condição visual"
+                  c={
+                    <select
+                      className={css}
+                      value={d.visualCondition}
+                      onChange={(e) => set("visualCondition", e.target.value)}
+                    >
+                      <option>NORMAL</option>
+                      <option>ATENÇÃO</option>
+                      <option>NÃO_CONFORME</option>
+                    </select>
+                  }
+                />
+                <F
+                  l="Observações"
+                  c={
+                    <textarea
+                      className={css}
+                      value={d.notes}
+                      onChange={(e) => set("notes", e.target.value)}
+                    />
+                  }
+                />
+              </>
+            )}
+            {s === 4 && (
+              <>
+                <div className="sm:col-span-2 rounded-xl bg-stone-50 p-4">
+                  <b>Compra vinculada:</b> {purchase?.purchaseNumber}
+                </div>
+                <F
+                  l="Nota Fiscal · XML/PDF"
+                  c={
+                    <input
+                      className={css}
+                      value={d.invoiceNumber}
+                      onChange={(e) => set("invoiceNumber", e.target.value)}
+                      placeholder="Número ou referência do arquivo"
+                    />
+                  }
+                />
+                <F
+                  l="CT-e / MDF-e / transporte"
+                  c={
+                    <input
+                      className={css}
+                      value={d.transportDocument}
+                      onChange={(e) => set("transportDocument", e.target.value)}
+                    />
+                  }
+                />
+                <F
+                  l="Romaneio / ticket de balança"
+                  c={<input className={css} placeholder="Referência" />}
+                />
+                <F
+                  l="Observações"
+                  c={
+                    <textarea
+                      className={css}
+                      value={d.notes}
+                      onChange={(e) => set("notes", e.target.value)}
+                    />
+                  }
+                />
+              </>
+            )}
+            {s === 5 && (
+              <div className="sm:col-span-2">
+                <h3 className="font-bold">COMPRADO × RECEBIDO × ANALISADO</h3>
+                <div className="mt-4 grid gap-2">
+                  {[
+                    ["Espécie", purchase?.species, d.species],
+                    ["Safra", purchase?.harvest, d.harvest],
+                    ["Quantidade", `${purchase?.balanceKg} kg`, `${net} kg`],
+                    ["Origem", purchase?.originRegion, d.origin],
+                    [
+                      "Umidade máxima",
+                      purchase?.maxMoisturePercent
+                        ? `${purchase.maxMoisturePercent}%`
+                        : "—",
+                      d.moisturePercent
+                        ? `${d.moisturePercent}%`
+                        : "Aguardando Lab",
+                    ],
+                    ["Peneira", "Contratada", "Aguardando Lab"],
+                    ["Defeitos", "Contratado", "Aguardando Lab"],
+                    ["Qualidade", "Contratada", "Aguardando Lab"],
+                  ].map(([a, b, c]) => (
+                    <div
+                      key={a}
+                      className="grid grid-cols-3 gap-2 rounded-xl bg-stone-50 p-3 text-xs"
+                    >
+                      <b>{a}</b>
+                      <span>{b}</span>
+                      <span>{c}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {err && (
+              <p className="sm:col-span-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                {err}
+              </p>
+            )}
+          </div>
+        </main>
+        <footer className="flex justify-between border-t p-4">
+          <button
+            disabled={!s}
+            onClick={() => setS((x) => x - 1)}
+            className="min-h-11 px-3"
+          >
+            <ArrowLeft className="inline" /> Voltar
+          </button>
+          {s < 5 ? (
+            <Button onClick={() => setS((x) => x + 1)}>
+              Continuar <ArrowRight />
+            </Button>
+          ) : (
+            <Button disabled={busy || net <= 0} onClick={submit}>
+              <Check />
+              Confirmar entrada e gerar lote
+            </Button>
+          )}
+        </footer>
+      </div>
+    </div>
+  );
 }
-
-function LotDrawer({ lot, onClose }: { lot: ReceiptLot; onClose: () => void }) {
-  const status = statusLabels[lot.status];
-  return <div className="fixed inset-0 z-50 flex justify-end"><button className="absolute inset-0 bg-forest-950/25 backdrop-blur-[2px]" aria-label="Fechar" onClick={onClose} /><aside className="relative h-full w-full max-w-xl overflow-y-auto border-l bg-white shadow-2xl"><header className="sticky top-0 z-10 flex items-start justify-between border-b bg-white/95 p-6 backdrop-blur"><div><p className="text-xs font-bold uppercase tracking-[.15em] text-forest-700">Lote de café verde</p><h2 className="mt-1 text-xl font-bold">{lot.code}</h2></div><button onClick={onClose} className="rounded-xl border p-2 text-stone-500"><X size={18} /></button></header><div className="space-y-7 p-6"><div className="flex items-center justify-between rounded-2xl bg-stone-50 p-4"><div><p className="text-sm font-bold">{lot.supplier}</p><p className="mt-1 text-xs text-stone-500">{lot.origin}</p></div><Badge tone={status.tone}>{status.label}</Badge></div><section><h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">Origem</h3><div className="mt-3 grid grid-cols-2 gap-3"><Info label="Fornecedor" value={lot.supplier} /><Info label="Origem" value={lot.origin} /><Info label="Recebido em" value={lot.receivedAt} /><Info label="Quantidade" value={`${integer.format(lot.quantityKg)} kg`} /></div></section><section><h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">Qualidade</h3><div className="mt-3 grid grid-cols-3 gap-3"><Info label="Umidade" value={lot.lab ? `${lot.lab.moisturePercent}%` : 'Pendente'} /><Info label="Aw" value={lot.lab?.waterActivity.toString() ?? 'Pendente'} /><Info label="SCA" value={lot.scaScore?.toLocaleString('pt-BR') ?? 'Pendente'} /><Info label="Densidade" value={lot.lab ? `${lot.lab.densityGPerL} g/L` : '—'} /><Info label="Peneira" value={lot.lab?.screen ?? '—'} /><Info label="Defeitos" value={lot.lab?.defects.toString() ?? '—'} /></div></section><section><h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">Custos</h3><div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white"><div className="flex justify-between"><div><p className="text-xs text-white/50">Custo real do lote</p><p className="mt-1 text-xl font-bold">{currency.format(lot.totalCost)}</p></div><div className="text-right"><p className="text-xs text-white/50">Custo real/kg</p><p className="mt-1 text-xl font-bold">{currency.format(lot.realCostPerKg)}</p></div></div></div></section><section><h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">Estoque</h3><div className="mt-3 flex items-center gap-3 rounded-xl border p-4"><MapPin size={18} className="text-forest-700" /><div><p className="text-sm font-semibold">{lot.location}</p><p className="mt-1 text-xs text-stone-400">Posição atual do lote</p></div></div></section><section><h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">Rastreabilidade</h3><div className="mt-4 space-y-0">{lot.traceability.map((event, index) => <div key={event.id} className="flex gap-3"><div className="flex flex-col items-center"><span className={`grid size-7 place-items-center rounded-full ${event.status === 'complete' ? 'bg-emerald-100 text-emerald-700' : event.status === 'current' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-400'}`}>{event.status === 'complete' ? <Check size={13} /> : <span className="size-1.5 rounded-full bg-current" />}</span>{index < lot.traceability.length - 1 && <span className="h-8 w-px bg-stone-200" />}</div><div><p className={`text-sm font-semibold ${event.status === 'future' ? 'text-stone-400' : ''}`}>{event.label}</p><p className="mt-0.5 text-[11px] text-stone-400">{event.occurredAt}</p></div></div>)}</div></section></div></aside></div>;
-}
-
-function Info({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-stone-50 p-3"><p className="text-[10px] uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-xs font-semibold">{value}</p></div>; }
-
-function AlertDrawer({ alert, lot, onClose }: { alert: ReceiptAlert; lot?: ReceiptLot; onClose: () => void }) {
-  return <div className="fixed inset-0 z-50 flex justify-end"><button aria-label="Fechar" className="absolute inset-0 bg-forest-950/25" onClick={onClose} /><aside className="relative h-full w-full max-w-lg overflow-y-auto border-l bg-white p-6 shadow-2xl"><div className="flex justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-red-700">Alerta operacional</p><h2 className="mt-2 text-xl font-bold">{alert.alert}</h2></div><button onClick={onClose} className="rounded-xl border p-2"><X size={18} /></button></div><div className="mt-7 space-y-4">{[['Dado', alert.datum], ['Alerta', `${lot?.code ?? 'Lote'} • ${alert.alert}`], ['Diagnóstico', alert.diagnosis], ['Impacto', alert.impact], ['Ação', alert.action], ['Resultado esperado', 'Decisão registrada, lote corretamente segregado e indicadores atualizados.']].map(([label, value], index) => <div key={label} className="flex gap-3"><span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${index < 4 ? 'bg-red-50 text-red-700' : 'bg-forest-50 text-forest-700'}`}>{index + 1}</span><div><p className="text-xs font-bold uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-sm leading-6 text-stone-600">{value}</p></div></div>)}</div>{alert.ruleReference && <p className="mt-6 rounded-xl bg-stone-50 p-4 text-xs text-stone-500">{alert.ruleReference}</p>}<Button className="mt-6 w-full">Registrar decisão operacional</Button></aside></div>;
-}
-
-export default function ReceiptPage() {
-  const [lots, setLots] = useState(receiptDemoDashboard.lots);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [selectedLot, setSelectedLot] = useState<ReceiptLot | null>(null);
-  const [selectedAlert, setSelectedAlert] = useState<ReceiptAlert | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  const summary = useMemo(() => ({ ...receiptDemoDashboard.summary, receiptsToday: receiptDemoDashboard.summary.receiptsToday + (lots.length - receiptDemoDashboard.lots.length), receivedKgToday: receiptDemoDashboard.summary.receivedKgToday + lots.slice(receiptDemoDashboard.lots.length).reduce((sum, lot) => sum + lot.quantityKg, 0), receivedValueToday: receiptDemoDashboard.summary.receivedValueToday + lots.slice(receiptDemoDashboard.lots.length).reduce((sum, lot) => sum + lot.totalCost, 0) }), [lots]);
-  const complete = (lot: ReceiptLot) => { setLots(current => [lot, ...current]); setWizardOpen(false); setResult(`${lot.code} criado • estoque, IndustrialEvent e CostEvents registrados`); };
-  const summaries = [{ label: 'Recebimentos hoje', value: summary.receiptsToday.toString(), icon: Truck }, { label: 'Kg recebidos hoje', value: `${integer.format(summary.receivedKgToday)} kg`, icon: Scale }, { label: 'Valor recebido', value: currency.format(summary.receivedValueToday), icon: CircleDollarSign }, { label: 'Custo médio/kg', value: currency.format(summary.averageCostPerKg), icon: ClipboardCheck }, { label: 'Aguardando laboratório', value: summary.awaitingLab.toString(), icon: FlaskConical }, { label: 'Lotes bloqueados', value: summary.blockedLots.toString(), icon: ShieldAlert }];
-  return <div className="mx-auto max-w-[1480px]"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-forest-700"><PackageOpen size={14} />Operação Industrial</div><h1 className="font-[var(--font-manrope)] text-3xl font-bold tracking-tight">Recebimento</h1><p className="mt-2 text-sm text-stone-500">Cargas, custos, qualidade e entrada em estoque</p></div><Button onClick={() => setWizardOpen(true)} className="flex items-center justify-center gap-2 px-5 py-3"><Plus size={17} />Novo Recebimento</Button></div>{result && <div className="mt-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><span className="flex items-center gap-2"><Check size={16} />{result}</span><button onClick={() => setResult(null)}><X size={15} /></button></div>}<section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{summaries.map(({ label, value, icon: Icon }, index) => <Card key={label} className="p-5"><div className="flex items-center justify-between"><p className="text-xs font-medium text-stone-500">{label}</p><Icon size={16} className={index === 5 ? 'text-red-600' : 'text-forest-700'} /></div><p className="mt-4 text-xl font-bold tracking-tight">{value}</p></Card>)}</section>
-    <section className="mt-8"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-red-700">Requer atenção</p><h2 className="mt-1 text-lg font-bold">Alertas com diagnóstico</h2></div><Badge tone="danger">{receiptDemoDashboard.alerts.length} alertas</Badge></div><div className="mt-4 grid gap-4 lg:grid-cols-2">{receiptDemoDashboard.alerts.map(alert => { const lot = lots.find(item => item.id === alert.lotId); return <Card key={alert.id} className={`p-5 ${alert.status === 'off-track' ? 'border-red-200' : 'border-amber-200'}`}><div className="flex gap-3"><span className={`grid size-9 shrink-0 place-items-center rounded-xl ${alert.status === 'off-track' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}><AlertTriangle size={17} /></span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">{alert.alert}</p><Badge tone={alert.status === 'off-track' ? 'danger' : 'warning'}>{lot?.code}</Badge></div><p className="mt-2 text-xs leading-5 text-stone-500">{alert.datum} • {alert.impact}</p><button onClick={() => setSelectedAlert(alert)} className="mt-3 flex items-center gap-1 text-xs font-bold text-forest-700">Ver detalhes e agir <ChevronRight size={13} /></button></div></div></Card>; })}</div></section>
-    <section className="mt-8"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Lotes recentes</p><h2 className="mt-1 text-lg font-bold">Café verde recebido</h2></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{lots.map(lot => { const status = statusLabels[lot.status]; return <button key={lot.id} onClick={() => setSelectedLot(lot)} className="text-left"><Card className="h-full p-5 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-center justify-between"><p className="font-bold">{lot.code}</p><Badge tone={status.tone}>{status.label}</Badge></div><p className="mt-3 text-sm font-semibold text-stone-700">{lot.supplier}</p><p className="mt-1 text-xs text-stone-400">{lot.origin}</p><div className="mt-5 grid grid-cols-3 gap-3 border-t pt-4"><Info label="Quantidade" value={`${integer.format(lot.quantityKg)} kg`} /><Info label="Custo/kg" value={currency.format(lot.realCostPerKg)} /><Info label="SCA" value={lot.scaScore?.toLocaleString('pt-BR') ?? 'Pendente'} /></div><div className="mt-4 flex items-center justify-between text-xs"><span className="flex items-center gap-1 text-stone-500"><Warehouse size={13} />{lot.location}</span><ChevronRight size={14} className="text-stone-300" /></div></Card></button>; })}</div></section>
-    {wizardOpen && <Wizard onClose={() => setWizardOpen(false)} onComplete={complete} />}{selectedLot && <LotDrawer lot={selectedLot} onClose={() => setSelectedLot(null)} />}{selectedAlert && <AlertDrawer alert={selectedAlert} lot={lots.find(item => item.id === selectedAlert.lotId)} onClose={() => setSelectedAlert(null)} />}
-  </div>;
+export default function Page() {
+  const [o, setO] = useState<Opt | null>(null),
+    [rows, setRows] = useState<Row[]>([]),
+    [open, setOpen] = useState(false),
+    [msg, setMsg] = useState(""),
+    [err, setErr] = useState(""),
+    [selectedPurchaseId, setSelectedPurchaseId] = useState("");
+  const load = () =>
+    Promise.all([
+      req<Opt>(`${API}/options`, { credentials: "include" }),
+      req<Row[]>(API, { credentials: "include" }),
+      fetchSessionIdentity(ROOT),
+      ])
+      .then(async ([a, b, identity]) => {
+        setO({ ...a, currentUser: identity });
+        setRows(b);
+      })
+      .catch((e) => setErr(String(e)));
+  useEffect(() => {
+    void load();
+  }, []);
+  const kg = useMemo(
+    () => rows.reduce((s, r) => s + Number(r.netWeightKg), 0),
+    [rows],
+  );
+  return (
+    <div className="mx-auto max-w-[1480px]">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase text-forest-700">
+            <PackageOpen className="inline" size={15} /> Processo operacional
+          </p>
+          <h1 className="mt-2 text-3xl font-bold">Recebimento de café verde</h1>
+          <p className="mt-2 text-sm text-stone-500">Fila operacional de entradas vinculadas a compras confirmadas.</p>
+        </div>
+      </header>
+      {msg && (
+        <p className="mt-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
+          {msg}
+        </p>
+      )}
+      {err && (
+        <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">
+          {err}
+        </p>
+      )}
+      <div className="mt-7 flex flex-wrap gap-2"><button className="min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Aguardando entrada ({o?.purchases.length ?? 0})</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Recebimento parcial</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Em quarentena</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Laboratório</button><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Concluídos</button></div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <Card className="p-5">
+          Recebimentos<b className="mt-2 block text-xl">{rows.length}</b>
+        </Card>
+        <Card className="p-5">
+          Peso físico<b className="mt-2 block text-xl">{kg} kg</b>
+        </Card>
+        <Card className="p-5">
+          Em quarentena
+          <b className="mt-2 block text-xl">
+            {rows.filter((r) => r.qualityStatus === "AWAITING_ANALYSIS").length}
+          </b>
+        </Card>
+      </div>
+      <section className="mt-7"><div className="mb-3"><h2 className="text-lg font-bold">Aguardando entrada</h2><p className="text-sm text-stone-500">Compras aprovadas, confirmadas e com saldo físico disponível.</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{o?.purchases.map((purchase) => <button key={purchase.id} type="button" onClick={() => { setSelectedPurchaseId(purchase.id); setOpen(true); }} className="rounded-2xl border border-amber-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-forest-700">{purchase.purchaseNumber}</p><h3 className="mt-1 text-lg font-bold">{purchase.supplier.name}</h3></div><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">Pronto para recebimento</span></div><p className="mt-3 text-sm text-stone-600">{displayEnum(purchase.qualityCategory)} · {speciesDisplay[purchase.species] ?? displayEnum(purchase.species)} · {displayEnum(purchase.variety)}</p><div className="mt-4 grid grid-cols-3 gap-3 text-xs"><span><small className="block text-stone-500">Contratado</small><b>{purchase.contractedWeightKg} kg · {purchase.volumeQuantity} volumes</b></span><span><small className="block text-stone-500">Recebido</small><b>{purchase.receivedKg} kg</b></span><span><small className="block text-stone-500">Saldo</small><b>{purchase.balanceKg} kg</b></span></div><p className="mt-4 text-xs text-stone-500">{purchase.expectedAt ? `Entrega prevista: ${new Date(purchase.expectedAt).toLocaleDateString("pt-BR")}` : "Entrega ainda não programada"}</p></button>)}</div>{o && o.purchases.length === 0 && <Card className="p-6 text-sm text-stone-500">Nenhuma compra elegível aguardando entrada.</Card>}</section>
+      <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {rows.map((r) => (
+          <Card key={r.id} className="p-5">
+            <div className="flex justify-between">
+              <b>{r.receiptNumber}</b>
+              <Badge tone="warning">{r.qualityStatus}</Badge>
+            </div>
+            <h3 className="mt-2 font-bold">{r.coffeeLot.code}</h3>
+            <p className="mt-2 text-sm">
+              {r.supplier.name} · {r.origin}
+            </p>
+            <p className="mt-3 text-xs">
+              {r.netWeightKg} kg · saldo por movimentos {r.stockBalanceKg} kg
+            </p>
+            <a
+              href={`/estoque?lot=${r.coffeeLot.id}`}
+              className="mt-3 inline-block min-h-11 text-xs font-bold text-forest-700"
+            >
+              Ver lote e rastreabilidade →
+            </a>
+          </Card>
+        ))}
+      </div>
+      {open && o && (
+        <Wizard
+          o={o}
+          initialPurchaseId={selectedPurchaseId}
+          close={() => setOpen(false)}
+          done={(x: ReceiptResult) => {
+            setOpen(false);
+            setMsg(
+              `${x.receiptNumber} · ${x.lotCode} · ${x.sampleNumber} criados em quarentena.`,
+            );
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
 }

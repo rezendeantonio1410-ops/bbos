@@ -22,6 +22,7 @@ export type CreateSalesOrderInput = {
   code: string;
   orderNumber?: string;
   customerId: string;
+  salesChannelId?: string;
   expectedDeliveryDate?: string;
   discount?: number;
   freight?: number;
@@ -114,6 +115,10 @@ export class SalesOrdersService implements OnModuleDestroy {
           where: { id: input.customerId },
         });
         if (!customer) throw new BadRequestException("Cliente não encontrado.");
+        const salesChannel = input.salesChannelId
+          ? await transaction.salesChannel.findFirst({ where: { id: input.salesChannelId, companyId: customer.companyId, active: true } })
+          : null;
+        if (input.salesChannelId && !salesChannel) throw new BadRequestException("Canal de venda inválido para a empresa.");
         const variants = await transaction.productVariant.findMany({
           where: {
             id: { in: input.items.map((item) => item.productVariantId) },
@@ -152,6 +157,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           data: {
             companyId: customer.companyId,
             customerId: customer.id,
+            salesChannelId: salesChannel?.id,
             code: input.code,
             orderNumber: input.orderNumber ?? input.code,
             quantity: totalQuantity,
@@ -596,6 +602,7 @@ export class SalesOrdersService implements OnModuleDestroy {
 
   private readonly orderInclude = {
     customer: true,
+    salesChannel: true,
     finishedProduct: true,
     items: {
       include: {

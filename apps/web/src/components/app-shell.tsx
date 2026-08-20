@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -13,6 +14,7 @@ import {
   Factory,
   FlaskConical,
   Gauge,
+  Globe2,
   House,
   LayoutDashboard,
   Menu,
@@ -26,20 +28,20 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
-import { currentUser } from "@/lib/current-user";
+import { UserAvatar } from "./user-avatar";
+import { fetchSessionIdentity, getApiRoot, type SessionIdentity, SessionError } from "@/lib/auth-session";
 
 const nav = [
   { href: "/home", label: "Início", icon: House },
   { href: "/dashboard", label: "Dashboard Executivo", icon: LayoutDashboard },
   { href: "/dashboard-industrial", label: "Dashboard Industrial", icon: Gauge },
-  { href: "/recebimento", label: "Recebimento", icon: PackageOpen },
-  { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
-  { href: "/estoque", label: "Estoque", icon: Warehouse },
+  { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
   { href: "/producao", label: "Produção", icon: Factory },
   { href: "/blends", label: "Blends", icon: Boxes },
   { href: "/produtos", label: "Produtos", icon: PackageCheck },
   { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { href: "/vendas", label: "Vendas", icon: BarChart3 },
+  { href: "/commerce", label: "Commerce", icon: Globe2 },
   { href: "/bi", label: "BI Executivo", icon: BrainCircuit },
   { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
   { href: "/custos", label: "Custos", icon: Calculator },
@@ -47,11 +49,50 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isExecutiveDashboard = pathname === "/dashboard";
-  const usesApprovedDashboardSurfaces = isExecutiveDashboard || pathname === "/dashboard-industrial" || pathname === "/home";
+  const router = useRouter();
+  const [sessionUser, setSessionUser] = useState<(SessionIdentity & { initials: string; corporateTitle: string }) | null>(null);
+  const [sessionState, setSessionState] = useState<"checking" | "authenticated" | "unauthenticated" | "unavailable">("checking");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setSessionState("checking");
+    void fetchSessionIdentity(getApiRoot()).then((identity) => {
+      if (cancelled) return;
+      setSessionUser({
+        ...identity,
+        initials: identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+        corporateTitle: identity.role === "ADMIN" ? "Sócio Administrador" : identity.role === "EXECUTIVE" ? "Diretor" : identity.role === "SALES" ? "Comercial" : identity.role,
+      });
+      setSessionState("authenticated");
+    }).catch((cause) => {
+      if (cancelled) return;
+      setSessionUser(null);
+      setSessionState(cause instanceof SessionError && cause.kind === "unavailable" ? "unavailable" : "unauthenticated");
+    });
+    return () => { cancelled = true; };
+  }, [sessionAttempt]);
+  useEffect(() => {
+    if (sessionState !== "unauthenticated" || pathname === "/login") return;
+    const returnTo = `${pathname}${window.location.search}`;
+    router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [pathname, router, sessionState]);
+  if (sessionState !== "authenticated") {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[var(--surface-page)] p-6">
+        <div className="text-center">
+          <p className="text-sm text-stone-500">
+            {sessionState === "checking" ? "Verificando sessão…" : sessionState === "unavailable" ? "Não foi possível conectar ao BBOS." : "Redirecionando para o login…"}
+          </p>
+          {sessionState === "unavailable" && <button type="button" onClick={() => setSessionAttempt((attempt) => attempt + 1)} className="mt-4 rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-900">Tentar novamente</button>}
+        </div>
+      </div>
+    );
+  }
+  const user = sessionUser;
+  const logout = async () => { await fetch(`${getApiRoot()}/auth/logout`, { method: "POST", credentials: "include" }); window.location.href = "/login"; };
   return (
-    <div className={`min-h-screen lg:grid lg:grid-cols-[264px_1fr] ${usesApprovedDashboardSurfaces ? "bg-[#F3FAF8]" : "bg-[#E0EAE9]"}`}>
-      <aside className={`hidden border-r lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto ${usesApprovedDashboardSurfaces ? "border-[#E7ECEA] bg-white" : "border-stone-200 bg-white"}`}>
+    <div className="min-h-screen bg-[var(--surface-page)] lg:grid lg:grid-cols-[264px_1fr]">
+      <aside className="hidden border-r border-[var(--surface-border)] bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-6">
           <Logo />
           <button
@@ -79,7 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active ? (usesApprovedDashboardSurfaces ? "bg-[#EDF7F5] text-forest-900" : "bg-forest-50 text-forest-900") : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"}`}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active ? "bg-[#F0F0ED] text-stone-950" : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"}`}
               >
                 <Icon size={18} strokeWidth={active ? 2.1 : 1.7} />
                 {label}
@@ -104,7 +145,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
       </aside>
       <div className="min-w-0">
-        <header className={`sticky top-0 z-20 flex h-[72px] items-center justify-between border-b px-4 backdrop-blur md:px-8 ${usesApprovedDashboardSurfaces ? "border-[#E7ECEA] bg-white shadow-[0_1px_8px_rgba(15,30,28,.025)]" : "bg-white/90"}`}>
+        <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-[var(--surface-border)] bg-white px-4 shadow-[0_1px_8px_rgba(15,30,28,.025)] backdrop-blur md:px-8">
           <div className="flex items-center gap-3 lg:hidden">
             <button
               aria-label="Abrir menu"
@@ -132,14 +173,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <div className="hidden h-8 w-px bg-stone-200 sm:block" />
             <div className="hidden items-center gap-2.5 sm:flex">
-              <span className="grid size-9 place-items-center rounded-full bg-forest-100 text-xs font-bold text-forest-800">
-                {currentUser.initials}
-              </span>
+                <UserAvatar name={user?.name ?? "Usuário"} avatarUrl={user?.avatarUrl} size="medium" />
               <div>
-                <p className="text-xs font-semibold">{currentUser.name}</p>
-                <p className="text-[11px] text-stone-500">{currentUser.corporateTitle}</p>
+                <p className="text-xs font-semibold">{user?.name ?? "Sessão não autenticada"}</p>
+                <p className="text-[11px] text-stone-500">{user?.corporateTitle ?? "Acesse o login"}</p>
               </div>
             </div>
+            {user && <button type="button" onClick={() => void logout()} className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-100 hover:text-stone-900">Sair</button>}
           </div>
         </header>
         <main className="p-4 md:p-8 xl:p-10">{children}</main>

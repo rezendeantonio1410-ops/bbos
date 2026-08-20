@@ -104,8 +104,8 @@ export const brandTokens: BrandTokenContract = {
     card: '#FFFFFF',
     header: '#FFFFFF',
     sidebar: '#FFFFFF',
-    page: '#F3FAF8',
-    muted: '#F7F9F8',
+    page: '#F7F7F5',
+    muted: '#FAFAF8',
   },
   analytics: {
     identityRevenue: '#087568',

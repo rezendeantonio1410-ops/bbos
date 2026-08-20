@@ -1,0 +1,4 @@
+-- AuthSession is part of the initial baseline so a fresh database has the
+-- authentication foundation before any incremental migration runs.
+-- This migration is intentionally retained as a historical no-op to avoid
+-- attempting to recreate the table on databases applying the full chain.

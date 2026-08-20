@@ -7,8 +7,10 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import type { Request } from "express";
 import {
   isProductLine,
   type CreateProductSkuInput,
@@ -17,33 +19,38 @@ import {
   // @ts-expect-error Nest uses legacy Node resolution; runtime resolves the package export.
 } from "@bbos/shared/product-presentation";
 import { ProductsService } from "./products.service";
+import { AuthService } from "./auth.service";
+import { requireSession } from "./auth-context";
 
 @Controller("products")
 export class ProductsController {
-  constructor(private readonly products: ProductsService) {}
+  constructor(private readonly products: ProductsService, private readonly auth: AuthService) {}
 
   @Get()
-  async listCatalog() {
+  async listCatalog(@Req() req: Request) {
     try {
-      return await this.products.listCatalog();
+      const actor = await requireSession(req, this.auth);
+      return await this.products.listCatalog(actor.companyId);
     } catch (error) {
       throwProductError(error);
     }
   }
 
   @Post()
-  async createProduct(@Body() input: CreateCatalogProductInput) {
+  async createProduct(@Body() input: CreateCatalogProductInput, @Req() req: Request) {
     try {
-      return await this.products.createProduct(input);
+      const actor = await requireSession(req, this.auth);
+      return await this.products.createProduct(input, actor.companyId);
     } catch (error) {
       throwProductError(error);
     }
   }
 
   @Get("lines")
-  async listLines() {
+  async listLines(@Req() req: Request) {
     try {
-      return await this.products.listLines();
+      const actor = await requireSession(req, this.auth);
+      return await this.products.listLines(actor.companyId);
     } catch (error) {
       throwProductError(error);
     }
@@ -53,9 +60,11 @@ export class ProductsController {
   async createVariant(
     @Param("id") id: string,
     @Body() input: CreateProductVariantInput,
+    @Req() req: Request,
   ) {
     try {
-      return await this.products.createVariant(id, input);
+      const actor = await requireSession(req, this.auth);
+      return await this.products.createVariant(id, input, actor.companyId);
     } catch (error) {
       throwProductError(error);
     }
@@ -65,9 +74,11 @@ export class ProductsController {
   async updateProduct(
     @Param("id") id: string,
     @Body() input: { name?: string; description?: string; active?: boolean },
+    @Req() req: Request,
   ) {
     try {
-      return await this.products.updateProduct(id, input);
+      const actor = await requireSession(req, this.auth);
+      return await this.products.updateProduct(id, input, actor.companyId);
     } catch (error) {
       throwProductError(error);
     }
@@ -77,9 +88,11 @@ export class ProductsController {
   async updateVariant(
     @Param("id") id: string,
     @Body() input: { active: boolean },
+    @Req() req: Request,
   ) {
     try {
-      return await this.products.updateVariant(id, input);
+      const actor = await requireSession(req, this.auth);
+      return await this.products.updateVariant(id, input, actor.companyId);
     } catch (error) {
       throwProductError(error);
     }
@@ -98,9 +111,10 @@ export class ProductsController {
   }
 
   @Get(":id")
-  async getProduct(@Param("id") id: string) {
+  async getProduct(@Param("id") id: string, @Req() req: Request) {
     try {
-      const product = await this.products.getProduct(id);
+      const actor = await requireSession(req, this.auth);
+      const product = await this.products.getProduct(id, actor.companyId);
       if (!product) throw new NotFoundException("Produto não encontrado.");
       return product;
     } catch (error) {

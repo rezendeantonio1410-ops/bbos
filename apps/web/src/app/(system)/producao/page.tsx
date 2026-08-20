@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   Boxes,
   Check,
   ChevronRight,
@@ -26,19 +25,14 @@ import {
   type ProductionOrderStatus,
   type ProductionOrderView,
 } from "@bbos/shared";
-import { inventoryLotsDemo } from "@/lib/inventory-demo-data";
 import {
-  PRODUCT_CATALOG_DEMO,
   PRODUCT_LINE_LABELS,
   PRODUCT_LINES,
   type CatalogProduct,
   type ProductLine,
 } from "@bbos/shared/product-presentation";
 import { loadProductCatalog } from "@/lib/product-catalog-api";
-import {
-  productionDemoDashboard,
-  productionOrdersDemo,
-} from "@/lib/production-demo-data";
+import { getApiBaseUrl } from "@/lib/api-url";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -100,16 +94,10 @@ function NewOrderWizard({
   onCreate: (order: ProductionOrderView) => void;
 }) {
   const [step, setStep] = useState(0);
-  const [catalog, setCatalog] = useState<CatalogProduct[]>(
-    PRODUCT_CATALOG_DEMO,
-  );
-  const [line, setLine] = useState<ProductLine>(
-    PRODUCT_CATALOG_DEMO[0]!.line,
-  );
-  const [productId, setProductId] = useState(PRODUCT_CATALOG_DEMO[0]!.id);
-  const [productVariantId, setProductVariantId] = useState(
-    PRODUCT_CATALOG_DEMO[0]!.skus[0]!.id,
-  );
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [line, setLine] = useState<ProductLine>(PRODUCT_LINES[0]);
+  const [productId, setProductId] = useState("");
+  const [productVariantId, setProductVariantId] = useState("");
   const productsForLine = catalog.filter(
     (item) => item.line === line && item.active,
   );
@@ -137,9 +125,7 @@ function NewOrderWizard({
   const [mode, setMode] = useState<"single" | "blend">("single");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
-  const available = inventoryLotsDemo.filter(
-    (lot) => lot.status === "approved" || lot.status === "attention",
-  );
+  const available: Array<{ id: string; code: string; origin: string; availableQuantityKg: number; realCostPerKg: number }> = [];
   const allocated = Object.values(selected).reduce(
     (sum, value) => sum + value,
     0,
@@ -196,7 +182,7 @@ function NewOrderWizard({
       return setError("A participação dos lotes deve somar 100%.");
     onCreate({
       id: `op-${Date.now()}`,
-      code: `OP-2026-${String(111 + productionOrdersDemo.length).padStart(4, "0")}`,
+      code: "OP-NOVA",
       productVariantId: selectedVariant?.id,
       product,
       sku,
@@ -660,7 +646,7 @@ function OrderDrawer({
                       <Badge
                         tone={
                           batch.lossPercent >
-                          productionDemoDashboard.roastLossTargetPercent
+                          0
                             ? "warning"
                             : "success"
                         }
@@ -816,11 +802,12 @@ function OrderDrawer({
 }
 
 export default function ProductionPage() {
-  const [orders, setOrders] = useState(productionOrdersDemo);
+  const [orders, setOrders] = useState<ProductionOrderView[]>([]);
   const [wizard, setWizard] = useState(false);
   const [selected, setSelected] = useState<ProductionOrderView | null>(null);
   const [message, setMessage] = useState("");
-  const summary = productionDemoDashboard.summary;
+  const summary = { plannedTodayKg: 0, producedTodayKg: 0, openOrders: 0, inProgressOrders: 0, delayedOrders: 0, efficiencyPercent: 0, averageRoastLossPercent: 0, averageRealCostPerKg: 0, monthlyProducedKg: 0, monthlyTargetKg: 0 };
+  useEffect(() => { void fetch(`${getApiBaseUrl()}/production/orders`, { credentials: "include" }).then((response) => response.ok ? response.json() : []).then((rows: Array<Record<string, unknown>>) => setOrders(rows.map((row) => ({ id: String(row.id), code: String(row.code), product: String(row.productName ?? "Produto não definido"), sku: String(row.sku ?? "—"), plannedQuantity: Number(row.plannedWeightKg ?? 0), producedQuantity: Number(row.actualOutputKg ?? 0), unit: String(row.unit ?? "kg"), plannedAt: String(row.plannedAt ?? ""), startedAt: row.startedAt ? String(row.startedAt) : undefined, completedAt: row.completedAt ? String(row.completedAt) : undefined, responsible: String(row.responsible ?? "—"), priority: String(row.priority ?? "normal").toLowerCase() as ProductionOrderView["priority"], status: String(row.status ?? "PLANNED").toLowerCase().replace("_", "-") as ProductionOrderView["status"], blendName: String((row.blend as { name?: string } | undefined)?.name ?? "—"), allocations: [], batches: [], packaging: undefined, costs: { greenCoffeeConsumedCost: 0, roastLossCost: 0, packagingCost: 0, suppliesCost: 0, laborCost: 0, energyCost: 0, otherIndustrialCosts: 0, roastedOutputKg: Number(row.actualOutputKg ?? 0), finishedOutputKg: 0, producedPackages: 0, totalCost: 0, costPerKg: 0, standardCostPerKg: 0, sku: String(row.sku ?? "—"), sourceCostEventIds: [] }, traceability: [] })) as unknown as ProductionOrderView[])).catch(() => setOrders([])); }, []);
   const cards = useMemo(
     () => [
       {
@@ -937,18 +924,13 @@ export default function ProductionPage() {
               </p>
               <h2 className="mt-1 text-lg font-bold">Produção mensal</h2>
             </div>
-            <strong>
-              {number.format(
-                (summary.monthlyProducedKg / summary.monthlyTargetKg) * 100,
-              )}
-              %
-            </strong>
+            <strong>{summary.monthlyTargetKg > 0 ? `${number.format((summary.monthlyProducedKg / summary.monthlyTargetKg) * 100)}%` : "Sem dados"}</strong>
           </div>
           <div className="mt-6 h-3 overflow-hidden rounded-full bg-stone-100">
             <div
               className="h-full rounded-full bg-forest-800"
               style={{
-                width: `${(summary.monthlyProducedKg / summary.monthlyTargetKg) * 100}%`,
+                width: `${summary.monthlyTargetKg > 0 ? Math.min(100, (summary.monthlyProducedKg / summary.monthlyTargetKg) * 100) : 0}%`,
               }}
             />
           </div>
@@ -959,28 +941,9 @@ export default function ProductionPage() {
             <span>{number.format(summary.monthlyTargetKg)} kg meta</span>
           </div>
         </Card>
-        <Card className="border-amber-200 p-6">
-          <div className="flex gap-3">
-            <span className="grid size-9 place-items-center rounded-xl bg-amber-50 text-amber-700">
-              <AlertTriangle size={17} />
-            </span>
-            <div>
-              <p className="text-sm font-bold">Perda acima da meta</p>
-              <p className="mt-2 text-xs leading-5 text-stone-500">
-                Batch B-108-A: 16,0% contra meta de 15,5%.
-              </p>
-              <button
-                onClick={() =>
-                  setSelected(
-                    orders.find((item) => item.id === "op-0108") ?? null,
-                  )
-                }
-                className="mt-3 flex items-center gap-1 text-xs font-bold text-forest-700"
-              >
-                Ver causas e ações <ArrowRight size={13} />
-              </button>
-            </div>
-          </div>
+        <Card className="border-dashed p-6">
+          <p className="text-sm font-bold">Alertas de produção</p>
+          <p className="mt-2 text-xs leading-5 text-stone-500">Sem dados reais de alertas para o período.</p>
         </Card>
       </section>
       <section className="mt-8">
@@ -1056,9 +1019,7 @@ export default function ProductionPage() {
       {selected && (
         <OrderDrawer
           order={selected}
-          alert={productionDemoDashboard.alerts.find(
-            (item) => item.orderId === selected.id,
-          )}
+          alert={undefined}
           onClose={() => setSelected(null)}
         />
       )}

@@ -14,9 +14,9 @@
   --surface-card: #FFFFFF;
   --surface-header: #FFFFFF;
   --surface-sidebar: #FFFFFF;
-  --surface-page: #F3FAF8;
-  --surface-muted: #F7F9F8;
-  --surface-border: #E7ECEA;
+  --surface-page: #F7F7F5;
+  --surface-muted: #FAFAF8;
+  --surface-border: #E7E7E3;
   --analytic-identity: #087568;
   --analytic-positive: #16A06A;
   --analytic-coffee: #C8923E;
@@ -26,7 +26,7 @@
   --analytic-critical: #D95757;
 }
 * { border-color: theme('colors.stone.200'); }
-body { margin: 0; background: var(--brand-platinum); color: var(--brand-ritual-black); }
+body { margin: 0; background: var(--surface-page); color: var(--brand-ritual-black); }
 button, input { font: inherit; }
 ::selection { background: var(--brand-chinese-black); color: var(--brand-whitt-sand); }
 
