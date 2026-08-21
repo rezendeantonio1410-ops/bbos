@@ -21,6 +21,7 @@ import {
 import { AuthService } from "./auth.service";
 import { assertCompany, requireSession } from "./auth-context";
 import { calculateWeightVariance } from "./receipts-weight";
+import { compareQuality } from "./lab-quality";
 
 type ConfirmReceiptBody = {
   companyId: string;
@@ -80,6 +81,72 @@ const lotStatusFor = (quality: GreenCoffeeQualityStatus): CoffeeLotStatus => {
 export class ReceiptsController {
   private readonly database = new PrismaClient();
   constructor(private readonly auth: AuthService) {}
+
+  @Get("lab-samples")
+  async listLabSamples(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const samples = await this.database.greenCoffeeLabSample.findMany({
+      where: { receipt: { companyId: actor.companyId } },
+      include: { receipt: { include: { supplier: true, coffeeLot: true, purchase: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    return samples.map((sample) => this.labSampleView(sample));
+  }
+
+  @Get("lab-samples/:id")
+  async getLabSample(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const sample = await this.database.greenCoffeeLabSample.findFirst({
+      where: { id, receipt: { companyId: actor.companyId } },
+      include: { receipt: { include: { supplier: true, coffeeLot: true, purchase: true } } },
+    });
+    if (!sample) throw new NotFoundException("Amostra não encontrada.");
+    return this.labSampleView(sample);
+  }
+
+  @Patch("lab-samples/:id/analysis")
+  async completeLabAnalysis(
+    @Param("id") id: string,
+    @Body() body: { qualityStatus: GreenCoffeeQualityStatus; moisturePercent?: number; defects?: number; screen?: string; score?: number; notes?: string },
+    @Req() req: Request,
+  ) {
+    const actor = await requireSession(req, this.auth);
+    if (!Object.values(GreenCoffeeQualityStatus).includes(body.qualityStatus))
+      throw new BadRequestException("Escolha uma decisão de qualidade válida.");
+    if (body.qualityStatus === GreenCoffeeQualityStatus.APPROVED_WITH_RESTRICTION && !body.notes?.trim())
+      throw new BadRequestException("Informe a ressalva da aprovação.");
+    return this.database.$transaction(async (transaction) => {
+      const sample = await transaction.greenCoffeeLabSample.findFirst({
+        where: { id, receipt: { companyId: actor.companyId } },
+        include: { receipt: { include: { purchase: true } } },
+      });
+      if (!sample) throw new NotFoundException("Amostra não encontrada.");
+      if (
+        sample.receipt.approvalStatus === "PENDING" &&
+        (body.qualityStatus === GreenCoffeeQualityStatus.APPROVED || body.qualityStatus === GreenCoffeeQualityStatus.APPROVED_WITH_RESTRICTION)
+      )
+        throw new BadRequestException("A divergência precisa ser aprovada antes da liberação do lote.");
+      const updated = await transaction.greenCoffeeReceipt.update({
+        where: { id: sample.receiptId },
+        data: { qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent, defects: body.defects, screen: body.screen, qualityNotes: body.notes },
+      });
+      await transaction.greenCoffeeLabSample.update({
+        where: { id: sample.id },
+        data: { status: body.qualityStatus === GreenCoffeeQualityStatus.REJECTED ? "REJECTED" : "COMPLETED" },
+      });
+      await transaction.coffeeLot.update({
+        where: { id: sample.receipt.coffeeLotId },
+        data: { status: lotStatusFor(body.qualityStatus), qualityScore: body.score },
+      });
+      await transaction.industrialEvent.create({
+        data: { companyId: actor.companyId, coffeeLotId: sample.receipt.coffeeLotId, warehouseId: sample.receipt.warehouseId, type: EventType.QUALITY_TEST, metadata: { receiptId: sample.receiptId, sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, screen: body.screen ?? null, score: body.score ?? null, notes: body.notes ?? null, userId: actor.id, userName: actor.name } },
+      });
+      await transaction.greenCoffeeAuditEvent.create({
+        data: { companyId: actor.companyId, purchaseId: sample.receipt.purchaseId, receiptId: sample.receiptId, action: "LAB_ANALYSIS_COMPLETED", actorId: actor.id, actorName: actor.name, metadata: { sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, score: body.score ?? null, screen: body.screen ?? null, notes: body.notes ?? null } },
+      });
+      return { sampleId: sample.id, receiptId: updated.id, qualityStatus: updated.qualityStatus, productionAvailable: lotStatusFor(updated.qualityStatus) === CoffeeLotStatus.APPROVED };
+    });
+  }
   @Get("options")
   async options(@Req() req: Request) {
     const actor = await requireSession(req, this.auth);
@@ -550,6 +617,76 @@ export class ReceiptsController {
           lotStatusFor(updated.qualityStatus) === CoffeeLotStatus.APPROVED,
       };
     });
+  }
+
+  private labSampleView(sample: {
+    id: string;
+    sampleNumber: string;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+    receipt: {
+      id: string;
+      receiptNumber: string;
+      qualityStatus: GreenCoffeeQualityStatus;
+      confirmedAt: Date;
+      netWeightKg: unknown;
+      species: string;
+      farmName: string | null;
+      municipality: string | null;
+      state: string | null;
+      origin: string;
+      harvest: string | null;
+      variety: string | null;
+      process: string | null;
+      moisturePercent: unknown;
+      defects: number | null;
+      screen: string | null;
+      qualityNotes: string | null;
+      supplier: { id: string; name: string };
+      coffeeLot: { id: string; code: string; status: CoffeeLotStatus; qualityScore: unknown };
+      purchase: {
+        purchaseNumber: string;
+        maxMoisturePercent: unknown;
+        maxDefects: number | null;
+        minimumScore: unknown;
+        contractedScreen: string | null;
+        contractedWeightKg: unknown;
+      } | null;
+    };
+  }) {
+    const purchase = sample.receipt.purchase;
+    const comparison = compareQuality({
+      maxMoisturePercent: purchase?.maxMoisturePercent == null ? null : Number(purchase.maxMoisturePercent),
+      measuredMoisturePercent: sample.receipt.moisturePercent == null ? null : Number(sample.receipt.moisturePercent),
+      maxDefects: purchase?.maxDefects,
+      measuredDefects: sample.receipt.defects,
+      minimumScore: purchase?.minimumScore == null ? null : Number(purchase.minimumScore),
+      measuredScore: sample.receipt.coffeeLot.qualityScore == null ? null : Number(sample.receipt.coffeeLot.qualityScore),
+      contractedScreen: purchase?.contractedScreen,
+      measuredScreen: sample.receipt.screen,
+    });
+    return {
+      id: sample.id,
+      sampleNumber: sample.sampleNumber,
+      status: sample.status,
+      createdAt: sample.createdAt,
+      updatedAt: sample.updatedAt,
+      receipt: {
+        id: sample.receipt.id,
+        receiptNumber: sample.receipt.receiptNumber,
+        confirmedAt: sample.receipt.confirmedAt,
+        netWeightKg: Number(sample.receipt.netWeightKg),
+        qualityStatus: sample.receipt.qualityStatus,
+        qualityNotes: sample.receipt.qualityNotes,
+      },
+      supplier: sample.receipt.supplier,
+      origin: { farmName: sample.receipt.farmName, municipality: sample.receipt.municipality, state: sample.receipt.state, region: sample.receipt.origin, harvest: sample.receipt.harvest, species: sample.receipt.species, variety: sample.receipt.variety, process: sample.receipt.process },
+      lot: sample.receipt.coffeeLot,
+      contract: purchase ? { purchaseNumber: purchase.purchaseNumber, contractedWeightKg: Number(purchase.contractedWeightKg), maxMoisturePercent: purchase.maxMoisturePercent == null ? null : Number(purchase.maxMoisturePercent), maxDefects: purchase.maxDefects, minimumScore: purchase.minimumScore == null ? null : Number(purchase.minimumScore), contractedScreen: purchase.contractedScreen } : null,
+      measured: { moisturePercent: sample.receipt.moisturePercent == null ? null : Number(sample.receipt.moisturePercent), defects: sample.receipt.defects, screen: sample.receipt.screen, score: sample.receipt.coffeeLot.qualityScore == null ? null : Number(sample.receipt.coffeeLot.qualityScore) },
+      comparison,
+    };
   }
 
   private validate(body: ConfirmReceiptBody) {
