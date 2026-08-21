@@ -263,6 +263,9 @@ export default function GreenCoffeeHome() {
           <Link href="/fornecedores" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700">
             Fornecedores
           </Link>
+          <Link href="/corretores" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700">
+            Corretores
+          </Link>
         </div>
       </header>
 
