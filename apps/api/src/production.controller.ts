@@ -19,12 +19,12 @@ import {
 import {
   calculateProductionCost,
   calculateRealProductionCost,
-  calculateRoastLoss,
   type RealProductionCostInput,
 } from "@bbos/shared";
 import { ProductionService } from "./production.service";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
+import { calculateRoastMetrics } from "./production-planning";
 
 type CreateOrderBody = {
   code: string;
@@ -181,6 +181,28 @@ export class ProductionController {
     });
   }
 
+  @Get("available-lots")
+  async listAvailableLots(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const lots = await this.production.database.coffeeLot.findMany({
+      where: { companyId: actor.companyId, status: "APPROVED", currentWeightKg: { gt: 0 } },
+      include: { supplier: true, warehouse: true },
+      orderBy: { receivedAt: "asc" },
+    });
+    return lots.map((lot) => ({
+      id: lot.id,
+      code: lot.code,
+      origin: lot.origin,
+      harvest: lot.harvest,
+      variety: lot.variety,
+      availableQuantityKg: Number(lot.currentWeightKg),
+      reservedQuantityKg: Number(lot.reservedWeightKg),
+      realCostPerKg: Number(lot.initialWeightKg) > 0 ? Number(lot.landedCost) / Number(lot.initialWeightKg) : 0,
+      supplier: lot.supplier.name,
+      warehouse: lot.warehouse.name,
+    }));
+  }
+
   @Get("orders/:id")
   async getOrder(@Param("id") id: string, @Req() req: Request) {
     const actor = await requireSession(req, this.auth);
@@ -325,7 +347,8 @@ export class ProductionController {
   async createBatch(@Param("id") id: string, @Body() body: CreateBatchBody, @Req() req: Request) {
     const actor = await requireSession(req, this.auth);
     if (body.greenInputKg <= 0 || body.roastedOutputKg <= 0) throw new BadRequestException("Pesos da torra devem ser maiores que zero.");
-    const loss = calculateRoastLoss(body.greenInputKg, body.roastedOutputKg);
+    let loss;
+    try { loss = calculateRoastMetrics(body.greenInputKg, body.roastedOutputKg); } catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Pesos da torra inválidos."); }
     return this.production.database.$transaction(
       async (transaction) => {
         const order = await transaction.productionOrder.findFirst({
