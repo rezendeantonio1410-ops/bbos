@@ -20,6 +20,7 @@ import {
 } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { assertCompany, requireSession } from "./auth-context";
+import { calculateWeightVariance } from "./receipts-weight";
 
 type ConfirmReceiptBody = {
   companyId: string;
@@ -116,24 +117,25 @@ export class ReceiptsController {
         orderBy: { purchasedAt: "desc" },
       }),
     ]);
+    const eligiblePurchases = purchases
+      .map((purchase) => {
+        const receivedKg = purchase.receipts.reduce(
+          (sum, receipt) => sum + Number(receipt.netWeightKg),
+          0,
+        );
+        return {
+          ...purchase,
+          receivedKg,
+          balanceKg: Number(purchase.contractedWeightKg) - receivedKg,
+        };
+      })
+      .filter((purchase) => purchase.balanceKg > 0);
     return {
       company,
       suppliers,
       warehouses,
       users,
-      purchases: purchases.map((purchase) => ({
-        ...purchase,
-        receivedKg: purchase.receipts.reduce(
-          (sum, receipt) => sum + Number(receipt.netWeightKg),
-          0,
-        ),
-        balanceKg:
-          Number(purchase.contractedWeightKg) -
-          purchase.receipts.reduce(
-            (sum, receipt) => sum + Number(receipt.netWeightKg),
-            0,
-          ),
-      })),
+      purchases: eligiblePurchases,
     };
   }
 
@@ -145,6 +147,7 @@ export class ReceiptsController {
       include: {
         supplier: true,
         warehouse: true,
+        labSample: { select: { sampleNumber: true, status: true } },
         coffeeLot: {
           include: { industrialEvents: { orderBy: { occurredAt: "desc" } } },
         },
@@ -459,6 +462,12 @@ export class ReceiptsController {
             },
           },
         });
+        const variance = calculateWeightVariance(
+          Number(purchase.contractedWeightKg),
+          receivedBefore,
+          body.netWeightKg,
+          Number(purchase.weightTolerancePercent ?? 0),
+        );
         return {
           receiptId: receipt.id,
           receiptNumber,
@@ -468,6 +477,12 @@ export class ReceiptsController {
           status: qualityStatus,
           approvalPending: requiresApproval,
           stockBalanceKg: body.netWeightKg,
+          contractedWeightKg: variance.contractedKg,
+          receivedAfterKg: variance.receivedKg,
+          differenceKg: variance.differenceKg,
+          differencePercent: variance.differencePercent,
+          tolerancePercent: variance.tolerancePercent,
+          withinTolerance: variance.withinTolerance,
           productionAvailable: false,
           duplicate: false,
         };

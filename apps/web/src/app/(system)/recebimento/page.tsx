@@ -30,6 +30,11 @@ type P = {
   variety?: string;
   process?: string;
   qualityCategory?: string;
+  qualityDescription?: string;
+  contractedScreen?: string;
+  maxDefects?: number;
+  minimumScore?: string;
+  weightTolerancePercent?: string;
   supplierLotCode?: string;
   packagingType: string;
   volumeQuantity: number;
@@ -60,7 +65,17 @@ type Row = {
   coffeeLot: { id: string; code: string };
   labSample?: { sampleNumber: string };
 };
-type ReceiptResult = { receiptNumber: string; lotCode: string; sampleNumber: string };
+type ReceiptResult = {
+  receiptNumber: string;
+  lotCode: string;
+  sampleNumber: string;
+  contractedWeightKg?: number;
+  receivedAfterKg?: number;
+  differenceKg?: number;
+  differencePercent?: number;
+  tolerancePercent?: number;
+  withinTolerance?: boolean;
+};
 async function req<T>(u: string, i?: RequestInit): Promise<T> {
   const r = await fetch(u, { credentials: "include", ...i }),
     d = await r.json().catch(() => ({}));
@@ -155,6 +170,13 @@ function Wizard({
     }
   };
   const purchase = o.purchases.find((p) => p.id === d.purchaseId);
+  const contractedKg = Number(purchase?.contractedWeightKg ?? 0);
+  const receivedAfterKg = Number(purchase?.receivedKg ?? 0) + net;
+  const differenceKg = receivedAfterKg - contractedKg;
+  const differencePercent = contractedKg > 0 ? (differenceKg / contractedKg) * 100 : 0;
+  const tolerancePercent = Number(purchase?.weightTolerancePercent ?? 0);
+  const isPartial = receivedAfterKg < contractedKg;
+  const withinTolerance = isPartial || Math.abs(differencePercent) <= tolerancePercent;
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-2">
       <div className="flex max-h-[96vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white">
@@ -245,9 +267,9 @@ function Wizard({
                   l="Região de origem"
                   c={
                     <input
+                      readOnly
                       className={css}
                       value={d.origin}
-                      onChange={(e) => set("origin", e.target.value)}
                     />
                   }
                 />
@@ -255,9 +277,9 @@ function Wizard({
                   l="Fazenda"
                   c={
                     <input
+                      readOnly
                       className={css}
                       value={d.farmName}
-                      onChange={(e) => set("farmName", e.target.value)}
                     />
                   }
                 />
@@ -279,9 +301,9 @@ function Wizard({
                   l="Espécie *"
                   c={
                     <select
+                      disabled
                       className={css}
                       value={d.species}
-                      onChange={(e) => set("species", e.target.value)}
                     >
                       <option value="ARABICA">Arábica</option>
                       <option value="ROBUSTA_CONILON">
@@ -294,9 +316,9 @@ function Wizard({
                   l="Safra *"
                   c={
                     <input
+                      readOnly
                       className={css}
                       value={d.harvest}
-                      onChange={(e) => set("harvest", e.target.value)}
                     />
                   }
                 />
@@ -304,9 +326,9 @@ function Wizard({
                   l="Variedade/Cultivar"
                   c={
                     <input
+                      readOnly
                       className={css}
                       value={d.variety}
-                      onChange={(e) => set("variety", e.target.value)}
                     />
                   }
                 />
@@ -314,9 +336,9 @@ function Wizard({
                   l="Processo"
                   c={
                     <select
+                      disabled
                       className={css}
                       value={d.process}
-                      onChange={(e) => set("process", e.target.value)}
                     >
                       {[
                         "Natural",
@@ -416,6 +438,22 @@ function Wizard({
                   <small>Peso líquido oficial</small>
                   <b className="block text-xl">{net} kg</b>
                 </Card>
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:col-span-2">
+                  <p className="font-semibold">Conferência de peso</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                    <span>Contratado <b className="block">{contractedKg.toLocaleString("pt-BR")} kg</b></span>
+                    <span>Recebido após entrada <b className="block">{receivedAfterKg.toLocaleString("pt-BR")} kg</b></span>
+                    <span>Diferença <b className="block">{differenceKg.toFixed(2)} kg ({differencePercent.toFixed(2)}%)</b></span>
+                    <span>Tolerância <b className="block">±{tolerancePercent.toFixed(2)}%</b></span>
+                  </div>
+                  <p className={`mt-3 font-semibold ${withinTolerance ? "text-forest-800" : "text-amber-800"}`}>
+                    {isPartial
+                      ? `Recebimento parcial. Saldo após esta entrada: ${Math.max(0, contractedKg - receivedAfterKg).toLocaleString("pt-BR")} kg.`
+                      : withinTolerance
+                        ? "Recebimento dentro da tolerância."
+                        : "Atenção: peso recebido fora da tolerância contratada."}
+                  </p>
+                </div>
               </>
             )}
             {s === 3 && (
@@ -520,7 +558,7 @@ function Wizard({
                   {[
                     ["Espécie", purchase?.species, d.species],
                     ["Safra", purchase?.harvest, d.harvest],
-                    ["Quantidade", `${purchase?.balanceKg} kg`, `${net} kg`],
+                    ["Quantidade", `${purchase?.contractedWeightKg} kg`, `${receivedAfterKg} kg acumulados`],
                     ["Origem", purchase?.originRegion, d.origin],
                     [
                       "Umidade máxima",
@@ -531,9 +569,10 @@ function Wizard({
                         ? `${d.moisturePercent}%`
                         : "Aguardando Lab",
                     ],
-                    ["Peneira", "Contratada", "Aguardando Lab"],
-                    ["Defeitos", "Contratado", "Aguardando Lab"],
-                    ["Qualidade", "Contratada", "Aguardando Lab"],
+                    ["Peneira", purchase?.contractedScreen ?? "—", "Aguardando Lab"],
+                    ["Defeitos", purchase?.maxDefects != null ? String(purchase.maxDefects) : "—", "Aguardando Lab"],
+                    ["Pontuação mínima", purchase?.minimumScore ?? "—", "Aguardando Lab"],
+                    ["Qualidade", purchase?.qualityDescription ?? purchase?.qualityCategory ?? "—", "Aguardando Lab"],
                   ].map(([a, b, c]) => (
                     <div
                       key={a}
