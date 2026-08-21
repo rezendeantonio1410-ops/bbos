@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts",
     "test:admin-reference-route": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/admin-coffee-reference.controller.test.ts",
-    "test:broker-commission": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/broker-commission.test.ts"
+    "test:broker-commission": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/broker-commission.test.ts",
+    "test:purchase-confirmation-pdf": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-confirmation-pdf.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",

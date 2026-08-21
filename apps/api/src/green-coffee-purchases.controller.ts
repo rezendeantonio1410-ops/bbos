@@ -41,6 +41,7 @@ import {
   validateStateRegistration,
   validateTaxId,
 } from "./supplier-verification";
+import { buildPurchaseConfirmationPdf } from "./purchase-confirmation-pdf";
 
 type Actor = {
   userId: string;
@@ -688,6 +689,10 @@ export class GreenCoffeePurchasesController {
         include: this.include,
       });
       if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.APPROVED)
+        throw new BadRequestException(
+          "A confirmação só pode ser gerada após a aprovação interna.",
+        );
       const last = await tx.purchaseConfirmationDocumentVersion.findFirst({
         where: { purchaseId: id },
         orderBy: { version: "desc" },
@@ -710,6 +715,42 @@ export class GreenCoffeePurchasesController {
         },
       });
     });
+  }
+
+  @Get(":id/confirmation-documents/:version/pdf")
+  async confirmationDocumentPdf(
+    @Param("id") id: string,
+    @Param("version") versionParam: string,
+    @Req() request: any,
+    @Res() response: any,
+  ) {
+    const actor = await this.sessionActor(request);
+    const version = Number(versionParam);
+    if (!Number.isInteger(version) || version < 1)
+      throw new BadRequestException("Versão do documento inválida.");
+    const document = await this.db.purchaseConfirmationDocumentVersion.findFirst({
+      where: {
+        purchaseId: id,
+        version,
+        purchase: { companyId: actor.companyId },
+      },
+    });
+    if (!document) throw new NotFoundException("Versão do documento não encontrada.");
+    const snapshot: any = document.snapshot;
+    const pdf = buildPurchaseConfirmationPdf({
+      snapshot,
+      version: document.version,
+      documentId: document.id,
+      documentHash: document.documentHash ?? "—",
+      createdAt: document.createdAt,
+    });
+    const purchaseNumber = String(snapshot.purchaseNumber ?? id).replace(/[^a-zA-Z0-9._-]/g, "-");
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${purchaseNumber}-confirmacao-v${document.version}.pdf"`,
+      "Content-Length": pdf.length,
+    });
+    response.send(pdf);
   }
 
   @Patch(":id")
