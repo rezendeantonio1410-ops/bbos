@@ -68,6 +68,13 @@ type ReferenceData = {
   suppliers: Supplier[];
 };
 type Options = { users: { id: string; name: string; role: string }[] };
+type Broker = {
+  id: string;
+  name: string;
+  legalName?: string | null;
+  tradeName?: string | null;
+  active: boolean;
+};
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: "include", ...init });
@@ -98,6 +105,7 @@ function harvestOptions() {
 export default function PurchaseFormV2Page() {
   const [references, setReferences] = useState<ReferenceData | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
+  const [brokers, setBrokers] = useState<Broker[]>([]);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
   const [purchaseState, setPurchaseState] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -111,6 +119,8 @@ export default function PurchaseFormV2Page() {
   const [volumes, setVolumes] = useState(1);
   const [unitWeight, setUnitWeight] = useState(30);
   const [priceKg, setPriceKg] = useState(0);
+  const [brokerId, setBrokerId] = useState("");
+  const [brokerCommissionPercent, setBrokerCommissionPercent] = useState(0);
   const [paymentTermType, setPaymentTermType] = useState("CASH");
   const [installmentCount, setInstallmentCount] = useState(1);
   const [daysAfterPurchase, setDaysAfterPurchase] = useState(30);
@@ -121,10 +131,12 @@ export default function PurchaseFormV2Page() {
   useEffect(() => {
     void Promise.all([
       req<Options>(`${ROOT}/receipts/options`),
+      req<Broker[]>(`${ROOT}/brokers`),
       fetchSessionIdentity(ROOT),
     ])
-      .then(([currentOptions, identity]) => {
+      .then(([currentOptions, currentBrokers, identity]) => {
         setOptions(currentOptions);
+        setBrokers(currentBrokers);
         setSessionUser(identity);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar sessão."));
@@ -182,6 +194,9 @@ export default function PurchaseFormV2Page() {
   const selectedContact = supplierContacts.find((item) => item.id === selectedContactId);
   const totalWeight = volumes * unitWeight;
   const totalValue = totalWeight * priceKg;
+  const selectedBroker = brokers.find((item) => item.id === brokerId);
+  const brokerCommissionAmount = Math.round(totalValue * brokerCommissionPercent) / 100;
+  const totalOperationCost = totalValue + brokerCommissionAmount;
   const currentApprovers = options?.users.filter((item) => ["EXECUTIVE", "ADMIN"].includes(item.role)) ?? [];
 
   const installments = useMemo(() => {
@@ -240,6 +255,9 @@ export default function PurchaseFormV2Page() {
           pricePerKg: priceKg,
           currency: "BRL",
           totalValue,
+          ...(selectedBroker
+            ? { brokerId: selectedBroker.id, brokerCommissionPercent }
+            : {}),
           paymentTermType,
           paymentTermData: { installmentCount: installments.length, daysAfterPurchase: paymentTermType === "DAYS_AFTER_PURCHASE" ? daysAfterPurchase : undefined },
           installments,
@@ -295,7 +313,7 @@ export default function PurchaseFormV2Page() {
         </Section>
 
         <Section title="C · Quantidade / embalagem">
-          <Field label="Acondicionamento"><select className={input} value={packagingType} onChange={(e) => { const next = e.target.value; setPackagingType(next); const weight = packagingWeights[next]; if (weight !== null) setUnitWeight(weight); }}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
+          <Field label="Acondicionamento"><select className={input} value={packagingType} onChange={(e) => { const next = e.target.value; setPackagingType(next); const weight = packagingWeights[next] ?? null; if (weight !== null) setUnitWeight(weight); }}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
           <Field label="Número de volumes"><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
           <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" className={input} value={unitWeight} readOnly={packagingWeights[packagingType] !== null} onChange={(e) => setUnitWeight(Number(e.target.value))} /></Field>
           <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" min="0" step=".01" defaultValue="0" className={input} /></Field>
@@ -312,6 +330,26 @@ export default function PurchaseFormV2Page() {
           {!["CASH", "DAYS_AFTER_PURCHASE"].includes(paymentTermType) && <Field label="Primeiro vencimento"><input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className={input} /></Field>}
           <Field label="Referência externa (opcional)"><input name="externalReference" className={input} /></Field>
           <Field label="Observações"><input name="commercialNotes" className={input} /></Field>
+          <div className="rounded-xl border bg-stone-50 p-4 sm:col-span-2 lg:col-span-4">
+            <p className="text-xs font-bold uppercase tracking-[.12em] text-stone-500">Intermediação (opcional)</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Corretor">
+                <select className={input} value={brokerId} onChange={(event) => setBrokerId(event.target.value)}>
+                  <option value="">Sem corretor</option>
+                  {brokers.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Comissão (%)">
+                <input type="number" min="0" max="100" step="0.01" className={input} value={brokerCommissionPercent || ""} disabled={!brokerId} onChange={(event) => setBrokerCommissionPercent(Math.max(0, Number(event.target.value)))} />
+              </Field>
+              <Metric label="Valor da comissão (estimado)" value={selectedBroker ? brl(brokerCommissionAmount) : "—"} />
+              <div className="rounded-xl bg-white p-4 text-xs text-stone-600">
+                <span className="font-semibold">Custo total da operação</span>
+                <b className="mt-1 block text-lg text-stone-900">{brl(totalOperationCost)}</b>
+                <span>O valor pago ao fornecedor permanece {brl(totalValue)}.</span>
+              </div>
+            </div>
+          </div>
         </Section>
 
         <Section title="E · Governança">
@@ -327,7 +365,10 @@ export default function PurchaseFormV2Page() {
             <Summary label="Café" value={`${species?.name ?? "—"} · ${cultivar?.name ?? "—"}`} />
             <Summary label="Quantidade" value={`${volumes} × ${unitWeight} kg = ${totalWeight} kg`} />
             <Summary label="Comercial" value={`${brl(priceKg)}/kg · ${brl(totalValue)}`} />
-            <Summary label="Embalagem" value={packagingLabels[packagingType]} />
+            <Summary label="Corretagem" value={selectedBroker ? `${selectedBroker.name} · ${brokerCommissionPercent.toFixed(2)}% · ${brl(brokerCommissionAmount)}` : "Sem corretor"} />
+            <Summary label="Custo total da operação" value={brl(totalOperationCost)} />
+            <Summary label="Valor ao fornecedor" value={brl(totalValue)} />
+            <Summary label="Embalagem" value={packagingLabels[packagingType] ?? "Outro"} />
             <Summary label="Pagamento" value={paymentTermType === "CASH" ? "À vista · 1 parcela" : `${installments.length} parcela(s)`} />
             <Summary label="Contato" value={selectedContact?.name ?? "—"} />
             <Summary label="Aprovação" value={sessionUser && ["ADMIN", "EXECUTIVE"].includes(sessionUser.role) ? "Usuário possui alçada" : "Enviar para aprovação"} />
