@@ -76,6 +76,32 @@ export type BrandTokenContract = {
     neutral: PendingOfficialBrandValue;
   };
   logoVariants: BrandLogoVariant[];
+  /** Tokens semânticos da camada de experiência; não representam páginas específicas. */
+  experience: HumanExperienceTokens;
+};
+
+export type HumanExperienceTokens = {
+  surface: { base: string; elevated: string; subtle: string; page: string };
+  text: { primary: string; secondary: string; muted: string; onAction: string };
+  action: { primary: string; primaryHover: string };
+  state: { success: string; information: string; attention: string; critical: string; neutral: string };
+  coffee: { green: string; roasted: string; caramel: string };
+  border: string;
+  focusRing: string;
+  radius: { card: string; control: string; pill: string };
+  motion: { standard: string; reduced: string };
+};
+
+export const humanExperienceTokens: HumanExperienceTokens = {
+  surface: { base: '#FFFFFF', elevated: '#FFFFFF', subtle: '#FAFAF8', page: '#F7F7F5' },
+  text: { primary: '#0A0A0A', secondary: '#626B69', muted: '#7A8381', onAction: '#FFFFFF' },
+  action: { primary: '#0A0A0A', primaryHover: '#0E191D' },
+  state: { success: '#047857', information: '#0369A1', attention: '#B45309', critical: '#B91C1C', neutral: '#57534E' },
+  coffee: { green: '#087568', roasted: '#3E73A8', caramel: '#C8923E' },
+  border: '#E7E7E3',
+  focusRing: '#087568',
+  radius: { card: '1rem', control: '0.75rem', pill: '9999px' },
+  motion: { standard: '180ms ease', reduced: '0ms' },
 };
 
 export const brandTokens: BrandTokenContract = {
@@ -141,4 +167,5 @@ export const brandTokens: BrandTokenContract = {
       background: 'light',
     },
   ],
+  experience: humanExperienceTokens,
 };
