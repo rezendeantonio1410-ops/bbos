@@ -373,6 +373,7 @@ export class GreenCoffeePurchasesController {
   @Get("suppliers/:supplierId/contacts")
   async supplierContacts(
     @Param("supplierId") supplierId: string,
+    @Query("includeInactive") includeInactive: string | undefined,
     @Req() request: any,
   ) {
     const actor = await this.sessionActor(request);
@@ -382,7 +383,7 @@ export class GreenCoffeePurchasesController {
     });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
     return this.db.supplierContact.findMany({
-      where: { supplierId, active: true },
+      where: { supplierId, ...(includeInactive === "true" ? {} : { active: true }) },
       orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
     });
   }
@@ -410,6 +411,18 @@ export class GreenCoffeePurchasesController {
     });
     if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
     return this.db.$transaction(async (tx) => {
+      const duplicate = await tx.supplierContact.findFirst({
+        where: {
+          supplierId,
+          active: true,
+          OR: [
+            ...(body.email?.trim() ? [{ email: body.email.trim() }] : []),
+            ...(body.whatsapp?.trim() ? [{ whatsapp: body.whatsapp.trim() }] : []),
+          ],
+        },
+      });
+      if (duplicate)
+        throw new BadRequestException("Já existe um contato com este e-mail ou telefone.");
       if (body.isPrimary)
         await tx.supplierContact.updateMany({
           where: { supplierId },
@@ -422,9 +435,68 @@ export class GreenCoffeePurchasesController {
           role: body.role?.trim() || null,
           whatsapp: body.whatsapp?.trim() || null,
           email: body.email?.trim() || null,
-          isPrimary: body.isPrimary ?? false,
+          isPrimary: body.active === false ? false : body.isPrimary ?? false,
           canConfirmBusiness: body.canConfirmBusiness ?? false,
           active: body.active ?? true,
+        },
+      });
+    });
+  }
+
+  @Patch("suppliers/:supplierId/contacts/:contactId")
+  async updateSupplierContact(
+    @Param("supplierId") supplierId: string,
+    @Param("contactId") contactId: string,
+    @Body()
+    body: Partial<{
+      name: string;
+      role: string;
+      whatsapp: string;
+      email: string;
+      isPrimary: boolean;
+      canConfirmBusiness: boolean;
+      active: boolean;
+    }>,
+    @Req() request: any,
+  ) {
+    const actor = await this.sessionActor(request);
+    const supplier = await this.db.supplier.findFirst({
+      where: { id: supplierId, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado.");
+    return this.db.$transaction(async (tx) => {
+      const contact = await tx.supplierContact.findFirst({ where: { id: contactId, supplierId } });
+      if (!contact) throw new NotFoundException("Contato não encontrado.");
+      if (body.name !== undefined && !body.name.trim())
+        throw new BadRequestException("Nome do contato é obrigatório.");
+      const email = body.email?.trim() || null;
+      const whatsapp = body.whatsapp?.trim() || null;
+      const duplicate = await tx.supplierContact.findFirst({
+        where: {
+          supplierId,
+          active: true,
+          NOT: { id: contactId },
+          OR: [
+            ...(email ? [{ email }] : []),
+            ...(whatsapp ? [{ whatsapp }] : []),
+          ],
+        },
+      });
+      if (duplicate)
+        throw new BadRequestException("Já existe um contato com este e-mail ou telefone.");
+      if (body.isPrimary && body.active !== false)
+        await tx.supplierContact.updateMany({ where: { supplierId, NOT: { id: contactId } }, data: { isPrimary: false } });
+      return tx.supplierContact.update({
+        where: { id: contactId },
+        data: {
+          ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+          ...(body.role !== undefined ? { role: body.role.trim() || null } : {}),
+          ...(body.email !== undefined ? { email } : {}),
+          ...(body.whatsapp !== undefined ? { whatsapp } : {}),
+          ...(body.isPrimary !== undefined ? { isPrimary: body.active === false ? false : body.isPrimary } : {}),
+          ...(body.canConfirmBusiness !== undefined ? { canConfirmBusiness: body.canConfirmBusiness } : {}),
+          ...(body.active !== undefined ? { active: body.active } : {}),
         },
       });
     });

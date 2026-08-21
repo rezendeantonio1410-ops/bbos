@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { lookupBrazilianCep } from "@/lib/brazil-address";
@@ -131,6 +131,16 @@ type Supplier = {
   active: boolean;
   originUnits: Unit[];
 };
+type SupplierContact = {
+  id: string;
+  name: string;
+  role?: string | null;
+  whatsapp?: string | null;
+  email?: string | null;
+  isPrimary: boolean;
+  canConfirmBusiness: boolean;
+  active: boolean;
+};
 type VerificationStatus =
   | "VERIFIED_ACTIVE"
   | "VERIFIED_INACTIVE"
@@ -246,6 +256,18 @@ export default function SuppliersPage() {
   const [unitIbgeCityCode, setUnitIbgeCityCode] = useState("");
   const [productionSpeciesId, setProductionSpeciesId] = useState("");
   const [message, setMessage] = useState("");
+  const [contacts, setContacts] = useState<SupplierContact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<SupplierContact | null>(null);
+  const [contactName, setContactName] = useState("");
+  const [contactRole, setContactRole] = useState("");
+  const [contactWhatsapp, setContactWhatsapp] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPrimary, setContactPrimary] = useState(false);
+  const [contactAuthorized, setContactAuthorized] = useState(false);
+  const [contactActive, setContactActive] = useState(true);
+  const [contactMessage, setContactMessage] = useState("");
 
   const load = async () => {
     const [suppliers, refs] = await Promise.all([
@@ -323,6 +345,17 @@ export default function SuppliersPage() {
       setProductionSpeciesId("");
     }
   }, [unitSupplier]);
+  useEffect(() => {
+    if (!detailsSupplier) {
+      setContacts([]);
+      return;
+    }
+    setContactsLoading(true);
+    void request<SupplierContact[]>(`${API}/suppliers/${detailsSupplier.id}/contacts?includeInactive=true`)
+      .then(setContacts)
+      .catch(() => setContactMessage("Não foi possível carregar os contatos."))
+      .finally(() => setContactsLoading(false));
+  }, [detailsSupplier]);
 
   const filtered = useMemo(
     () =>
@@ -450,6 +483,47 @@ export default function SuppliersPage() {
           ? error.message
           : "Não foi possível verificar o cadastro.",
       );
+    }
+  };
+  const openContact = (contact?: SupplierContact) => {
+    setEditingContact(contact ?? null);
+    setContactName(contact?.name ?? "");
+    setContactRole(contact?.role ?? "");
+    setContactWhatsapp(contact?.whatsapp ?? "");
+    setContactEmail(contact?.email ?? "");
+    setContactPrimary(contact?.isPrimary ?? false);
+    setContactAuthorized(contact?.canConfirmBusiness ?? false);
+    setContactActive(contact?.active ?? true);
+    setContactMessage("");
+    setContactOpen(true);
+  };
+  const saveContact = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!detailsSupplier) return;
+    if (!contactName.trim()) {
+      setContactMessage("Informe ao menos o nome do contato.");
+      return;
+    }
+    try {
+      const body = {
+        name: contactName.trim(),
+        role: contactRole.trim() || undefined,
+        whatsapp: contactWhatsapp.trim() || undefined,
+        email: contactEmail.trim() || undefined,
+        isPrimary: contactPrimary,
+        canConfirmBusiness: contactAuthorized,
+        active: contactActive,
+      };
+      const url = editingContact
+        ? `${API}/suppliers/${detailsSupplier.id}/contacts/${editingContact.id}`
+        : `${API}/suppliers/${detailsSupplier.id}/contacts`;
+      await request(url, { method: editingContact ? "PATCH" : "POST", body: JSON.stringify(body) });
+      setContactOpen(false);
+      setContactMessage("Contato atualizado.");
+      const updated = await request<SupplierContact[]>(`${API}/suppliers/${detailsSupplier.id}/contacts?includeInactive=true`);
+      setContacts(updated);
+    } catch (cause) {
+      setContactMessage(cause instanceof Error ? cause.message : "Não foi possível salvar o contato.");
     }
   };
   return (
@@ -995,6 +1069,21 @@ export default function SuppliersPage() {
                 </b>
               </p>
             </div>
+            <section className="mt-7 border-t border-stone-200 pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold">Contatos</h3>
+                  <p className="mt-1 text-xs text-stone-500">Pessoas comerciais; contato comercial não é signatário jurídico.</p>
+                </div>
+                <button type="button" onClick={() => openContact()} className="inline-flex items-center gap-1.5 rounded-xl bg-forest-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14} /> Adicionar</button>
+              </div>
+              {contactMessage && <p className="mt-3 rounded-xl bg-stone-50 p-3 text-xs font-semibold text-stone-700">{contactMessage}</p>}
+              {contactsLoading && <p className="mt-4 text-sm text-stone-500">Carregando contatos...</p>}
+              {!contactsLoading && contacts.length === 0 && <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-stone-500"><p>Nenhum contato cadastrado.</p>{detailsSupplier.supplierType === "RURAL_PERSON" && <button type="button" onClick={() => { setContactName(detailsSupplier.name); setContactRole("Produtor / proprietário"); setContactPrimary(true); setContactAuthorized(true); setContactOpen(true); }} className="mt-2 font-bold text-forest-700">Usar o próprio produtor como contato</button>}</div>}
+              <div className="mt-4 space-y-2">
+                {contacts.map((contact) => <div key={contact.id} className="flex flex-col gap-3 rounded-xl border border-stone-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold">{contact.name}</p>{contact.isPrimary && contact.active && <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">Principal</span>}{contact.canConfirmBusiness && <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">Pode confirmar</span>}{!contact.active && <span className="rounded-full bg-stone-100 px-2 py-1 text-[10px] font-bold text-stone-600">Inativo</span>}</div><p className="mt-1 text-xs text-stone-500">{contact.role || "Função não informada"}{contact.whatsapp ? ` · ${contact.whatsapp}` : ""}{contact.email ? ` · ${contact.email}` : ""}</p></div><button type="button" onClick={() => openContact(contact)} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 text-xs font-bold"><Pencil size={13} /> Editar</button></div>)}
+              </div>
+            </section>
             <button
               onClick={() => setDetailsSupplier(null)}
               className="mt-6 min-h-10 rounded-xl border px-4 text-sm font-bold"
@@ -1002,6 +1091,24 @@ export default function SuppliersPage() {
               Fechar
             </button>
           </Card>
+        </div>
+      )}
+      {contactOpen && detailsSupplier && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-forest-950/30 p-3">
+          <form onSubmit={(event) => void saveContact(event)} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">{detailsSupplier.name}</p><h2 className="mt-1 text-xl font-bold">{editingContact ? "Editar contato" : "Adicionar contato"}</h2></div><button type="button" aria-label="Fechar" onClick={() => setContactOpen(false)}><X /></button></div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <label className="text-sm font-semibold sm:col-span-2">Nome completo<input required value={contactName} onChange={(event) => setContactName(event.target.value)} className={input} /></label>
+              <label className="text-sm font-semibold">Cargo/Função<input value={contactRole} onChange={(event) => setContactRole(event.target.value)} placeholder="Comercial, Logística..." className={input} /></label>
+              <label className="text-sm font-semibold">WhatsApp/Telefone<input value={contactWhatsapp} onChange={(event) => setContactWhatsapp(event.target.value)} className={input} /></label>
+              <label className="text-sm font-semibold sm:col-span-2">E-mail<input type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} className={input} /></label>
+              <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={contactPrimary} onChange={(event) => setContactPrimary(event.target.checked)} /> Contato principal</label>
+              <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={contactAuthorized} onChange={(event) => setContactAuthorized(event.target.checked)} /> Autorizado a confirmar</label>
+              {editingContact && <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2"><input type="checkbox" checked={contactActive} onChange={(event) => setContactActive(event.target.checked)} /> Ativo</label>}
+            </div>
+            {contactMessage && <p className="mt-3 text-sm font-semibold text-red-700">{contactMessage}</p>}
+            <div className="mt-6 flex justify-end gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={() => setContactOpen(false)} className="min-h-10 rounded-xl border border-stone-200 px-4 text-sm font-bold">Cancelar</button><button type="submit" className="min-h-10 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Salvar contato</button></div>
+          </form>
         </div>
       )}
       {unitSupplier && (
