@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -21,23 +21,50 @@ import {
   ShieldAlert,
   Warehouse,
   X,
-} from 'lucide-react';
-import { Badge, Button, Card } from '@bbos/ui';
-import { applyInventoryMovement, calculateInventorySummary, InventoryRuleError, type InventoryAlert, type InventoryLot, type InventoryMovement, type InventoryMovementType, type ReceiptStatus } from '@bbos/shared';
-import { getApiBaseUrl } from '@/lib/api-url';
+} from "lucide-react";
+import { Badge, Button, Card } from "@bbos/ui";
+import {
+  applyInventoryMovement,
+  calculateInventorySummary,
+  InventoryRuleError,
+  type InventoryAlert,
+  type InventoryLot,
+  type InventoryMovement,
+  type InventoryMovementType,
+  type ReceiptStatus,
+} from "@bbos/shared";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
-const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-const statusMap: Record<ReceiptStatus, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' }> = {
-  approved: { label: 'Disponível', tone: 'success' }, attention: { label: 'Atenção', tone: 'warning' }, blocked: { label: 'Bloqueado', tone: 'danger' }, 'awaiting-lab': { label: 'Aguardando laboratório', tone: 'neutral' },
+const currency = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  maximumFractionDigits: 2,
+});
+const integer = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const statusMap: Record<
+  ReceiptStatus,
+  { label: string; tone: "neutral" | "success" | "warning" | "danger" }
+> = {
+  approved: { label: "Disponível", tone: "success" },
+  attention: { label: "Atenção", tone: "warning" },
+  blocked: { label: "Bloqueado", tone: "danger" },
+  "awaiting-lab": { label: "Aguardando laboratório", tone: "neutral" },
 };
-const movementLabels: Record<InventoryMovementType, string> = { entry: 'Entrada', exit: 'Saída', 'internal-transfer': 'Transferência interna', 'production-reservation': 'Reserva para OP', 'reservation-release': 'Liberação de reserva', 'inventory-adjustment': 'Ajuste de inventário' };
-const inputClass = 'w-full rounded-xl border bg-stone-50 px-3 py-2.5 text-sm outline-none focus:border-forest-700 focus:bg-white';
+const movementLabels: Record<InventoryMovementType, string> = {
+  entry: "Entrada",
+  exit: "Saída",
+  "internal-transfer": "Transferência interna",
+  "production-reservation": "Reserva para OP",
+  "reservation-release": "Liberação de reserva",
+  "inventory-adjustment": "Ajuste de inventário",
+};
+const inputClass =
+  "w-full rounded-xl border bg-stone-50 px-3 py-2.5 text-sm outline-none focus:border-forest-700 focus:bg-white";
 
 type FinishedGoodsStock = {
   finishedProductId: string;
   productVariantId: string | null;
-  source: 'catalog' | 'legacy';
+  source: "catalog" | "legacy";
   line: string;
   product: string;
   sku: string;
@@ -49,45 +76,536 @@ type FinishedGoodsStock = {
   availableUnits: number;
 };
 
-function SummaryCard({ label, value, icon: Icon, tone = 'normal' }: { label: string; value: string; icon: typeof Warehouse; tone?: 'normal' | 'warning' | 'danger' }) {
-  return <Card className="p-5"><div className="flex items-center justify-between gap-3"><p className="text-xs font-medium text-stone-500">{label}</p><Icon size={16} className={tone === 'danger' ? 'text-red-700' : tone === 'warning' ? 'text-amber-700' : 'text-forest-700'} /></div><p className="mt-4 text-xl font-bold tracking-tight">{value}</p></Card>;
+function SummaryCard({
+  label,
+  value,
+  icon: Icon,
+  tone = "normal",
+}: {
+  label: string;
+  value: string;
+  icon: typeof Warehouse;
+  tone?: "normal" | "warning" | "danger";
+}) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-stone-500">{label}</p>
+        <Icon
+          size={16}
+          className={
+            tone === "danger"
+              ? "text-red-700"
+              : tone === "warning"
+                ? "text-amber-700"
+                : "text-forest-700"
+          }
+        />
+      </div>
+      <p className="mt-4 text-xl font-bold tracking-tight">{value}</p>
+    </Card>
+  );
 }
 
-function DataPoint({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-stone-50 p-3"><p className="text-[10px] uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-xs font-semibold text-stone-800">{value}</p></div>; }
+function DataPoint({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-stone-50 p-3">
+      <p className="text-[10px] uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
+      <p className="mt-1 text-xs font-semibold text-stone-800">{value}</p>
+    </div>
+  );
+}
 
-function LotDrawer({ lot, movements, onClose }: { lot: InventoryLot; movements: InventoryMovement[]; onClose: () => void }) {
+function LotDrawer({
+  lot,
+  movements,
+  onClose,
+}: {
+  lot: InventoryLot;
+  movements: InventoryMovement[];
+  onClose: () => void;
+}) {
   const status = statusMap[lot.status];
-  const lotMovements = movements.filter(item => item.lotId === lot.id);
-  return <div className="fixed inset-0 z-50 flex justify-end"><button aria-label="Fechar" className="absolute inset-0 bg-forest-950/25 backdrop-blur-[2px]" onClick={onClose} /><aside role="dialog" aria-modal="true" className="relative h-full w-full max-w-2xl overflow-y-auto border-l bg-white shadow-2xl"><header className="sticky top-0 z-10 flex items-start justify-between border-b bg-white/95 p-6 backdrop-blur"><div><p className="text-xs font-bold uppercase tracking-[.15em] text-forest-700">Lote em estoque</p><h2 className="mt-1 font-[var(--font-manrope)] text-xl font-semibold">{lot.code}</h2></div><div className="flex items-center gap-3"><Badge tone={status.tone}>{status.label}</Badge><button onClick={onClose} className="rounded-xl border p-2 text-stone-500"><X size={18} /></button></div></header><div className="space-y-8 p-6"><section><h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">Origem</h3><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3"><DataPoint label="Fornecedor" value={lot.supplier} /><DataPoint label="Produtor" value={lot.producer} /><DataPoint label="Fazenda" value={lot.farm} /><DataPoint label="Cidade/Estado" value={lot.cityState} /><DataPoint label="Safra" value={lot.harvest} /><DataPoint label="Variedade" value={lot.variety} /><DataPoint label="Processo" value={lot.process} /></div></section><section><h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">Qualidade</h3><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3"><DataPoint label="Umidade" value={lot.quality.moisturePercent !== undefined ? `${lot.quality.moisturePercent}%` : 'Pendente'} /><DataPoint label="Aw" value={lot.quality.waterActivity?.toString() ?? 'Pendente'} /><DataPoint label="Densidade" value={lot.quality.densityGPerL ? `${lot.quality.densityGPerL} g/L` : '—'} /><DataPoint label="Peneira" value={lot.quality.screen ?? '—'} /><DataPoint label="Defeitos" value={lot.quality.defects?.toString() ?? '—'} /><DataPoint label="SCA" value={lot.quality.scaScore?.toLocaleString('pt-BR') ?? 'Pendente'} /></div>{lot.quality.notes && <p className="mt-3 rounded-xl bg-stone-50 p-4 text-xs leading-5 text-stone-600">{lot.quality.notes}</p>}</section><section><h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">Custos</h3><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3"><DataPoint label="Valor de compra" value={currency.format(lot.costs.coffeeValue)} /><DataPoint label="Frete" value={currency.format(lot.costs.freight)} /><DataPoint label="Impostos não recuperáveis" value={currency.format(lot.costs.nonRecoverableTaxes)} /><DataPoint label="Descarga" value={currency.format(lot.costs.unloading)} /><DataPoint label="Outros custos" value={currency.format(lot.costs.initialProcessing + lot.costs.otherDirectCosts)} /><DataPoint label="Custo total" value={currency.format(lot.totalLotCost)} /></div><div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white"><p className="text-xs text-white/50">Custo real por kg</p><p className="mt-1 text-2xl font-bold">{currency.format(lot.realCostPerKg)}</p></div></section><section><h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">Estoque</h3><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3"><DataPoint label="Quantidade inicial" value={`${integer.format(lot.initialQuantityKg)} kg`} /><DataPoint label="Disponível" value={`${integer.format(lot.availableQuantityKg)} kg`} /><DataPoint label="Reservada" value={`${integer.format(lot.reservedQuantityKg)} kg`} /><DataPoint label="Localização" value={lot.location} /><DataPoint label="Valor atual" value={currency.format(lot.currentStockValue)} /></div></section><section><h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">Rastreabilidade</h3><div className="mt-4">{lot.traceability.map((event, index) => <div key={event.id} className="flex gap-3"><div className="flex flex-col items-center"><span className={`grid size-7 place-items-center rounded-full ${event.status === 'complete' ? 'bg-emerald-100 text-emerald-700' : event.status === 'current' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-400'}`}>{event.status === 'complete' ? <Check size={13} /> : <span className="size-1.5 rounded-full bg-current" />}</span>{index < lot.traceability.length - 1 && <span className="h-8 w-px bg-stone-200" />}</div><div><p className={`text-sm font-semibold ${event.status === 'future' ? 'text-stone-400' : ''}`}>{event.label}</p><p className="mt-0.5 text-[11px] text-stone-400">{event.occurredAt}</p></div></div>)}</div></section>{lotMovements.length > 0 && <section><h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">Movimentações recentes</h3><div className="mt-3 space-y-2">{lotMovements.map(item => <div key={item.id} className="flex items-center gap-3 rounded-xl border p-3"><RefreshCw size={15} className="text-forest-700" /><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{movementLabels[item.type]} • {integer.format(item.quantityKg)} kg</p><p className="mt-1 truncate text-[11px] text-stone-400">{item.userName} • {item.reason}</p></div></div>)}</div></section>}</div></aside></div>;
+  const lotMovements = movements.filter((item) => item.lotId === lot.id);
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <button
+        aria-label="Fechar"
+        className="absolute inset-0 bg-forest-950/25 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        className="relative h-full w-full max-w-2xl overflow-y-auto border-l bg-white shadow-2xl"
+      >
+        <header className="sticky top-0 z-10 flex items-start justify-between border-b bg-white/95 p-6 backdrop-blur">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.15em] text-forest-700">
+              Lote em estoque
+            </p>
+            <h2 className="mt-1 font-[var(--font-manrope)] text-xl font-semibold">
+              {lot.code}
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge tone={status.tone}>{status.label}</Badge>
+            <button
+              onClick={onClose}
+              className="rounded-xl border p-2 text-stone-500"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </header>
+        <div className="space-y-8 p-6">
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
+              Origem
+            </h3>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <DataPoint label="Fornecedor" value={lot.supplier} />
+              <DataPoint label="Produtor" value={lot.producer} />
+              <DataPoint label="Fazenda" value={lot.farm} />
+              <DataPoint label="Cidade/Estado" value={lot.cityState} />
+              <DataPoint label="Safra" value={lot.harvest} />
+              <DataPoint label="Variedade" value={lot.variety} />
+              <DataPoint label="Processo" value={lot.process} />
+            </div>
+          </section>
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
+              Qualidade
+            </h3>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <DataPoint
+                label="Umidade"
+                value={
+                  lot.quality.moisturePercent !== undefined
+                    ? `${lot.quality.moisturePercent}%`
+                    : "Pendente"
+                }
+              />
+              <DataPoint
+                label="Aw"
+                value={lot.quality.waterActivity?.toString() ?? "Pendente"}
+              />
+              <DataPoint
+                label="Densidade"
+                value={
+                  lot.quality.densityGPerL
+                    ? `${lot.quality.densityGPerL} g/L`
+                    : "—"
+                }
+              />
+              <DataPoint label="Peneira" value={lot.quality.screen ?? "—"} />
+              <DataPoint
+                label="Defeitos"
+                value={lot.quality.defects?.toString() ?? "—"}
+              />
+              <DataPoint
+                label="SCA"
+                value={
+                  lot.quality.scaScore?.toLocaleString("pt-BR") ?? "Pendente"
+                }
+              />
+            </div>
+            {lot.quality.notes && (
+              <p className="mt-3 rounded-xl bg-stone-50 p-4 text-xs leading-5 text-stone-600">
+                {lot.quality.notes}
+              </p>
+            )}
+          </section>
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
+              Custos
+            </h3>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <DataPoint
+                label="Valor de compra"
+                value={currency.format(lot.costs.coffeeValue)}
+              />
+              <DataPoint
+                label="Frete"
+                value={currency.format(lot.costs.freight)}
+              />
+              <DataPoint
+                label="Impostos não recuperáveis"
+                value={currency.format(lot.costs.nonRecoverableTaxes)}
+              />
+              <DataPoint
+                label="Descarga"
+                value={currency.format(lot.costs.unloading)}
+              />
+              <DataPoint
+                label="Outros custos"
+                value={currency.format(
+                  lot.costs.initialProcessing + lot.costs.otherDirectCosts,
+                )}
+              />
+              <DataPoint
+                label="Custo total"
+                value={currency.format(lot.totalLotCost)}
+              />
+            </div>
+            <div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white">
+              <p className="text-xs text-white/50">Custo real por kg</p>
+              <p className="mt-1 text-2xl font-bold">
+                {currency.format(lot.realCostPerKg)}
+              </p>
+            </div>
+          </section>
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
+              Estoque
+            </h3>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <DataPoint
+                label="Quantidade inicial"
+                value={`${integer.format(lot.initialQuantityKg)} kg`}
+              />
+              <DataPoint
+                label="Disponível"
+                value={`${integer.format(lot.availableQuantityKg)} kg`}
+              />
+              <DataPoint
+                label="Reservada"
+                value={`${integer.format(lot.reservedQuantityKg)} kg`}
+              />
+              <DataPoint label="Localização" value={lot.location} />
+              <DataPoint
+                label="Valor atual"
+                value={currency.format(lot.currentStockValue)}
+              />
+            </div>
+          </section>
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
+              Rastreabilidade
+            </h3>
+            <div className="mt-4">
+              {lot.traceability.map((event, index) => (
+                <div key={event.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span
+                      className={`grid size-7 place-items-center rounded-full ${event.status === "complete" ? "bg-emerald-100 text-emerald-700" : event.status === "current" ? "bg-amber-100 text-amber-700" : "bg-stone-100 text-stone-400"}`}
+                    >
+                      {event.status === "complete" ? (
+                        <Check size={13} />
+                      ) : (
+                        <span className="size-1.5 rounded-full bg-current" />
+                      )}
+                    </span>
+                    {index < lot.traceability.length - 1 && (
+                      <span className="h-8 w-px bg-stone-200" />
+                    )}
+                  </div>
+                  <div>
+                    <p
+                      className={`text-sm font-semibold ${event.status === "future" ? "text-stone-400" : ""}`}
+                    >
+                      {event.label}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-stone-400">
+                      {event.occurredAt}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          {lotMovements.length > 0 && (
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
+                Movimentações recentes
+              </h3>
+              <div className="mt-3 space-y-2">
+                {lotMovements.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-xl border p-3"
+                  >
+                    <RefreshCw size={15} className="text-forest-700" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold">
+                        {movementLabels[item.type]} •{" "}
+                        {integer.format(item.quantityKg)} kg
+                      </p>
+                      <p className="mt-1 truncate text-[11px] text-stone-400">
+                        {item.userName} • {item.reason}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
 }
 
-function AlertDrawer({ alert, lot, onClose, onOpenLot }: { alert: InventoryAlert; lot?: InventoryLot; onClose: () => void; onOpenLot: () => void }) {
-  const stages = [['Dado', alert.datum], ['Alerta', alert.alert], ['Diagnóstico', alert.diagnosis], ['Impacto', `${integer.format(alert.impactKg)} kg • ${currency.format(alert.impactAmount)}`], ['Ação', alert.action], ['Resultado', alert.expectedResult]];
-  return <div className="fixed inset-0 z-50 flex justify-end"><button aria-label="Fechar" className="absolute inset-0 bg-forest-950/25" onClick={onClose} /><aside className="relative h-full w-full max-w-lg overflow-y-auto border-l bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-red-700">Diagnóstico de estoque</p><h2 className="mt-2 text-xl font-bold">{alert.alert}</h2></div><button onClick={onClose} className="rounded-xl border p-2"><X size={18} /></button></div><div className="mt-7 space-y-4">{stages.map(([label, value], index) => <div key={label} className="flex gap-3"><span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${index < 4 ? 'bg-red-50 text-red-700' : 'bg-forest-50 text-forest-700'}`}>{index + 1}</span><div><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-sm leading-6 text-stone-600">{value}</p></div></div>)}</div>{lot && <Button onClick={onOpenLot} className="mt-7 flex w-full items-center justify-center gap-2">Abrir lote {lot.code}<ArrowRight size={15} /></Button>}</aside></div>;
+function AlertDrawer({
+  alert,
+  lot,
+  onClose,
+  onOpenLot,
+}: {
+  alert: InventoryAlert;
+  lot?: InventoryLot;
+  onClose: () => void;
+  onOpenLot: () => void;
+}) {
+  const stages = [
+    ["Dado", alert.datum],
+    ["Alerta", alert.alert],
+    ["Diagnóstico", alert.diagnosis],
+    [
+      "Impacto",
+      `${integer.format(alert.impactKg)} kg • ${currency.format(alert.impactAmount)}`,
+    ],
+    ["Ação", alert.action],
+    ["Resultado", alert.expectedResult],
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <button
+        aria-label="Fechar"
+        className="absolute inset-0 bg-forest-950/25"
+        onClick={onClose}
+      />
+      <aside className="relative h-full w-full max-w-lg overflow-y-auto border-l bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-red-700">
+              Diagnóstico de estoque
+            </p>
+            <h2 className="mt-2 text-xl font-bold">{alert.alert}</h2>
+          </div>
+          <button onClick={onClose} className="rounded-xl border p-2">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-7 space-y-4">
+          {stages.map(([label, value], index) => (
+            <div key={label} className="flex gap-3">
+              <span
+                className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${index < 4 ? "bg-red-50 text-red-700" : "bg-forest-50 text-forest-700"}`}
+              >
+                {index + 1}
+              </span>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  {label}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-stone-600">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {lot && (
+          <Button
+            onClick={onOpenLot}
+            className="mt-7 flex w-full items-center justify-center gap-2"
+          >
+            Abrir lote {lot.code}
+            <ArrowRight size={15} />
+          </Button>
+        )}
+      </aside>
+    </div>
+  );
 }
 
-function MovementModal({ lots, onClose, onSubmit }: { lots: InventoryLot[]; onClose: () => void; onSubmit: (movement: InventoryMovement) => void }) {
-  const [lotId, setLotId] = useState(lots[0]?.id ?? '');
-  const [type, setType] = useState<InventoryMovementType>('internal-transfer');
+function MovementModal({
+  lots,
+  onClose,
+  onSubmit,
+}: {
+  lots: InventoryLot[];
+  onClose: () => void;
+  onSubmit: (movement: InventoryMovement) => void;
+}) {
+  const [lotId, setLotId] = useState(lots[0]?.id ?? "");
+  const [type, setType] = useState<InventoryMovementType>("internal-transfer");
   const [quantity, setQuantity] = useState(100);
-  const [origin, setOrigin] = useState(lots[0]?.location ?? '');
-  const [destination, setDestination] = useState('ACV • Rua B-01');
-  const [reason, setReason] = useState('Organização operacional do armazém');
-  const [direction, setDirection] = useState<'increase' | 'decrease'>('decrease');
+  const [origin, setOrigin] = useState(lots[0]?.location ?? "");
+  const [destination, setDestination] = useState("ACV • Rua B-01");
+  const [reason, setReason] = useState("Organização operacional do armazém");
+  const [direction, setDirection] = useState<"increase" | "decrease">(
+    "decrease",
+  );
   const [error, setError] = useState<string | null>(null);
-  const selected = lots.find(item => item.id === lotId);
-  const submit = () => { if (!selected) return; try { onSubmit({ id: `mov-${Date.now()}`, type, occurredAt: new Date().toISOString(), userId: '', userName: '', lotId: selected.id, lotCode: selected.code, origin, destination, quantityKg: quantity, reason, adjustmentDirection: type === 'inventory-adjustment' ? direction : undefined }); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Movimentação não permitida.'); } };
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-4 backdrop-blur-[2px]"><div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Inventory Engine V1</p><h2 className="mt-1 text-xl font-bold">Nova movimentação</h2></div><button onClick={onClose} className="rounded-xl border p-2"><X size={18} /></button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold">Lote<select value={lotId} onChange={event => { setLotId(event.target.value); const lot = lots.find(item => item.id === event.target.value); setOrigin(lot?.location ?? ''); }} className={`mt-2 ${inputClass}`}>{lots.map(lot => <option key={lot.id} value={lot.id}>{lot.code} • {integer.format(lot.availableQuantityKg)} kg</option>)}</select></label><label className="text-xs font-semibold">Tipo<select value={type} onChange={event => setType(event.target.value as InventoryMovementType)} className={`mt-2 ${inputClass}`}>{Object.entries(movementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-semibold">Quantidade (kg)<input type="number" min="0.01" value={quantity} onChange={event => setQuantity(Number(event.target.value))} className={`mt-2 ${inputClass}`} /></label>{type === 'inventory-adjustment' && <label className="text-xs font-semibold">Direção<select value={direction} onChange={event => setDirection(event.target.value as 'increase' | 'decrease')} className={`mt-2 ${inputClass}`}><option value="decrease">Reduzir saldo</option><option value="increase">Aumentar saldo</option></select></label>}<label className="text-xs font-semibold">Origem<input value={origin} onChange={event => setOrigin(event.target.value)} className={`mt-2 ${inputClass}`} /></label><label className="text-xs font-semibold">Destino<input value={destination} onChange={event => setDestination(event.target.value)} className={`mt-2 ${inputClass}`} /></label><label className="text-xs font-semibold sm:col-span-2">Motivo<input value={reason} onChange={event => setReason(event.target.value)} className={`mt-2 ${inputClass}`} /></label></div>{selected && <div className="mt-5 flex gap-4 rounded-xl bg-stone-50 p-4 text-xs"><span>Disponível: <strong>{integer.format(selected.availableQuantityKg)} kg</strong></span><span>Reservado: <strong>{integer.format(selected.reservedQuantityKg)} kg</strong></span></div>}{error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-stone-500">Cancelar</button><Button onClick={submit}>Registrar movimentação</Button></div></div></div>;
+  const selected = lots.find((item) => item.id === lotId);
+  const submit = () => {
+    if (!selected) return;
+    try {
+      onSubmit({
+        id: `mov-${Date.now()}`,
+        type,
+        occurredAt: new Date().toISOString(),
+        userId: "",
+        userName: "",
+        lotId: selected.id,
+        lotCode: selected.code,
+        origin,
+        destination,
+        quantityKg: quantity,
+        reason,
+        adjustmentDirection:
+          type === "inventory-adjustment" ? direction : undefined,
+      });
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Movimentação não permitida.",
+      );
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+              Inventory Engine V1
+            </p>
+            <h2 className="mt-1 text-xl font-bold">Nova movimentação</h2>
+          </div>
+          <button onClick={onClose} className="rounded-xl border p-2">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-semibold">
+            Lote
+            <select
+              value={lotId}
+              onChange={(event) => {
+                setLotId(event.target.value);
+                const lot = lots.find((item) => item.id === event.target.value);
+                setOrigin(lot?.location ?? "");
+              }}
+              className={`mt-2 ${inputClass}`}
+            >
+              {lots.map((lot) => (
+                <option key={lot.id} value={lot.id}>
+                  {lot.code} • {integer.format(lot.availableQuantityKg)} kg
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold">
+            Tipo
+            <select
+              value={type}
+              onChange={(event) =>
+                setType(event.target.value as InventoryMovementType)
+              }
+              className={`mt-2 ${inputClass}`}
+            >
+              {Object.entries(movementLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold">
+            Quantidade (kg)
+            <input
+              type="number"
+              min="0.01"
+              value={quantity}
+              onChange={(event) => setQuantity(Number(event.target.value))}
+              className={`mt-2 ${inputClass}`}
+            />
+          </label>
+          {type === "inventory-adjustment" && (
+            <label className="text-xs font-semibold">
+              Direção
+              <select
+                value={direction}
+                onChange={(event) =>
+                  setDirection(event.target.value as "increase" | "decrease")
+                }
+                className={`mt-2 ${inputClass}`}
+              >
+                <option value="decrease">Reduzir saldo</option>
+                <option value="increase">Aumentar saldo</option>
+              </select>
+            </label>
+          )}
+          <label className="text-xs font-semibold">
+            Origem
+            <input
+              value={origin}
+              onChange={(event) => setOrigin(event.target.value)}
+              className={`mt-2 ${inputClass}`}
+            />
+          </label>
+          <label className="text-xs font-semibold">
+            Destino
+            <input
+              value={destination}
+              onChange={(event) => setDestination(event.target.value)}
+              className={`mt-2 ${inputClass}`}
+            />
+          </label>
+          <label className="text-xs font-semibold sm:col-span-2">
+            Motivo
+            <input
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className={`mt-2 ${inputClass}`}
+            />
+          </label>
+        </div>
+        {selected && (
+          <div className="mt-5 flex gap-4 rounded-xl bg-stone-50 p-4 text-xs">
+            <span>
+              Disponível:{" "}
+              <strong>{integer.format(selected.availableQuantityKg)} kg</strong>
+            </span>
+            <span>
+              Reservado:{" "}
+              <strong>{integer.format(selected.reservedQuantityKg)} kg</strong>
+            </span>
+          </div>
+        )}
+        {error && (
+          <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+            {error}
+          </p>
+        )}
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-stone-500"
+          >
+            Cancelar
+          </button>
+          <Button onClick={submit}>Registrar movimentação</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function InventoryPage() {
   const [lots, setLots] = useState<InventoryLot[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [locationFilter, setLocationFilter] = useState('all');
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
   const [selectedLot, setSelectedLot] = useState<InventoryLot | null>(null);
-  const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(
+    null,
+  );
   const [movementOpen, setMovementOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGoodsStock[]>([]);
@@ -95,25 +613,546 @@ export default function InventoryPage() {
   useEffect(() => {
     const api = getApiBaseUrl();
     void Promise.all([
-      fetch(`${api}/inventory/finished-goods`, { cache: 'no-store', credentials: 'include' }).then(response => response.ok ? response.json() as Promise<FinishedGoodsStock[]> : []),
-      fetch(`${api}/inventory/lots`, { cache: 'no-store', credentials: 'include' }).then(response => response.ok ? response.json() : []),
-      fetch(`${api}/inventory/movements`, { cache: 'no-store', credentials: 'include' }).then(response => response.ok ? response.json() : []),
-    ]).then(([goods, rawLots, rawMovements]) => {
-      setFinishedGoods(goods as FinishedGoodsStock[]);
-      setLots((rawLots as Array<Record<string, unknown>>).map(lot => ({ id: String(lot.id), code: String(lot.code), supplier: String((lot.supplier as { name?: string } | undefined)?.name ?? '—'), producer: '—', farm: '—', cityState: '—', origin: String(lot.origin ?? '—'), harvest: String(lot.harvest ?? '—'), variety: String(lot.variety ?? '—'), process: '—', initialQuantityKg: Number(lot.initialWeightKg ?? 0), availableQuantityKg: Number(lot.currentWeightKg ?? 0), reservedQuantityKg: Number(lot.reservedWeightKg ?? 0), realCostPerKg: Number(lot.initialWeightKg ?? 0) > 0 ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg) : 0, totalLotCost: Number(lot.landedCost ?? 0), currentStockValue: Number(lot.landedCost ?? 0), location: String((lot.warehouse as { name?: string } | undefined)?.name ?? '—'), status: lot.status === 'APPROVED' ? 'approved' : lot.status === 'BLOCKED' ? 'blocked' : 'awaiting-lab', minimumStockKg: 0, quality: {}, costs: { coffeeValue: Number(lot.purchaseCost ?? 0), freight: 0, nonRecoverableTaxes: 0, unloading: 0, initialProcessing: 0, otherDirectCosts: 0 }, traceability: [] })));
-      setMovements(rawMovements as InventoryMovement[]);
-    }).catch(() => { setFinishedGoods([]); setLots([]); setMovements([]); });
+      fetch(`${api}/inventory/finished-goods`, {
+        cache: "no-store",
+        credentials: "include",
+      }).then((response) =>
+        response.ok ? (response.json() as Promise<FinishedGoodsStock[]>) : [],
+      ),
+      fetch(`${api}/inventory/lots`, {
+        cache: "no-store",
+        credentials: "include",
+      }).then((response) => (response.ok ? response.json() : [])),
+      fetch(`${api}/inventory/movements`, {
+        cache: "no-store",
+        credentials: "include",
+      }).then((response) => (response.ok ? response.json() : [])),
+    ])
+      .then(([goods, rawLots, rawMovements]) => {
+        setFinishedGoods(goods as FinishedGoodsStock[]);
+        setLots(
+          (rawLots as Array<Record<string, unknown>>).map((lot) => {
+            const supplier = lot.supplier as { name?: string } | undefined;
+            const receipt = lot.receipt as Record<string, unknown> | undefined;
+            const purchase = receipt?.purchase as Record<string, unknown> | undefined;
+            const originUnit = purchase?.originUnit as Record<string, unknown> | undefined;
+            const region = originUnit?.coffeeRegion as { name?: string } | undefined;
+            const qualityStatus = String(receipt?.qualityStatus ?? "AWAITING_ANALYSIS");
+            const available = lot.status === "APPROVED" ? Number(lot.currentWeightKg ?? 0) : 0;
+            const traceability = (lot.traceability as Array<{ id: string; label: string; detail?: string; occurredAt?: string; status: "complete" | "current" | "future" } | null> | undefined ?? [])
+              .filter((event): event is { id: string; label: string; detail?: string; occurredAt?: string; status: "complete" | "current" | "future" } => Boolean(event))
+              .map((event) => ({ ...event, occurredAt: event.occurredAt ? new Date(event.occurredAt).toLocaleString("pt-BR") : "—" }));
+            return {
+            id: String(lot.id),
+            code: String(lot.code),
+            supplier: supplier?.name ?? "—",
+            producer: supplier?.name ?? "—",
+            farm: String(receipt?.farmName ?? originUnit?.name ?? "—"),
+            cityState: `${String(receipt?.municipality ?? originUnit?.municipality ?? "—")}/${String(receipt?.state ?? originUnit?.state ?? "—")}`,
+            origin: String(lot.origin ?? "—"),
+            harvest: String(receipt?.harvest ?? lot.harvest ?? "—"),
+            variety: String(receipt?.variety ?? lot.variety ?? "—"),
+            process: String(receipt?.process ?? "—"),
+            initialQuantityKg: Number(lot.initialWeightKg ?? 0),
+            availableQuantityKg: available,
+            reservedQuantityKg: Number(lot.reservedWeightKg ?? 0),
+            realCostPerKg:
+              Number(lot.initialWeightKg ?? 0) > 0
+                ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg)
+                : 0,
+            totalLotCost: Number(lot.landedCost ?? 0),
+            currentStockValue:
+              (available + Number(lot.reservedWeightKg ?? 0)) *
+              (Number(lot.initialWeightKg ?? 0) > 0
+                ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg)
+                : 0),
+            location: String(
+              (lot.warehouse as { name?: string } | undefined)?.name ?? "—",
+            ),
+            status: lot.status === "APPROVED" ? "approved" : lot.status === "BLOCKED" ? "blocked" : "awaiting-lab",
+            minimumStockKg: 0,
+            quality: {
+              moisturePercent: receipt?.moisturePercent == null ? undefined : Number(receipt.moisturePercent),
+              screen: receipt?.screen ? String(receipt.screen) : undefined,
+              defects: receipt?.defects == null ? undefined : Number(receipt.defects),
+              scaScore: lot.qualityScore == null ? undefined : Number(lot.qualityScore),
+              notes: receipt?.qualityNotes ? String(receipt.qualityNotes) : undefined,
+            },
+            costs: {
+              coffeeValue: Number(lot.purchaseCost ?? 0),
+              freight: 0,
+              nonRecoverableTaxes: 0,
+              unloading: 0,
+              initialProcessing: 0,
+              otherDirectCosts: 0,
+            },
+            traceability,
+            region: region?.name ?? String(receipt?.origin ?? "—"),
+            qualityStatus,
+            physicalQuantityKg: Number(lot.currentWeightKg ?? 0),
+            };
+          }),
+        );
+        setMovements(rawMovements as InventoryMovement[]);
+      })
+      .catch(() => {
+        setFinishedGoods([]);
+        setLots([]);
+        setMovements([]);
+      });
   }, []);
-  const finishedGoodsByLine = useMemo(() => Object.entries(
-    finishedGoods.reduce<Record<string, FinishedGoodsStock[]>>((groups, item) => {
-      (groups[item.line] ??= []).push(item);
-      return groups;
-    }, {}),
-  ), [finishedGoods]);
-  const summary = useMemo(() => calculateInventorySummary(lots, 811), [lots]);
-  const locations = [...new Set(lots.map(lot => lot.location))];
-  const filteredLots = lots.filter(lot => { const text = `${lot.code} ${lot.supplier} ${lot.origin} ${lot.variety} ${lot.harvest} ${lot.status} ${lot.location}`.toLowerCase(); return text.includes(query.toLowerCase()) && (statusFilter === 'all' || lot.status === statusFilter) && (locationFilter === 'all' || lot.location === locationFilter); });
-  const registerMovement = (movement: InventoryMovement) => { const lot = lots.find(item => item.id === movement.lotId); if (!lot) throw new InventoryRuleError('Lote não encontrado.'); const updated = applyInventoryMovement(lot, movement); setLots(current => current.map(item => item.id === updated.id ? updated : item)); setMovements(current => [movement, ...current]); setMovementOpen(false); setResult(`${movementLabels[movement.type]} de ${integer.format(movement.quantityKg)} kg registrada em ${movement.lotCode}`); setSelectedLot(current => current?.id === updated.id ? updated : current); };
-  const cards = [{ label: 'Café verde total', value: `${integer.format(summary.totalGreenCoffeeKg)} kg`, icon: Warehouse }, { label: 'Valor do estoque', value: currency.format(summary.financialStockValue), icon: CircleDollarSign }, { label: 'Custo médio/kg', value: currency.format(summary.averageCostPerKg), icon: PackageCheck }, { label: 'Lotes ativos', value: summary.activeLots.toString(), icon: Boxes }, { label: 'Lotes bloqueados', value: summary.blockedLots.toString(), icon: LockKeyhole, tone: 'danger' as const }, { label: 'Lotes em atenção', value: summary.attentionLots.toString(), icon: ShieldAlert, tone: 'warning' as const }, { label: 'Cobertura estimada', value: `${summary.estimatedCoverageDays} dias`, icon: Clock3, tone: summary.estimatedCoverageDays < 60 ? 'warning' as const : 'normal' as const }];
-  return <div className="mx-auto max-w-[1480px]"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-forest-700"><Warehouse size={14} />Operação Industrial</div><h1 className="font-[var(--font-manrope)] text-3xl font-semibold tracking-tight">Estoque</h1><p className="mt-2 text-sm text-stone-500">Saldos, valor, reservas e rastreabilidade do café verde</p></div><Button onClick={() => setMovementOpen(true)} className="flex items-center justify-center gap-2 px-5 py-3"><Plus size={16} />Nova movimentação</Button></div>{result && <div className="mt-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><span className="flex items-center gap-2"><Check size={15} />{result}</span><button onClick={() => setResult(null)}><X size={15} /></button></div>}<section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">{cards.map(card => <SummaryCard key={card.label} {...card} />)}</section><section className="mt-8"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Produto acabado</p><h2 className="mt-1 font-[var(--font-manrope)] text-lg font-semibold">Saldo por linha, produto e apresentação</h2></div><Card className="mt-4 p-5">{finishedGoodsByLine.length ? <div className="space-y-5">{finishedGoodsByLine.map(([lineName, items]) => <div key={lineName}><p className="text-[11px] font-bold uppercase tracking-[.14em] text-stone-400">{lineName}</p><div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{items.map(item => <div key={item.finishedProductId} className="rounded-xl bg-stone-50 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{item.product}</p><p className="mt-1 text-[11px] text-stone-400">{item.sku} • {item.presentationGrams === 1000 ? '1 kg' : `${item.presentationGrams} g`} • {item.location}</p></div>{item.source === 'legacy' && <Badge tone="neutral">Legado</Badge>}</div><div className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><p className="text-stone-400">Físico</p><strong>{integer.format(item.physicalUnits)} un.</strong></div><div><p className="text-stone-400">Reservado</p><strong>{integer.format(item.reservedUnits)} un.</strong></div><div><p className="text-stone-400">Disponível</p><strong className="text-forest-700">{integer.format(item.availableUnits)} un.</strong></div></div></div>)}</div></div>)}</div> : <div className="py-7 text-center"><PackageCheck size={22} className="mx-auto text-stone-300" /><p className="mt-3 text-sm font-semibold">Nenhum saldo de produto acabado</p><p className="mt-1 text-xs text-stone-400">As conclusões de OP criarão os saldos por SKU automaticamente.</p></div>}</Card></section><section className="mt-8"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-red-700">Dado → ação</p><h2 className="mt-1 font-[var(--font-manrope)] text-lg font-semibold">Alertas de estoque</h2></div><Badge tone="warning">{inventoryDemoDashboard.alerts.length} pontos</Badge></div><div className="mt-4 grid gap-4 md:grid-cols-2">{inventoryDemoDashboard.alerts.map(alert => { const lot = lots.find(item => item.id === alert.lotId); return <Card key={alert.id} className={`p-5 ${alert.status === 'off-track' ? 'border-red-200' : 'border-amber-200'}`}><div className="flex gap-3"><span className={`grid size-9 shrink-0 place-items-center rounded-xl ${alert.status === 'off-track' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}><AlertTriangle size={17} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold">{alert.alert}</p>{lot && <Badge tone={alert.status === 'off-track' ? 'danger' : 'warning'}>{lot.code}</Badge>}</div><p className="mt-2 text-xs leading-5 text-stone-500">{alert.datum} • impacto {integer.format(alert.impactKg)} kg</p><button onClick={() => setSelectedAlert(alert)} className="mt-3 flex items-center gap-1 text-xs font-bold text-forest-700">Ver diagnóstico e ação <ChevronRight size={13} /></button></div></div></Card>; })}</div></section><section className="mt-8"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Lotes ativos</p><h2 className="mt-1 font-[var(--font-manrope)] text-lg font-semibold">Posição do café verde</h2></div><div className="flex flex-col gap-2 sm:flex-row"><label className="flex min-w-60 items-center gap-2 rounded-xl border bg-white px-3 py-2.5"><Search size={15} className="text-stone-400" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Código, fornecedor, origem..." className="w-full bg-transparent text-xs outline-none" /></label><label className="flex items-center gap-2 rounded-xl border bg-white px-3"><Filter size={14} className="text-stone-400" /><select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="bg-transparent py-2.5 text-xs outline-none"><option value="all">Todos os status</option><option value="approved">Disponível</option><option value="attention">Atenção</option><option value="awaiting-lab">Aguardando laboratório</option><option value="blocked">Bloqueado</option></select></label><select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} className="rounded-xl border bg-white px-3 py-2.5 text-xs outline-none"><option value="all">Todas as localizações</option>{locations.map(location => <option key={location}>{location}</option>)}</select></div></div><div className="mt-4 space-y-3">{filteredLots.map(lot => { const status = statusMap[lot.status]; return <button key={lot.id} onClick={() => setSelectedLot(lot)} className="w-full text-left"><Card className="p-5 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex flex-col gap-4 lg:flex-row lg:items-center"><div className="min-w-48"><div className="flex items-center gap-2"><p className="font-bold">{lot.code}</p><Badge tone={status.tone}>{status.label}</Badge></div><p className="mt-2 text-xs font-semibold text-stone-600">{lot.supplier}</p><p className="mt-1 text-[11px] text-stone-400">{lot.origin} • {lot.harvest} • {lot.variety}</p></div><div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6"><DataPoint label="Inicial" value={`${integer.format(lot.initialQuantityKg)} kg`} /><DataPoint label="Disponível" value={`${integer.format(lot.availableQuantityKg)} kg`} /><DataPoint label="Reservado" value={`${integer.format(lot.reservedQuantityKg)} kg`} /><DataPoint label="Custo/kg" value={currency.format(lot.realCostPerKg)} /><DataPoint label="Valor atual" value={currency.format(lot.currentStockValue)} /><DataPoint label="SCA / Umidade" value={`${lot.quality.scaScore?.toLocaleString('pt-BR') ?? '—'} / ${lot.quality.moisturePercent !== undefined ? `${lot.quality.moisturePercent}%` : '—'}`} /></div><div className="flex min-w-44 items-center justify-between gap-3 lg:justify-end"><span className="flex items-center gap-1 text-xs text-stone-500"><MapPin size={13} />{lot.location}</span><ChevronRight size={15} className="text-stone-300" /></div></div></Card></button>; })}{filteredLots.length === 0 && <div className="rounded-2xl border border-dashed py-14 text-center"><p className="text-sm font-semibold">Nenhum lote encontrado</p><p className="mt-1 text-xs text-stone-400">Revise a busca ou os filtros aplicados.</p></div>}</div></section><section className="mt-8"><Card className="p-6"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Movimentações</p><h2 className="mt-1 text-base font-semibold">Atividade recente</h2></div><button onClick={() => setMovementOpen(true)} className="text-xs font-bold text-forest-700">Registrar nova</button></div><div className="mt-5 grid gap-3 lg:grid-cols-3">{movements.slice(0, 3).map(item => <div key={item.id} className="flex items-start gap-3 rounded-xl bg-stone-50 p-4"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-forest-50 text-forest-700">{item.type === 'entry' ? <ArrowDownToLine size={15} /> : item.type === 'exit' ? <ArrowUpFromLine size={15} /> : <RefreshCw size={15} />}</span><div><p className="text-xs font-semibold">{movementLabels[item.type]} • {integer.format(item.quantityKg)} kg</p><p className="mt-1 text-[11px] text-stone-400">{item.lotCode} • {item.userName}</p><p className="mt-1 text-[11px] text-stone-500">{item.reason}</p></div></div>)}</div></Card></section>{selectedLot && <LotDrawer lot={selectedLot} movements={movements} onClose={() => setSelectedLot(null)} />}{selectedAlert && <AlertDrawer alert={selectedAlert} lot={lots.find(item => item.id === selectedAlert.lotId)} onClose={() => setSelectedAlert(null)} onOpenLot={() => { const lot = lots.find(item => item.id === selectedAlert.lotId); setSelectedAlert(null); if (lot) setSelectedLot(lot); }} />}{movementOpen && <MovementModal lots={lots} onClose={() => setMovementOpen(false)} onSubmit={registerMovement} />}</div>;
+  const finishedGoodsByLine = useMemo(
+    () =>
+      Object.entries(
+        finishedGoods.reduce<Record<string, FinishedGoodsStock[]>>(
+          (groups, item) => {
+            (groups[item.line] ??= []).push(item);
+            return groups;
+          },
+          {},
+        ),
+      ),
+    [finishedGoods],
+  );
+  const summary = useMemo(() => calculateInventorySummary(lots, 0), [lots]);
+  const locations = [...new Set(lots.map((lot) => lot.location))];
+  const filteredLots = lots.filter((lot) => {
+    const text =
+      `${lot.code} ${lot.supplier} ${lot.origin} ${lot.variety} ${lot.harvest} ${lot.status} ${lot.location}`.toLowerCase();
+    return (
+      text.includes(query.toLowerCase()) &&
+      (statusFilter === "all" || lot.status === statusFilter) &&
+      (locationFilter === "all" || lot.location === locationFilter)
+    );
+  });
+  const availableKg = lots.reduce((sum, lot) => sum + lot.availableQuantityKg, 0);
+  const awaitingQualityKg = lots
+    .filter((lot) => lot.status === "awaiting-lab")
+    .reduce((sum, lot) => sum + lot.initialQuantityKg, 0);
+  const registerMovement = (movement: InventoryMovement) => {
+    const lot = lots.find((item) => item.id === movement.lotId);
+    if (!lot) throw new InventoryRuleError("Lote não encontrado.");
+    const updated = applyInventoryMovement(lot, movement);
+    setLots((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item)),
+    );
+    setMovements((current) => [movement, ...current]);
+    setMovementOpen(false);
+    setResult(
+      `${movementLabels[movement.type]} de ${integer.format(movement.quantityKg)} kg registrada em ${movement.lotCode}`,
+    );
+    setSelectedLot((current) =>
+      current?.id === updated.id ? updated : current,
+    );
+  };
+  const cards = [
+    {
+      label: "Café verde total",
+      value: `${integer.format(summary.totalGreenCoffeeKg)} kg`,
+      icon: Warehouse,
+    },
+    {
+      label: "Disponível para produção",
+      value: `${integer.format(availableKg)} kg`,
+      icon: PackageCheck,
+    },
+    {
+      label: "Aguardando qualidade",
+      value: `${integer.format(awaitingQualityKg)} kg`,
+      icon: Clock3,
+      tone: "warning" as const,
+    },
+    {
+      label: "Lotes ativos",
+      value: summary.activeLots.toString(),
+      icon: Boxes,
+    },
+    {
+      label: "Lotes bloqueados",
+      value: `${integer.format(lots.filter((lot) => lot.status === "blocked").reduce((sum, lot) => sum + lot.initialQuantityKg, 0))} kg`,
+      icon: LockKeyhole,
+      tone: "danger" as const,
+    },
+    {
+      label: "Valor do estoque",
+      value: currency.format(summary.financialStockValue),
+      icon: CircleDollarSign,
+    },
+    {
+      label: "Custo médio/kg",
+      value: summary.totalGreenCoffeeKg > 0 ? currency.format(summary.averageCostPerKg) : "Sem dados",
+      icon: ShieldAlert,
+    },
+  ];
+  return (
+    <div className="mx-auto max-w-[1480px]">
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+            <Warehouse size={14} />
+            Operação Industrial
+          </div>
+          <h1 className="font-[var(--font-manrope)] text-3xl font-semibold tracking-tight">
+            Estoque
+          </h1>
+          <p className="mt-2 text-sm text-stone-500">
+            Saldos, valor, reservas e rastreabilidade do café verde
+          </p>
+        </div>
+        <Button
+          onClick={() => setMovementOpen(true)}
+          className="flex items-center justify-center gap-2 px-5 py-3"
+        >
+          <Plus size={16} />
+          Nova movimentação
+        </Button>
+      </div>
+      {result && (
+        <div className="mt-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <span className="flex items-center gap-2">
+            <Check size={15} />
+            {result}
+          </span>
+          <button onClick={() => setResult(null)}>
+            <X size={15} />
+          </button>
+        </div>
+      )}
+      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        {cards.map((card) => (
+          <SummaryCard key={card.label} {...card} />
+        ))}
+      </section>
+      <section className="mt-8">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+            Produto acabado
+          </p>
+          <h2 className="mt-1 font-[var(--font-manrope)] text-lg font-semibold">
+            Saldo por linha, produto e apresentação
+          </h2>
+        </div>
+        <Card className="mt-4 p-5">
+          {finishedGoodsByLine.length ? (
+            <div className="space-y-5">
+              {finishedGoodsByLine.map(([lineName, items]) => (
+                <div key={lineName}>
+                  <p className="text-[11px] font-bold uppercase tracking-[.14em] text-stone-400">
+                    {lineName}
+                  </p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {items.map((item) => (
+                      <div
+                        key={item.finishedProductId}
+                        className="rounded-xl bg-stone-50 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">
+                              {item.product}
+                            </p>
+                            <p className="mt-1 text-[11px] text-stone-400">
+                              {item.sku} •{" "}
+                              {item.presentationGrams === 1000
+                                ? "1 kg"
+                                : `${item.presentationGrams} g`}{" "}
+                              • {item.location}
+                            </p>
+                          </div>
+                          {item.source === "legacy" && (
+                            <Badge tone="neutral">Legado</Badge>
+                          )}
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <p className="text-stone-400">Físico</p>
+                            <strong>
+                              {integer.format(item.physicalUnits)} un.
+                            </strong>
+                          </div>
+                          <div>
+                            <p className="text-stone-400">Reservado</p>
+                            <strong>
+                              {integer.format(item.reservedUnits)} un.
+                            </strong>
+                          </div>
+                          <div>
+                            <p className="text-stone-400">Disponível</p>
+                            <strong className="text-forest-700">
+                              {integer.format(item.availableUnits)} un.
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-7 text-center">
+              <PackageCheck size={22} className="mx-auto text-stone-300" />
+              <p className="mt-3 text-sm font-semibold">
+                Nenhum saldo de produto acabado
+              </p>
+              <p className="mt-1 text-xs text-stone-400">
+                As conclusões de OP criarão os saldos por SKU automaticamente.
+              </p>
+            </div>
+          )}
+        </Card>
+      </section>
+      <section className="mt-8">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-red-700">
+              Dado → ação
+            </p>
+            <h2 className="mt-1 font-[var(--font-manrope)] text-lg font-semibold">
+              Alertas de estoque
+            </h2>
+          </div>
+          <Badge tone="warning">
+            {inventoryDemoDashboard.alerts.length} pontos
+          </Badge>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {inventoryDemoDashboard.alerts.map((alert) => {
+            const lot = lots.find((item) => item.id === alert.lotId);
+            return (
+              <Card
+                key={alert.id}
+                className={`p-5 ${alert.status === "off-track" ? "border-red-200" : "border-amber-200"}`}
+              >
+                <div className="flex gap-3">
+                  <span
+                    className={`grid size-9 shrink-0 place-items-center rounded-xl ${alert.status === "off-track" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}
+                  >
+                    <AlertTriangle size={17} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold">{alert.alert}</p>
+                      {lot && (
+                        <Badge
+                          tone={
+                            alert.status === "off-track" ? "danger" : "warning"
+                          }
+                        >
+                          {lot.code}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-stone-500">
+                      {alert.datum} • impacto {integer.format(alert.impactKg)}{" "}
+                      kg
+                    </p>
+                    <button
+                      onClick={() => setSelectedAlert(alert)}
+                      className="mt-3 flex items-center gap-1 text-xs font-bold text-forest-700"
+                    >
+                      Ver diagnóstico e ação <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+      <section className="mt-8">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+              Lotes ativos
+            </p>
+            <h2 className="mt-1 font-[var(--font-manrope)] text-lg font-semibold">
+              Posição do café verde
+            </h2>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="flex min-w-60 items-center gap-2 rounded-xl border bg-white px-3 py-2.5">
+              <Search size={15} className="text-stone-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Código, fornecedor, origem..."
+                className="w-full bg-transparent text-xs outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 rounded-xl border bg-white px-3">
+              <Filter size={14} className="text-stone-400" />
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="bg-transparent py-2.5 text-xs outline-none"
+              >
+                <option value="all">Todos os status</option>
+                <option value="approved">Disponível</option>
+                <option value="attention">Atenção</option>
+                <option value="awaiting-lab">Aguardando laboratório</option>
+                <option value="blocked">Bloqueado</option>
+              </select>
+            </label>
+            <select
+              value={locationFilter}
+              onChange={(event) => setLocationFilter(event.target.value)}
+              className="rounded-xl border bg-white px-3 py-2.5 text-xs outline-none"
+            >
+              <option value="all">Todas as localizações</option>
+              {locations.map((location) => (
+                <option key={location}>{location}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 space-y-3">
+          {filteredLots.map((lot) => {
+            const status = statusMap[lot.status];
+            return (
+              <button
+                key={lot.id}
+                onClick={() => setSelectedLot(lot)}
+                className="w-full text-left"
+              >
+                <Card className="p-5 transition hover:-translate-y-0.5 hover:shadow-lg">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                    <div className="min-w-48">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold">{lot.code}</p>
+                        <Badge tone={status.tone}>{status.label}</Badge>
+                      </div>
+                      <p className="mt-2 text-xs font-semibold text-stone-600">
+                        {lot.supplier}
+                      </p>
+                      <p className="mt-1 text-[11px] text-stone-400">
+                        {lot.origin} • {lot.harvest} • {lot.variety}
+                      </p>
+                    </div>
+                    <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                      <DataPoint
+                        label="Inicial"
+                        value={`${integer.format(lot.initialQuantityKg)} kg`}
+                      />
+                      <DataPoint
+                        label="Disponível"
+                        value={`${integer.format(lot.availableQuantityKg)} kg`}
+                      />
+                      <DataPoint
+                        label="Reservado"
+                        value={`${integer.format(lot.reservedQuantityKg)} kg`}
+                      />
+                      <DataPoint
+                        label="Custo/kg"
+                        value={currency.format(lot.realCostPerKg)}
+                      />
+                      <DataPoint
+                        label="Valor atual"
+                        value={currency.format(lot.currentStockValue)}
+                      />
+                      <DataPoint
+                        label="SCA / Umidade"
+                        value={`${lot.quality.scaScore?.toLocaleString("pt-BR") ?? "—"} / ${lot.quality.moisturePercent !== undefined ? `${lot.quality.moisturePercent}%` : "—"}`}
+                      />
+                    </div>
+                    <div className="flex min-w-44 items-center justify-between gap-3 lg:justify-end">
+                      <span className="flex items-center gap-1 text-xs text-stone-500">
+                        <MapPin size={13} />
+                        {lot.location}
+                      </span>
+                      <ChevronRight size={15} className="text-stone-300" />
+                    </div>
+                  </div>
+                </Card>
+              </button>
+            );
+          })}
+          {filteredLots.length === 0 && (
+            <div className="rounded-2xl border border-dashed py-14 text-center">
+              <p className="text-sm font-semibold">Nenhum lote encontrado</p>
+              <p className="mt-1 text-xs text-stone-400">
+                Revise a busca ou os filtros aplicados.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="mt-8">
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+                Movimentações
+              </p>
+              <h2 className="mt-1 text-base font-semibold">
+                Atividade recente
+              </h2>
+            </div>
+            <button
+              onClick={() => setMovementOpen(true)}
+              className="text-xs font-bold text-forest-700"
+            >
+              Registrar nova
+            </button>
+          </div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {movements.slice(0, 3).map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-3 rounded-xl bg-stone-50 p-4"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-forest-50 text-forest-700">
+                  {item.type === "entry" ? (
+                    <ArrowDownToLine size={15} />
+                  ) : item.type === "exit" ? (
+                    <ArrowUpFromLine size={15} />
+                  ) : (
+                    <RefreshCw size={15} />
+                  )}
+                </span>
+                <div>
+                  <p className="text-xs font-semibold">
+                    {movementLabels[item.type]} •{" "}
+                    {integer.format(item.quantityKg)} kg
+                  </p>
+                  <p className="mt-1 text-[11px] text-stone-400">
+                    {item.lotCode} • {item.userName}
+                  </p>
+                  <p className="mt-1 text-[11px] text-stone-500">
+                    {item.reason}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+      {selectedLot && (
+        <LotDrawer
+          lot={selectedLot}
+          movements={movements}
+          onClose={() => setSelectedLot(null)}
+        />
+      )}
+      {selectedAlert && (
+        <AlertDrawer
+          alert={selectedAlert}
+          lot={lots.find((item) => item.id === selectedAlert.lotId)}
+          onClose={() => setSelectedAlert(null)}
+          onOpenLot={() => {
+            const lot = lots.find((item) => item.id === selectedAlert.lotId);
+            setSelectedAlert(null);
+            if (lot) setSelectedLot(lot);
+          }}
+        />
+      )}
+      {movementOpen && (
+        <MovementModal
+          lots={lots}
+          onClose={() => setMovementOpen(false)}
+          onSubmit={registerMovement}
+        />
+      )}
+    </div>
+  );
 }
