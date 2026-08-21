@@ -4,8 +4,8 @@ import { DashboardService } from "./dashboard.service";
 import { BlendsController } from "./blends.controller";
 import { HealthController } from "./health.controller";
 import { ReceiptsController } from "./receipts.controller";
-import { GreenCoffeePurchasesController } from './green-coffee-purchases.controller';
-import { PurchaseAcceptanceController } from './purchase-acceptance.controller';
+import { GreenCoffeePurchasesController } from "./green-coffee-purchases.controller";
+import { PurchaseAcceptanceController } from "./purchase-acceptance.controller";
 import { InventoryController } from "./inventory.controller";
 import { ProductionController } from "./production.controller";
 import { ProductsController } from "./products.controller";
@@ -29,6 +29,7 @@ import { AdminCoffeeReferenceController } from "./admin-coffee-reference.control
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
+import { BrokersController } from "./brokers.controller";
 
 @Module({
   controllers: [
@@ -48,7 +49,22 @@ import { UnconfiguredStateRegistrationProvider } from "./state-registration.prov
     CommerceController,
     AuthController,
     AdminCoffeeReferenceController,
+    BrokersController,
   ],
-  providers: [DashboardService, ProductsService, ProductsRepository, ProductionService, SalesOrdersService, CostingService, FinanceService, ReconciliationService, CommerceService, AuthService, UnconfiguredTaxRegistryProvider, UnconfiguredStateRegistrationProvider, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [
+    DashboardService,
+    ProductsService,
+    ProductsRepository,
+    ProductionService,
+    SalesOrdersService,
+    CostingService,
+    FinanceService,
+    ReconciliationService,
+    CommerceService,
+    AuthService,
+    UnconfiguredTaxRegistryProvider,
+    UnconfiguredStateRegistrationProvider,
+    { provide: APP_GUARD, useClass: AuthGuard },
+  ],
 })
 export class AppModule {}

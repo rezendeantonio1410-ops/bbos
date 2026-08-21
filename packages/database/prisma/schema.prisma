@@ -126,6 +126,13 @@ enum PurchaseExternalAcceptanceStatus {
   EXPIRED
 }
 
+enum PurchaseConfirmationDocumentStatus {
+  DRAFT
+  ACCEPTED
+  SUPERSEDED
+  CANCELLED
+}
+
 enum ProductionStatus {
   PLANNED
   RESERVED
@@ -381,6 +388,7 @@ model Company {
   coffeeRegions            CoffeeRegion[]
   screenClassifications    ScreenClassification[]
   supplierBankAccounts     SupplierBankAccount[]
+  brokers                  Broker[]
 }
 
 model User {
@@ -462,6 +470,28 @@ model Supplier {
   updatedAt            DateTime                        @updatedAt
 
   @@index([companyId])
+}
+
+model Broker {
+  id            String                  @id @default(cuid())
+  companyId     String
+  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  legalName     String?
+  tradeName     String?
+  taxId         String?
+  contactName   String?
+  phone         String?
+  email         String?
+  bankDetails   Json?
+  active        Boolean                 @default(true)
+  purchases     GreenCoffeePurchase[]
+  accountsPayable AccountsPayable[]
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([companyId, taxId])
+  @@index([companyId, active])
 }
 
 model SupplierContact {
@@ -668,6 +698,10 @@ model GreenCoffeePurchase {
   company                      Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   supplierId                   String
   supplier                     Supplier                         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  brokerId                     String?
+  broker                       Broker?                          @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerCommissionPercent     Decimal?                         @db.Decimal(7, 4)
+  brokerCommissionAmount      Decimal?                         @db.Decimal(14, 2)
   originUnitId                 String?
   originUnit                   SupplierOriginUnit?              @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
   purchaseNumber               String
@@ -751,6 +785,7 @@ model GreenCoffeePurchase {
   termsDocumentUrl             String?
   acceptanceConditionText      String?
   externalAcceptances          GreenCoffeePurchaseAcceptance[]
+  confirmationDocuments        PurchaseConfirmationDocumentVersion[]
 
   @@unique([companyId, purchaseNumber])
   @@index([companyId, status])
@@ -760,6 +795,23 @@ model GreenCoffeePurchase {
   @@index([cultivarId])
   @@index([coffeeRegionId])
   @@index([screenClassificationId])
+  @@index([brokerId])
+}
+
+model PurchaseConfirmationDocumentVersion {
+  id          String                                @id @default(cuid())
+  purchaseId  String
+  purchase    GreenCoffeePurchase                   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  version     Int
+  status      PurchaseConfirmationDocumentStatus   @default(DRAFT)
+  snapshot    Json
+  documentHash String?
+  createdAt   DateTime                              @default(now())
+  acceptedAt  DateTime?
+  supersededAt DateTime?
+
+  @@unique([purchaseId, version])
+  @@index([purchaseId, status])
 }
 
 model GreenCoffeePurchaseAcceptance {
@@ -1430,6 +1482,8 @@ model AccountsPayable {
   company             Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   supplierId          String?
   supplier            Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  brokerId            String?
+  broker              Broker?                         @relation(fields: [brokerId], references: [id], onDelete: SetNull)
   costCenterId        String?
   costCenter          CostCenter?                     @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   description         String
@@ -1445,6 +1499,7 @@ model AccountsPayable {
   purchaseInstallment GreenCoffeePurchaseInstallment?
   purchaseId          String?
   purchase            GreenCoffeePurchase?            @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  brokerCommissionPayableKey String?                  @unique
   createdAt           DateTime                        @default(now())
   updatedAt           DateTime                        @updatedAt
 

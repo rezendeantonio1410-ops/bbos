@@ -30,6 +30,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
+import {
+  calculateBrokerCommission,
+  ensureBrokerCommissionPayable,
+} from "./broker-commission";
 import { getBrazilianMunicipalities } from "./brazilian-municipalities";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -104,6 +108,8 @@ type PurchaseBody = {
   expectedAt?: string;
   contractReference?: string;
   commercialNotes?: string;
+  brokerId?: string;
+  brokerCommissionPercent?: number;
 };
 
 const DEFAULT_ACCEPTANCE_TEXT =
@@ -230,6 +236,7 @@ export class GreenCoffeePurchasesController {
   ) {}
 
   private readonly include = {
+    broker: true,
     supplier: {
       include: {
         contacts: {
@@ -583,6 +590,56 @@ export class GreenCoffeePurchasesController {
     return this.view(row);
   }
 
+  @Get(":id/confirmation-documents")
+  async confirmationDocuments(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    const purchase = await this.db.greenCoffeePurchase.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!purchase) throw new NotFoundException("Compra não encontrada.");
+    return this.db.purchaseConfirmationDocumentVersion.findMany({
+      where: { purchaseId: id },
+      orderBy: { version: "desc" },
+    });
+  }
+
+  @Post(":id/confirmation-documents")
+  async createConfirmationDocument(
+    @Param("id") id: string,
+    @Req() request: any,
+  ) {
+    const actor = await this.sessionActor(request);
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+        include: this.include,
+      });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      const last = await tx.purchaseConfirmationDocumentVersion.findFirst({
+        where: { purchaseId: id },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      await tx.purchaseConfirmationDocumentVersion.updateMany({
+        where: { purchaseId: id, status: "DRAFT" },
+        data: { status: "SUPERSEDED", supersededAt: new Date() },
+      });
+      const snapshot = this.acceptanceSnapshot(purchase);
+      const documentHash = createHash("sha256")
+        .update(JSON.stringify(snapshot))
+        .digest("hex");
+      return tx.purchaseConfirmationDocumentVersion.create({
+        data: {
+          purchaseId: id,
+          version: (last?.version ?? 0) + 1,
+          snapshot,
+          documentHash,
+        },
+      });
+    });
+  }
+
   @Patch(":id")
   async updateDraft(
     @Param("id") id: string,
@@ -597,6 +654,15 @@ export class GreenCoffeePurchasesController {
     )
       throw new BadRequestException(
         "A umidade máxima deve estar entre 10,0% e 12,5%.",
+      );
+    if (
+      body.brokerCommissionPercent !== undefined &&
+      (!Number.isFinite(body.brokerCommissionPercent) ||
+        body.brokerCommissionPercent < 0 ||
+        body.brokerCommissionPercent > 100)
+    )
+      throw new BadRequestException(
+        "A comissão do corretor deve estar entre 0% e 100%.",
       );
     return this.db.$transaction(async (tx) => {
       const purchase = await tx.greenCoffeePurchase.findFirst({
@@ -675,6 +741,24 @@ export class GreenCoffeePurchasesController {
           );
         data.originUnit = { connect: { id: unit.id } };
       }
+      if (Object.prototype.hasOwnProperty.call(body, "brokerId")) {
+        if (body.brokerId) {
+          const broker = await tx.broker.findFirst({
+            where: {
+              id: body.brokerId,
+              companyId: actor.companyId,
+              active: true,
+            },
+          });
+          if (!broker)
+            throw new BadRequestException("Corretor inválido para a empresa.");
+          data.broker = { connect: { id: broker.id } };
+        } else {
+          data.broker = { disconnect: true };
+          data.brokerCommissionPercent = null;
+          data.brokerCommissionAmount = null;
+        }
+      }
       for (const key of [
         "originRegion",
         "municipality",
@@ -705,6 +789,17 @@ export class GreenCoffeePurchasesController {
       }
       if (body.pricePerKg !== undefined) data.pricePerKg = body.pricePerKg;
       if (body.totalValue !== undefined) data.totalValue = body.totalValue;
+      if (body.brokerCommissionPercent !== undefined) {
+        if (!body.brokerId && !purchase.brokerId)
+          throw new BadRequestException(
+            "Informe o corretor para registrar a comissão.",
+          );
+        data.brokerCommissionPercent = body.brokerCommissionPercent;
+        data.brokerCommissionAmount = calculateBrokerCommission(
+          body.totalValue ?? Number(purchase.totalValue),
+          body.brokerCommissionPercent,
+        );
+      }
       if (Object.keys(data).length)
         await tx.greenCoffeePurchase.update({ where: { id }, data });
       await tx.greenCoffeeAuditEvent.create({
@@ -1250,6 +1345,31 @@ export class GreenCoffeePurchasesController {
         });
         if (!supplier)
           throw new BadRequestException("Fornecedor inválido para a empresa.");
+        let broker: { id: string } | null = null;
+        if (body.brokerId) {
+          broker = await tx.broker.findFirst({
+            where: {
+              id: body.brokerId,
+              companyId: body.companyId,
+              active: true,
+            },
+            select: { id: true },
+          });
+          if (!broker)
+            throw new BadRequestException("Corretor inválido para a empresa.");
+        }
+        const brokerCommissionPercent = body.brokerCommissionPercent ?? null;
+        if (brokerCommissionPercent !== null && !broker)
+          throw new BadRequestException(
+            "Informe o corretor para registrar a comissão.",
+          );
+        const brokerCommissionAmount =
+          brokerCommissionPercent === null
+            ? null
+            : calculateBrokerCommission(
+                body.totalValue,
+                brokerCommissionPercent,
+              );
         const references = await this.resolveReferences(
           tx,
           body,
@@ -1282,6 +1402,9 @@ export class GreenCoffeePurchasesController {
           data: {
             companyId: body.companyId,
             supplierId: body.supplierId,
+            brokerId: broker?.id,
+            brokerCommissionPercent,
+            brokerCommissionAmount,
             originUnitId: references.originUnitId,
             purchaseNumber,
             status: approved
@@ -1389,6 +1512,7 @@ export class GreenCoffeePurchasesController {
             },
           },
         });
+        if (approved) await ensureBrokerCommissionPayable(tx, purchase as any);
         if (action === "SUBMIT") {
           await tx.greenCoffeeAuditEvent.create({
             data: {
@@ -1491,10 +1615,13 @@ export class GreenCoffeePurchasesController {
             actorName: actor.userName,
           },
         });
-        return tx.greenCoffeePurchase.findUnique({
+        const approvedPurchase = await tx.greenCoffeePurchase.findUnique({
           where: { id },
           include: this.include,
         });
+        if (approvedPurchase)
+          await ensureBrokerCommissionPayable(tx, approvedPurchase as any);
+        return approvedPurchase;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -2096,6 +2223,14 @@ export class GreenCoffeePurchasesController {
       ...row,
       contractedWeightKg: Number(row.contractedWeightKg),
       totalValue: Number(row.totalValue),
+      brokerCommissionPercent:
+        row.brokerCommissionPercent == null
+          ? null
+          : Number(row.brokerCommissionPercent),
+      brokerCommissionAmount:
+        row.brokerCommissionAmount == null
+          ? null
+          : Number(row.brokerCommissionAmount),
       receivedKg,
       receivedPercent: Number(row.contractedWeightKg)
         ? Math.min(100, (receivedKg / Number(row.contractedWeightKg)) * 100)
@@ -2104,6 +2239,8 @@ export class GreenCoffeePurchasesController {
       financialStatus,
       financial: {
         contracted: Number(row.totalValue),
+        brokerCommission: row.brokerCommissionAmount == null ? 0 : Number(row.brokerCommissionAmount),
+        totalCost: Number(row.totalValue) + (row.brokerCommissionAmount == null ? 0 : Number(row.brokerCommissionAmount)),
         committed,
         paid,
         balance: Math.max(0, Number(row.totalValue) - paid),
@@ -2171,6 +2308,14 @@ export class GreenCoffeePurchasesController {
       commercial: {
         pricePerKg: purchase.pricePerKg ? Number(purchase.pricePerKg) : null,
         totalValue: Number(purchase.totalValue),
+        broker: purchase.broker
+          ? {
+              id: purchase.broker.id,
+              name: purchase.broker.name,
+              commissionPercent: purchase.brokerCommissionPercent == null ? null : Number(purchase.brokerCommissionPercent),
+              commissionAmount: purchase.brokerCommissionAmount == null ? null : Number(purchase.brokerCommissionAmount),
+            }
+          : null,
         currency: purchase.currency,
         expectedAt: purchase.expectedAt,
         contractReference: purchase.contractReference,

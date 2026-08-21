@@ -16,6 +16,7 @@ import {
   PurchaseExternalAcceptanceStatus,
 } from "@bbos/database";
 import { Public } from "./auth.guard";
+import { ensureBrokerCommissionPayable } from "./broker-commission";
 
 const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
@@ -43,30 +44,37 @@ export class PurchaseAcceptanceController {
       });
       throw new BadRequestException("Este link expirou.");
     }
-    if (acceptance.status !== PurchaseExternalAcceptanceStatus.ACCEPTED && !acceptance.viewedAt) {
-      await this.db.$transaction([
-        this.db.greenCoffeePurchaseAcceptance.update({
-          where: { id: acceptance.id },
-          data: {
-            viewedAt: acceptance.viewedAt ?? new Date(),
-            status: PurchaseExternalAcceptanceStatus.VIEWED,
-          },
-        }),
-        this.db.greenCoffeePurchase.update({
-          where: { id: acceptance.purchaseId },
-          data: { externalAcceptanceStatus: PurchaseExternalAcceptanceStatus.VIEWED },
-        }),
-        this.db.greenCoffeeAuditEvent.create({
-          data: {
-            companyId: (acceptance.snapshot as any).companyId ?? "",
-            purchaseId: acceptance.purchaseId,
-            action: "PURCHASE_ACCEPTANCE_VIEWED",
-            actorId: "EXTERNAL_SUPPLIER",
-            actorName: acceptance.contactName ?? "Fornecedor",
-            metadata: { acceptanceId: acceptance.id },
-          },
-        }),
-      ]).catch(() => undefined);
+    if (
+      acceptance.status !== PurchaseExternalAcceptanceStatus.ACCEPTED &&
+      !acceptance.viewedAt
+    ) {
+      await this.db
+        .$transaction([
+          this.db.greenCoffeePurchaseAcceptance.update({
+            where: { id: acceptance.id },
+            data: {
+              viewedAt: acceptance.viewedAt ?? new Date(),
+              status: PurchaseExternalAcceptanceStatus.VIEWED,
+            },
+          }),
+          this.db.greenCoffeePurchase.update({
+            where: { id: acceptance.purchaseId },
+            data: {
+              externalAcceptanceStatus: PurchaseExternalAcceptanceStatus.VIEWED,
+            },
+          }),
+          this.db.greenCoffeeAuditEvent.create({
+            data: {
+              companyId: (acceptance.snapshot as any).companyId ?? "",
+              purchaseId: acceptance.purchaseId,
+              action: "PURCHASE_ACCEPTANCE_VIEWED",
+              actorId: "EXTERNAL_SUPPLIER",
+              actorName: acceptance.contactName ?? "Fornecedor",
+              metadata: { acceptanceId: acceptance.id },
+            },
+          }),
+        ])
+        .catch(() => undefined);
     }
     return {
       acceptanceId: acceptance.id,
@@ -98,7 +106,8 @@ export class PurchaseAcceptanceController {
           where: { tokenHash: hashToken(token) },
           include: { purchase: { include: { installments: true } } },
         });
-        if (!acceptance) throw new NotFoundException("Link de aceite inválido.");
+        if (!acceptance)
+          throw new NotFoundException("Link de aceite inválido.");
         if (acceptance.status === PurchaseExternalAcceptanceStatus.ACCEPTED)
           return {
             status: "ACCEPTED",
@@ -111,7 +120,9 @@ export class PurchaseAcceptanceController {
         if (acceptance.tokenExpiresAt < new Date())
           throw new BadRequestException("Este link expirou.");
         if (acceptance.purchase.approvalStatus !== "APPROVED")
-          throw new BadRequestException("A compra ainda não foi aprovada internamente.");
+          throw new BadRequestException(
+            "A compra ainda não foi aprovada internamente.",
+          );
         const acceptedAt = new Date();
         const updated = await tx.greenCoffeePurchaseAcceptance.update({
           where: { id: acceptance.id },
@@ -125,8 +136,12 @@ export class PurchaseAcceptanceController {
         });
         await tx.greenCoffeePurchase.update({
           where: { id: acceptance.purchaseId },
-          data: { externalAcceptanceStatus: PurchaseExternalAcceptanceStatus.ACCEPTED, operationalStatus: "AWAITING_DELIVERY" },
+          data: {
+            externalAcceptanceStatus: PurchaseExternalAcceptanceStatus.ACCEPTED,
+            operationalStatus: "AWAITING_DELIVERY",
+          },
         });
+        await ensureBrokerCommissionPayable(tx, acceptance.purchase as any);
         for (const installment of acceptance.purchase.installments) {
           if (installment.accountsPayableId) continue;
           const payable = await tx.accountsPayable.create({
@@ -178,22 +193,66 @@ export class PurchaseAcceptanceController {
   }
 
   @Post(":token/decline")
-  async decline(@Param("token") token: string, @Body() body: { name: string; reason: string }) {
+  async decline(
+    @Param("token") token: string,
+    @Body() body: { name: string; reason: string },
+  ) {
     const reason = body.reason?.trim();
-    if (!body.name?.trim() || !reason) throw new BadRequestException("Informe seu nome e o motivo da recusa.");
+    if (!body.name?.trim() || !reason)
+      throw new BadRequestException("Informe seu nome e o motivo da recusa.");
     return this.db.$transaction(async (tx) => {
-      const acceptance = await tx.greenCoffeePurchaseAcceptance.findUnique({ where: { tokenHash: hashToken(token) }, include: { purchase: true } });
+      const acceptance = await tx.greenCoffeePurchaseAcceptance.findUnique({
+        where: { tokenHash: hashToken(token) },
+        include: { purchase: true },
+      });
       if (!acceptance) throw new NotFoundException("Link de aceite inválido.");
-      if (acceptance.status === PurchaseExternalAcceptanceStatus.ACCEPTED) throw new BadRequestException("Este negócio já foi confirmado.");
-      if (acceptance.status === PurchaseExternalAcceptanceStatus.DECLINED) return { status: "DECLINED", alreadyDeclined: true, declinedAt: acceptance.declinedAt };
-      if (acceptance.tokenRevokedAt) throw new BadRequestException("Este link foi revogado.");
-      if (acceptance.tokenExpiresAt < new Date()) throw new BadRequestException("Este link expirou.");
-      if (acceptance.purchase.approvalStatus !== "APPROVED") throw new BadRequestException("A compra ainda não foi aprovada internamente.");
+      if (acceptance.status === PurchaseExternalAcceptanceStatus.ACCEPTED)
+        throw new BadRequestException("Este negócio já foi confirmado.");
+      if (acceptance.status === PurchaseExternalAcceptanceStatus.DECLINED)
+        return {
+          status: "DECLINED",
+          alreadyDeclined: true,
+          declinedAt: acceptance.declinedAt,
+        };
+      if (acceptance.tokenRevokedAt)
+        throw new BadRequestException("Este link foi revogado.");
+      if (acceptance.tokenExpiresAt < new Date())
+        throw new BadRequestException("Este link expirou.");
+      if (acceptance.purchase.approvalStatus !== "APPROVED")
+        throw new BadRequestException(
+          "A compra ainda não foi aprovada internamente.",
+        );
       const declinedAt = new Date();
-      await tx.greenCoffeePurchaseAcceptance.update({ where: { id: acceptance.id }, data: { status: PurchaseExternalAcceptanceStatus.DECLINED, declinedAt, acceptedByName: body.name.trim() } });
-      await tx.greenCoffeePurchase.update({ where: { id: acceptance.purchaseId }, data: { externalAcceptanceStatus: PurchaseExternalAcceptanceStatus.DECLINED, operationalStatus: "NOT_STARTED" } });
-      await tx.greenCoffeeAuditEvent.create({ data: { companyId: acceptance.purchase.companyId, purchaseId: acceptance.purchaseId, action: "PURCHASE_CORRECTION_REQUESTED", actorId: "EXTERNAL_SUPPLIER", actorName: body.name.trim(), metadata: { acceptanceId: acceptance.id, reason } } });
-      return { status: "DECLINED", declinedAt, purchaseNumber: acceptance.purchase.purchaseNumber };
+      await tx.greenCoffeePurchaseAcceptance.update({
+        where: { id: acceptance.id },
+        data: {
+          status: PurchaseExternalAcceptanceStatus.DECLINED,
+          declinedAt,
+          acceptedByName: body.name.trim(),
+        },
+      });
+      await tx.greenCoffeePurchase.update({
+        where: { id: acceptance.purchaseId },
+        data: {
+          externalAcceptanceStatus: PurchaseExternalAcceptanceStatus.DECLINED,
+          operationalStatus: "NOT_STARTED",
+        },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: acceptance.purchase.companyId,
+          purchaseId: acceptance.purchaseId,
+          action: "PURCHASE_CORRECTION_REQUESTED",
+          actorId: "EXTERNAL_SUPPLIER",
+          actorName: body.name.trim(),
+          metadata: { acceptanceId: acceptance.id, reason },
+        },
+      });
+      return {
+        status: "DECLINED",
+        declinedAt,
+        purchaseNumber: acceptance.purchase.purchaseNumber,
+      };
     });
   }
 }
