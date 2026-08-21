@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:auth-session": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/auth-session.test.ts"
   },
   "dependencies": {
     "@bbos/shared": "workspace:*",
