@@ -24,11 +24,41 @@
   --analytic-projection: #7867A9;
   --analytic-attention: #E99A35;
   --analytic-critical: #D95757;
+  /* BBOS Human Experience System — semantic, deliberately compatible with the current UI. */
+  --bbos-surface-base: #FFFFFF;
+  --bbos-surface-elevated: #FFFFFF;
+  --bbos-surface-subtle: #FAFAF8;
+  --bbos-surface-page: #F7F7F5;
+  --bbos-text-primary: #0A0A0A;
+  --bbos-text-secondary: #626B69;
+  --bbos-text-muted: #7A8381;
+  --bbos-text-on-action: #FFFFFF;
+  --bbos-action-primary: #0A0A0A;
+  --bbos-action-primary-hover: #0E191D;
+  --bbos-state-success: #047857;
+  --bbos-state-information: #0369A1;
+  --bbos-state-attention: #B45309;
+  --bbos-state-critical: #B91C1C;
+  --bbos-state-neutral: #57534E;
+  --bbos-coffee-green: #087568;
+  --bbos-coffee-roasted: #3E73A8;
+  --bbos-coffee-caramel: #C8923E;
+  --bbos-border: #E7E7E3;
+  --bbos-focus-ring: #087568;
+  --bbos-radius-card: 1rem;
+  --bbos-radius-control: 0.75rem;
+  --bbos-motion-standard: 180ms ease;
 }
 * { border-color: theme('colors.stone.200'); }
 body { margin: 0; background: var(--surface-page); color: var(--brand-ritual-black); }
-button, input { font: inherit; }
+button, input, select, textarea { font: inherit; }
+button, input, select, textarea, a { transition-duration: var(--bbos-motion-standard); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--bbos-focus-ring); outline-offset: 2px; }
 ::selection { background: var(--brand-chinese-black); color: var(--brand-whitt-sand); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
 
 /* Safra pertence à compra/lote, não ao cadastro estrutural da fazenda. */
 label:has(input[name="productionHarvest"]) {
