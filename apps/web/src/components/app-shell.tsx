@@ -81,9 +81,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="grid min-h-screen place-items-center bg-[var(--surface-page)] p-6">
         <div className="text-center">
           <p className="text-sm text-stone-500">
-            {sessionState === "checking" ? "Verificando sessão…" : sessionState === "unavailable" ? "Não foi possível conectar ao BBOS." : "Redirecionando para o login…"}
+            {sessionState === "checking" ? "Conectando ao BBOS…" : sessionState === "unavailable" ? "Não conseguimos conectar ao BBOS." : "Redirecionando para o login…"}
           </p>
-          {sessionState === "unavailable" && <button type="button" onClick={() => setSessionAttempt((attempt) => attempt + 1)} className="mt-4 rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-900">Tentar novamente</button>}
+          {sessionState === "checking" && <p className="mt-2 text-xs text-stone-400">Retomando a conexão com segurança…</p>}
+          {sessionState === "unavailable" && <><p className="mt-2 text-xs text-stone-500">O sistema está retomando a conexão. Isso pode levar alguns segundos.</p><button type="button" onClick={() => setSessionAttempt((attempt) => attempt + 1)} className="mt-4 rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-900">Tentar novamente</button></>}
         </div>
       </div>
     );
