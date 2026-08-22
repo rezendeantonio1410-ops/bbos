@@ -91,7 +91,7 @@ function NewOrderWizard({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (order: ProductionOrderView) => void;
+  onCreate: (order: ProductionOrderView) => Promise<void>;
 }) {
   const [step, setStep] = useState(0);
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
@@ -125,7 +125,13 @@ function NewOrderWizard({
   const [mode, setMode] = useState<"single" | "blend">("single");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
-  const available: Array<{ id: string; code: string; origin: string; availableQuantityKg: number; realCostPerKg: number }> = [];
+  const [available, setAvailable] = useState<Array<{ id: string; code: string; origin: string; availableQuantityKg: number; realCostPerKg: number; supplier: string; warehouse: string }>>([]);
+  useEffect(() => {
+    void fetch(`${getApiBaseUrl()}/production/available-lots`, { credentials: "include", cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<typeof available> : [])
+      .then(setAvailable)
+      .catch(() => setAvailable([]));
+  }, []);
   const allocated = Object.values(selected).reduce(
     (sum, value) => sum + value,
     0,
@@ -180,7 +186,7 @@ function NewOrderWizard({
       ) > 0.01
     )
       return setError("A participação dos lotes deve somar 100%.");
-    onCreate({
+    void onCreate({
       id: `op-${Date.now()}`,
       code: "OP-NOVA",
       productVariantId: selectedVariant?.id,
@@ -417,6 +423,7 @@ function NewOrderWizard({
           )}
           {step === 4 && (
             <div className="space-y-3">
+              {!available.length && <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">Nenhum lote aprovado com saldo disponível.</p>}
               {available.map((lot) => (
                 <div
                   key={lot.id}
@@ -806,8 +813,25 @@ export default function ProductionPage() {
   const [wizard, setWizard] = useState(false);
   const [selected, setSelected] = useState<ProductionOrderView | null>(null);
   const [message, setMessage] = useState("");
-  const summary = { plannedTodayKg: 0, producedTodayKg: 0, openOrders: 0, inProgressOrders: 0, delayedOrders: 0, efficiencyPercent: 0, averageRoastLossPercent: 0, averageRealCostPerKg: 0, monthlyProducedKg: 0, monthlyTargetKg: 0 };
-  useEffect(() => { void fetch(`${getApiBaseUrl()}/production/orders`, { credentials: "include" }).then((response) => response.ok ? response.json() : []).then((rows: Array<Record<string, unknown>>) => setOrders(rows.map((row) => ({ id: String(row.id), code: String(row.code), product: String(row.productName ?? "Produto não definido"), sku: String(row.sku ?? "—"), plannedQuantity: Number(row.plannedWeightKg ?? 0), producedQuantity: Number(row.actualOutputKg ?? 0), unit: String(row.unit ?? "kg"), plannedAt: String(row.plannedAt ?? ""), startedAt: row.startedAt ? String(row.startedAt) : undefined, completedAt: row.completedAt ? String(row.completedAt) : undefined, responsible: String(row.responsible ?? "—"), priority: String(row.priority ?? "normal").toLowerCase() as ProductionOrderView["priority"], status: String(row.status ?? "PLANNED").toLowerCase().replace("_", "-") as ProductionOrderView["status"], blendName: String((row.blend as { name?: string } | undefined)?.name ?? "—"), allocations: [], batches: [], packaging: undefined, costs: { greenCoffeeConsumedCost: 0, roastLossCost: 0, packagingCost: 0, suppliesCost: 0, laborCost: 0, energyCost: 0, otherIndustrialCosts: 0, roastedOutputKg: Number(row.actualOutputKg ?? 0), finishedOutputKg: 0, producedPackages: 0, totalCost: 0, costPerKg: 0, standardCostPerKg: 0, sku: String(row.sku ?? "—"), sourceCostEventIds: [] }, traceability: [] })) as unknown as ProductionOrderView[])).catch(() => setOrders([])); }, []);
+  const summary = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const month = today.slice(0, 7);
+    const plannedTodayKg = orders.filter((order) => order.plannedAt.slice(0, 10) === today).reduce((sum, order) => sum + order.plannedQuantity, 0);
+    const producedTodayKg = orders.filter((order) => order.completedAt?.slice(0, 10) === today).reduce((sum, order) => sum + order.producedQuantity, 0);
+    const openOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
+    const inProgressOrders = orders.filter((order) => ["in-production", "roasted", "packaging"].includes(order.status)).length;
+    const monthOrders = orders.filter((order) => order.plannedAt.startsWith(month));
+    const monthlyProducedKg = monthOrders.reduce((sum, order) => sum + order.producedQuantity, 0);
+    const losses = orders.flatMap((order) => order.batches).map((batch) => batch.lossPercent);
+    const averageRoastLossPercent = losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : null;
+    return { plannedTodayKg, producedTodayKg, openOrders, inProgressOrders, delayedOrders: 0, efficiencyPercent: null, averageRoastLossPercent, averageRealCostPerKg: null, monthlyProducedKg, monthlyTargetKg: null };
+  }, [orders]);
+  useEffect(() => { void fetch(`${getApiBaseUrl()}/production/orders`, { credentials: "include" }).then((response) => response.ok ? response.json() : []).then((rows: Array<Record<string, unknown>>) => setOrders(rows.map((row) => {
+    const consumptions = Array.isArray(row.consumptions) ? row.consumptions as Array<Record<string, unknown>> : [];
+    const batches = Array.isArray(row.batches) ? row.batches as Array<Record<string, unknown>> : [];
+    const plannedQuantity = Number(row.plannedWeightKg ?? 0);
+    return { id: String(row.id), code: String(row.code), product: String(row.productName ?? "Produto não definido"), sku: String(row.sku ?? "—"), plannedQuantity, producedQuantity: Number(row.actualOutputKg ?? 0), unit: String(row.unit ?? "kg"), plannedAt: String(row.plannedAt ?? ""), startedAt: row.startedAt ? String(row.startedAt) : undefined, completedAt: row.completedAt ? String(row.completedAt) : undefined, responsible: String(row.responsible ?? "—"), priority: String(row.priority ?? "normal").toLowerCase() as ProductionOrderView["priority"], status: String(row.status ?? "PLANNED").toLowerCase().replace("_", "-") as ProductionOrderView["status"], blendName: String((row.blend as { name?: string } | undefined)?.name ?? "—"), allocations: consumptions.map((item) => { const lot = item.coffeeLot as { id?: string; code?: string; origin?: string } | undefined; return { lotId: String(lot?.id ?? item.coffeeLotId), lotCode: String(lot?.code ?? item.coffeeLotId), origin: String(lot?.origin ?? "—"), reservedKg: Number(item.reservedKg ?? 0), consumedKg: Number(item.consumedKg ?? 0), percentage: Number(item.percentage ?? 0), realCostPerKg: Number(item.realCostPerKg ?? 0) }; }), batches: batches.map((batch) => ({ id: String(batch.id), code: String(batch.code), machine: String(batch.machine), operator: String(batch.operator), lotCode: "—", greenInputKg: Number(batch.greenInputKg), roastedOutputKg: Number(batch.roastedOutputKg), lossKg: Number(batch.lossKg), lossPercent: Number(batch.lossPercent), startedAt: String(batch.startedAt), completedAt: String(batch.completedAt), notes: batch.notes ? String(batch.notes) : undefined })), packaging: undefined, costs: { greenCoffeeConsumedCost: 0, roastLossCost: 0, packagingCost: 0, suppliesCost: 0, laborCost: 0, energyCost: 0, otherIndustrialCosts: 0, roastedOutputKg: Number(row.actualOutputKg ?? 0), finishedOutputKg: 0, producedPackages: 0, totalCost: 0, costPerKg: 0, standardCostPerKg: 0, sku: String(row.sku ?? "—"), sourceCostEventIds: [] }, traceability: [] } as ProductionOrderView;
+  }))).catch(() => setOrders([])); }, []);
   const cards = useMemo(
     () => [
       {
@@ -834,18 +858,18 @@ export default function ProductionPage() {
       },
       {
         label: "Eficiência industrial",
-        value: `${number.format(summary.efficiencyPercent)}%`,
+        value: summary.efficiencyPercent == null ? "Sem dados" : `${number.format(summary.efficiencyPercent)}%`,
         icon: Gauge,
       },
       {
         label: "Perda média de torra",
-        value: `${number.format(summary.averageRoastLossPercent)}%`,
+        value: summary.averageRoastLossPercent == null ? "Sem dados" : `${number.format(summary.averageRoastLossPercent)}%`,
         icon: Flame,
         tone: "warning" as const,
       },
       {
         label: "Custo médio/kg",
-        value: brl.format(summary.averageRealCostPerKg),
+        value: summary.averageRealCostPerKg == null ? "Sem dados" : brl.format(summary.averageRealCostPerKg),
         icon: CircleDollarSign,
       },
       {
@@ -855,17 +879,21 @@ export default function ProductionPage() {
       },
       {
         label: "Meta do mês",
-        value: `${number.format(summary.monthlyTargetKg)} kg`,
+        value: summary.monthlyTargetKg == null ? "Sem dados" : `${number.format(summary.monthlyTargetKg)} kg`,
         icon: Target,
       },
     ],
     [summary],
   );
-  const create = (order: ProductionOrderView) => {
-    setOrders((current) => [order, ...current]);
+  const monthlyTargetKg = summary.monthlyTargetKg;
+  const create = async (order: ProductionOrderView) => {
+    const response = await fetch(`${getApiBaseUrl()}/production/orders`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: `OP-${Date.now()}`, productVariantId: order.productVariantId, productName: order.product, sku: order.sku, plannedWeightKg: order.plannedQuantity, plannedAt: order.plannedAt, responsible: order.responsible, blendId: undefined, allocations: order.allocations.map((item) => ({ coffeeLotId: item.lotId, reservedKg: item.reservedKg, percentage: item.percentage })) }) });
+    if (!response.ok) { setMessage("Não foi possível criar a ordem. Verifique os lotes e o saldo disponível."); return; }
+    const created = await response.json() as Record<string, unknown>;
+    setOrders((current) => [{ ...order, id: String(created.id), code: String(created.code) }, ...current]);
     setWizard(false);
     setMessage(
-      `${order.code} criada e ${number.format(order.plannedQuantity)} kg reservados sem alterar o saldo físico.`,
+      `${String(created.code)} criada e ${number.format(order.plannedQuantity)} kg reservados no estoque disponível.`,
     );
   };
   return (
@@ -924,13 +952,13 @@ export default function ProductionPage() {
               </p>
               <h2 className="mt-1 text-lg font-bold">Produção mensal</h2>
             </div>
-            <strong>{summary.monthlyTargetKg > 0 ? `${number.format((summary.monthlyProducedKg / summary.monthlyTargetKg) * 100)}%` : "Sem dados"}</strong>
+            <strong>{monthlyTargetKg != null && monthlyTargetKg > 0 ? `${number.format((summary.monthlyProducedKg / monthlyTargetKg) * 100)}%` : "Sem dados"}</strong>
           </div>
           <div className="mt-6 h-3 overflow-hidden rounded-full bg-stone-100">
             <div
               className="h-full rounded-full bg-forest-800"
               style={{
-                width: `${summary.monthlyTargetKg > 0 ? Math.min(100, (summary.monthlyProducedKg / summary.monthlyTargetKg) * 100) : 0}%`,
+                width: `${monthlyTargetKg != null && monthlyTargetKg > 0 ? Math.min(100, (summary.monthlyProducedKg / monthlyTargetKg) * 100) : 0}%`,
               }}
             />
           </div>
@@ -938,7 +966,7 @@ export default function ProductionPage() {
             <span>
               {number.format(summary.monthlyProducedKg)} kg realizados
             </span>
-            <span>{number.format(summary.monthlyTargetKg)} kg meta</span>
+            <span>{summary.monthlyTargetKg == null ? "Sem meta cadastrada" : `${number.format(summary.monthlyTargetKg)} kg meta`}</span>
           </div>
         </Card>
         <Card className="border-dashed p-6">
