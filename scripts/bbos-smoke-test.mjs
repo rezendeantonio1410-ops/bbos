@@ -102,11 +102,11 @@ async function main() {
 
   const protectedChecks = [
     ["Dashboard", "/api/dashboard/home"],
-    ["Fornecedores", "/api/brokers"],
+    ["Fornecedores", "/api/green-coffee-purchases/suppliers"],
     ["Compras", "/api/green-coffee-purchases"],
     ["Recebimentos", "/api/receipts"],
     ["Receipt options", "/api/receipts/options"],
-    ["Laboratório", null],
+    ["Laboratório", "/api/receipts/lab-samples"],
     ["Estoque", "/api/inventory/summary"],
     ["Blends", "/api/blends"],
     ["Produção", "/api/production/orders"],
