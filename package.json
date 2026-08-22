@@ -16,7 +16,8 @@
     "db:migrate:staging": "corepack pnpm db:migrate:deploy",
     "db:staging:prepare": "corepack pnpm db:migrate:deploy && corepack pnpm db:seed:coffee-references",
     "db:seed": "corepack pnpm --filter @bbos/database seed",
-    "db:seed:coffee-references": "corepack pnpm --filter @bbos/database seed:coffee-references"
+    "db:seed:coffee-references": "corepack pnpm --filter @bbos/database seed:coffee-references",
+    "smoke": "node scripts/bbos-smoke-test.mjs"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
