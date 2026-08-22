@@ -28,6 +28,7 @@
   --bbos-surface-base: #FFFFFF;
   --bbos-surface-elevated: #FFFFFF;
   --bbos-surface-subtle: #FAFAF8;
+  --bbos-surface-warm: #FBF8F1;
   --bbos-surface-page: #F7F7F5;
   --bbos-text-primary: #0A0A0A;
   --bbos-text-secondary: #626B69;
@@ -35,10 +36,20 @@
   --bbos-text-on-action: #FFFFFF;
   --bbos-action-primary: #0A0A0A;
   --bbos-action-primary-hover: #0E191D;
+  --bbos-action-secondary: #E7E7E3;
   --bbos-state-success: #047857;
+  --bbos-success-soft: #ECFDF5;
+  --bbos-success-border: #A7F3D0;
   --bbos-state-information: #0369A1;
+  --bbos-info-soft: #EFF6FF;
   --bbos-state-attention: #B45309;
+  --bbos-warning-soft: #FFFBEB;
+  --bbos-warning-border: #FCD34D;
   --bbos-state-critical: #B91C1C;
+  --bbos-danger-soft: #FEF2F2;
+  --bbos-danger-border: #FCA5A5;
+  --bbos-intelligence: #6D4FA3;
+  --bbos-intelligence-soft: #F5F3FF;
   --bbos-state-neutral: #57534E;
   --bbos-coffee-green: #087568;
   --bbos-coffee-roasted: #3E73A8;

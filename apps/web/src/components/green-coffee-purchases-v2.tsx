@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Plus, ShieldCheck, X } from "lucide-react";
+import { Bean, Check, Handshake, MapPinned, Plus, Scale, ShieldCheck, X } from "lucide-react";
 import { Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 
 const ROOT = getApiBaseUrl();
 const API = `${ROOT}/green-coffee-purchases`;
-const input = "w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-forest-700 focus:ring-2 focus:ring-forest-700/15";
+const input = "w-full rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-elevated)] px-3 py-2.5 text-sm text-[var(--bbos-text-primary)] outline-none transition focus:border-[var(--bbos-focus-ring)] focus:ring-2 focus:ring-[var(--bbos-focus-ring)]/15";
 
 const HARVESTS = Array.from({ length: 10 }, (_, index) => {
   const start = 2023 + index;
@@ -105,16 +105,25 @@ const brl = (value: number) =>
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-semibold text-stone-600">{label}</span>
+      <span className="mb-1 block text-xs font-semibold text-[var(--bbos-text-secondary)]">{label}</span>
       {children}
     </label>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+type SectionTone = "origin" | "quality" | "quantity" | "commercial" | "governance";
+
+function Section({ title, tone, icon: Icon, children }: { title: string; tone: SectionTone; icon: typeof MapPinned; children: React.ReactNode }) {
+  const toneClasses = {
+    origin: "border-l-[var(--bbos-coffee-green)] text-[var(--bbos-coffee-green)]",
+    quality: "border-l-[var(--bbos-coffee-roasted)] text-[var(--bbos-coffee-roasted)]",
+    quantity: "border-l-[var(--bbos-state-information)] text-[var(--bbos-state-information)]",
+    commercial: "border-l-[var(--bbos-coffee-caramel)] text-[var(--bbos-coffee-caramel)]",
+    governance: "border-l-[var(--bbos-state-attention)] text-[var(--bbos-state-attention)]",
+  }[tone];
   return (
-    <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-3.5 sm:p-4">
-      <h3 className="text-sm font-bold text-stone-900">{title}</h3>
+    <section className={`mt-4 rounded-2xl border border-[var(--bbos-border)] border-l-4 bg-[var(--bbos-surface-elevated)] p-3.5 sm:p-4 ${toneClasses}`}>
+      <h3 className="flex items-center gap-2 text-sm font-bold text-[var(--bbos-text-primary)]"><Icon size={16} aria-hidden="true" /><span>{title}</span></h3>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">{children}</div>
     </section>
   );
@@ -337,7 +346,7 @@ export default function GreenCoffeePurchasesV2() {
     <div className="mx-auto max-w-[1480px]">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Suprimentos · Café verde</p>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">Suprimentos · Café verde</p>
           <h1 className="mt-2 text-3xl font-bold">Compras de café verde</h1>
           <p className="mt-2 text-sm text-stone-500">Aquisição, governança, financeiro e rastreabilidade desde a origem.</p>
         </div>
@@ -347,8 +356,8 @@ export default function GreenCoffeePurchasesV2() {
         </div>
       </header>
 
-      {message && <p className="mt-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800"><Check className="mr-2 inline" size={15} />{message}</p>}
-      {error && <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+      {message && <p className="mt-5 flex items-center gap-2 rounded-xl border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-4 text-sm text-[var(--bbos-state-success)]"><Check size={15} aria-hidden="true" />{message}</p>}
+      {error && <p className="mt-5 rounded-xl border border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] p-4 text-sm text-[var(--bbos-state-critical)]" role="alert">{error}</p>}
 
       <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((row) => (
@@ -362,34 +371,50 @@ export default function GreenCoffeePurchasesV2() {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-3">
-          <form onSubmit={(event) => void submit(event, "SUBMIT")} className="max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-stone-50 p-4 pb-6 shadow-2xl sm:p-5 sm:pb-7">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[color:var(--bbos-action-primary)]/30 p-3">
+          <form onSubmit={(event) => void submit(event, "SUBMIT")} className="max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-[var(--bbos-surface-warm)] p-4 pb-6 shadow-2xl sm:p-5 sm:pb-7">
             <div className="flex items-start justify-between">
-              <div><p className="text-xs font-bold uppercase text-forest-700">Ficha de compra V2</p><h2 className="mt-1 text-xl font-bold">Nova compra de café verde</h2></div>
+              <div><p className="text-xs font-bold uppercase text-[var(--bbos-coffee-green)]">Ficha de compra V2</p><h2 className="mt-1 text-xl font-bold">Nova compra de café verde</h2></div>
               <button type="button" className="min-h-11 min-w-11" onClick={() => setOpen(false)}><X /></button>
             </div>
 
-            <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${guidance === "Compra pronta para aprovação." ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`} role="status" aria-live="polite">
-              <span className={`size-2 rounded-full ${guidance === "Compra pronta para aprovação." ? "bg-emerald-600" : "bg-amber-500"}`} aria-hidden="true" />
+            <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${guidance === "Compra pronta para aprovação." ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`} role="status" aria-live="polite">
+              <span className={`size-2 rounded-full ${guidance === "Compra pronta para aprovação." ? "bg-[var(--bbos-state-success)]" : "bg-[var(--bbos-state-attention)]"}`} aria-hidden="true" />
               {guidance}
             </div>
 
-            <Section title="A · Origem">
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[var(--bbos-text-muted)]" aria-label="Progresso da ficha">
+              {[
+                ["Origem", Boolean(supplier && originUnit)],
+                ["Especificação", Boolean(speciesCode && selectedContact)],
+                ["Quantidade", totalWeight > 0],
+                ["Comercial", priceKg > 0],
+                ["Governança", Boolean(selectedContact?.canConfirmBusiness)],
+              ].map(([label, complete], index) => (
+                <span key={String(label)} className="inline-flex items-center gap-1.5">
+                  <span className={`grid size-4 place-items-center rounded-full border text-[9px] ${complete ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`} aria-hidden="true">{complete ? "✓" : "○"}</span>
+                  {label}
+                  {index < 4 && <span className="ml-0.5 text-[var(--bbos-border)]" aria-hidden="true">→</span>}
+                </span>
+              ))}
+            </div>
+
+            <Section title="A · Origem" tone="origin" icon={MapPinned}>
               <Field label="Estado"><select required className={input} value={purchaseState} onChange={(e) => setPurchaseState(e.target.value)}><option value="">Selecione</option>{["PR","SP","MG","ES","BA","RJ","RO","GO"].map((state) => <option key={state}>{state}</option>)}</select></Field>
               <Field label="Fornecedor"><select required disabled={!purchaseState} className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">{purchaseState ? "Selecione" : "Selecione o estado primeiro"}</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.taxId}</option>)}</select></Field>
               <Field label="Unidade / Fazenda"><select required disabled={!supplierId} className={input} value={originUnitId} onChange={(e) => setOriginUnitId(e.target.value)}><option value="">Selecione</option>{originUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></Field>
               <Field label="Safra"><select required name="harvest" className={input} value={harvest} onChange={(e) => setHarvest(e.target.value)}>{HARVESTS.map((item) => <option key={item}>{item}</option>)}</select></Field>
-              <Field label="Região cafeeira"><input className={input} readOnly value={originUnit?.coffeeRegion?.name ?? "—"} /></Field>
-              <Field label="Município"><input className={input} readOnly value={originUnit?.municipality ?? "—"} /></Field>
+              <Field label="Região cafeeira"><input className={`${input} bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-secondary)]`} readOnly value={originUnit?.coffeeRegion?.name ?? "—"} /></Field>
+              <Field label="Município"><input className={`${input} bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-secondary)]`} readOnly value={originUnit?.municipality ?? "—"} /></Field>
               <Field label="Espécie"><select required disabled={!originUnitId} className={input} value={speciesCode} onChange={(e) => setSpeciesCode(e.target.value)}><option value="">Selecione</option>{availableSpecies.map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}</select></Field>
               <Field label="Variedade/Cultivar"><select required name="cultivarId" disabled={!speciesCode} className={input} defaultValue=""><option value="">Selecione</option>{availableCultivars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-              <div className="sm:col-span-2 rounded-xl border bg-stone-100/70 p-3">
-                <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-stone-700">Contato comercial</p><p className="mt-1 text-sm">{selectedContact ? `${selectedContact.name}${selectedContact.role ? ` · ${selectedContact.role}` : ""}` : "Nenhum contato cadastrado"}</p><p className="text-xs text-stone-500">{selectedContact?.whatsapp ?? selectedContact?.email ?? "—"}</p></div><Link href="/fornecedores" className="text-xs font-bold text-forest-700">+ Novo contato</Link></div>
+              <div className="sm:col-span-2 rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] p-3">
+                <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-[var(--bbos-text-primary)]">Contato comercial</p><p className="mt-1 text-sm">{selectedContact ? `${selectedContact.name}${selectedContact.role ? ` · ${selectedContact.role}` : ""}` : "Nenhum contato cadastrado"}</p><p className="text-xs text-[var(--bbos-text-secondary)]">{selectedContact?.whatsapp ?? selectedContact?.email ?? "—"}</p></div><Link href="/fornecedores" className="text-xs font-bold text-[var(--bbos-coffee-green)]">+ Novo contato</Link></div>
                 {contacts.length > 1 && <select className={`${input} mt-3`} value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}><option value="">Selecione o contato</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.role ? ` · ${contact.role}` : ""}</option>)}</select>}
               </div>
             </Section>
 
-            <Section title="B · Especificação contratada">
+            <Section title="B · Especificação contratada" tone="quality" icon={Bean}>
               <Field label="Processo"><select name="process" className={input}>{["Natural","Cereja Descascado","Honey","Lavado","Fermentado","Outro"].map((value) => <option key={value}>{value}</option>)}</select></Field>
               <Field label="Qualidade contratada"><select name="qualityCategory" className={input}>{["Especial","Gourmet","Fine Cup","Good Cup","Comercial","Outra"].map((value) => <option key={value}>{value}</option>)}</select></Field>
               <Field label="Peneira"><select required name="screenClassificationId" className={input} defaultValue=""><option value="">Selecione</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
@@ -400,17 +425,17 @@ export default function GreenCoffeePurchasesV2() {
               <Field label="Lote do fornecedor (opcional)"><input name="supplierLotCode" className={input} /></Field>
             </Section>
 
-            <Section title="C · Quantidade / embalagem">
+            <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
               <Field label="Acondicionamento"><select name="packagingType" className={input} value={packagingType} onChange={(e) => setPackaging(e.target.value)}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
               <Field label="Número de volumes"><input required type="number" min="1" value={volumes} onChange={(e) => setVolumes(Number(e.target.value))} className={input} /></Field>
               <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" value={unitWeight} readOnly={packagingType === "BAG_30_KG" || packagingType === "BAG_60_KG"} onChange={(e) => setUnitWeight(Number(e.target.value))} className={input} /></Field>
               <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" step=".01" defaultValue="0" className={input} /></Field>
-              <div className="rounded-xl bg-emerald-50 p-3"><span className="text-xs text-stone-500">Peso total contratado</span><b className="mt-1 block text-lg">{totalWeight.toLocaleString("pt-BR")} kg</b></div>
+              <div className="rounded-xl border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3"><span className="text-xs text-[var(--bbos-text-secondary)]">Peso total contratado</span><b className="mt-1 block text-lg text-[var(--bbos-state-success)]">{totalWeight.toLocaleString("pt-BR")} kg</b></div>
             </Section>
 
-            <Section title="D · Comercial">
+            <Section title="D · Comercial" tone="commercial" icon={Handshake}>
               <Field label="Preço/kg"><input required type="number" min=".01" step=".01" value={priceKg || ""} onChange={(e) => setPriceKg(Number(e.target.value))} className={input} /></Field>
-              <div className="rounded-xl bg-emerald-50 p-3"><span className="text-xs text-stone-500">Valor da compra <span className="font-normal">· calculado</span></span><b className="mt-1 block text-lg">{brl(totalValue)}</b></div>
+              <div className="rounded-xl border border-[var(--bbos-coffee-caramel)]/30 bg-[var(--bbos-surface-warm)] p-3"><span className="text-xs text-[var(--bbos-text-secondary)]">Valor da compra <span className="font-normal">· calculado</span></span><b className="mt-1 block text-lg text-[var(--bbos-coffee-caramel)]">{brl(totalValue)}</b></div>
               <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
               <Field label="Condição de pagamento"><select className={input} value={paymentTermType} onChange={(e) => setPaymentTermType(e.target.value)}><option value="CASH">À vista</option><option value="DAYS_AFTER_PURCHASE">X dias após a compra</option><option value="FIXED_DATE">Data definida</option><option value="INSTALLMENTS">Parcelado</option><option value="ADVANCE_AND_BALANCE">Antecipado + saldo</option><option value="AFTER_RECEIPT">Após recebimento</option></select></Field>
               {paymentTermType === "DAYS_AFTER_PURCHASE" && <Field label="Prazo (dias)"><input type="number" min="0" value={daysAfterPurchase} onChange={(e) => setDaysAfterPurchase(Number(e.target.value))} className={input} /></Field>}
@@ -420,14 +445,14 @@ export default function GreenCoffeePurchasesV2() {
               <Field label="Observações"><input name="commercialNotes" className={input} /></Field>
             </Section>
 
-            <Section title="E · Governança">
-              <div className="rounded-xl bg-stone-100/70 p-3 text-sm"><span className="text-xs text-stone-500">Comprador responsável</span><b className="mt-1 block">{sessionUser?.name ?? "—"}</b><span className="text-xs text-stone-500">Departamento Compras · {sessionUser?.role ?? "—"}</span></div>
+            <Section title="E · Governança" tone="governance" icon={ShieldCheck}>
+              <div className="rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] p-3 text-sm"><span className="text-xs text-[var(--bbos-text-secondary)]">Comprador responsável</span><b className="mt-1 block text-[var(--bbos-text-primary)]">{sessionUser?.name ?? "—"}</b><span className="text-xs text-[var(--bbos-text-secondary)]">Departamento Compras · {sessionUser?.role ?? "—"}</span></div>
               <Field label="Diretor aprovador"><select name="approverName" className={input} defaultValue=""><option value="">Selecione quando aplicável</option>{approvers.map((user) => <option key={user.id} value={user.name}>{user.name}</option>)}</select></Field>
-              <div className="sm:col-span-2 rounded-xl border bg-stone-100/70 p-3 text-xs"><ShieldCheck className="mb-1.5 text-forest-700" size={18} /><b>Trilha de governança</b><p className="mt-1 text-stone-500">Usuário, data/hora e valor da decisão ficam vinculados à compra.</p></div>
+              <div className="sm:col-span-2 rounded-xl border border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] p-3 text-xs"><ShieldCheck className="mb-1.5 text-[var(--bbos-state-attention)]" size={18} /><b className="text-[var(--bbos-text-primary)]">Trilha de governança</b><p className="mt-1 text-[var(--bbos-text-secondary)]">Usuário, data/hora e valor da decisão ficam vinculados à compra.</p></div>
             </Section>
 
-            <section className="mt-4 rounded-2xl border border-forest-200 bg-forest-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-[.12em] text-forest-700">Resumo da negociação</p>
+            <section className="mt-4 rounded-2xl border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-4">
+              <p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--bbos-state-success)]">Resumo da negociação</p>
               <div className="mt-2.5 grid gap-2.5 text-sm sm:grid-cols-2">
                 <p><b>{originUnit?.name ?? "Origem não selecionada"}</b><br /><span className="text-stone-600">Safra {harvest} · {species?.name ?? "Espécie"}</span></p>
                 <p><b>{volumes} × {unitWeight.toLocaleString("pt-BR")} kg = {totalWeight.toLocaleString("pt-BR")} kg</b><br /><span className="text-stone-600">{brl(priceKg)}/kg · Total {brl(totalValue)}</span></p>
