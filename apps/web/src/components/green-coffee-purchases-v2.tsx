@@ -9,7 +9,7 @@ import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 
 const ROOT = getApiBaseUrl();
 const API = `${ROOT}/green-coffee-purchases`;
-const input = "w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm outline-none focus:border-forest-700";
+const input = "w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-forest-700 focus:ring-2 focus:ring-forest-700/15";
 
 const HARVESTS = Array.from({ length: 10 }, (_, index) => {
   const start = 2023 + index;
@@ -105,7 +105,7 @@ const brl = (value: number) =>
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-stone-600">{label}</span>
+      <span className="mb-1 block text-xs font-semibold text-stone-600">{label}</span>
       {children}
     </label>
   );
@@ -113,9 +113,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
+    <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-3.5 sm:p-4">
       <h3 className="text-sm font-bold text-stone-900">{title}</h3>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">{children}</div>
     </section>
   );
 }
@@ -231,6 +231,15 @@ export default function GreenCoffeePurchasesV2() {
   const totalValue = totalWeight * Math.max(0, priceKg);
   const selectedContact = contacts.find((item) => item.id === selectedContactId);
   const approvers = options?.users.filter((user) => ["ADMIN", "EXECUTIVE"].includes(user.role)) ?? [];
+  const guidance = useMemo(() => {
+    if (!purchaseState) return "Comece pela origem da compra.";
+    if (!supplier) return "Selecione o fornecedor desta origem.";
+    if (!originUnit) return "Selecione a unidade ou fazenda.";
+    if (!speciesCode) return "Defina a espécie do café.";
+    if (!priceKg) return "Falta definir o preço por kg.";
+    if (!selectedContact || !selectedContact.canConfirmBusiness) return "Selecione um contato autorizado.";
+    return "Compra pronta para aprovação.";
+  }, [originUnit, priceKg, purchaseState, selectedContact, speciesCode, supplier]);
 
   const setPackaging = (value: string) => {
     setPackagingType(value);
@@ -354,10 +363,15 @@ export default function GreenCoffeePurchasesV2() {
 
       {open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-3">
-          <form onSubmit={(event) => void submit(event, "SUBMIT")} className="max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-stone-50 p-5 shadow-2xl sm:p-7">
+          <form onSubmit={(event) => void submit(event, "SUBMIT")} className="max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-stone-50 p-4 pb-6 shadow-2xl sm:p-5 sm:pb-7">
             <div className="flex items-start justify-between">
               <div><p className="text-xs font-bold uppercase text-forest-700">Ficha de compra V2</p><h2 className="mt-1 text-xl font-bold">Nova compra de café verde</h2></div>
               <button type="button" className="min-h-11 min-w-11" onClick={() => setOpen(false)}><X /></button>
+            </div>
+
+            <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${guidance === "Compra pronta para aprovação." ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`} role="status" aria-live="polite">
+              <span className={`size-2 rounded-full ${guidance === "Compra pronta para aprovação." ? "bg-emerald-600" : "bg-amber-500"}`} aria-hidden="true" />
+              {guidance}
             </div>
 
             <Section title="A · Origem">
@@ -369,7 +383,7 @@ export default function GreenCoffeePurchasesV2() {
               <Field label="Município"><input className={input} readOnly value={originUnit?.municipality ?? "—"} /></Field>
               <Field label="Espécie"><select required disabled={!originUnitId} className={input} value={speciesCode} onChange={(e) => setSpeciesCode(e.target.value)}><option value="">Selecione</option>{availableSpecies.map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}</select></Field>
               <Field label="Variedade/Cultivar"><select required name="cultivarId" disabled={!speciesCode} className={input} defaultValue=""><option value="">Selecione</option>{availableCultivars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-              <div className="sm:col-span-2 rounded-xl border bg-stone-50 p-3">
+              <div className="sm:col-span-2 rounded-xl border bg-stone-100/70 p-3">
                 <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-stone-700">Contato comercial</p><p className="mt-1 text-sm">{selectedContact ? `${selectedContact.name}${selectedContact.role ? ` · ${selectedContact.role}` : ""}` : "Nenhum contato cadastrado"}</p><p className="text-xs text-stone-500">{selectedContact?.whatsapp ?? selectedContact?.email ?? "—"}</p></div><Link href="/fornecedores" className="text-xs font-bold text-forest-700">+ Novo contato</Link></div>
                 {contacts.length > 1 && <select className={`${input} mt-3`} value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}><option value="">Selecione o contato</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.role ? ` · ${contact.role}` : ""}</option>)}</select>}
               </div>
@@ -391,12 +405,12 @@ export default function GreenCoffeePurchasesV2() {
               <Field label="Número de volumes"><input required type="number" min="1" value={volumes} onChange={(e) => setVolumes(Number(e.target.value))} className={input} /></Field>
               <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" value={unitWeight} readOnly={packagingType === "BAG_30_KG" || packagingType === "BAG_60_KG"} onChange={(e) => setUnitWeight(Number(e.target.value))} className={input} /></Field>
               <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" step=".01" defaultValue="0" className={input} /></Field>
-              <div className="rounded-xl bg-emerald-50 p-4"><span className="text-xs text-stone-500">Peso total contratado</span><b className="mt-1 block text-xl">{totalWeight.toLocaleString("pt-BR")} kg</b></div>
+              <div className="rounded-xl bg-emerald-50 p-3"><span className="text-xs text-stone-500">Peso total contratado</span><b className="mt-1 block text-lg">{totalWeight.toLocaleString("pt-BR")} kg</b></div>
             </Section>
 
             <Section title="D · Comercial">
               <Field label="Preço/kg"><input required type="number" min=".01" step=".01" value={priceKg || ""} onChange={(e) => setPriceKg(Number(e.target.value))} className={input} /></Field>
-              <div className="rounded-xl bg-emerald-50 p-4"><span className="text-xs text-stone-500">Valor total da compra</span><b className="mt-1 block text-xl">{brl(totalValue)}</b></div>
+              <div className="rounded-xl bg-emerald-50 p-3"><span className="text-xs text-stone-500">Valor da compra <span className="font-normal">· calculado</span></span><b className="mt-1 block text-lg">{brl(totalValue)}</b></div>
               <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
               <Field label="Condição de pagamento"><select className={input} value={paymentTermType} onChange={(e) => setPaymentTermType(e.target.value)}><option value="CASH">À vista</option><option value="DAYS_AFTER_PURCHASE">X dias após a compra</option><option value="FIXED_DATE">Data definida</option><option value="INSTALLMENTS">Parcelado</option><option value="ADVANCE_AND_BALANCE">Antecipado + saldo</option><option value="AFTER_RECEIPT">Após recebimento</option></select></Field>
               {paymentTermType === "DAYS_AFTER_PURCHASE" && <Field label="Prazo (dias)"><input type="number" min="0" value={daysAfterPurchase} onChange={(e) => setDaysAfterPurchase(Number(e.target.value))} className={input} /></Field>}
@@ -407,14 +421,14 @@ export default function GreenCoffeePurchasesV2() {
             </Section>
 
             <Section title="E · Governança">
-              <div className="rounded-xl bg-stone-50 p-4 text-sm"><span className="text-xs text-stone-500">Comprador responsável</span><b className="mt-1 block">{sessionUser?.name ?? "—"}</b><span className="text-xs text-stone-500">Departamento Compras · {sessionUser?.role ?? "—"}</span></div>
+              <div className="rounded-xl bg-stone-100/70 p-3 text-sm"><span className="text-xs text-stone-500">Comprador responsável</span><b className="mt-1 block">{sessionUser?.name ?? "—"}</b><span className="text-xs text-stone-500">Departamento Compras · {sessionUser?.role ?? "—"}</span></div>
               <Field label="Diretor aprovador"><select name="approverName" className={input} defaultValue=""><option value="">Selecione quando aplicável</option>{approvers.map((user) => <option key={user.id} value={user.name}>{user.name}</option>)}</select></Field>
-              <div className="sm:col-span-2 rounded-xl border bg-stone-50 p-4 text-xs"><ShieldCheck className="mb-2 text-forest-700" size={20} /><b>Trilha de governança</b><p className="mt-1 text-stone-500">Usuário, data/hora e valor da decisão ficam vinculados à compra.</p></div>
+              <div className="sm:col-span-2 rounded-xl border bg-stone-100/70 p-3 text-xs"><ShieldCheck className="mb-1.5 text-forest-700" size={18} /><b>Trilha de governança</b><p className="mt-1 text-stone-500">Usuário, data/hora e valor da decisão ficam vinculados à compra.</p></div>
             </Section>
 
-            <section className="mt-6 rounded-2xl border border-forest-200 bg-forest-50 p-5">
+            <section className="mt-4 rounded-2xl border border-forest-200 bg-forest-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[.12em] text-forest-700">Resumo da negociação</p>
-              <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+              <div className="mt-2.5 grid gap-2.5 text-sm sm:grid-cols-2">
                 <p><b>{originUnit?.name ?? "Origem não selecionada"}</b><br /><span className="text-stone-600">Safra {harvest} · {species?.name ?? "Espécie"}</span></p>
                 <p><b>{volumes} × {unitWeight.toLocaleString("pt-BR")} kg = {totalWeight.toLocaleString("pt-BR")} kg</b><br /><span className="text-stone-600">{brl(priceKg)}/kg · Total {brl(totalValue)}</span></p>
                 <p><b>Pagamento</b><br /><span className="text-stone-600">{paymentTermType === "CASH" ? "À vista" : paymentTermType === "INSTALLMENTS" ? `${installmentCount} parcelas` : paymentTermType === "DAYS_AFTER_PURCHASE" ? `${daysAfterPurchase} dias após a compra` : paymentTermType.replaceAll("_", " ")}</span></p>
@@ -422,7 +436,7 @@ export default function GreenCoffeePurchasesV2() {
               </div>
             </section>
 
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={(event) => void submit(event as unknown as React.FormEvent<HTMLFormElement>, "DRAFT")} className="min-h-11 rounded-xl border bg-white px-4 text-sm font-bold">Salvar rascunho</button>
               <Button type="submit">Enviar para aprovação</Button>
               {sessionUser && ["ADMIN","EXECUTIVE"].includes(sessionUser.role) && <button type="button" onClick={(event) => void submit(event as unknown as React.FormEvent<HTMLFormElement>, "APPROVE")} className="min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Aprovar diretamente</button>}
