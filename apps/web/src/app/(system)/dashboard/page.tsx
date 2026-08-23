@@ -36,7 +36,6 @@ import {
   SalesMapDrawer,
 } from "@/components/executive-drawers";
 import { getApiBaseUrl } from "@/lib/api-url";
-import { BrazilSalesPanel } from "@/components/brazil-sales-map";
 
 const periods: Array<{ key: Period; label: string }> = [
   { key: "day", label: "Dia" },
@@ -184,6 +183,7 @@ function RevenueChart({
   dashboard: ExecutiveDashboard;
 }) {
   const goal = dashboard.goals.find((item) => item.period === period) ?? { actual: 0, target: 0, difference: 0, closingProjection: 0, attainment: 0, status: "attention" as const };
+  if (dashboard.goals.length < 2) return <Card className="border p-5 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-secondary)]">Receita × meta</p><p className="mt-3 text-sm text-[var(--bbos-text-secondary)]">Assim que houver vendas no período, a evolução da receita aparecerá aqui.</p><button type="button" onClick={onOpen} className="mt-4 text-xs font-bold text-[var(--bbos-action-primary)]">Ver detalhes <ChevronRight size={12} className="inline" /></button></Card>;
   const previous = goal.actual;
   const sets: Record<Period, number[]> = {
     day: [previous, previous, previous, previous, previous, previous, previous],
@@ -332,7 +332,7 @@ function RevenueChart({
 }
 
 function SalesMapCard({ onOpen }: { onOpen: () => void }) {
-  return <BrazilSalesPanel onStateClick={onOpen} onRegionClick={onOpen} />;
+  return <Card className="border p-5 shadow-sm"><div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-muted)]"><Users size={15} /></span><div><p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">Vendas por região</p><p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">Aguardando dados regionais reais.</p></div></div><button type="button" onClick={onOpen} className="mt-4 text-xs font-bold text-[var(--bbos-action-primary)]">Ver detalhes <ChevronRight size={12} className="inline" /></button></Card>;
   /* Legacy regional card retained temporarily for reference; replaced by the vector map.
   const regions: Array<{
     id: string;
@@ -511,7 +511,7 @@ const cashFlowSeries = [
   },
 ];
 
-function CashFlowChart() {
+function LegacyCashFlowChart() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const min = 65000;
@@ -741,6 +741,12 @@ function CashFlowChart() {
   );
 }
 
+function CashFlowChart() {
+  return <Card className="border p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-secondary)]">Fluxo de caixa</p><h2 className="mt-1 text-lg font-bold">Aguardando movimentações reais</h2></div><Link href="/financeiro/fluxo-caixa" className="text-xs font-bold text-[var(--bbos-action-primary)]">Abrir Financeiro <ChevronRight size={12} className="inline" /></Link></div><p className="mt-4 rounded-xl bg-[var(--bbos-surface-subtle)] p-4 text-sm text-[var(--bbos-text-secondary)]">Resultado disponível após os primeiros lançamentos financeiros confiáveis.</p></Card>;
+}
+
+void LegacyCashFlowChart;
+
 function SectionHeading({
   eyebrow,
   title,
@@ -950,7 +956,7 @@ export default function DashboardPage() {
             Dashboard Executivo
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            Visão consolidada da Bispo Coffees • atualizado hoje, 10:30
+            Visão consolidada da Bispo Coffees • {data.updatedAt ? `atualizado em ${new Date(data.updatedAt).toLocaleString("pt-BR")}` : "aguardando atualização"}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -985,6 +991,7 @@ export default function DashboardPage() {
           </button>
         </div>
       </header>
+      {false && <>
       <section className="order-2 mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {kpis.map((item) => (
           <KpiCard key={item.label} {...item} />
@@ -1255,6 +1262,16 @@ export default function DashboardPage() {
           </Card>
         </button>
       </section>
+      </>}
+      <section className="order-2 mt-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
+        { label: "Receita", value: metrics[0]?.value ?? "Sem dados", supporting: metrics[0]?.supportingText ?? "Aguardando dados do período", icon: CircleDollarSign },
+        { label: "Lucro líquido", value: metrics[1]?.value ?? "Sem dados", supporting: metrics[2]?.value && metrics[2].value !== "Sem dados" ? `Margem ${metrics[2].value}` : "Resultado disponível após os primeiros custos", icon: Banknote },
+        { label: "ROI", value: data.roi.current ? `${number.format(data.roi.current)}%` : "Sem dados", supporting: data.roi.current ? `Meta ${number.format(data.roi.target)}%` : "Aguardando base real para comparação", icon: Percent },
+        { label: "Caixa", value: metrics[3]?.value ?? "Sem dados", supporting: metrics[3]?.supportingText ?? "Aguardando movimentações reais", icon: CircleDollarSign },
+      ].map((item) => { const Icon = item.icon; return <Card key={item.label} className="min-h-[142px] border p-5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">{item.label}</p><p className="mt-3 text-3xl font-bold tracking-tight text-[var(--bbos-text-primary)]">{item.value}</p><p className="mt-2 text-xs text-[var(--bbos-text-secondary)]">{item.supporting}</p></div><span className="grid size-9 place-items-center rounded-xl bg-[var(--bbos-surface-subtle)] text-[var(--bbos-action-primary)]"><Icon size={17} aria-hidden="true" /></span></div></Card>; })}</div></section>
+      <section className="order-3 mt-4 rounded-2xl border border-[var(--bbos-info-border)] bg-[var(--bbos-info-soft)]/50 p-4"><div className="flex items-center gap-2"><Gauge size={16} className="text-[var(--bbos-state-information)]" /><h2 className="text-sm font-bold">Pulso da operação</h2><span className="text-xs text-[var(--bbos-text-muted)]">dados do período selecionado</span></div><div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Link href="/vendas" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Vendas</p><p className="mt-1 text-lg font-bold">{metrics[0]?.value ?? "Sem dados"}</p></Link><Link href="/pedidos" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Pedidos</p><p className="mt-1 text-lg font-bold">{metrics[6]?.value ?? "Sem dados"}</p></Link><Link href="/producao" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Produção</p><p className="mt-1 text-lg font-bold">{metrics[4]?.value ?? "Sem dados"}</p></Link><Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Estoque + cobertura</p><p className="mt-1 text-lg font-bold">{metrics[5]?.value ?? "Sem dados"}</p><p className="text-[11px] text-[var(--bbos-text-muted)]">Cobertura: aguardando dados reais</p></Link></div></section>
+      <section id="atencao-executiva" className="order-4 mt-4"><div className="flex items-center gap-2"><Lightbulb size={16} className="text-[var(--bbos-state-attention)]" /><h2 className="text-sm font-bold">O que merece sua atenção</h2><Badge tone={data.alerts.length ? "warning" : "success"}>{data.alerts.length ? data.alerts.length : "✓"}</Badge></div><Card className="mt-3 border p-4 shadow-sm">{data.alerts.length === 0 ? <p className="text-sm text-[var(--bbos-state-success)]">✓ Tudo sob controle. Nenhuma ocorrência crítica neste período.</p> : <div className="space-y-3">{data.alerts.slice(0, 3).map((alert) => <div key={alert.id} className="flex items-center justify-between gap-3 border-b border-[var(--bbos-border)] pb-3 last:border-0 last:pb-0"><div><p className="text-sm font-semibold">{alert.title}</p><p className="mt-1 text-xs text-[var(--bbos-text-secondary)]">{alert.area}</p></div><Link href={alert.area === "Estoque" ? "/estoque" : alert.area === "Produção" ? "/producao" : "/recebimento"} className="text-xs font-bold text-[var(--bbos-action-primary)]">Analisar <ChevronRight size={12} className="inline" /></Link></div>)}</div>}</Card></section>
+      <section className="order-5 mt-5 grid gap-4 lg:grid-cols-2"><RevenueChart period={period} dashboard={data} onOpen={() => setCommercialOpen(true)} /><SalesMapCard onOpen={() => setSalesMapOpen(true)} /></section><section className="order-6 mt-4"><CashFlowChart /></section>
       <section className="hidden" aria-hidden="true">
         <SectionHeading
           eyebrow="Performance Industrial"
