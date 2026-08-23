@@ -9,7 +9,6 @@ import {
   Factory,
   Flame,
   Gauge,
-  Settings2,
   Wrench,
   Zap,
 } from "lucide-react";

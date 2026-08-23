@@ -7,7 +7,7 @@ import {
   PackageOpen,
   X,
 } from "lucide-react";
-import { Badge, Button, Card, HumanEmptyState } from "@bbos/ui";
+import { Badge, Button, Card } from "@bbos/ui";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
 const ROOT =
