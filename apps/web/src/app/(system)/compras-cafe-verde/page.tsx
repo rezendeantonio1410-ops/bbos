@@ -1,1 +1,1 @@
-export { default } from "../compras-cafe-verde-v2/page";
+export { default } from "@/components/green-coffee-purchases-v2";
