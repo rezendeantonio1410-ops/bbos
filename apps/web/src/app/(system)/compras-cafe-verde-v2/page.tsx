@@ -129,6 +129,8 @@ export default function PurchaseFormV2Page() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submittedNumber, setSubmittedNumber] = useState<string | null>(null);
+  const [submittedPurchaseId, setSubmittedPurchaseId] = useState<string | null>(null);
+  const [submittedStatus, setSubmittedStatus] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -222,7 +224,7 @@ export default function PurchaseFormV2Page() {
     const form = new FormData(event.currentTarget);
     setSubmitting(true);
     try {
-      const result = await req<{ purchaseNumber: string }>(API, {
+      const result = await req<{ id: string; purchaseNumber: string; status?: string; approvalStatus?: string }>(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -270,7 +272,9 @@ export default function PurchaseFormV2Page() {
           commercialNotes: form.get("commercialNotes"),
         }),
       });
+      setSubmittedPurchaseId(result.id);
       setSubmittedNumber(result.purchaseNumber);
+      setSubmittedStatus(result.approvalStatus ?? result.status ?? "PENDING_APPROVAL");
       setMessage(`${result.purchaseNumber} enviada para aprovação.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Falha ao salvar compra.");
@@ -297,6 +301,7 @@ export default function PurchaseFormV2Page() {
       </nav>
 
       <form onSubmit={submit} className="mt-3 space-y-2.5">
+        <fieldset disabled={Boolean(submittedNumber)} className="contents">
         <Section title="A · Origem" tone="origin" icon={MapPinned}>
           <Field label="Estado"><select required className={input} value={purchaseState} onChange={(e) => setPurchaseState(e.target.value)}><option value="">Selecione</option>{states.map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Fornecedor"><select required className={input} disabled={!purchaseState} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
@@ -353,7 +358,7 @@ export default function PurchaseFormV2Page() {
           <div className="rounded-lg border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] px-3 py-2 text-xs"><ShieldCheck size={16} className="mr-1 inline text-[var(--bbos-state-success)]" /><b>Trilha registrada ✓</b></div>
         </Section>
 
-        <Card className="border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3">
+        <Card data-purchase-id={submittedPurchaseId ?? undefined} className="border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3">
           <p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--bbos-state-success)]">Confirmação da negociação</p>
           <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <Summary label="Origem" value={`${originUnit?.name ?? "—"} · ${harvest}`} />
@@ -366,9 +371,11 @@ export default function PurchaseFormV2Page() {
             <Summary label="Embalagem" value={packagingLabels[packagingType] ?? "Outro"} />
             <Summary label="Pagamento" value={paymentTermType === "CASH" ? "À vista · 1 parcela" : `${installments.length} parcela(s)`} />
             <Summary label="Contato" value={selectedContact?.name ?? "—"} />
-            <Summary label="Aprovação" value={sessionUser && ["ADMIN", "EXECUTIVE"].includes(sessionUser.role) ? "Usuário possui alçada" : "Enviar para aprovação"} />
+            <Summary label="Aprovação" value={submittedStatus ? "AGUARDANDO APROVAÇÃO" : sessionUser && ["ADMIN", "EXECUTIVE"].includes(sessionUser.role) ? "Usuário possui alçada" : "Enviar para aprovação"} />
           </div>
         </Card>
+
+        </fieldset>
 
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Link href="/compras-cafe-verde" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Cancelar</Link>
