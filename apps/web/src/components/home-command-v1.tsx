@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, ClipboardCheck, Factory, PackageCheck, ShieldAlert, Sprout, WalletCards } from "lucide-react";
-import { Badge, Card } from "@bbos/ui";
+import { Badge, Card, HumanPageHeader } from "@bbos/ui";
 import { getApiRoot, fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
 
@@ -25,6 +25,7 @@ export function HomeCommandV1() {
   const executiveV3Data = { inventory: dashboardInventory };
   const executiveV3DemoData = executiveV3Data;
   return <div className="home-command mx-auto w-full max-w-[1600px] space-y-6">
+    <HumanPageHeader eyebrow="Visão operacional" title="Início" description="O que precisa da sua atenção agora." action={<Badge tone="neutral">Hoje</Badge>} />
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#087568]">Bispo Coffees · Central de comando</p>

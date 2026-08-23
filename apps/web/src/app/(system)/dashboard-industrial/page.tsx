@@ -22,7 +22,7 @@ import {
   TrendingUp,
   Warehouse,
 } from "lucide-react";
-import { Badge, Card } from "@bbos/ui";
+import { Badge, Card, HumanPageHeader } from "@bbos/ui";
 import type {
   IndustrialMetric,
   PerformanceStatus,
@@ -423,6 +423,7 @@ export default function IndustrialDashboardPage() {
   const classifiedProduction = productionByLine.reduce((sum, line) => sum + line.producedKg, 0);
   return (
     <div className="industrial-dashboard mx-auto max-w-[1600px]">
+      <HumanPageHeader eyebrow="Operação industrial" title="Dashboard industrial" description="Estado da fábrica, desvios e próximas ações." />
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.14em] text-forest-700">
