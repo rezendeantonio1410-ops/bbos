@@ -37,6 +37,19 @@ enum GreenCoffeeQualityStatus {
   REJECTED
 }
 
+enum CuppingSessionStatus {
+  OPEN
+  AWAITING_CLOSURE
+  CLOSED
+  REASSESSMENT
+}
+
+enum CuppingDecision {
+  APPROVED
+  REJECTED
+  REASSESSMENT
+}
+
 enum GreenCoffeePurchaseStatus {
   DRAFT
   CONFIRMED
@@ -389,6 +402,7 @@ model Company {
   screenClassifications    ScreenClassification[]
   supplierBankAccounts     SupplierBankAccount[]
   brokers                  Broker[]
+  cuppingSessions          CuppingSession[]
 }
 
 model User {
@@ -970,6 +984,53 @@ model GreenCoffeeLabSample {
   status       String             @default("PENDING")
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
+  cuppingSessions CuppingSession[]
+}
+
+model CuppingSession {
+  id              String              @id @default(cuid())
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sampleId        String
+  sample          GreenCoffeeLabSample @relation(fields: [sampleId], references: [id], onDelete: Restrict)
+  code            String
+  sessionDate     DateTime            @default(now())
+  responsibleId   String?
+  responsibleName String?
+  participantIds  Json?
+  protocol        String              @default("SCA")
+  generalNotes    String?
+  status          CuppingSessionStatus @default(OPEN)
+  decision        CuppingDecision?
+  decisionReason  String?
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  evaluations     CuppingEvaluation[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([sampleId])
+}
+
+model CuppingEvaluation {
+  id          String         @id @default(cuid())
+  sessionId   String
+  session     CuppingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  evaluatorId String
+  evaluatorName String
+  attributes  Json
+  defects     Json?
+  sensoryNotes Json?
+  score       Decimal?       @db.Decimal(5, 2)
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([sessionId, evaluatorId])
+  @@index([evaluatorId])
 }
 
 model GreenCoffeeApprovalRequest {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Check, FlaskConical, X } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
@@ -374,9 +375,10 @@ export default function LaboratorioPage() {
           <FlaskConical size={15} /> Qualidade do café verde
         </p>
         <h1 className="mt-2 text-3xl font-bold">Laboratório</h1>
-        <p className="mt-2 text-sm text-stone-500">
-          Amostras recebidas, comparação contratual e liberação de lotes.
-        </p>
+      <p className="mt-2 text-sm text-stone-500">
+        Amostras recebidas, comparação contratual e liberação de lotes.
+      </p>
+      <Link href="/laboratorio/cupping" className="mt-4 inline-flex min-h-10 items-center rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Abrir central de Cupping</Link>
       </header>
       {error && (
         <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">
