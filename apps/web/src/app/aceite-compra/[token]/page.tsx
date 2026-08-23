@@ -1,6 +1,17 @@
 import ConfirmationClient, { type PublicConfirmation } from "./confirmation-client";
 
-const API_INTERNAL = (process.env.BBOS_API_INTERNAL_URL ?? process.env.API_INTERNAL_URL ?? "http://localhost:3001/api").replace(/\/$/, "");
+const configuredApi = [
+  process.env.BBOS_API_INTERNAL_URL,
+  process.env.API_INTERNAL_URL,
+  process.env.NEXT_PUBLIC_API_URL,
+]
+  .map((value) => value?.trim())
+  .find((value): value is string => Boolean(value));
+const API_INTERNAL = (configuredApi
+  ? configuredApi.endsWith("/api")
+    ? configuredApi
+    : `${configuredApi}/api`
+  : "http://localhost:3001/api").replace(/\/$/, "");
 
 async function getPublicConfirmation(token: string): Promise<PublicConfirmation | null> {
   try {
