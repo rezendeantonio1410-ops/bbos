@@ -83,6 +83,10 @@ function NewSessionChooser({ close, offer, professional, training }: { close: ()
   return <div className="fixed inset-0 z-50 bg-black/30 p-3"><section role="dialog" aria-modal="true" className="mx-auto mt-8 max-h-[calc(100%-4rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-5 shadow-xl sm:p-7"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Nova sessão</p><h2 className="mt-2 text-2xl font-bold">O que vamos avaliar hoje?</h2><p className="mt-1 text-sm text-stone-500">Escolha o caminho. O BBOS conduz o restante.</p></div><button type="button" onClick={close} aria-label="Fechar"><X /></button></div><div className="mt-6 grid gap-3">{choices.map(({ title, text, flow, icon: Icon, action, tone }) => <button type="button" key={title} onClick={action} className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${tone}`}><div className="flex items-start gap-3"><span className="rounded-xl bg-white p-2"><Icon size={20} /></span><span><strong className="block text-base">{title}</strong><span className="mt-1 block text-sm text-stone-600">{text}</span><span className="mt-3 block text-xs font-semibold text-stone-500">{flow}</span></span></div></button>)}</div><p className="mt-5 text-center text-xs text-stone-500">Training não aprova lotes nem movimenta estoque.</p></section></div>;
 }
 
+function SessionEntryCards({ offer, professional, training }: { offer: () => void; professional: () => void; training: () => void }) {
+  return <section aria-label="Escolha o tipo de sessão" className="mt-6 grid gap-3 md:grid-cols-3"><button type="button" onClick={offer} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center gap-2 font-bold"><Coffee size={18} /> Amostra de oferta</div><p className="mt-2 text-sm text-stone-600">Avaliar um café antes da compra.</p></button><button type="button" onClick={professional} className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center gap-2 font-bold"><Layers size={18} /> Lote / avaliação profissional</div><p className="mt-2 text-sm text-stone-600">Avaliar um café ligado à operação.</p></button><button type="button" onClick={training} className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center gap-2 font-bold"><GraduationCap size={18} /> Training & calibração</div><p className="mt-2 text-sm text-stone-600">Treinar percepção e calibrar a equipe.</p></button></section>;
+}
+
 function OfferSampleForm({ close, saved }: { close: () => void; saved: () => void }) {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
@@ -417,7 +421,7 @@ export default function LaboratorioPage() {
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-forest-700">
           <FlaskConical size={15} /> Qualidade do café verde
         </p>
-        <h1 className="mt-2 text-3xl font-bold">Laboratório</h1>
+        <h1 className="mt-2 text-3xl font-bold">Laboratório &amp; Cupping</h1>
       <p className="mt-2 text-sm text-stone-500">
         Avalie cafés, tome decisões de qualidade ou treine sua percepção.
       </p>
@@ -426,6 +430,7 @@ export default function LaboratorioPage() {
         <Link href="/laboratorio/cupping" className="inline-flex min-h-10 items-center rounded-xl border px-4 text-sm font-semibold">Histórico</Link>
         <Link href="/laboratorio/cupping-training" className="inline-flex min-h-10 items-center rounded-xl border px-4 text-sm font-semibold">Training & calibração</Link>
       </div>
+      <SessionEntryCards offer={() => setOfferForm(true)} professional={() => { window.location.href = "/laboratorio/cupping"; }} training={() => { window.location.href = "/laboratorio/cupping-training"; }} />
       </header>
       {error && (
         <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">
@@ -511,7 +516,8 @@ export default function LaboratorioPage() {
         {visible.length === 0 && (
           <Card className="p-10 text-center text-sm text-stone-500">
             <Check className="mx-auto text-forest-700" />
-            <p className="mt-3 font-semibold">Nenhuma amostra nesta fila.</p>
+            <p className="mt-3 font-semibold">Nenhuma amostra esperando por você.</p>
+            <p className="mt-1">Você pode avaliar uma oferta, analisar um lote recebido ou iniciar uma sessão de treinamento.</p>
           </Card>
         )}
       </section>
