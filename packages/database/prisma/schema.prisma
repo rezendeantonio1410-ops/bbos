@@ -50,6 +50,17 @@ enum CuppingDecision {
   REASSESSMENT
 }
 
+enum CuppingTrainingLevel {
+  DISCOVERY
+  DEVELOPMENT
+  CALIBRATION
+}
+
+enum CuppingTrainingStatus {
+  OPEN
+  COMPLETED
+}
+
 enum GreenCoffeePurchaseStatus {
   DRAFT
   CONFIRMED
@@ -403,6 +414,7 @@ model Company {
   supplierBankAccounts     SupplierBankAccount[]
   brokers                  Broker[]
   cuppingSessions          CuppingSession[]
+  cuppingTrainingSessions  CuppingTrainingSession[]
 }
 
 model User {
@@ -1031,6 +1043,47 @@ model CuppingEvaluation {
 
   @@unique([sessionId, evaluatorId])
   @@index([evaluatorId])
+}
+
+model CuppingTrainingSession {
+  id              String                 @id @default(cuid())
+  companyId       String
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code            String
+  title           String
+  level           CuppingTrainingLevel   @default(DISCOVERY)
+  lesson          String?
+  sampleName      String
+  sampleContext   Json?
+  referenceProfile Json?
+  status          CuppingTrainingStatus  @default(OPEN)
+  createdById     String
+  createdByName   String
+  completedAt     DateTime?
+  evaluations     CuppingTrainingEvaluation[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+model CuppingTrainingEvaluation {
+  id            String                  @id @default(cuid())
+  sessionId     String
+  session       CuppingTrainingSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participantName String
+  attributes    Json
+  descriptors   Json?
+  sensoryMap    Json?
+  score         Decimal?                @db.Decimal(5, 2)
+  completedAt   DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([sessionId, participantId])
+  @@index([participantId])
 }
 
 model GreenCoffeeApprovalRequest {

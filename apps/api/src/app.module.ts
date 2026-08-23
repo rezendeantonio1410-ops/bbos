@@ -31,6 +31,7 @@ import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
 import { BrokersController } from "./brokers.controller";
 import { CuppingController } from "./cupping.controller";
+import { CuppingTrainingController } from "./cupping-training.controller";
 
 @Module({
   controllers: [
@@ -52,6 +53,7 @@ import { CuppingController } from "./cupping.controller";
     AdminCoffeeReferenceController,
     BrokersController,
     CuppingController,
+    CuppingTrainingController,
   ],
   providers: [
     DashboardService,
