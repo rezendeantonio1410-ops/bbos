@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, FlaskConical, X } from "lucide-react";
-import { Badge, Button, Card } from "@bbos/ui";
+import { Badge, Button, Card, HumanEmptyState } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 
 type Sample = {
@@ -460,10 +460,7 @@ export default function LaboratorioPage() {
           </button>
         ))}
         {visible.length === 0 && (
-          <Card className="p-10 text-center text-sm text-stone-500">
-            <Check className="mx-auto text-forest-700" />
-            <p className="mt-3 font-semibold">Nenhuma amostra nesta fila.</p>
-          </Card>
+          <HumanEmptyState title="Nenhuma amostra nesta fila." description="As próximas amostras aparecerão quando um recebimento for encaminhado para análise." />
         )}
       </section>
       {selected && (
