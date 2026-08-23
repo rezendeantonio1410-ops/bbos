@@ -37,6 +37,30 @@ enum GreenCoffeeQualityStatus {
   REJECTED
 }
 
+enum CuppingSessionStatus {
+  OPEN
+  AWAITING_CLOSURE
+  CLOSED
+  REASSESSMENT
+}
+
+enum CuppingDecision {
+  APPROVED
+  REJECTED
+  REASSESSMENT
+}
+
+enum CuppingTrainingLevel {
+  DISCOVERY
+  DEVELOPMENT
+  CALIBRATION
+}
+
+enum CuppingTrainingStatus {
+  OPEN
+  COMPLETED
+}
+
 enum GreenCoffeePurchaseStatus {
   DRAFT
   CONFIRMED
@@ -336,6 +360,21 @@ enum AllocationRuleStatus {
   CANCELLED
 }
 
+enum ProfessionalSampleSource {
+  OFFER
+  RECEIPT
+  CONTROL
+}
+
+enum ProfessionalSampleStatus {
+  RECEIVED
+  IN_ANALYSIS
+  EVALUATED
+  APPROVED_FOR_PURCHASE
+  REJECTED
+  REASSESSMENT
+}
+
 model Company {
   id                       String                       @id @default(cuid())
   name                     String
@@ -389,6 +428,9 @@ model Company {
   screenClassifications    ScreenClassification[]
   supplierBankAccounts     SupplierBankAccount[]
   brokers                  Broker[]
+  cuppingSessions          CuppingSession[]
+  cuppingTrainingSessions  CuppingTrainingSession[]
+  professionalCoffeeSamples ProfessionalCoffeeSample[]
 }
 
 model User {
@@ -466,6 +508,7 @@ model Supplier {
   bankAccounts         SupplierBankAccount[]
   contacts             SupplierContact[]
   originUnits          SupplierOriginUnit[]
+  professionalSamples  ProfessionalCoffeeSample[]
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @updatedAt
 
@@ -538,6 +581,7 @@ model SupplierOriginUnit {
   updatedAt         DateTime                   @updatedAt
   purchases         GreenCoffeePurchase[]
   productions       SupplierOriginProduction[]
+  professionalSamples ProfessionalCoffeeSample[]
 
   @@unique([supplierId, name])
   @@index([supplierId, state, active])
@@ -684,6 +728,7 @@ model GreenCoffeeReceipt {
   labSample           GreenCoffeeLabSample?
   approvalRequests    GreenCoffeeApprovalRequest[]
   auditEvents         GreenCoffeeAuditEvent[]
+  professionalSample  ProfessionalCoffeeSample?    @relation("ReceiptProfessionalSample")
 
   @@unique([companyId, receiptNumber])
   @@index([companyId, confirmedAt])
@@ -751,6 +796,7 @@ model GreenCoffeePurchase {
   createdAt                    DateTime                         @default(now())
   updatedAt                    DateTime                         @updatedAt
   receipts                     GreenCoffeeReceipt[]
+  professionalSample           ProfessionalCoffeeSample? @relation("PurchaseProfessionalSample")
   approvalRequests             GreenCoffeeApprovalRequest[]
   notifications                OperationalNotification[]
   auditEvents                  GreenCoffeeAuditEvent[]
@@ -970,6 +1016,164 @@ model GreenCoffeeLabSample {
   status       String             @default("PENDING")
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
+  cuppingSessions CuppingSession[]
+}
+
+model ProfessionalCoffeeSample {
+  id               String                    @id @default(cuid())
+  companyId        String
+  company          Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source           ProfessionalSampleSource
+  code             String
+  status           ProfessionalSampleStatus  @default(RECEIVED)
+  supplierId       String?
+  supplier         Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  originUnitId     String?
+  originUnit       SupplierOriginUnit?       @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
+  contactName      String?
+  country          String?
+  state            String?
+  municipality     String?
+  region           String?
+  harvest          String?
+  species          String?
+  cultivar         String?
+  process          String?
+  screen           String?
+  informedDefects  Int?
+  informedMoisture Decimal?                  @db.Decimal(5, 2)
+  supplierLotCode  String?
+  receivedAt       DateTime?
+  notes            String?
+  purchaseId       String?                   @unique
+  purchase         GreenCoffeePurchase?      @relation("PurchaseProfessionalSample", fields: [purchaseId], references: [id], onDelete: SetNull)
+  receiptId        String?                   @unique
+  receipt          GreenCoffeeReceipt?       @relation("ReceiptProfessionalSample", fields: [receiptId], references: [id], onDelete: SetNull)
+  sourceSampleId   String?
+  sourceSample     ProfessionalCoffeeSample? @relation("ProfessionalSampleLineage", fields: [sourceSampleId], references: [id], onDelete: SetNull)
+  derivedSamples   ProfessionalCoffeeSample[] @relation("ProfessionalSampleLineage")
+  evaluations      ProfessionalSampleEvaluation[]
+  approvedById     String?
+  approvedByName   String?
+  approvedAt       DateTime?
+  createdById      String
+  createdByName    String
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([companyId, source])
+  @@index([supplierId, status])
+}
+
+model ProfessionalSampleEvaluation {
+  id             String                   @id @default(cuid())
+  sampleId       String
+  sample         ProfessionalCoffeeSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  evaluatorId    String
+  evaluatorName  String
+  attributes     Json
+  descriptors    Json?
+  sensoryMap     Json?
+  defects        Int?
+  moisture       Decimal?                 @db.Decimal(5, 2)
+  screen         String?
+  score          Decimal?                 @db.Decimal(5, 2)
+  notes          String?
+  completedAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@unique([sampleId, evaluatorId])
+  @@index([sampleId, completedAt])
+}
+
+model CuppingSession {
+  id              String              @id @default(cuid())
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sampleId        String
+  sample          GreenCoffeeLabSample @relation(fields: [sampleId], references: [id], onDelete: Restrict)
+  code            String
+  sessionDate     DateTime            @default(now())
+  responsibleId   String?
+  responsibleName String?
+  participantIds  Json?
+  protocol        String              @default("SCA")
+  generalNotes    String?
+  status          CuppingSessionStatus @default(OPEN)
+  decision        CuppingDecision?
+  decisionReason  String?
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  evaluations     CuppingEvaluation[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([sampleId])
+}
+
+model CuppingEvaluation {
+  id          String         @id @default(cuid())
+  sessionId   String
+  session     CuppingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  evaluatorId String
+  evaluatorName String
+  attributes  Json
+  defects     Json?
+  sensoryNotes Json?
+  score       Decimal?       @db.Decimal(5, 2)
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([sessionId, evaluatorId])
+  @@index([evaluatorId])
+}
+
+model CuppingTrainingSession {
+  id              String                 @id @default(cuid())
+  companyId       String
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code            String
+  title           String
+  level           CuppingTrainingLevel   @default(DISCOVERY)
+  lesson          String?
+  sampleName      String
+  sampleContext   Json?
+  referenceProfile Json?
+  status          CuppingTrainingStatus  @default(OPEN)
+  createdById     String
+  createdByName   String
+  completedAt     DateTime?
+  evaluations     CuppingTrainingEvaluation[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+model CuppingTrainingEvaluation {
+  id            String                  @id @default(cuid())
+  sessionId     String
+  session       CuppingTrainingSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participantName String
+  attributes    Json
+  descriptors   Json?
+  sensoryMap    Json?
+  score         Decimal?                @db.Decimal(5, 2)
+  completedAt   DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([sessionId, participantId])
+  @@index([participantId])
 }
 
 model GreenCoffeeApprovalRequest {

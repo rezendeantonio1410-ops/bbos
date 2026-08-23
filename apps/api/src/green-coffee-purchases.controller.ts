@@ -24,6 +24,8 @@ import {
   PurchaseInstallmentStatus,
   PurchaseOperationalStatus,
   PurchasePaymentTermType,
+  ProfessionalSampleSource,
+  ProfessionalSampleStatus,
 } from "@bbos/database";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -111,6 +113,7 @@ type PurchaseBody = {
   commercialNotes?: string;
   brokerId?: string;
   brokerCommissionPercent?: number;
+  professionalSampleId?: string;
 };
 
 const DEFAULT_ACCEPTANCE_TEXT =
@@ -1483,6 +1486,11 @@ export class GreenCoffeePurchasesController {
                 body.totalValue,
                 brokerCommissionPercent,
               );
+        let professionalSample: { id: string } | null = null;
+        if (body.professionalSampleId) {
+          professionalSample = await tx.professionalCoffeeSample.findFirst({ where: { id: body.professionalSampleId, companyId: body.companyId, supplierId: body.supplierId, source: ProfessionalSampleSource.OFFER, status: ProfessionalSampleStatus.APPROVED_FOR_PURCHASE }, select: { id: true } });
+          if (!professionalSample) throw new BadRequestException("A amostra selecionada não está aprovada para compra.");
+        }
         const references = await this.resolveReferences(
           tx,
           body,
@@ -1515,6 +1523,7 @@ export class GreenCoffeePurchasesController {
           data: {
             companyId: body.companyId,
             supplierId: body.supplierId,
+            professionalSample: professionalSample ? { connect: { id: professionalSample.id } } : undefined,
             brokerId: broker?.id,
             brokerCommissionPercent,
             brokerCommissionAmount,
