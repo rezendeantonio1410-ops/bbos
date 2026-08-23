@@ -18,7 +18,7 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { Badge, Button, Card } from "@bbos/ui";
+import { Badge, Button, Card, HumanEmptyState } from "@bbos/ui";
 import {
   calculateProductionCost,
   type ProductionAlert,
@@ -423,7 +423,7 @@ function NewOrderWizard({
           )}
           {step === 4 && (
             <div className="space-y-3">
-              {!available.length && <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">Nenhum lote aprovado com saldo disponível.</p>}
+              {!available.length && <HumanEmptyState title="Nenhum lote aprovado com saldo disponível." description="A produção poderá começar quando um lote for liberado e tiver saldo." />}
               {available.map((lot) => (
                 <div
                   key={lot.id}
