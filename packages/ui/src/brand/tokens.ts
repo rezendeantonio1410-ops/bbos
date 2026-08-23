@@ -81,10 +81,10 @@ export type BrandTokenContract = {
 };
 
 export type HumanExperienceTokens = {
-  surface: { base: string; elevated: string; subtle: string; page: string };
+  surface: { base: string; elevated: string; subtle: string; warm: string; page: string };
   text: { primary: string; secondary: string; muted: string; onAction: string };
-  action: { primary: string; primaryHover: string };
-  state: { success: string; information: string; attention: string; critical: string; neutral: string };
+  action: { primary: string; primaryHover: string; secondary: string };
+  state: { success: string; successSoft: string; successBorder: string; information: string; informationSoft: string; attention: string; attentionSoft: string; critical: string; criticalSoft: string; neutral: string; intelligence: string; intelligenceSoft: string };
   coffee: { green: string; roasted: string; caramel: string };
   border: string;
   focusRing: string;
@@ -93,10 +93,10 @@ export type HumanExperienceTokens = {
 };
 
 export const humanExperienceTokens: HumanExperienceTokens = {
-  surface: { base: '#FFFFFF', elevated: '#FFFFFF', subtle: '#FAFAF8', page: '#F7F7F5' },
+  surface: { base: '#FFFFFF', elevated: '#FFFFFF', subtle: '#FAFAF8', warm: '#FBF8F1', page: '#F7F7F5' },
   text: { primary: '#0A0A0A', secondary: '#626B69', muted: '#7A8381', onAction: '#FFFFFF' },
-  action: { primary: '#0A0A0A', primaryHover: '#0E191D' },
-  state: { success: '#047857', information: '#0369A1', attention: '#B45309', critical: '#B91C1C', neutral: '#57534E' },
+  action: { primary: '#0A0A0A', primaryHover: '#0E191D', secondary: '#E7E7E3' },
+  state: { success: '#047857', successSoft: '#ECFDF5', successBorder: '#A7F3D0', information: '#0369A1', informationSoft: '#EFF6FF', attention: '#B45309', attentionSoft: '#FFFBEB', critical: '#B91C1C', criticalSoft: '#FEF2F2', neutral: '#57534E', intelligence: '#6D4FA3', intelligenceSoft: '#F5F3FF' },
   coffee: { green: '#087568', roasted: '#3E73A8', caramel: '#C8923E' },
   border: '#E7E7E3',
   focusRing: '#087568',
