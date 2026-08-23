@@ -375,6 +375,24 @@ enum ProfessionalSampleStatus {
   REASSESSMENT
 }
 
+enum CuppingPublicKind {
+  PROFESSIONAL
+  TRAINING
+}
+
+enum CuppingPublicStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum CuppingParticipantStatus {
+  JOINED
+  IN_PROGRESS
+  COMPLETED
+}
+
 model Company {
   id                       String                       @id @default(cuid())
   name                     String
@@ -431,6 +449,7 @@ model Company {
   cuppingSessions          CuppingSession[]
   cuppingTrainingSessions  CuppingTrainingSession[]
   professionalCoffeeSamples ProfessionalCoffeeSample[]
+  cuppingPublicSessions CuppingPublicSession[]
 }
 
 model User {
@@ -1053,6 +1072,7 @@ model ProfessionalCoffeeSample {
   sourceSample     ProfessionalCoffeeSample? @relation("ProfessionalSampleLineage", fields: [sourceSampleId], references: [id], onDelete: SetNull)
   derivedSamples   ProfessionalCoffeeSample[] @relation("ProfessionalSampleLineage")
   evaluations      ProfessionalSampleEvaluation[]
+  publicSessions   CuppingPublicSession[]
   approvedById     String?
   approvedByName   String?
   approvedAt       DateTime?
@@ -1174,6 +1194,60 @@ model CuppingTrainingEvaluation {
 
   @@unique([sessionId, participantId])
   @@index([participantId])
+}
+
+model CuppingPublicSession {
+  id                  String                 @id @default(cuid())
+  companyId           String
+  company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  kind                CuppingPublicKind
+  code                String
+  status              CuppingPublicStatus    @default(DRAFT)
+  tokenHash           String                 @unique
+  tokenExpiresAt      DateTime?
+  professionalSampleId String?
+  professionalSample  ProfessionalCoffeeSample? @relation(fields: [professionalSampleId], references: [id], onDelete: SetNull)
+  referenceProfile    Json?
+  createdById         String
+  createdByName       String
+  createdAt           DateTime               @default(now())
+  openedAt            DateTime?
+  closedAt            DateTime?
+  participants        CuppingParticipant[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([professionalSampleId])
+}
+
+model CuppingParticipant {
+  id             String                    @id @default(cuid())
+  sessionId      String
+  session        CuppingPublicSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name           String
+  phone          String
+  normalizedPhone String
+  institution    String?
+  status         CuppingParticipantStatus  @default(JOINED)
+  joinedAt       DateTime                  @default(now())
+  completedAt    DateTime?
+  evaluation     CuppingParticipantEvaluation?
+
+  @@unique([sessionId, normalizedPhone])
+  @@index([sessionId, status])
+}
+
+model CuppingParticipantEvaluation {
+  id            String             @id @default(cuid())
+  participantId String             @unique
+  participant   CuppingParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  attributes    Json
+  descriptors   Json?
+  sensoryMap    Json?
+  score         Decimal?           @db.Decimal(5, 2)
+  completedAt   DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 }
 
 model GreenCoffeeApprovalRequest {
