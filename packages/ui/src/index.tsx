@@ -42,3 +42,30 @@ export function Status({ children, tone = 'neutral', className }: { children: Re
   };
   return <span role="status" className={cx('inline-flex items-center gap-1.5 text-sm font-semibold', tones[tone], className)}><span aria-hidden="true" className="size-2 rounded-full bg-current" />{children}</span>;
 }
+
+export function HumanPageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: ReactNode }) {
+  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="min-w-0">
+      {eyebrow ? <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--bbos-text-muted)]">{eyebrow}</p> : null}
+      <h1 className="text-2xl font-bold tracking-tight text-[var(--bbos-text-primary)]">{title}</h1>
+      {description ? <p className="mt-1 max-w-2xl text-sm text-[var(--bbos-text-secondary)]">{description}</p> : null}
+    </div>
+    {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+  </header>;
+}
+
+export function HumanEmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+  return <div className="rounded-2xl border border-dashed border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-5 py-8 text-center">
+    <p className="text-sm font-semibold text-[var(--bbos-text-primary)]">{title}</p>
+    {description ? <p className="mx-auto mt-1 max-w-md text-sm text-[var(--bbos-text-secondary)]">{description}</p> : null}
+    {action ? <div className="mt-4">{action}</div> : null}
+  </div>;
+}
+
+export function ActionBar({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx('flex flex-wrap items-center justify-end gap-2 border-t border-[var(--bbos-border)] pt-3', className)}>{children}</div>;
+}
+
+export function StatusBadge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'success' | 'information' | 'attention' | 'critical' }) {
+  return <span className="inline-flex items-center gap-1.5 rounded-full border border-current/15 px-2.5 py-1 text-xs font-semibold" data-status-tone={tone}><Status tone={tone}>{children}</Status></span>;
+}
