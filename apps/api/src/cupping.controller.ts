@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { CuppingDecision, CuppingSessionStatus, Prisma, PrismaClient } from "@bbos/database";
+import { CoffeeLotStatus, CuppingDecision, CuppingSessionStatus, Prisma, PrismaClient } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { CUPPING_ATTRIBUTES, scoreCuppingAttributes } from "./cupping-score";
@@ -55,7 +55,10 @@ export class CuppingController {
     const qualityStatus = body.decision === CuppingDecision.APPROVED ? "APPROVED" : body.decision === CuppingDecision.REJECTED ? "REJECTED" : "AWAITING_ANALYSIS";
     return this.database.$transaction(async (transaction) => {
       const updated = await transaction.cuppingSession.update({ where: { id }, data: { status, decision: body.decision, decisionReason: body.reason?.trim() || undefined, decidedById: actor.id, decidedByName: actor.name, decidedAt: new Date() } });
-      if (body.decision !== CuppingDecision.REASSESSMENT) await transaction.greenCoffeeReceipt.update({ where: { id: session.sample.receiptId }, data: { qualityStatus: qualityStatus as never, qualityNotes: body.reason?.trim() || undefined } });
+      if (body.decision !== CuppingDecision.REASSESSMENT) {
+        await transaction.greenCoffeeReceipt.update({ where: { id: session.sample.receiptId }, data: { qualityStatus: qualityStatus as never, qualityNotes: body.reason?.trim() || undefined } });
+        await transaction.coffeeLot.update({ where: { id: session.sample.receipt.coffeeLotId }, data: { status: body.decision === CuppingDecision.APPROVED ? CoffeeLotStatus.APPROVED : CoffeeLotStatus.BLOCKED } });
+      }
       return updated;
     });
   }
