@@ -950,7 +950,7 @@ export default function DashboardPage() {
             Dashboard Executivo
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            Visão consolidada da Bispo Coffees • atualizado hoje, 10:30
+            Visão consolidada da Bispo Coffees • {data.updatedAt ? `atualizado em ${new Date(data.updatedAt).toLocaleString("pt-BR")}` : "aguardando atualização"}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -985,6 +985,7 @@ export default function DashboardPage() {
           </button>
         </div>
       </header>
+      {false && <>
       <section className="order-2 mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {kpis.map((item) => (
           <KpiCard key={item.label} {...item} />
@@ -1255,6 +1256,32 @@ export default function DashboardPage() {
           </Card>
         </button>
       </section>
+      </>}
+      <section className="order-2 mt-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Receita", value: metrics[0]?.value ?? "Sem dados", supporting: metrics[0]?.supportingText ?? "Ainda sem movimento no período", icon: CircleDollarSign, status: "info" },
+            { label: "Lucro líquido", value: metrics[1]?.value ?? "Sem dados", supporting: metrics[1]?.supportingText ?? "Margem será calculada após os primeiros custos", icon: Banknote, status: "neutral" },
+            { label: "ROI", value: data.roi.current ? `${number.format(data.roi.current)}%` : "Sem dados", supporting: data.roi.current ? `Meta ${number.format(data.roi.target)}%` : "Ainda sem base real para comparação", icon: Percent, status: data.roi.current ? "success" : "neutral" },
+            { label: "Margem líquida", value: metrics[2]?.value ?? "Sem dados", supporting: metrics[2]?.supportingText ?? "Margem será calculada após os primeiros custos", icon: Gauge, status: "neutral" },
+          ].map((item) => {
+            const Icon = item.icon;
+            const tone = item.status === "success" ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)]" : item.status === "info" ? "border-[var(--bbos-info-border)] bg-[var(--bbos-info-soft)]" : "border-[var(--bbos-border)] bg-[var(--bbos-surface-elevated)]";
+            return <Card key={item.label} className={`min-h-[142px] border p-5 shadow-sm ${tone}`}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">{item.label}</p><p className="mt-3 text-3xl font-bold tracking-tight text-[var(--bbos-text-primary)]">{item.value}</p><p className="mt-2 text-xs text-[var(--bbos-text-secondary)]">{item.supporting}</p></div><span className="grid size-9 place-items-center rounded-xl bg-[var(--bbos-surface-subtle)] text-[var(--bbos-action-primary)]"><Icon size={17} aria-hidden="true" /></span></div></Card>;
+          })}
+        </div>
+      </section>
+      <section className="order-3 mt-4 rounded-2xl border border-[var(--bbos-info-border)] bg-[var(--bbos-info-soft)]/50 p-4">
+        <div className="flex items-center gap-2"><Gauge size={16} className="text-[var(--bbos-state-information)]" /><h2 className="text-sm font-bold text-[var(--bbos-text-primary)]">Operação agora</h2><span className="text-xs text-[var(--bbos-text-muted)]">dados reais disponíveis</span></div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Estoque verde</p><p className="mt-1 text-lg font-bold">{metrics[5]?.value ?? "Sem dados"}</p></Link>
+          <Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Cobertura</p><p className="mt-1 text-lg font-bold">Sem dados</p><p className="text-[11px] text-[var(--bbos-text-muted)]">Ainda sem base real</p></Link>
+          <Link href="/pedidos" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Pedidos em aberto</p><p className="mt-1 text-lg font-bold">{metrics[6]?.value ?? "Sem dados"}</p></Link>
+          <Link href="/producao" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Produção</p><p className="mt-1 text-lg font-bold">{metrics[4]?.value ?? "Sem dados"}</p></Link>
+        </div>
+      </section>
+      <section id="atencao-executiva" className="order-4 mt-4"><div className="flex items-center gap-2"><Lightbulb size={16} className="text-[var(--bbos-state-attention)]" /><h2 className="text-sm font-bold">Precisa da sua atenção</h2><Badge tone={data.alerts.length ? "warning" : "success"}>{data.alerts.length ? data.alerts.length : "✓"}</Badge></div><Card className="mt-3 border p-4 shadow-sm">{data.alerts.length === 0 ? <p className="text-sm text-[var(--bbos-state-success)]">✓ Nenhuma ação crítica agora</p> : <div className="space-y-3">{data.alerts.map((alert) => <div key={alert.id} className="flex items-center justify-between gap-3 border-b border-[var(--bbos-border)] pb-3 last:border-0 last:pb-0"><div><p className="text-sm font-semibold">{alert.title}</p><p className="mt-1 text-xs text-[var(--bbos-text-secondary)]">{alert.area}</p></div><Link href={alert.area === "Estoque" ? "/estoque" : alert.area === "Produção" ? "/producao" : "/recebimento"} className="text-xs font-bold text-[var(--bbos-action-primary)]">Analisar <ChevronRight size={12} className="inline" /></Link></div>)}</div>}</Card></section>
+      <section className="order-5 mt-5 grid gap-4 lg:grid-cols-2"><RevenueChart period={period} dashboard={data} onOpen={() => setCommercialOpen(true)} /><CashFlowChart /></section>
       <section className="hidden" aria-hidden="true">
         <SectionHeading
           eyebrow="Performance Industrial"
