@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronLeft, ShieldCheck } from "lucide-react";
+import { Bean, Check, ChevronLeft, Handshake, MapPinned, Package, Scale, ShieldCheck } from "lucide-react";
 import { Button, Card } from "@bbos/ui";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
 
 const ROOT = getApiBaseUrl();
 const API = `${ROOT}/green-coffee-purchases`;
-const input = "w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm outline-none focus:border-forest-700 disabled:cursor-not-allowed disabled:opacity-60";
+const input = "w-full rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-elevated)] px-3 py-2 text-sm text-[var(--bbos-text-primary)] outline-none transition focus:border-[var(--bbos-focus-ring)] focus:ring-2 focus:ring-[var(--bbos-focus-ring)]/15 disabled:cursor-not-allowed disabled:bg-[var(--bbos-surface-subtle)] disabled:opacity-60";
 
 const states = ["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"];
 const packagingWeights: Record<string, number | null> = {
@@ -127,6 +127,10 @@ export default function PurchaseFormV2Page() {
   const [firstDueDate, setFirstDueDate] = useState(new Date().toISOString().slice(0, 10));
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submittedNumber, setSubmittedNumber] = useState<string | null>(null);
+  const [submittedPurchaseId, setSubmittedPurchaseId] = useState<string | null>(null);
+  const [submittedStatus, setSubmittedStatus] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -213,12 +217,14 @@ export default function PurchaseFormV2Page() {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting || submittedNumber) return;
     setError("");
     setMessage("");
     if (!supplier || !originUnit || !species || !cultivar) return setError("Complete origem, espécie e cultivar.");
     const form = new FormData(event.currentTarget);
+    setSubmitting(true);
     try {
-      const result = await req<{ purchaseNumber: string }>(API, {
+      const result = await req<{ id: string; purchaseNumber: string; status?: string; approvalStatus?: string }>(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -266,9 +272,14 @@ export default function PurchaseFormV2Page() {
           commercialNotes: form.get("commercialNotes"),
         }),
       });
+      setSubmittedPurchaseId(result.id);
+      setSubmittedNumber(result.purchaseNumber);
+      setSubmittedStatus(result.approvalStatus ?? result.status ?? "PENDING_APPROVAL");
       setMessage(`${result.purchaseNumber} enviada para aprovação.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Falha ao salvar compra.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -282,11 +293,16 @@ export default function PurchaseFormV2Page() {
           <p className="mt-2 text-sm text-stone-500">Fluxo progressivo: origem → especificação → quantidade → comercial → governança.</p>
         </div>
       </div>
-      {message && <p className="mt-5 rounded-xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800"><Check className="mr-2 inline" size={15} />{message}</p>}
-      {error && <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
+      {message && <p className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-success)]"><Check size={15} aria-hidden="true" />{message}</p>}
+      {error && <p className="mt-3 rounded-xl border border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-critical)]" role="alert">{error}</p>}
 
-      <form onSubmit={submit} className="mt-6 space-y-5">
-        <Section title="A · Origem">
+      <nav className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2" aria-label="Progresso da ficha">
+        {([["Origem", Boolean(supplier && originUnit), MapPinned], ["Especificação", Boolean(species && cultivar), Bean], ["Quantidade", totalWeight > 0, Package], ["Comercial", priceKg > 0, Handshake], ["Governança", Boolean(selectedContact?.canConfirmBusiness), ShieldCheck]] as const).map(([label, complete, Icon], index, items) => <span key={label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--bbos-text-secondary)]"><span className={`grid size-5 place-items-center rounded-full border ${complete ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`}><Icon size={11} aria-hidden="true" /></span>{label}{index < items.length - 1 && <span className="ml-0.5 text-[var(--bbos-text-muted)]" aria-hidden="true">→</span>}</span>)}
+      </nav>
+
+      <form onSubmit={submit} className="mt-3 space-y-2.5">
+        <fieldset disabled={Boolean(submittedNumber)} className="contents">
+        <Section title="A · Origem" tone="origin" icon={MapPinned}>
           <Field label="Estado"><select required className={input} value={purchaseState} onChange={(e) => setPurchaseState(e.target.value)}><option value="">Selecione</option>{states.map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Fornecedor"><select required className={input} disabled={!purchaseState} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Unidade / Fazenda"><select required className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Selecione</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
@@ -303,7 +319,7 @@ export default function PurchaseFormV2Page() {
           </div>
         </Section>
 
-        <Section title="B · Especificação contratada">
+        <Section title="B · Especificação contratada" tone="quality" icon={Bean}>
           <Field label="Processo"><select name="process" className={input}>{["Natural", "Cereja Descascado", "Honey", "Lavado", "Fermentado", "Outro"].map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Qualidade"><select name="qualityCategory" className={input}>{["Especial", "Gourmet", "Fine Cup", "Good Cup", "Comercial", "Outra"].map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Peneira"><select required name="screenClassificationId" className={input} defaultValue=""><option value="" disabled>Selecione</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
@@ -312,7 +328,7 @@ export default function PurchaseFormV2Page() {
           <Field label="Pontuação mínima"><input name="minimumScore" type="number" step=".25" className={input} /></Field>
         </Section>
 
-        <Section title="C · Quantidade / embalagem">
+        <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
           <Field label="Acondicionamento"><select className={input} value={packagingType} onChange={(e) => { const next = e.target.value; setPackagingType(next); const weight = packagingWeights[next] ?? null; if (weight !== null) setUnitWeight(weight); }}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
           <Field label="Número de volumes"><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
           <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" className={input} value={unitWeight} readOnly={packagingWeights[packagingType] !== null} onChange={(e) => setUnitWeight(Number(e.target.value))} /></Field>
@@ -320,7 +336,7 @@ export default function PurchaseFormV2Page() {
           <Metric label="Peso total contratado" value={`${totalWeight.toLocaleString("pt-BR")} kg`} />
         </Section>
 
-        <Section title="D · Comercial">
+        <Section title="D · Comercial" tone="commercial" icon={Handshake}>
           <Field label="Preço/kg"><input required type="number" min=".01" step=".01" className={input} value={priceKg || ""} onChange={(e) => setPriceKg(Number(e.target.value))} /></Field>
           <Metric label="Valor total da compra" value={brl(totalValue)} />
           <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
@@ -330,37 +346,21 @@ export default function PurchaseFormV2Page() {
           {!["CASH", "DAYS_AFTER_PURCHASE"].includes(paymentTermType) && <Field label="Primeiro vencimento"><input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className={input} /></Field>}
           <Field label="Referência externa (opcional)"><input name="externalReference" className={input} /></Field>
           <Field label="Observações"><input name="commercialNotes" className={input} /></Field>
-          <div className="rounded-xl border bg-stone-50 p-4 sm:col-span-2 lg:col-span-4">
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-stone-500">Intermediação (opcional)</p>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Corretor">
-                <select className={input} value={brokerId} onChange={(event) => setBrokerId(event.target.value)}>
-                  <option value="">Sem corretor</option>
-                  {brokers.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Comissão (%)">
-                <input type="number" min="0" max="100" step="0.01" className={input} value={brokerCommissionPercent || ""} disabled={!brokerId} onChange={(event) => setBrokerCommissionPercent(Math.max(0, Number(event.target.value)))} />
-              </Field>
-              <Metric label="Valor da comissão (estimado)" value={selectedBroker ? brl(brokerCommissionAmount) : "—"} />
-              <div className="rounded-xl bg-white p-4 text-xs text-stone-600">
-                <span className="font-semibold">Custo total da operação</span>
-                <b className="mt-1 block text-lg text-stone-900">{brl(totalOperationCost)}</b>
-                <span>O valor pago ao fornecedor permanece {brl(totalValue)}.</span>
-              </div>
-            </div>
+          <div className="rounded-lg border border-[var(--bbos-coffee-caramel)]/40 bg-[var(--bbos-surface-warm)] px-3 py-2 sm:col-span-2 lg:col-span-4">
+            <div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-bold uppercase tracking-wide text-[var(--bbos-coffee-caramel)]">Intermediação</span><select aria-label="Corretor" className="rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-elevated)] px-2 py-1.5 text-xs" value={brokerId} onChange={(event) => setBrokerId(event.target.value)}><option value="">Sem corretor ✓</option>{brokers.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{!selectedBroker && <span className="text-xs text-[var(--bbos-text-secondary)]">Custo total: {brl(totalValue)}</span>}</div>
+            {selectedBroker && <div className="mt-2 grid gap-2 sm:grid-cols-3"><Field label="Comissão (%)"><input type="number" min="0" max="100" step="0.01" className={input} value={brokerCommissionPercent || ""} onChange={(event) => setBrokerCommissionPercent(Math.max(0, Number(event.target.value)))} /></Field><Metric label="Comissão estimada" value={brl(brokerCommissionAmount)} /><div className="rounded-lg border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] px-3 py-2"><span className="text-[11px] text-[var(--bbos-text-secondary)]">Custo total · fornecedor não muda</span><b className="mt-0.5 block text-base text-[var(--bbos-state-success)]">{brl(totalOperationCost)}</b></div></div>}
           </div>
         </Section>
 
-        <Section title="E · Governança">
-          <div className="rounded-xl bg-stone-50 p-4"><p className="text-xs text-stone-500">Comprador responsável</p><b className="mt-1 block">{sessionUser?.name ?? "—"}</b><p className="text-xs text-stone-500">Compras · {sessionUser?.role ?? "—"}</p></div>
+        <Section title="E · Governança" tone="governance" icon={ShieldCheck}>
+          <div className="rounded-lg bg-[var(--bbos-surface-subtle)] px-3 py-2"><p className="text-[11px] text-[var(--bbos-text-secondary)]">Comprador</p><b className="ml-1 text-sm">{sessionUser?.name ?? "—"} ✓</b></div>
           <Field label="Diretor aprovador"><select name="approverName" className={input} defaultValue=""><option value="">Seleção automática / próximo disponível</option>{currentApprovers.map((user) => <option key={user.id} value={user.name}>{user.name} · {user.role}</option>)}</select></Field>
-          <div className="rounded-xl border p-4 text-xs"><ShieldCheck size={20} className="mb-2 text-forest-700" /><b>Trilha de aprovação</b><p className="mt-1 text-stone-500">O BBOS registra usuário, data/hora, valor e versão da ficha.</p></div>
+          <div className="rounded-lg border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] px-3 py-2 text-xs"><ShieldCheck size={16} className="mr-1 inline text-[var(--bbos-state-success)]" /><b>Trilha registrada ✓</b></div>
         </Section>
 
-        <Card className="p-5">
-          <p className="text-xs font-bold uppercase tracking-[.12em] text-forest-700">Resumo da negociação</p>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <Card data-purchase-id={submittedPurchaseId ?? undefined} className="border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3">
+          <p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--bbos-state-success)]">Confirmação da negociação</p>
+          <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <Summary label="Origem" value={`${originUnit?.name ?? "—"} · ${harvest}`} />
             <Summary label="Café" value={`${species?.name ?? "—"} · ${cultivar?.name ?? "—"}`} />
             <Summary label="Quantidade" value={`${volumes} × ${unitWeight} kg = ${totalWeight} kg`} />
@@ -371,27 +371,31 @@ export default function PurchaseFormV2Page() {
             <Summary label="Embalagem" value={packagingLabels[packagingType] ?? "Outro"} />
             <Summary label="Pagamento" value={paymentTermType === "CASH" ? "À vista · 1 parcela" : `${installments.length} parcela(s)`} />
             <Summary label="Contato" value={selectedContact?.name ?? "—"} />
-            <Summary label="Aprovação" value={sessionUser && ["ADMIN", "EXECUTIVE"].includes(sessionUser.role) ? "Usuário possui alçada" : "Enviar para aprovação"} />
+            <Summary label="Aprovação" value={submittedStatus ? "AGUARDANDO APROVAÇÃO" : sessionUser && ["ADMIN", "EXECUTIVE"].includes(sessionUser.role) ? "Usuário possui alçada" : "Enviar para aprovação"} />
           </div>
         </Card>
 
-        <div className="flex flex-wrap justify-end gap-3">
+        </fieldset>
+
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Link href="/compras-cafe-verde" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Cancelar</Link>
-          <Button type="submit">Enviar para aprovação</Button>
+          <Button type="submit" disabled={submitting || Boolean(submittedNumber)} aria-disabled={submitting || Boolean(submittedNumber)}>{submitting ? "Enviando..." : submittedNumber ? "✓ Enviada para aprovação" : "Enviar para aprovação"}</Button>
         </div>
       </form>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <Card className="p-5 sm:p-6"><h2 className="text-base font-bold">{title}</h2><div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div></Card>;
+type SectionTone = "origin" | "quality" | "quantity" | "commercial" | "governance";
+function Section({ title, tone, icon: Icon, children }: { title: string; tone: SectionTone; icon: typeof MapPinned; children: React.ReactNode }) {
+  const accent = { origin: "border-l-[var(--bbos-coffee-green)]", quality: "border-l-[var(--bbos-coffee-roasted)]", quantity: "border-l-[var(--bbos-state-information)]", commercial: "border-l-[var(--bbos-coffee-caramel)]", governance: "border-l-[var(--bbos-state-attention)]" }[tone];
+  return <section className={`rounded-xl border border-[var(--bbos-border)] border-l-4 bg-[var(--bbos-surface-elevated)] px-3 py-2.5 ${accent}`}><h2 className="flex items-center gap-2 text-sm font-bold text-[var(--bbos-text-primary)]"><Icon size={15} aria-hidden="true" />{title}</h2><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{children}</div></section>;
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-bold text-stone-600">{label}</span>{children}</label>;
+  return <label className="block"><span className="mb-0.5 block text-[11px] font-semibold text-[var(--bbos-text-secondary)]">{label}</span>{children}</label>;
 }
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-forest-50 p-4"><span className="text-xs text-stone-500">{label}</span><b className="mt-1 block text-xl">{value}</b></div>;
+  return <div className="rounded-lg border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] px-3 py-2"><span className="text-[11px] text-[var(--bbos-text-secondary)]">{label}</span><b className="mt-0.5 block text-base text-[var(--bbos-state-success)]">{value}</b></div>;
 }
 function Summary({ label, value }: { label: string; value: string }) {
   return <div><p className="text-[11px] font-bold uppercase tracking-wide text-stone-400">{label}</p><p className="mt-1 font-semibold text-stone-800">{value}</p></div>;
