@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
-import { Card } from "@bbos/ui";
+import { Card, HumanEmptyState } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { lookupBrazilianCep } from "@/lib/brazil-address";
 
@@ -692,9 +692,7 @@ export default function SuppliersPage() {
           </Card>
         ))}
         {filtered.length === 0 && (
-          <div className="rounded-2xl border border-dashed p-12 text-center text-sm text-stone-500">
-            Nenhum fornecedor encontrado.
-          </div>
+          <HumanEmptyState title="Ainda não há fornecedores nesta busca." description="Ajuste os filtros ou cadastre um novo fornecedor para começar." />
         )}
       </div>
       {supplierOpen && (
