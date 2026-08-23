@@ -5,7 +5,7 @@ import {
   Route,
   Sparkles,
 } from "lucide-react";
-import { Card } from "@bbos/ui";
+import { Card, HumanEmptyState } from "@bbos/ui";
 
 export default function ExecutiveBiPlaceholderPage() {
   return (
@@ -51,6 +51,7 @@ export default function ExecutiveBiPlaceholderPage() {
           </div>
         </div>
       </Card>
+      <div className="mt-4 max-w-3xl"><HumanEmptyState title="A análise profunda será exibida quando houver histórico suficiente." description="O Dashboard Executivo continua sendo o espaço para decisões rápidas." /></div>
     </div>
   );
 }

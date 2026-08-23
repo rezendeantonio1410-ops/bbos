@@ -13,7 +13,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { Badge, Card } from "@bbos/ui";
+import { Badge, Card, HumanEmptyState } from "@bbos/ui";
 import { CostNavigation } from "@/components/cost-navigation";
 
 const API = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api"}/costing`;
@@ -63,7 +63,7 @@ export default function CostsPage() {
       <Card className="p-5"><Heading title="Máquinas / recursos" subtitle="Memória de custo por hora"/><div className="mt-4 space-y-3">{resources.map((resource)=><div key={resource.id} className="rounded-xl bg-stone-50 p-4"><div className="flex items-start justify-between"><div><p className="text-sm font-semibold">{resource.name}</p><p className="mt-1 text-[10px] text-stone-500">{resource.code} • {resource.costCenter}</p></div><strong className="text-sm">{brl.format(resource.cost.totalPerHour)}/h</strong></div><div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-stone-500 sm:grid-cols-4"><span>Depreciação<br/><b className="text-stone-900">{brl.format(resource.cost.depreciationPerHour)}</b></span><span>Manutenção<br/><b className="text-stone-900">{brl.format(resource.cost.maintenancePerHour)}</b></span><span>Energia<br/><b className="text-stone-900">{brl.format(resource.cost.energyPerHour)}</b></span><span>Gás<br/><b className="text-stone-900">{brl.format(resource.cost.gasPerHour)}</b></span></div></div>)}</div></Card>
       <Card className="p-5"><Heading title="Produtos com maior custo" subtitle="Custo industrial real por ProductVariant"/><div className="mt-4 space-y-2">{(summary?.products ?? []).sort((a,b)=>b.costPerUnit-a.costPerUnit).map((product)=><Link key={product.productVariantId} href={`/custos/produtos/${product.productVariantId}`} className="group grid gap-3 rounded-xl border border-transparent p-3 transition hover:border-forest-100 hover:bg-forest-50/40 md:grid-cols-[1.2fr_.7fr_.7fr_110px_20px] md:items-center"><div><p className="text-sm font-semibold">{product.product}</p><p className="mt-1 text-[10px] text-stone-500">{product.line} • {product.sku} • {product.presentationGrams===1000?"1 kg":`${product.presentationGrams} g`}</p></div><div><p className="text-[10px] text-stone-500">Custo/un.</p><strong className="text-xs">{brl.format(product.costPerUnit)}</strong></div><div><p className="text-[10px] text-stone-500">Custo/kg</p><strong className="text-xs">{brl.format(product.costPerKg)}</strong></div><Badge tone={product.status === "CALCULATED" ? "success" : "warning"}>{product.status === "CALCULATED" ? "Calculado" : "Aguardando dados"}</Badge><ArrowRight size={14} className="text-stone-300 transition group-hover:translate-x-0.5"/></Link>)}</div></Card>
     </section>
-    <section className="mt-6"><Card className="p-5"><Heading title="Variações relevantes" subtitle="Diagnósticos serão exibidos somente quando houver lançamentos rastreáveis"/><div className="mt-4 flex items-center gap-3 rounded-xl border border-dashed p-5 text-xs text-stone-500"><Settings2 size={17}/><p>Nenhuma variação real disponível. O BBOS não apresenta causas sem origem auditável.</p></div></Card></section>
+    <section className="mt-6"><Card className="p-5"><Heading title="Variações relevantes" subtitle="Diagnósticos serão exibidos somente quando houver lançamentos rastreáveis"/><div className="mt-4"><HumanEmptyState title="Nenhuma variação real disponível." description="O BBOS não apresenta causas sem origem auditável." /></div></Card></section>
   </div>;
 }
 
