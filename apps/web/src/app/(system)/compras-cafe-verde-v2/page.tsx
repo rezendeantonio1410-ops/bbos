@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Bean, Check, ChevronLeft, Handshake, MapPinned, Package, Scale, ShieldCheck } from "lucide-react";
 import { Button, Card } from "@bbos/ui";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
@@ -75,6 +76,7 @@ type Broker = {
   tradeName?: string | null;
   active: boolean;
 };
+type ApprovedSample = { id: string; code: string; supplierId?: string | null; originUnitId?: string | null; state?: string | null; municipality?: string | null; region?: string | null; harvest?: string | null; species?: string | null; cultivar?: string | null; process?: string | null; screen?: string | null; informedDefects?: number | null; informedMoisture?: number | null; supplierLotCode?: string | null; supplier?: { name: string } | null; originUnit?: { name: string; state: string; municipality?: string | null; coffeeRegion?: { id: string; name: string } | null } | null; evaluations: { score?: number | null }[] };
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: "include", ...init });
@@ -103,6 +105,8 @@ function harvestOptions() {
 }
 
 export default function PurchaseFormV2Page() {
+  const searchParams = useSearchParams();
+  const sampleId = searchParams.get("sampleId");
   const [references, setReferences] = useState<ReferenceData | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [brokers, setBrokers] = useState<Broker[]>([]);
@@ -131,6 +135,7 @@ export default function PurchaseFormV2Page() {
   const [submittedNumber, setSubmittedNumber] = useState<string | null>(null);
   const [submittedPurchaseId, setSubmittedPurchaseId] = useState<string | null>(null);
   const [submittedStatus, setSubmittedStatus] = useState<string | null>(null);
+  const [approvedSample, setApprovedSample] = useState<ApprovedSample | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -145,6 +150,17 @@ export default function PurchaseFormV2Page() {
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar sessão."));
   }, []);
+
+  useEffect(() => {
+    if (!sampleId) return;
+    void req<ApprovedSample>(`${ROOT}/professional-samples/${sampleId}`)
+      .then((sample) => setApprovedSample(sample))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "Não foi possível carregar a amostra aprovada."));
+  }, [sampleId]);
+
+  useEffect(() => {
+    if (approvedSample?.state) setPurchaseState(approvedSample.state);
+  }, [approvedSample]);
 
   useEffect(() => {
     if (!purchaseState) {
@@ -162,6 +178,14 @@ export default function PurchaseFormV2Page() {
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar origem."));
   }, [purchaseState]);
+
+  useEffect(() => {
+    if (!approvedSample || !references) return;
+    if (approvedSample.supplierId && references.suppliers.some((item) => item.id === approvedSample.supplierId)) setSupplierId(approvedSample.supplierId);
+    setOriginUnitId(approvedSample.originUnitId ?? "");
+    setSpeciesCode(approvedSample.species ?? "");
+    if (approvedSample.harvest) setHarvest(approvedSample.harvest);
+  }, [approvedSample, references]);
 
   useEffect(() => {
     if (!supplierId) {
@@ -229,6 +253,7 @@ export default function PurchaseFormV2Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           supplierId,
+          professionalSampleId: approvedSample?.id,
           originUnitId: originUnit.id,
           idempotencyKey: crypto.randomUUID(),
           action: "SUBMIT",
@@ -293,6 +318,7 @@ export default function PurchaseFormV2Page() {
           <p className="mt-2 text-sm text-stone-500">Fluxo progressivo: origem → especificação → quantidade → comercial → governança.</p>
         </div>
       </div>
+      {approvedSample && <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Dados da amostra aprovada <b>{approvedSample.code}</b> carregados para esta compra. Revise os campos comerciais antes de enviar.</div>}
       {message && <p className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-success)]"><Check size={15} aria-hidden="true" />{message}</p>}
       {error && <p className="mt-3 rounded-xl border border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-critical)]" role="alert">{error}</p>}
 
@@ -300,7 +326,7 @@ export default function PurchaseFormV2Page() {
         {([["Origem", Boolean(supplier && originUnit), MapPinned], ["Especificação", Boolean(species && cultivar), Bean], ["Quantidade", totalWeight > 0, Package], ["Comercial", priceKg > 0, Handshake], ["Governança", Boolean(selectedContact?.canConfirmBusiness), ShieldCheck]] as const).map(([label, complete, Icon], index, items) => <span key={label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--bbos-text-secondary)]"><span className={`grid size-5 place-items-center rounded-full border ${complete ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`}><Icon size={11} aria-hidden="true" /></span>{label}{index < items.length - 1 && <span className="ml-0.5 text-[var(--bbos-text-muted)]" aria-hidden="true">→</span>}</span>)}
       </nav>
 
-      <form onSubmit={submit} className="mt-3 space-y-2.5">
+      <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} className="mt-3 space-y-2.5">
         <fieldset disabled={Boolean(submittedNumber)} className="contents">
         <Section title="A · Origem" tone="origin" icon={MapPinned}>
           <Field label="Estado"><select required className={input} value={purchaseState} onChange={(e) => setPurchaseState(e.target.value)}><option value="">Selecione</option>{states.map((value) => <option key={value}>{value}</option>)}</select></Field>
@@ -320,12 +346,12 @@ export default function PurchaseFormV2Page() {
         </Section>
 
         <Section title="B · Especificação contratada" tone="quality" icon={Bean}>
-          <Field label="Processo"><select name="process" className={input}>{["Natural", "Cereja Descascado", "Honey", "Lavado", "Fermentado", "Outro"].map((value) => <option key={value}>{value}</option>)}</select></Field>
+          <Field label="Processo"><select name="process" defaultValue={approvedSample?.process ?? "Natural"} className={input}>{["Natural", "Cereja Descascado", "Honey", "Lavado", "Fermentado", "Outro"].map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Qualidade"><select name="qualityCategory" className={input}>{["Especial", "Gourmet", "Fine Cup", "Good Cup", "Comercial", "Outra"].map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Peneira"><select required name="screenClassificationId" className={input} defaultValue=""><option value="" disabled>Selecione</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-          <Field label="Máx. defeitos"><input name="maxDefects" type="number" min="0" className={input} /></Field>
-          <Field label="Umidade máxima (%)"><select name="maxMoisturePercent" defaultValue="12.0" className={input}>{Array.from({ length: 26 }, (_, index) => (10 + index / 10).toFixed(1)).map((value) => <option key={value} value={value}>{value.replace(".", ",")} %</option>)}</select></Field>
-          <Field label="Pontuação mínima"><input name="minimumScore" type="number" step=".25" className={input} /></Field>
+          <Field label="Máx. defeitos"><input name="maxDefects" type="number" min="0" defaultValue={approvedSample?.informedDefects ?? undefined} className={input} /></Field>
+          <Field label="Umidade máxima (%)"><select name="maxMoisturePercent" defaultValue={approvedSample?.informedMoisture?.toString() ?? "12.0"} className={input}>{Array.from({ length: 26 }, (_, index) => (10 + index / 10).toFixed(1)).map((value) => <option key={value} value={value}>{value.replace(".", ",")} %</option>)}</select></Field>
+          <Field label="Pontuação mínima"><input name="minimumScore" type="number" step=".25" defaultValue={approvedSample?.evaluations?.[0]?.score ?? undefined} className={input} /></Field>
         </Section>
 
         <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>

@@ -32,6 +32,7 @@ import { UnconfiguredStateRegistrationProvider } from "./state-registration.prov
 import { BrokersController } from "./brokers.controller";
 import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
+import { ProfessionalSamplesController } from "./professional-samples.controller";
 
 @Module({
   controllers: [
@@ -54,6 +55,7 @@ import { CuppingTrainingController } from "./cupping-training.controller";
     BrokersController,
     CuppingController,
     CuppingTrainingController,
+    ProfessionalSamplesController,
   ],
   providers: [
     DashboardService,

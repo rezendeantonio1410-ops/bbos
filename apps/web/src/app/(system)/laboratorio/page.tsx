@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, FlaskConical, X } from "lucide-react";
+import { Check, FlaskConical, Plus, X } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 
@@ -61,6 +61,7 @@ type Sample = {
 };
 
 const api = `${getApiBaseUrl()}/receipts`;
+const professionalApi = `${getApiBaseUrl()}/professional-samples`;
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: "include", ...init });
@@ -68,6 +69,36 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (!response.ok)
     throw new Error(body.message ?? "Não foi possível carregar as amostras.");
   return body as T;
+}
+
+type SupplierOption = { id: string; name: string; originUnits: { id: string; name: string; state: string; municipality?: string | null; coffeeRegion?: { name: string } | null }[] };
+type ProfessionalSample = { id: string; code: string; source: string; status: string; supplier?: { name: string } | null; originUnit?: { name: string } | null; harvest?: string | null; species?: string | null; cultivar?: string | null; process?: string | null; evaluations: { score?: number | null }[] };
+
+function OfferSampleForm({ close, saved }: { close: () => void; saved: () => void }) {
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [supplierId, setSupplierId] = useState("");
+  const [originUnitId, setOriginUnitId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { void request<SupplierOption[]>(`${professionalApi}/options`).then(setSuppliers).catch((e) => setError(e instanceof Error ? e.message : "Não foi possível carregar fornecedores.")); }, []);
+  const supplier = suppliers.find((item) => item.id === supplierId);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true); setError("");
+    try {
+      const payload = {
+        source: "OFFER", supplierId, originUnitId: originUnitId || undefined,
+        contactName: data.get("contactName"), country: data.get("country"), state: data.get("state"), municipality: data.get("municipality"), region: data.get("region"), harvest: data.get("harvest"), species: data.get("species"), cultivar: data.get("cultivar"), process: data.get("process"), screen: data.get("screen"),
+        informedDefects: data.get("informedDefects") ? Number(data.get("informedDefects")) : undefined,
+        informedMoisture: data.get("informedMoisture") ? Number(data.get("informedMoisture")) : undefined,
+        supplierLotCode: data.get("supplierLotCode"), receivedAt: data.get("receivedAt") || undefined, notes: data.get("notes"),
+      };
+      await request(`${professionalApi}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      saved(); close();
+    } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível registrar a amostra."); } finally { setBusy(false); }
+  };
+  return <div className="fixed inset-0 z-50 bg-black/30 p-3"><form onSubmit={submit} className="mx-auto flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-xl"><header className="flex items-center justify-between border-b p-5"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Amostra de oferta</p><h2 className="mt-1 text-xl font-bold">Registrar café antes da compra</h2></div><button type="button" onClick={close} aria-label="Fechar"><X /></button></header><main className="grid flex-1 gap-3 overflow-y-auto p-5 sm:grid-cols-2"><label className="text-sm font-semibold sm:col-span-2">Fornecedor<select required value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setOriginUnitId(""); }} className="mt-1 w-full rounded-xl border p-3"><option value="">Selecione</option>{suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-sm font-semibold">Fazenda/unidade<select value={originUnitId} onChange={(e) => setOriginUnitId(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Não informada</option>{supplier?.originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-sm font-semibold">Contato<input name="contactName" className="mt-1 w-full rounded-xl border p-3" /></label>{["country:País", "state:Estado", "municipality:Município", "region:Região cafeeira", "harvest:Safra", "species:Espécie", "cultivar:Cultivar", "process:Processo", "screen:Peneira", "supplierLotCode:Lote do fornecedor", "receivedAt:Data de recebimento"].map((entry) => { const [name, label] = entry.split(":"); return <label key={name} className="text-sm font-semibold">{label}<input name={name} type={name === "receivedAt" ? "date" : "text"} className="mt-1 w-full rounded-xl border p-3" /></label>; })}<label className="text-sm font-semibold">Defeitos informados<input name="informedDefects" type="number" min="0" className="mt-1 w-full rounded-xl border p-3" /></label><label className="text-sm font-semibold">Umidade informada (%)<input name="informedMoisture" type="number" step=".1" min="0" className="mt-1 w-full rounded-xl border p-3" /></label><label className="text-sm font-semibold sm:col-span-2">Observações<textarea name="notes" className="mt-1 min-h-20 w-full rounded-xl border p-3" /></label>{error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 sm:col-span-2">{error}</p>}</main><footer className="flex justify-end gap-2 border-t p-4"><Button type="button" onClick={close} className="border bg-white text-stone-700">Cancelar</Button><Button type="submit" disabled={busy}>{busy ? "Salvando..." : "Registrar amostra"}</Button></footer></form></div>;
 }
 
 const statusLabel: Record<string, string> = {
@@ -327,12 +358,14 @@ function SampleDrawer({
 
 export default function LaboratorioPage() {
   const [samples, setSamples] = useState<Sample[]>([]);
+  const [professionalSamples, setProfessionalSamples] = useState<ProfessionalSample[]>([]);
+  const [offerForm, setOfferForm] = useState(false);
   const [filter, setFilter] = useState("pending");
   const [selected, setSelected] = useState<Sample | null>(null);
   const [error, setError] = useState("");
   const load = () =>
-    request<Sample[]>(`${api}/lab-samples`)
-      .then(setSamples)
+    Promise.all([request<Sample[]>(`${api}/lab-samples`), request<ProfessionalSample[]>(professionalApi)])
+      .then(([received, professional]) => { setSamples(received); setProfessionalSamples(professional); })
       .catch((e) =>
         setError(
           e instanceof Error
@@ -379,6 +412,11 @@ export default function LaboratorioPage() {
         Amostras recebidas, comparação contratual e liberação de lotes.
       </p>
       <Link href="/laboratorio/cupping" className="mt-4 inline-flex min-h-10 items-center rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Abrir central de Cupping</Link>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button onClick={() => setOfferForm(true)}><Plus size={16} /> Nova amostra</Button>
+        <Link href="/laboratorio/cupping" className="inline-flex min-h-10 items-center rounded-xl border px-4 text-sm font-semibold">Histórico profissional</Link>
+        <Link href="/laboratorio/cupping-training" className="inline-flex min-h-10 items-center rounded-xl border px-4 text-sm font-semibold">Training & calibração</Link>
+      </div>
       </header>
       {error && (
         <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">
@@ -468,6 +506,10 @@ export default function LaboratorioPage() {
           </Card>
         )}
       </section>
+      <section className="mt-8">
+        <div className="mb-3 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Cupping profissional</p><h2 className="mt-1 text-xl font-bold">Amostras de oferta</h2></div><span className="text-sm text-stone-500">{professionalSamples.length} registradas</span></div>
+        {professionalSamples.length === 0 ? <Card className="p-8 text-center text-sm text-stone-500"><p className="font-semibold">Nenhuma amostra esperando por você.</p><p className="mt-1">Registre uma oferta antes da compra ou analise um lote recebido.</p></Card> : <div className="grid gap-3 lg:grid-cols-2">{professionalSamples.filter((item) => item.source === "OFFER").map((item) => <Card key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-forest-700">{item.code} · Amostra de oferta</p><h3 className="mt-1 font-bold">{item.supplier?.name ?? "Fornecedor não informado"}</h3><p className="mt-1 text-sm text-stone-500">{item.originUnit?.name ?? "Origem não informada"} · {item.species ?? "—"} · {item.cultivar ?? "—"} · Safra {item.harvest ?? "—"}</p></div><Badge tone={item.status === "APPROVED_FOR_PURCHASE" ? "success" : item.status === "REJECTED" ? "danger" : "warning"}>{item.status === "APPROVED_FOR_PURCHASE" ? "Aprovada para compra" : item.status === "IN_ANALYSIS" ? "Em análise" : item.status === "EVALUATED" ? "Avaliada" : item.status === "REJECTED" ? "Reprovada" : "Recebida"}</Badge></div><div className="mt-3 flex flex-wrap gap-2"><Link href={`/laboratorio/cupping-profissional/${encodeURIComponent(item.id)}`} className="inline-flex min-h-10 items-center rounded-xl border px-4 text-sm font-semibold">Abrir cupping</Link>{item.status === "APPROVED_FOR_PURCHASE" && <Link href={`/compras-cafe-verde-v2?sampleId=${encodeURIComponent(item.id)}`} className="inline-flex min-h-10 items-center rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">Usar em nova compra</Link>}</div></Card>)}</div>}
+      </section>
       {selected && (
         <SampleDrawer
           sample={selected}
@@ -475,6 +517,7 @@ export default function LaboratorioPage() {
           reload={load}
         />
       )}
+      {offerForm && <OfferSampleForm close={() => setOfferForm(false)} saved={() => setError("")} />}
     </div>
   );
 }

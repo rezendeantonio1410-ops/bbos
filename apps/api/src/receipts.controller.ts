@@ -15,6 +15,8 @@ import {
   CostType,
   EventType,
   GreenCoffeeQualityStatus,
+  ProfessionalSampleSource,
+  ProfessionalSampleStatus,
   Prisma,
   PrismaClient,
 } from "@bbos/database";
@@ -292,7 +294,7 @@ export class ReceiptsController {
           }),
           transaction.greenCoffeePurchase.findFirst({
             where: { id: body.purchaseId, companyId: body.companyId },
-            include: { receipts: { select: { netWeightKg: true } } },
+            include: { receipts: { select: { netWeightKg: true } }, professionalSample: true },
           }),
         ]);
         if (
@@ -430,6 +432,39 @@ export class ReceiptsController {
         await transaction.greenCoffeeLabSample.create({
           data: { receiptId: receipt.id, sampleNumber },
         });
+        if (purchase.professionalSample) {
+          const professionalSequence =
+            (await transaction.professionalCoffeeSample.count({ where: { companyId: body.companyId } })) + 1;
+          await transaction.professionalCoffeeSample.create({
+            data: {
+              companyId: body.companyId,
+              source: ProfessionalSampleSource.RECEIPT,
+              code: `AM-${new Date().getFullYear()}-${String(professionalSequence).padStart(6, "0")}`,
+              status: ProfessionalSampleStatus.RECEIVED,
+              supplierId: receipt.supplierId,
+              contactName: purchase.professionalSample.contactName,
+              country: receipt.country,
+              state: receipt.state,
+              municipality: receipt.municipality,
+              region: receipt.origin,
+              harvest: receipt.harvest,
+              species: receipt.species,
+              cultivar: receipt.variety,
+              process: receipt.process,
+              screen: receipt.screen,
+              informedDefects: receipt.defects,
+              informedMoisture: receipt.moisturePercent,
+              supplierLotCode: receipt.supplierLotCode,
+              receivedAt: receipt.confirmedAt,
+              notes: receipt.notes,
+              purchaseId: purchase.id,
+              receiptId: receipt.id,
+              sourceSampleId: purchase.professionalSample.id,
+              createdById: actor.id,
+              createdByName: actor.name,
+            },
+          });
+        }
         if (requiresApproval) {
           const request = await transaction.greenCoffeeApprovalRequest.create({
             data: {
