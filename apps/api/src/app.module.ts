@@ -33,6 +33,7 @@ import { BrokersController } from "./brokers.controller";
 import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
+import { CuppingPublicController } from "./cupping-public.controller";
 
 @Module({
   controllers: [
@@ -56,6 +57,7 @@ import { ProfessionalSamplesController } from "./professional-samples.controller
     CuppingController,
     CuppingTrainingController,
     ProfessionalSamplesController,
+    CuppingPublicController,
   ],
   providers: [
     DashboardService,
