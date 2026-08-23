@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bean, Check, Handshake, MapPinned, Plus, Scale, ShieldCheck, X } from "lucide-react";
+import { ArrowRight, Bean, Check, Handshake, MapPinned, Plus, Scale, ShieldCheck, X } from "lucide-react";
 import { Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
@@ -83,14 +83,55 @@ type Purchase = {
   purchaseNumber: string;
   approvalStatus: string;
   operationalStatus: string;
+  externalAcceptanceStatus?: string;
   harvest: string;
   contractedWeightKg: number;
   totalValue: number;
+  createdAt?: string;
   supplier: Supplier;
   farmName?: string;
   species?: string;
   variety?: string;
 };
+
+const approvalLabels: Record<string, string> = {
+  DRAFT: "Rascunho",
+  PENDING_APPROVAL: "Aguardando aprovação",
+  APPROVED: "Aprovada",
+  REJECTED: "Reprovada",
+};
+
+const operationalLabels: Record<string, string> = {
+  NOT_STARTED: "Não iniciada",
+  AWAITING_DELIVERY: "Aguardando entrega",
+  PARTIALLY_RECEIVED: "Recebimento parcial",
+  RECEIVED: "Recebida",
+  CANCELLED: "Cancelada",
+};
+
+function purchaseStatus(purchase: Purchase) {
+  if (purchase.approvalStatus === "PENDING_APPROVAL") return "Aguardando aprovação";
+  if (purchase.approvalStatus === "REJECTED") return "Reprovada";
+  if (purchase.approvalStatus === "DRAFT") return "Rascunho";
+  if (purchase.externalAcceptanceStatus === "ACCEPTED") return operationalLabels[purchase.operationalStatus] ?? "Confirmada";
+  if (purchase.approvalStatus === "APPROVED") return "Aprovada";
+  return approvalLabels[purchase.approvalStatus] ?? purchase.approvalStatus;
+}
+
+function nextAction(purchase: Purchase) {
+  if (purchase.approvalStatus === "PENDING_APPROVAL") return "Aprovar ou reprovar";
+  if (purchase.approvalStatus === "APPROVED" && purchase.externalAcceptanceStatus !== "ACCEPTED") return "Confirmar compra";
+  if (purchase.approvalStatus === "APPROVED") return operationalLabels[purchase.operationalStatus] ?? "Aguardando entrega";
+  if (purchase.approvalStatus === "REJECTED") return "Revisar decisão";
+  return "Continuar compra";
+}
+
+function statusClass(purchase: Purchase) {
+  if (purchase.approvalStatus === "REJECTED") return "border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] text-[var(--bbos-state-critical)]";
+  if (purchase.approvalStatus === "PENDING_APPROVAL") return "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]";
+  if (purchase.approvalStatus === "APPROVED") return "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]";
+  return "border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-secondary)]";
+}
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: "include", ...init });
@@ -362,10 +403,11 @@ export default function GreenCoffeePurchasesV2() {
       <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((row) => (
           <Card key={row.id} className="p-5">
-            <div className="flex items-start justify-between gap-3"><b>{row.purchaseNumber}</b><span className="text-xs font-bold text-stone-500">{row.approvalStatus}</span></div>
+            <div className="flex items-start justify-between gap-3"><div><b>{row.purchaseNumber}</b><p className="mt-1 text-xs text-[var(--bbos-text-muted)]">{row.createdAt ? new Date(row.createdAt).toLocaleDateString("pt-BR") : "—"}</p></div><span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass(row)}`}>{purchaseStatus(row)}</span></div>
             <p className="mt-2 text-sm font-semibold">{row.supplier?.name ?? "—"}</p>
             <p className="mt-1 text-xs text-stone-500">{row.farmName ?? "—"} · Safra {row.harvest}</p>
             <div className="mt-4 flex justify-between border-t pt-3 text-sm"><span>{row.contractedWeightKg.toLocaleString("pt-BR")} kg</span><b>{brl(row.totalValue)}</b></div>
+            <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3"><span className="text-xs text-[var(--bbos-text-secondary)]"><b>Próxima ação</b><br />{nextAction(row)}</span><Link href={`/compras-cafe-verde/${row.id}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[var(--bbos-action-primary)] px-3.5 text-xs font-bold text-white hover:opacity-90">Abrir compra <ArrowRight size={14} aria-hidden="true" /></Link></div>
           </Card>
         ))}
       </div>
