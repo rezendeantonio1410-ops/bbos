@@ -18,7 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Badge, Card } from "@bbos/ui";
+import { Badge, Card, HumanEmptyState } from "@bbos/ui";
 import type { Period, SalesProductPerformance } from "@bbos/shared";
 import {
   getAllowedPresentations,
@@ -859,11 +859,7 @@ export default function SalesPage() {
               </Card>
             </Link>
           ))}
-          {!products.length && (
-            <div className="rounded-2xl border border-dashed py-12 text-center text-sm text-stone-500">
-              Nenhum produto encontrado.
-            </div>
-          )}
+          {!products.length && <HumanEmptyState title="Nenhum produto encontrado." description="Ajuste a busca para visualizar resultados comerciais." />}
         </div>
       </section>
       <section className="mt-8 grid gap-5 xl:grid-cols-2">

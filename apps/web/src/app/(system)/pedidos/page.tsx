@@ -12,7 +12,7 @@ import {
   ShoppingBag,
   X,
 } from "lucide-react";
-import { Badge, Card } from "@bbos/ui";
+import { Badge, Card, HumanEmptyState } from "@bbos/ui";
 
 const API = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api"}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", {
@@ -403,14 +403,7 @@ export default function OrdersPage() {
               </div>
             </Card>
           ))}
-          {!visible.length && (
-            <Card className="py-14 text-center">
-              <PackageCheck className="mx-auto text-stone-300" />
-              <p className="mt-3 text-sm font-semibold">
-                Nenhum pedido neste filtro
-              </p>
-            </Card>
-          )}
+          {!visible.length && <HumanEmptyState title="Nenhum pedido neste filtro." description="Quando houver movimentação, ela aparecerá aqui com a próxima ação." />}
         </div>
       </section>
       {creating && (
