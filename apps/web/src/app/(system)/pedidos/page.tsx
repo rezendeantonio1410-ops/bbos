@@ -6,7 +6,6 @@ import {
   Check,
   ChevronRight,
   Clock3,
-  PackageCheck,
   Plus,
   Send,
   ShoppingBag,

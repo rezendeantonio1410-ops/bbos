@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, FlaskConical, X } from "lucide-react";
+import { FlaskConical, X } from "lucide-react";
 import { Badge, Button, Card, HumanEmptyState } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 
