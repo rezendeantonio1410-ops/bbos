@@ -1,0 +1,60 @@
+"use client";
+
+import * as React from "react";
+import { ChevronLeft, ChevronRight, RotateCcw, Sparkles } from "lucide-react";
+import { CuppingSensoryLibrary, type MobileSelection } from "@/components/cupping-mobile";
+import { CuppingAftertaste } from "@/components/cupping-aftertaste";
+import { CuppingAcidity } from "@/components/cupping-acidity";
+import { CuppingBody } from "@/components/cupping-body";
+import type { OlfactoryStageSelection } from "@bbos/shared";
+
+const STORAGE_KEY = "bbos-cupping-sensory-preview-v2";
+const stages = [
+  { id: "fragrance", label: "Fragrância", context: "FRAGRANCE" as const },
+  { id: "aroma", label: "Aroma", context: "AROMA" as const },
+  { id: "flavor", label: "Sabor", context: "FLAVOR" as const },
+  { id: "aftertaste", label: "Finalização" },
+  { id: "acidity", label: "Acidez" },
+  { id: "body", label: "Corpo" },
+] as const;
+type StageId = (typeof stages)[number]["id"];
+type PreviewState = {
+  selections: MobileSelection[];
+  aftertaste: OlfactoryStageSelection[];
+  acidity: { intensity?: string; types: string[]; references: string[]; characters: string[]; score?: number };
+  body: { weight?: string; textures: string[]; score?: number; memory: string };
+};
+const initialState: PreviewState = { selections: [], aftertaste: [], acidity: { types: [], references: [], characters: [] }, body: { textures: [], memory: "" } };
+
+export default function PreviewClient() {
+  const [stage, setStage] = React.useState<StageId>("fragrance");
+  const [state, setState] = React.useState<PreviewState>(initialState);
+  const [hydrated, setHydrated] = React.useState(false);
+  React.useEffect(() => {
+    try { const raw = window.localStorage.getItem(STORAGE_KEY); if (raw) setState({ ...initialState, ...JSON.parse(raw) }); } catch { /* preview remains usable */ }
+    setHydrated(true);
+  }, []);
+  React.useEffect(() => { if (hydrated) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [hydrated, state]);
+  const index = stages.findIndex((item) => item.id === stage);
+  const current = stages[index] ?? stages[0];
+  const sensoryContext = "context" in current ? current.context : undefined;
+  const go = (next: number) => setStage(stages[Math.max(0, Math.min(stages.length - 1, next))]?.id ?? stage);
+  const reset = () => { setState(initialState); setStage("fragrance"); window.localStorage.removeItem(STORAGE_KEY); };
+  return <main className="mx-auto min-h-screen w-full max-w-6xl px-3 pb-12 pt-20 sm:px-6">
+    <header className="rounded-[2rem] border border-white/80 bg-white/75 p-5 shadow-[0_18px_50px_rgba(83,45,31,.08)] backdrop-blur sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-orange-700">Preview local · desenvolvimento</p><h1 className="mt-1 text-3xl font-black tracking-tight text-[#432a1e] sm:text-4xl">Cupping sensorial</h1><p className="mt-2 max-w-2xl text-sm text-[#6f5c51]">Explore a roda, construa Sua Xícara e experimente as etapas recuperadas sem criar dados no servidor.</p></div><button type="button" onClick={reset} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-orange-200 bg-white px-4 text-xs font-black text-orange-800"><RotateCcw size={15} /> Limpar preview</button></div>
+      <nav aria-label="Etapas sensoriais" className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-6">{stages.map((item, itemIndex) => <button key={item.id} type="button" onClick={() => setStage(item.id)} aria-current={item.id === stage ? "step" : undefined} className={`min-h-12 rounded-2xl border px-2 text-left text-xs font-black transition motion-reduce:transition-none ${item.id === stage ? "border-orange-500 bg-orange-500 text-white shadow-lg shadow-orange-200" : itemIndex < index ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-white bg-white/80 text-[#765e50]"}`}><span className="mr-1 text-[10px] opacity-70">{String(itemIndex + 1).padStart(2, "0")}</span>{item.label}</button>)}</nav>
+    </header>
+    <section className="mt-5 rounded-[2rem] border border-white/80 bg-white/45 p-2 sm:p-4"><div className="mb-3 flex items-center gap-2 px-2 text-xs font-bold text-[#6f5c51]"><Sparkles size={16} className="text-fuchsia-600" /> Preview sem sessão: as escolhas ficam somente neste navegador.</div>
+      {sensoryContext ? <CuppingSensoryLibrary context={sensoryContext} value={state.selections} onChange={(selections) => setState((old) => ({ ...old, selections }))} training mode="educational" /> : null}
+      {stage === "aftertaste" && <CuppingAftertaste persistence={undefined} intensity={undefined} characters={[]} selections={state.aftertaste} flavorSelections={state.selections.filter((item) => item.context === "FLAVOR") as OlfactoryStageSelection[]} onPersistence={() => undefined} onIntensity={() => undefined} onCharacters={() => undefined} onSelections={setAftertaste(setState)} onExplore={() => setStage("flavor")} />}
+      {stage === "acidity" && <CuppingAcidity {...state.acidity} selectedTypes={state.acidity.types} characters={state.acidity.characters} onIntensity={(intensity) => setState((old) => ({ ...old, acidity: { ...old.acidity, intensity } }))} onTypes={(types) => setState((old) => ({ ...old, acidity: { ...old.acidity, types } }))} onReferences={(references) => setState((old) => ({ ...old, acidity: { ...old.acidity, references } }))} onCharacters={(characters) => setState((old) => ({ ...old, acidity: { ...old.acidity, characters } }))} onScore={(score) => setState((old) => ({ ...old, acidity: { ...old.acidity, score } }))} />}
+      {stage === "body" && <CuppingBody weight={state.body.weight} selectedTextures={state.body.textures} score={state.body.score} memory={state.body.memory} onWeight={(weight) => setState((old) => ({ ...old, body: { ...old.body, weight } }))} onTextures={(textures) => setState((old) => ({ ...old, body: { ...old.body, textures } }))} onScore={(score) => setState((old) => ({ ...old, body: { ...old.body, score } }))} onMemory={(memory) => setState((old) => ({ ...old, body: { ...old.body, memory } }))} />}
+    </section>
+    <footer className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/75 p-3"><button type="button" onClick={() => go(index - 1)} disabled={index === 0} className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-black text-[#765e50] disabled:opacity-40"><ChevronLeft size={17} /> Anterior</button><span className="text-xs font-black text-[#765e50]">{index + 1} de {stages.length}</span><button type="button" onClick={() => go(index + 1)} disabled={index === stages.length - 1} className="inline-flex min-h-11 items-center gap-1 rounded-full bg-[#512b1a] px-4 text-xs font-black text-white disabled:opacity-40">Próxima <ChevronRight size={17} /></button></footer>
+  </main>;
+}
+
+function setAftertaste(setState: React.Dispatch<React.SetStateAction<PreviewState>>) {
+  return (aftertaste: OlfactoryStageSelection[]) => setState((old) => ({ ...old, aftertaste }));
+}
