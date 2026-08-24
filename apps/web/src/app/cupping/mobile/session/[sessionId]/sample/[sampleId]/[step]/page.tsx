@@ -28,7 +28,7 @@ import {
   type CuppingAttribute,
   type OlfactoryStageSelection,
 } from "@bbos/shared";
-import { cacheCuppingSession, cuppingFetch, CUPPING_API, getCuppingToken, readCachedCuppingSession, recoverCuppingToken } from "@/lib/cupping-mobile-access";
+import { cacheCuppingSession, fetchCurrentCuppingSession, getCuppingToken, readCachedCuppingSession, recoverCuppingToken, saveCurrentCuppingEvaluation } from "@/lib/cupping-mobile-access";
 import {
   BalanceIntegrationVisual,
   CuppingScorePicker,
@@ -42,7 +42,6 @@ import { CuppingOlfactoryTemplate } from "@/components/cupping-olfactory-templat
 import { CuppingAftertaste } from "@/components/cupping-aftertaste";
 import { CuppingAcidity } from "@/components/cupping-acidity";
 import { CuppingBody } from "@/components/cupping-body";
-const API = CUPPING_API;
 const steps = [
   "aroma",
   "sabor",
@@ -227,15 +226,8 @@ export default function CuppingStepPage() {
       } catch {}
     }
     if (local || cachedContext) loaded.current = true;
-    cuppingFetch(`${API}/cupping/mobile/sessions/${sessionId}`, {
-      headers: { authorization: `Bearer ${token ?? ""}` },
-    }, { retries: 1, timeoutMs: 8_000 })
-      .then((r) => (r.ok ? r.json() : null))
+    fetchCurrentCuppingSession(sessionId, token)
       .then((data) => {
-        if (!data) {
-          loaded.current = true;
-          return;
-        }
         setContext(data);
         cacheCuppingSession(sessionId, data);
         const evaluation = data?.session?.evaluations?.find(
@@ -267,17 +259,7 @@ export default function CuppingStepPage() {
       if (!navigator.onLine) return;
       const token = getCuppingToken(sessionId);
       try {
-      const response = await cuppingFetch(
-        `${API}/cupping/mobile/sessions/${sessionId}/samples/${sampleId}/evaluation`,
-        {
-          method: "PUT",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${token ?? ""}`,
-          },
-          body: JSON.stringify(draft),
-        }, { retries: 1, timeoutMs: 8_000 },
-      );
+      const response = await saveCurrentCuppingEvaluation(sessionId, draft, false, token);
       setSaveState(response.ok ? "Salvo" : "Alterações não salvas");
       } catch {
         setSaveState("Sem conexão · rascunho neste dispositivo");
@@ -450,16 +432,10 @@ export default function CuppingStepPage() {
     if (!confirm("Finalizar e bloquear a edição normal desta avaliação?"))
       return;
     const token = getCuppingToken(sessionId);
-    const response = await fetch(
-      `${API}/cupping/mobile/sessions/${sessionId}/samples/${sampleId}/finalize`,
-      { method: "POST", headers: { authorization: `Bearer ${token ?? ""}` } },
-    );
+    const response = await saveCurrentCuppingEvaluation(sessionId, draft, true, token);
     if (response.ok) {
-      const finalizedResult = await response.json();
       localStorage.removeItem(key);
-      router.replace(finalizedResult.navigation?.nextSampleId
-        ? `/cupping/mobile/session/${sessionId}/sample/${finalizedResult.navigation.nextSampleId}/aroma`
-        : `/cupping/mobile/session/${sessionId}?completed=1`);
+      router.replace(`/cupping/mobile/session/${sessionId}?completed=1`);
     } else
       setError(
         (await response.json().catch(() => null))?.message ??

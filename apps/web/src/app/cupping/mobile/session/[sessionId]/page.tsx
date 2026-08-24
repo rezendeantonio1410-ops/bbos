@@ -5,7 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Check, ChevronRight, Clock3, RefreshCw, Sparkles } from "lucide-react";
-import { cacheCuppingSession, cuppingFetch, CUPPING_API, maskCuppingToken, readCachedCuppingSession, recoverCuppingToken, traceCuppingAccess } from "@/lib/cupping-mobile-access";
+import { cacheCuppingSession, fetchCurrentCuppingSession, readCachedCuppingSession, recoverCuppingToken, traceCuppingAccess, CUPPING_API, maskCuppingToken } from "@/lib/cupping-mobile-access";
 
 const API = CUPPING_API;
 
@@ -21,27 +21,15 @@ export default function MobileSessionPage() {
     const token = recoverCuppingToken(sessionId);
     const cached = readCachedCuppingSession<any>(sessionId);
     if (cached) setData(cached);
-    if (!token) {
-      traceCuppingAccess("session:missing-token", { url: window.location.href, pathname: window.location.pathname, sessionId, hashPresent: Boolean(window.location.hash), apiBase: API });
-      setAccessError("Acesso não encontrado. Abra novamente o convite enviado pelo laboratório.");
-      setLoading(false);
-      return () => { active = false; };
-    }
+    if (!token) traceCuppingAccess("session:using-authenticated-main-session", { sessionId, apiBase: API });
     setLoading(true);
     setAccessError("");
-    const endpoint = `${API}/cupping/mobile/sessions/${sessionId}`;
+    const endpoint = `${API}/cupping/sessions`;
     traceCuppingAccess("session:start", { url: window.location.href, pathname: window.location.pathname, sessionId, token: maskCuppingToken(token), endpoint, apiBase: API });
-    cuppingFetch(endpoint, {
-      headers: { authorization: `Bearer ${token ?? ""}` },
-    }, { retries: 1, timeoutMs: 8_000 })
-      .then(async (response) => {
-        const responseBody = await response.clone().json().catch(() => null);
-        traceCuppingAccess("session:response", { status: response.status, endpoint, body: response.ok ? { sessionId: responseBody?.session?.id, participantId: responseBody?.participant?.id } : responseBody });
-        if (!response.ok) {
-          const body = responseBody;
-          throw new Error(body?.message ?? "Não foi possível validar o acesso a esta sessão.");
-        }
-        return response.json();
+    fetchCurrentCuppingSession(sessionId, token)
+      .then((context) => {
+        traceCuppingAccess("session:response", { status: 200, endpoint, body: { sessionId: context.session.id, participantId: context.participant.id } });
+        return context;
       })
       .then((context) => {
         if (!active) return;

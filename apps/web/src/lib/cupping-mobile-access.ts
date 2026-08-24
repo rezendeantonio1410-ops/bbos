@@ -6,6 +6,13 @@ export const sessionCacheKey = (sessionId: string) => `cupping-session:${session
 export const maskCuppingToken = (token?: string | null) =>
   token ? `${token.slice(0, 6)}…${token.slice(-4)}` : "ausente";
 
+type CurrentCuppingSession = {
+  id: string;
+  sample: { id: string; sampleNumber?: string | null; [key: string]: unknown };
+  evaluations?: Array<{ sampleId?: string; status?: string; completedAt?: string | null }>;
+  [key: string]: unknown;
+};
+
 export function traceCuppingAccess(event: string, details: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "production") console.info(`[cupping-mobile] ${event}`, details);
 }
@@ -76,4 +83,34 @@ export async function cuppingFetch(
     await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
   }
   throw lastError;
+}
+
+export async function fetchCurrentCuppingSession(sessionId: string, token?: string | null) {
+  const response = await cuppingFetch(`${CUPPING_API}/cupping/sessions`, {
+    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+  }, { retries: 1, timeoutMs: 8_000 });
+  if (!response.ok) throw new Error("Não foi possível carregar a sessão de cupping.");
+  const sessions = await response.json() as CurrentCuppingSession[];
+  const current = sessions.find((item) => item.id === sessionId);
+  if (!current) throw new Error("Sessão de cupping não encontrada.");
+  const sample = current.sample;
+  return {
+    session: {
+      ...current,
+      evaluations: current.evaluations?.map((evaluation) => ({ ...evaluation, sampleId: sample.id, status: evaluation.completedAt ? "COMPLETED" : "IN_PROGRESS" })),
+      samples: [{ sample: { ...sample, id: sample.id, sampleCode: sample.sampleNumber ?? sample.id } }],
+    },
+    participant: { id: "current-user", name: "Minha avaliação" },
+    progress: { samples: [{ sampleId: sample.id, state: current.evaluations?.some((item) => item.completedAt) ? "COMPLETED" : "IN_PROGRESS" }], overall: { state: current.evaluations?.some((item) => item.completedAt) ? "COMPLETED" : "IN_PROGRESS" } },
+  };
+}
+
+export async function saveCurrentCuppingEvaluation(sessionId: string, draft: { scores: Record<string, number>; defects?: unknown; sensoryNotes?: unknown }, complete: boolean, token?: string | null) {
+  const attributes = { ...draft.scores, fragrance: draft.scores.fragranceAroma ?? draft.scores.fragrance };
+  delete (attributes as Record<string, unknown>).fragranceAroma;
+  return cuppingFetch(`${CUPPING_API}/cupping/sessions/${sessionId}/evaluation`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ attributes, defects: draft.defects, sensoryNotes: draft.sensoryNotes, complete }),
+  }, { retries: 1, timeoutMs: 8_000 });
 }
