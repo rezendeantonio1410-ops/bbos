@@ -8,6 +8,7 @@ export type CircularSensoryItem = {
   imageKey: string;
   color: string;
   assetPath?: string;
+  assetPaths?: string[];
   sensoryHint?: string;
 };
 
@@ -19,6 +20,7 @@ const fruitColors: Record<string, string> = {
 };
 
 function Pictogram({ item }: { item: CircularSensoryItem }) {
+  if (item.assetPaths?.length) return <svg viewBox="0 0 72 54" aria-hidden="true">{item.assetPaths.slice(0, 2).map((asset, index) => <image key={asset} href={asset} x={index ? 25 : 0} y={index ? 5 : 0} width="48" height="48" preserveAspectRatio="xMidYMid meet" />)}</svg>;
   if (item.assetPath)
     return <svg viewBox="0 0 54 54" aria-hidden="true"><image href={item.assetPath} width="54" height="54" preserveAspectRatio="xMidYMid meet" /></svg>;
   const key = item.imageKey.toLowerCase();
@@ -56,6 +58,7 @@ export function CircularSensoryNavigator({ items, level, title, breadcrumb, sele
   selected: string[]; onItem(item: CircularSensoryItem): void; onBack?(): void; immersive?: boolean;
 }) {
   const count = items.length;
+  const visualLevel = level as string;
   return <section className="w-full" aria-label={`${title}: navegação sensorial circular`}>
     {onBack && <button type="button" onClick={onBack} className="mb-2 inline-flex min-h-11 items-center gap-1 px-1 text-sm font-bold text-slate-800"><ChevronLeft size={19}/> {breadcrumb.at(-1) ?? "Voltar"}</button>}
     <p className="mb-3 min-h-5 text-xs font-semibold text-slate-500">{breadcrumb.length ? breadcrumb.join(" › ") : "Roda de famílias sensoriais"}</p>
@@ -72,11 +75,15 @@ export function CircularSensoryNavigator({ items, level, title, breadcrumb, sele
         })}
         <div className="pointer-events-none absolute left-1/2 top-1/2 grid size-[28%] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-amber-100 bg-[#fffaf4] text-center shadow-inner"><span><Coffee size={28} className="mx-auto text-[#512b1a]"/><b className="mt-1 block px-2 text-[10px] leading-3">{title}</b><small className="mt-1 block text-[8px] uppercase text-slate-500">{selected.length} selecionado{selected.length === 1 ? "" : "s"}</small></span></div>
       </div>
-    ) : <div className="relative mx-auto aspect-square w-full max-w-[380px]">
+    ) : level === "subfamily" ? <div className="relative mx-auto min-h-[19rem] w-full max-w-[520px] overflow-hidden rounded-[2rem] bg-[radial-gradient(ellipse_at_50%_100%,rgba(255,255,255,.95),rgba(255,247,235,.2)_65%,transparent_66%)] px-2 pb-5 pt-3 sm:min-h-[23rem]" role="group" aria-label={`${title}: subfamílias em arco`}>
+      <div className="pointer-events-none absolute inset-x-[8%] bottom-[6%] h-[78%] rounded-t-[50%] border-t-[clamp(8px,1.7vw,14px)] border-orange-200/80 shadow-[0_-12px_35px_rgba(209,112,54,.12)]" />
+      <div className="relative z-10 flex h-full min-h-[18rem] items-end justify-center gap-1 sm:min-h-[22rem] sm:gap-2">{items.map((item, index) => { const angle = items.length === 1 ? 0 : -70 + index * (140 / (items.length - 1)); const active = selected.includes(item.name); return <button type="button" key={item.name} aria-pressed={active} aria-label={item.name} onClick={() => onItem(item)} className={`absolute bottom-[12%] flex min-h-24 w-[clamp(4.3rem,17vw,7rem)] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-[1.4rem] border-2 bg-white/95 p-2 text-center shadow-[0_10px_24px_rgba(80,45,25,.13)] transition duration-200 hover:-translate-y-[calc(50%+.25rem)] active:scale-95 motion-reduce:transition-none ${active ? "ring-4 ring-orange-200" : ""}`} style={{ left: `${50 + Math.sin((angle * Math.PI) / 180) * 43}%`, transform: `translate(-50%,-50%) rotate(${angle * .14}deg)`, borderColor: active ? "#f45b19" : `${item.color}aa`, boxShadow: active ? `0 14px 26px ${item.color}55` : undefined }}><span className="relative block size-14 sm:size-16"><Pictogram item={item} /></span><span className="mt-1 max-w-full text-[10px] font-black leading-3 text-slate-800">{item.name}</span>{active && <span className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-orange-500 text-xs font-black text-white">✓</span>}</button>; })}</div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-[3%] z-20 text-center"><Coffee size={25} className="mx-auto text-[#512b1a]"/><b className="mt-1 block text-xs font-black text-slate-800">{title}</b><small className="text-[9px] uppercase tracking-wide text-slate-500">expanda para explorar</small></div>
+    </div> : <div className="relative mx-auto aspect-square w-full max-w-[380px]">
       <svg viewBox="0 0 400 400" className="absolute inset-0 size-full overflow-visible" role="group">
         {items.map((item,index)=>{const start=index*360/count+.7,end=(index+1)*360/count-.7,mid=(start+end)/2,[x,y]=polar(132,mid);const active=selected.includes(item.name);return <g key={item.name} role="button" tabIndex={0} aria-label={item.name} aria-pressed={level==="descriptor"?active:undefined} className="cursor-pointer outline-none" onClick={()=>onItem(item)} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();onItem(item)}}}>
           <path d={wedge(72,184,start,end)} fill={active?item.color:`${item.color}d9`} stroke={active?"#5b2b13":"#fffaf4"} strokeWidth={active?3:2}/>
-          <foreignObject x={x-(immersive && level === "subfamily" ? 36 : 27)} y={y-(immersive && level === "subfamily" ? 51 : 43)} width={immersive && level === "subfamily" ? 72 : 54} height={immersive && level === "subfamily" ? 72 : 54} className="pointer-events-none"><Pictogram item={item}/></foreignObject>
+          <foreignObject x={x-(immersive && visualLevel === "subfamily" ? 36 : 27)} y={y-(immersive && visualLevel === "subfamily" ? 51 : 43)} width={immersive && visualLevel === "subfamily" ? 72 : 54} height={immersive && visualLevel === "subfamily" ? 72 : 54} className="pointer-events-none"><Pictogram item={item}/></foreignObject>
           <foreignObject x={x-47} y={y+12} width="94" height={item.sensoryHint && count <= 5 ? 38 : 28} className="pointer-events-none overflow-visible"><div className="flex h-full items-start justify-center px-1 text-center text-[9px] font-bold leading-[10px] text-[#3b2d27]"><span>{item.name}{item.sensoryHint && count <= 5 ? <small className="mt-0.5 block text-[6.5px] font-medium leading-[8px] opacity-70">{item.sensoryHint}</small> : null}</span></div></foreignObject>
           {active&&<g><circle cx={x+21} cy={y-26} r="10" fill="#f45b19"/><path d={`M${x+16} ${y-26}l4 4 7-8`} fill="none" stroke="white" strokeWidth="2"/></g>}
         </g>})}

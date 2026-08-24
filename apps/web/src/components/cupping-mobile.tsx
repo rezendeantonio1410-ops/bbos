@@ -194,6 +194,9 @@ export function CuppingSensoryLibrary({
     imageKey: item.imageKey,
     color: ("color" in item && item.color) || family?.color || "#ef6b35",
     assetPath: "assetPath" in item ? item.assetPath : undefined,
+    assetPaths: !family && item.name === "Frutado" && "assetPath" in item && item.assetPath
+      ? [item.assetPath, "/sensory/aroma/frutado/citricos/tangerina.webp"]
+      : undefined,
     sensoryHint: "sensoryHint" in item ? item.sensoryHint : undefined,
   }));
   const contextSelections = value.filter((item) => item.context === context);
@@ -266,7 +269,7 @@ export function CuppingSensoryLibrary({
       {contextSelections.length > 0 && <div className="mt-4 rounded-3xl border border-orange-100 bg-white/70 p-3">
         <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-500">{context === "FLAVOR" ? "Sua xícara" : "Sua taça — Aroma"}</p><span className="text-[10px] font-bold text-orange-700">{contextSelections.length} aroma{contextSelections.length === 1 ? "" : "s"}</span></div>
         <div className="mt-3 space-y-2">{contextSelections.map((selection, index) => <div key={`${selection.family}-${selection.descriptor}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-3"><button type="button" onClick={() => olfactory ? setPending(selection) : undefined} className="min-h-11 flex-1 text-left"><strong className="block text-xs text-slate-800">{selection.descriptor ?? selection.subfamily ?? selection.family}</strong><span className="mt-1 block text-[10px] text-slate-500">{selection.family} › {selection.subfamily} · Intensidade {selection.intensity}/5</span></button><button type="button" onClick={() => onChange(olfactory ? removeOlfactoryPerception(contextSelections as OlfactoryStageSelection[], selection as OlfactoryStageSelection) as MobileSelection[] : toggleSensorySelection(value, selection))} aria-label={`Remover ${selection.descriptor ?? selection.family}`} className="min-h-11 rounded-xl px-3 text-xs font-black text-red-700">Remover</button></div>)}</div>
-        {olfactory && <button type="button" onClick={() => { if (window.confirm("Remover todos os aromas desta taça?")) onChange([]); }} className="mt-3 min-h-11 w-full rounded-xl border border-red-100 text-xs font-bold text-red-700">Limpar todos</button>}
+        {olfactory && <div className="mt-3 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => { setPending(null); setFamily(null); setSubfamily(null); }} className="min-h-11 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">↻ Explorar outra família</button><button type="button" onClick={() => { if (window.confirm("Remover todos os aromas desta taça?")) onChange([]); }} className="min-h-11 rounded-xl border border-red-100 text-xs font-bold text-red-700">Limpar todos</button></div>}
       </div>}
       {!olfactory && contextSelections.map((selection, index) => (
           <div

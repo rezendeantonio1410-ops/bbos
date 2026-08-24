@@ -500,7 +500,7 @@ const sensoryLibraryTaxonomy: SensoryFamily[] = [
     color: "#ef6f78",
     assetPath: "/sensory/descriptors/flavor/red-fruits/morango.webp",
     subfamilies: [
-      sub("Cítricos", "Laranja|Lima|Limão|Tangerina|Grapefruit", "citricos", "#f2b632"),
+      sub("Cítricos", "Laranja|Lima|Limão|Tangerina|Grapefruit|Hibisco", "citricos", "#f2b632"),
       sub("Tropicais", "Abacaxi|Kiwi|Maracujá|Mamão|Banana", "tropicais", "#e3a522"),
       sub(
         "Frutas amarelas",
@@ -763,7 +763,7 @@ export const olfactoryLibrary: SensoryFamily[] = [
   ]},
   { name: "Frutado", imageKey: "olfactory-frutado", color: "#df5c55", assetPath: olfactoryAssets.Morango, subfamilies: [
     olfactorySub("Frutas vermelhas", "Morango|Cereja|Framboesa|Amora|Mirtilo|Groselha|Romã|Cranberry|Uva vermelha", "frutas-vermelhas", "#ce4056"),
-    olfactorySub("Cítricos", "Limão|Lima|Tangerina|Bergamota", "citricos", "#e8b52d"),
+    olfactorySub("Cítricos", "Limão|Lima|Tangerina|Bergamota|Hibisco", "citricos", "#e8b52d"),
     olfactorySub("Frutas tropicais", "Manga|Abacaxi|Maracujá|Mamão", "tropicais", "#dda526"),
     olfactorySub("Outras frutas", "Groselha preta|Ameixa|Pêssego|Damasco|Nectarina|Maçã|Pera", "outras-frutas", "#91aa66"),
     olfactorySub("Frutas secas", "Uva-passa|Figo seco|Ameixa seca", "frutas-secas", "#885142"),
