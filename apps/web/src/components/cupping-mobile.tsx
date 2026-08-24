@@ -220,7 +220,7 @@ export function CuppingSensoryLibrary({
   const contextLabel = context === "FLAVOR" ? "Sabor" : context === "FRAGRANCE" ? "Fragrância" : context === "AROMA" ? "Aroma" : context === "AFTERTASTE" ? "Finalização" : context === "ACIDITY" ? "Acidez" : "Corpo";
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-[radial-gradient(circle_at_12%_4%,rgba(255,202,120,.3),transparent_35%),radial-gradient(circle_at_90%_18%,rgba(232,116,191,.2),transparent_34%),rgba(255,255,255,.45)] p-2 shadow-[0_18px_50px_rgba(83,45,31,.08)] sm:p-3" data-sensory-mode={mode}>
-      <div className="mb-2 flex items-center justify-between gap-3 px-2 pt-1">
+      <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border-l-4 px-3 py-2 pt-1 transition-colors duration-200 motion-reduce:transition-none" style={family?.color ? { borderColor: family.color, backgroundColor: `${family.color}16` } : undefined}>
         <div><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#714934]">{training ? "Treinamento sensorial" : "Cupping profissional"}</p><p className="mt-0.5 text-xs font-semibold text-[#6e5c51]">{contextLabel} · {family ? subfamily ? "Escolha uma percepção" : "Explore uma subfamília" : "Comece pela família"}</p></div>
         <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${mode === "educational" ? "bg-violet-100 text-violet-800" : "bg-orange-100 text-orange-800"}`}>{mode === "educational" ? "Aprender" : "Precisão"}</span>
       </div>

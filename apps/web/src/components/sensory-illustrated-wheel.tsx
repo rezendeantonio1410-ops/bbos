@@ -51,6 +51,17 @@ function wedge(inner: number, outer: number, start: number, end: number) {
   const [a,b]=polar(outer,start), [c,d]=polar(outer,end), [e,f]=polar(inner,end), [g,h]=polar(inner,start);
   return `M${a} ${b}A${outer} ${outer} 0 ${end-start>180?1:0} 1 ${c} ${d}L${e} ${f}A${inner} ${inner} 0 ${end-start>180?1:0} 0 ${g} ${h}Z`;
 }
+function arcBandSegment(index: number, count: number) {
+  const center = [164, 170] as const;
+  const inner = 70;
+  const outer = 148;
+  const start = 120 + index * (120 / count) + 1.5;
+  const end = 120 + (index + 1) * (120 / count) - 1.5;
+  const point = (radius: number, angle: number) => { const radians = angle * Math.PI / 180; return [center[0] + radius * Math.cos(radians), center[1] + radius * Math.sin(radians)] as const; };
+  const [a,b] = point(outer, start); const [c,d] = point(outer, end); const [e,f] = point(inner, end); const [g,h] = point(inner, start);
+  const mid = point((inner + outer) / 2, (start + end) / 2);
+  return { path: `M${a} ${b}A${outer} ${outer} 0 0 1 ${c} ${d}L${e} ${f}A${inner} ${inner} 0 0 0 ${g} ${h}Z`, label: mid };
+}
 
 export function CircularSensoryNavigator({ items, level, title, breadcrumb, selected, onItem, onBack, immersive = false }: {
   items: CircularSensoryItem[]; level: "family"|"subfamily"|"descriptor"; title: string; breadcrumb: string[];
@@ -65,11 +76,15 @@ export function CircularSensoryNavigator({ items, level, title, breadcrumb, sele
         <div className="grid grid-cols-3 gap-2 sm:gap-3">{items.map((item) => { const active = selected.includes(item.name); return <button type="button" key={item.name} aria-pressed={active} aria-label={item.name} onClick={() => onItem(item)} className={`group relative flex min-h-28 touch-manipulation flex-col items-center justify-center rounded-2xl border-2 bg-white/75 p-2 text-center transition duration-200 hover:-translate-y-0.5 active:scale-[.97] motion-reduce:transition-none ${active ? "ring-4 ring-orange-200 shadow-lg" : "shadow-sm"}`} style={{ borderColor: active ? "#f45b19" : `${item.color}66` }}><span className="relative size-16 drop-shadow-[0_8px_8px_rgba(73,42,25,.16)] sm:size-20"><Pictogram item={item} /></span><span className="mt-1 break-words text-[10px] font-black leading-3 text-slate-800">{item.name}</span>{active && <span className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-orange-500 text-xs font-black text-white">✓</span>}</button>; })}</div>
         <p className="mt-3 text-center text-[10px] text-slate-500">Selecione quantos descritores quiser.</p>
       </div>
-    ) : level === "subfamily" ? <div className="relative mx-auto min-h-[19rem] w-full max-w-[560px] overflow-hidden rounded-[2rem] bg-[radial-gradient(ellipse_at_50%_100%,rgba(255,255,255,.98),rgba(255,247,235,.35)_65%,transparent_66%)] p-2 sm:min-h-[23rem]" role="group" aria-label={`${title}: subfamílias em arco`}>
-      <svg viewBox="0 0 420 280" className="absolute inset-0 size-full" aria-hidden="true">{items.map((item, index) => { const start = 200 + index * (140 / count) + 1; const end = 200 + (index + 1) * (140 / count) - 1; const point = (radius: number, angle: number) => { const r = (angle - 90) * Math.PI / 180; return [210 + radius * Math.cos(r), 230 + radius * Math.sin(r)] as const; }; const [a,b] = point(175,start), [c,d] = point(175,end), [e,f] = point(75,end), [g,h] = point(75,start); const active = selected.includes(item.name); return <path key={item.name} d={`M${a} ${b}A175 175 0 0 1 ${c} ${d}L${e} ${f}A75 75 0 0 0 ${g} ${h}Z`} fill={item.color} fillOpacity={active ? ".96" : ".48"} stroke={active ? "#fff" : "rgba(255,255,255,.8)"} strokeWidth={active ? "4" : "2"} onClick={() => onItem(item)} className="cursor-pointer transition-[fill-opacity,stroke-width] duration-200 motion-reduce:transition-none" />; })}</svg>
-      <div className="absolute inset-x-0 bottom-2 z-10 flex justify-center gap-1 px-2 sm:gap-2">{items.map((item) => <button type="button" key={item.name} aria-pressed={selected.includes(item.name)} aria-label={item.name} onClick={() => onItem(item)} className="min-h-11 max-w-[7rem] flex-1 rounded-xl px-1 text-[9px] font-black leading-3 text-slate-800 transition hover:bg-white/70 motion-reduce:transition-none">{item.name}</button>)}</div>
-      <div className="pointer-events-none absolute left-1/2 top-[42%] z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-1 rounded-full bg-white/55 px-3 py-2 shadow-inner">{items.slice(0, 4).map((item) => <span key={item.name} className="relative size-12 drop-shadow-[0_8px_8px_rgba(73,42,25,.18)]"><Pictogram item={item} /></span>)}</div>
-      <div className="pointer-events-none absolute bottom-[1.5rem] left-1/2 z-20 -translate-x-1/2 text-center"><b className="block text-xs font-black text-slate-800">{title}</b><small className="text-[9px] uppercase tracking-wide text-slate-500">escolha uma subfamília</small></div>
+    ) : level === "subfamily" ? <div className="relative mx-auto w-full max-w-[560px] overflow-hidden rounded-[2rem] bg-white/35 px-1 py-2 sm:px-2" role="group" aria-label={`${title}: subfamílias em meia-lua`}>
+      <svg viewBox="0 0 520 340" className="block h-auto w-full" role="img" aria-label={`${title}: segmentos de subfamílias`}>
+        {items.map((item, index) => { const band = arcBandSegment(index, count); const active = selected.includes(item.name); return <g key={item.name} role="button" tabIndex={0} aria-label={item.name} aria-pressed={active} className="cursor-pointer outline-none" onClick={() => onItem(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onItem(item); } }}>
+          <path d={band.path} fill={item.color} fillOpacity={active ? ".98" : ".55"} stroke={active ? "#fff" : "rgba(255,255,255,.95)"} strokeWidth={active ? "4" : "2"} className="transition-[fill-opacity,stroke-width] duration-200 motion-reduce:transition-none" />
+          <foreignObject x={band.label[0] - 43} y={band.label[1] - 15} width="86" height="32" className="pointer-events-none overflow-visible"><div className="flex h-full items-center justify-center px-1 text-center text-[10px] font-black leading-[11px] text-slate-900">{item.name}</div></foreignObject>
+        </g>; })}
+      </svg>
+      <div className="pointer-events-none absolute right-[7%] top-1/2 flex w-[35%] -translate-y-1/2 items-center justify-center"><div className="relative flex flex-wrap items-center justify-center gap-1 rounded-[45%] bg-white/35 p-2 drop-shadow-[0_16px_20px_rgba(79,43,29,.18)]">{items.slice(0, 4).map((item) => <span key={item.name} className="relative size-14 sm:size-20"><Pictogram item={item} /></span>)}</div></div>
+      <div className="pointer-events-none absolute bottom-2 left-[31%] text-center"><b className="block text-xs font-black text-slate-900">{title}</b><small className="text-[9px] uppercase tracking-wide text-slate-600">selecione uma subfamília</small></div>
     </div> : <div className="relative mx-auto aspect-square w-full max-w-[380px]">
       <svg viewBox="0 0 400 400" className="absolute inset-0 size-full overflow-visible" role="group">
         {items.map((item,index)=>{const start=index*360/count+.7,end=(index+1)*360/count-.7,mid=(start+end)/2,[x,y]=polar(132,mid);const active=selected.includes(item.name);return <g key={item.name} role="button" tabIndex={0} aria-label={item.name} className="cursor-pointer outline-none" onClick={()=>onItem(item)} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();onItem(item)}}}>
