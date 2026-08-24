@@ -167,12 +167,14 @@ export function CuppingSensoryLibrary({
   onChange,
   training,
   onDepthChange,
+  mode = training ? "educational" : "professional",
 }: {
   context: MobileSelection["context"];
   value: MobileSelection[];
   onChange(value: MobileSelection[]): void;
   training: boolean;
   onDepthChange?(depth: number): void;
+  mode?: "professional" | "educational";
 }) {
   const [family, setFamily] = React.useState<SensoryFamily | null>(null);
   const [subfamily, setSubfamily] = React.useState<
@@ -202,9 +204,14 @@ export function CuppingSensoryLibrary({
   React.useEffect(() => {
     onDepthChange?.(subfamily ? 2 : family ? 1 : 0);
   }, [family, onDepthChange, subfamily]);
+  const contextLabel = context === "FLAVOR" ? "Sabor" : context === "FRAGRANCE" ? "Fragrância" : context === "AROMA" ? "Aroma" : context === "AFTERTASTE" ? "Finalização" : context === "ACIDITY" ? "Acidez" : "Corpo";
   return (
-    <div>
-      {training && <span className="mb-2 inline-flex rounded-full bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-cyan-800">Treinamento</span>}
+    <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-[radial-gradient(circle_at_12%_4%,rgba(255,202,120,.3),transparent_35%),radial-gradient(circle_at_90%_18%,rgba(232,116,191,.2),transparent_34%),rgba(255,255,255,.45)] p-2 shadow-[0_18px_50px_rgba(83,45,31,.08)] sm:p-3" data-sensory-mode={mode}>
+      <div className="mb-2 flex items-center justify-between gap-3 px-2 pt-1">
+        <div><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#714934]">{training ? "Treinamento sensorial" : "Cupping profissional"}</p><p className="mt-0.5 text-xs font-semibold text-[#6e5c51]">{contextLabel} · {family ? subfamily ? "Escolha uma percepção" : "Explore uma subfamília" : "Comece pela família"}</p></div>
+        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${mode === "educational" ? "bg-violet-100 text-violet-800" : "bg-orange-100 text-orange-800"}`}>{mode === "educational" ? "Aprender" : "Precisão"}</span>
+      </div>
+      {training && <span className="mb-2 ml-2 inline-flex rounded-full bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-cyan-800">Treinamento · suas escolhas são privadas</span>}
       <CircularSensoryNavigator
         items={wheelItems}
         level={level}
