@@ -167,6 +167,7 @@ export function CuppingSensoryLibrary({
   onChange,
   training,
   onDepthChange,
+  onRootReset,
   mode = training ? "educational" : "professional",
 }: {
   context: MobileSelection["context"];
@@ -174,6 +175,7 @@ export function CuppingSensoryLibrary({
   onChange(value: MobileSelection[]): void;
   training: boolean;
   onDepthChange?(depth: number): void;
+  onRootReset?(reset: () => void): void;
   mode?: "professional" | "educational";
 }) {
   const [family, setFamily] = React.useState<SensoryFamily | null>(null);
@@ -202,8 +204,16 @@ export function CuppingSensoryLibrary({
     selectedNames.push(pending.descriptor);
   const level = subfamily ? "descriptor" : family ? "subfamily" : "family";
   React.useEffect(() => {
+    setPending(null);
+    setFamily(null);
+    setSubfamily(null);
+  }, [context]);
+  React.useEffect(() => {
     onDepthChange?.(subfamily ? 2 : family ? 1 : 0);
   }, [family, onDepthChange, subfamily]);
+  React.useEffect(() => {
+    onRootReset?.(() => { setPending(null); setFamily(null); setSubfamily(null); });
+  }, [onRootReset]);
   const contextLabel = context === "FLAVOR" ? "Sabor" : context === "FRAGRANCE" ? "Fragrância" : context === "AROMA" ? "Aroma" : context === "AFTERTASTE" ? "Finalização" : context === "ACIDITY" ? "Acidez" : "Corpo";
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-[radial-gradient(circle_at_12%_4%,rgba(255,202,120,.3),transparent_35%),radial-gradient(circle_at_90%_18%,rgba(232,116,191,.2),transparent_34%),rgba(255,255,255,.45)] p-2 shadow-[0_18px_50px_rgba(83,45,31,.08)] sm:p-3" data-sensory-mode={mode}>
@@ -212,6 +222,7 @@ export function CuppingSensoryLibrary({
         <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${mode === "educational" ? "bg-violet-100 text-violet-800" : "bg-orange-100 text-orange-800"}`}>{mode === "educational" ? "Aprender" : "Precisão"}</span>
       </div>
       {training && <span className="mb-2 ml-2 inline-flex rounded-full bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-cyan-800">Treinamento · suas escolhas são privadas</span>}
+      {family && <button type="button" onClick={() => { setPending(null); setFamily(null); setSubfamily(null); }} className="mb-2 ml-2 inline-flex min-h-11 items-center rounded-full border border-orange-200 bg-white/85 px-4 text-xs font-black text-orange-800">↶ Voltar à roda</button>}
       <CircularSensoryNavigator
         items={wheelItems}
         level={level}
