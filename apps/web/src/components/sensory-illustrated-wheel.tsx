@@ -94,7 +94,8 @@ export function CircularSensoryNavigator({ items, level, title, breadcrumb, sele
           {active&&<g><circle cx={x+21} cy={y-26} r="10" fill="#f45b19"/><path d={`M${x+16} ${y-26}l4 4 7-8`} fill="none" stroke="white" strokeWidth="2"/></g>}
         </g>})}
         <circle cx="200" cy="200" r="69" fill="#fffaf4" stroke="#eadfd4" strokeWidth="2"/>
-      </svg>
+    </svg>
+      <div className="pointer-events-none absolute inset-0 z-10">{items.map((item, index) => { const start = index * 360 / count + .7; const end = (index + 1) * 360 / count - .7; const [x, y] = polar(132, (start + end) / 2); return <button key={item.name} type="button" aria-label={`Abrir ${item.name}`} onClick={() => onItem(item)} className="pointer-events-auto absolute size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-600" style={{ left: `${x / 400 * 100}%`, top: `${y / 400 * 100}%` }} />; })}</div>
       <div className="pointer-events-none absolute left-1/2 top-1/2 flex size-[31%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center text-center">
         <Coffee size={30} strokeWidth={1.7} className="text-[#512b1a]"/>
         <b className="mt-1 max-w-[92px] text-[10px] leading-3 text-slate-800">{title}</b>

@@ -31,6 +31,10 @@ import {
   CircularSensoryNavigator,
   type CircularSensoryItem,
 } from "@/components/sensory-illustrated-wheel";
+import {
+  SensoryReferenceFlow,
+  type ReferenceSelection,
+} from "@/components/sensory-reference-flow";
 
 export function CuppingBispoLogo() {
   return (
@@ -168,6 +172,7 @@ export function CuppingSensoryLibrary({
   training,
   onDepthChange,
   onRootReset,
+  onComplete,
   mode = training ? "educational" : "professional",
 }: {
   context: MobileSelection["context"];
@@ -176,10 +181,14 @@ export function CuppingSensoryLibrary({
   training: boolean;
   onDepthChange?(depth: number): void;
   onRootReset?(reset: () => void): void;
+  onComplete?(): void;
   mode?: "professional" | "educational";
 }) {
   const [family, setFamily] = React.useState<SensoryFamily | null>(null);
   const [subfamily, setSubfamily] = React.useState<
+    SensoryFamily["subfamilies"][number] | null
+  >(null);
+  const [subfamilyCandidate, setSubfamilyCandidate] = React.useState<
     SensoryFamily["subfamilies"][number] | null
   >(null);
   const [pending, setPending] = React.useState<MobileSelection | null>(null);
@@ -210,30 +219,42 @@ export function CuppingSensoryLibrary({
     setPending(null);
     setFamily(null);
     setSubfamily(null);
+    setSubfamilyCandidate(null);
   }, [context]);
   React.useEffect(() => {
     onDepthChange?.(subfamily ? 2 : family ? 1 : 0);
   }, [family, onDepthChange, subfamily]);
   React.useEffect(() => {
-    onRootReset?.(() => { setPending(null); setFamily(null); setSubfamily(null); });
+    onRootReset?.(() => { setPending(null); setFamily(null); setSubfamily(null); setSubfamilyCandidate(null); });
   }, [onRootReset]);
   const contextLabel = context === "FLAVOR" ? "Sabor" : context === "FRAGRANCE" ? "Fragrância" : context === "AROMA" ? "Aroma" : context === "AFTERTASTE" ? "Finalização" : context === "ACIDITY" ? "Acidez" : "Corpo";
+  const legacyContext = context as MobileSelection["context"];
+  if (context === "FRAGRANCE" || context === "AROMA" || context === "FLAVOR") {
+    return <SensoryReferenceFlow
+      context={context}
+      families={activeLibrary}
+      value={contextSelections as ReferenceSelection[]}
+      onChange={(next) => onChange([...value.filter((item) => item.context !== context), ...(next as MobileSelection[])])}
+      mode={mode}
+      onDepthChange={onDepthChange}
+      onComplete={onComplete}
+    />;
+  }
   return (
-    <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-[radial-gradient(circle_at_12%_4%,rgba(255,202,120,.3),transparent_35%),radial-gradient(circle_at_90%_18%,rgba(232,116,191,.2),transparent_34%),rgba(255,255,255,.45)] p-2 shadow-[0_18px_50px_rgba(83,45,31,.08)] sm:p-3" data-sensory-mode={mode}>
-      <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border-l-4 px-3 py-2 pt-1 transition-colors duration-200 motion-reduce:transition-none" style={family?.color ? { borderColor: family.color, backgroundColor: `${family.color}16` } : undefined}>
-        <div><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#714934]">{training ? "Treinamento sensorial" : "Cupping profissional"}</p><p className="mt-0.5 text-xs font-semibold text-[#6e5c51]">{contextLabel} · {family ? subfamily ? "Escolha uma percepção" : "Explore uma subfamília" : "Comece pela família"}</p></div>
-        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${mode === "educational" ? "bg-violet-100 text-violet-800" : "bg-orange-100 text-orange-800"}`}>{mode === "educational" ? "Aprender" : "Precisão"}</span>
+    <div className="mx-auto relative w-full max-w-[390px] overflow-visible rounded-[2rem] border border-white/80 bg-[radial-gradient(circle_at_12%_4%,rgba(255,202,120,.3),transparent_35%),radial-gradient(circle_at_90%_18%,rgba(232,116,191,.2),transparent_34%),rgba(255,255,255,.45)] p-2 shadow-[0_18px_50px_rgba(83,45,31,.08)] sm:p-3" data-sensory-mode={mode}>
+      <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border-l-4 px-3 py-2 pt-1 transition-colors duration-200 motion-reduce:transition-none" style={family?.color ? { borderColor: family.color, backgroundColor: family.color, color: "white" } : undefined}>
+        <div><p className={`text-[10px] font-black uppercase tracking-[.16em] ${family ? "text-white" : "text-[#714934]"}`}>{training ? "Treinamento sensorial" : "Cupping profissional"}</p><p className={`mt-0.5 text-xs font-semibold ${family ? "text-white/90" : "text-[#6e5c51]"}`}>{contextLabel} · {family ? subfamily ? "Escolha uma percepção" : "Selecione uma subfamília" : "Comece pela família"}</p></div>
+        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${family ? "bg-white/20 text-white" : mode === "educational" ? "bg-violet-100 text-violet-800" : "bg-orange-100 text-orange-800"}`}>{family?.name ?? (mode === "educational" ? "Aprender" : "Precisão")}</span>
       </div>
       {training && <span className="mb-2 ml-2 inline-flex rounded-full bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-cyan-800">Treinamento · suas escolhas são privadas</span>}
-      {family && <button type="button" onClick={() => { setPending(null); setFamily(null); setSubfamily(null); }} className="mb-2 ml-2 inline-flex min-h-11 items-center rounded-full border border-orange-200 bg-white/85 px-4 text-xs font-black text-orange-800">↶ Voltar à roda</button>}
       <CircularSensoryNavigator
         items={wheelItems}
         level={level}
-        title={subfamily?.name ?? family?.name ?? (context === "FLAVOR" ? "Sabor" : context === "FRAGRANCE" ? "Fragrância" : "Aroma")}
-        breadcrumb={[family?.name, subfamily?.name].filter((item): item is string => Boolean(item))}
-        selected={selectedNames}
-        immersive={context === "FRAGRANCE" || context === "AROMA"}
-        onBack={family ? () => { setPending(null); if (subfamily) setSubfamily(null); else setFamily(null); } : undefined}
+        title={subfamily?.name ?? family?.name ?? (legacyContext === "FLAVOR" ? "Sabor" : legacyContext === "FRAGRANCE" ? "Fragrância" : "Aroma")}
+        breadcrumb={[family?.name, subfamily?.name ?? subfamilyCandidate?.name].filter((item): item is string => Boolean(item))}
+        selected={[...selectedNames, ...(subfamilyCandidate ? [subfamilyCandidate.name] : [])]}
+        immersive={legacyContext === "FRAGRANCE" || legacyContext === "AROMA"}
+        onBack={family ? () => { setPending(null); if (subfamily) setSubfamily(null); else if (subfamilyCandidate) setSubfamilyCandidate(null); else setFamily(null); } : undefined}
         onItem={(wheelItem) => {
           setPending(null);
           if (!family) {
@@ -241,7 +262,7 @@ export function CuppingSensoryLibrary({
             return;
           }
           if (!subfamily) {
-            setSubfamily(family.subfamilies.find((item) => item.name === wheelItem.name) ?? null);
+            setSubfamilyCandidate(family.subfamilies.find((item) => item.name === wheelItem.name) ?? null);
             return;
           }
           const descriptor = subfamily.descriptors.find((item) => item.name === wheelItem.name);
@@ -253,6 +274,7 @@ export function CuppingSensoryLibrary({
           }
         }}
       />
+      {olfactory && family && subfamilyCandidate && !subfamily && <div className="mt-3 grid grid-cols-2 gap-2" aria-label="Ações da subfamília"><button type="button" onClick={() => { setSubfamilyCandidate(null); setFamily(null); }} className="min-h-12 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">← Voltar</button><button type="button" onClick={() => { setSubfamily(subfamilyCandidate); setPending(null); }} className="min-h-12 rounded-xl bg-orange-600 px-3 text-xs font-black text-white shadow-sm">Ver descritores →</button></div>}
       {olfactory && pending && (
         <section className="mt-4 rounded-[2rem] border border-amber-200 bg-white/90 p-4 shadow-sm" aria-label={`Intensidade de ${pending.descriptor}`}>
           <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-800">{pending.family} › {pending.subfamily}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pending.descriptor}</h3><p className="mt-1 text-xs text-slate-500">Quanto você percebe?</p></div><button type="button" onClick={() => setPending(null)} className="min-h-11 px-2 text-xs font-bold text-slate-500">Cancelar</button></div>
@@ -266,10 +288,11 @@ export function CuppingSensoryLibrary({
           <button type="button" onClick={() => { onChange(upsertOlfactoryPerception(contextSelections as OlfactoryStageSelection[], pending as OlfactoryStageSelection) as MobileSelection[]); setPending(null); }} className="mt-4 min-h-12 w-full rounded-xl bg-[#512b1a] px-4 text-sm font-black text-white shadow-md active:scale-[.99]">Adicionar à xícara</button>
         </section>
       )}
+      {olfactory && family && subfamily && contextSelections.length === 0 && <div className="mt-3 grid grid-cols-2 gap-2" aria-label="Navegação dos descritores"><button type="button" onClick={() => { setPending(null); setSubfamily(null); }} className="min-h-12 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">← Voltar</button><button type="button" onClick={() => { setPending(null); setSubfamily(null); setSubfamilyCandidate(null); setFamily(null); }} className="min-h-12 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">↻ Explorar outra família</button></div>}
       {contextSelections.length > 0 && <div className="mt-4 rounded-3xl border border-orange-100 bg-white/70 p-3">
-        <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-500">{context === "FLAVOR" ? "Sua xícara" : "Sua taça — Aroma"}</p><span className="text-[10px] font-bold text-orange-700">{contextSelections.length} aroma{contextSelections.length === 1 ? "" : "s"}</span></div>
+        <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-500">{legacyContext === "FLAVOR" ? "Sua xícara" : "Sua taça — Aroma"}</p><span className="text-[10px] font-bold text-orange-700">{contextSelections.length} aroma{contextSelections.length === 1 ? "" : "s"}</span></div>
         <div className="mt-3 space-y-2">{contextSelections.map((selection, index) => <div key={`${selection.family}-${selection.descriptor}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-3"><button type="button" onClick={() => olfactory ? setPending(selection) : undefined} className="min-h-11 flex-1 text-left"><strong className="block text-xs text-slate-800">{selection.descriptor ?? selection.subfamily ?? selection.family}</strong><span className="mt-1 block text-[10px] text-slate-500">{selection.family} › {selection.subfamily} · Intensidade {selection.intensity}/5</span></button><button type="button" onClick={() => onChange(olfactory ? removeOlfactoryPerception(contextSelections as OlfactoryStageSelection[], selection as OlfactoryStageSelection) as MobileSelection[] : toggleSensorySelection(value, selection))} aria-label={`Remover ${selection.descriptor ?? selection.family}`} className="min-h-11 rounded-xl px-3 text-xs font-black text-red-700">Remover</button></div>)}</div>
-        {olfactory && <div className="mt-3 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => { setPending(null); setFamily(null); setSubfamily(null); }} className="min-h-11 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">↻ Explorar outra família</button><button type="button" onClick={() => { if (window.confirm("Remover todos os aromas desta taça?")) onChange([]); }} className="min-h-11 rounded-xl border border-red-100 text-xs font-bold text-red-700">Limpar todos</button></div>}
+        {olfactory && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { setPending(null); setSubfamily(null); }} className="min-h-11 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">← Voltar</button><button type="button" onClick={() => { setPending(null); setFamily(null); setSubfamily(null); setSubfamilyCandidate(null); }} className="min-h-11 rounded-xl border border-orange-200 bg-white text-xs font-black text-orange-800">↻ Explorar outra família</button></div>}
       </div>}
       {!olfactory && contextSelections.map((selection, index) => (
           <div
