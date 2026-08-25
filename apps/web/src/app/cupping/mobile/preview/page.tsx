@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default function CuppingMobilePreviewPage() {
-  if (process.env.NODE_ENV !== "development") notFound();
+  const previewEnabled = process.env.NODE_ENV === "development" || process.env.CUPPING_PREVIEW_ENABLED === "true";
+  if (!previewEnabled) notFound();
   return <PreviewClient />;
 }
