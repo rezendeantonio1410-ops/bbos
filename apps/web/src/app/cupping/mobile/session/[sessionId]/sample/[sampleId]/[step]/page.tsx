@@ -50,9 +50,7 @@ const steps = CUPPING_SESSION_STEPS.map((item) => item.id) as unknown as readonl
   "finalizacao",
   "acidez",
   "corpo",
-  "uniformity",
-  "sweetness",
-  "cleanCup",
+  "sample_consistency",
   "overall",
   "result",
 ];
@@ -144,9 +142,9 @@ const reviewAttributes: Array<{
   { key: "acidity", label: "Acidez", route: "acidez" },
   { key: "body", label: "Corpo", route: "corpo" },
   { key: "balance", label: "Equilíbrio", route: "equilibrio" },
-  { key: "uniformity", label: "Uniformidade", route: "uniformity" },
-  { key: "sweetness", label: "Doçura", route: "sweetness" },
-  { key: "cleanCup", label: "Xícara Limpa", route: "cleanCup" },
+  { key: "uniformity", label: "Uniformidade", route: "sample_consistency" },
+  { key: "sweetness", label: "Doçura", route: "sample_consistency" },
+  { key: "cleanCup", label: "Xícara Limpa", route: "sample_consistency" },
   { key: "overall", label: "Avaliação Geral", route: "overall" },
 ];
 
@@ -208,6 +206,7 @@ export default function CuppingStepPage() {
   const [saveState, setSaveState] = React.useState("Salvo");
   const [syncAttempt, setSyncAttempt] = React.useState(0);
   const [error, setError] = React.useState("");
+  const decisionRef = React.useRef<HTMLDivElement>(null);
   const [showPriorScores, setShowPriorScores] = React.useState(
     priorScoresInitiallyExpanded,
   );
@@ -270,6 +269,21 @@ export default function CuppingStepPage() {
     }, 650);
     return () => clearTimeout(timer);
   }, [draft, key, sampleId, sessionId, syncAttempt]);
+  React.useEffect(() => {
+    let frame = 0;
+    frame = window.requestAnimationFrame(() => {
+      const target = decisionRef.current;
+      if (!target) return;
+      const headerOffset = 12;
+      // Safari/iOS may retain the previous scroll position across route changes;
+      // use an immediate, deterministic position after the new DOM is mounted.
+      window.scrollTo({
+        top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - headerOffset),
+        behavior: "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [step, olfactoryMoment]);
   const index = steps.indexOf(step as any);
   const meta = copy[step as (typeof steps)[number]];
   const update = (patch: Partial<Draft>) =>
@@ -381,10 +395,8 @@ export default function CuppingStepPage() {
   const canContinue =
     step === "aroma" && olfactoryMoment === "FRAGRANCE"
       ? true
-      : step === "cleanCup"
+      : step === "sample_consistency"
       ? cleanCupsValid
-      : step === "uniformity" || step === "sweetness"
-      ? true
       : requiredScore
         ? canContinueSensoryStep(draft.scores[requiredScore])
         : true;
@@ -458,7 +470,7 @@ export default function CuppingStepPage() {
   }
   return (
     <main className={`mx-auto min-h-screen w-full overflow-x-clip px-[clamp(.75rem,3vw,2rem)] pb-[calc(12rem+env(safe-area-inset-bottom))] pt-[clamp(4.5rem,8vw,6rem)] ${step === "aroma" || step === "sabor" ? "max-w-[430px]" : step === "finalizacao" || step === "acidez" || step === "corpo" ? "max-w-[1180px]" : "max-w-3xl"}`}>
-      <header>
+      <header ref={decisionRef}>
         <Link
           href={
             index
@@ -470,7 +482,7 @@ export default function CuppingStepPage() {
           <ChevronLeft size={16} />
           Voltar
         </Link>
-        <div className={`${step === "aroma" ? "mt-3 rounded-2xl border border-[#eadfd4] bg-white/65 px-3 py-3" : "mt-5"} flex items-start justify-between gap-3`}>
+        <div tabIndex={-1} className={`${step === "aroma" ? "mt-3 rounded-2xl border border-[#eadfd4] bg-white/65 px-3 py-3" : "mt-5"} flex items-start justify-between gap-3 outline-none`}>
           <div className="min-w-0">
             <p className={`font-black uppercase tracking-[.16em] ${step === "aroma" ? "text-[9px] text-[#8b654f]" : "text-xs text-fuchsia-600"}`}>
               {sample?.sampleCode ?? "Amostra"} · {sample?.lot?.origin ?? "Origem não informada"} · {context?.session?.code ?? "Sessão"}
@@ -478,18 +490,14 @@ export default function CuppingStepPage() {
             {index >= 0 && <p className="mt-1 text-[10px] font-black uppercase tracking-[.14em] text-slate-500">Etapa {index + 1} de {steps.length} · {CUPPING_SESSION_STEPS[index]?.label}</p>}
             <h1 className={`${step === "aroma" ? "mt-1 text-2xl text-[#432a1d]" : "mt-2 text-3xl"} font-black`}>
               {step === "aroma" ? (olfactoryMoment === "FRAGRANCE" ? "Fragrância" : "Aroma") : meta?.[0] ??
-                (step === "uniformity"
-                  ? "Uniformidade"
-                  : step === "sweetness"
-                    ? "Doçura"
-                    : step === "cleanCup"
-                      ? "Xícara limpa"
+                (step === "sample_consistency"
+                  ? "Consistência da amostra"
                   : step === "review"
                     ? "Revisar avaliação"
                     : "Resultado da Prova")}
             </h1>
             <p className={`${step === "aroma" ? "mt-1 text-xs" : "mt-2 text-sm"} text-slate-600`}>
-              {step === "aroma" ? "O que esse café te lembra?" : meta?.[1] ?? (step === "uniformity" ? "As cinco xícaras estão consistentes entre si?" : step === "sweetness" ? "A doçura está presente nas cinco xícaras?" : step === "cleanCup" ? "Todas as cinco xícaras estão limpas?" : "Confira cada percepção antes de concluir.")}
+              {step === "aroma" ? "O que esse café te lembra?" : meta?.[1] ?? (step === "sample_consistency" ? "Observe as mesmas cinco xícaras." : "Confira cada percepção antes de concluir.")}
             </p>
           </div>
           <span className="shrink-0 pt-1 text-xs font-bold text-slate-500">
@@ -673,9 +681,7 @@ export default function CuppingStepPage() {
             />
           </>
         )}
-        {step === "uniformity" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">{renderCupSelector("Uniformidade", "UNIFORMITY", "uniformity")}</div>}
-        {step === "sweetness" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">{renderCupSelector("Doçura", "SWEETNESS", "sweetness")}</div>}
-        {step === "cleanCup" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">{renderCupSelector("Xícara limpa", "CLEAN_CUP", "cleanCup")}</div>}
+        {step === "sample_consistency" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3"><h2 className="px-2 text-lg font-black text-[#432a1e]">Consistência da amostra</h2><p className="px-2 text-sm text-slate-600">Observe as mesmas cinco xícaras.</p>{renderCupSelector("Uniformidade", "UNIFORMITY", "uniformity")}{renderCupSelector("Doçura", "SWEETNESS", "sweetness")}{renderCupSelector("Xícara limpa", "CLEAN_CUP", "cleanCup")}</div>}
         {step === "overall" && (
           <>
             <CuppingTrainingHint
@@ -748,7 +754,7 @@ export default function CuppingStepPage() {
           Selecione uma pontuação para continuar.
         </p>
       )}
-      {!canContinue && step === "cleanCup" && (
+      {!canContinue && step === "sample_consistency" && (
         <p className="mt-5 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
           Informe o tipo e a severidade de cada defeito para continuar.
         </p>
