@@ -886,20 +886,14 @@ function CuppingCupArtwork({ divergent = false }: { divergent?: boolean }) {
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        {/* The supplied photograph uses a chroma-green staging background. */}
-        <filter id="cupping-cup-key" colorInterpolationFilters="sRGB">
-          <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1 -1 1 0 0" />
-        </filter>
+        <radialGradient id="cup-porcelain" cx="38%" cy="30%"><stop offset="0" stopColor="#fff"/><stop offset=".78" stopColor="#e8e2dc"/><stop offset="1" stopColor="#c8beb5"/></radialGradient>
+        <radialGradient id="cup-coffee" cx="35%" cy="28%"><stop offset="0" stopColor="#7b4a2f"/><stop offset=".45" stopColor="#4a281b"/><stop offset="1" stopColor="#24120d"/></radialGradient>
+        <filter id="cup-shadow"><feGaussianBlur stdDeviation="2.2"/></filter>
       </defs>
-      <image
-        href="/sensory/aroma/stages/aroma-crosta.webp"
-        x="0"
-        y="0"
-        width="100"
-        height="100"
-        preserveAspectRatio="xMidYMid meet"
-        filter="url(#cupping-cup-key)"
-      />
+      <ellipse cx="50" cy="54" rx="43" ry="39" fill="#6b5548" opacity=".2" filter="url(#cup-shadow)" />
+      <ellipse cx="50" cy="50" rx="43" ry="40" fill="url(#cup-porcelain)" stroke="#d2c9c1" strokeWidth="1.5" />
+      <ellipse cx="50" cy="49" rx="33" ry="30" fill="url(#cup-coffee)" stroke="#b7aaa0" strokeWidth="2" />
+      <ellipse cx="39" cy="39" rx="8" ry="4" fill="#d4a078" opacity=".25" transform="rotate(-18 39 39)" />
       {divergent ? (
         <circle cx="50" cy="50" r="45" fill="none" stroke="#f97316" strokeWidth="2.5" />
       ) : null}
