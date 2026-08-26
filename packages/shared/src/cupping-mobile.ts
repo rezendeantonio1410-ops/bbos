@@ -13,6 +13,21 @@ export const CUPPING_ATTRIBUTES = [
   "cleanCup",
   "overall",
 ] as const;
+
+/** Canonical order for the participant-facing ten-step cupping session. */
+export const CUPPING_SESSION_STEPS = [
+  { id: "aroma", label: "Fragrância + Aroma" },
+  { id: "sabor", label: "Sabor" },
+  { id: "finalizacao", label: "Finalização" },
+  { id: "acidez", label: "Acidez" },
+  { id: "corpo", label: "Corpo" },
+  { id: "uniformity", label: "Uniformidade" },
+  { id: "sweetness", label: "Doçura" },
+  { id: "cleanCup", label: "Xícara Limpa" },
+  { id: "overall", label: "Avaliação Geral" },
+  { id: "result", label: "Resultado" },
+] as const;
+export type CuppingSessionStepId = (typeof CUPPING_SESSION_STEPS)[number]["id"];
 export type CuppingAttribute = (typeof CUPPING_ATTRIBUTES)[number];
 
 export function isValidCuppingScore(value: unknown) {

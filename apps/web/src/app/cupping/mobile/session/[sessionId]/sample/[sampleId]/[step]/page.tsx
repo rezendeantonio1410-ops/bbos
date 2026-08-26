@@ -25,6 +25,7 @@ import {
   priorScoresInitiallyExpanded,
   Traditional100ScoringEngine,
   validateCleanCupState,
+  CUPPING_SESSION_STEPS,
   type CuppingAttribute,
   type OlfactoryStageSelection,
 } from "@bbos/shared";
@@ -42,25 +43,26 @@ import { CuppingOlfactoryTemplate } from "@/components/cupping-olfactory-templat
 import { CuppingAftertaste } from "@/components/cupping-aftertaste";
 import { CuppingAcidity } from "@/components/cupping-acidity";
 import { CuppingBody } from "@/components/cupping-body";
-const steps = [
+const steps = CUPPING_SESSION_STEPS.map((item) => item.id) as unknown as readonly [
   "aroma",
   "sabor",
   "finalizacao",
   "acidez",
   "corpo",
-  "equilibrio",
-  "cups",
+  "uniformity",
+  "sweetness",
+  "cleanCup",
   "overall",
-  "review",
   "result",
-] as const;
+];
+type RouteStep = (typeof steps)[number] | "equilibrio" | "review";
 type StepMeta = [
   string,
   string,
   CuppingAttribute,
   "AROMA" | "FLAVOR" | "AFTERTASTE" | "ACIDITY" | "BODY" | null,
 ];
-const copy: Partial<Record<(typeof steps)[number], StepMeta>> = {
+const copy: Partial<Record<RouteStep, StepMeta>> = {
   aroma: [
     "Fragrância / Aroma",
     "O que esse aroma te lembra?",
@@ -76,7 +78,6 @@ const copy: Partial<Record<(typeof steps)[number], StepMeta>> = {
   ],
   acidez: ["Acidez", "Como a acidez se apresenta na xícara?", "acidity", null],
   corpo: ["Corpo", "Como o café ocupa a boca?", "body", "BODY"],
-  equilibrio: ["Equilíbrio", "Como os atributos se integram?", "balance", null],
   overall: [
     "Avaliação geral",
     "Considerando toda a experiência, qual é sua avaliação geral?",
@@ -121,7 +122,7 @@ function mergeCups(saved: CupState[] | undefined) {
   );
 }
 const requiredScoreByStep: Partial<
-  Record<(typeof steps)[number], CuppingAttribute>
+  Record<RouteStep, CuppingAttribute>
 > = {
   aroma: "fragranceAroma",
   sabor: "flavor",
@@ -134,7 +135,7 @@ const requiredScoreByStep: Partial<
 const reviewAttributes: Array<{
   key: CuppingAttribute;
   label: string;
-  route: (typeof steps)[number];
+  route: RouteStep;
 }> = [
   { key: "fragranceAroma", label: "Fragrância / Aroma", route: "aroma" },
   { key: "flavor", label: "Sabor", route: "sabor" },
@@ -142,9 +143,9 @@ const reviewAttributes: Array<{
   { key: "acidity", label: "Acidez", route: "acidez" },
   { key: "body", label: "Corpo", route: "corpo" },
   { key: "balance", label: "Equilíbrio", route: "equilibrio" },
-  { key: "uniformity", label: "Uniformidade", route: "cups" },
-  { key: "sweetness", label: "Doçura", route: "cups" },
-  { key: "cleanCup", label: "Xícara Limpa", route: "cups" },
+  { key: "uniformity", label: "Uniformidade", route: "uniformity" },
+  { key: "sweetness", label: "Doçura", route: "sweetness" },
+  { key: "cleanCup", label: "Xícara Limpa", route: "cleanCup" },
   { key: "overall", label: "Avaliação Geral", route: "overall" },
 ];
 
@@ -378,8 +379,10 @@ export default function CuppingStepPage() {
   const canContinue =
     step === "aroma" && olfactoryMoment === "FRAGRANCE"
       ? true
-      : step === "cups"
+      : step === "cleanCup"
       ? cleanCupsValid
+      : step === "uniformity" || step === "sweetness"
+      ? true
       : requiredScore
         ? canContinueSensoryStep(draft.scores[requiredScore])
         : true;
@@ -408,6 +411,15 @@ export default function CuppingStepPage() {
     });
   } catch {}
   const complete = scoring != null && cleanCupsValid;
+  const renderCupSelector = (label: string, attribute: CupState["attribute"], scoreKey: "uniformity" | "sweetness" | "cleanCup") => (
+    <FiveCupSelector
+      label={label}
+      attribute={attribute}
+      cups={draft.cups}
+      onChange={(cups) => update({ cups, scores: { ...draft.scores, [scoreKey]: cupsScore(Array.from({ length: 5 }, (_, i) => cups.find((cup) => cup.attribute === attribute && cup.cupNumber === i + 1)?.selected ?? true)) } })}
+      defects={cleanCupDefects}
+    />
+  );
   function continueToNext() {
     if (step === "aroma" && olfactoryMoment === "FRAGRANCE") {
       setOlfactoryMoment("AROMA");
@@ -461,16 +473,21 @@ export default function CuppingStepPage() {
             <p className={`font-black uppercase tracking-[.16em] ${step === "aroma" ? "text-[9px] text-[#8b654f]" : "text-xs text-fuchsia-600"}`}>
               {sample?.sampleCode ?? "Amostra"} · {sample?.lot?.origin ?? "Origem não informada"} · {context?.session?.code ?? "Sessão"}
             </p>
+            {index >= 0 && <p className="mt-1 text-[10px] font-black uppercase tracking-[.14em] text-slate-500">Etapa {index + 1} de {steps.length} · {CUPPING_SESSION_STEPS[index]?.label}</p>}
             <h1 className={`${step === "aroma" ? "mt-1 text-2xl text-[#432a1d]" : "mt-2 text-3xl"} font-black`}>
               {step === "aroma" ? (olfactoryMoment === "FRAGRANCE" ? "Fragrância" : "Aroma") : meta?.[0] ??
-                (step === "cups"
-                  ? "As cinco xícaras"
+                (step === "uniformity"
+                  ? "Uniformidade"
+                  : step === "sweetness"
+                    ? "Doçura"
+                    : step === "cleanCup"
+                      ? "Xícara limpa"
                   : step === "review"
                     ? "Revisar avaliação"
                     : "Resultado da Prova")}
             </h1>
             <p className={`${step === "aroma" ? "mt-1 text-xs" : "mt-2 text-sm"} text-slate-600`}>
-              {step === "aroma" ? "O que esse café te lembra?" : meta?.[1] ?? "Confira cada percepção antes de concluir."}
+              {step === "aroma" ? "O que esse café te lembra?" : meta?.[1] ?? (step === "uniformity" ? "As cinco xícaras estão consistentes entre si?" : step === "sweetness" ? "A doçura está presente nas cinco xícaras?" : step === "cleanCup" ? "Todas as cinco xícaras estão limpas?" : "Confira cada percepção antes de concluir.")}
             </p>
           </div>
           <span className="shrink-0 pt-1 text-xs font-bold text-slate-500">
@@ -654,85 +671,9 @@ export default function CuppingStepPage() {
             />
           </>
         )}
-        {step === "cups" && (
-          <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">
-            <FiveCupSelector
-              label="Uniformidade"
-              attribute="UNIFORMITY"
-              cups={draft.cups}
-              onChange={(cups) =>
-                update({
-                  cups,
-                  scores: {
-                    ...draft.scores,
-                    uniformity: cupsScore(
-                      Array.from(
-                        { length: 5 },
-                        (_, i) =>
-                          cups.find(
-                            (c) =>
-                              c.attribute === "UNIFORMITY" &&
-                              c.cupNumber === i + 1,
-                          )?.selected ?? true,
-                      ),
-                    ),
-                  },
-                })
-              }
-              defects={cleanCupDefects}
-            />
-            <FiveCupSelector
-              label="Doçura"
-              attribute="SWEETNESS"
-              cups={draft.cups}
-              onChange={(cups) =>
-                update({
-                  cups,
-                  scores: {
-                    ...draft.scores,
-                    sweetness: cupsScore(
-                      Array.from(
-                        { length: 5 },
-                        (_, i) =>
-                          cups.find(
-                            (c) =>
-                              c.attribute === "SWEETNESS" &&
-                              c.cupNumber === i + 1,
-                          )?.selected ?? true,
-                      ),
-                    ),
-                  },
-                })
-              }
-              defects={cleanCupDefects}
-            />
-            <FiveCupSelector
-              label="Xícara limpa"
-              attribute="CLEAN_CUP"
-              cups={draft.cups}
-              onChange={(cups) =>
-                update({
-                  cups,
-                  scores: {
-                    ...draft.scores,
-                    cleanCup: cupsScore(
-                      Array.from(
-                        { length: 5 },
-                        (_, i) =>
-                          cups.find(
-                            (c) =>
-                              c.attribute === "CLEAN_CUP" &&
-                              c.cupNumber === i + 1,
-                          )?.selected ?? true,
-                      ),
-                    ),
-                  },
-                })
-              }
-              defects={cleanCupDefects}
-            />
-          </div>
-        )}
+        {step === "uniformity" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">{renderCupSelector("Uniformidade", "UNIFORMITY", "uniformity")}</div>}
+        {step === "sweetness" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">{renderCupSelector("Doçura", "SWEETNESS", "sweetness")}</div>}
+        {step === "cleanCup" && <div className="space-y-5 rounded-[1.5rem] bg-white/45 p-3">{renderCupSelector("Xícara limpa", "CLEAN_CUP", "cleanCup")}</div>}
         {step === "overall" && (
           <>
             <CuppingTrainingHint
@@ -806,7 +747,7 @@ export default function CuppingStepPage() {
           Selecione uma pontuação para continuar.
         </p>
       )}
-      {!canContinue && step === "cups" && (
+      {!canContinue && step === "cleanCup" && (
         <p className="mt-5 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
           Informe o tipo e a severidade de cada defeito para continuar.
         </p>
