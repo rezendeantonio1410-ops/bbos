@@ -401,8 +401,12 @@ export function CuppingOlfactoryTemplate({ context, value, onChange, onDepthChan
       {!family && <FamilyWheel context={context} library={library} counts={familyCounts} onSelect={(next) => { setFamily(next); setSubfamily(null); setPending(null); }} />}
       {family && !descriptorView && <SubfamilyArc family={family} selected={subfamily} onSelect={(next) => { setSubfamily(next); setPending(null); }} onBack={() => { setFamily(null); setSubfamily(null); }} onContinue={() => { if (subfamily) setDescriptorView(true); }} />}
       {family && subfamily && descriptorView && <DescriptorGrid context={context} family={family} subfamily={subfamily} selectedNames={selectedNames} pending={pending} adding={adding} addedLabel={addedLabel} onWheel={goToWheel} onBack={() => { setDescriptorView(false); setPending(null); }} onSelect={(descriptor) => {
-        const existing = [...selectedDescriptors, ...value].find((item) => item.family === family.name && item.subfamily === subfamily.name && item.descriptor === descriptor.name);
-        updateActiveDescriptor(existing ?? { context, family: family.name, subfamily: subfamily.name, descriptor: descriptor.name, level: 3, intensity: 3, imageKey: descriptor.imageKey, perceptionType: family.name === "Desvios de Qualidade" ? "QUALITY_DEVIATION" : "SENSORY_ATTRIBUTE" });
+        const existing = [...selectedDescriptors, ...value].find((item) => item.context === context && item.family === family.name && item.subfamily === subfamily.name && item.descriptor === descriptor.name);
+        if (existing) {
+          onChange(removeOlfactoryPerception(value, existing));
+          setSelectedDescriptors((current) => removeOlfactoryPerception(current, existing));
+          setPending(null);
+        } else updateActiveDescriptor({ context, family: family.name, subfamily: subfamily.name, descriptor: descriptor.name, level: 3, intensity: 3, imageKey: descriptor.imageKey, perceptionType: family.name === "Desvios de Qualidade" ? "QUALITY_DEVIATION" : "SENSORY_ATTRIBUTE" });
       }} onPending={updateActiveDescriptor} onAdd={() => {
         if (!pending || adding) return;
         haptic();

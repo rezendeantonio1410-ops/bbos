@@ -255,8 +255,12 @@ export function CuppingSensoryLibrary({
           if (descriptor) {
             const existing = contextSelections.find((item) => item.descriptor === descriptor.name && item.family === family.name && item.subfamily === subfamily.name);
             const selection = existing ?? { context, family: family.name, subfamily: subfamily.name, descriptor: descriptor.name, level: 3, intensity: 3, imageKey: descriptor.imageKey };
-            if (olfactory) setPending(selection);
-            else toggle(selection);
+            if (olfactory) {
+              if (existing) {
+                onChange(removeOlfactoryPerception(contextSelections as OlfactoryStageSelection[], existing as OlfactoryStageSelection) as MobileSelection[]);
+                setPending(null);
+              } else setPending(selection);
+            } else toggle(selection);
           }
         }}
       />
