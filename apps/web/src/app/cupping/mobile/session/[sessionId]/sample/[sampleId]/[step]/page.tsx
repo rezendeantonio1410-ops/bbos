@@ -32,6 +32,7 @@ import {
 import { cacheCuppingSession, fetchCurrentCuppingSession, getCuppingToken, readCachedCuppingSession, recoverCuppingToken, saveCurrentCuppingEvaluation } from "@/lib/cupping-mobile-access";
 import {
   BalanceIntegrationVisual,
+  ApprovedSensoryArtwork,
   CuppingScorePicker,
   CuppingSensoryProfile,
   CuppingTrainingHint,
@@ -998,6 +999,25 @@ function Result({
   const bodyTextures = Array.isArray(draft.stageData.bodyTextures)
     ? draft.stageData.bodyTextures
     : (draft.bodyType?.split(" + ").filter(Boolean) ?? []);
+  const aromaSelections = draft.selections.filter((selection) => selection.context === "FRAGRANCE" || selection.context === "AROMA");
+  const flavorSelections = draft.selections.filter((selection) => selection.context === "FLAVOR");
+  const descriptors = [...aromaSelections, ...flavorSelections].map((selection) => selection.descriptor).filter((value): value is string => Boolean(value));
+  const dominantProfile = [...new Set(draft.selections.map((selection) => selection.family).filter(Boolean))].slice(0, 4).join(" · ") || "Nenhuma percepção registrada";
+  const synthesis = descriptors.length
+    ? `Café de perfil ${dominantProfile.toLowerCase()}, com destaque para ${[...new Set(descriptors)].slice(0, 3).join(", ")}.`
+    : "Registre percepções sensoriais para construir a síntese deste café.";
+  const scoreRows: Array<[string, number | undefined]> = [
+    ["Fragrância + Aroma", values.fragranceAroma],
+    ["Sabor", values.flavor],
+    ["Finalização", values.aftertaste],
+    ["Acidez", values.acidity],
+    ["Corpo", values.body],
+    ["Uniformidade", values.uniformity],
+    ["Doçura", values.sweetness],
+    ["Xícara Limpa", values.cleanCup],
+    ["Avaliação Geral", values.overall],
+  ];
+  const cupRows = ["UNIFORMITY", "SWEETNESS", "CLEAN_CUP"] as const;
   return (
     <div className="space-y-5 text-center">
       <div>
@@ -1012,6 +1032,7 @@ function Result({
         </p>
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white/75 p-6">
+        <p className="text-left text-xs font-black uppercase tracking-[.08em] text-slate-600">Amostra 03 · Arábica · Natural</p>
         <p className="text-xs font-black uppercase tracking-[.08em] text-slate-600">
           Sua pontuação final
         </p>
@@ -1023,6 +1044,35 @@ function Result({
           Traditional 100
         </small>
       </div>
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
+        <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Síntese sensorial</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-700">{synthesis}</p>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
+        <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Fragrância + Aroma</h3>
+        <p className="mt-1 text-xs text-slate-500">Este foi o perfil aromático encontrado.</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {aromaSelections.length ? aromaSelections.map((selection, index) => <div key={`${selection.family}-${selection.descriptor}-${index}`} className="flex items-center gap-2 rounded-xl bg-white/80 p-2"><ApprovedSensoryArtwork name={selection.descriptor ?? selection.family} fallback={selection.family} className="h-10 w-10 shrink-0" /><span className="min-w-0 text-xs font-bold text-slate-700">{selection.descriptor ?? selection.family}</span></div>) : <p className="col-span-2 text-xs text-slate-500">Nenhuma percepção aromática registrada.</p>}
+        </div>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
+        <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Sabor</h3>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {flavorSelections.length ? flavorSelections.map((selection, index) => <div key={`${selection.family}-${selection.descriptor}-${index}`} className="rounded-xl bg-white/80 p-2 text-xs font-bold text-slate-700">{selection.descriptor ?? selection.family}</div>) : <p className="col-span-2 text-xs text-slate-500">Nenhuma percepção de sabor registrada.</p>}
+        </div>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
+        <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Acidez · Corpo · Finalização</h3>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-700"><div><b className="block text-[10px] uppercase text-slate-500">Acidez</b>{acidityTypes.join(" · ") || "—"}</div><div><b className="block text-[10px] uppercase text-slate-500">Corpo</b>{bodyTextures.join(" · ") || "—"}</div><div><b className="block text-[10px] uppercase text-slate-500">Finalização</b>{[draft.aftertastePersistence, draft.stageData.aftertasteCharacter].filter(Boolean).join(" · ") || "—"}</div></div>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
+        <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Consistência das xícaras</h3>
+        <div className="mt-3 space-y-2">{cupRows.map((attribute) => <div key={attribute} className="flex items-center justify-between gap-2 text-xs"><span className="font-bold">{attribute === "UNIFORMITY" ? "Uniformidade" : attribute === "SWEETNESS" ? "Doçura" : "Xícara Limpa"}</span><span className="flex gap-1">{draft.cups.filter((cup) => cup.attribute === attribute).map((cup) => <span key={cup.cupNumber} aria-label={`Xícara ${cup.cupNumber} ${cup.selected ? "conforme" : "divergente"}`} className={cup.selected ? "text-emerald-600" : "text-orange-600"}>{cup.selected ? "✓" : "×"}</span>)}</span><b>{values[attribute === "UNIFORMITY" ? "uniformity" : attribute === "SWEETNESS" ? "sweetness" : "cleanCup"]}/10</b></div>)}</div>
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
+        <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Atributos técnicos</h3>
+        <div className="mt-3 space-y-2">{scoreRows.map(([label, score]) => <div key={label} className="flex items-center gap-2 text-xs"><span className="w-32 shrink-0 font-bold text-slate-600">{label}</span><span className="h-2 flex-1 rounded-full bg-slate-100"><span className="block h-2 rounded-full bg-fuchsia-400" style={{ width: `${score == null ? 0 : Math.min(100, score * 10)}%` }} /></span><b className="w-10 text-right">{score == null ? "—" : score.toFixed(2).replace(".", ",")}</b></div>)}</div>
+      </section>
       {pending.length > 0 && (
         <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
           <b>Atributos pendentes</b>
