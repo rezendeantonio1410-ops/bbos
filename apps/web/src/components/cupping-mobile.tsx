@@ -64,36 +64,22 @@ export function CuppingScorePicker({
   grid?: boolean;
   maximum?: number;
 }) {
-  const scores = Array.from(
-    { length: Math.round((maximum - 6) / 0.25) + 1 },
-    (_, index) => 6 + index * 0.25,
-  );
+  const step = 0.25;
+  const adjust = (delta: number) => {
+    const next = Number(((value ?? 6) + delta).toFixed(2));
+    onChange(Math.min(maximum, Math.max(6, next)));
+  };
+  const scoreLabel = value == null ? "—" : value.toFixed(2).replace(".", ",");
+  const qualityLabel = value == null ? "Avaliar" : value >= 9 ? "Excepcional" : value >= 8 ? "Excelente" : value >= 7 ? "Muito bom" : "Bom";
   return (
-    <div
-      aria-label={`Nota de ${label}`}
-      className={
-        grid
-          ? "max-w-full"
-          : "-mx-1 max-w-full snap-x overflow-x-auto overscroll-x-contain px-1 pb-2"
-      }
-    >
-      <div
-        className={
-          grid ? "grid grid-cols-5 gap-2" : "flex min-w-max items-center gap-2"
-        }
-      >
-        {scores.map((score) => (
-          <button
-            type="button"
-            key={score}
-            onClick={() => onChange(score)}
-            aria-pressed={value === score}
-            className={`${grid ? "min-h-11 min-w-0 px-1 text-xs" : "min-h-12 min-w-16 snap-center px-3 text-sm"} rounded-xl border font-black transition ${value === score ? "border-fuchsia-500 bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-200" : "border-white/70 bg-white/80 text-slate-700"}`}
-          >
-            {score.toFixed(2).replace(".", ",")}
-            {value === score && <Check size={14} className="mx-auto mt-1" />}
-          </button>
-        ))}
+    <div aria-label={`Nota de ${label}`} data-grid={grid} className="rounded-2xl border border-white/70 bg-white/65 p-3">
+      <div className="flex items-center justify-center gap-4">
+        <button type="button" onClick={() => adjust(-step)} disabled={value == null || value <= 6} aria-label="Reduzir nota" className="grid min-h-12 min-w-12 place-items-center rounded-full border border-slate-200 bg-white text-xl font-black text-slate-700 disabled:opacity-35">−</button>
+        <div className="min-w-24 text-center"><strong className="block text-3xl font-black tabular-nums text-slate-900">{scoreLabel}</strong><span className="text-xs font-bold text-slate-500">{qualityLabel}</span></div>
+        <button type="button" onClick={() => adjust(step)} disabled={value != null && value >= maximum} aria-label="Aumentar nota" className="grid min-h-12 min-w-12 place-items-center rounded-full border border-slate-200 bg-white text-xl font-black text-slate-700 disabled:opacity-35">+</button>
+      </div>
+      <div className="mt-3 flex justify-center gap-2" aria-label="Atalhos de nota">
+        {[6, 7, 8, 9].filter((score) => score <= maximum).map((score) => <button type="button" key={score} onClick={() => onChange(score)} aria-pressed={value === score} className={`min-h-9 min-w-12 rounded-full border px-3 text-xs font-black ${value === score ? "border-fuchsia-500 bg-fuchsia-500 text-white" : "border-white bg-white/80 text-slate-600"}`}>{score}</button>)}
       </div>
     </div>
   );
@@ -884,6 +870,7 @@ export type CupState = {
   selected: boolean;
   defectType?: string;
   defectSeverity?: "TAINT" | "FAULT";
+  defectWeight?: 2 | 4;
   defectDescription?: string;
   notes?: string;
 };
@@ -990,6 +977,7 @@ export function FiveCupSelector({
                 selected,
                 defectType: selected ? undefined : cup.defectType,
                 defectSeverity: selected ? undefined : cup.defectSeverity,
+                defectWeight: selected ? undefined : cup.defectWeight,
                 defectDescription: selected ? undefined : cup.defectDescription,
               });
             }}
@@ -1021,35 +1009,19 @@ export function FiveCupSelector({
             >
               <label className="text-xs font-bold text-rose-900">
                 Que problema você percebeu na xícara {cup.cupNumber}?
-                <select
-                  value={cup.defectType ?? ""}
-                  onChange={(e) =>
-                    update({ ...cup, defectType: e.target.value })
-                  }
-                  className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 bg-white px-3"
-                >
-                  <option value="">Selecione o defeito</option>
+                <span className="mt-2 grid grid-cols-2 gap-2">
                   {defects.map((defect) => (
-                    <option key={defect}>{defect}</option>
+                    <button type="button" key={defect} aria-pressed={cup.defectType === defect} onClick={() => update({ ...cup, defectType: cup.defectType === defect ? undefined : defect })} className={`min-h-11 rounded-xl border px-2 text-left text-xs font-black transition ${cup.defectType === defect ? "border-rose-500 bg-rose-500 text-white" : "border-rose-200 bg-white text-rose-900"}`}>{defect}</button>
                   ))}
-                </select>
+                </span>
               </label>
               <label className="mt-3 block text-xs font-bold text-rose-900">
-                Severidade do defeito
-                <select
-                  value={cup.defectSeverity ?? ""}
-                  onChange={(event) =>
-                    update({
-                      ...cup,
-                      defectSeverity: event.target.value as "TAINT" | "FAULT",
-                    })
-                  }
-                  className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 bg-white px-3"
-                >
-                  <option value="">Selecione a severidade</option>
-                  <option value="TAINT">TAINT · penalidade de 2 pontos</option>
-                  <option value="FAULT">FAULT · penalidade de 4 pontos</option>
-                </select>
+                Qual a intensidade do defeito?
+                <span className="mt-2 grid grid-cols-2 gap-2">
+                  {([ ["TAINT", "Leve", 2], ["FAULT", "Grave", 4] ] as const).map(([severity, description, weight]) => (
+                    <button type="button" key={severity} aria-pressed={cup.defectSeverity === severity} onClick={() => update({ ...cup, defectSeverity: severity, defectWeight: weight })} className={`min-h-16 rounded-xl border p-2 text-left transition ${cup.defectSeverity === severity ? "border-rose-500 bg-rose-500 text-white" : "border-rose-200 bg-white text-rose-900"}`}><b className="block text-xs">{severity}</b><span className="block text-[10px]">{description} · peso {weight}</span></button>
+                  ))}
+                </span>
               </label>
               {cup.defectType === "Outro" && (
                 <input

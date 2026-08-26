@@ -174,6 +174,7 @@ function draftFromEvaluation(evaluation: any): Draft {
       notes: cup.notes ?? undefined,
       defectType: cup.defect?.defectType,
       defectSeverity: cup.defect?.defectSeverity,
+      defectWeight: cup.defect?.defectSeverity === "FAULT" ? 4 : cup.defect?.defectSeverity === "TAINT" ? 2 : undefined,
       defectDescription: cup.defect?.defectDescription ?? undefined,
     }),
   );
@@ -688,9 +689,8 @@ export default function CuppingStepPage() {
               aftertasteCharacter={draft.stageData.aftertasteCharacter}
             />
             <div className="rounded-3xl bg-white/55 p-4">
-              <p className="mb-3 text-xs font-black uppercase tracking-[.14em] text-slate-600">
-                Sua avaliação geral
-              </p>
+              <p className="text-xs font-black uppercase tracking-[.14em] text-slate-600">Considerando tudo o que encontrou, como você avalia este café?</p>
+              <p className="mt-2 text-sm text-slate-600">Pense no conjunto da experiência na xícara.</p>
               <CuppingScorePicker
                 label="Avaliação geral"
                 value={draft.scores.overall}
@@ -792,7 +792,7 @@ export default function CuppingStepPage() {
                 disabled={!canContinue}
                 className="flex min-h-12 flex-1 items-center justify-center gap-1 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-rose-500 to-orange-400 px-2 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {step === "aroma" && olfactoryMoment === "FRAGRANCE" ? "Ir para Aroma" : step === "aroma" ? "Continuar para Sabor" : step === "finalizacao" ? "Continuar para Acidez" : "Continuar"} <ChevronRight size={18} />
+                {step === "aroma" && olfactoryMoment === "FRAGRANCE" ? "Ir para Aroma" : step === "aroma" ? "Continuar para Sabor" : step === "finalizacao" ? "Continuar para Acidez" : step === "overall" ? "Concluir avaliação" : "Continuar"} <ChevronRight size={18} />
               </button>
             </>
           )}

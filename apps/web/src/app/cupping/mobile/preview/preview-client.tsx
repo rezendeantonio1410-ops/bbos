@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ChevronLeft, ChevronRight, RotateCcw, Sparkles } from "lucide-react";
-import { CuppingSensoryLibrary, FiveCupSelector, type CupState, type MobileSelection } from "@/components/cupping-mobile";
+import { CuppingScorePicker, CuppingSensoryLibrary, FiveCupSelector, type CupState, type MobileSelection } from "@/components/cupping-mobile";
 import { CuppingAftertaste } from "@/components/cupping-aftertaste";
 import { CuppingAcidity } from "@/components/cupping-acidity";
 import { CuppingBody } from "@/components/cupping-body";
@@ -26,6 +26,7 @@ type PreviewState = {
   acidity: { intensity?: string; types: string[]; references: string[]; characters: string[]; score?: number };
   body: { weight?: string; textures: string[]; score?: number; memory: string };
   cups: CupState[];
+  overall?: number;
 };
 const initialState: PreviewState = { selections: [], aftertaste: { selections: [], characters: [] }, acidity: { types: [], references: [], characters: [] }, body: { textures: [], memory: "" }, cups: defaultCups };
 
@@ -101,10 +102,10 @@ export default function PreviewClient() {
       {stage === "uniformity" && <FiveCupSelector label="Uniformidade" attribute="UNIFORMITY" cups={state.cups} onChange={updateCups} defects={cleanCupDefects} />}
       {stage === "sweetness" && <FiveCupSelector label="Doçura" attribute="SWEETNESS" cups={state.cups} onChange={updateCups} defects={cleanCupDefects} />}
       {stage === "cleanCup" && <FiveCupSelector label="Xícara limpa" attribute="CLEAN_CUP" cups={state.cups} onChange={updateCups} defects={cleanCupDefects} />}
-      {stage === "overall" && <div className="rounded-3xl border border-white/70 bg-white/75 p-5"><p className="text-xs font-black uppercase tracking-[.16em] text-orange-700">Etapa 09 de 10</p><h2 className="mt-2 text-2xl font-black text-[#432a1e]">Avaliação geral</h2><p className="mt-2 text-sm leading-6 text-[#6f5c51]">Revise a experiência completa antes de seguir ao resultado.</p></div>}
+      {stage === "overall" && <div className="rounded-3xl border border-white/70 bg-white/75 p-5"><p className="text-xs font-black uppercase tracking-[.16em] text-orange-700">Etapa 09 de 10</p><h2 className="mt-2 text-2xl font-black text-[#432a1e]">Considerando tudo o que encontrou, como você avalia este café?</h2><p className="mt-2 text-sm leading-6 text-[#6f5c51]">Pense no conjunto da experiência na xícara.</p><div className="mt-4"><CuppingScorePicker label="Avaliação geral" value={state.overall} onChange={(overall) => setState((old) => ({ ...old, overall }))} /></div></div>}
       {stage === "result" && <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-5"><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-700">Etapa 10 de 10</p><h2 className="mt-2 text-2xl font-black text-emerald-950">Resultado</h2><p className="mt-2 text-sm leading-6 text-emerald-900">Fluxo de dez etapas concluído. Suas escolhas permanecem salvas neste preview.</p></div>}
       </>}
     </section>
-    {welcomeSeen && <footer className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/75 p-3"><button type="button" onClick={() => go(index - 1)} disabled={index === 0} className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-black text-[#765e50] disabled:opacity-40"><ChevronLeft size={17} /> Anterior</button><span className="text-xs font-black text-[#765e50]">{index + 1} de {stages.length}</span><button type="button" onClick={() => go(index + 1)} disabled={index === stages.length - 1} className="inline-flex min-h-11 items-center gap-1 rounded-full bg-[#512b1a] px-4 text-xs font-black text-white disabled:opacity-40">Próxima <ChevronRight size={17} /></button></footer>}
+    {welcomeSeen && <footer className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/75 p-3"><button type="button" onClick={() => go(index - 1)} disabled={index === 0} className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-black text-[#765e50] disabled:opacity-40"><ChevronLeft size={17} /> Anterior</button><span className="text-xs font-black text-[#765e50]">{index + 1} de {stages.length}</span><button type="button" onClick={() => go(index + 1)} disabled={index === stages.length - 1 || (stage === "overall" && state.overall == null)} className="inline-flex min-h-11 items-center justify-center gap-1 rounded-full bg-[#512b1a] px-4 text-xs font-black text-white disabled:opacity-40">{stage === "overall" ? "Concluir avaliação" : "Próxima"} <ChevronRight size={17} /></button></footer>}
   </main>;
 }
