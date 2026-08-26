@@ -21,7 +21,7 @@ export function TraditionalQualityScore({ value, onChange, min = 6, max = 10, st
     onChange(Math.min(max, Math.max(min, Number(next.toFixed(2)))));
   };
   const display = value === undefined ? "—" : value.toFixed(2).replace(".", ",");
-  return <section className="mx-3 mb-3 rounded-3xl border border-[#eaded1] bg-[#fffdfa] p-4" aria-label={label}>
+  return <section className="mx-3 mb-3 rounded-3xl border border-[#eaded1] bg-[#fffdfa] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]" aria-label={label}>
     <p className="text-[10px] font-black uppercase tracking-[.14em] text-[#855542]">NOTA DE QUALIDADE</p>
     <h3 className="mt-1 text-sm font-black text-[#2f211b]">{attribute}</h3>
     <p className="mt-1 text-[11px] text-slate-500">Considere o conjunto de fragrância e aroma, sua qualidade, limpeza, intensidade e complexidade.</p>

@@ -637,6 +637,7 @@ const olfactoryAssets: Record<string, string> = {
   Lima: "/sensory/aroma/frutado/citricos/lima.webp",
   Tangerina: "/sensory/aroma/frutado/citricos/tangerina.webp",
   Bergamota: "/sensory/aroma/frutado/citricos/bergamota.webp",
+  Hibisco: "/sensory/aroma/floral/flores-perfumadas/rosa.png",
   Morango: "/sensory/aroma/frutado/frutas-vermelhas/morango.webp",
   Framboesa: "/sensory/aroma/frutado/frutas-vermelhas/framboesa.webp",
   Cereja: "/sensory/aroma/frutado/frutas-vermelhas/cereja.webp",
