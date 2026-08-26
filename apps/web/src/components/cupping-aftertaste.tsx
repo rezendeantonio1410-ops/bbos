@@ -63,7 +63,7 @@ export function CuppingAftertaste({ persistence, intensity, score, characters, s
   return (
     <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[minmax(0,.78fr)_minmax(0,1.22fr)] md:items-start lg:gap-5">
       <section className="min-w-0 overflow-hidden rounded-[clamp(1.4rem,4vw,2rem)] border border-[#eadbcf] bg-[radial-gradient(circle_at_25%_20%,#fffdfa_0,#fbf3ea_48%,#efe0d4_100%)] p-[clamp(1rem,3vw,1.6rem)] shadow-[0_18px_50px_rgba(75,43,27,.11)] md:col-span-2">
-        <div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-[#9b735d]">Etapa 03 de 10</p><h2 className="mt-1 text-2xl font-black text-[#432a1e]">Finalização</h2></div><span className="text-[10px] font-bold text-[#85695a]">aftertaste</span></div>
+        <div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-[#9b735d]">Etapa 03 de 08</p><h2 className="mt-1 text-2xl font-black text-[#432a1e]">Finalização</h2></div><span className="text-[10px] font-bold text-[#85695a]">aftertaste</span></div>
         <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/70"><span className="block h-full w-[30%] rounded-full bg-gradient-to-r from-[#6d3d29] to-[#d18d62]" /></div>
         <p className="mt-5 text-sm font-semibold leading-6 text-[#6f5c51]">Por quanto tempo as sensações permanecem depois da xícara?</p>
 

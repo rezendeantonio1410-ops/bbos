@@ -14,16 +14,14 @@ export const CUPPING_ATTRIBUTES = [
   "overall",
 ] as const;
 
-/** Canonical order for the participant-facing ten-step cupping session. */
+/** Canonical order for the participant-facing eight-step cupping session. */
 export const CUPPING_SESSION_STEPS = [
   { id: "aroma", label: "Fragrância + Aroma" },
   { id: "sabor", label: "Sabor" },
   { id: "finalizacao", label: "Finalização" },
   { id: "acidez", label: "Acidez" },
   { id: "corpo", label: "Corpo" },
-  { id: "uniformity", label: "Uniformidade" },
-  { id: "sweetness", label: "Doçura" },
-  { id: "cleanCup", label: "Xícara Limpa" },
+  { id: "sample_consistency", label: "Consistência da amostra" },
   { id: "overall", label: "Avaliação Geral" },
   { id: "result", label: "Resultado" },
 ] as const;
