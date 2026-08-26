@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { Check, Coffee, Waves } from "lucide-react";
+import { CuppingScorePicker } from "@/components/cupping-mobile";
 
 const weights = ["Leve", "Médio-leve", "Médio", "Médio-alto", "Encorpado", "Denso"] as const;
 const textures = [
@@ -17,7 +18,6 @@ export function CuppingBody({ weight, selectedTextures, score, memory, onWeight,
   const [dragging, setDragging] = React.useState(false);
   const weightIndex = Math.max(0, weights.indexOf(weight as never));
   const chooseAt = React.useCallback((clientX: number) => { const bounds = trackRef.current?.getBoundingClientRect(); if (!bounds) return; const next = weights[Math.round(Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width)) * (weights.length - 1))]; if (next && next !== weight) { haptic(); onWeight(next); } }, [onWeight, weight]);
-  const scores = Array.from({ length: 15 }, (_, index) => 6 + index * .25);
   const toggleTexture = (texture: string) => { haptic(); onTextures(selectedTextures.includes(texture) ? selectedTextures.filter((item) => item !== texture) : [...selectedTextures, texture]); };
   return <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-start lg:gap-5">
     <section className="min-w-0 overflow-hidden rounded-[clamp(1.4rem,4vw,2rem)] border border-[#e6d7c8] bg-[radial-gradient(circle_at_20%_15%,#fffdf9_0,#f7eee4_50%,#ebd9c7_100%)] p-[clamp(1rem,3vw,1.6rem)] shadow-[0_18px_50px_rgba(91,54,35,.1)] md:col-span-2"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-[#9a725d]">Etapa 05 de 08</p><h2 className="mt-1 text-2xl font-black text-[#432b20]">Corpo</h2><p className="mt-2 text-sm font-semibold text-[#6e5c51]">Como o café ocupa a boca?</p><p className="mt-1 text-xs text-[#87766c]">Perceba o peso, a textura e a sensação tátil.</p></div><Waves className="text-[#b9805e]" /></div>
@@ -31,7 +31,7 @@ export function CuppingBody({ weight, selectedTextures, score, memory, onWeight,
 
     <section className="min-w-0 rounded-[1.7rem] border border-[#e6d7c8] bg-white/85 p-[clamp(1rem,2.5vw,1.4rem)] shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#96705b]">Sua Xícara — Corpo</p><Coffee size={17} className="text-[#8d573b]" /></div><dl className="mt-3 grid grid-cols-[minmax(4.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs"><dt className="font-bold text-[#8c776a]">Peso</dt><dd className="font-black text-[#493126]">{weight ?? "—"}</dd><dt className="font-bold text-[#8c776a]">Textura</dt><dd className="break-words font-black text-[#493126]">{selectedTextures.join(" · ") || "—"}</dd><dt className="font-bold text-[#8c776a]">Qualidade</dt><dd className="font-black text-[#493126]">{score?.toFixed(2).replace(".", ",") ?? "—"}</dd><dt className="font-bold text-[#8c776a]">Memória</dt><dd className="break-words font-black text-[#493126]">{memory?.trim() || "—"}</dd></dl></section>
 
-    <section className="min-w-0 rounded-[1.7rem] border border-[#e6d7c8] bg-white/85 p-[clamp(1rem,2.5vw,1.4rem)] shadow-sm"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#96705b]">Qualidade do Corpo</p><p className="mt-1 text-xs text-[#807067]">Julgamento técnico independente do peso e da textura.</p><div className="mt-3 grid grid-cols-3 gap-2 min-[430px]:grid-cols-5">{scores.map((value) => <button type="button" key={value} aria-pressed={score === value} onClick={() => onScore(value)} className={`min-h-11 rounded-xl border px-1 text-xs font-black transition active:scale-[.96] ${score === value ? "border-[#875337] bg-[#8d573b] text-white shadow-md" : "border-[#eadfd5] bg-[#fdfaf7] text-[#62483a]"}`}>{value.toFixed(2).replace(".", ",")}</button>)}</div></section>
+    <section className="min-w-0 rounded-[1.7rem] border border-[#e6d7c8] bg-white/85 p-[clamp(1rem,2.5vw,1.4rem)] shadow-sm"><CuppingScorePicker label="Qualidade do Corpo" value={score} onChange={onScore} /></section>
 
     <label className="block min-w-0 rounded-[1.7rem] border border-[#e6d7c8] bg-white/85 p-[clamp(1rem,2.5vw,1.4rem)] text-[10px] font-black uppercase tracking-[.16em] text-[#96705b] shadow-sm">Isso te lembra algo?<textarea maxLength={300} value={memory ?? ""} onChange={(event) => onMemory(event.target.value)} className="mt-2 min-h-20 w-full rounded-2xl border border-[#eadfd5] bg-[#fdfaf7] p-3 text-xs font-normal normal-case tracking-normal text-[#51372a]" placeholder="Memória afetiva — opcional" /></label>
   </div>;

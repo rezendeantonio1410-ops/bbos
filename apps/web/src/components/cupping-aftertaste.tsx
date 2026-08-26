@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { Check, ChevronRight, Droplets, Flower2, Leaf, Sparkles } from "lucide-react";
+import { CuppingScorePicker } from "@/components/cupping-mobile";
 import {
   aftertasteCharacterOptions,
   aftertasteIntensityOptions,
@@ -36,6 +37,11 @@ const photoFor = (selection: OlfactoryStageSelection) => sensoryLibrary
   .find((descriptor) => descriptor.name === selection.descriptor)?.assetPath;
 
 export function CuppingAftertaste({ persistence, intensity, score, characters, selections, flavorSelections, onPersistence, onIntensity, onScore, onCharacters, onSelections, onExplore }: Props) {
+  const [phase, setPhase] = React.useState<1 | 2 | 3>(persistence ? 2 : 1);
+  React.useEffect(() => {
+    if (intensity != null || characters.length > 0 || selections.length > 0) setPhase(3);
+    else if (persistence) setPhase(2);
+  }, [characters.length, intensity, persistence, selections.length]);
   const persistenceIndex = Math.max(0, aftertastePersistenceOptions.indexOf(persistence as never));
   const trailIntensity = intensity ?? 3;
   const trackRef = React.useRef<HTMLDivElement>(null);
@@ -46,9 +52,10 @@ export function CuppingAftertaste({ persistence, intensity, score, characters, s
     const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
     const index = Math.min(3, Math.max(0, Math.round(ratio * 3)));
     const next = aftertastePersistenceOptions[index];
-    if (next && next !== persistence) {
-      haptic();
-      onPersistence(next);
+            if (next && next !== persistence) {
+              haptic();
+              onPersistence(next);
+              setPhase(2);
     }
   }, [onPersistence, persistence]);
   const toggleSelection = (selection: OlfactoryStageSelection) => {
@@ -58,6 +65,7 @@ export function CuppingAftertaste({ persistence, intensity, score, characters, s
   };
   const toggleCharacter = (character: string) => {
     haptic();
+    setPhase(3);
     onCharacters(characters.includes(character) ? characters.filter((item) => item !== character) : unique([...characters, character]));
   };
   return (
@@ -91,11 +99,11 @@ export function CuppingAftertaste({ persistence, intensity, score, characters, s
         <div className="relative mt-2 grid grid-cols-5 gap-0.5" role="radiogroup" aria-label="Intensidade da finalização"><span className="pointer-events-none absolute left-[10%] right-[10%] top-5 h-px bg-[#dcc8b8]" />{aftertasteIntensityOptions.map((label, index) => { const value = index + 1; const active = intensity === value; return <button key={label} type="button" role="radio" aria-checked={active} onClick={() => { haptic(); onIntensity(value); }} className="relative z-10 flex min-h-14 min-w-0 touch-manipulation flex-col items-center px-0.5 pt-2 text-[clamp(.5rem,2.2vw,.68rem)] font-black leading-3 text-[#67554b] active:scale-95"><span className={`mb-1.5 rounded-full border-[3px] border-[#fffaf5] transition active:scale-90 motion-reduce:transition-none ${active ? "size-6 bg-[#b55438] shadow-[0_0_0_4px_rgba(181,84,56,.15)]" : "size-4 bg-[#cdb8a8]"}`} />{label}</button>; })}</div>
       </section>
 
-      {onScore && <section className="min-w-0 rounded-[1.8rem] border border-[#ead9ca] bg-white/80 p-[clamp(1rem,2.5vw,1.5rem)] shadow-sm"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#8b6a58]">Qualidade da finalização</p><p className="mt-1 text-xs text-[#706057]">Avalie a qualidade independentemente da duração.</p><div className="mt-3 grid grid-cols-3 gap-2 min-[430px]:grid-cols-5">{Array.from({ length: 17 }, (_, index) => 6 + index * .25).map((value) => <button type="button" key={value} aria-pressed={score === value} onClick={() => onScore(value)} className={`min-h-11 rounded-xl border px-1 text-xs font-black transition active:scale-[.96] ${score === value ? "border-[#b55438] bg-[#b55438] text-white shadow-md" : "border-[#e7d6c8] bg-[#fffaf5] text-[#665249]"}`}>{value.toFixed(2).replace(".", ",")}</button>)}</div></section>}
+      {onScore && phase >= 3 && <section className="min-w-0 rounded-[1.8rem] border border-[#ead9ca] bg-white/80 p-[clamp(1rem,2.5vw,1.5rem)] shadow-sm"><CuppingScorePicker label="Qualidade da finalização" value={score} onChange={onScore} /></section>}
 
       <section className="min-w-0 rounded-[1.8rem] border border-[#ead9ca] bg-white/80 p-[clamp(1rem,2.5vw,1.5rem)] shadow-sm">
         <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#8b6a58]">O que permaneceu?</p><p className="mt-1 text-sm text-[#706057]">Percepções de Sabor sugeridas, sem seleção automática.</p>
-        {flavorSelections.length ? <div className="mt-4 grid grid-cols-2 gap-2 min-[430px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3">{flavorSelections.map((selection) => { const selected = selections.some((item) => item.family === selection.family && item.subfamily === selection.subfamily && item.descriptor === selection.descriptor); const asset = photoFor(selection); return <button key={`${selection.family}-${selection.subfamily}-${selection.descriptor}`} type="button" aria-pressed={selected} onClick={() => toggleSelection(selection)} className={`group flex min-h-[5.5rem] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border p-2 text-center text-xs font-black transition active:scale-[.96] motion-reduce:transition-none ${selected ? "-translate-y-0.5 border-[#b55438] bg-[#fff0e9] text-[#773925] shadow-[0_8px_18px_rgba(126,65,40,.15)]" : "border-[#e8d8ca] bg-white text-[#655248] shadow-sm"}`}>{asset && <span className="relative size-11 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm"><Image src={asset} alt="" fill sizes="44px" className="object-cover" />{selected && <span className="absolute right-0 top-0 grid size-4 place-items-center rounded-full bg-[#9d4f34] text-white"><Check size={10} /></span>}</span>}<span className="min-w-0 break-words">{selection.descriptor}</span></button>; })}</div> : <p className="mt-4 rounded-xl bg-[#f8f0e8] p-3 text-xs text-[#78685e]">Adicione percepções em Sabor para vê-las aqui.</p>}
+        {phase >= 2 && (flavorSelections.length ? <div className="mt-4 grid grid-cols-2 gap-2 min-[430px]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3">{flavorSelections.map((selection) => { const selected = selections.some((item) => item.family === selection.family && item.subfamily === selection.subfamily && item.descriptor === selection.descriptor); const asset = photoFor(selection); return <button key={`${selection.family}-${selection.subfamily}-${selection.descriptor}`} type="button" aria-pressed={selected} onClick={() => { toggleSelection(selection); setPhase(3); }} className={`group flex min-h-[5.5rem] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border p-2 text-center text-xs font-black transition active:scale-[.96] motion-reduce:transition-none ${selected ? "-translate-y-0.5 border-[#b55438] bg-[#fff0e9] text-[#773925] shadow-[0_8px_18px_rgba(126,65,40,.15)]" : "border-[#e8d8ca] bg-white text-[#655248] shadow-sm"}`}>{asset && <span className="relative size-11 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm"><Image src={asset} alt="" fill sizes="44px" className="object-cover" />{selected && <span className="absolute right-0 top-0 grid size-4 place-items-center rounded-full bg-[#9d4f34] text-white"><Check size={10} /></span>}</span>}<span className="min-w-0 break-words">{selection.descriptor}</span></button>; })}</div> : <p className="mt-4 rounded-xl bg-[#f8f0e8] p-3 text-xs text-[#78685e]">Adicione percepções em Sabor para vê-las aqui.</p>)}
         <button type="button" onClick={onExplore} className="mt-3 inline-flex min-h-12 items-center gap-1 rounded-full border border-[#d9c1ae] px-4 text-xs font-black text-[#633d2a]"><Sparkles size={15} /> Outra percepção <ChevronRight size={15} /></button>
       </section>
 

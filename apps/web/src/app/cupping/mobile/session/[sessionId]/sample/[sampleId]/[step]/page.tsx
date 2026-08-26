@@ -470,6 +470,12 @@ export default function CuppingStepPage() {
   }
   return (
     <main className={`mx-auto min-h-screen w-full overflow-x-clip px-[clamp(.75rem,3vw,2rem)] pb-[calc(12rem+env(safe-area-inset-bottom))] pt-[clamp(4.5rem,8vw,6rem)] ${step === "aroma" || step === "sabor" ? "max-w-[430px]" : step === "finalizacao" || step === "acidez" || step === "corpo" ? "max-w-[1180px]" : "max-w-3xl"}`}>
+      <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/70 bg-[#fbfaf7]/95 px-4 py-2 backdrop-blur">
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between">
+          <div className="min-w-0"><p className="truncate text-xs font-black text-slate-800">{context?.participant?.name ?? context?.session?.participant?.name ?? "Provador"}</p><p className="text-[10px] font-semibold text-slate-500">Provador</p></div>
+          <img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees" className="h-8 w-auto object-contain" />
+        </div>
+      </div>
       <header ref={decisionRef}>
         <Link
           href={
@@ -698,11 +704,13 @@ export default function CuppingStepPage() {
             <div className="rounded-3xl bg-white/55 p-4">
               <p className="text-xs font-black uppercase tracking-[.14em] text-slate-600">Considerando tudo o que encontrou, como você avalia este café?</p>
               <p className="mt-2 text-sm text-slate-600">Pense no conjunto da experiência na xícara.</p>
+              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Faixa de qualidade">
+                {([['Bom', 6.5, 'Uma xícara agradável.'], ['Muito bom', 7.5, 'Uma experiência bem construída.'], ['Excelente', 8.5, 'Uma xícara distinta e memorável.'], ['Excepcional', 9.5, 'Uma experiência rara.']] as const).map(([label, value, hint]) => <button key={label} type="button" onClick={() => setScore('overall', value)} className={`rounded-2xl border px-2 py-2 text-xs font-black transition ${draft.scores.overall === value ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white/80 text-slate-700'}`}><span className="block">{label}</span><small className={`mt-1 block text-[10px] font-medium ${draft.scores.overall === value ? 'text-white/80' : 'text-slate-500'}`}>{hint}</small></button>)}
+              </div>
               <CuppingScorePicker
                 label="Avaliação geral"
                 value={draft.scores.overall}
                 onChange={(value) => setScore("overall", value)}
-                grid
               />
             </div>
             <label className="block rounded-3xl bg-white/80 p-4 text-xs font-bold">
@@ -1045,7 +1053,7 @@ function Result({
         <span className="mx-auto grid size-20 place-items-center rounded-full bg-lime-100 text-5xl text-lime-700">
           ✓
         </span>
-        <h2 className="mt-4 text-2xl font-black">Avaliação completa!</h2>
+        <h2 className="mt-4 text-2xl font-black">Sua prova está concluída.</h2>
         <p className="mx-auto mt-2 max-w-xs text-sm italic text-slate-600">
           Todos os atributos obrigatórios
           <br />
@@ -1055,7 +1063,7 @@ function Result({
       <div className="rounded-2xl border border-slate-200 bg-white/75 p-6">
         <p className="text-left text-xs font-black uppercase tracking-[.08em] text-slate-600">Amostra 03 · Arábica · Natural</p>
         <p className="text-xs font-black uppercase tracking-[.08em] text-slate-600">
-          Sua pontuação final
+          NOTA FINAL
         </p>
         <strong className="mt-2 block text-5xl font-black text-slate-800">
           {scoring?.finalScore.toFixed(2).replace(".", ",") ?? "—"}
@@ -1064,7 +1072,9 @@ function Result({
         <small className="mt-1 block text-[10px] uppercase tracking-wide text-slate-500">
           Traditional 100
         </small>
+        <p className="mt-3 text-sm text-slate-600">Este é o café que você encontrou.</p>
       </div>
+      <h3 className="text-left text-xs font-black uppercase tracking-[.12em] text-slate-500">O QUE VOCÊ PERCEBEU</h3>
       <section className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-left">
         <h3 className="text-xs font-black uppercase tracking-[.1em] text-slate-600">Síntese sensorial</h3>
         <p className="mt-2 text-sm leading-6 text-slate-700">{synthesis}</p>
