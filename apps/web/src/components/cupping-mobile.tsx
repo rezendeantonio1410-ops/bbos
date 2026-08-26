@@ -887,6 +887,38 @@ export type CupState = {
   defectDescription?: string;
   notes?: string;
 };
+
+/** A single, reusable top-view cup image used by all five controls. */
+function CuppingCupArtwork({ divergent = false }: { divergent?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      role="img"
+      aria-label="Xícara de cupping com café"
+      className={`mx-auto block h-[4.75rem] w-full transition-transform ${divergent ? "scale-[.94]" : ""}`}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <defs>
+        {/* The supplied photograph uses a chroma-green staging background. */}
+        <filter id="cupping-cup-key" colorInterpolationFilters="sRGB">
+          <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1 -1 1 0 0" />
+        </filter>
+      </defs>
+      <image
+        href="/sensory/aroma/stages/aroma-crosta.webp"
+        x="0"
+        y="0"
+        width="100"
+        height="100"
+        preserveAspectRatio="xMidYMid meet"
+        filter="url(#cupping-cup-key)"
+      />
+      {divergent ? (
+        <circle cx="50" cy="50" r="45" fill="none" stroke="#f97316" strokeWidth="2.5" />
+      ) : null}
+    </svg>
+  );
+}
 export function FiveCupSelector({
   label,
   attribute,
@@ -930,10 +962,15 @@ export function FiveCupSelector({
     },
   }[attribute];
   return (
-    <section className="border-b border-dashed border-slate-300 pb-5 last:border-b-0">
-      <div className="flex items-center justify-between">
-        <h3 className="font-black text-slate-800">{label}</h3>
-        <b className="text-fuchsia-700">
+    <section className="border-b border-dashed border-slate-300 pb-5 last:border-b-0" aria-label={label}>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h3 className="font-black text-slate-800">{label}</h3>
+          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">
+            Toque somente na xícara diferente
+          </p>
+        </div>
+        <b className="shrink-0 text-lg font-black tabular-nums text-fuchsia-700">
           {current.filter((cup) => cup.selected).length * 2}/10
         </b>
       </div>
@@ -941,7 +978,7 @@ export function FiveCupSelector({
         {guidance.question}
       </p>
       <p className="mt-1 text-xs leading-5 text-slate-500">{guidance.help}</p>
-      <div className="mt-4 grid grid-cols-5 gap-2">
+      <div className="mt-4 grid grid-cols-5 gap-1.5 sm:gap-2">
         {current.map((cup) => (
           <button
             type="button"
@@ -956,19 +993,17 @@ export function FiveCupSelector({
                 defectDescription: selected ? undefined : cup.defectDescription,
               });
             }}
-            aria-label={`${label}, xícara ${cup.cupNumber}, ${cup.selected ? "selecionada" : "desmarcada"}`}
+            aria-label={`Xícara ${String(cup.cupNumber).padStart(2, "0")} — ${cup.selected ? "conforme" : "divergente"}`}
             aria-pressed={cup.selected}
-            className={`relative min-h-24 rounded-xl border px-1 transition active:scale-[.98] ${cup.selected ? "border-fuchsia-300 bg-white/75" : "border-orange-400 bg-orange-50"}`}
+            className={`relative min-h-[7.5rem] rounded-2xl border px-0.5 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-500 active:scale-[.97] ${cup.selected ? "border-fuchsia-200 bg-white/80" : "border-orange-400 bg-orange-50"}`}
           >
-            <ApprovedSensoryArtwork
-              name="Taça de cupping"
-              className="mx-auto h-14 w-full"
-            />
-            <small className="mt-1 block font-black">
+            <CuppingCupArtwork divergent={!cup.selected} />
+            <small className="mt-0.5 block font-black text-slate-700">
               {String(cup.cupNumber).padStart(2, "0")}
             </small>
             {cup.selected && (
               <Check
+                aria-hidden="true"
                 className="absolute right-1 top-1 rounded-full bg-fuchsia-600 p-0.5 text-white"
                 size={14}
               />
