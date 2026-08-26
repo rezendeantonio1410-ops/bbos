@@ -87,7 +87,12 @@ export function SensoryReferenceFlow({ context, families, value, onChange, mode,
   const selectDescriptor = (item: SensoryFamily["subfamilies"][number]["descriptors"][number]) => {
     const existing = selections.find((selection) => selection.family === family?.name && selection.subfamily === subfamily?.name && selection.descriptor === item.name);
     const selection: ReferenceSelection = existing ?? { context, family: family?.name ?? "", subfamily: subfamily?.name, descriptor: item.name, level: 3, intensity: 3, imageKey: item.imageKey, assetPath: item.assetPath };
-    if (!existing) onChange([...value, selection]);
+    if (existing) {
+      onChange(value.filter((item) => !(item.context === context && item.family === existing.family && item.subfamily === existing.subfamily && item.descriptor === existing.descriptor)));
+      setPending(null);
+      return;
+    }
+    onChange([...value, selection]);
     setPending(selection);
   };
   const updateIntensity = (intensity: number) => {
