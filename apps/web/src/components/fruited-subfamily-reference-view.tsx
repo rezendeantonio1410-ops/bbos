@@ -13,6 +13,8 @@ type Props = {
   qualityScore?: number;
   onQualityChange(value: number): void;
   onComplete?(): void;
+  qualityLabel?: string;
+  qualityAttribute?: string;
 };
 
 const paths = [
@@ -58,7 +60,7 @@ const fallbackImages: Record<string, string> = {
 const colors = ["#c81418", "#f2dfbd", "#f0dfb9", "#b9cf9b", "#b89987"];
 const labelPos: Array<readonly [number, number]> = [[178, 92], [126, 165], [128, 246], [145, 337], [190, 425]];
 
-export function SensorySubfamilyArc({ family, familyColor, onSelect, onBack, qualityScore, onQualityChange, onComplete }: Props) {
+export function SensorySubfamilyArc({ family, familyColor, onSelect, onBack, qualityScore, onQualityChange, onComplete, qualityLabel = "Nota de qualidade de fragrância e aroma", qualityAttribute = "Fragrância + Aroma" }: Props) {
   const accent = familyColor ?? family.color ?? "#c81418";
   const headerImage = fallbackImages[family.subfamilies[0]?.name ?? ""] ?? family.subfamilies[0]?.assetPath;
   return <div data-sensory-subfamily-arc className="mx-auto w-full max-w-[390px] overflow-x-hidden bg-[#fbfaf7] text-[#211b18]">
@@ -66,6 +68,6 @@ export function SensorySubfamilyArc({ family, familyColor, onSelect, onBack, qua
     <div className="flex items-center gap-3 px-5 py-4 text-white" style={{ background: accent }}><img src={headerImage} alt="" className="size-12 object-contain mix-blend-multiply" /><div><div className="text-xl font-black">{family.name.toUpperCase()}</div><div className="text-sm">Selecione uma subfamília</div></div></div>
     <div className="px-2 pt-2"><svg viewBox="0 0 390 520" className="block h-auto w-full" role="group" aria-label={`Subfamílias ${family.name}`}>{family.subfamilies.slice(0, 5).map((item, index) => { const [x, y] = labelPos[index] ?? [0, 0]; const assets = compositions[item.name] ?? [item.assetPath ?? fallbackImages[item.name]]; return <g key={item.name} role="button" tabIndex={0} aria-label={item.name} className="cursor-pointer touch-manipulation outline-none active:brightness-105" onClick={() => onSelect(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item); } }}><path d={paths[index]} fill={item.color ?? colors[index]} stroke="#fffaf7" strokeWidth="3" />{assets.filter(Boolean).slice(0, 3).map((src, assetIndex) => <image key={`${item.name}-${assetIndex}`} href={src} x={x - 33 + (assetIndex % 2) * 18} y={y - 33 + Math.floor(assetIndex / 2) * 12} width={assetIndex === 0 ? 66 : 48} height={assetIndex === 0 ? 66 : 48} preserveAspectRatio="xMidYMid meet" style={{ mixBlendMode: "multiply" }} />)}</g>; })}</svg></div>
     <button type="button" onClick={onBack} className="mx-4 mt-2 min-h-12 w-[calc(100%-2rem)] rounded-2xl border border-slate-200 bg-white text-sm font-bold">← Voltar</button>
-    <TraditionalQualityScore value={qualityScore} onChange={onQualityChange} onConclude={onComplete} label="Nota de qualidade de fragrância e aroma" attribute="Fragrância + Aroma" />
+    <TraditionalQualityScore value={qualityScore} onChange={onQualityChange} onConclude={onComplete} label={qualityLabel} attribute={qualityAttribute} />
   </div>;
 }
