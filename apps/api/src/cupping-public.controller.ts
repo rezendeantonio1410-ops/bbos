@@ -39,7 +39,7 @@ export class CuppingPublicController {
     const code = `${prefix}-${new Date().getFullYear()}-${String(sequence).padStart(6, "0")}`;
     const token = randomBytes(32).toString("base64url");
     const baseUrl = process.env.WEB_URL || `${request.protocol}://${request.get("host")}`;
-    const publicUrl = `${baseUrl.replace(/\/$/, "")}/cupping/sessao/${token}`;
+    const publicUrl = `${baseUrl.replace(/\/$/, "")}/cupping/mobile/invite/${token}`;
     const qrCodeDataUrl = await QRCode.toDataURL(publicUrl, { errorCorrectionLevel: "M", margin: 2, width: 320 });
     const session = await this.db.cuppingPublicSession.create({ data: { companyId: actor.companyId, kind: body.kind, code, status: CuppingPublicStatus.OPEN, tokenHash: hashToken(token), professionalSampleId: body.professionalSampleId, referenceProfile: body.referenceProfile as Prisma.InputJsonValue | undefined, createdById: actor.id, createdByName: actor.name, openedAt: new Date() }, include: { participants: true } });
     return { ...session, publicUrl, qrCodeDataUrl, rawToken: undefined };
@@ -88,6 +88,16 @@ export class CuppingPublicController {
     const session = await this.db.cuppingPublicSession.findUnique({ where: { tokenHash: hashToken(token) }, include: { professionalSample: { select: { code: true, supplier: { select: { name: true } }, originUnit: { select: { name: true } }, harvest: true, species: true, cultivar: true, process: true } } } });
     if (!session || session.status !== CuppingPublicStatus.OPEN || (session.tokenExpiresAt && session.tokenExpiresAt < new Date())) throw new BadRequestException("Esta sessão não está disponível.");
     return { id: session.id, code: session.code, kind: session.kind, status: session.status, sample: session.professionalSample };
+  }
+
+  /** Safe resolver used by new Laboratory QR links. It exposes only the
+   * participant-facing session identity; source metadata remains server-side. */
+  @Public()
+  @Get("public/:token/mobile")
+  async mobileInvite(@Param("token") token: string) {
+    const session = await this.db.cuppingPublicSession.findUnique({ where: { tokenHash: hashToken(token) }, include: { professionalSample: { select: { code: true } } } });
+    if (!session || session.status !== CuppingPublicStatus.OPEN || (session.tokenExpiresAt && session.tokenExpiresAt < new Date())) throw new BadRequestException("Este convite não está disponível.");
+    return { sessionId: session.id, code: session.code, sample: session.professionalSample ? { displayCode: session.professionalSample.code } : null, mode: session.kind };
   }
 
   @Public()
