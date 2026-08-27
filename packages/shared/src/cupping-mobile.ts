@@ -993,6 +993,21 @@ export function cuppingReviewIssues(
     });
   return issues;
 }
+
+export type CuppingCompletionState = "UNTOUCHED" | "IN_PROGRESS" | "COMPLETE" | "REQUIRES_ATTENTION";
+export type CuppingCompletionItem = { sessionSampleId: string; step: string; stepLabel: string; state: CuppingCompletionState };
+/** Builds the participant/sample/required-step map without coupling it to UI. */
+export function getCuppingCompletionMap(input: { sessionSampleIds: string[]; drafts: Record<string, { scores?: Record<string, unknown>; stageData?: Record<string, unknown> }> }): CuppingCompletionItem[] {
+  const required = [["aroma", "Fragrância + Aroma", "fragranceAroma"], ["sabor", "Sabor", "flavor"], ["finalizacao", "Finalização", "aftertaste"], ["acidez", "Acidez", "acidity"], ["corpo", "Corpo", "body"], ["sample_consistency", "Consistência da Amostra", "cleanCup"], ["overall", "Avaliação Geral", "overall"]] as const;
+  return input.sessionSampleIds.flatMap((sessionSampleId) => required.map(([step, stepLabel, scoreKey]) => {
+    const draft = input.drafts[sessionSampleId];
+    if (!draft) return { sessionSampleId, step, stepLabel, state: "UNTOUCHED" as const };
+    const completedSteps = Array.isArray(draft.stageData?.completedSteps) ? draft.stageData.completedSteps : [];
+    if (completedSteps.includes(step)) return { sessionSampleId, step, stepLabel, state: "COMPLETE" as const };
+    if (draft.scores?.[scoreKey] != null) return { sessionSampleId, step, stepLabel, state: "IN_PROGRESS" as const };
+    return { sessionSampleId, step, stepLabel, state: "IN_PROGRESS" as const };
+  }));
+}
 export const cleanCupDefects = [
   "Fenólico leve",
   "Fenólico",

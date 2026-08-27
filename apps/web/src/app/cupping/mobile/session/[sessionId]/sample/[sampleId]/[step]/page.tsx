@@ -25,6 +25,7 @@ import {
   priorScoresInitiallyExpanded,
   Traditional100ScoringEngine,
   validateCleanCupState,
+  getCuppingCompletionMap,
   CUPPING_SESSION_STEPS,
   type CuppingAttribute,
   type OlfactoryStageSelection,
@@ -214,6 +215,9 @@ export default function CuppingStepPage() {
     "FRAGRANCE" | "AROMA"
   >("FRAGRANCE");
   const [exploreAftertaste, setExploreAftertaste] = React.useState(false);
+  const [allDrafts, setAllDrafts] = React.useState<Record<string, Draft>>({});
+  const [showProofMap, setShowProofMap] = React.useState(false);
+  const [navigationMode, setNavigationMode] = React.useState<"BY_SAMPLE" | "BY_ATTRIBUTE">("BY_SAMPLE");
   const loaded = React.useRef(false);
   const finalized = React.useRef(false);
   React.useEffect(() => {
@@ -221,6 +225,7 @@ export default function CuppingStepPage() {
     const token = recoverCuppingToken(sessionId);
     const cachedContext = readCachedCuppingSession<any>(sessionId);
     if (cachedContext) setContext(cachedContext);
+    if (cachedContext?.session?.navigationMode === "BY_ATTRIBUTE") setNavigationMode("BY_ATTRIBUTE");
     if (local) {
       try {
         const stored = JSON.parse(local) as Draft;
@@ -231,6 +236,7 @@ export default function CuppingStepPage() {
     fetchCurrentCuppingSession(sessionId, token)
       .then((data) => {
         setContext(data);
+        if (data?.session?.navigationMode === "BY_ATTRIBUTE") setNavigationMode("BY_ATTRIBUTE");
         cacheCuppingSession(sessionId, data);
         const evaluation = data?.session?.evaluations?.find(
           (item: any) => item.sampleId === sampleId,
@@ -244,6 +250,26 @@ export default function CuppingStepPage() {
         setSaveState("Sem conexão · rascunho neste dispositivo");
       });
   }, [key, sampleId, sessionId]);
+  React.useEffect(() => {
+    const samples = Array.isArray(context?.session?.samples) ? context.session.samples : [];
+    if (!samples.length) return;
+    const loadedDrafts: Record<string, Draft> = {};
+    for (const entry of samples) {
+      const id = entry.sample?.id ?? entry.sessionSampleId;
+      if (!id) continue;
+      try {
+        const stored = localStorage.getItem(`cupping-draft:${sessionId}:${id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored) as Draft;
+          loadedDrafts[id] = { ...initial, ...parsed, scores: { ...initial.scores, ...parsed.scores }, cups: mergeCups(parsed.cups) };
+        }
+      } catch {}
+      const remote = context?.session?.evaluations?.find((evaluation: any) => evaluation.sampleId === id || evaluation.sessionSampleId === id);
+      if (!loadedDrafts[id] && remote) loadedDrafts[id] = draftFromEvaluation(remote);
+    }
+    loadedDrafts[sampleId] = draft;
+    setAllDrafts(loadedDrafts);
+  }, [context, draft, sampleId, sessionId]);
   React.useEffect(() => {
     const synchronize = () => setSyncAttempt((current) => current + 1);
     window.addEventListener("online", synchronize);
@@ -309,6 +335,11 @@ export default function CuppingStepPage() {
     cleanCup: cupsScore(cupValues("CLEAN_CUP")),
   };
   const requiredScore = requiredScoreByStep[step as (typeof steps)[number]];
+  const completionItems = React.useMemo(() => getCuppingCompletionMap({
+    sessionSampleIds: Object.keys(allDrafts),
+    drafts: allDrafts,
+  }), [allDrafts]);
+  const pendingCompletionItems = completionItems.filter((item) => item.state !== "COMPLETE");
   const cleanCupStates = Array.from(
     { length: 5 },
     (_, index) =>
@@ -398,7 +429,7 @@ export default function CuppingStepPage() {
       : step === "sample_consistency"
       ? cleanCupsValid
       : requiredScore
-        ? canContinueSensoryStep(draft.scores[requiredScore])
+        ? canContinueSensoryStep(draft.scores[requiredScore]) && ((draft.stageData.completedSteps ?? []).includes(step) || step !== "sabor" || draft.selections.length > 0)
         : true;
   let scoring: ReturnType<Traditional100ScoringEngine["calculate"]> | null =
     null;
@@ -446,11 +477,21 @@ export default function CuppingStepPage() {
       return;
     }
     setError("");
+    const completedSteps = Array.isArray(draft.stageData.completedSteps) ? draft.stageData.completedSteps : [];
+    update({ stageData: { ...draft.stageData, completedSteps: completedSteps.includes(step) ? completedSteps : [...completedSteps, step] } });
     router.push(
       `/cupping/mobile/session/${sessionId}/sample/${sampleId}/${next}`,
     );
   }
   async function finalize() {
+    if (!complete || pendingCompletionItems.length > 0) {
+      const pendingSamples = new Set(pendingCompletionItems.map((item) => item.sessionSampleId)).size;
+      setError(pendingCompletionItems.length > 0
+        ? `Sua prova ainda tem alguns pontos para concluir. ${pendingCompletionItems.length} avaliações pendentes em ${pendingSamples} amostras.`
+        : "Revise os campos obrigatórios antes de finalizar.");
+      setShowProofMap(true);
+      return;
+    }
     if (!complete) {
       setError("Revise os campos obrigatórios antes de finalizar.");
       return;
@@ -516,7 +557,8 @@ export default function CuppingStepPage() {
           </span>
         </div>
       </header>
-      {Array.isArray(context?.session?.samples) && context.session.samples.length > 1 && <nav aria-label="Amostras" className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-[.14em] text-slate-500">Amostras</p><div className="flex gap-2 overflow-x-auto pb-1">{context.session.samples.map((entry: any, sampleIndex: number) => { const targetId = entry.sample?.id ?? entry.sessionSampleId; const state = context.progress?.samples?.find((item: any) => item.sampleId === targetId)?.state; return <Link key={targetId} href={`/cupping/mobile/session/${sessionId}/sample/${targetId}/${step}`} aria-current={targetId === sampleId ? "page" : undefined} className={`min-w-12 rounded-xl px-3 py-2 text-center text-xs font-black ${targetId === sampleId ? "bg-[#572f1d] text-white" : "bg-stone-100 text-slate-700"}`}>{String.fromCodePoint(65 + sampleIndex)}<span className="ml-1 text-[10px]">{state === "COMPLETED" ? "✓" : state === "IN_PROGRESS" ? "●" : "○"}</span></Link>; })}</div></nav>}
+      {Array.isArray(context?.session?.samples) && context.session.samples.length > 1 && <nav aria-label="Amostras" className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-3"><div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.14em] text-slate-500">Amostras</p><div className="flex gap-1"><button type="button" onClick={() => setNavigationMode("BY_SAMPLE")} className={`rounded-md px-2 py-1 text-[9px] font-black ${navigationMode === "BY_SAMPLE" ? "bg-[#572f1d] text-white" : "bg-stone-100 text-slate-500"}`}>Por amostra</button><button type="button" onClick={() => setNavigationMode("BY_ATTRIBUTE")} className={`rounded-md px-2 py-1 text-[9px] font-black ${navigationMode === "BY_ATTRIBUTE" ? "bg-[#572f1d] text-white" : "bg-stone-100 text-slate-500"}`}>Por atributo</button></div></div><div className="flex gap-2 overflow-x-auto pb-1">{context.session.samples.map((entry: any, sampleIndex: number) => { const targetId = entry.sample?.id ?? entry.sessionSampleId; const state = context.progress?.samples?.find((item: any) => item.sampleId === targetId)?.state; const targetStep = navigationMode === "BY_SAMPLE" ? "aroma" : step; return <Link key={targetId} href={`/cupping/mobile/session/${sessionId}/sample/${targetId}/${targetStep}`} onClick={() => { try { localStorage.setItem(`cupping-draft:${sessionId}:${sampleId}`, JSON.stringify(draft)); } catch {} }} aria-current={targetId === sampleId ? "page" : undefined} className={`min-w-12 rounded-xl px-3 py-2 text-center text-xs font-black ${targetId === sampleId ? "bg-[#572f1d] text-white" : "bg-stone-100 text-slate-700"}`}>{String.fromCodePoint(65 + sampleIndex)}<span className="ml-1 text-[10px]">{state === "COMPLETED" ? "✓" : state === "IN_PROGRESS" ? "●" : "○"}</span></Link>; })}</div><button type="button" onClick={() => setShowProofMap((value) => !value)} className="mt-3 text-xs font-black text-[#572f1d]">{showProofMap ? "Fechar mapa da prova" : "Mapa da prova"}</button></nav>}
+      {showProofMap && completionItems.length > 0 && <section className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white/80 p-3" aria-label="Mapa da prova"><p className="mb-2 text-[10px] font-black uppercase tracking-[.14em] text-slate-500">Mapa da prova</p><div className="min-w-[520px] space-y-1"><div className="grid grid-cols-[5rem_repeat(7,minmax(3.5rem,1fr))] gap-1 text-center text-[9px] font-black text-slate-500"><span />{["Aroma","Sabor","Final","Acidez","Corpo","Consist.","Geral"].map((label) => <span key={label}>{label}</span>)}</div>{Array.from(new Set(completionItems.map((item) => item.sessionSampleId))).map((id) => <div key={id} className="grid grid-cols-[5rem_repeat(7,minmax(3.5rem,1fr))] items-center gap-1 text-center text-[10px]"><b className="text-left">{context?.session?.samples?.find((entry: any) => (entry.sample?.id ?? entry.sessionSampleId) === id)?.sample?.sampleCode ?? "Amostra"}</b>{completionItems.filter((item) => item.sessionSampleId === id).map((item) => <Link key={item.step} href={`/cupping/mobile/session/${sessionId}/sample/${id}/${item.step}`} className={`rounded-lg py-2 font-black ${item.state === "COMPLETE" ? "bg-lime-100 text-lime-800" : item.state === "IN_PROGRESS" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`} title={item.stepLabel}>{item.state === "COMPLETE" ? "✓" : item.state === "IN_PROGRESS" ? "●" : "○"}</Link>)}</div>)}</div>{pendingCompletionItems.length > 0 && <div className="mt-3 space-y-1 text-left"><p className="text-xs font-black text-amber-800">Sua prova ainda tem alguns pontos para concluir.</p>{pendingCompletionItems.map((item) => <Link key={`${item.sessionSampleId}-${item.step}`} href={`/cupping/mobile/session/${sessionId}/sample/${item.sessionSampleId}/${item.step}`} className="block text-xs font-semibold text-slate-700">• {context?.session?.samples?.find((entry: any) => (entry.sample?.id ?? entry.sessionSampleId) === item.sessionSampleId)?.sample?.sampleCode ?? "Amostra"} · {item.stepLabel} →</Link>)}</div>}</section>}
       <section className="mt-7 space-y-5">
         {meta && step !== "overall" && step !== "aroma" && (
           <CuppingTrainingHint
@@ -763,6 +805,7 @@ export default function CuppingStepPage() {
           Selecione uma pontuação para continuar.
         </p>
       )}
+      {requiredScore && <button type="button" onClick={() => { const completedSteps = Array.isArray(draft.stageData.completedSteps) ? draft.stageData.completedSteps : []; update({ stageData: { ...draft.stageData, completedSteps: completedSteps.includes(step) ? completedSteps : [...completedSteps, step], completedWithoutPerception: true } }); }} className={`mt-3 rounded-xl border px-4 py-2 text-xs font-bold ${draft.stageData.completedWithoutPerception ? "border-forest-600 bg-forest-50 text-forest-800" : "border-slate-200 text-slate-600"}`}>{draft.stageData.completedWithoutPerception ? "✓ Nenhuma percepção adicional" : "Nenhuma percepção adicional"}</button>}
       {!canContinue && step === "sample_consistency" && (
         <p className="mt-5 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
           Informe o tipo e a severidade de cada defeito para continuar.
