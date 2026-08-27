@@ -516,6 +516,7 @@ export default function CuppingStepPage() {
           </span>
         </div>
       </header>
+      {Array.isArray(context?.session?.samples) && context.session.samples.length > 1 && <nav aria-label="Amostras" className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-[.14em] text-slate-500">Amostras</p><div className="flex gap-2 overflow-x-auto pb-1">{context.session.samples.map((entry: any, sampleIndex: number) => { const targetId = entry.sample?.id ?? entry.sessionSampleId; const state = context.progress?.samples?.find((item: any) => item.sampleId === targetId)?.state; return <Link key={targetId} href={`/cupping/mobile/session/${sessionId}/sample/${targetId}/${step}`} aria-current={targetId === sampleId ? "page" : undefined} className={`min-w-12 rounded-xl px-3 py-2 text-center text-xs font-black ${targetId === sampleId ? "bg-[#572f1d] text-white" : "bg-stone-100 text-slate-700"}`}>{String.fromCodePoint(65 + sampleIndex)}<span className="ml-1 text-[10px]">{state === "COMPLETED" ? "✓" : state === "IN_PROGRESS" ? "●" : "○"}</span></Link>; })}</div></nav>}
       <section className="mt-7 space-y-5">
         {meta && step !== "overall" && step !== "aroma" && (
           <CuppingTrainingHint
