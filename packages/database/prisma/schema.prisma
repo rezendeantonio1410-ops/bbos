@@ -1036,6 +1036,7 @@ model GreenCoffeeLabSample {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   cuppingSessions CuppingSession[]
+  cuppingSessionSamples CuppingSessionSample[]
 }
 
 model ProfessionalCoffeeSample {
@@ -1073,6 +1074,7 @@ model ProfessionalCoffeeSample {
   derivedSamples   ProfessionalCoffeeSample[] @relation("ProfessionalSampleLineage")
   evaluations      ProfessionalSampleEvaluation[]
   publicSessions   CuppingPublicSession[]
+  cuppingSessionSamples CuppingSessionSample[]
   approvedById     String?
   approvedByName   String?
   approvedAt       DateTime?
@@ -1121,6 +1123,7 @@ model CuppingSession {
   responsibleName String?
   participantIds  Json?
   protocol        String              @default("SCA")
+  protocolVersion String              @default("v1")
   generalNotes    String?
   status          CuppingSessionStatus @default(OPEN)
   decision        CuppingDecision?
@@ -1129,12 +1132,36 @@ model CuppingSession {
   decidedByName   String?
   decidedAt       DateTime?
   evaluations     CuppingEvaluation[]
+  samples         CuppingSessionSample[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, status])
   @@index([sampleId])
+}
+
+model CuppingSessionSample {
+  id                  String                    @id @default(cuid())
+  sessionId           String
+  sourceType          String                    @default("GREEN_COFFEE_LAB_SAMPLE")
+  sourceId            String
+  sampleId            String?
+  professionalSampleId String?
+  position            Int                       @default(1)
+  blindCode           String?
+  coffeeLotId         String?
+  greenCoffeeReceiptId String?
+  session             CuppingSession             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sample              GreenCoffeeLabSample?     @relation(fields: [sampleId], references: [id], onDelete: Restrict)
+  professionalSample  ProfessionalCoffeeSample? @relation(fields: [professionalSampleId], references: [id], onDelete: Restrict)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([sessionId, sourceType, sourceId])
+  @@index([sampleId])
+  @@index([professionalSampleId])
+  @@index([sessionId, position])
 }
 
 model CuppingEvaluation {
