@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronRight, Clock3, RefreshCw, Sparkles } from "lucide-react";
 import { cacheCuppingSession, fetchCurrentCuppingSession, readCachedCuppingSession, recoverCuppingToken, traceCuppingAccess, CUPPING_API, maskCuppingToken } from "@/lib/cupping-mobile-access";
 
@@ -11,6 +11,8 @@ const API = CUPPING_API;
 
 export default function MobileSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const router = useRouter();
+  const search = useSearchParams();
   const [data, setData] = React.useState<any>(null);
   const [accessError, setAccessError] = React.useState("");
   const [loading, setLoading] = React.useState(true);
@@ -37,6 +39,9 @@ export default function MobileSessionPage() {
         cacheCuppingSession(sessionId, context);
         setAccessError("");
         setConnectionWarning("");
+        const requestedSample = search.get("sessionSampleId");
+        const sample = requestedSample && context.session.samples?.find((item: any) => item.sample.id === requestedSample || item.sessionSampleId === requestedSample);
+        if (sample) router.replace(`/cupping/mobile/session/${sessionId}/sample/${sample.sample.id}/aroma`);
       })
       .catch((cause) => {
         if (!active) return;
@@ -52,7 +57,7 @@ export default function MobileSessionPage() {
     return () => {
       active = false;
     };
-  }, [attempt, sessionId]);
+  }, [attempt, router, search, sessionId]);
   const progressBySample = new Map(
     (data?.progress?.samples ?? []).map((item: any) => [item.sampleId, item]),
   );
