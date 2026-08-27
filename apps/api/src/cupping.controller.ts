@@ -52,8 +52,14 @@ export class CuppingController {
     });
   }
 
+  @Get("participants")
+  async participants(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    return this.database.user.findMany({ where: { companyId: actor.companyId, active: true }, select: { id: true, name: true, role: true, avatarUrl: true }, orderBy: { name: "asc" } });
+  }
+
   @Post("sessions")
-  async create(@Body() body: { sampleId: string; protocol?: string; generalNotes?: string; participantIds?: string[] }, @Req() req: Request) {
+  async create(@Body() body: { sampleId: string; sampleIds?: string[]; protocol?: string; generalNotes?: string; participantIds?: string[] }, @Req() req: Request) {
     const actor = await requireSession(req, this.auth);
     const sample = await this.database.greenCoffeeLabSample.findFirst({ where: { id: body.sampleId, receipt: { companyId: actor.companyId } } });
     if (!sample) throw new BadRequestException("Selecione uma amostra válida.");
@@ -61,6 +67,10 @@ export class CuppingController {
     const code = `CUP-${new Date().getFullYear()}-${String(sequence + 1).padStart(6, "0")}`;
     const session = await this.database.cuppingSession.create({ data: { companyId: actor.companyId, sampleId: sample.id, code, protocol: body.protocol?.trim() || "SCA", protocolVersion: "v1", generalNotes: body.generalNotes?.trim() || undefined, participantIds: body.participantIds ?? [], responsibleId: actor.id, responsibleName: actor.name } });
     await this.database.cuppingSessionSample.create({ data: { sessionId: session.id, sourceType: "GREEN_COFFEE_LAB_SAMPLE", sourceId: sample.id, sampleId: sample.id, position: 1 } });
+    for (const [index, sampleId] of [...new Set((body.sampleIds ?? []).filter((id) => id && id !== sample.id))].entries()) {
+      const extra = await this.database.greenCoffeeLabSample.findFirst({ where: { id: sampleId, receipt: { companyId: actor.companyId } } });
+      if (extra) await this.database.cuppingSessionSample.create({ data: { sessionId: session.id, sourceType: "GREEN_COFFEE_LAB_SAMPLE", sourceId: extra.id, sampleId: extra.id, position: index + 2 } });
+    }
     return session;
   }
 
