@@ -109,6 +109,48 @@ export class CuppingPublicController {
     return { sessionId: session.id, code: session.code, sample: session.professionalSample ? { displayCode: session.professionalSample.code } : null, mode: session.kind };
   }
 
+  /** Participant-scoped V1 context. The invite is the only credential; no
+   * administrative cookie is required and sample identity is never accepted
+   * from the browser. */
+  @Public()
+  @Get("public/:token/v1-context")
+  async v1Context(@Param("token") token: string) {
+    const invite = await this.db.cuppingParticipantInvite.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { session: { include: { samples: { orderBy: { position: "asc" } }, evaluations: true } } },
+    });
+    if (!invite || invite.status !== CuppingParticipantInviteStatus.ACTIVE || (invite.expiresAt && invite.expiresAt < new Date())) throw new BadRequestException("Este convite expirou ou não está mais ativo.");
+    const samples = invite.session.samples.map((item) => ({
+      sessionSampleId: item.id,
+      position: item.position,
+      sample: { id: item.id, sampleCode: item.blindCode || `Amostra ${String(item.position).padStart(2, "0")}` },
+    }));
+    const evaluations = invite.session.evaluations.filter((item) => item.evaluatorId === invite.participantId);
+    return {
+      session: { id: invite.session.id, code: invite.session.code, protocol: invite.session.protocol, protocolVersion: invite.session.protocolVersion, samples },
+      participant: { id: invite.participantId, name: "Provador" },
+      evaluations: evaluations.map((item) => ({ sampleId: item.sessionSampleId, status: item.completedAt ? "COMPLETED" : "IN_PROGRESS", completedAt: item.completedAt, attributes: item.attributes, defects: item.defects, sensoryNotes: item.sensoryNotes })),
+      progress: { samples: samples.map((item) => { const evaluation = evaluations.find((entry) => entry.sessionSampleId === item.sessionSampleId); return { sampleId: item.sessionSampleId, state: evaluation?.completedAt ? "COMPLETED" : evaluation ? "IN_PROGRESS" : "NOT_STARTED" }; }), overall: { state: evaluations.length && evaluations.every((entry) => entry.completedAt) ? "COMPLETED" : "IN_PROGRESS" } },
+    };
+  }
+
+  @Public()
+  @Patch("public/:token/v1-evaluation")
+  async saveV1Evaluation(@Param("token") token: string, @Body() body: { sessionSampleId?: string; attributes: Record<string, unknown>; defects?: unknown; sensoryNotes?: unknown; complete?: boolean }) {
+    const invite = await this.db.cuppingParticipantInvite.findUnique({ where: { tokenHash: hashToken(token) }, include: { session: { include: { samples: true } } } });
+    if (!invite || invite.status !== CuppingParticipantInviteStatus.ACTIVE || (invite.expiresAt && invite.expiresAt < new Date())) throw new BadRequestException("Este convite expirou ou não está mais ativo.");
+    const sessionSampleId = body.sessionSampleId ?? invite.session.samples.sort((a, b) => a.position - b.position)[0]?.id;
+    if (!sessionSampleId || !invite.session.samples.some((item) => item.id === sessionSampleId)) throw new BadRequestException("A amostra não pertence a esta sessão.");
+    const values = Object.entries(body.attributes ?? {}).filter(([key]) => CUPPING_ATTRIBUTES.includes(key as (typeof CUPPING_ATTRIBUTES)[number]));
+    if (values.some(([, value]) => value !== null && value !== undefined && value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 10))) throw new BadRequestException("Cada atributo deve estar entre 0 e 10.");
+    const attributes = body.attributes as Prisma.InputJsonValue;
+    return this.db.cuppingEvaluation.upsert({
+      where: { sessionId_sessionSampleId_evaluatorId: { sessionId: invite.sessionId, sessionSampleId, evaluatorId: invite.participantId } },
+      create: { sessionId: invite.sessionId, sessionSampleId, evaluatorId: invite.participantId, evaluatorName: "Provador", attributes, defects: body.defects as Prisma.InputJsonValue | undefined, sensoryNotes: body.sensoryNotes as Prisma.InputJsonValue | undefined, score: scoreCuppingAttributes(body.attributes), completedAt: body.complete ? new Date() : undefined },
+      update: { attributes, defects: body.defects as Prisma.InputJsonValue | undefined, sensoryNotes: body.sensoryNotes as Prisma.InputJsonValue | undefined, score: scoreCuppingAttributes(body.attributes), completedAt: body.complete ? new Date() : null },
+    });
+  }
+
   @Public()
   @Post("public/:token/join")
   async join(@Param("token") token: string, @Body() body: { name: string; phone: string; institution?: string }) {

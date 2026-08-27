@@ -261,7 +261,7 @@ export default function CuppingStepPage() {
       if (!navigator.onLine) return;
       const token = getCuppingToken(sessionId);
       try {
-      const response = await saveCurrentCuppingEvaluation(sessionId, draft, false, token);
+      const response = await saveCurrentCuppingEvaluation(sessionId, draft, false, token, sampleId);
       setSaveState(response.ok ? "Salvo" : "Alterações não salvas");
       } catch {
         setSaveState("Sem conexão · rascunho neste dispositivo");
@@ -458,7 +458,7 @@ export default function CuppingStepPage() {
     if (!confirm("Finalizar e bloquear a edição normal desta avaliação?"))
       return;
     const token = getCuppingToken(sessionId);
-    const response = await saveCurrentCuppingEvaluation(sessionId, draft, true, token);
+      const response = await saveCurrentCuppingEvaluation(sessionId, draft, true, token, sampleId);
     if (response.ok) {
       localStorage.removeItem(key);
       router.replace(`/cupping/mobile/session/${sessionId}?completed=1`);

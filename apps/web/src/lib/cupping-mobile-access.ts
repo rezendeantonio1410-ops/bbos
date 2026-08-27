@@ -86,6 +86,11 @@ export async function cuppingFetch(
 }
 
 export async function fetchCurrentCuppingSession(sessionId: string, token?: string | null) {
+  if (token) {
+    const inviteResponse = await cuppingFetch(`${CUPPING_API}/cupping-public/public/${encodeURIComponent(token)}/v1-context`, {}, { retries: 1, timeoutMs: 8_000 });
+    if (!inviteResponse.ok) throw new Error("Este convite expirou ou não está mais ativo.");
+    return await inviteResponse.json();
+  }
   const response = await cuppingFetch(`${CUPPING_API}/cupping/sessions`, {
     headers: token ? { authorization: `Bearer ${token}` } : undefined,
   }, { retries: 1, timeoutMs: 8_000 });
@@ -105,12 +110,13 @@ export async function fetchCurrentCuppingSession(sessionId: string, token?: stri
   };
 }
 
-export async function saveCurrentCuppingEvaluation(sessionId: string, draft: { scores: Record<string, number>; defects?: unknown; sensoryNotes?: unknown }, complete: boolean, token?: string | null) {
+export async function saveCurrentCuppingEvaluation(sessionId: string, draft: { scores: Record<string, number>; defects?: unknown; sensoryNotes?: unknown }, complete: boolean, token?: string | null, sessionSampleId?: string) {
   const attributes = { ...draft.scores, fragrance: draft.scores.fragranceAroma ?? draft.scores.fragrance };
   delete (attributes as Record<string, unknown>).fragranceAroma;
-  return cuppingFetch(`${CUPPING_API}/cupping/sessions/${sessionId}/evaluation`, {
+  const endpoint = token ? `${CUPPING_API}/cupping-public/public/${encodeURIComponent(token)}/v1-evaluation` : `${CUPPING_API}/cupping/sessions/${sessionId}/evaluation`;
+  return cuppingFetch(endpoint, {
     method: "PATCH",
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ attributes, defects: draft.defects, sensoryNotes: draft.sensoryNotes, complete }),
+    body: JSON.stringify({ attributes, defects: draft.defects, sensoryNotes: draft.sensoryNotes, complete, ...(sessionSampleId ? { sessionSampleId } : {}) }),
   }, { retries: 1, timeoutMs: 8_000 });
 }

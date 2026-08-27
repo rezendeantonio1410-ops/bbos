@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { persistCuppingAccess } from "@/lib/cupping-mobile-access";
 
 /** Compatibilidade com convites antigos: o aceite público atual é a fonte de verdade. */
 export default function InvitePage() {
@@ -14,6 +15,7 @@ export default function InvitePage() {
       .then(async (response) => { if (!response.ok) throw new Error("Este convite não está disponível."); return response.json() as Promise<{ sessionId: string; sessionSampleId?: string; participantId?: string; completed?: boolean }>; })
       .then(({ sessionId, sessionSampleId, participantId, completed }) => {
         if (completed) { setError("Sessão concluída ✓"); return; }
+        if (participantId) persistCuppingAccess(sessionId, token, participantId);
         const query = new URLSearchParams({ invite: token, ...(sessionSampleId ? { sessionSampleId } : {}), ...(participantId ? { participantId } : {}) });
         router.replace(`/cupping/mobile/session/${sessionId}?${query.toString()}`);
       })
