@@ -80,17 +80,42 @@ export class CuppingController {
     return session.samples[0]?.professionalSample ?? session.samples[0]?.sample ?? session.sample;
   }
 
+  @Get("sessions/:id/progress")
+  async progress(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const session = await this.database.cuppingSession.findFirst({ where: { id, companyId: actor.companyId }, include: { samples: { orderBy: { position: "asc" } }, evaluations: true } });
+    if (!session) throw new BadRequestException("Sessão não encontrada.");
+    const participantIds = Array.isArray(session.participantIds) ? session.participantIds.filter((value): value is string => typeof value === "string") : [...new Set(session.evaluations.map((item) => item.evaluatorId))];
+    const matrix = participantIds.flatMap((participantId) => session.samples.map((sample) => {
+      const evaluation = session.evaluations.find((item) => item.evaluatorId === participantId && item.sessionSampleId === sample.id);
+      return { participantId, sessionSampleId: sample.id, state: evaluation?.completedAt ? "COMPLETED" : evaluation ? "IN_PROGRESS" : "NOT_STARTED" };
+    }));
+    const completed = matrix.filter((item) => item.state === "COMPLETED").length;
+    return { sessionId: id, total: matrix.length, completed, inProgress: matrix.filter((item) => item.state === "IN_PROGRESS").length, notStarted: matrix.filter((item) => item.state === "NOT_STARTED").length, percent: matrix.length ? Math.round(completed / matrix.length * 100) : 0, matrix };
+  }
+
+  @Get("sessions/:id/next-sample")
+  async nextSample(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const session = await this.database.cuppingSession.findFirst({ where: { id, companyId: actor.companyId }, include: { samples: { orderBy: { position: "asc" } }, evaluations: true } });
+    if (!session) throw new BadRequestException("Sessão não encontrada.");
+    const next = session.samples.find((sample) => !session.evaluations.some((item) => item.evaluatorId === actor.id && item.sessionSampleId === sample.id && item.completedAt));
+    return next ? { sessionSampleId: next.id, sourceType: next.sourceType, sourceId: next.sourceId, blindCode: next.blindCode, position: next.position } : { completed: true };
+  }
+
   @Patch("sessions/:id/evaluation")
-  async saveEvaluation(@Param("id") id: string, @Body() body: { attributes: Record<string, unknown>; defects?: unknown; sensoryNotes?: unknown; complete?: boolean }, @Req() req: Request) {
+  async saveEvaluation(@Param("id") id: string, @Body() body: { attributes: Record<string, unknown>; defects?: unknown; sensoryNotes?: unknown; complete?: boolean; sessionSampleId?: string }, @Req() req: Request) {
     const actor = await requireSession(req, this.auth);
     const values = Object.entries(body.attributes ?? {}).filter(([key]) => CUPPING_ATTRIBUTES.includes(key as (typeof CUPPING_ATTRIBUTES)[number]));
     if (values.some(([, value]) => value !== null && value !== undefined && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 10))) throw new BadRequestException("Cada atributo deve estar entre 0 e 10.");
-    const session = await this.database.cuppingSession.findFirst({ where: { id, companyId: actor.companyId } });
+    const session = await this.database.cuppingSession.findFirst({ where: { id, companyId: actor.companyId }, include: { samples: { orderBy: { position: "asc" } } } });
     if (!session) throw new BadRequestException("Sessão não encontrada.");
+    const sessionSampleId = body.sessionSampleId ?? session.samples[0]?.id;
+    if (!sessionSampleId || !session.samples.some((item) => item.id === sessionSampleId)) throw new BadRequestException("A amostra não pertence a esta sessão.");
     const attributes = body.attributes as Prisma.InputJsonValue;
     const defects = body.defects as Prisma.InputJsonValue | undefined;
     const sensoryNotes = body.sensoryNotes as Prisma.InputJsonValue | undefined;
-    return this.database.cuppingEvaluation.upsert({ where: { sessionId_evaluatorId: { sessionId: id, evaluatorId: actor.id } }, create: { sessionId: id, evaluatorId: actor.id, evaluatorName: actor.name, attributes, defects, sensoryNotes, score: scoreCuppingAttributes(body.attributes), completedAt: body.complete ? new Date() : undefined }, update: { attributes, defects, sensoryNotes, score: scoreCuppingAttributes(body.attributes), completedAt: body.complete ? new Date() : null } });
+    return this.database.cuppingEvaluation.upsert({ where: { sessionId_sessionSampleId_evaluatorId: { sessionId: id, sessionSampleId, evaluatorId: actor.id } }, create: { sessionId: id, sessionSampleId, evaluatorId: actor.id, evaluatorName: actor.name, attributes, defects, sensoryNotes, score: scoreCuppingAttributes(body.attributes), completedAt: body.complete ? new Date() : undefined }, update: { attributes, defects, sensoryNotes, score: scoreCuppingAttributes(body.attributes), completedAt: body.complete ? new Date() : null } });
   }
 
   @Post("sessions/:id/decision")
