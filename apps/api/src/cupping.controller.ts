@@ -147,7 +147,8 @@ export class CuppingController {
   @Get("history")
   async history(@Req() req: Request) {
     const actor = await requireSession(req, this.auth);
-    return this.database.cuppingEvaluation.findMany({ where: { session: { companyId: actor.companyId }, completedAt: { not: null } }, orderBy: { completedAt: "desc" }, include: { session: { select: { id: true, code: true, protocol: true, sessionDate: true } }, sessionSample: { include: { sample: { include: { receipt: { include: { coffeeLot: true } } } }, professionalSample: { select: { code: true } } } } } });
+    const rows = await this.database.cuppingEvaluation.findMany({ where: { session: { companyId: actor.companyId }, completedAt: { not: null } }, orderBy: { completedAt: "desc" }, include: { session: { select: { id: true, code: true, protocol: true, sessionDate: true } }, sessionSample: { include: { sample: { include: { receipt: { include: { coffeeLot: true } } } }, professionalSample: { select: { code: true } } } } } });
+    return rows.map((row) => ({ ...row, sampleCode: row.sessionSample?.blindCode || row.sessionSample?.sample?.sampleNumber || row.sessionSample?.professionalSample?.code || null, lotCode: row.sessionSample?.sample?.receipt?.coffeeLot?.code || null }));
   }
 
   @Get("sessions/:id/next-sample")
