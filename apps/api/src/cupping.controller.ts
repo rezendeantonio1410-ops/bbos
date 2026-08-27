@@ -136,6 +136,20 @@ export class CuppingController {
     return { sessionId: id, total: matrix.length, completed, inProgress: matrix.filter((item) => item.state === "IN_PROGRESS").length, notStarted: matrix.filter((item) => item.state === "NOT_STARTED").length, percent: matrix.length ? Math.round(completed / matrix.length * 100) : 0, matrix };
   }
 
+  @Get("sessions/:id/results")
+  async results(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const session = await this.database.cuppingSession.findFirst({ where: { id, companyId: actor.companyId }, include: { samples: { orderBy: { position: "asc" }, include: { sample: { include: { receipt: { include: { coffeeLot: true } } } }, professionalSample: true } }, evaluations: { orderBy: { updatedAt: "desc" } } } });
+    if (!session) throw new BadRequestException("Sessão não encontrada.");
+    return { session: { id: session.id, code: session.code, protocol: session.protocol, sessionDate: session.sessionDate, status: session.status }, samples: session.samples.map((sample) => { const evaluations = session.evaluations.filter((item) => item.sessionSampleId === sample.id); return { id: sample.id, position: sample.position, code: sample.blindCode || sample.sample?.sampleNumber || sample.professionalSample?.code || `Amostra ${sample.position}`, lotCode: sample.sample?.receipt?.coffeeLot?.code || null, evaluations, completed: evaluations.filter((item) => item.completedAt).length, average: evaluations.filter((item) => item.completedAt && item.score != null).length ? Number((evaluations.filter((item) => item.completedAt && item.score != null).reduce((sum, item) => sum + Number(item.score), 0) / evaluations.filter((item) => item.completedAt && item.score != null).length).toFixed(2)) : null }; }) };
+  }
+
+  @Get("history")
+  async history(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    return this.database.cuppingEvaluation.findMany({ where: { session: { companyId: actor.companyId }, completedAt: { not: null } }, orderBy: { completedAt: "desc" }, include: { session: { select: { id: true, code: true, protocol: true, sessionDate: true } }, sessionSample: { include: { sample: { include: { receipt: { include: { coffeeLot: true } } } }, professionalSample: { select: { code: true } } } } } });
+  }
+
   @Get("sessions/:id/next-sample")
   async nextSample(@Param("id") id: string, @Req() req: Request) {
     const actor = await requireSession(req, this.auth);
