@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@bbos/ui";
+import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
 import { Logo } from "@/components/logo";
 
 export default function LoginPage() {
@@ -63,6 +64,7 @@ export default function LoginPage() {
             <Button disabled={busy} type="submit" className="flex w-full items-center justify-center gap-2 py-3.5">{busy ? "Entrando…" : "Entrar no BBOS"} <ArrowRight size={16} /></Button>
           </form>
           <p className="mt-8 text-center text-xs text-stone-400">Ambiente seguro • Acesso restrito à equipe Bispo</p>
+          <p className="mt-3 text-center text-[10px] text-stone-300">{SYSTEM_CREATOR_CREDIT_PT}</p>
         </div>
       </section>
     </main>

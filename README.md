@@ -1,5 +1,11 @@
 # BBOS — Bispo Business Operating System
 
+## Identidade do sistema
+
+**System:** BBOS — Bispo Business Operating System
+**Creator:** José Rezende
+**Crédito institucional:** BBOS — concebido e desenvolvido por José Rezende.
+
 Fundação do sistema operacional de negócios da Bispo Coffees. Esta primeira entrega cobre exclusivamente a operação industrial.
 
 ## Executar localmente

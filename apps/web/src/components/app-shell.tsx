@@ -30,6 +30,7 @@ import type { ReactNode } from "react";
 import { Logo } from "./logo";
 import { UserAvatar } from "./user-avatar";
 import { fetchSessionIdentity, getApiRoot, type SessionIdentity, SessionError } from "@/lib/auth-session";
+import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
 
 const nav = [
   { href: "/home", label: "Início", icon: House },
@@ -183,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {user && <button type="button" onClick={() => void logout()} className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-100 hover:text-stone-900">Sair</button>}
           </div>
         </header>
-        <main className="p-4 md:p-8 xl:p-10">{children}</main>
+        <main className="p-4 md:p-8 xl:p-10">{children}<footer className="mx-auto mt-10 max-w-7xl border-t border-[var(--surface-border)] pt-4 text-center text-[10px] text-stone-400"><Link href="/sobre" className="transition hover:text-stone-600">{SYSTEM_CREATOR_CREDIT_PT}</Link></footer></main>
       </div>
     </div>
   );
