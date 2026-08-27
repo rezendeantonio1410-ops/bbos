@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { CuppingParticipantStatus, CuppingPublicKind, CuppingPublicStatus, Prisma, PrismaClient } from "@bbos/database";
+import { CuppingParticipantInviteStatus, CuppingParticipantStatus, CuppingPublicKind, CuppingPublicStatus, Prisma, PrismaClient } from "@bbos/database";
 import { createHash, randomBytes } from "node:crypto";
 import * as QRCode from "qrcode";
 import { AuthService } from "./auth.service";
@@ -95,6 +95,15 @@ export class CuppingPublicController {
   @Public()
   @Get("public/:token/mobile")
   async mobileInvite(@Param("token") token: string) {
+    const participantInvite = await this.db.cuppingParticipantInvite.findUnique({ where: { tokenHash: hashToken(token) }, include: { session: { include: { samples: { orderBy: { position: "asc" } }, evaluations: true } } } });
+    if (participantInvite) {
+      if (participantInvite.status !== CuppingParticipantInviteStatus.ACTIVE || (participantInvite.expiresAt && participantInvite.expiresAt < new Date())) throw new BadRequestException("Este convite não está disponível.");
+      const session = participantInvite.session;
+      const next = session.samples.find((sample) => !session.evaluations.some((evaluation) => evaluation.evaluatorId === participantInvite.participantId && evaluation.sessionSampleId === sample.id && evaluation.completedAt));
+      await this.db.cuppingParticipantInvite.update({ where: { id: participantInvite.id }, data: { lastUsedAt: new Date() } });
+      if (!next) return { completed: true, sessionId: session.id, participantId: participantInvite.participantId, mode: "V1" };
+      return { sessionId: session.id, participantId: participantInvite.participantId, sessionSampleId: next.id, blindCode: next.blindCode, displayCode: next.blindCode || `Amostra ${String(next.position).padStart(2, "0")}`, mode: "V1" };
+    }
     const session = await this.db.cuppingPublicSession.findUnique({ where: { tokenHash: hashToken(token) }, include: { professionalSample: { select: { code: true } } } });
     if (!session || session.status !== CuppingPublicStatus.OPEN || (session.tokenExpiresAt && session.tokenExpiresAt < new Date())) throw new BadRequestException("Este convite não está disponível.");
     return { sessionId: session.id, code: session.code, sample: session.professionalSample ? { displayCode: session.professionalSample.code } : null, mode: session.kind };

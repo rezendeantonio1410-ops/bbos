@@ -1,14 +1,46 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { CoffeeLotStatus, CuppingDecision, CuppingSessionStatus, Prisma, PrismaClient } from "@bbos/database";
+import { createHash, randomBytes } from "node:crypto";
+import * as QRCode from "qrcode";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { CUPPING_ATTRIBUTES, scoreCuppingAttributes } from "./cupping-score";
+
+const hashParticipantInvite = (token: string) => createHash("sha256").update(token).digest("hex");
 
 @Controller("cupping")
 export class CuppingController {
   private readonly database = new PrismaClient();
   constructor(private readonly auth: AuthService) {}
+
+  /** Issue a participant-scoped invite for the authenticated V1 flow. */
+  @Post("sessions/:id/participants/:participantId/invite")
+  async createParticipantInvite(@Param("id") id: string, @Param("participantId") participantId: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const session = await this.database.cuppingSession.findFirst({ where: { id, companyId: actor.companyId }, include: { samples: { orderBy: { position: "asc" } }, evaluations: true } });
+    if (!session) throw new BadRequestException("Sessão não encontrada.");
+    const participantIds = Array.isArray(session.participantIds) ? session.participantIds.filter((value): value is string => typeof value === "string") : [];
+    const knownParticipant = participantIds.includes(participantId) || session.evaluations.some((evaluation) => evaluation.evaluatorId === participantId);
+    if (!knownParticipant) throw new BadRequestException("Participante não pertence a esta sessão.");
+    const rawToken = randomBytes(32).toString("base64url");
+    const invite = await this.database.cuppingParticipantInvite.upsert({
+      where: { sessionId_participantId: { sessionId: id, participantId } },
+      create: { companyId: actor.companyId, sessionId: id, participantId, tokenHash: hashParticipantInvite(rawToken) },
+      update: { tokenHash: hashParticipantInvite(rawToken), status: "ACTIVE", revokedAt: null, lastUsedAt: null },
+    });
+    const baseUrl = process.env.WEB_URL || `${req.protocol}://${req.get("host")}`;
+    const url = `${baseUrl.replace(/\/$/, "")}/cupping/mobile/invite/${rawToken}`;
+    return { id: invite.id, sessionId: id, participantId, url, qrCodeDataUrl: await QRCode.toDataURL(url, { errorCorrectionLevel: "M", margin: 2, width: 320 }) };
+  }
+
+  @Post("sessions/:id/participants/:participantId/invite/revoke")
+  async revokeParticipantInvite(@Param("id") id: string, @Param("participantId") participantId: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const invite = await this.database.cuppingParticipantInvite.findFirst({ where: { sessionId: id, participantId, companyId: actor.companyId } });
+    if (!invite) throw new BadRequestException("Convite não encontrado.");
+    return this.database.cuppingParticipantInvite.update({ where: { id: invite.id }, data: { status: "REVOKED", revokedAt: new Date() }, select: { id: true, status: true, revokedAt: true } });
+  }
 
   @Get("sessions")
   async list(@Req() req: Request) {

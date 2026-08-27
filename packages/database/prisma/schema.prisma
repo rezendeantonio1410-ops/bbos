@@ -393,63 +393,69 @@ enum CuppingParticipantStatus {
   COMPLETED
 }
 
+enum CuppingParticipantInviteStatus {
+  ACTIVE
+  REVOKED
+}
+
 model Company {
-  id                       String                       @id @default(cuid())
-  name                     String
-  tradeName                String
-  taxId                    String                       @unique
-  currency                 String                       @default("BRL")
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
-  users                    User[]
-  suppliers                Supplier[]
-  customers                Customer[]
-  coffeeLots               CoffeeLot[]
-  warehouses               Warehouse[]
-  blends                   Blend[]
-  productionOrders         ProductionOrder[]
-  products                 FinishedProduct[]
-  productLines             ProductLine[]
-  salesOrders              SalesOrder[]
-  industrialEvents         IndustrialEvent[]
-  costEvents               CostEvent[]
-  productionBatches        ProductionBatch[]
-  productionConsumptions   ProductionConsumption[]
-  packagingConsumptions    PackagingConsumption[]
-  finishedGoodsMovements   FinishedGoodsMovement[]
-  salesOrderItems          SalesOrderItem[]
-  inventoryReservations    InventoryReservation[]
-  costCenters              CostCenter[]
-  productiveResources      ProductiveResource[]
-  allocationPeriods        AllocationPeriod[]
-  allocationRules          AllocationRule[]
-  costSnapshots            CostCalculationSnapshot[]
-  costTariffs              CostTariff[]
-  financialAccounts        FinancialAccount[]
-  salesChannels            SalesChannel[]
-  productPrices            ProductPrice[]
-  accountsReceivable       AccountsReceivable[]
-  accountsPayable          AccountsPayable[]
-  financialTransactions    FinancialTransaction[]
-  payments                 Payment[]
-  reconciliationItems      ReconciliationItem[]
-  reconciliationEvents     ReconciliationEvent[]
-  financialInstitutions    FinancialInstitution[]
-  bankTransactions         BankTransaction[]
-  greenCoffeeReceipts      GreenCoffeeReceipt[]
-  greenCoffeePurchases     GreenCoffeePurchase[]
-  greenCoffeeApprovals     GreenCoffeeApprovalRequest[]
-  operationalNotifications OperationalNotification[]
-  greenCoffeeAuditEvents   GreenCoffeeAuditEvent[]
-  coffeeSpecies            CoffeeSpecies[]
-  coffeeRegions            CoffeeRegion[]
-  screenClassifications    ScreenClassification[]
-  supplierBankAccounts     SupplierBankAccount[]
-  brokers                  Broker[]
-  cuppingSessions          CuppingSession[]
-  cuppingTrainingSessions  CuppingTrainingSession[]
+  id                        String                       @id @default(cuid())
+  name                      String
+  tradeName                 String
+  taxId                     String                       @unique
+  currency                  String                       @default("BRL")
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
+  users                     User[]
+  suppliers                 Supplier[]
+  customers                 Customer[]
+  coffeeLots                CoffeeLot[]
+  warehouses                Warehouse[]
+  blends                    Blend[]
+  productionOrders          ProductionOrder[]
+  products                  FinishedProduct[]
+  productLines              ProductLine[]
+  salesOrders               SalesOrder[]
+  industrialEvents          IndustrialEvent[]
+  costEvents                CostEvent[]
+  productionBatches         ProductionBatch[]
+  productionConsumptions    ProductionConsumption[]
+  packagingConsumptions     PackagingConsumption[]
+  finishedGoodsMovements    FinishedGoodsMovement[]
+  salesOrderItems           SalesOrderItem[]
+  inventoryReservations     InventoryReservation[]
+  costCenters               CostCenter[]
+  productiveResources       ProductiveResource[]
+  allocationPeriods         AllocationPeriod[]
+  allocationRules           AllocationRule[]
+  costSnapshots             CostCalculationSnapshot[]
+  costTariffs               CostTariff[]
+  financialAccounts         FinancialAccount[]
+  salesChannels             SalesChannel[]
+  productPrices             ProductPrice[]
+  accountsReceivable        AccountsReceivable[]
+  accountsPayable           AccountsPayable[]
+  financialTransactions     FinancialTransaction[]
+  payments                  Payment[]
+  reconciliationItems       ReconciliationItem[]
+  reconciliationEvents      ReconciliationEvent[]
+  financialInstitutions     FinancialInstitution[]
+  bankTransactions          BankTransaction[]
+  greenCoffeeReceipts       GreenCoffeeReceipt[]
+  greenCoffeePurchases      GreenCoffeePurchase[]
+  greenCoffeeApprovals      GreenCoffeeApprovalRequest[]
+  operationalNotifications  OperationalNotification[]
+  greenCoffeeAuditEvents    GreenCoffeeAuditEvent[]
+  coffeeSpecies             CoffeeSpecies[]
+  coffeeRegions             CoffeeRegion[]
+  screenClassifications     ScreenClassification[]
+  supplierBankAccounts      SupplierBankAccount[]
+  brokers                   Broker[]
+  cuppingSessions           CuppingSession[]
+  cuppingParticipantInvites CuppingParticipantInvite[]
+  cuppingTrainingSessions   CuppingTrainingSession[]
   professionalCoffeeSamples ProfessionalCoffeeSample[]
-  cuppingPublicSessions CuppingPublicSession[]
+  cuppingPublicSessions     CuppingPublicSession[]
 }
 
 model User {
@@ -484,73 +490,73 @@ model AuthSession {
 }
 
 model Supplier {
-  id                   String                          @id @default(cuid())
-  companyId            String
-  company              Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                 String
-  tradeName            String?
-  taxId                String?
-  city                 String?
-  state                String?
-  coffeeLots           CoffeeLot[]
-  costEvents           CostEvent[]
-  costTariffs          CostTariff[]
-  accountsPayable      AccountsPayable[]
-  reconciliationItems  ReconciliationItem[]
-  greenCoffeeReceipts  GreenCoffeeReceipt[]
-  supplierType         GreenCoffeeSupplierType         @default(COMPANY)
-  legalName            String?
-  stateRegistration    String?
-  stateRegistrationType String @default("NUMBER")
-  ruralRegistration    String?
-  farmName             String?
-  country              String?                         @default("Brasil")
-  address              String?
-  postalCode           String?
-  district             String?
-  addressComplement    String?
-  ibgeCityCode         String?
-  taxIdVerificationStatus TaxVerificationStatus @default(NOT_VERIFIED)
-  taxIdVerifiedAt      DateTime?
-  taxIdVerificationSource String?
-  stateRegistrationVerificationStatus TaxVerificationStatus @default(NOT_VERIFIED)
-  stateRegistrationVerifiedAt DateTime?
+  id                                  String                          @id @default(cuid())
+  companyId                           String
+  company                             Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                                String
+  tradeName                           String?
+  taxId                               String?
+  city                                String?
+  state                               String?
+  coffeeLots                          CoffeeLot[]
+  costEvents                          CostEvent[]
+  costTariffs                         CostTariff[]
+  accountsPayable                     AccountsPayable[]
+  reconciliationItems                 ReconciliationItem[]
+  greenCoffeeReceipts                 GreenCoffeeReceipt[]
+  supplierType                        GreenCoffeeSupplierType         @default(COMPANY)
+  legalName                           String?
+  stateRegistration                   String?
+  stateRegistrationType               String                          @default("NUMBER")
+  ruralRegistration                   String?
+  farmName                            String?
+  country                             String?                         @default("Brasil")
+  address                             String?
+  postalCode                          String?
+  district                            String?
+  addressComplement                   String?
+  ibgeCityCode                        String?
+  taxIdVerificationStatus             TaxVerificationStatus           @default(NOT_VERIFIED)
+  taxIdVerifiedAt                     DateTime?
+  taxIdVerificationSource             String?
+  stateRegistrationVerificationStatus TaxVerificationStatus           @default(NOT_VERIFIED)
+  stateRegistrationVerifiedAt         DateTime?
   stateRegistrationVerificationSource String?
-  contactName          String?
-  contactRole          String?
-  contactPhone         String?
-  whatsapp             String?
-  contactEmail         String?
-  active               Boolean                         @default(true)
-  greenCoffeePurchases GreenCoffeePurchase[]
-  purchaseAcceptances  GreenCoffeePurchaseAcceptance[]
-  bankAccounts         SupplierBankAccount[]
-  contacts             SupplierContact[]
-  originUnits          SupplierOriginUnit[]
-  professionalSamples  ProfessionalCoffeeSample[]
-  createdAt            DateTime                        @default(now())
-  updatedAt            DateTime                        @updatedAt
+  contactName                         String?
+  contactRole                         String?
+  contactPhone                        String?
+  whatsapp                            String?
+  contactEmail                        String?
+  active                              Boolean                         @default(true)
+  greenCoffeePurchases                GreenCoffeePurchase[]
+  purchaseAcceptances                 GreenCoffeePurchaseAcceptance[]
+  bankAccounts                        SupplierBankAccount[]
+  contacts                            SupplierContact[]
+  originUnits                         SupplierOriginUnit[]
+  professionalSamples                 ProfessionalCoffeeSample[]
+  createdAt                           DateTime                        @default(now())
+  updatedAt                           DateTime                        @updatedAt
 
   @@index([companyId])
 }
 
 model Broker {
-  id            String                  @id @default(cuid())
-  companyId     String
-  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name          String
-  legalName     String?
-  tradeName     String?
-  taxId         String?
-  contactName   String?
-  phone         String?
-  email         String?
-  bankDetails   Json?
-  active        Boolean                 @default(true)
-  purchases     GreenCoffeePurchase[]
+  id              String                @id @default(cuid())
+  companyId       String
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  legalName       String?
+  tradeName       String?
+  taxId           String?
+  contactName     String?
+  phone           String?
+  email           String?
+  bankDetails     Json?
+  active          Boolean               @default(true)
+  purchases       GreenCoffeePurchase[]
   accountsPayable AccountsPayable[]
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
@@ -575,31 +581,31 @@ model SupplierContact {
 }
 
 model SupplierOriginUnit {
-  id                String                     @id @default(cuid())
-  supplierId        String
-  supplier          Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  name              String
-  taxId             String?
-  stateRegistration String?
-  country           String                     @default("Brasil")
-  state             String
-  municipality      String?
-  address           String?
-  postalCode        String?
-  district          String?
-  addressComplement String?
-  ibgeCityCode      String?
-  latitude          Decimal?                   @db.Decimal(10, 7)
-  longitude         Decimal?                   @db.Decimal(10, 7)
-  altitudeMeters    Decimal?                   @db.Decimal(10, 2)
-  coffeeAreaHa      Decimal?                   @db.Decimal(12, 2)
-  coffeeRegionId    String?
-  coffeeRegion      CoffeeRegion?              @relation(fields: [coffeeRegionId], references: [id], onDelete: SetNull)
-  active            Boolean                    @default(true)
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  purchases         GreenCoffeePurchase[]
-  productions       SupplierOriginProduction[]
+  id                  String                     @id @default(cuid())
+  supplierId          String
+  supplier            Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name                String
+  taxId               String?
+  stateRegistration   String?
+  country             String                     @default("Brasil")
+  state               String
+  municipality        String?
+  address             String?
+  postalCode          String?
+  district            String?
+  addressComplement   String?
+  ibgeCityCode        String?
+  latitude            Decimal?                   @db.Decimal(10, 7)
+  longitude           Decimal?                   @db.Decimal(10, 7)
+  altitudeMeters      Decimal?                   @db.Decimal(10, 2)
+  coffeeAreaHa        Decimal?                   @db.Decimal(12, 2)
+  coffeeRegionId      String?
+  coffeeRegion        CoffeeRegion?              @relation(fields: [coffeeRegionId], references: [id], onDelete: SetNull)
+  active              Boolean                    @default(true)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  purchases           GreenCoffeePurchase[]
+  productions         SupplierOriginProduction[]
   professionalSamples ProfessionalCoffeeSample[]
 
   @@unique([supplierId, name])
@@ -757,70 +763,70 @@ model GreenCoffeeReceipt {
 }
 
 model GreenCoffeePurchase {
-  id                           String                           @id @default(cuid())
+  id                           String                                @id @default(cuid())
   companyId                    String
-  company                      Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company                      Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   supplierId                   String
-  supplier                     Supplier                         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier                     Supplier                              @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   brokerId                     String?
-  broker                       Broker?                          @relation(fields: [brokerId], references: [id], onDelete: SetNull)
-  brokerCommissionPercent     Decimal?                         @db.Decimal(7, 4)
-  brokerCommissionAmount      Decimal?                         @db.Decimal(14, 2)
+  broker                       Broker?                               @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerCommissionPercent      Decimal?                              @db.Decimal(7, 4)
+  brokerCommissionAmount       Decimal?                              @db.Decimal(14, 2)
   originUnitId                 String?
-  originUnit                   SupplierOriginUnit?              @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
+  originUnit                   SupplierOriginUnit?                   @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
   purchaseNumber               String
-  status                       GreenCoffeePurchaseStatus        @default(DRAFT)
+  status                       GreenCoffeePurchaseStatus             @default(DRAFT)
   purchasedAt                  DateTime
   buyerId                      String
   buyerName                    String
   species                      String
   speciesId                    String?
-  speciesRef                   CoffeeSpecies?                   @relation("PurchaseSpecies", fields: [speciesId], references: [id], onDelete: SetNull)
+  speciesRef                   CoffeeSpecies?                        @relation("PurchaseSpecies", fields: [speciesId], references: [id], onDelete: SetNull)
   originRegion                 String
   municipality                 String?
   state                        String?
   coffeeRegionId               String?
-  coffeeRegion                 CoffeeRegion?                    @relation(fields: [coffeeRegionId], references: [id], onDelete: SetNull)
-  country                      String                           @default("Brasil")
+  coffeeRegion                 CoffeeRegion?                         @relation(fields: [coffeeRegionId], references: [id], onDelete: SetNull)
+  country                      String                                @default("Brasil")
   farmName                     String?
   harvest                      String
   variety                      String?
   cultivarId                   String?
-  cultivarRef                  CoffeeVariety?                   @relation(fields: [cultivarId], references: [id], onDelete: SetNull)
+  cultivarRef                  CoffeeVariety?                        @relation(fields: [cultivarId], references: [id], onDelete: SetNull)
   process                      String?
   supplierLotCode              String?
   qualityDescription           String?
   contractedScreen             String?
   screenClassificationId       String?
-  screenClassification         ScreenClassification?            @relation(fields: [screenClassificationId], references: [id], onDelete: SetNull)
+  screenClassification         ScreenClassification?                 @relation(fields: [screenClassificationId], references: [id], onDelete: SetNull)
   maxDefects                   Int?
-  maxMoisturePercent           Decimal?                         @db.Decimal(5, 2)
+  maxMoisturePercent           Decimal?                              @db.Decimal(5, 2)
   beverageClassification       String?
-  minimumScore                 Decimal?                         @db.Decimal(5, 2)
+  minimumScore                 Decimal?                              @db.Decimal(5, 2)
   technicalSpecifications      String?
   packagingType                GreenCoffeePackagingType
   volumeQuantity               Int
-  nominalUnitWeightKg          Decimal                          @db.Decimal(14, 3)
-  contractedWeightKg           Decimal                          @db.Decimal(14, 3)
-  weightTolerancePercent       Decimal                          @default(0) @db.Decimal(7, 3)
-  pricePerKg                   Decimal?                         @db.Decimal(14, 4)
-  pricePerBag                  Decimal?                         @db.Decimal(14, 2)
-  currency                     String                           @default("BRL")
-  totalValue                   Decimal                          @db.Decimal(14, 2)
+  nominalUnitWeightKg          Decimal                               @db.Decimal(14, 3)
+  contractedWeightKg           Decimal                               @db.Decimal(14, 3)
+  weightTolerancePercent       Decimal                               @default(0) @db.Decimal(7, 3)
+  pricePerKg                   Decimal?                              @db.Decimal(14, 4)
+  pricePerBag                  Decimal?                              @db.Decimal(14, 2)
+  currency                     String                                @default("BRL")
+  totalValue                   Decimal                               @db.Decimal(14, 2)
   paymentTerms                 String?
   expectedAt                   DateTime?
   commercialNotes              String?
-  idempotencyKey               String                           @unique
+  idempotencyKey               String                                @unique
   confirmedAt                  DateTime?
-  createdAt                    DateTime                         @default(now())
-  updatedAt                    DateTime                         @updatedAt
+  createdAt                    DateTime                              @default(now())
+  updatedAt                    DateTime                              @updatedAt
   receipts                     GreenCoffeeReceipt[]
-  professionalSample           ProfessionalCoffeeSample? @relation("PurchaseProfessionalSample")
+  professionalSample           ProfessionalCoffeeSample?             @relation("PurchaseProfessionalSample")
   approvalRequests             GreenCoffeeApprovalRequest[]
   notifications                OperationalNotification[]
   auditEvents                  GreenCoffeeAuditEvent[]
-  approvalStatus               PurchaseApprovalStatus           @default(DRAFT)
-  operationalStatus            PurchaseOperationalStatus        @default(NOT_STARTED)
+  approvalStatus               PurchaseApprovalStatus                @default(DRAFT)
+  operationalStatus            PurchaseOperationalStatus             @default(NOT_STARTED)
   createdByUserId              String
   createdByName                String
   approvedByUserId             String?
@@ -845,8 +851,8 @@ model GreenCoffeePurchase {
   paymentTermData              Json
   installments                 GreenCoffeePurchaseInstallment[]
   accountsPayable              AccountsPayable[]
-  externalAcceptanceStatus     PurchaseExternalAcceptanceStatus @default(NOT_SENT)
-  termsVersion                 String                           @default("2026.08")
+  externalAcceptanceStatus     PurchaseExternalAcceptanceStatus      @default(NOT_SENT)
+  termsVersion                 String                                @default("2026.08")
   termsDocumentUrl             String?
   acceptanceConditionText      String?
   externalAcceptances          GreenCoffeePurchaseAcceptance[]
@@ -864,15 +870,15 @@ model GreenCoffeePurchase {
 }
 
 model PurchaseConfirmationDocumentVersion {
-  id          String                                @id @default(cuid())
-  purchaseId  String
-  purchase    GreenCoffeePurchase                   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  version     Int
-  status      PurchaseConfirmationDocumentStatus   @default(DRAFT)
-  snapshot    Json
+  id           String                             @id @default(cuid())
+  purchaseId   String
+  purchase     GreenCoffeePurchase                @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  version      Int
+  status       PurchaseConfirmationDocumentStatus @default(DRAFT)
+  snapshot     Json
   documentHash String?
-  createdAt   DateTime                              @default(now())
-  acceptedAt  DateTime?
+  createdAt    DateTime                           @default(now())
+  acceptedAt   DateTime?
   supersededAt DateTime?
 
   @@unique([purchaseId, version])
@@ -1028,60 +1034,60 @@ model ScreenClassification {
 }
 
 model GreenCoffeeLabSample {
-  id           String             @id @default(cuid())
-  receiptId    String             @unique
-  receipt      GreenCoffeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
-  sampleNumber String             @unique
-  status       String             @default("PENDING")
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  cuppingSessions CuppingSession[]
+  id                    String                 @id @default(cuid())
+  receiptId             String                 @unique
+  receipt               GreenCoffeeReceipt     @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  sampleNumber          String                 @unique
+  status                String                 @default("PENDING")
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  cuppingSessions       CuppingSession[]
   cuppingSessionSamples CuppingSessionSample[]
 }
 
 model ProfessionalCoffeeSample {
-  id               String                    @id @default(cuid())
-  companyId        String
-  company          Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  source           ProfessionalSampleSource
-  code             String
-  status           ProfessionalSampleStatus  @default(RECEIVED)
-  supplierId       String?
-  supplier         Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  originUnitId     String?
-  originUnit       SupplierOriginUnit?       @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
-  contactName      String?
-  country          String?
-  state            String?
-  municipality     String?
-  region           String?
-  harvest          String?
-  species          String?
-  cultivar         String?
-  process          String?
-  screen           String?
-  informedDefects  Int?
-  informedMoisture Decimal?                  @db.Decimal(5, 2)
-  supplierLotCode  String?
-  receivedAt       DateTime?
-  notes            String?
-  purchaseId       String?                   @unique
-  purchase         GreenCoffeePurchase?      @relation("PurchaseProfessionalSample", fields: [purchaseId], references: [id], onDelete: SetNull)
-  receiptId        String?                   @unique
-  receipt          GreenCoffeeReceipt?       @relation("ReceiptProfessionalSample", fields: [receiptId], references: [id], onDelete: SetNull)
-  sourceSampleId   String?
-  sourceSample     ProfessionalCoffeeSample? @relation("ProfessionalSampleLineage", fields: [sourceSampleId], references: [id], onDelete: SetNull)
-  derivedSamples   ProfessionalCoffeeSample[] @relation("ProfessionalSampleLineage")
-  evaluations      ProfessionalSampleEvaluation[]
-  publicSessions   CuppingPublicSession[]
+  id                    String                         @id @default(cuid())
+  companyId             String
+  company               Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source                ProfessionalSampleSource
+  code                  String
+  status                ProfessionalSampleStatus       @default(RECEIVED)
+  supplierId            String?
+  supplier              Supplier?                      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  originUnitId          String?
+  originUnit            SupplierOriginUnit?            @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
+  contactName           String?
+  country               String?
+  state                 String?
+  municipality          String?
+  region                String?
+  harvest               String?
+  species               String?
+  cultivar              String?
+  process               String?
+  screen                String?
+  informedDefects       Int?
+  informedMoisture      Decimal?                       @db.Decimal(5, 2)
+  supplierLotCode       String?
+  receivedAt            DateTime?
+  notes                 String?
+  purchaseId            String?                        @unique
+  purchase              GreenCoffeePurchase?           @relation("PurchaseProfessionalSample", fields: [purchaseId], references: [id], onDelete: SetNull)
+  receiptId             String?                        @unique
+  receipt               GreenCoffeeReceipt?            @relation("ReceiptProfessionalSample", fields: [receiptId], references: [id], onDelete: SetNull)
+  sourceSampleId        String?
+  sourceSample          ProfessionalCoffeeSample?      @relation("ProfessionalSampleLineage", fields: [sourceSampleId], references: [id], onDelete: SetNull)
+  derivedSamples        ProfessionalCoffeeSample[]     @relation("ProfessionalSampleLineage")
+  evaluations           ProfessionalSampleEvaluation[]
+  publicSessions        CuppingPublicSession[]
   cuppingSessionSamples CuppingSessionSample[]
-  approvedById     String?
-  approvedByName   String?
-  approvedAt       DateTime?
-  createdById      String
-  createdByName    String
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
+  approvedById          String?
+  approvedByName        String?
+  approvedAt            DateTime?
+  createdById           String
+  createdByName         String
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, status])
@@ -1090,74 +1096,101 @@ model ProfessionalCoffeeSample {
 }
 
 model ProfessionalSampleEvaluation {
-  id             String                   @id @default(cuid())
-  sampleId       String
-  sample         ProfessionalCoffeeSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
-  evaluatorId    String
-  evaluatorName  String
-  attributes     Json
-  descriptors    Json?
-  sensoryMap     Json?
-  defects        Int?
-  moisture       Decimal?                 @db.Decimal(5, 2)
-  screen         String?
-  score          Decimal?                 @db.Decimal(5, 2)
-  notes          String?
-  completedAt    DateTime?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  id            String                   @id @default(cuid())
+  sampleId      String
+  sample        ProfessionalCoffeeSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  evaluatorId   String
+  evaluatorName String
+  attributes    Json
+  descriptors   Json?
+  sensoryMap    Json?
+  defects       Int?
+  moisture      Decimal?                 @db.Decimal(5, 2)
+  screen        String?
+  score         Decimal?                 @db.Decimal(5, 2)
+  notes         String?
+  completedAt   DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
 
   @@unique([sampleId, evaluatorId])
   @@index([sampleId, completedAt])
 }
 
 model CuppingSession {
-  id              String              @id @default(cuid())
-  companyId       String
-  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sampleId        String
-  sample          GreenCoffeeLabSample @relation(fields: [sampleId], references: [id], onDelete: Restrict)
-  code            String
-  sessionDate     DateTime            @default(now())
-  responsibleId   String?
-  responsibleName String?
-  participantIds  Json?
-  protocol        String              @default("SCA")
-  protocolVersion String              @default("v1")
-  generalNotes    String?
-  status          CuppingSessionStatus @default(OPEN)
-  decision        CuppingDecision?
-  decisionReason  String?
-  decidedById     String?
-  decidedByName   String?
-  decidedAt       DateTime?
-  evaluations     CuppingEvaluation[]
-  samples         CuppingSessionSample[]
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id                 String                     @id @default(cuid())
+  companyId          String
+  company            Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sampleId           String
+  sample             GreenCoffeeLabSample       @relation(fields: [sampleId], references: [id], onDelete: Restrict)
+  code               String
+  sessionDate        DateTime                   @default(now())
+  responsibleId      String?
+  responsibleName    String?
+  participantIds     Json?
+  protocol           String                     @default("SCA")
+  protocolVersion    String                     @default("v1")
+  generalNotes       String?
+  status             CuppingSessionStatus       @default(OPEN)
+  decision           CuppingDecision?
+  decisionReason     String?
+  decidedById        String?
+  decidedByName      String?
+  decidedAt          DateTime?
+  evaluations        CuppingEvaluation[]
+  samples            CuppingSessionSample[]
+  participantInvites CuppingParticipantInvite[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, status])
   @@index([sampleId])
 }
 
+/// Participant-specific access token for the authenticated Cupping V1 flow.
+/// participantId intentionally remains a scalar: the legacy public participant
+/// entity belongs to CuppingPublicSession, while authenticated sessions use
+/// evaluator/user identities. API resolvers validate its membership in the
+/// owning session before issuing or consuming an invite.
+model CuppingParticipantInvite {
+  id            String                         @id @default(cuid())
+  companyId     String
+  company       Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionId     String
+  session       CuppingSession                 @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  tokenHash     String                         @unique
+  status        CuppingParticipantInviteStatus @default(ACTIVE)
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  lastUsedAt    DateTime?
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @updatedAt
+
+  @@unique([sessionId, participantId])
+  @@index([companyId, status])
+  @@index([sessionId, status])
+  @@index([participantId, status])
+}
+
 model CuppingSessionSample {
-  id                  String                    @id @default(cuid())
-  sessionId           String
-  sourceType          String                    @default("GREEN_COFFEE_LAB_SAMPLE")
-  sourceId            String
-  sampleId            String?
+  id                   String                    @id @default(cuid())
+  sessionId            String
+  sourceType           String                    @default("GREEN_COFFEE_LAB_SAMPLE")
+  sourceId             String
+  sampleId             String?
   professionalSampleId String?
-  position            Int                       @default(1)
-  blindCode           String?
-  coffeeLotId         String?
+  position             Int                       @default(1)
+  blindCode            String?
+  coffeeLotId          String?
   greenCoffeeReceiptId String?
-  session             CuppingSession             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sample              GreenCoffeeLabSample?     @relation(fields: [sampleId], references: [id], onDelete: Restrict)
-  professionalSample  ProfessionalCoffeeSample? @relation(fields: [professionalSampleId], references: [id], onDelete: Restrict)
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  evaluations         CuppingEvaluation[]
+  session              CuppingSession            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sample               GreenCoffeeLabSample?     @relation(fields: [sampleId], references: [id], onDelete: Restrict)
+  professionalSample   ProfessionalCoffeeSample? @relation(fields: [professionalSampleId], references: [id], onDelete: Restrict)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  evaluations          CuppingEvaluation[]
 
   @@unique([sessionId, sourceType, sourceId])
   @@index([sampleId])
@@ -1166,84 +1199,84 @@ model CuppingSessionSample {
 }
 
 model CuppingEvaluation {
-  id          String         @id @default(cuid())
-  sessionId   String
-  session     CuppingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id              String                @id @default(cuid())
+  sessionId       String
+  session         CuppingSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionSampleId String?
-  sessionSample CuppingSessionSample? @relation(fields: [sessionSampleId], references: [id], onDelete: Cascade)
-  evaluatorId String
-  evaluatorName String
-  attributes  Json
-  defects     Json?
-  sensoryNotes Json?
-  score       Decimal?       @db.Decimal(5, 2)
-  completedAt DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  sessionSample   CuppingSessionSample? @relation(fields: [sessionSampleId], references: [id], onDelete: Cascade)
+  evaluatorId     String
+  evaluatorName   String
+  attributes      Json
+  defects         Json?
+  sensoryNotes    Json?
+  score           Decimal?              @db.Decimal(5, 2)
+  completedAt     DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@unique([sessionId, sessionSampleId, evaluatorId])
   @@index([evaluatorId])
 }
 
 model CuppingTrainingSession {
-  id              String                 @id @default(cuid())
-  companyId       String
-  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code            String
-  title           String
-  level           CuppingTrainingLevel   @default(DISCOVERY)
-  lesson          String?
-  sampleName      String
-  sampleContext   Json?
+  id               String                      @id @default(cuid())
+  companyId        String
+  company          Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code             String
+  title            String
+  level            CuppingTrainingLevel        @default(DISCOVERY)
+  lesson           String?
+  sampleName       String
+  sampleContext    Json?
   referenceProfile Json?
-  status          CuppingTrainingStatus  @default(OPEN)
-  createdById     String
-  createdByName   String
-  completedAt     DateTime?
-  evaluations     CuppingTrainingEvaluation[]
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
+  status           CuppingTrainingStatus       @default(OPEN)
+  createdById      String
+  createdByName    String
+  completedAt      DateTime?
+  evaluations      CuppingTrainingEvaluation[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, status])
 }
 
 model CuppingTrainingEvaluation {
-  id            String                  @id @default(cuid())
-  sessionId     String
-  session       CuppingTrainingSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  participantId String
+  id              String                 @id @default(cuid())
+  sessionId       String
+  session         CuppingTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId   String
   participantName String
-  attributes    Json
-  descriptors   Json?
-  sensoryMap    Json?
-  score         Decimal?                @db.Decimal(5, 2)
-  completedAt   DateTime?
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  attributes      Json
+  descriptors     Json?
+  sensoryMap      Json?
+  score           Decimal?               @db.Decimal(5, 2)
+  completedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@unique([sessionId, participantId])
   @@index([participantId])
 }
 
 model CuppingPublicSession {
-  id                  String                 @id @default(cuid())
-  companyId           String
-  company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  kind                CuppingPublicKind
-  code                String
-  status              CuppingPublicStatus    @default(DRAFT)
-  tokenHash           String                 @unique
-  tokenExpiresAt      DateTime?
+  id                   String                    @id @default(cuid())
+  companyId            String
+  company              Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  kind                 CuppingPublicKind
+  code                 String
+  status               CuppingPublicStatus       @default(DRAFT)
+  tokenHash            String                    @unique
+  tokenExpiresAt       DateTime?
   professionalSampleId String?
-  professionalSample  ProfessionalCoffeeSample? @relation(fields: [professionalSampleId], references: [id], onDelete: SetNull)
-  referenceProfile    Json?
-  createdById         String
-  createdByName       String
-  createdAt           DateTime               @default(now())
-  openedAt            DateTime?
-  closedAt            DateTime?
-  participants        CuppingParticipant[]
+  professionalSample   ProfessionalCoffeeSample? @relation(fields: [professionalSampleId], references: [id], onDelete: SetNull)
+  referenceProfile     Json?
+  createdById          String
+  createdByName        String
+  createdAt            DateTime                  @default(now())
+  openedAt             DateTime?
+  closedAt             DateTime?
+  participants         CuppingParticipant[]
 
   @@unique([companyId, code])
   @@index([companyId, status])
@@ -1251,17 +1284,17 @@ model CuppingPublicSession {
 }
 
 model CuppingParticipant {
-  id             String                    @id @default(cuid())
-  sessionId      String
-  session        CuppingPublicSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  name           String
-  phone          String
+  id              String                        @id @default(cuid())
+  sessionId       String
+  session         CuppingPublicSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name            String
+  phone           String
   normalizedPhone String
-  institution    String?
-  status         CuppingParticipantStatus  @default(JOINED)
-  joinedAt       DateTime                  @default(now())
-  completedAt    DateTime?
-  evaluation     CuppingParticipantEvaluation?
+  institution     String?
+  status          CuppingParticipantStatus      @default(JOINED)
+  joinedAt        DateTime                      @default(now())
+  completedAt     DateTime?
+  evaluation      CuppingParticipantEvaluation?
 
   @@unique([sessionId, normalizedPhone])
   @@index([sessionId, status])
@@ -1276,8 +1309,8 @@ model CuppingParticipantEvaluation {
   sensoryMap    Json?
   score         Decimal?           @db.Decimal(5, 2)
   completedAt   DateTime?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 }
 
 model GreenCoffeeApprovalRequest {
@@ -1785,31 +1818,31 @@ model AccountsReceivable {
 }
 
 model AccountsPayable {
-  id                  String                          @id @default(cuid())
-  companyId           String
-  company             Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplierId          String?
-  supplier            Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  brokerId            String?
-  broker              Broker?                         @relation(fields: [brokerId], references: [id], onDelete: SetNull)
-  costCenterId        String?
-  costCenter          CostCenter?                     @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  description         String
-  issueDate           DateTime
-  dueDate             DateTime
-  amount              Decimal                         @db.Decimal(14, 2)
-  openAmount          Decimal                         @db.Decimal(14, 2)
-  status              PayableStatus                   @default(OPEN)
-  category            String
-  paymentDate         DateTime?
-  notes               String?
-  payments            Payment[]
-  purchaseInstallment GreenCoffeePurchaseInstallment?
-  purchaseId          String?
-  purchase            GreenCoffeePurchase?            @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
-  brokerCommissionPayableKey String?                  @unique
-  createdAt           DateTime                        @default(now())
-  updatedAt           DateTime                        @updatedAt
+  id                         String                          @id @default(cuid())
+  companyId                  String
+  company                    Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId                 String?
+  supplier                   Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  brokerId                   String?
+  broker                     Broker?                         @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  costCenterId               String?
+  costCenter                 CostCenter?                     @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  description                String
+  issueDate                  DateTime
+  dueDate                    DateTime
+  amount                     Decimal                         @db.Decimal(14, 2)
+  openAmount                 Decimal                         @db.Decimal(14, 2)
+  status                     PayableStatus                   @default(OPEN)
+  category                   String
+  paymentDate                DateTime?
+  notes                      String?
+  payments                   Payment[]
+  purchaseInstallment        GreenCoffeePurchaseInstallment?
+  purchaseId                 String?
+  purchase                   GreenCoffeePurchase?            @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  brokerCommissionPayableKey String?                         @unique
+  createdAt                  DateTime                        @default(now())
+  updatedAt                  DateTime                        @updatedAt
 
   @@index([companyId, status, dueDate])
   @@index([costCenterId, dueDate])
