@@ -44,6 +44,11 @@ export class AuthService {
   }
 
   async revoke(token?: string) { if (token) await this.db.authSession.updateMany({ where: { tokenHash: tokenHash(token), revokedAt: null }, data: { revokedAt: new Date() } }); }
+  async updateAvatar(userId: string, avatarUrl: string | null) {
+    if (avatarUrl !== null && (!/^data:image\/(jpeg|png|webp);base64,/i.test(avatarUrl) || avatarUrl.length > 3_000_000)) throw new BadRequestException("Envie uma imagem JPG, PNG ou WebP de até 2 MB.");
+    const user = await this.db.user.update({ where: { id: userId }, data: { avatarUrl }, include: { company: true } });
+    return this.publicUser(user);
+  }
   publicUser(user: any) { return { id: user.id, companyId: user.companyId, name: user.name, email: user.email, role: user.role, active: user.active, avatarUrl: user.avatarUrl ?? null, company: user.company ? { id: user.company.id, name: user.company.name, tradeName: user.company.tradeName } : undefined }; }
   readToken(req: { headers?: { cookie?: string } }) { const raw = req.headers?.cookie ?? ""; return raw.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${SESSION_COOKIE}=`))?.split("=").slice(1).join("="); }
 }

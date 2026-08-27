@@ -73,6 +73,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [sessionAttempt]);
   useEffect(() => {
+    const onAvatarUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<SessionIdentity>).detail;
+      if (detail?.id) setSessionUser((current) => current ? { ...current, ...detail } : current);
+    };
+    window.addEventListener("bbos:avatar-updated", onAvatarUpdated);
+    return () => window.removeEventListener("bbos:avatar-updated", onAvatarUpdated);
+  }, []);
+  useEffect(() => {
     if (sessionState !== "unauthenticated" || pathname === "/login") return;
     const returnTo = `${pathname}${window.location.search}`;
     router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
@@ -177,7 +185,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="hidden items-center gap-2.5 sm:flex">
                 <UserAvatar name={user?.name ?? "Usuário"} avatarUrl={user?.avatarUrl} size="medium" />
               <div>
-                <p className="text-xs font-semibold">{user?.name ?? "Sessão não autenticada"}</p>
+                <Link href="/perfil" className="text-xs font-semibold hover:text-forest-800">{user?.name ?? "Sessão não autenticada"}</Link>
                 <p className="text-[11px] text-stone-500">{user?.corporateTitle ?? "Acesse o login"}</p>
               </div>
             </div>

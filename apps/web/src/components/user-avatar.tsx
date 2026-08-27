@@ -12,6 +12,6 @@ export function UserAvatar({ name, avatarUrl, size = "medium" }: { name: string;
   const style = sizes[size];
   const initials = name.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "?";
   return <span className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-full border border-stone-200 bg-forest-100 font-bold text-forest-800 ${style.box} ${style.text}`} aria-label={name}>
-    {avatarUrl ? <Image src={avatarUrl} alt="" fill sizes={`${style.pixels}px`} className="object-cover" /> : initials}
+    {avatarUrl ? (avatarUrl.startsWith("data:") ? <img src={avatarUrl} alt="" className="absolute inset-0 size-full object-cover" /> : <Image src={`${avatarUrl}${avatarUrl.includes("?") ? "&" : "?"}v=1`} alt="" fill sizes={`${style.pixels}px`} className="object-cover" />) : initials}
   </span>;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
 import { AuthService, SESSION_COOKIE } from "./auth.service";
 import { Public } from "./auth.guard";
 
@@ -19,6 +19,13 @@ export class AuthController {
     const user = await this.auth.resolve(this.auth.readToken(request));
     if (!user) throw new UnauthorizedException("Sessão não encontrada.");
     return { user };
+  }
+
+  @Patch("me/avatar")
+  async updateAvatar(@Req() request: any, @Body() body: { avatarUrl?: string | null }) {
+    const user = await this.auth.resolve(this.auth.readToken(request));
+    if (!user) throw new UnauthorizedException("Sessão não encontrada.");
+    return { user: await this.auth.updateAvatar(user.id, body.avatarUrl === undefined ? null : body.avatarUrl) };
   }
 
   @Post("logout")
