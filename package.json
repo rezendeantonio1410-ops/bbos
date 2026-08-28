@@ -12,7 +12,7 @@
     "format": "prettier --write .",
     "db:generate": "corepack pnpm --filter @bbos/database generate",
     "db:migrate": "corepack pnpm --filter @bbos/database migrate",
-    "db:migrate:deploy": "pnpm --filter @bbos/database exec prisma migrate resolve --applied 20260813190000_green_coffee_receipt_v1 --schema=prisma/schema.prisma && pnpm --filter @bbos/database migrate:deploy",
+    "db:migrate:deploy": "pnpm --filter @bbos/database migrate:deploy",
     "db:migrate:staging": "corepack pnpm db:migrate:deploy",
     "db:staging:prepare": "corepack pnpm db:migrate:deploy && corepack pnpm db:seed:coffee-references",
     "db:seed": "corepack pnpm --filter @bbos/database seed",
