@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: .
     branch: staging/cupping-sensory
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:migrate:deploy && pnpm db:seed:coffee-references && pnpm --filter @bbos/api build
+    buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:migrate:deploy && pnpm db:seed:coffee-references && pnpm --filter @bbos/api build
     startCommand: pnpm --filter @bbos/api start
     healthCheckPath: /api/health
     envVars:

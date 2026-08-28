@@ -22,16 +22,20 @@ export default function LoginPage() {
     const timeout = window.setTimeout(() => controller.abort(), 10000);
     try {
       const response = await fetch("/api/auth/login", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim(), password }), signal: controller.signal });
-      await response.json().catch(() => ({}));
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) throw new Error("Credenciais inválidas.");
-        throw new Error("Não foi possível entrar no BBOS.");
+        if (response.status === 404) throw new Error("O serviço de autenticação não está disponível nesta versão.");
+        if (response.status >= 500) throw new Error("A API do BBOS está indisponível no momento.");
+        throw new Error(typeof payload?.message === "string" ? payload.message : "Não foi possível entrar no BBOS.");
       }
       const requestedReturnTo = new URLSearchParams(window.location.search).get("returnTo");
       const destination = requestedReturnTo && requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//") ? requestedReturnTo : "/home";
       router.replace(destination);
     } catch (cause) {
-      setError(cause instanceof Error && cause.message === "Credenciais inválidas." ? cause.message : "Não foi possível conectar ao BBOS.");
+      if (cause instanceof DOMException && cause.name === "AbortError") setError("A API do BBOS demorou para responder.");
+      else if (cause instanceof TypeError) setError("Não foi possível conectar ao BBOS. Verifique a rede ou o CORS.");
+      else setError(cause instanceof Error ? cause.message : "Não foi possível conectar ao BBOS.");
     } finally {
       window.clearTimeout(timeout);
       setBusy(false);
