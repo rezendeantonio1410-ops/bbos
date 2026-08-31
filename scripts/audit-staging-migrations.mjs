@@ -115,6 +115,15 @@ try {
   ]);
   recoveries.push([lifecycle, lifecycleSafe]);
 
+  const returnAdjustment = "20260815090000_purchase_return_adjustment";
+  const returnSafe = await audit(returnAdjustment, [
+    ["COLUMN GreenCoffeePurchase.returnedByUserId", col("GreenCoffeePurchase", "returnedByUserId")],
+    ["COLUMN GreenCoffeePurchase.returnedAt", col("GreenCoffeePurchase", "returnedAt")],
+    ["COLUMN GreenCoffeePurchase.returnReason", col("GreenCoffeePurchase", "returnReason")],
+    ["COLUMN GreenCoffeePurchase.correctionRequest", col("GreenCoffeePurchase", "correctionRequest")],
+  ]);
+  recoveries.push([returnAdjustment, returnSafe]);
+
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
   await prisma.$disconnect();
 
