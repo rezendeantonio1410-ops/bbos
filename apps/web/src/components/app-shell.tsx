@@ -24,6 +24,7 @@ import {
   Search,
   ShoppingBag,
   Sparkles,
+  UsersRound,
   Warehouse,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -40,6 +41,7 @@ const nav = [
   { href: "/producao", label: "Produção", icon: Factory },
   { href: "/blends", label: "Blends", icon: Boxes },
   { href: "/produtos", label: "Produtos", icon: PackageCheck },
+  { href: "/clientes", label: "Clientes", icon: UsersRound },
   { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { href: "/vendas", label: "Vendas", icon: BarChart3 },
   { href: "/commerce", label: "Commerce", icon: Globe2 },
