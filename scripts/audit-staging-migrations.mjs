@@ -48,7 +48,6 @@ try {
     return "PENDING";
   };
   const recoveries = [];
-
   async function add(name, checks) { recoveries.push([name, await audit(name, checks)]); }
 
   await add("20260814120000_green_coffee_purchase_v2", [
@@ -74,74 +73,60 @@ try {
     ["FK acceptance purchase", fk("GreenCoffeePurchaseAcceptance_purchaseId_fkey")], ["FK acceptance supplier", fk("GreenCoffeePurchaseAcceptance_supplierId_fkey")],
   ]);
 
-  await add("20260814180000_purchase_submission_lifecycle", [
-    ["COLUMN submittedForApprovalAt", col("GreenCoffeePurchase", "submittedForApprovalAt")], ["COLUMN submittedForApprovalByUserId", col("GreenCoffeePurchase", "submittedForApprovalByUserId")],
-  ]);
-  await add("20260815090000_purchase_return_adjustment", [
-    ["COLUMN returnedByUserId", col("GreenCoffeePurchase", "returnedByUserId")], ["COLUMN returnedAt", col("GreenCoffeePurchase", "returnedAt")],
-    ["COLUMN returnReason", col("GreenCoffeePurchase", "returnReason")], ["COLUMN correctionRequest", col("GreenCoffeePurchase", "correctionRequest")],
-  ]);
+  await add("20260814180000_purchase_submission_lifecycle", [["COLUMN submittedForApprovalAt", col("GreenCoffeePurchase", "submittedForApprovalAt")], ["COLUMN submittedForApprovalByUserId", col("GreenCoffeePurchase", "submittedForApprovalByUserId")]]);
+  await add("20260815090000_purchase_return_adjustment", [["COLUMN returnedByUserId", col("GreenCoffeePurchase", "returnedByUserId")], ["COLUMN returnedAt", col("GreenCoffeePurchase", "returnedAt")], ["COLUMN returnReason", col("GreenCoffeePurchase", "returnReason")], ["COLUMN correctionRequest", col("GreenCoffeePurchase", "correctionRequest")]]);
   await add("20260816120000_supplier_contacts", [
     ["TABLE SupplierContact", table("SupplierContact")], ["COLUMN acceptance.supplierContactId", col("GreenCoffeePurchaseAcceptance", "supplierContactId")],
     ["COLUMN acceptance.contactPhoneSnapshot", col("GreenCoffeePurchaseAcceptance", "contactPhoneSnapshot")], ["COLUMN acceptance.contactEmailSnapshot", col("GreenCoffeePurchaseAcceptance", "contactEmailSnapshot")],
-    ["INDEX SupplierContact supplier/active/confirm", idx("SupplierContact_supplierId_active_canConfirmBusiness_idx")], ["FK SupplierContact supplier", fk("SupplierContact_supplierId_fkey")],
-    ["FK acceptance supplierContact", fk("GreenCoffeePurchaseAcceptance_supplierContactId_fkey")],
+    ["INDEX SupplierContact supplier/active/confirm", idx("SupplierContact_supplierId_active_canConfirmBusiness_idx")], ["FK SupplierContact supplier", fk("SupplierContact_supplierId_fkey")], ["FK acceptance supplierContact", fk("GreenCoffeePurchaseAcceptance_supplierContactId_fkey")],
   ]);
   await add("20260818100000_user_avatar", [["COLUMN User.avatarUrl", col("User", "avatarUrl")]]);
 
   await add("20260819090000_green_coffee_reference_data_v1", [
-    ["COLUMN CoffeeVariety.breeder", col("CoffeeVariety", "breeder")], ["COLUMN CoffeeVariety.sortOrder", col("CoffeeVariety", "sortOrder")],
-    ["TABLE CoffeeRegion", table("CoffeeRegion")], ["TABLE ScreenClassification", table("ScreenClassification")],
-    ["INDEX CoffeeRegion unique", idx("CoffeeRegion_companyId_state_name_key")], ["INDEX CoffeeRegion active", idx("CoffeeRegion_companyId_state_active_idx")],
-    ["FK CoffeeRegion company", fk("CoffeeRegion_companyId_fkey")], ["INDEX ScreenClassification unique", idx("ScreenClassification_companyId_code_key")],
-    ["INDEX ScreenClassification active", idx("ScreenClassification_companyId_active_idx")], ["FK ScreenClassification company", fk("ScreenClassification_companyId_fkey")],
-    ["COLUMN purchase.speciesId", col("GreenCoffeePurchase", "speciesId")], ["COLUMN purchase.cultivarId", col("GreenCoffeePurchase", "cultivarId")],
-    ["COLUMN purchase.coffeeRegionId", col("GreenCoffeePurchase", "coffeeRegionId")], ["COLUMN purchase.screenClassificationId", col("GreenCoffeePurchase", "screenClassificationId")],
-    ["INDEX purchase species", idx("GreenCoffeePurchase_speciesId_idx")], ["INDEX purchase cultivar", idx("GreenCoffeePurchase_cultivarId_idx")],
-    ["INDEX purchase region", idx("GreenCoffeePurchase_coffeeRegionId_idx")], ["INDEX purchase screen", idx("GreenCoffeePurchase_screenClassificationId_idx")],
-    ["FK purchase species", fk("GreenCoffeePurchase_speciesId_fkey")], ["FK purchase cultivar", fk("GreenCoffeePurchase_cultivarId_fkey")],
-    ["FK purchase region", fk("GreenCoffeePurchase_coffeeRegionId_fkey")], ["FK purchase screen", fk("GreenCoffeePurchase_screenClassificationId_fkey")],
+    ["COLUMN CoffeeVariety.breeder", col("CoffeeVariety", "breeder")], ["COLUMN CoffeeVariety.sortOrder", col("CoffeeVariety", "sortOrder")], ["TABLE CoffeeRegion", table("CoffeeRegion")], ["TABLE ScreenClassification", table("ScreenClassification")],
+    ["INDEX CoffeeRegion unique", idx("CoffeeRegion_companyId_state_name_key")], ["INDEX CoffeeRegion active", idx("CoffeeRegion_companyId_state_active_idx")], ["FK CoffeeRegion company", fk("CoffeeRegion_companyId_fkey")],
+    ["INDEX ScreenClassification unique", idx("ScreenClassification_companyId_code_key")], ["INDEX ScreenClassification active", idx("ScreenClassification_companyId_active_idx")], ["FK ScreenClassification company", fk("ScreenClassification_companyId_fkey")],
+    ["COLUMN purchase.speciesId", col("GreenCoffeePurchase", "speciesId")], ["COLUMN purchase.cultivarId", col("GreenCoffeePurchase", "cultivarId")], ["COLUMN purchase.coffeeRegionId", col("GreenCoffeePurchase", "coffeeRegionId")], ["COLUMN purchase.screenClassificationId", col("GreenCoffeePurchase", "screenClassificationId")],
+    ["INDEX purchase species", idx("GreenCoffeePurchase_speciesId_idx")], ["INDEX purchase cultivar", idx("GreenCoffeePurchase_cultivarId_idx")], ["INDEX purchase region", idx("GreenCoffeePurchase_coffeeRegionId_idx")], ["INDEX purchase screen", idx("GreenCoffeePurchase_screenClassificationId_idx")],
+    ["FK purchase species", fk("GreenCoffeePurchase_speciesId_fkey")], ["FK purchase cultivar", fk("GreenCoffeePurchase_cultivarId_fkey")], ["FK purchase region", fk("GreenCoffeePurchase_coffeeRegionId_fkey")], ["FK purchase screen", fk("GreenCoffeePurchase_screenClassificationId_fkey")],
   ]);
 
   const supplierActiveShape = await prisma.$queryRawUnsafe(`SELECT is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='Supplier' AND column_name='active'`);
-  await add("20260819093000_supplier_active_reference_bootstrap", [
-    ["COLUMN Supplier.active", col("Supplier", "active")], ["Supplier.active NOT NULL", Promise.resolve(supplierActiveShape[0]?.is_nullable === "NO")],
-    ["Supplier.active DEFAULT true", Promise.resolve(String(supplierActiveShape[0]?.column_default).toLowerCase() === "true")],
-  ]);
+  await add("20260819093000_supplier_active_reference_bootstrap", [["COLUMN Supplier.active", col("Supplier", "active")], ["Supplier.active NOT NULL", Promise.resolve(supplierActiveShape[0]?.is_nullable === "NO")], ["Supplier.active DEFAULT true", Promise.resolve(String(supplierActiveShape[0]?.column_default).toLowerCase() === "true")]]);
 
   await add("20260819110000_supplier_origin_units", [
-    ["TABLE SupplierOriginUnit", table("SupplierOriginUnit")], ["INDEX origin unique", idx("SupplierOriginUnit_supplierId_name_key")],
-    ["INDEX origin supplier/state/active", idx("SupplierOriginUnit_supplierId_state_active_idx")], ["INDEX origin region", idx("SupplierOriginUnit_coffeeRegionId_idx")],
-    ["FK origin supplier", fk("SupplierOriginUnit_supplierId_fkey")], ["FK origin region", fk("SupplierOriginUnit_coffeeRegionId_fkey")],
-    ["COLUMN purchase.originUnitId", col("GreenCoffeePurchase", "originUnitId")], ["INDEX purchase origin", idx("GreenCoffeePurchase_originUnitId_idx")],
-    ["FK purchase origin", fk("GreenCoffeePurchase_originUnitId_fkey")],
+    ["TABLE SupplierOriginUnit", table("SupplierOriginUnit")], ["INDEX origin unique", idx("SupplierOriginUnit_supplierId_name_key")], ["INDEX origin supplier/state/active", idx("SupplierOriginUnit_supplierId_state_active_idx")], ["INDEX origin region", idx("SupplierOriginUnit_coffeeRegionId_idx")],
+    ["FK origin supplier", fk("SupplierOriginUnit_supplierId_fkey")], ["FK origin region", fk("SupplierOriginUnit_coffeeRegionId_fkey")], ["COLUMN purchase.originUnitId", col("GreenCoffeePurchase", "originUnitId")], ["INDEX purchase origin", idx("GreenCoffeePurchase_originUnitId_idx")], ["FK purchase origin", fk("GreenCoffeePurchase_originUnitId_fkey")],
   ]);
 
   await add("20260819130000_supplier_origin_details", [
-    ["ENUM COOPERATIVE", enumValue("GreenCoffeeSupplierType", "COOPERATIVE")], ["ENUM ASSOCIATION", enumValue("GreenCoffeeSupplierType", "ASSOCIATION")],
-    ["ENUM EXPORTER", enumValue("GreenCoffeeSupplierType", "EXPORTER")], ["ENUM OTHER", enumValue("GreenCoffeeSupplierType", "OTHER")],
-    ["COLUMN Supplier.tradeName", col("Supplier", "tradeName")], ["COLUMN origin.taxId", col("SupplierOriginUnit", "taxId")],
-    ["COLUMN origin.stateRegistration", col("SupplierOriginUnit", "stateRegistration")], ["COLUMN origin.address", col("SupplierOriginUnit", "address")],
-    ["COLUMN origin.latitude", col("SupplierOriginUnit", "latitude")], ["COLUMN origin.longitude", col("SupplierOriginUnit", "longitude")],
-    ["COLUMN origin.altitudeMeters", col("SupplierOriginUnit", "altitudeMeters")], ["COLUMN origin.coffeeAreaHa", col("SupplierOriginUnit", "coffeeAreaHa")],
-    ["TABLE SupplierOriginProduction", table("SupplierOriginProduction")], ["INDEX production origin", idx("SupplierOriginProduction_originUnitId_active_idx")],
-    ["INDEX production species/cultivar", idx("SupplierOriginProduction_speciesId_cultivarId_idx")], ["FK production origin", fk("SupplierOriginProduction_originUnitId_fkey")],
-    ["FK production species", fk("SupplierOriginProduction_speciesId_fkey")], ["FK production cultivar", fk("SupplierOriginProduction_cultivarId_fkey")],
+    ["ENUM COOPERATIVE", enumValue("GreenCoffeeSupplierType", "COOPERATIVE")], ["ENUM ASSOCIATION", enumValue("GreenCoffeeSupplierType", "ASSOCIATION")], ["ENUM EXPORTER", enumValue("GreenCoffeeSupplierType", "EXPORTER")], ["ENUM OTHER", enumValue("GreenCoffeeSupplierType", "OTHER")],
+    ["COLUMN Supplier.tradeName", col("Supplier", "tradeName")], ["COLUMN origin.taxId", col("SupplierOriginUnit", "taxId")], ["COLUMN origin.stateRegistration", col("SupplierOriginUnit", "stateRegistration")], ["COLUMN origin.address", col("SupplierOriginUnit", "address")],
+    ["COLUMN origin.latitude", col("SupplierOriginUnit", "latitude")], ["COLUMN origin.longitude", col("SupplierOriginUnit", "longitude")], ["COLUMN origin.altitudeMeters", col("SupplierOriginUnit", "altitudeMeters")], ["COLUMN origin.coffeeAreaHa", col("SupplierOriginUnit", "coffeeAreaHa")],
+    ["TABLE SupplierOriginProduction", table("SupplierOriginProduction")], ["INDEX production origin", idx("SupplierOriginProduction_originUnitId_active_idx")], ["INDEX production species/cultivar", idx("SupplierOriginProduction_speciesId_cultivarId_idx")],
+    ["FK production origin", fk("SupplierOriginProduction_originUnitId_fkey")], ["FK production species", fk("SupplierOriginProduction_speciesId_fkey")], ["FK production cultivar", fk("SupplierOriginProduction_cultivarId_fkey")],
   ]);
 
   await add("20260819150000_structured_supplier_addresses", [
-    ["COLUMN Supplier.postalCode", col("Supplier", "postalCode")], ["COLUMN Supplier.district", col("Supplier", "district")],
-    ["COLUMN Supplier.addressComplement", col("Supplier", "addressComplement")], ["COLUMN Supplier.ibgeCityCode", col("Supplier", "ibgeCityCode")],
-    ["COLUMN origin.postalCode", col("SupplierOriginUnit", "postalCode")], ["COLUMN origin.district", col("SupplierOriginUnit", "district")],
-    ["COLUMN origin.addressComplement", col("SupplierOriginUnit", "addressComplement")], ["COLUMN origin.ibgeCityCode", col("SupplierOriginUnit", "ibgeCityCode")],
+    ["COLUMN Supplier.postalCode", col("Supplier", "postalCode")], ["COLUMN Supplier.district", col("Supplier", "district")], ["COLUMN Supplier.addressComplement", col("Supplier", "addressComplement")], ["COLUMN Supplier.ibgeCityCode", col("Supplier", "ibgeCityCode")],
+    ["COLUMN origin.postalCode", col("SupplierOriginUnit", "postalCode")], ["COLUMN origin.district", col("SupplierOriginUnit", "district")], ["COLUMN origin.addressComplement", col("SupplierOriginUnit", "addressComplement")], ["COLUMN origin.ibgeCityCode", col("SupplierOriginUnit", "ibgeCityCode")],
   ]);
 
   await add("20260819160000_supplier_tax_verification", [
-    ["ENUM TaxVerificationStatus", en("TaxVerificationStatus")], ["COLUMN Supplier.taxIdVerificationStatus", col("Supplier", "taxIdVerificationStatus")],
-    ["COLUMN Supplier.taxIdVerifiedAt", col("Supplier", "taxIdVerifiedAt")], ["COLUMN Supplier.taxIdVerificationSource", col("Supplier", "taxIdVerificationSource")],
-    ["COLUMN Supplier.stateRegistrationVerificationStatus", col("Supplier", "stateRegistrationVerificationStatus")],
-    ["COLUMN Supplier.stateRegistrationVerifiedAt", col("Supplier", "stateRegistrationVerifiedAt")],
-    ["COLUMN Supplier.stateRegistrationVerificationSource", col("Supplier", "stateRegistrationVerificationSource")],
+    ["ENUM TaxVerificationStatus", en("TaxVerificationStatus")], ["COLUMN Supplier.taxIdVerificationStatus", col("Supplier", "taxIdVerificationStatus")], ["COLUMN Supplier.taxIdVerifiedAt", col("Supplier", "taxIdVerifiedAt")], ["COLUMN Supplier.taxIdVerificationSource", col("Supplier", "taxIdVerificationSource")],
+    ["COLUMN Supplier.stateRegistrationVerificationStatus", col("Supplier", "stateRegistrationVerificationStatus")], ["COLUMN Supplier.stateRegistrationVerifiedAt", col("Supplier", "stateRegistrationVerifiedAt")], ["COLUMN Supplier.stateRegistrationVerificationSource", col("Supplier", "stateRegistrationVerificationSource")],
+  ]);
+
+  const registrationShape = await prisma.$queryRawUnsafe(`SELECT is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='Supplier' AND column_name='stateRegistrationType'`);
+  await add("20260819170000_supplier_state_registration_type", [
+    ["COLUMN Supplier.stateRegistrationType", col("Supplier", "stateRegistrationType")], ["stateRegistrationType NOT NULL", Promise.resolve(registrationShape[0]?.is_nullable === "NO")], ["stateRegistrationType DEFAULT NUMBER", Promise.resolve(String(registrationShape[0]?.column_default).includes("NUMBER"))],
+  ]);
+
+  await add("20260820100000_purchase_broker_v2", [
+    ["ENUM PurchaseConfirmationDocumentStatus", en("PurchaseConfirmationDocumentStatus")], ["TABLE Broker", table("Broker")], ["FK Broker company", fk("Broker_companyId_fkey")], ["INDEX Broker company/taxId", idx("Broker_companyId_taxId_key")], ["INDEX Broker company/active", idx("Broker_companyId_active_idx")],
+    ["COLUMN purchase.brokerId", col("GreenCoffeePurchase", "brokerId")], ["COLUMN purchase.brokerCommissionPercent", col("GreenCoffeePurchase", "brokerCommissionPercent")], ["COLUMN purchase.brokerCommissionAmount", col("GreenCoffeePurchase", "brokerCommissionAmount")], ["INDEX purchase broker", idx("GreenCoffeePurchase_brokerId_idx")], ["FK purchase broker", fk("GreenCoffeePurchase_brokerId_fkey")],
+    ["TABLE PurchaseConfirmationDocumentVersion", table("PurchaseConfirmationDocumentVersion")], ["INDEX document purchase/version", idx("PurchaseConfirmationDocumentVersion_purchaseId_version_key")], ["INDEX document purchase/status", idx("PurchaseConfirmationDocumentVersion_purchaseId_status_idx")], ["FK document purchase", fk("PurchaseConfirmationDocumentVersion_purchaseId_fkey")],
+    ["COLUMN AccountsPayable.brokerId", col("AccountsPayable", "brokerId")], ["COLUMN AccountsPayable.brokerCommissionPayableKey", col("AccountsPayable", "brokerCommissionPayableKey")], ["INDEX AccountsPayable broker key", idx("AccountsPayable_brokerCommissionPayableKey_key")], ["FK AccountsPayable broker", fk("AccountsPayable_brokerId_fkey")],
   ]);
 
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
