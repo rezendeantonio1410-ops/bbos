@@ -102,6 +102,22 @@ try {
   const avatar = "20260818100000_user_avatar";
   recoveries.push([avatar, await audit(avatar, [["COLUMN User.avatarUrl", col("User", "avatarUrl")]])]);
 
+  const referenceData = "20260819090000_green_coffee_reference_data_v1";
+  recoveries.push([referenceData, await audit(referenceData, [
+    ["COLUMN CoffeeVariety.breeder", col("CoffeeVariety", "breeder")],
+    ["COLUMN CoffeeVariety.sortOrder", col("CoffeeVariety", "sortOrder")],
+    ["TABLE CoffeeRegion", table("CoffeeRegion")], ["TABLE ScreenClassification", table("ScreenClassification")],
+    ["INDEX CoffeeRegion unique", idx("CoffeeRegion_companyId_state_name_key")], ["INDEX CoffeeRegion active", idx("CoffeeRegion_companyId_state_active_idx")],
+    ["FK CoffeeRegion company", fk("CoffeeRegion_companyId_fkey")], ["INDEX ScreenClassification unique", idx("ScreenClassification_companyId_code_key")],
+    ["INDEX ScreenClassification active", idx("ScreenClassification_companyId_active_idx")], ["FK ScreenClassification company", fk("ScreenClassification_companyId_fkey")],
+    ["COLUMN purchase.speciesId", col("GreenCoffeePurchase", "speciesId")], ["COLUMN purchase.cultivarId", col("GreenCoffeePurchase", "cultivarId")],
+    ["COLUMN purchase.coffeeRegionId", col("GreenCoffeePurchase", "coffeeRegionId")], ["COLUMN purchase.screenClassificationId", col("GreenCoffeePurchase", "screenClassificationId")],
+    ["INDEX purchase species", idx("GreenCoffeePurchase_speciesId_idx")], ["INDEX purchase cultivar", idx("GreenCoffeePurchase_cultivarId_idx")],
+    ["INDEX purchase region", idx("GreenCoffeePurchase_coffeeRegionId_idx")], ["INDEX purchase screen", idx("GreenCoffeePurchase_screenClassificationId_idx")],
+    ["FK purchase species", fk("GreenCoffeePurchase_speciesId_fkey")], ["FK purchase cultivar", fk("GreenCoffeePurchase_cultivarId_fkey")],
+    ["FK purchase region", fk("GreenCoffeePurchase_coffeeRegionId_fkey")], ["FK purchase screen", fk("GreenCoffeePurchase_screenClassificationId_fkey")],
+  ])]);
+
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
   await prisma.$disconnect();
   for (const [name] of recoveries) {
