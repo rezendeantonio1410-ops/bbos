@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "nest start --watch",
-    "build": "corepack pnpm --filter @bbos/database build && nest build",
+    "build": "corepack pnpm --filter @bbos/database build && corepack pnpm --filter @bbos/shared build && nest build",
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
