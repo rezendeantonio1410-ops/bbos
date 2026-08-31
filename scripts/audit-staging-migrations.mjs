@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 
 const V2 = "20260814120000_green_coffee_purchase_v2";
 const FIN_LINK = "20260814130000_purchase_financial_purchase_link";
+const EXTERNAL_ACCEPTANCE = "20260814150000_purchase_external_acceptance";
 
 function run(command, args) {
   console.log(`\n$ ${command} ${args.join(" ")}`);
@@ -34,6 +35,12 @@ async function tableExists(name) {
 }
 async function columnExists(table, column) {
   return exists(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name=$2) AS value`, table, column);
+}
+async function indexExists(name) {
+  return exists(`SELECT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname=$1) AS value`, name);
+}
+async function constraintExists(name) {
+  return exists(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname=$1) AS value`, name);
 }
 
 try {
@@ -78,8 +85,8 @@ try {
   for (const name of enumNames) { const ok = await exists(`SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname=$1) AS value`, name); console.log(`ENUM ${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
   for (const name of tableNames) { const ok = await tableExists(name); console.log(`TABLE ${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
   for (const name of purchaseColumns) { const ok = await columnExists("GreenCoffeePurchase", name); console.log(`COLUMN GreenCoffeePurchase.${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
-  for (const name of v2Indexes) { const ok = await exists(`SELECT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname=$1) AS value`, name); console.log(`INDEX ${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
-  for (const name of v2Constraints) { const ok = await exists(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname=$1) AS value`, name); console.log(`FK ${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
+  for (const name of v2Indexes) { const ok = await indexExists(name); console.log(`INDEX ${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
+  for (const name of v2Constraints) { const ok = await constraintExists(name); console.log(`FK ${name}: ${ok ? "PASS" : "FAIL"}`); v2Safe &&= ok; }
   const requiredNotNull = ["approvalStatus", "operationalStatus", "createdByUserId", "createdByName", "supplierSnapshot", "qualityCategory", "paymentTermType", "paymentTermData"];
   const nullableRequired = await prisma.$queryRawUnsafe(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='GreenCoffeePurchase' AND column_name = ANY($1::text[]) AND is_nullable='YES'`, requiredNotNull);
   v2Safe &&= nullableRequired.length === 0;
@@ -90,8 +97,8 @@ try {
 
   console.log(`\nAUDIT ${FIN_LINK}`);
   const finColumn = await columnExists("AccountsPayable", "purchaseId");
-  const finIndex = await exists(`SELECT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='AccountsPayable_purchaseId_dueDate_idx') AS value`);
-  const finFk = await exists(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='AccountsPayable_purchaseId_fkey') AS value`);
+  const finIndex = await indexExists("AccountsPayable_purchaseId_dueDate_idx");
+  const finFk = await constraintExists("AccountsPayable_purchaseId_fkey");
   const mismatches = Number(await scalar(`SELECT COUNT(*)::int AS value FROM "GreenCoffeePurchaseInstallment" i JOIN "AccountsPayable" a ON a.id=i."accountsPayableId" WHERE a."purchaseId" IS DISTINCT FROM i."purchaseId"`));
   const finSafe = finColumn && finIndex && finFk && mismatches === 0;
   console.log(`COLUMN AccountsPayable.purchaseId: ${finColumn ? "PASS" : "FAIL"}`);
@@ -100,18 +107,44 @@ try {
   console.log(`BACKFILL MISMATCHES: ${mismatches}`);
   console.log(`SAFE ${FIN_LINK}: ${finSafe ? "YES" : "NO"}`);
 
+  console.log(`\nAUDIT ${EXTERNAL_ACCEPTANCE}`);
+  const extChecks = [
+    ["ENUM PurchaseExternalAcceptanceStatus", await exists(`SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname='PurchaseExternalAcceptanceStatus') AS value`)],
+    ["COLUMN Supplier.contactRole", await columnExists("Supplier", "contactRole")],
+    ["COLUMN Supplier.whatsapp", await columnExists("Supplier", "whatsapp")],
+    ["COLUMN GreenCoffeePurchase.externalAcceptanceStatus", await columnExists("GreenCoffeePurchase", "externalAcceptanceStatus")],
+    ["COLUMN GreenCoffeePurchase.termsVersion", await columnExists("GreenCoffeePurchase", "termsVersion")],
+    ["COLUMN GreenCoffeePurchase.termsDocumentUrl", await columnExists("GreenCoffeePurchase", "termsDocumentUrl")],
+    ["COLUMN GreenCoffeePurchase.acceptanceConditionText", await columnExists("GreenCoffeePurchase", "acceptanceConditionText")],
+    ["TABLE GreenCoffeePurchaseAcceptance", await tableExists("GreenCoffeePurchaseAcceptance")],
+    ["INDEX GreenCoffeePurchaseAcceptance_tokenHash_key", await indexExists("GreenCoffeePurchaseAcceptance_tokenHash_key")],
+    ["INDEX GreenCoffeePurchaseAcceptance_purchaseId_status_idx", await indexExists("GreenCoffeePurchaseAcceptance_purchaseId_status_idx")],
+    ["INDEX GreenCoffeePurchaseAcceptance_tokenExpiresAt_idx", await indexExists("GreenCoffeePurchaseAcceptance_tokenExpiresAt_idx")],
+    ["FK GreenCoffeePurchaseAcceptance_purchaseId_fkey", await constraintExists("GreenCoffeePurchaseAcceptance_purchaseId_fkey")],
+    ["FK GreenCoffeePurchaseAcceptance_supplierId_fkey", await constraintExists("GreenCoffeePurchaseAcceptance_supplierId_fkey")],
+  ];
+  let extSafe = true;
+  for (const [label, ok] of extChecks) { console.log(`${label}: ${ok ? "PASS" : "FAIL"}`); extSafe &&= ok; }
+  const acceptanceRequired = ["id", "purchaseId", "supplierId", "status", "tokenHash", "tokenExpiresAt", "termsVersion", "documentHash", "snapshot", "createdAt", "updatedAt"];
+  const missingAcceptanceColumns = [];
+  for (const column of acceptanceRequired) if (!(await columnExists("GreenCoffeePurchaseAcceptance", column))) missingAcceptanceColumns.push(column);
+  const acceptanceNullable = await prisma.$queryRawUnsafe(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='GreenCoffeePurchaseAcceptance' AND column_name = ANY($1::text[]) AND is_nullable='YES'`, acceptanceRequired);
+  const acceptanceShapeOk = missingAcceptanceColumns.length === 0 && acceptanceNullable.length === 0;
+  console.log(`ACCEPTANCE REQUIRED COLUMNS: ${acceptanceShapeOk ? "PASS" : "FAIL"}`);
+  extSafe &&= acceptanceShapeOk;
+  console.log(`SAFE ${EXTERNAL_ACCEPTANCE}: ${extSafe ? "YES" : "NO"}`);
+
   const v2Status = status(V2);
   const finStatus = status(FIN_LINK);
-  if (!v2Safe || !finSafe) throw new Error("Recovery audit failed; migration history was not changed.");
+  const extStatus = status(EXTERNAL_ACCEPTANCE);
+  if (!v2Safe || !finSafe || !extSafe) throw new Error("Recovery audit failed; migration history was not changed.");
 
   await prisma.$disconnect();
 
-  if (v2Status === "FAILED") resolveApplied(V2);
-  else if (v2Status !== "APPLIED") throw new Error(`Unexpected ${V2} status: ${v2Status}`);
-
-  if (finStatus === "FAILED") resolveApplied(FIN_LINK);
-  else if (finStatus !== "APPLIED" && finStatus !== "NOT_REGISTERED") throw new Error(`Unexpected ${FIN_LINK} status: ${finStatus}`);
-  else if (finStatus === "NOT_REGISTERED") resolveApplied(FIN_LINK);
+  for (const [name, currentStatus] of [[V2, v2Status], [FIN_LINK, finStatus], [EXTERNAL_ACCEPTANCE, extStatus]]) {
+    if (currentStatus === "FAILED" || currentStatus === "NOT_REGISTERED") resolveApplied(name);
+    else if (currentStatus !== "APPLIED") throw new Error(`Unexpected ${name} status: ${currentStatus}`);
+  }
 
   run("pnpm", ["db:generate"]);
   run("pnpm", ["db:migrate:deploy"]);
