@@ -5,17 +5,23 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 
-function apiBaseUrl() {
-  const configured = [
+function normalizeApiBase(value: string) {
+  const base = value.trim().replace(/\/$/, "");
+  return base.endsWith("/api") ? base : `${base}/api`;
+}
+
+function apiBaseUrls() {
+  const candidates = [
     process.env.BBOS_API_INTERNAL_URL,
     process.env.API_INTERNAL_URL,
     process.env.NEXT_PUBLIC_API_URL,
+    "https://bbos-api-staging.onrender.com",
   ]
     .map((value) => value?.trim())
-    .find((value): value is string => Boolean(value));
-  if (!configured) throw new Error("API interna não configurada.");
-  const base = configured.replace(/\/$/, "");
-  return base.endsWith("/api") ? base : `${base}/api`;
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeApiBase);
+
+  return [...new Set(candidates)];
 }
 
 function upstreamHeaders(request: NextRequest) {
@@ -36,59 +42,90 @@ function upstreamHeaders(request: NextRequest) {
   return headers;
 }
 
-async function proxy(request: NextRequest, context: RouteContext) {
+async function fetchUpstream(
+  request: NextRequest,
+  target: URL,
+  method: string,
+  body: ArrayBuffer | undefined,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
   try {
-    const { path } = await context.params;
-    const target = new URL(
-      `${apiBaseUrl()}/${path.map(encodeURIComponent).join("/")}`,
-    );
-    target.search = request.nextUrl.search;
-
-    const method = request.method.toUpperCase();
-    const hasBody = method !== "GET" && method !== "HEAD";
-    const body = hasBody ? await request.arrayBuffer() : undefined;
-
-    const response = await fetch(target, {
+    return await fetch(target, {
       method,
       headers: upstreamHeaders(request),
       body,
       redirect: "manual",
       cache: "no-store",
+      signal: controller.signal,
     });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
-    const responseHeaders = new Headers(response.headers);
-    responseHeaders.delete("content-encoding");
-    responseHeaders.delete("content-length");
-    responseHeaders.delete("transfer-encoding");
-    responseHeaders.delete("connection");
-
-    const getSetCookie = (
-      response.headers as Headers & { getSetCookie?: () => string[] }
-    ).getSetCookie;
-    if (getSetCookie) {
-      responseHeaders.delete("set-cookie");
-      for (const cookie of getSetCookie.call(response.headers)) {
-        responseHeaders.append("set-cookie", cookie);
-      }
-    }
-
-    return new NextResponse(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-    });
-  } catch (error) {
-    console.error("BBOS API proxy failed", error);
-    const message =
-      error instanceof Error ? error.message : "Falha desconhecida no proxy.";
+async function proxy(request: NextRequest, context: RouteContext) {
+  const bases = apiBaseUrls();
+  if (bases.length === 0) {
+    console.error("BBOS API proxy failed: no upstream configured");
     return NextResponse.json(
-      {
-        message: "Não foi possível conectar ao BBOS.",
-        detail: process.env.NODE_ENV === "development" ? message : undefined,
-      },
+      { message: "Não foi possível conectar ao BBOS." },
       { status: 502 },
     );
   }
+
+  const { path } = await context.params;
+  const method = request.method.toUpperCase();
+  const hasBody = method !== "GET" && method !== "HEAD";
+  const body = hasBody ? await request.arrayBuffer() : undefined;
+  let lastError: unknown = null;
+
+  for (const base of bases) {
+    const target = new URL(`${base}/${path.map(encodeURIComponent).join("/")}`);
+    target.search = request.nextUrl.search;
+
+    try {
+      const response = await fetchUpstream(request, target, method, body);
+      const responseHeaders = new Headers(response.headers);
+      responseHeaders.delete("content-encoding");
+      responseHeaders.delete("content-length");
+      responseHeaders.delete("transfer-encoding");
+      responseHeaders.delete("connection");
+
+      const getSetCookie = (
+        response.headers as Headers & { getSetCookie?: () => string[] }
+      ).getSetCookie;
+      if (getSetCookie) {
+        responseHeaders.delete("set-cookie");
+        for (const cookie of getSetCookie.call(response.headers)) {
+          responseHeaders.append("set-cookie", cookie);
+        }
+      }
+
+      return new NextResponse(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    } catch (error) {
+      lastError = error;
+      console.error("BBOS API proxy upstream failed", {
+        upstream: base,
+        path: request.nextUrl.pathname,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  console.error("BBOS API proxy exhausted all upstreams", {
+    path: request.nextUrl.pathname,
+    error: lastError instanceof Error ? lastError.message : String(lastError),
+  });
+
+  return NextResponse.json(
+    { message: "Não foi possível conectar ao BBOS." },
+    { status: 502 },
+  );
 }
 
 export const GET = proxy;
