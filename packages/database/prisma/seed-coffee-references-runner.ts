@@ -20,11 +20,14 @@ async function main() {
     prisma.screenClassification.count({ where: { companyId: company.id, active: true } }),
     prisma.supplier.count({ where: { companyId: company.id, active: true } }),
   ]);
-  if (species !== 2 || cultivars !== 38 || regions !== 24 || screens !== 6 || suppliers < 1) {
+  // The seed owns a baseline of 38 cultivars. Later catalog migrations may
+  // intentionally add more, so validation must accept a superset.
+  if (species !== 2 || cultivars < 38 || regions !== 24 || screens !== 6 || suppliers < 1) {
     throw new Error(`Coffee reference seed validation failed: species=${species} cultivars=${cultivars} regions=${regions} screens=${screens} suppliers=${suppliers}`);
   }
   console.log(`Coffee reference seed: species=${species} cultivars=${cultivars} regions=${regions} screens=${screens}`);
   console.log(`Staging supplier bootstrap: suppliers=${suppliers}`);
+  console.log(`Seed operation result: species=${result.species} cultivars=${result.cultivars} regions=${result.regions} screens=${result.screens} suppliers=${result.suppliers}`);
 }
 
 main()
