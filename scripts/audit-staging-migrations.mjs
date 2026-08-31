@@ -104,8 +104,7 @@ try {
 
   const referenceData = "20260819090000_green_coffee_reference_data_v1";
   recoveries.push([referenceData, await audit(referenceData, [
-    ["COLUMN CoffeeVariety.breeder", col("CoffeeVariety", "breeder")],
-    ["COLUMN CoffeeVariety.sortOrder", col("CoffeeVariety", "sortOrder")],
+    ["COLUMN CoffeeVariety.breeder", col("CoffeeVariety", "breeder")], ["COLUMN CoffeeVariety.sortOrder", col("CoffeeVariety", "sortOrder")],
     ["TABLE CoffeeRegion", table("CoffeeRegion")], ["TABLE ScreenClassification", table("ScreenClassification")],
     ["INDEX CoffeeRegion unique", idx("CoffeeRegion_companyId_state_name_key")], ["INDEX CoffeeRegion active", idx("CoffeeRegion_companyId_state_active_idx")],
     ["FK CoffeeRegion company", fk("CoffeeRegion_companyId_fkey")], ["INDEX ScreenClassification unique", idx("ScreenClassification_companyId_code_key")],
@@ -116,6 +115,14 @@ try {
     ["INDEX purchase region", idx("GreenCoffeePurchase_coffeeRegionId_idx")], ["INDEX purchase screen", idx("GreenCoffeePurchase_screenClassificationId_idx")],
     ["FK purchase species", fk("GreenCoffeePurchase_speciesId_fkey")], ["FK purchase cultivar", fk("GreenCoffeePurchase_cultivarId_fkey")],
     ["FK purchase region", fk("GreenCoffeePurchase_coffeeRegionId_fkey")], ["FK purchase screen", fk("GreenCoffeePurchase_screenClassificationId_fkey")],
+  ])]);
+
+  const supplierActive = "20260819093000_supplier_active_reference_bootstrap";
+  const supplierActiveShape = await prisma.$queryRawUnsafe(`SELECT is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='Supplier' AND column_name='active'`);
+  recoveries.push([supplierActive, await audit(supplierActive, [
+    ["COLUMN Supplier.active", col("Supplier", "active")],
+    ["Supplier.active NOT NULL", Promise.resolve(supplierActiveShape[0]?.is_nullable === "NO")],
+    ["Supplier.active DEFAULT true", Promise.resolve(String(supplierActiveShape[0]?.column_default).toLowerCase() === "true")],
   ])]);
 
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
