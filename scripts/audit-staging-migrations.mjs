@@ -96,9 +96,11 @@ try {
     ["COLUMN acceptance.contactPhoneSnapshot", col("GreenCoffeePurchaseAcceptance", "contactPhoneSnapshot")],
     ["COLUMN acceptance.contactEmailSnapshot", col("GreenCoffeePurchaseAcceptance", "contactEmailSnapshot")],
     ["INDEX SupplierContact supplier/active/confirm", idx("SupplierContact_supplierId_active_canConfirmBusiness_idx")],
-    ["FK SupplierContact supplier", fk("SupplierContact_supplierId_fkey")],
-    ["FK acceptance supplierContact", fk("GreenCoffeePurchaseAcceptance_supplierContactId_fkey")],
+    ["FK SupplierContact supplier", fk("SupplierContact_supplierId_fkey")], ["FK acceptance supplierContact", fk("GreenCoffeePurchaseAcceptance_supplierContactId_fkey")],
   ])]);
+
+  const avatar = "20260818100000_user_avatar";
+  recoveries.push([avatar, await audit(avatar, [["COLUMN User.avatarUrl", col("User", "avatarUrl")]])]);
 
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
   await prisma.$disconnect();
