@@ -24,6 +24,7 @@ async function col(t, c) { return exists(`SELECT EXISTS (SELECT 1 FROM informati
 async function idx(name) { return exists(`SELECT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname=$1) AS value`, name); }
 async function fk(name) { return exists(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname=$1) AS value`, name); }
 async function en(name) { return exists(`SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname=$1) AS value`, name); }
+async function enumValue(type, value) { return exists(`SELECT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid WHERE t.typname=$1 AND e.enumlabel=$2) AS value`, type, value); }
 async function audit(name, checks) {
   console.log(`\nAUDIT ${name}`);
   let safe = true;
@@ -48,62 +49,47 @@ try {
   };
   const recoveries = [];
 
-  const v2 = "20260814120000_green_coffee_purchase_v2";
-  recoveries.push([v2, await audit(v2, [
+  async function add(name, checks) { recoveries.push([name, await audit(name, checks)]); }
+
+  await add("20260814120000_green_coffee_purchase_v2", [
     ["ENUM PurchaseApprovalStatus", en("PurchaseApprovalStatus")], ["ENUM PurchaseOperationalStatus", en("PurchaseOperationalStatus")],
     ["ENUM PurchasePaymentTermType", en("PurchasePaymentTermType")], ["ENUM PurchaseInstallmentStatus", en("PurchaseInstallmentStatus")],
     ["TABLE GreenCoffeePurchaseInstallment", table("GreenCoffeePurchaseInstallment")], ["TABLE SupplierBankAccount", table("SupplierBankAccount")],
     ["TABLE CoffeeSpecies", table("CoffeeSpecies")], ["TABLE CoffeeVariety", table("CoffeeVariety")],
-    ["COLUMN GreenCoffeePurchase.approvalStatus", col("GreenCoffeePurchase", "approvalStatus")],
-    ["COLUMN GreenCoffeePurchase.operationalStatus", col("GreenCoffeePurchase", "operationalStatus")],
-    ["COLUMN GreenCoffeePurchase.createdByUserId", col("GreenCoffeePurchase", "createdByUserId")],
-    ["COLUMN GreenCoffeePurchase.createdByName", col("GreenCoffeePurchase", "createdByName")],
-    ["INDEX installment purchase/number", idx("GreenCoffeePurchaseInstallment_purchaseId_installmentNumber_key")],
-    ["FK installment purchase", fk("GreenCoffeePurchaseInstallment_purchaseId_fkey")],
-  ])]);
+    ["COLUMN purchase.approvalStatus", col("GreenCoffeePurchase", "approvalStatus")], ["COLUMN purchase.operationalStatus", col("GreenCoffeePurchase", "operationalStatus")],
+    ["COLUMN purchase.createdByUserId", col("GreenCoffeePurchase", "createdByUserId")], ["COLUMN purchase.createdByName", col("GreenCoffeePurchase", "createdByName")],
+    ["INDEX installment purchase/number", idx("GreenCoffeePurchaseInstallment_purchaseId_installmentNumber_key")], ["FK installment purchase", fk("GreenCoffeePurchaseInstallment_purchaseId_fkey")],
+  ]);
 
-  const fin = "20260814130000_purchase_financial_purchase_link";
   const mismatchCount = Number(await scalar(`SELECT COUNT(*)::int AS value FROM "GreenCoffeePurchaseInstallment" i JOIN "AccountsPayable" a ON a.id=i."accountsPayableId" WHERE a."purchaseId" IS DISTINCT FROM i."purchaseId"`));
-  recoveries.push([fin, await audit(fin, [
+  await add("20260814130000_purchase_financial_purchase_link", [
     ["COLUMN AccountsPayable.purchaseId", col("AccountsPayable", "purchaseId")], ["INDEX AccountsPayable purchase/dueDate", idx("AccountsPayable_purchaseId_dueDate_idx")],
     ["FK AccountsPayable purchase", fk("AccountsPayable_purchaseId_fkey")], ["BACKFILL CONSISTENCY", Promise.resolve(mismatchCount === 0)],
-  ])]);
+  ]);
 
-  const ext = "20260814150000_purchase_external_acceptance";
-  recoveries.push([ext, await audit(ext, [
+  await add("20260814150000_purchase_external_acceptance", [
     ["ENUM PurchaseExternalAcceptanceStatus", en("PurchaseExternalAcceptanceStatus")], ["COLUMN Supplier.contactRole", col("Supplier", "contactRole")],
-    ["COLUMN Supplier.whatsapp", col("Supplier", "whatsapp")], ["COLUMN GreenCoffeePurchase.externalAcceptanceStatus", col("GreenCoffeePurchase", "externalAcceptanceStatus")],
+    ["COLUMN Supplier.whatsapp", col("Supplier", "whatsapp")], ["COLUMN purchase.externalAcceptanceStatus", col("GreenCoffeePurchase", "externalAcceptanceStatus")],
     ["TABLE GreenCoffeePurchaseAcceptance", table("GreenCoffeePurchaseAcceptance")], ["INDEX acceptance token", idx("GreenCoffeePurchaseAcceptance_tokenHash_key")],
     ["FK acceptance purchase", fk("GreenCoffeePurchaseAcceptance_purchaseId_fkey")], ["FK acceptance supplier", fk("GreenCoffeePurchaseAcceptance_supplierId_fkey")],
-  ])]);
+  ]);
 
-  const lifecycle = "20260814180000_purchase_submission_lifecycle";
-  recoveries.push([lifecycle, await audit(lifecycle, [
-    ["COLUMN submittedForApprovalAt", col("GreenCoffeePurchase", "submittedForApprovalAt")],
-    ["COLUMN submittedForApprovalByUserId", col("GreenCoffeePurchase", "submittedForApprovalByUserId")],
-  ])]);
-
-  const ret = "20260815090000_purchase_return_adjustment";
-  recoveries.push([ret, await audit(ret, [
+  await add("20260814180000_purchase_submission_lifecycle", [
+    ["COLUMN submittedForApprovalAt", col("GreenCoffeePurchase", "submittedForApprovalAt")], ["COLUMN submittedForApprovalByUserId", col("GreenCoffeePurchase", "submittedForApprovalByUserId")],
+  ]);
+  await add("20260815090000_purchase_return_adjustment", [
     ["COLUMN returnedByUserId", col("GreenCoffeePurchase", "returnedByUserId")], ["COLUMN returnedAt", col("GreenCoffeePurchase", "returnedAt")],
     ["COLUMN returnReason", col("GreenCoffeePurchase", "returnReason")], ["COLUMN correctionRequest", col("GreenCoffeePurchase", "correctionRequest")],
-  ])]);
+  ]);
+  await add("20260816120000_supplier_contacts", [
+    ["TABLE SupplierContact", table("SupplierContact")], ["COLUMN acceptance.supplierContactId", col("GreenCoffeePurchaseAcceptance", "supplierContactId")],
+    ["COLUMN acceptance.contactPhoneSnapshot", col("GreenCoffeePurchaseAcceptance", "contactPhoneSnapshot")], ["COLUMN acceptance.contactEmailSnapshot", col("GreenCoffeePurchaseAcceptance", "contactEmailSnapshot")],
+    ["INDEX SupplierContact supplier/active/confirm", idx("SupplierContact_supplierId_active_canConfirmBusiness_idx")], ["FK SupplierContact supplier", fk("SupplierContact_supplierId_fkey")],
+    ["FK acceptance supplierContact", fk("GreenCoffeePurchaseAcceptance_supplierContactId_fkey")],
+  ]);
+  await add("20260818100000_user_avatar", [["COLUMN User.avatarUrl", col("User", "avatarUrl")]]);
 
-  const contacts = "20260816120000_supplier_contacts";
-  recoveries.push([contacts, await audit(contacts, [
-    ["TABLE SupplierContact", table("SupplierContact")],
-    ["COLUMN acceptance.supplierContactId", col("GreenCoffeePurchaseAcceptance", "supplierContactId")],
-    ["COLUMN acceptance.contactPhoneSnapshot", col("GreenCoffeePurchaseAcceptance", "contactPhoneSnapshot")],
-    ["COLUMN acceptance.contactEmailSnapshot", col("GreenCoffeePurchaseAcceptance", "contactEmailSnapshot")],
-    ["INDEX SupplierContact supplier/active/confirm", idx("SupplierContact_supplierId_active_canConfirmBusiness_idx")],
-    ["FK SupplierContact supplier", fk("SupplierContact_supplierId_fkey")], ["FK acceptance supplierContact", fk("GreenCoffeePurchaseAcceptance_supplierContactId_fkey")],
-  ])]);
-
-  const avatar = "20260818100000_user_avatar";
-  recoveries.push([avatar, await audit(avatar, [["COLUMN User.avatarUrl", col("User", "avatarUrl")]])]);
-
-  const referenceData = "20260819090000_green_coffee_reference_data_v1";
-  recoveries.push([referenceData, await audit(referenceData, [
+  await add("20260819090000_green_coffee_reference_data_v1", [
     ["COLUMN CoffeeVariety.breeder", col("CoffeeVariety", "breeder")], ["COLUMN CoffeeVariety.sortOrder", col("CoffeeVariety", "sortOrder")],
     ["TABLE CoffeeRegion", table("CoffeeRegion")], ["TABLE ScreenClassification", table("ScreenClassification")],
     ["INDEX CoffeeRegion unique", idx("CoffeeRegion_companyId_state_name_key")], ["INDEX CoffeeRegion active", idx("CoffeeRegion_companyId_state_active_idx")],
@@ -115,15 +101,48 @@ try {
     ["INDEX purchase region", idx("GreenCoffeePurchase_coffeeRegionId_idx")], ["INDEX purchase screen", idx("GreenCoffeePurchase_screenClassificationId_idx")],
     ["FK purchase species", fk("GreenCoffeePurchase_speciesId_fkey")], ["FK purchase cultivar", fk("GreenCoffeePurchase_cultivarId_fkey")],
     ["FK purchase region", fk("GreenCoffeePurchase_coffeeRegionId_fkey")], ["FK purchase screen", fk("GreenCoffeePurchase_screenClassificationId_fkey")],
-  ])]);
+  ]);
 
-  const supplierActive = "20260819093000_supplier_active_reference_bootstrap";
   const supplierActiveShape = await prisma.$queryRawUnsafe(`SELECT is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='Supplier' AND column_name='active'`);
-  recoveries.push([supplierActive, await audit(supplierActive, [
-    ["COLUMN Supplier.active", col("Supplier", "active")],
-    ["Supplier.active NOT NULL", Promise.resolve(supplierActiveShape[0]?.is_nullable === "NO")],
+  await add("20260819093000_supplier_active_reference_bootstrap", [
+    ["COLUMN Supplier.active", col("Supplier", "active")], ["Supplier.active NOT NULL", Promise.resolve(supplierActiveShape[0]?.is_nullable === "NO")],
     ["Supplier.active DEFAULT true", Promise.resolve(String(supplierActiveShape[0]?.column_default).toLowerCase() === "true")],
-  ])]);
+  ]);
+
+  await add("20260819110000_supplier_origin_units", [
+    ["TABLE SupplierOriginUnit", table("SupplierOriginUnit")], ["INDEX origin unique", idx("SupplierOriginUnit_supplierId_name_key")],
+    ["INDEX origin supplier/state/active", idx("SupplierOriginUnit_supplierId_state_active_idx")], ["INDEX origin region", idx("SupplierOriginUnit_coffeeRegionId_idx")],
+    ["FK origin supplier", fk("SupplierOriginUnit_supplierId_fkey")], ["FK origin region", fk("SupplierOriginUnit_coffeeRegionId_fkey")],
+    ["COLUMN purchase.originUnitId", col("GreenCoffeePurchase", "originUnitId")], ["INDEX purchase origin", idx("GreenCoffeePurchase_originUnitId_idx")],
+    ["FK purchase origin", fk("GreenCoffeePurchase_originUnitId_fkey")],
+  ]);
+
+  await add("20260819130000_supplier_origin_details", [
+    ["ENUM COOPERATIVE", enumValue("GreenCoffeeSupplierType", "COOPERATIVE")], ["ENUM ASSOCIATION", enumValue("GreenCoffeeSupplierType", "ASSOCIATION")],
+    ["ENUM EXPORTER", enumValue("GreenCoffeeSupplierType", "EXPORTER")], ["ENUM OTHER", enumValue("GreenCoffeeSupplierType", "OTHER")],
+    ["COLUMN Supplier.tradeName", col("Supplier", "tradeName")], ["COLUMN origin.taxId", col("SupplierOriginUnit", "taxId")],
+    ["COLUMN origin.stateRegistration", col("SupplierOriginUnit", "stateRegistration")], ["COLUMN origin.address", col("SupplierOriginUnit", "address")],
+    ["COLUMN origin.latitude", col("SupplierOriginUnit", "latitude")], ["COLUMN origin.longitude", col("SupplierOriginUnit", "longitude")],
+    ["COLUMN origin.altitudeMeters", col("SupplierOriginUnit", "altitudeMeters")], ["COLUMN origin.coffeeAreaHa", col("SupplierOriginUnit", "coffeeAreaHa")],
+    ["TABLE SupplierOriginProduction", table("SupplierOriginProduction")], ["INDEX production origin", idx("SupplierOriginProduction_originUnitId_active_idx")],
+    ["INDEX production species/cultivar", idx("SupplierOriginProduction_speciesId_cultivarId_idx")], ["FK production origin", fk("SupplierOriginProduction_originUnitId_fkey")],
+    ["FK production species", fk("SupplierOriginProduction_speciesId_fkey")], ["FK production cultivar", fk("SupplierOriginProduction_cultivarId_fkey")],
+  ]);
+
+  await add("20260819150000_structured_supplier_addresses", [
+    ["COLUMN Supplier.postalCode", col("Supplier", "postalCode")], ["COLUMN Supplier.district", col("Supplier", "district")],
+    ["COLUMN Supplier.addressComplement", col("Supplier", "addressComplement")], ["COLUMN Supplier.ibgeCityCode", col("Supplier", "ibgeCityCode")],
+    ["COLUMN origin.postalCode", col("SupplierOriginUnit", "postalCode")], ["COLUMN origin.district", col("SupplierOriginUnit", "district")],
+    ["COLUMN origin.addressComplement", col("SupplierOriginUnit", "addressComplement")], ["COLUMN origin.ibgeCityCode", col("SupplierOriginUnit", "ibgeCityCode")],
+  ]);
+
+  await add("20260819160000_supplier_tax_verification", [
+    ["ENUM TaxVerificationStatus", en("TaxVerificationStatus")], ["COLUMN Supplier.taxIdVerificationStatus", col("Supplier", "taxIdVerificationStatus")],
+    ["COLUMN Supplier.taxIdVerifiedAt", col("Supplier", "taxIdVerifiedAt")], ["COLUMN Supplier.taxIdVerificationSource", col("Supplier", "taxIdVerificationSource")],
+    ["COLUMN Supplier.stateRegistrationVerificationStatus", col("Supplier", "stateRegistrationVerificationStatus")],
+    ["COLUMN Supplier.stateRegistrationVerifiedAt", col("Supplier", "stateRegistrationVerifiedAt")],
+    ["COLUMN Supplier.stateRegistrationVerificationSource", col("Supplier", "stateRegistrationVerificationSource")],
+  ]);
 
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
   await prisma.$disconnect();
