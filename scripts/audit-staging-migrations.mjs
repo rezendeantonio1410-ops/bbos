@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /* Read-only staging migration audit. Run inside Render with DATABASE_URL set. */
-import { PrismaClient } from "@prisma/client";
+import { createRequire } from "node:module";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+
+const databasePackageJson = join(process.cwd(), "packages/database/package.json");
+const requireFromDatabase = createRequire(databasePackageJson);
+const { PrismaClient } = requireFromDatabase("@prisma/client");
 
 const prisma = new PrismaClient();
 const migrationRoot = join(process.cwd(), "packages/database/prisma/migrations");
