@@ -15,6 +15,10 @@ import { randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 
 const CREDIT_STATUSES = ["NOT_ANALYZED", "UNDER_REVIEW", "APPROVED", "REJECTED"] as const;
+const isCashTerm = (value: unknown) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return !normalized || normalized === "à vista" || normalized === "a vista";
+};
 
 @Controller("customers")
 export class CustomersController {
@@ -52,7 +56,7 @@ export class CustomersController {
     const availableCredit = Math.max(0, creditLimit - openReceivables);
 
     let health = "HEALTHY";
-    let guidance = "Cliente em dia. Nenhuma pendência financeira encontrada.";
+    let guidance = "Cliente apto para compras à vista.";
     if (overdueCount > 0) {
       health = maxDaysOverdue >= 30 ? "BLOCKED" : "ATTENTION";
       guidance = maxDaysOverdue >= 30
@@ -60,17 +64,19 @@ export class CustomersController {
         : `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Revise antes de vender a prazo.`;
     } else if (customer.creditStatus === "UNDER_REVIEW") {
       health = "ATTENTION";
-      guidance = "Análise de crédito em andamento. Venda à vista pode seguir normalmente.";
+      guidance = "Crédito pendente de aprovação. Compras à vista continuam liberadas.";
     } else if (customer.creditStatus === "REJECTED") {
       health = "BLOCKED";
-      guidance = "Crédito não aprovado. Venda a prazo deve permanecer bloqueada.";
+      guidance = "Crédito não aprovado. Compras à vista continuam liberadas; venda a prazo permanece bloqueada.";
     } else if (customer.creditStatus === "NOT_ANALYZED") {
       health = "INFO";
-      guidance = "Cliente ainda sem análise de crédito. Venda à vista pode seguir; venda a prazo deve solicitar análise.";
+      guidance = "Cliente apto para compras à vista. Para comprar a prazo, solicite aprovação de crédito.";
     }
 
     return {
       ...customer,
+      cashPurchaseAllowed: customer.active !== false,
+      termPurchaseAllowed: customer.active !== false && customer.creditStatus === "APPROVED" && overdueCount === 0,
       financialHealth: {
         health,
         guidance,
@@ -107,7 +113,7 @@ export class CustomersController {
   async getHealth(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
     const customer = (await this.db.$queryRawUnsafe<any[]>(
-      `SELECT id, name, "tradeName", "creditStatus", "creditLimit", "paymentTerms"
+      `SELECT id, name, "tradeName", active, "creditStatus", "creditLimit", "paymentTerms"
          FROM "Customer" WHERE id=$1 AND "companyId"=$2`, id, actor.companyId,
     ))[0];
     if (!customer) throw new NotFoundException("Cliente não encontrado.");
@@ -125,20 +131,22 @@ export class CustomersController {
       const duplicate = await this.db.customer.findFirst({ where: { companyId: actor.companyId, taxId } });
       if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
     }
+    const paymentTerms = body.paymentTerms?.trim() || "À vista";
+    const initialCreditStatus = isCashTerm(paymentTerms) ? "NOT_ANALYZED" : "UNDER_REVIEW";
     const id = randomUUID();
     const rows = await this.db.$queryRawUnsafe<any[]>(
       `INSERT INTO "Customer"
         (id, "companyId", name, "legalName", "tradeName", "taxId", segment,
          email, phone, "postalCode", address, district, city, state,
          "paymentTerms", active, "creditStatus", "creditLimit", "createdAt", "updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'NOT_ANALYZED',0,NOW(),NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,0,NOW(),NOW())
        RETURNING *`,
       id, actor.companyId, name,
       body.legalName?.trim() || null, body.tradeName?.trim() || null, taxId,
       body.segment?.trim() || null, body.email?.trim() || null, body.phone?.trim() || null,
       body.postalCode?.trim() || null, body.address?.trim() || null, body.district?.trim() || null,
-      body.city?.trim() || null, body.state?.trim() || null, body.paymentTerms?.trim() || null,
-      body.active !== false,
+      body.city?.trim() || null, body.state?.trim() || null, paymentTerms,
+      body.active !== false, initialCreditStatus,
     );
     return this.decorate(rows[0], null);
   }
@@ -156,10 +164,13 @@ export class CustomersController {
       const duplicate = await this.db.customer.findFirst({ where: { companyId: actor.companyId, taxId, NOT: { id } } });
       if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
     }
+    const paymentTerms = body.paymentTerms === undefined ? current.paymentTerms : (body.paymentTerms?.trim() || "À vista");
+    const needsCreditApproval = !isCashTerm(paymentTerms);
+    const nextCreditStatus = needsCreditApproval && current.creditStatus !== "APPROVED" ? "UNDER_REVIEW" : current.creditStatus;
     const rows = await this.db.$queryRawUnsafe<any[]>(
       `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6, segment=$7,
          email=$8, phone=$9, "postalCode"=$10, address=$11, district=$12, city=$13, state=$14,
-         "paymentTerms"=$15, active=$16, "updatedAt"=NOW()
+         "paymentTerms"=$15, active=$16, "creditStatus"=$17, "updatedAt"=NOW()
        WHERE id=$1 AND "companyId"=$2 RETURNING *`,
       id, actor.companyId, name,
       body.legalName === undefined ? current.legalName : (body.legalName?.trim() || null),
@@ -173,8 +184,9 @@ export class CustomersController {
       body.district === undefined ? current.district : (body.district?.trim() || null),
       body.city === undefined ? current.city : (body.city?.trim() || null),
       body.state === undefined ? current.state : (body.state?.trim() || null),
-      body.paymentTerms === undefined ? current.paymentTerms : (body.paymentTerms?.trim() || null),
+      paymentTerms,
       body.active === undefined ? current.active : Boolean(body.active),
+      nextCreditStatus,
     );
     const financial = (await this.health(actor.companyId, id))[0];
     return this.decorate(rows[0], financial);
