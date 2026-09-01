@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import styles from "./page.module.css";
+import playful from "./playful.module.css";
 
 const lines = [
   { name: "GOURMET", copy: "O essencial bem escolhido.", tone: "#F4D54A" },
@@ -14,6 +15,13 @@ const products = [
   { name: "Doce de Leite", line: "CLÁSSICOS", notes: "Mascavo · Doce de leite · Alfajor", price: "R$ 74", tone: "#D9A333" },
   { name: "Tangerina", line: "CLÁSSICOS", notes: "Cítrico · Doce · Fresco", price: "R$ 68", tone: "#E88A2E" },
   { name: "Singular", line: "ÉPICOS", notes: "Frutado · Complexo · Evolutivo", price: "R$ 85", tone: "#387D50" },
+];
+
+const moments = [
+  { title: "Começar devagar", cue: "macio · doce · fácil", line: "GOURMET", tone: "#F4D54A", mark: "☀" },
+  { title: "Uma pausa boa", cue: "caramelo · chocolate · conforto", line: "CLÁSSICOS", tone: "#E78A38", mark: "◐" },
+  { title: "Quero perceber algo novo", cue: "fruta · frescor · evolução", line: "ÉPICOS", tone: "#387D50", mark: "✦" },
+  { title: "Hoje merece algo raro", cue: "floral · delicado · memorável", line: "RAROS", tone: "#B83A31", mark: "◇" },
 ];
 
 export default function LojaPage() {
@@ -80,6 +88,24 @@ export default function LojaPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className={playful.momentSection} aria-label="Escolha pelo momento">
+        <div className={playful.momentLead}>
+          <p>NEM TODO MUNDO ESCOLHE CAFÉ PELO NOME.</p>
+          <h2>Às vezes, você escolhe um momento.</h2>
+          <span>Passe o olhar. Veja qual sensação encontra você primeiro.</span>
+        </div>
+        <div className={playful.momentRail}>
+          {moments.map((moment, index) => (
+            <Link key={moment.title} href="/loja/descobrir" className={playful.momentCard} style={{ "--moment": moment.tone } as React.CSSProperties}>
+              <div className={playful.momentTop}><span>{String(index + 1).padStart(2, "0")}</span><b>{moment.mark}</b></div>
+              <div className={playful.orbit} aria-hidden="true"><i /><i /><i /></div>
+              <div className={playful.momentCopy}><small>{moment.line}</small><strong>{moment.title}</strong><span>{moment.cue}</span><em>me mostre →</em></div>
+            </Link>
+          ))}
+        </div>
+        <div className={playful.senseLine} aria-hidden="true"><span>sentir</span><i /><span>reconhecer</span><i /><span>escolher</span><i /><span>provar</span></div>
       </section>
 
       <section className={styles.peopleLayer} aria-label="Quem sustenta a escolha Bispo">
