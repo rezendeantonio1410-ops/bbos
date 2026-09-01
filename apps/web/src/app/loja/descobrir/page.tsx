@@ -5,139 +5,62 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import styles from "./page.module.css";
 
-type Choice = { id: string; label: string; hint: string; tone: string };
-type Answers = { flavor?: string; acidity?: string; body?: string; moment?: string };
+type Choice = { id: string; label: string; hint: string; tone: string; symbol: string };
+type Answers = { flavors: string[]; descriptors: string[]; memories: string[]; acidity?: string; body?: string; moments: string[] };
 
-const flavorChoices: Choice[] = [
-  { id: "caramel", label: "Chocolate & caramelo", hint: "Doce, confortável, familiar", tone: "#C87324" },
-  { id: "citrus", label: "Frutas cítricas", hint: "Fresco, vivo, luminoso", tone: "#E8A72B" },
-  { id: "fruit", label: "Frutas maduras", hint: "Suculento, expressivo, alegre", tone: "#B6434B" },
-  { id: "floral", label: "Floral & delicado", hint: "Elegante, leve, surpreendente", tone: "#8B776B" },
-  { id: "nuts", label: "Castanhas & especiarias", hint: "Aconchegante, profundo, persistente", tone: "#73513B" },
+const families: Choice[] = [
+  { id:"sweet", label:"Doce", hint:"Chocolate, caramelo, mel", tone:"#C87324", symbol:"◐" },
+  { id:"fruit", label:"Frutado", hint:"Frutas maduras e suculentas", tone:"#B6434B", symbol:"●" },
+  { id:"citrus", label:"Cítrico", hint:"Laranja, tangerina, limão", tone:"#E8A72B", symbol:"◒" },
+  { id:"floral", label:"Floral", hint:"Flores e delicadeza", tone:"#9B7C8D", symbol:"✣" },
+  { id:"nuts", label:"Castanhas", hint:"Amêndoas, nozes, cacau", tone:"#73513B", symbol:"◆" },
 ];
-const acidityChoices: Choice[] = [
-  { id: "low", label: "Suave", hint: "Quase sem destaque de acidez", tone: "#D6C7A4" },
-  { id: "balanced", label: "Equilibrada", hint: "Frescor presente, sem dominar", tone: "#E0A73A" },
-  { id: "citrica", label: "Cítrica", hint: "Lembra laranja ou tangerina", tone: "#E58A2E" },
-  { id: "malica", label: "Málica", hint: "Frescor que lembra maçã", tone: "#799A46" },
-  { id: "vibrant", label: "Vibrante", hint: "Acidez evidente e cheia de energia", tone: "#B83A31" },
+const descriptors: Record<string, Choice[]> = {
+  sweet:[{id:"chocolate",label:"Chocolate",hint:"Cremoso e familiar",tone:"#6B4334",symbol:"■"},{id:"caramel",label:"Caramelo",hint:"Doce e tostado",tone:"#C87324",symbol:"●"},{id:"dulce",label:"Doce de leite",hint:"Cremoso e afetivo",tone:"#D9A15B",symbol:"◉"},{id:"honey",label:"Mel",hint:"Doçura delicada",tone:"#E2B23D",symbol:"⬟"}],
+  fruit:[{id:"strawberry",label:"Morango",hint:"Fruta fresca ou geleia",tone:"#C94852",symbol:"♥"},{id:"cherry",label:"Cereja",hint:"Doce, viva, persistente",tone:"#A82E3A",symbol:"●"},{id:"berries",label:"Frutas vermelhas",hint:"Suculentas e complexas",tone:"#8F3E5A",symbol:"●"},{id:"peach",label:"Pêssego",hint:"Macio e perfumado",tone:"#E7A074",symbol:"◒"}],
+  citrus:[{id:"tangerine",label:"Tangerina",hint:"Doce e luminosa",tone:"#ED8A2B",symbol:"◉"},{id:"orange",label:"Laranja",hint:"Fresca e familiar",tone:"#E79A31",symbol:"◒"},{id:"lemon",label:"Limão",hint:"Vivo e refrescante",tone:"#D7C93E",symbol:"●"},{id:"apple",label:"Maçã",hint:"Frescor delicado",tone:"#8DA54A",symbol:"◐"}],
+  floral:[{id:"jasmine",label:"Jasmim",hint:"Leve e elegante",tone:"#A68EA1",symbol:"✣"},{id:"orangeblossom",label:"Flor de laranjeira",hint:"Perfumada e fresca",tone:"#E6B17A",symbol:"✤"}],
+  nuts:[{id:"almond",label:"Amêndoas",hint:"Doce e aconchegante",tone:"#A77B55",symbol:"◆"},{id:"walnut",label:"Nozes",hint:"Profundo e persistente",tone:"#76513B",symbol:"◆"},{id:"cocoa",label:"Cacau",hint:"Intenso e seco",tone:"#5E4035",symbol:"■"}],
+};
+const memories: Choice[] = [
+  {id:"home",label:"Casa",hint:"Algo familiar",tone:"#D79B65",symbol:"⌂"},{id:"childhood",label:"Infância",hint:"Uma lembrança doce",tone:"#E7B94B",symbol:"✦"},{id:"dessert",label:"Sobremesa",hint:"Prazer e recompensa",tone:"#C96E59",symbol:"◉"},{id:"pause",label:"Uma pausa",hint:"Um momento só seu",tone:"#6E9480",symbol:"☕"},{id:"travel",label:"Viagem",hint:"Algo que surpreendeu",tone:"#5D7E8B",symbol:"↗"},{id:"justlike",label:"Só gostei",hint:"Sem precisar explicar",tone:"#9B8877",symbol:"♡"},
 ];
-const bodyChoices: Choice[] = [
-  { id: "light", label: "Leve", hint: "Fluido e delicado", tone: "#C7D8D5" },
-  { id: "silky", label: "Sedoso", hint: "Macio e elegante", tone: "#95B3A8" },
-  { id: "round", label: "Envolvente", hint: "Presente e confortável", tone: "#B87843" },
-  { id: "structured", label: "Estruturado", hint: "Mais corpo e persistência", tone: "#5F4738" },
+const acidity: Choice[] = [
+  {id:"low",label:"Suave",hint:"Pouco frescor",tone:"#D6C7A4",symbol:"○"},{id:"balanced",label:"Equilibrada",hint:"Frescor presente",tone:"#E0A73A",symbol:"◐"},{id:"citrica",label:"Cítrica",hint:"Como laranja",tone:"#E58A2E",symbol:"◒"},{id:"malica",label:"Málica",hint:"Como maçã",tone:"#799A46",symbol:"◉"},{id:"vibrant",label:"Vibrante",hint:"Cheia de energia",tone:"#B83A31",symbol:"●"},
 ];
-const momentChoices: Choice[] = [
-  { id: "daily", label: "Meu dia a dia", hint: "Quero algo fácil de reencontrar", tone: "#F4D54A" },
-  { id: "pause", label: "Minha pausa", hint: "Quero conforto e presença", tone: "#E78A38" },
-  { id: "discover", label: "Quero descobrir", hint: "Quero perceber algo diferente", tone: "#387D50" },
-  { id: "special", label: "Algo especial", hint: "Quero uma experiência fora da curva", tone: "#B83A31" },
+const bodies: Choice[] = [
+  {id:"light",label:"Leve",hint:"Fluido e delicado",tone:"#C7D8D5",symbol:"≈"},{id:"silky",label:"Sedoso",hint:"Macio e elegante",tone:"#95B3A8",symbol:"∿"},{id:"round",label:"Envolvente",hint:"Presente e confortável",tone:"#B87843",symbol:"◯"},{id:"structured",label:"Estruturado",hint:"Mais corpo e persistência",tone:"#5F4738",symbol:"⬤"},
 ];
-const choiceGroups: Choice[][] = [flavorChoices, acidityChoices, bodyChoices, momentChoices];
-const answerKeys: (keyof Answers)[] = ["flavor", "acidity", "body", "moment"];
+const moments: Choice[] = [
+  {id:"daily",label:"Começar o dia",hint:"Algo para reencontrar",tone:"#F4D54A",symbol:"☀"},{id:"pause",label:"Minha pausa",hint:"Conforto e presença",tone:"#E78A38",symbol:"☕"},{id:"meal",label:"Depois de comer",hint:"Um final gostoso",tone:"#C87324",symbol:"◒"},{id:"discover",label:"Quero descobrir",hint:"Algo diferente",tone:"#387D50",symbol:"✦"},{id:"special",label:"Algo especial",hint:"Fora da curva",tone:"#B83A31",symbol:"★"},
+];
 
 const recommendations = {
-  essencial: { name: "Essencial", line: "GOURMET", notes: "Equilibrado · Suave · Versátil", price: "R$ 48", tone: "#F4D54A", reason: "Você mostrou preferência por suavidade, equilíbrio e praticidade. Um caminho natural para o dia a dia." },
-  caramelo: { name: "Caramelo", line: "CLÁSSICOS", notes: "Caramelo · Chocolate · Corpo envolvente", price: "R$ 68", tone: "#E78A38", reason: "Seu mapa aponta para doçura, conforto e uma xícara equilibrada e envolvente." },
-  doce: { name: "Doce de Leite", line: "CLÁSSICOS", notes: "Mascavo · Doce de leite · Alfajor", price: "R$ 74", tone: "#D99B3C", reason: "Você busca doçura evidente, mas com mais complexidade, elegância e presença." },
-  tangerina: { name: "Tangerina", line: "CLÁSSICOS", notes: "Cítrico · Doce · Fresco", price: "R$ 68", tone: "#E8892F", reason: "Você indicou frescor, brilho e uma acidez agradável sem abrir mão da doçura." },
-  singular: { name: "Singular", line: "ÉPICOS", notes: "Frutado · Complexo · Evolutivo", price: "R$ 85", tone: "#387D50", reason: "Seu paladar pede descoberta: fruta, acidez e uma xícara que evolui enquanto esfria." },
-  raro: { name: "Microlote Raro", line: "RAROS", notes: "Floral · Frutas vermelhas · Único", price: "R$ 53", tone: "#B83A31", reason: "Você demonstrou curiosidade por perfis delicados, marcantes e menos previsíveis." },
+  essencial:{name:"Essencial",line:"GOURMET",notes:"Equilibrado · Suave · Versátil",price:"R$ 48",tone:"#F4D54A"},
+  caramelo:{name:"Caramelo",line:"CLÁSSICOS",notes:"Caramelo · Chocolate · Corpo envolvente",price:"R$ 68",tone:"#E78A38"},
+  doce:{name:"Doce de Leite",line:"CLÁSSICOS",notes:"Mascavo · Doce de leite · Alfajor",price:"R$ 74",tone:"#D99B3C"},
+  tangerina:{name:"Tangerina",line:"CLÁSSICOS",notes:"Cítrico · Doce · Fresco",price:"R$ 68",tone:"#E8892F"},
+  singular:{name:"Singular",line:"ÉPICOS",notes:"Frutado · Complexo · Evolutivo",price:"R$ 85",tone:"#387D50"},
+  raro:{name:"Microlote Raro",line:"RAROS",notes:"Floral · Frutas vermelhas · Único",price:"R$ 53",tone:"#B83A31"},
 };
 
-const steps = ["Sabor", "Acidez", "Corpo", "Momento"];
-
-export default function DescobrirCafePage() {
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<Answers>({});
-  const [finished, setFinished] = useState(false);
-
-  const resultKey = useMemo(() => {
-    if (!finished) return "caramelo";
-    if (answers.moment === "special" || answers.flavor === "floral") return "raro";
-    if (answers.moment === "discover" || answers.flavor === "fruit" || answers.acidity === "vibrant") return "singular";
-    if (answers.flavor === "citrus" || answers.acidity === "citrica" || answers.acidity === "malica") return "tangerina";
-    if (answers.flavor === "caramel" && (answers.body === "structured" || answers.acidity === "balanced")) return "doce";
-    if (answers.flavor === "caramel" || answers.moment === "pause" || answers.body === "round") return "caramelo";
-    return "essencial";
-  }, [answers, finished]);
-
-  const result = recommendations[resultKey as keyof typeof recommendations];
-
-  function choose(group: keyof Answers, id: string) {
-    setAnswers((current) => ({ ...current, [group]: id }));
-    if (step < 3) window.setTimeout(() => setStep((value) => Math.min(value + 1, 3)), 170);
-    else window.setTimeout(() => setFinished(true), 170);
-  }
-
-  function reset() { setAnswers({}); setStep(0); setFinished(false); }
-
-  const currentChoices: Choice[] = choiceGroups[step] ?? flavorChoices;
-  const currentKey: keyof Answers = answerKeys[step] ?? "flavor";
-
-  return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <Link href="/loja" className={styles.brand} aria-label="Voltar para a loja Bispo"><Image src="/brand/logo/bispo-logo-official-transparent.png" width={150} height={50} alt="Bispo Coffees" priority /></Link>
-        <div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span><small>Um mapa de preferência inspirado na linguagem sensorial do café.</small></div>
-        <Link className={styles.close} href="/loja" aria-label="Fechar">×</Link>
-      </header>
-
-      {!finished ? (
-        <section className={styles.experience}>
-          <div className={styles.progress} aria-label="Progresso">{steps.map((label, index) => <div key={label} className={`${styles.progressItem} ${index <= step ? styles.active : ""}`}><i>{index + 1}</i><span>{label}</span></div>)}</div>
-          <div className={styles.intro}>
-            <p>NÃO PRECISA ENTENDER DE CAFÉ.</p>
-            <h1>{step === 0 ? "Só escolha o que chama você." : step === 1 ? "Quanto de frescor você gosta?" : step === 2 ? "Como você gosta de sentir o café?" : "O que você procura nesta xícara?"}</h1>
-            <span>{step === 0 ? "Sua primeira reação já diz bastante sobre o seu paladar." : "Não existe resposta certa. Escolha pela sensação."}</span>
-          </div>
-          <div className={styles.stage}>
-            {step === 0 && <FlavorWheel selected={answers.flavor} />}
-            {step === 1 && <AcidityMandala selected={answers.acidity} />}
-            {step === 2 && <BodyPulse selected={answers.body} />}
-            {step === 3 && <MomentOrbit />}
-            <div className={styles.choices}>{currentChoices.map((choice) => <button key={choice.id} className={answers[currentKey] === choice.id ? styles.selected : ""} style={{ "--tone": choice.tone } as React.CSSProperties} onClick={() => choose(currentKey, choice.id)}><i /><strong>{choice.label}</strong><span>{choice.hint}</span></button>)}</div>
-          </div>
-          <div className={styles.backRow}>{step > 0 ? <button onClick={() => setStep((value) => Math.max(value - 1, 0))}>← Voltar</button> : <Link href="/loja">← Voltar para a loja</Link>}<small>Leva menos de 1 minuto.</small></div>
-        </section>
-      ) : (
-        <section className={styles.resultPage}>
-          <div className={styles.resultLead}><p>SEU MAPA BISPO</p><h1>Temos um café em mente.</h1><span>Traduzimos suas escolhas em um perfil simples. Não é uma nota de cupping: é o seu mapa de preferência.</span></div>
-          <div className={styles.resultGrid}>
-            <TastePortrait answers={answers} tone={result.tone} />
-            <article className={styles.recommendation} style={{ "--tone": result.tone } as React.CSSProperties}>
-              <div className={styles.resultBag}><span>BISPO</span><i /></div>
-              <div className={styles.resultCopy}><p>{result.line}</p><h2>{result.name}</h2><strong>{result.notes}</strong><span>{result.reason}</span><div className={styles.resultBuy}><b>{result.price} <small>· 500 g</small></b><button>Quero experimentar →</button></div><button className={styles.why} onClick={reset}>Refazer meu mapa</button></div>
-            </article>
-          </div>
-          <div className={styles.nextPaths}><span>Quer ir além?</span><Link href="/loja#linhas">Ver todas as linhas →</Link><Link href="/loja#cafes">Ver todos os cafés →</Link></div>
-        </section>
-      )}
-    </main>
-  );
+export default function DescobrirCafePage(){
+ const [step,setStep]=useState(0); const [openFamily,setOpenFamily]=useState<string>(); const [finished,setFinished]=useState(false);
+ const [answers,setAnswers]=useState<Answers>({flavors:[],descriptors:[],memories:[],moments:[]});
+ const toggle=(key:"flavors"|"descriptors"|"memories"|"moments",id:string)=>setAnswers(a=>({...a,[key]:a[key].includes(id)?a[key].filter(x=>x!==id):[...a[key],id]}));
+ const resultKey=useMemo(()=>{ const d=answers.descriptors; if(answers.moments.includes("special")||d.some(x=>["jasmine","orangeblossom"].includes(x)))return"raro"; if(answers.moments.includes("discover")||d.some(x=>["strawberry","cherry","berries","peach"].includes(x)))return"singular"; if(d.some(x=>["tangerine","orange","lemon","apple"].includes(x))||["citrica","malica","vibrant"].includes(answers.acidity||""))return"tangerina"; if(d.includes("dulce")||((d.includes("chocolate")||d.includes("caramel"))&&answers.body==="structured"))return"doce"; if(d.some(x=>["chocolate","caramel","honey","almond","cocoa"].includes(x))||answers.body==="round")return"caramelo"; return"essencial";},[answers]);
+ const result=recommendations[resultKey as keyof typeof recommendations];
+ const next=()=>{if(step<4)setStep(s=>s+1);else setFinished(true)};
+ const back=()=>{if(openFamily)setOpenFamily(undefined);else setStep(s=>Math.max(0,s-1))};
+ const selectedWords=[...answers.descriptors,...answers.memories].slice(0,5).map(id=>[...Object.values(descriptors).flat(),...memories].find(x=>x.id===id)?.label).filter(Boolean);
+ if(finished)return <main className={styles.page}><header className={styles.header}><Link href="/loja" className={styles.brand}><Image src="/brand/logo/bispo-logo-official-transparent.png" width={150} height={50} alt="Bispo Coffees" priority/></Link><div className={styles.headerCopy}><span>SEU PALADAR BISPO</span><small>O que você escolheu virou uma direção.</small></div><Link className={styles.close} href="/loja">×</Link></header><section className={styles.resultPage}><div className={styles.resultLead}><p>OLHA O QUE VOCÊ ACABOU DE DESCOBRIR.</p><h1>Seu café tem um jeito.</h1><span>{selectedWords.join(" · ")}</span></div><div className={styles.resultGrid}><TastePortrait answers={answers} tone={result.tone}/><article className={styles.recommendation} style={{"--tone":result.tone} as React.CSSProperties}><div className={styles.resultBag}><span>BISPO</span><i/></div><div className={styles.resultCopy}><p>{result.line}</p><h2>{result.name}</h2><strong>{result.notes}</strong><span>Suas escolhas de sabor, sensação e memória apontaram para este caminho.</span><div className={styles.resultBuy}><b>{result.price} <small>· 500 g</small></b><button>Quero experimentar →</button></div><button className={styles.why} onClick={()=>{setFinished(false);setStep(0)}}>Explorar de novo</button></div></article></div></section></main>;
+ return <main className={styles.page}><header className={styles.header}><Link href="/loja" className={styles.brand}><Image src="/brand/logo/bispo-logo-official-transparent.png" width={150} height={50} alt="Bispo Coffees" priority/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span><small>Uma pequena viagem pelo que você gosta.</small></div><Link className={styles.close} href="/loja">×</Link></header><section className={styles.experience}>
+ <div className={styles.softProgress}><i className={step>=0?styles.on:""}/><i className={step>=1?styles.on:""}/><i className={step>=2?styles.on:""}/><i className={step>=3?styles.on:""}/><i className={step>=4?styles.on:""}/><span>{step<2?"Estamos conhecendo seu paladar.":step<4?"Já temos algumas pistas...":"Falta pouco."}</span></div>
+ <div className={styles.intro}><p>{step===0?"COMECE POR UMA LEMBRANÇA.":step===1?"MEMÓRIA TAMBÉM PROVA CAFÉ.":step===2?"AGORA IMAGINE A SENSAÇÃO.":step===3?"COMO ELE FICA NA BOCA?":"E ONDE ESSA XÍCARA ENTRA NA SUA VIDA?"}</p><h1>{step===0?(openFamily?"Entre um pouco mais nesse sabor.":"O que chama você?"):step===1?"Isso te leva para algum lugar?":step===2?"Quanto de frescor combina com você?":step===3?"Como você gosta de sentir o café?":"Quando você quer esse café?"}</h1><span>{step===0?"Pode ser um sabor, uma fruta, uma sobremesa ou só algo que deu vontade. Marque quantos quiser.":step===1?"Casa, infância, uma sobremesa, uma pausa. Pode marcar mais de uma — ou nenhuma.":"Não existe resposta certa. Escolha pela sensação."}</span></div>
+ <div className={styles.journeyStage}>{step===0&&<><SensoryWheel active={openFamily} onOpen={id=>{setOpenFamily(id);if(!answers.flavors.includes(id))toggle("flavors",id)}}/><div className={styles.memoryChoices}>{(openFamily?descriptors[openFamily]:families).map(c=><ChoiceButton key={c.id} choice={c} selected={(openFamily?answers.descriptors:answers.flavors).includes(c.id)} onClick={()=>openFamily?toggle("descriptors",c.id):setOpenFamily(c.id)}/>)}</div></>}{step===1&&<div className={styles.memoryChoices}>{memories.map(c=><ChoiceButton key={c.id} choice={c} selected={answers.memories.includes(c.id)} onClick={()=>toggle("memories",c.id)}/>)}</div>}{step===2&&<><AcidityMandala selected={answers.acidity}/><div className={styles.memoryChoices}>{acidity.map(c=><ChoiceButton key={c.id} choice={c} selected={answers.acidity===c.id} onClick={()=>setAnswers(a=>({...a,acidity:c.id}))}/>)}</div></>}{step===3&&<><BodyPulse selected={answers.body}/><div className={styles.memoryChoices}>{bodies.map(c=><ChoiceButton key={c.id} choice={c} selected={answers.body===c.id} onClick={()=>setAnswers(a=>({...a,body:c.id}))}/>)}</div></>}{step===4&&<div className={styles.memoryChoices}>{moments.map(c=><ChoiceButton key={c.id} choice={c} selected={answers.moments.includes(c.id)} onClick={()=>toggle("moments",c.id)}/>)}</div>}</div>
+ {selectedWords.length>0&&<div className={styles.memoryTrail}><small>SUAS PISTAS</small>{selectedWords.map(x=><span key={x}>{x}</span>)}</div>}
+ <div className={styles.bispoWhisper}><strong>Dica do Bispo</strong><span>{step===0?"Não pense demais. A primeira lembrança costuma dizer bastante.":step===1?"Às vezes reconhecemos uma sensação antes de conseguirmos dar nome a ela.":step===2?"Acidez no café pode ser frescor — como numa fruta.":"Escolha o que dá vontade. A técnica fica por nossa conta."}</span></div>
+ <div className={styles.mobileNav}>{(step>0||openFamily)&&<button onClick={back}>← Voltar</button>}<button className={styles.continueButton} onClick={openFamily?()=>setOpenFamily(undefined):next}>{openFamily?"Outros sabores":"Continuar"} →</button></div>
+ </section></main>;
 }
-
-function FlavorWheel({ selected }: { selected?: string }) {
-  return <div className={styles.flavorWheel} aria-hidden="true"><div className={styles.wheelOuter} /><div className={styles.wheelMid} /><div className={styles.wheelCup}><span>BISPO</span><small>paladar</small></div><em className={`${styles.wheelLabel} ${styles.one} ${selected === "caramel" ? styles.emphasis : ""}`}>Doce</em><em className={`${styles.wheelLabel} ${styles.two} ${selected === "citrus" ? styles.emphasis : ""}`}>Cítrico</em><em className={`${styles.wheelLabel} ${styles.three} ${selected === "fruit" ? styles.emphasis : ""}`}>Frutado</em><em className={`${styles.wheelLabel} ${styles.four} ${selected === "floral" ? styles.emphasis : ""}`}>Floral</em><em className={`${styles.wheelLabel} ${styles.five} ${selected === "nuts" ? styles.emphasis : ""}`}>Profundo</em></div>;
-}
-
-function AcidityMandala({ selected }: { selected?: string }) {
-  return <div className={styles.acidityMandala} aria-hidden="true"><div className={styles.acidityCore}><span>ACIDEZ</span><strong>{selected ? "seu ponto" : "frescor"}</strong></div><i className={styles.ringOne} /><i className={styles.ringTwo} /><i className={styles.ringThree} /><b className={styles.acidLow}>suave</b><b className={styles.acidCitrus}>cítrica</b><b className={styles.acidMalic}>málica</b><b className={styles.acidVibrant}>vibrante</b></div>;
-}
-
-function BodyPulse({ selected }: { selected?: string }) {
-  return <div className={styles.bodyPulse} aria-hidden="true"><span className={styles.pulseOne} /><span className={styles.pulseTwo} /><span className={styles.pulseThree} /><span className={styles.pulseFour} /><div><small>leve</small><strong>{selected === "structured" ? "estrutura" : selected === "round" ? "envolvência" : selected === "silky" ? "maciez" : "fluidez"}</strong><small>presente</small></div></div>;
-}
-
-function MomentOrbit() {
-  return <div className={styles.momentOrbit} aria-hidden="true"><div className={styles.orbitCore}>SUA<br />XÍCARA</div><i /><i /><i /><i /><span className={styles.morning}>dia a dia</span><span className={styles.pause}>pausa</span><span className={styles.discover}>descoberta</span><span className={styles.special}>especial</span></div>;
-}
-
-function TastePortrait({ answers, tone }: { answers: Answers; tone: string }) {
-  const sweetness = answers.flavor === "caramel" ? 92 : answers.flavor === "fruit" ? 75 : 60;
-  const acidity = answers.acidity === "vibrant" ? 95 : answers.acidity === "citrica" || answers.acidity === "malica" ? 78 : answers.acidity === "balanced" ? 58 : 35;
-  const body = answers.body === "structured" ? 92 : answers.body === "round" ? 76 : answers.body === "silky" ? 58 : 40;
-  const discovery = answers.moment === "special" ? 96 : answers.moment === "discover" ? 82 : 48;
-  return <div className={styles.portrait} style={{ "--tone": tone } as React.CSSProperties}><div className={styles.portraitCircle}><div><span>SEU</span><strong>PALADAR</strong></div></div>{[["Doçura", sweetness], ["Acidez", acidity], ["Corpo", body], ["Descoberta", discovery]].map(([label, value]) => <div className={styles.metric} key={String(label)}><span>{label}</span><i><b style={{ width: `${value}%` }} /></i></div>)}</div>;
-}
+function ChoiceButton({choice,selected,onClick}:{choice:Choice;selected:boolean;onClick:()=>void}){return <button className={`${styles.memoryChoice} ${selected?styles.selected:""}`} style={{"--tone":choice.tone} as
