@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import styles from "./page.module.css";
 
 const lines = [
@@ -31,7 +32,7 @@ export default function LojaPage() {
         <nav className={styles.nav} aria-label="Navegação principal">
           <a href="#cafes">Cafés</a>
           <a href="#linhas">Linhas</a>
-          <a href="#descobrir">Descobrir o meu</a>
+          <Link href="/loja/descobrir">Descobrir o meu</Link>
           <a href="#aprender">Aprender</a>
         </nav>
         <div className={styles.actions} aria-label="Ações">
@@ -48,7 +49,7 @@ export default function LojaPage() {
           <p className={styles.subcopy}>Cafés brasileiros selecionados com critério, consistência e experiência.</p>
           <div className={styles.heroButtons}>
             <a className={styles.primaryCta} href="#cafes">Comprar cafés <span>→</span></a>
-            <a className={styles.secondaryCta} href="#descobrir">Descobrir o meu <span>→</span></a>
+            <Link className={styles.secondaryCta} href="/loja/descobrir">Descobrir o meu <span>→</span></Link>
           </div>
           <div className={styles.colorSignal} aria-hidden="true">
             {lines.map((line) => <i key={line.name} style={{ background: line.tone }} />)}
@@ -115,9 +116,9 @@ export default function LojaPage() {
         <p>NÃO SABE QUAL ESCOLHER?</p>
         <h2>Comece pelo que você gosta.</h2>
         <div className={styles.tasteOptions}>
-          <button>Suave</button><button>Doce</button><button>Intenso</button><button>Frutado</button><button>Surpreendente</button>
+          <span>Suave</span><span>Doce</span><span>Intenso</span><span>Frutado</span><span>Surpreendente</span>
         </div>
-        <a href="#cafes">Descobrir meu café →</a>
+        <Link href="/loja/descobrir">Descobrir meu café →</Link>
       </section>
 
       <section id="aprender" className={styles.valueStrip}>
