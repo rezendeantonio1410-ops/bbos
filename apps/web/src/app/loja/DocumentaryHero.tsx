@@ -6,14 +6,13 @@ import media from "./DocumentaryHero.module.css";
 
 type Scene={kind:"video"|"photo";src:string;start?:number;seconds:number;label:string};
 const scenes:Scene[]=[
-  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:3.2,label:"campo"},
-  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46.jpeg",seconds:3.2,label:"origem"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.46.mp4",start:1,seconds:4,label:"prova"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.42.mp4",start:1,seconds:4,label:"escolha"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 14.15.16.mp4",start:1,seconds:4,label:"xícara"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.22.13.mp4",start:1,seconds:4,label:"critério"}
+  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:3.0,label:"campo"},
+  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46.jpeg",seconds:3.0,label:"origem"},
+  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.46.mp4",start:1,seconds:3.6,label:"prova"},
+  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.42.mp4",start:1,seconds:3.6,label:"escolha"},
+  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.22.13.mp4",start:1,seconds:3.6,label:"critério"}
 ];
-const fallback:Scene={kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:3.2,label:"campo"};
+const fallback:Scene={kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:3,label:"campo"};
 const poster="/WhatsApp Image 2026-09-01 at 14.11.25.jpeg";
 
 export default function DocumentaryHero(){
