@@ -1,6 +1,6 @@
 "use client";
 
-import {useRef,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import styles from "./page.module.css";
 import media from "./DocumentaryHero.module.css";
 
@@ -22,12 +22,13 @@ export default function DocumentaryHero(){
   const current=scenes[scene];
   const next=()=>{if(timer.current)clearTimeout(timer.current);setReady(false);setScene(i=>(i+1)%scenes.length)};
   const schedule=(seconds:number)=>{if(timer.current)clearTimeout(timer.current);timer.current=setTimeout(next,seconds*1000)};
+  useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current)},[]);
   return <div className={styles.authorityVisual}>
     <div className={media.frame}>
       <img src={poster} alt="Prova de café Bispo Coffees" className={`${media.photo} ${!ready?media.ready:""}`}/>
       {current.kind==="video"?<video key={current.src} className={`${media.film} ${ready?media.ready:""}`} autoPlay muted playsInline preload="metadata" poster={poster}
         onLoadedMetadata={e=>{const v=e.currentTarget;v.currentTime=Math.min(current.start||0,Math.max(0,v.duration-.5))}}
-        onCanPlay={e=>{setReady(true);e.currentTarget.play().catch(()=>{});schedule(current.seconds)}}
+        onCanPlay={e=>{setReady(true);void e.currentTarget.play().catch(()=>undefined);schedule(current.seconds)}}
         onTimeUpdate={e=>{if(e.currentTarget.currentTime>=(current.start||0)+current.seconds)next()}}
         onEnded={next} onError={next} aria-label={`Bispo Coffees — ${current.label}`}><source src={current.src} type="video/mp4"/></video>
       :<img key={current.src} src={current.src} alt={`Bispo Coffees — ${current.label}`} className={`${media.film} ${ready?media.ready:""}`} onLoad={()=>{setReady(true);schedule(current.seconds)}}/>}
