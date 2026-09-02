@@ -7,7 +7,7 @@ import media from "./DocumentaryHero.module.css";
 type Scene={kind:"video"|"photo";src:string;start?:number;seconds:number;label?:string};
 const scenes:Scene[]=[
   {kind:"video",src:"/WhatsApp Video 2026-09-02 at 17.34.18.mp4",start:1,seconds:4.2},
-  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:2.6,label:"origem"},
+  {kind:"video",src:"/cafezal .mp4",start:0,seconds:2.0,label:"origem"},
   {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.46.mp4",start:1,seconds:3.1,label:"prova"},
   {kind:"video",src:"/Torra de Cafe .mp4",start:0,seconds:2.0,label:"torra"}
 ];
