@@ -6,13 +6,12 @@ import media from "./DocumentaryHero.module.css";
 
 type Scene={kind:"video"|"photo";src:string;start?:number;seconds:number;label:string};
 const scenes:Scene[]=[
+  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:3.2,label:"campo"},
+  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46.jpeg",seconds:3.2,label:"origem"},
   {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.46.mp4",start:1,seconds:4,label:"prova"},
   {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.42.mp4",start:1,seconds:4,label:"escolha"},
-  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46.jpeg",seconds:3.2,label:"origem"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.05.49.mp4",start:1,seconds:4,label:"prova"},
-  {kind:"photo",src:"/WhatsApp Image 2026-09-01 at 21.36.46 (1).jpeg",seconds:3.2,label:"campo"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.22.13.mp4",start:1,seconds:4,label:"critério"},
-  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 14.15.16.mp4",start:1,seconds:4,label:"xícara"}
+  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 14.15.16.mp4",start:1,seconds:4,label:"xícara"},
+  {kind:"video",src:"/WhatsApp Video 2026-09-01 at 15.22.13.mp4",start:1,seconds:4,label:"critério"}
 ];
 const poster="/WhatsApp Image 2026-09-01 at 14.11.25.jpeg";
 
@@ -33,7 +32,7 @@ export default function DocumentaryHero(){
         onEnded={next} onError={next} aria-label={`Bispo Coffees — ${current.label}`}><source src={current.src} type="video/mp4"/></video>
       :<img key={current.src} src={current.src} alt={`Bispo Coffees — ${current.label}`} className={`${media.film} ${ready?media.ready:""}`} onLoad={()=>{setReady(true);schedule(current.seconds)}}/>}
       <div className={`${media.veil} ${ready?media.ready:""}`}/>
-      <div className={media.words}><span>campo</span><span>prova</span><span>xícara</span></div>
+      <div className={media.words}><span>{current.label}</span></div>
       <div className={media.counter}>{String(scene+1).padStart(2,"0")} / {String(scenes.length).padStart(2,"0")}</div>
     </div>
   </div>
