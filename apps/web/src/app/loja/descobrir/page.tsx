@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import styles from "./page.module.css";
 
@@ -85,10 +85,10 @@ const acids = [
 
 const productMap = {
   fruitFresh: { name: "Tangerina", line: "CLÁSSICOS", price: "R$ 74", perCup: "≈ R$ 2,96/xícara", profile: "Cítrico · Refrescante · Delicado" },
-  fruitExplorer: { name: "Singular", line: "ÉPICOS", price: "R$ 84", perCup: "≈ R$ 3,36/xícara", profile: "Frutado · Complexo · Evolutivo" },
+  fruitExplorer: { name: "Singular", line: "ÉPICOS", price: "R$ 85", perCup: "≈ R$ 3,40/xícara", profile: "Frutado · Complexo · Evolutivo" },
   sweetSoft: { name: "Doce de Leite", line: "CLÁSSICOS", price: "R$ 74", perCup: "≈ R$ 2,96/xícara", profile: "Açúcar mascavo · Alfajor · Doçura" },
   sweetDaily: { name: "Caramelo", line: "CLÁSSICOS", price: "R$ 68", perCup: "≈ R$ 2,72/xícara", profile: "Caramelo · Chocolate · Equilíbrio" },
-  cocoaBody: { name: "Sublime", line: "ÉPICOS", price: "R$ 84", perCup: "≈ R$ 3,36/xícara", profile: "Rapadura · Caramelo · Corpo" },
+  cocoaBody: { name: "Sublime", line: "ÉPICOS", price: "R$ 85", perCup: "≈ R$ 3,40/xícara", profile: "Rapadura · Caramelo · Corpo" },
   gentle: { name: "Essencial", line: "GOURMET", price: "R$ 48", perCup: "≈ R$ 1,92/xícara", profile: "Suavidade · Praticidade · Equilíbrio" },
   intense: { name: "Intenso", line: "GOURMET", price: "R$ 48", perCup: "≈ R$ 1,92/xícara", profile: "Corpo · Presença · Limpeza" },
 };
@@ -104,6 +104,10 @@ export default function Page() {
   const [fs, setFs] = useState("");
   const [fd, setFd] = useState<string[]>([]);
   const [acid, setAcid] = useState("");
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [phase]);
 
   const isFlavor = phase.startsWith("flavor");
   const famId = isFlavor ? ff : af;
@@ -222,7 +226,8 @@ export default function Page() {
 }
 
 function Wheel({ items, pick }: { items: Array<{ id: string; name: string; color: string; image: string }>; pick: (id: string) => void }) {
-  return <div className={styles.familyWheel}>{items.slice(0, 4).map((x, i) => <button key={x.id} className={`${styles.wheelSector} ${styles[`sector${i}`]}`} style={{ "--tone": x.color } as CSSProperties} onClick={() => pick(x.id)}><img src={x.image} alt={x.name}/><span>{x.name}</span></button>)}<div className={styles.wheelCore}><strong>SUA XÍCARA</strong><small>toque e explore</small></div></div>;
+  const wheelClass = `${styles.familyWheel} ${items.length === 2 ? styles.familyWheelTwo : ""}`;
+  return <div className={wheelClass}>{items.slice(0, 4).map((x, i) => <button key={x.id} className={`${styles.wheelSector} ${styles[`sector${i}`]}`} style={{ "--tone": x.color } as CSSProperties} onClick={() => pick(x.id)}><img src={x.image} alt={x.name}/><span>{x.name}</span></button>)}<div className={styles.wheelCore}><strong>SUA XÍCARA</strong><small>toque e explore</small></div></div>;
 }
 
 function Trail({ a, f }: { a: string[]; f: string[] }) {
@@ -231,5 +236,5 @@ function Trail({ a, f }: { a: string[]; f: string[] }) {
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  return <main className={styles.page}><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/bispo-logo-black.svg" alt="Bispo"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
+  return <main className={styles.page}><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
 }
