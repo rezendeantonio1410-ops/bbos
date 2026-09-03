@@ -163,14 +163,17 @@ export default function Page() {
   };
 
   if (phase === "profile") {
+    const cupNotes = [...names(ad).slice(0, 1), ...names(fd).slice(0, 1), acidName];
     return <Shell><section className={`${styles.resultScene} ${styles[dominant]}`}><div className={styles.quizReveal}>
       <small>ACHO QUE ENTENDI VOCÊ.</small>
-      <h1>Hoje, sua xícara pede...</h1>
+      <h1>Essa é a sua xícara hoje.</h1>
+      <div className={styles.cupWorld} style={{minHeight:"330px",margin:"-8px auto 0",maxWidth:"620px"}}>
+        <div className={styles.steam}/><div className={styles.cup}/>
+        <div className={styles.sensoryCloud}>{cupNotes.map((x) => <span key={x}>{x}</span>)}</div>
+      </div>
       <div className={styles.profileWords}><b>{profile}</b></div>
-      <p>{dominant === "fruit" ? "Você foi atrás de aromas expressivos, confirmou a fruta no sabor e escolheu quanto de vida queria na xícara." : dominant === "sweet" ? "Você procurou doçura e conforto desde o aroma. Sua xícara pede algo gostoso de reencontrar." : dominant === "cocoa" ? "Você construiu uma xícara profunda, familiar e envolvente." : "Você escolheu delicadeza, perfume e uma xícara que convida a prestar atenção."}</p>
-      <div className={styles.summary}><span>AROMA · {names(ad).join(" + ")}</span><span>SABOR · {names(fd).join(" + ")}</span><span>FRESCOR · {acidName}</span></div>
-      <div className={styles.bispoVoice}><b>Bispo</b><span>Já consigo imaginar essa xícara. Quero te mostrar antes de falar em café.</span></div>
-      <button className={styles.humanCta} onClick={() => setPhase("desire")}>Quero sentir essa xícara</button>
+      <div className={styles.bispoVoice}><b>Bispo</b><span>Boa. Agora ela já tem cheiro, sabor e vida. Quer sentir essa xícara antes de eu te mostrar o café?</span></div>
+      <button className={styles.humanCta} onClick={() => setPhase("desire")}>Quero sentir</button>
     </div></section></Shell>;
   }
 
