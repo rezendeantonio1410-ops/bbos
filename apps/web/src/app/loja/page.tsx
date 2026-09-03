@@ -61,6 +61,11 @@ export default function LojaPage(){return <main className={styles.page}>
     <p className={styles.priceNote}>*Referência de 20 g de café por preparo. Frete grátis para Sul e Sudeste a partir de R$ 270.</p>
   </section>
 
+  <section className={styles.authoritySection}>
+    <div className={styles.authorityLead}><p>CONHECIMENTO ANTES DO RÓTULO</p><h2>Café é escolha antes de ser produto.</h2></div>
+    <div className={styles.authorityCopy}><p>A Bispo Coffees nasce da experiência de José Rezende, o Bispo, filho de produtores de café e dedicado à qualidade desde 2003. A mesma lógica usada para provar, selecionar e apresentar cafés ao mercado agora ajuda você a escolher melhor para a sua própria xícara.</p><div className={styles.authorityFacts}><span><b>2003</b><small>trabalho com qualidade na origem</small></span><span><b>2010</b><small>Q-Grader e café brasileiro no mundo</small></span><span><b>Hoje</b><small>origem + prova + torra + escolha</small></span></div><Link href="/loja/sobre">Conheça a história da Bispo →</Link></div>
+  </section>
+
   <section id="descobrir" className={styles.discovery}>
     <div className={styles.discoveryCopy}><p>NÃO SABE QUAL ESCOLHER?</p><h2>Descubra o seu paladar.</h2><span>Escolha por aromas, sabores e sensações. A experiência sensorial da Bispo traduzida para uma jornada simples, intuitiva e divertida.</span><Link href="/loja/descobrir">Descobrir meu café →</Link></div>
     <div className={styles.discoveryPreview}><div className={styles.miniWheel}><i/><i/><i/><i/><b>BISPO</b></div><div className={styles.miniMandala}><i/><i/><i/><span>acidez</span></div></div>
@@ -68,9 +73,10 @@ export default function LojaPage(){return <main className={styles.page}>
 
   <section className={styles.valueStrip}><span>Escolhido na origem.</span><span>Provado antes da escolha.</span><span>Torra fresca.</span><span>Frete grátis Sul + Sudeste · R$ 270+</span></section>
 
-  <footer style={{padding:"42px 5vw",display:"grid",gap:18,background:"#fffdf9",borderTop:"1px solid rgba(14,25,29,.08)"}}>
-    <Image src="/brand/logo/bispo-logo-official-transparent.png" width={150} height={50} alt="Bispo Coffees"/>
-    <p style={{margin:0,maxWidth:620,opacity:.62,lineHeight:1.55}}>Cafés brasileiros escolhidos com experiência de origem, prova e mercado. Bispo Coffees — café para beber, perceber e lembrar.</p>
-    <div style={{display:"flex",gap:22,flexWrap:"wrap",fontSize:12}}><Link href="/loja/descobrir">Descubra o seu café</Link><Link href="/loja/aprender">Aprender sobre café</Link><Link href="/loja/sobre">Sobre a Bispo Coffees</Link></div>
+  <footer className={styles.footer}>
+    <div className={styles.footerBrand}><Image src="/brand/logo/bispo-logo-official-transparent.png" width={150} height={50} alt="Bispo Coffees"/><p>Cafés brasileiros escolhidos com experiência de origem, prova e mercado. Café para beber, perceber e lembrar.</p></div>
+    <div className={styles.footerNav}><strong>Explorar</strong><Link href="/loja/descobrir">Descubra o seu café</Link><Link href="/loja/aprender">Aprender sobre café</Link><Link href="/loja/sobre">Sobre a Bispo Coffees</Link></div>
+    <div className={styles.footerNav}><strong>Comprar</strong><a href="#cafes">Todos os cafés</a><a href="#linhas">Linhas Bispo</a><a href="#top">Voltar ao início</a></div>
+    <div className={styles.footerBottom}><span>Bispo Coffees · Brasil</span><Link href="/bbos">Área interna</Link></div>
   </footer>
 </main>}
