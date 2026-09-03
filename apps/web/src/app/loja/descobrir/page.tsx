@@ -115,10 +115,10 @@ export default function Page() {
   const names = (ids: string[]) => allDescriptors.filter((x) => ids.includes(x.id)).map((x) => x.name);
   const acidName = acids.find((x) => x.id === acid)?.name || "Equilibrado";
 
-  const score = { fruit: 0, sweet: 0, cocoa: 0, floral: 0 } as Record<string, number>;
-  if (af in score) score[af] += 2;
-  if (ff in score) score[ff] += 2;
-  const dominant = Object.keys(score).sort((a, b) => score[b] - score[a])[0] || "fruit";
+  const score: Record<string, number> = { fruit: 0, sweet: 0, cocoa: 0, floral: 0 };
+  if (af in score) score[af] = (score[af] ?? 0) + 2;
+  if (ff in score) score[ff] = (score[ff] ?? 0) + 2;
+  const dominant = Object.keys(score).sort((a, b) => (score[b] ?? 0) - (score[a] ?? 0))[0] || "fruit";
 
   const recommendation = (() => {
     if (acid === "soft" && dominant === "fruit") return productMap.gentle;
