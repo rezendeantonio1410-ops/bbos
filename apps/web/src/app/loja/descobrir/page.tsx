@@ -105,9 +105,7 @@ export default function Page() {
   const [fd, setFd] = useState<string[]>([]);
   const [acid, setAcid] = useState("");
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [phase]);
+  useEffect(() => { window.scrollTo(0, 0); }, [phase]);
 
   const isFlavor = phase.startsWith("flavor");
   const famId = isFlavor ? ff : af;
@@ -125,8 +123,12 @@ export default function Page() {
   const dominant = Object.keys(score).sort((a, b) => (score[b] ?? 0) - (score[a] ?? 0))[0] || "fruit";
 
   const recommendation = (() => {
-    if (acid === "soft" && dominant === "fruit") return productMap.gentle;
-    if (dominant === "fruit" && ["fresh", "juicy", "alive"].includes(acid)) return fs === "citrus" || as === "citrus" ? productMap.fruitFresh : productMap.fruitExplorer;
+    if (dominant === "fruit") {
+      const citrusPath = fs === "citrus" || as === "citrus";
+      if (citrusPath) return productMap.fruitFresh;
+      if (acid === "soft") return productMap.gentle;
+      return productMap.fruitExplorer;
+    }
     if (dominant === "sweet") return ["soft", "balanced"].includes(acid) ? productMap.sweetSoft : productMap.sweetDaily;
     if (dominant === "cocoa") return acid === "alive" ? productMap.intense : productMap.cocoaBody;
     if (dominant === "floral") return productMap.fruitExplorer;
@@ -139,21 +141,14 @@ export default function Page() {
     if (isFlavor) { setFf(id); setFs(""); setFd([]); setPhase("flavor-sub"); }
     else { setAf(id); setAs(""); setAd([]); setPhase("aroma-sub"); }
   };
-
-  const chooseSub = (id: string) => {
-    if (isFlavor) { setFs(id); setPhase("flavor-desc"); }
-    else { setAs(id); setPhase("aroma-desc"); }
-  };
-
+  const chooseSub = (id: string) => { if (isFlavor) { setFs(id); setPhase("flavor-desc"); } else { setAs(id); setPhase("aroma-desc"); } };
   const chooseDesc = (id: string) => {
     if (isFlavor) {
       const next = fd.includes(id) ? fd.filter((x) => x !== id) : [...fd, id].slice(-2);
-      setFd(next);
-      if (next.length === 2) window.setTimeout(() => setPhase("acid"), 520);
+      setFd(next); if (next.length === 2) window.setTimeout(() => setPhase("acid"), 520);
     } else {
       const next = ad.includes(id) ? ad.filter((x) => x !== id) : [...ad, id].slice(-2);
-      setAd(next);
-      if (next.length === 2) window.setTimeout(() => setPhase("flavor-family"), 520);
+      setAd(next); if (next.length === 2) window.setTimeout(() => setPhase("flavor-family"), 520);
     }
   };
 
@@ -165,12 +160,8 @@ export default function Page() {
   if (phase === "profile") {
     const cupNotes = [...names(ad).slice(0, 1), ...names(fd).slice(0, 1), acidName];
     return <Shell><section className={`${styles.resultScene} ${styles[dominant]}`}><div className={styles.quizReveal}>
-      <small>ACHO QUE ENTENDI VOCÊ.</small>
-      <h1>Essa é a sua xícara hoje.</h1>
-      <div className={styles.cupWorld} style={{minHeight:"330px",margin:"-8px auto 0",maxWidth:"620px"}}>
-        <div className={styles.steam}/><div className={styles.cup}/>
-        <div className={styles.sensoryCloud}>{cupNotes.map((x) => <span key={x}>{x}</span>)}</div>
-      </div>
+      <small>ACHO QUE ENTENDI VOCÊ.</small><h1>Essa é a sua xícara hoje.</h1>
+      <div className={styles.cupWorld} style={{minHeight:"330px",margin:"-8px auto 0",maxWidth:"620px"}}><div className={styles.steam}/><div className={styles.cup}/><div className={styles.sensoryCloud}>{cupNotes.map((x) => <span key={x}>{x}</span>)}</div></div>
       <div className={styles.profileWords}><b>{profile}</b></div>
       <div className={styles.bispoVoice}><b>Bispo</b><span>Boa. Agora ela já tem cheiro, sabor e vida. Quer sentir essa xícara antes de eu te mostrar o café?</span></div>
       <button className={styles.humanCta} onClick={() => setPhase("desire")}>Quero sentir</button>
@@ -180,14 +171,8 @@ export default function Page() {
   if (phase === "desire") {
     return <Shell><section className={`${styles.desireScene} ${styles[dominant]}`}>
       <div className={styles.cupWorld}><div className={styles.steam}/><div className={styles.cup}/><div className={styles.sensoryCloud}>{[...names(ad), ...names(fd)].slice(0, 4).map((x) => <span key={x}>{x}</span>)}</div></div>
-      <div className={styles.desireCopy}>
-        <small>ANTES DO CAFÉ, A SENSAÇÃO.</small>
-        <h1>Imagine o primeiro gole.</h1>
-        <div className={styles.desireRhythm}>
-          <b>{dominant === "fruit" ? "Fruta primeiro." : dominant === "sweet" ? "Doçura primeiro." : dominant === "cocoa" ? "Aroma profundo." : "Perfume primeiro."}</b>
-          <b>{dominant === "fruit" ? "Doçura junto." : dominant === "sweet" ? "Textura macia." : dominant === "cocoa" ? "Textura envolvente." : "Delicadeza no gole."}</b>
-          <b>{["fresh", "juicy", "alive"].includes(acid) ? "Frescor que chama o próximo gole." : "Um final confortável que fica."}</b>
-        </div>
+      <div className={styles.desireCopy}><small>ANTES DO CAFÉ, A SENSAÇÃO.</small><h1>Imagine o primeiro gole.</h1>
+        <div className={styles.desireRhythm}><b>{dominant === "fruit" ? "Fruta primeiro." : dominant === "sweet" ? "Doçura primeiro." : dominant === "cocoa" ? "Aroma profundo." : "Perfume primeiro."}</b><b>{dominant === "fruit" ? "Doçura junto." : dominant === "sweet" ? "Textura macia." : dominant === "cocoa" ? "Textura envolvente." : "Delicadeza no gole."}</b><b>{["fresh", "juicy", "alive"].includes(acid) ? "Frescor que chama o próximo gole." : "Um final confortável que fica."}</b></div>
         <p>Não pense em marca nem embalagem. Pense apenas nessa xícara chegando quente, aromática, do jeito que você acabou de construir.</p>
         <div className={styles.bispoVoice}><b>Bispo</b><span>{dominant === "fruit" ? "É uma xícara que eu beberia prestando atenção na fruta que aparece primeiro." : dominant === "sweet" ? "É uma xícara para quem gosta daquela sensação de conforto logo no primeiro gole." : dominant === "cocoa" ? "É uma xícara que pede calma: chocolate, profundidade e um final que permanece." : "É uma xícara delicada, dessas que fazem a gente chegar mais perto para sentir o aroma."}</span></div>
         <button className={styles.humanCta} onClick={() => setPhase("product")}>É essa sensação que eu quero</button>
@@ -198,33 +183,26 @@ export default function Page() {
   if (phase === "product") {
     return <Shell><section className={styles.productScene}>
       <div className={styles.productIntro}><small>AGORA SIM. TENHO UM CAFÉ EM MENTE.</small><h1>Se eu estivesse escolhendo para você hoje...</h1><p>Eu começaria por este.</p></div>
-      <article className={styles.productCard}>
-        <div><small>{recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>Ele segue a direção sensorial que você construiu nesta sessão. Não é um rótulo para sempre — é o café que eu colocaria na sua frente hoje.</p></div>
-        <div className={styles.price}><b>{recommendation.price} <small>· pacote</small></b><span>{recommendation.perCup}</span><button>Quero provar esse</button></div>
-      </article>
+      <article className={styles.productCard}><div><small>{recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>Ele segue a direção sensorial que você construiu nesta sessão. Não é um rótulo para sempre — é o café que eu colocaria na sua frente hoje.</p></div><div className={styles.price}><b>{recommendation.price} <small>· pacote</small></b><span>{recommendation.perCup}</span><button>Quero provar esse</button></div></article>
       <div className={styles.feedback}><b>Bispo</b><span>Cheguei perto do que você estava imaginando?</span><div><button>Sim, é por aí</button><button onClick={() => window.location.reload()}>Quero descobrir outro lado meu</button></div></div>
     </section></Shell>;
   }
 
-  const title = phase === "aroma-family" ? "O que chama você no aroma?" : phase === "aroma-sub" ? `Dentro de ${fam?.name.toLowerCase()}, para onde você iria?` : phase === "aroma-desc" ? "Quais dois aromas puxam você primeiro?" : phase === "flavor-family" ? "Agora imagine o primeiro gole." : phase === "flavor-sub" ? "No sabor, que caminho dá mais vontade?" : phase === "flavor-desc" ? "Quais dois sabores você procuraria na xícara?" : "Só mais uma coisa: como você gosta do frescor?";
+  const title = phase === "aroma-family" ? "O que chama você no aroma?" : phase === "aroma-sub" ? `Dentro de ${fam?.name.toLowerCase()}, para onde você iria?` : phase === "aroma-desc" ? "Quais dois aromas puxam você primeiro?" : phase === "flavor-family" ? "Agora muda a pergunta: o que você quer sentir no primeiro gole?" : phase === "flavor-sub" ? "No sabor, qual caminho dá mais vontade?" : phase === "flavor-desc" ? "Quais dois sabores você gostaria de encontrar?" : "Só mais uma coisa: como você gosta do frescor?";
   const selected = isFlavor ? fd : ad;
-  const whisper = phase === "aroma-family" ? "Não precisa entender de café. Escolha pelo desejo." : phase === "aroma-sub" ? "Boa pista. Agora vamos chegar mais perto do aroma." : phase === "aroma-desc" ? (ad.length === 0 ? "Escolha o primeiro sem pensar demais." : ad.length === 1 ? `${names(ad)[0]}. Boa pista. Escolha só mais um.` : `${names(ad).join(" e ")}... já consigo imaginar o aroma.`) : phase === "flavor-family" ? `No aroma você me mostrou ${names(ad).join(" e ")}. Agora quero saber o que dá vontade no primeiro gole.` : phase === "flavor-sub" ? "Ótimo. Estamos deixando de falar de café e começando a imaginar a xícara." : phase === "flavor-desc" ? (fd.length === 0 ? "Escolha o primeiro sabor que te chama." : fd.length === 1 ? `${names(fd)[0]}. Agora só mais um.` : `${names(fd).join(" e ")}. Agora ficou interessante.`) : "Já sei bastante sobre você. Um toque aqui fecha a xícara.";
+  const whisper = phase === "aroma-family" ? "Não precisa entender de café. Escolha pelo desejo." : phase === "aroma-sub" ? "Boa pista. Agora vamos chegar mais perto do aroma." : phase === "aroma-desc" ? (ad.length === 0 ? "Escolha o primeiro sem pensar demais." : ad.length === 1 ? `${names(ad)[0]}. Boa pista. Escolha só mais um.` : `${names(ad).join(" e ")}... já consigo imaginar o aroma.`) : phase === "flavor-family" ? `Agora deixamos o cheiro para trás. Pense na boca: o que você gostaria de sentir no primeiro gole?` : phase === "flavor-sub" ? "Isso. Agora estamos falando de sabor, textura e vontade de dar o próximo gole." : phase === "flavor-desc" ? (fd.length === 0 ? "Escolha o primeiro sabor que te chama." : fd.length === 1 ? `${names(fd)[0]}. Agora só mais um.` : `${names(fd).join(" e ")}. Agora ficou interessante.`) : "Já sei bastante sobre você. Um toque aqui fecha a xícara.";
+  const helper = phase.startsWith("flavor") ? (phase.endsWith("desc") ? "Escolha pelo que você gostaria de encontrar no gole." : "Aqui não é mais aroma. Imagine sabor, textura e o que fica na boca.") : phase.endsWith("family") ? "Um toque basta. Escolha pelo primeiro impulso." : phase.endsWith("sub") ? "Toque no caminho que mais te atrai." : phase.endsWith("desc") ? "Não pense demais. Os dois primeiros costumam dizer bastante." : "Toque na sensação que combina com a xícara que você imaginou.";
 
   return <Shell><section className={styles.experience}>
     {phase !== "aroma-family" && <button className={styles.back} onClick={() => setPhase(backMap[phase] || "aroma-family")}>← quero rever</button>}
-    <div className={styles.intro}>
-      <p>{phase.startsWith("aroma") ? "AROMA" : phase.startsWith("flavor") ? "SABOR" : "ACIDEZ"} · BISPO VAI COM VOCÊ</p>
-      <h1>{title}</h1>
-      <span>{phase.endsWith("family") ? "Um toque basta. Escolha pelo primeiro impulso." : phase.endsWith("sub") ? "Toque no caminho que mais te atrai." : phase.endsWith("desc") ? "Não pense demais. Os dois primeiros costumam dizer bastante." : "Toque na sensação que combina com a xícara que você imaginou."}</span>
-    </div>
-    <div className={styles.journeyStage}>
-      {phase.endsWith("family") && <Wheel items={data} pick={chooseFamily}/>} 
-      {phase.endsWith("sub") && fam && <Wheel items={fam.subs} pick={chooseSub}/>} 
+    <div className={styles.intro}><p>{phase.startsWith("aroma") ? "AROMA" : phase.startsWith("flavor") ? "SABOR · AGORA LEVE PARA O GOLE" : "FRESCOR"} · BISPO VAI COM VOCÊ</p><h1>{title}</h1><span>{helper}</span></div>
+    <div className={`${styles.journeyStage} ${isFlavor ? "flavorStage" : ""}`}>
+      {phase.endsWith("family") && (isFlavor ? <FlavorCompass items={data} pick={chooseFamily}/> : <Wheel items={data} pick={chooseFamily}/>)}
+      {phase.endsWith("sub") && fam && (isFlavor ? <FlavorCompass items={fam.subs} pick={chooseSub}/> : <Wheel items={fam.subs} pick={chooseSub}/>)}
       {phase.endsWith("desc") && sub && <div className={styles.descriptorGrid}>{sub.d.map((x) => { const on = selected.includes(x.id); return <button key={x.id} className={`${styles.descriptorTile} ${on ? styles.selected : ""}`} style={{ "--tone": fam?.color } as CSSProperties} onClick={() => chooseDesc(x.id)}><span><img src={x.image} alt={x.name}/>{on && <i>✓</i>}</span><strong>{x.name}</strong></button>; })}</div>}
       {phase === "acid" && <div className={styles.acidMandala}><div className={styles.acidCore}><strong>SUA XÍCARA</strong><small>toque no frescor</small></div>{acids.map((x) => <button key={x.id} className={styles.acidPetal} style={{ "--tone": x.color } as CSSProperties} onClick={() => { setAcid(x.id); window.setTimeout(() => setPhase("profile"), 320); }}><b>{x.name}</b><span>{x.hint}</span></button>)}</div>}
     </div>
-    <Trail a={names(ad)} f={names(fd)}/>
-    <div className={styles.bispoWhisper}><strong>Bispo</strong><span>{whisper}</span></div>
+    <Trail a={names(ad)} f={names(fd)}/><div className={styles.bispoWhisper}><strong>Bispo</strong><span>{whisper}</span></div>
   </section></Shell>;
 }
 
@@ -233,11 +211,44 @@ function Wheel({ items, pick }: { items: Array<{ id: string; name: string; color
   return <div className={wheelClass}>{items.slice(0, 4).map((x, i) => <button key={x.id} className={`${styles.wheelSector} ${styles[`sector${i}`]}`} style={{ "--tone": x.color } as CSSProperties} onClick={() => pick(x.id)}><img src={x.image} alt={x.name}/><span>{x.name}</span></button>)}<div className={styles.wheelCore}><strong>SUA XÍCARA</strong><small>toque e explore</small></div></div>;
 }
 
+function FlavorCompass({ items, pick }: { items: Array<{ id: string; name: string; color: string; image: string }>; pick: (id: string) => void }) {
+  return <div className={`flavorCompass ${items.length === 2 ? "two" : ""}`}>
+    {items.slice(0, 4).map((x) => <button key={x.id} className="flavorChoice" style={{ "--tone": x.color } as CSSProperties} onClick={() => pick(x.id)}><span><img src={x.image} alt={x.name}/></span><strong>{x.name}</strong><small>imaginar no gole →</small></button>)}
+    <div className="flavorCore"><i/><b>PRIMEIRO GOLE</b><small>agora é sabor</small></div>
+  </div>;
+}
+
 function Trail({ a, f }: { a: string[]; f: string[] }) {
   if (!a.length && !f.length) return null;
-  return <div className={styles.memoryTrail}><small>SUA XÍCARA</small>{a.map((x) => <span key={`a-${x}`}>{x}</span>)}{f.map((x) => <span key={`f-${x}`}>{x}</span>)}</div>;
+  return <div className={styles.memoryTrail}><small>SUA XÍCARA</small>{a.length > 0 && <span>AROMA · {a.join(" + ")}</span>}{f.length > 0 && <span>SABOR · {f.join(" + ")}</span>}</div>;
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  return <main className={styles.page}><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
+  const responsive = `
+    @media (min-width:901px) and (min-height:720px){
+      .${styles.experience}{min-height:calc(100svh - 72px);box-sizing:border-box;padding:14px 4vw 18px;display:flex;flex-direction:column;justify-content:center}
+      .${styles.back}{padding-bottom:8px}
+      .${styles.intro}{margin-bottom:12px;max-width:900px}
+      .${styles.intro} h1{font-size:clamp(38px,5.4vh,60px);margin-bottom:7px}
+      .${styles.intro}>span{font-size:14px}
+      .${styles.journeyStage}{padding:16px;flex:0 1 auto}
+      .${styles.familyWheel}{width:min(500px,54vh)}
+      .${styles.acidMandala}{width:min(500px,54vh)}
+      .${styles.memoryTrail}{margin-top:9px}
+      .${styles.bispoWhisper}{margin-top:9px;padding:10px 14px}
+    }
+    .flavorStage{background:linear-gradient(145deg,#fffaf2,#f5eee3)!important;border-color:#eadfce!important}
+    .flavorCompass{width:min(760px,72vw);margin:auto;position:relative;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px}
+    .flavorCompass.two{grid-template-columns:1fr 1fr;max-width:720px}
+    .flavorChoice{min-height:180px;border:0;border-radius:28px;background:color-mix(in srgb,var(--tone) 12%,#fff);display:grid;grid-template-columns:130px 1fr;grid-template-rows:1fr auto;align-items:center;text-align:left;padding:18px 22px;cursor:pointer;box-shadow:0 14px 34px #4c38220d;transition:.2s}
+    .flavorChoice:hover{transform:translateY(-3px);box-shadow:0 20px 42px #4c382218}
+    .flavorChoice>span{grid-row:1/3;width:112px;height:112px;border-radius:50%;background:#fff;display:grid;place-items:center;overflow:hidden;box-shadow:inset 0 0 0 1px #0000000b}
+    .flavorChoice img{width:92%;height:92%;object-fit:contain}
+    .flavorChoice strong{font-size:20px;align-self:end}.flavorChoice small{font-size:10px;opacity:.55;align-self:start;margin-top:6px}
+    .flavorCore{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:118px;height:118px;border-radius:50%;background:#fffdf9;box-shadow:0 0 0 9px #fffdf9,0 0 0 10px #dfd2c1,0 18px 42px #4c382227;display:flex;flex-direction:column;justify-content:center;align-items:center;pointer-events:none;text-align:center}
+    .flavorCore i{width:54px;height:30px;border-radius:8px 8px 28px 28px;background:linear-gradient(#fff,#eee);position:relative;margin-bottom:6px}.flavorCore i:before{content:"";position:absolute;left:5px;right:5px;top:-5px;height:10px;border-radius:50%;background:#4b2b1f}.flavorCore b{font-size:9px;letter-spacing:.08em}.flavorCore small{font-size:7px;opacity:.55;margin-top:2px}
+    .flavorStage .${styles.descriptorTile}>span{background:#fffaf3;border-radius:30px;padding:14px}.flavorStage .${styles.descriptorTile} img{border-radius:18px}
+    @media(max-width:700px){.flavorCompass,.flavorCompass.two{width:100%;grid-template-columns:1fr;gap:10px;padding:0}.flavorChoice{min-height:116px;grid-template-columns:92px 1fr;padding:12px 14px;border-radius:20px}.flavorChoice>span{width:78px;height:78px}.flavorChoice strong{font-size:16px}.flavorCore{position:static;transform:none;grid-row:1;width:86px;height:86px;margin:0 auto 4px;order:-1}.flavorCompass{display:flex;flex-direction:column}.flavorCompass .flavorCore{order:-1}.flavorStage .${styles.descriptorTile}>span{padding:8px}}
+  `;
+  return <main className={styles.page}><style>{responsive}</style><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
 }
