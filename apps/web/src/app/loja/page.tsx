@@ -19,7 +19,7 @@ const moments=[
 ];
 
 export default function LojaPage(){
-  const heroProduct=products[1];
+  const heroProduct={name:"Caramelo",line:"CLÁSSICOS",notes:"Caramelo · Chocolate · Equilíbrio",price:"R$ 68",weight:"500 g",tone:"#D97830",image:productImages["Caramelo"],tag:"conforto"};
   return <main className={styles.page}>
     <div className={styles.commerceBar}><span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span><a href="#cafes">Comprar cafés →</a></div>
 
