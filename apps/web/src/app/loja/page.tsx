@@ -44,12 +44,16 @@ export default function LojaPage(){
       </div>
 
       <div className={`${styles.heroCopy} ${tight.heroCopy}`}>
-        <p className={styles.eyebrow}>CAFÉ PARA QUERER DE NOVO</p>
-        <h1>Tem café que você bebe.<br/><em>E tem café que você quer de novo.</em></h1>
-        <p className={styles.subcopy}>Escolha pelo que quer sentir. A Bispo já fez o trabalho difícil para você chegar mais rápido à xícara certa — e reconhecê-la de novo amanhã.</p>
-        <div className={tight.valueFlow} aria-label="Escolha simples, confiança e constância"><span><i>01</i><b>Escolha</b><small>sem complicação</small></span><em>→</em><span><i>02</i><b>Confie</b><small>na curadoria Bispo</small></span><em>→</em><span><i>03</i><b>Reencontre</b><small>o perfil que gostou</small></span></div>
-        <div className={styles.heroButtons}><a className={styles.primaryCta} href="#cafes">Comprar cafés <span>→</span></a><Link className={styles.secondaryCta} href="/loja/descobrir">Descobrir o meu <span>→</span></Link></div>
-        <div className={`${styles.trustRow} ${tight.trustRow}`}><span><b>Você acerta mais rápido</b><small>perfis claros para escolher bem</small></span><span><b>Gostou? Reencontre.</b><small>torra e constância para preservar a experiência</small></span><span><b>Confie no Bispo</b><small>curadoria de quem vive café há décadas</small></span></div>
+        <p className={styles.eyebrow}>ESCOLHA PELO DESEJO</p>
+        <h1>O que dá vontade<br/><em>agora?</em></h1>
+        <p className={`${styles.subcopy} ${tight.shortCopy}`}>Você escolhe a sensação. A Bispo cuida para a xícara entregar o que promete.</p>
+        <div className={tight.desireChoices} aria-label="Escolha pela sensação">
+          <a href="#cafes" style={{"--tone":"#D97830"} as React.CSSProperties}><i/><b>Doce</b><small>caramelo · chocolate</small></a>
+          <a href="#cafes" style={{"--tone":"#3B7651"} as React.CSSProperties}><i/><b>Fresco</b><small>fruta · leveza</small></a>
+          <Link href="/loja/descobrir" style={{"--tone":"#762D2A"} as React.CSSProperties}><i/><b>Descoberta</b><small>quero ser surpreendido</small></Link>
+        </div>
+        <div className={styles.heroButtons}><a className={styles.primaryCta} href="#cafes">Quero escolher <span>→</span></a><Link className={styles.secondaryCta} href="/loja/descobrir">Me ajuda a descobrir <span>→</span></Link></div>
+        <div className={tight.valueSignature}><span><b>Escolha fácil</b><small>perfis claros</small></span><span><b>Bispo prova</b><small>curadoria e constância</small></span><span><b>Você reencontra</b><small>o perfil que gostou</small></span></div>
       </div>
     </section>
 
