@@ -6,10 +6,10 @@ import DocumentaryHero from "./DocumentaryHero";
 import { productImages } from "./product-images";
 
 const lines=[
-  {name:"GOURMET",need:"Todo dia",copy:"O essencial bem escolhido.",tone:"#F4D54A",image:productImages["Essencial"]},
-  {name:"CLÁSSICOS",need:"Quero conforto",copy:"Conforto com personalidade.",tone:"#E78A38",image:productImages["Caramelo"]},
-  {name:"ÉPICOS",need:"Quero descobrir",copy:"Cafés para perceber algo novo.",tone:"#387D50",image:productImages["Singular"]},
-  {name:"RAROS",need:"Quero algo raro",copy:"Microlotes. Poucos. Únicos.",tone:"#B83A31",image:null}
+  {name:"GOURMET",need:"Todo dia",copy:"O essencial bem escolhido.",tone:"#F4D54A"},
+  {name:"CLÁSSICOS",need:"Quero conforto",copy:"Conforto com personalidade.",tone:"#E78A38"},
+  {name:"ÉPICOS",need:"Quero descobrir",copy:"Cafés para perceber algo novo.",tone:"#387D50"},
+  {name:"RAROS",need:"Quero algo raro",copy:"Microlotes. Poucos. Únicos.",tone:"#B83A31"}
 ];
 
 const products=[
@@ -53,12 +53,12 @@ export default function LojaPage(){return <main className={styles.page}>
 
   <section id="linhas" className={styles.linesSection}>
     <div className={styles.sectionIntro}><p>ESCOLHA PELO QUE VOCÊ PROCURA</p><h2>Qual Bispo combina com hoje?</h2><span>Primeiro a sensação. Depois, se quiser, você aprofunda.</span></div>
-    <div className={styles.lineGrid}>{lines.map(line=><a key={line.name} href="#cafes" className={styles.lineCard} style={{"--tone":line.tone} as React.CSSProperties}><div className={styles.bag}>{line.image?<img src={line.image} alt={`Café Bispo ${line.name}`}/>:<><span>BISPO</span><i/></>}</div><div><small className={styles.needLabel}>{line.need}</small><strong>{line.name}</strong><span>{line.copy}</span></div></a>)}</div>
+    <div className={styles.lineGrid}>{lines.map(line=><a key={line.name} href="#cafes" className={styles.lineCard} style={{"--tone":line.tone} as React.CSSProperties}><div className={styles.bag}><span>BISPO</span><i/></div><div><small className={styles.needLabel}>{line.need}</small><strong>{line.name}</strong><span>{line.copy}</span></div></a>)}</div>
   </section>
 
   <section id="cafes" className={styles.productsSection}>
-    <div className={styles.sectionIntro}><p>NOSSOS CAFÉS</p><h2>Comece por um perfil.</h2><span>Do café para todos os dias aos microlotes que aparecem poucas vezes.</span></div>
-    <div className={styles.productGrid}>{products.map(p=><article key={p.name} className={styles.productCard}><div className={styles.productVisual} style={{"--tone":p.tone} as React.CSSProperties}>{p.image?<img src={p.image} alt={`Embalagem Bispo ${p.name}`}/>:<div className={styles.productBag}><span>BISPO</span><i/></div>}</div><div className={styles.productMeta}><p>{p.line}</p><h3>{p.name}</h3><span>{p.notes}</span><div className={styles.buyRow}><div><strong>{p.price} <small>· {p.weight}</small></strong><em className={styles.cupPrice}>{p.cup}</em></div><button aria-label={`Adicionar ${p.name}`}>+ Adicionar</button></div></div></article>)}</div>
+    <div className={styles.sectionIntro}><p>NOSSOS CAFÉS</p><h2>Comece por um perfil.</h2><span>As fotos atuais são provisórias e já mostram os produtos reais da Bispo.</span></div>
+    <div className={styles.productGrid}>{products.map(p=><article key={p.name} className={styles.productCard}><div className={styles.productVisual} style={{"--tone":p.tone} as React.CSSProperties}>{p.image?<img src={p.image} alt={`Embalagem Bispo ${p.name}`} style={{width:"68%",height:"92%",objectFit:"contain",filter:"drop-shadow(0 16px 18px rgba(14,25,29,.10))"}}/>:<div className={styles.productBag}><span>BISPO</span><i/></div>}</div><div className={styles.productMeta}><p>{p.line}</p><h3>{p.name}</h3><span>{p.notes}</span><div className={styles.buyRow}><div><strong>{p.price} <small>· {p.weight}</small></strong><em className={styles.cupPrice}>{p.cup}</em></div><button aria-label={`Adicionar ${p.name}`}>+ Adicionar</button></div></div></article>)}</div>
     <p className={styles.priceNote}>*Referência de 20 g de café por preparo. Frete grátis para Sul e Sudeste a partir de R$ 270.</p>
   </section>
 
