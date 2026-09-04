@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import styles from "./sales.module.css";
+import tight from "./sales-tight.module.css";
 import { productImages } from "./product-images";
 
 const products=[
@@ -29,25 +30,25 @@ export default function LojaPage(){
       <div className={styles.actions}><button aria-label="Buscar">⌕</button><button aria-label="Minha conta">○</button><button aria-label="Sacola">□</button></div>
     </header>
 
-    <section id="top" className={styles.hero}>
-      <div className={styles.heroMedia}>
-        <video className={styles.heroVideo} autoPlay muted loop playsInline preload="metadata" poster="/WhatsApp Image 2026-09-02 at 17.53.29.jpeg">
+    <section id="top" className={`${styles.hero} ${tight.hero}`}>
+      <div className={`${styles.heroMedia} ${tight.heroMedia}`}>
+        <video className={`${styles.heroVideo} ${tight.heroVideo}`} autoPlay muted loop playsInline preload="metadata" poster="/WhatsApp Image 2026-09-02 at 17.53.29.jpeg">
           <source src="/WhatsApp Video 2026-09-02 at 17.34.18.mp4" type="video/mp4"/>
         </video>
         <div className={styles.heroShade}/>
-        <div className={styles.heroProductCard}>
+        <div className={`${styles.heroProductCard} ${tight.heroProductCard}`}>
           {heroProduct.image&&<img src={heroProduct.image} alt="Embalagem Bispo Caramelo"/>}
-          <div><small>{heroProduct.line}</small><b>{heroProduct.name}</b><span>{heroProduct.notes}</span><strong>{heroProduct.price} · {heroProduct.weight}</strong></div>
+          <div><small>{heroProduct.line}</small><b>{heroProduct.name}</b><span>{heroProduct.notes}</span><strong>{heroProduct.price} · {heroProduct.weight}</strong><a href="#cafes" className={tight.heroBuy}>Quero esse →</a></div>
         </div>
-        <div className={styles.heroSceneLabel}><span>CAFÉ CAINDO. AROMA SUBINDO.</span><b>É daqui que começa a vontade.</b></div>
+        <div className={`${styles.heroSceneLabel} ${tight.heroSceneLabel}`}><span>CAFÉ CAINDO. AROMA SUBINDO.</span><b>É daqui que começa a vontade.</b></div>
       </div>
 
-      <div className={styles.heroCopy}>
+      <div className={`${styles.heroCopy} ${tight.heroCopy}`}>
         <p className={styles.eyebrow}>CAFÉ PARA QUERER DE NOVO</p>
-        <h1>Tem café que você bebe.<br/><em>E tem café que você quer repetir amanhã.</em></h1>
-        <p className={styles.subcopy}>Escolha pelo que você quer sentir. A Bispo cuida do resto — da seleção à constância da sua xícara.</p>
+        <h1>Tem café que você bebe.<br/><em>E tem café que você quer de novo.</em></h1>
+        <p className={styles.subcopy}>Escolha pelo que quer sentir. A Bispo cuida para essa experiência continuar reconhecível na sua xícara.</p>
         <div className={styles.heroButtons}><a className={styles.primaryCta} href="#cafes">Comprar cafés <span>→</span></a><Link className={styles.secondaryCta} href="/loja/descobrir">Descobrir o meu <span>→</span></Link></div>
-        <div className={styles.trustRow}><span><b>Perfis claros</b><small>escolha sem complicação</small></span><span><b>Torra própria</b><small>frescor e consistência</small></span><span><b>Curadoria Bispo</b><small>mais de duas décadas no café</small></span></div>
+        <div className={`${styles.trustRow} ${tight.trustRow}`}><span><b>Perfis claros</b><small>escolha sem complicação</small></span><span><b>Torra própria</b><small>frescor e consistência</small></span><span><b>Curadoria Bispo</b><small>mais de duas décadas no café</small></span></div>
       </div>
     </section>
 
