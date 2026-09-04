@@ -44,16 +44,24 @@ export default function LojaPage(){
       </div>
 
       <div className={`${styles.heroCopy} ${tight.heroCopy}`}>
-        <p className={styles.eyebrow}>ESCOLHA PELO DESEJO</p>
-        <h1>O que dá vontade<br/><em>agora?</em></h1>
-        <p className={`${styles.subcopy} ${tight.shortCopy}`}>Você escolhe a sensação. A Bispo cuida para a xícara entregar o que promete.</p>
-        <div className={tight.desireChoices} aria-label="Escolha pela sensação">
-          <a href="#cafes" style={{"--tone":"#D97830"} as React.CSSProperties}><i/><b>Doce</b><small>caramelo · chocolate</small></a>
-          <a href="#cafes" style={{"--tone":"#3B7651"} as React.CSSProperties}><i/><b>Fresco</b><small>fruta · leveza</small></a>
-          <Link href="/loja/descobrir" style={{"--tone":"#762D2A"} as React.CSSProperties}><i/><b>Descoberta</b><small>quero ser surpreendido</small></Link>
+        <div className={tight.sensoryTopline}><span>CLÁSSICOS</span><i/> <b>CARAMELO</b></div>
+        <h1 className={tight.sensoryTitle}>Doce. Confortável.<br/><em>Equilibrado.</em></h1>
+        <p className={`${styles.subcopy} ${tight.shortCopy}`}>Se você gosta de cafés doces, cremosos e fáceis de amar, comece por aqui.</p>
+
+        <div className={tight.sensoryStage} aria-label="Experiência sensorial do café Caramelo">
+          <div className={tight.sensoryHalo} aria-hidden="true"><i/><i/><i/></div>
+          <div className={tight.sensoryCore}><small>NA XÍCARA</small><b>Caramelo</b><span>+ chocolate</span></div>
+          <div className={`${tight.sensoryNote} ${tight.noteOne}`}><i/><span><b>Doçura</b><small>envolvente</small></span></div>
+          <div className={`${tight.sensoryNote} ${tight.noteTwo}`}><i/><span><b>Corpo</b><small>presente</small></span></div>
+          <div className={`${tight.sensoryNote} ${tight.noteThree}`}><i/><span><b>Acidez</b><small>equilibrada</small></span></div>
         </div>
-        <div className={styles.heroButtons}><a className={styles.primaryCta} href="#cafes">Quero escolher <span>→</span></a><Link className={styles.secondaryCta} href="/loja/descobrir">Me ajuda a descobrir <span>→</span></Link></div>
-        <div className={tight.valueSignature}><span><b>Escolha fácil</b><small>perfis claros</small></span><span><b>Bispo prova</b><small>curadoria e constância</small></span><span><b>Você reencontra</b><small>o perfil que gostou</small></span></div>
+
+        <div className={tight.sensoryPromise}><span>100% Arábica</span><span>Torra média</span><span>Selecionado na origem</span></div>
+        <div className={tight.sensoryBuyRow}>
+          <div><small>500 g · em grãos</small><strong>R$ 68,00</strong></div>
+          <a className={tight.sensoryCta} href="#cafes">Quero este café <span>→</span></a>
+        </div>
+        <Link className={tight.sensoryAssist} href="/loja/descobrir">Não é o seu perfil? A Bispo te ajuda a descobrir →</Link>
       </div>
     </section>
 
