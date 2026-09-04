@@ -158,13 +158,14 @@ export default function Page() {
   };
 
   if (phase === "profile") {
-    const cupNotes = [...names(ad).slice(0, 1), ...names(fd).slice(0, 1), acidName];
+    const cupNotes = Array.from(new Set([...names(ad).slice(0, 1), ...names(fd).slice(0, 1), acidName]));
     return <Shell><section className={`${styles.resultScene} ${styles[dominant]}`}><div className={styles.quizReveal}>
       <small>ACHO QUE ENTENDI VOCÊ.</small><h1>Essa é a sua xícara hoje.</h1>
-      <div className={styles.cupWorld} style={{minHeight:"330px",margin:"-8px auto 0",maxWidth:"620px"}}><div className={styles.steam}/><div className={styles.cup}/><div className={styles.sensoryCloud}>{cupNotes.map((x) => <span key={x}>{x}</span>)}</div></div>
+      <button type="button" aria-label="Ver o café que combina com esta xícara" onClick={() => setPhase("product")} className="cupRevealButton">
+        <div className={styles.cupWorld} style={{minHeight:"330px",margin:"-8px auto 0",maxWidth:"620px"}}><div className={styles.steam}/><div className={styles.cup}/><div className={styles.sensoryCloud}>{cupNotes.map((x) => <span key={x}>{x}</span>)}</div></div>
+      </button>
       <div className={styles.profileWords}><b>{profile}</b></div>
-      <div className={styles.bispoVoice}><b>Bispo</b><span>Boa. Agora ela já tem cheiro, sabor e vida. Quer sentir essa xícara antes de eu te mostrar o café?</span></div>
-      <button className={styles.humanCta} onClick={() => setPhase("desire")}>Quero sentir</button>
+      <p className="tapHint">Toque na xícara para eu te mostrar o café.</p>
     </div></section></Shell>;
   }
 
@@ -237,6 +238,7 @@ function Shell({ children }: { children: ReactNode }) {
       .${styles.memoryTrail}{margin-top:9px}
       .${styles.bispoWhisper}{margin-top:9px;padding:10px 14px}
     }
+    .cupRevealButton{display:block;margin:0 auto;border:0;background:transparent;padding:0;cursor:pointer;border-radius:48px;transition:transform .2s ease,filter .2s ease}.cupRevealButton:hover{transform:scale(1.02);filter:drop-shadow(0 18px 34px rgba(45,28,18,.12))}.tapHint{margin:10px auto 0!important;font-size:12px!important;opacity:.6!important;line-height:1.3!important}.cupRevealButton:focus-visible{outline:2px solid #101a1d;outline-offset:8px}.cupRevealButton .${styles.cupWorld}{pointer-events:none}
     .flavorStage{background:linear-gradient(145deg,#fffaf2,#f5eee3)!important;border-color:#eadfce!important}
     .flavorCompass{width:min(760px,72vw);margin:auto;position:relative;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px}
     .flavorCompass.two{grid-template-columns:1fr 1fr;max-width:720px}
@@ -248,7 +250,7 @@ function Shell({ children }: { children: ReactNode }) {
     .flavorCore{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:118px;height:118px;border-radius:50%;background:#fffdf9;box-shadow:0 0 0 9px #fffdf9,0 0 0 10px #dfd2c1,0 18px 42px #4c382227;display:flex;flex-direction:column;justify-content:center;align-items:center;pointer-events:none;text-align:center}
     .flavorCore i{width:54px;height:30px;border-radius:8px 8px 28px 28px;background:linear-gradient(#fff,#eee);position:relative;margin-bottom:6px}.flavorCore i:before{content:"";position:absolute;left:5px;right:5px;top:-5px;height:10px;border-radius:50%;background:#4b2b1f}.flavorCore b{font-size:9px;letter-spacing:.08em}.flavorCore small{font-size:7px;opacity:.55;margin-top:2px}
     .flavorStage .${styles.descriptorTile}>span{background:#fffaf3;border-radius:30px;padding:14px}.flavorStage .${styles.descriptorTile} img{border-radius:18px}
-    @media(max-width:700px){.flavorCompass,.flavorCompass.two{width:100%;grid-template-columns:1fr;gap:10px;padding:0}.flavorChoice{min-height:116px;grid-template-columns:92px 1fr;padding:12px 14px;border-radius:20px}.flavorChoice>span{width:78px;height:78px}.flavorChoice strong{font-size:16px}.flavorCore{position:static;transform:none;grid-row:1;width:86px;height:86px;margin:0 auto 4px;order:-1}.flavorCompass{display:flex;flex-direction:column}.flavorCompass .flavorCore{order:-1}.flavorStage .${styles.descriptorTile}>span{padding:8px}}
+    @media(max-width:700px){.cupRevealButton{width:100%}.tapHint{text-align:center}.flavorCompass,.flavorCompass.two{width:100%;grid-template-columns:1fr;gap:10px;padding:0}.flavorChoice{min-height:116px;grid-template-columns:92px 1fr;padding:12px 14px;border-radius:20px}.flavorChoice>span{width:78px;height:78px}.flavorChoice strong{font-size:16px}.flavorCore{position:static;transform:none;grid-row:1;width:86px;height:86px;margin:0 auto 4px;order:-1}.flavorCompass{display:flex;flex-direction:column}.flavorCompass .flavorCore{order:-1}.flavorStage .${styles.descriptorTile}>span{padding:8px}}
   `;
   return <main className={styles.page}><style>{responsive}</style><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
 }
