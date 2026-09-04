@@ -46,9 +46,10 @@ export default function LojaPage(){
       <div className={`${styles.heroCopy} ${tight.heroCopy}`}>
         <p className={styles.eyebrow}>CAFÉ PARA QUERER DE NOVO</p>
         <h1>Tem café que você bebe.<br/><em>E tem café que você quer de novo.</em></h1>
-        <p className={styles.subcopy}>Escolha pelo que quer sentir. A Bispo cuida para essa experiência continuar reconhecível na sua xícara.</p>
+        <p className={styles.subcopy}>Escolha pelo que quer sentir. A Bispo já fez o trabalho difícil para você chegar mais rápido à xícara certa — e reconhecê-la de novo amanhã.</p>
+        <div className={tight.valueFlow} aria-label="Escolha simples, confiança e constância"><span><i>01</i><b>Escolha</b><small>sem complicação</small></span><em>→</em><span><i>02</i><b>Confie</b><small>na curadoria Bispo</small></span><em>→</em><span><i>03</i><b>Reencontre</b><small>o perfil que gostou</small></span></div>
         <div className={styles.heroButtons}><a className={styles.primaryCta} href="#cafes">Comprar cafés <span>→</span></a><Link className={styles.secondaryCta} href="/loja/descobrir">Descobrir o meu <span>→</span></Link></div>
-        <div className={`${styles.trustRow} ${tight.trustRow}`}><span><b>Perfis claros</b><small>escolha sem complicação</small></span><span><b>Torra própria</b><small>frescor e consistência</small></span><span><b>Curadoria Bispo</b><small>mais de duas décadas no café</small></span></div>
+        <div className={`${styles.trustRow} ${tight.trustRow}`}><span><b>Você acerta mais rápido</b><small>perfis claros para escolher bem</small></span><span><b>Gostou? Reencontre.</b><small>torra e constância para preservar a experiência</small></span><span><b>Confie no Bispo</b><small>curadoria de quem vive café há décadas</small></span></div>
       </div>
     </section>
 
