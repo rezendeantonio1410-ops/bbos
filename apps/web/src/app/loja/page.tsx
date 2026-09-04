@@ -3,23 +3,24 @@ import Link from "next/link";
 import styles from "./page.module.css";
 import playful from "./playful.module.css";
 import DocumentaryHero from "./DocumentaryHero";
+import { productImages } from "./product-images";
 
 const lines=[
-  {name:"GOURMET",need:"Todo dia",copy:"O essencial bem escolhido.",tone:"#F4D54A"},
-  {name:"CLÁSSICOS",need:"Quero conforto",copy:"Conforto com personalidade.",tone:"#E78A38"},
-  {name:"ÉPICOS",need:"Quero descobrir",copy:"Cafés para perceber algo novo.",tone:"#387D50"},
-  {name:"RAROS",need:"Quero algo raro",copy:"Microlotes. Poucos. Únicos.",tone:"#B83A31"}
+  {name:"GOURMET",need:"Todo dia",copy:"O essencial bem escolhido.",tone:"#F4D54A",image:productImages["Essencial"]},
+  {name:"CLÁSSICOS",need:"Quero conforto",copy:"Conforto com personalidade.",tone:"#E78A38",image:productImages["Caramelo"]},
+  {name:"ÉPICOS",need:"Quero descobrir",copy:"Cafés para perceber algo novo.",tone:"#387D50",image:productImages["Singular"]},
+  {name:"RAROS",need:"Quero algo raro",copy:"Microlotes. Poucos. Únicos.",tone:"#B83A31",image:null}
 ];
 
 const products=[
-  {name:"Essencial",line:"GOURMET",notes:"Macio · Doce · Fácil",price:"R$ 48",weight:"500 g",cup:"≈ R$ 1,92 por xícara*",tone:"#F4D54A"},
-  {name:"Intenso",line:"GOURMET",notes:"Presença · Corpo · Conforto",price:"R$ 48",weight:"500 g",cup:"≈ R$ 1,92 por xícara*",tone:"#E2B52E"},
-  {name:"Caramelo",line:"CLÁSSICOS",notes:"Caramelo · Chocolate · Equilíbrio",price:"R$ 68",weight:"500 g",cup:"≈ R$ 2,72 por xícara*",tone:"#E78A38"},
-  {name:"Doce de Leite",line:"CLÁSSICOS",notes:"Mascavo · Doce de leite · Alfajor",price:"R$ 74",weight:"500 g",cup:"≈ R$ 2,96 por xícara*",tone:"#D9A333"},
-  {name:"Tangerina",line:"CLÁSSICOS",notes:"Cítrico · Doce · Fresco",price:"R$ 74",weight:"500 g",cup:"≈ R$ 2,96 por xícara*",tone:"#E88A2E"},
-  {name:"Singular",line:"ÉPICOS",notes:"Frutado · Complexo · Evolutivo",price:"R$ 85",weight:"500 g",cup:"≈ R$ 3,40 por xícara*",tone:"#387D50"},
-  {name:"Sublime",line:"ÉPICOS",notes:"Expressivo · Elegante · Descoberta",price:"R$ 85",weight:"500 g",cup:"≈ R$ 3,40 por xícara*",tone:"#4B8960"},
-  {name:"Raros",line:"RAROS",notes:"Floral · Delicado · Memorável",price:"R$ 53",weight:"250 g",cup:"≈ R$ 4,24 por xícara*",tone:"#B83A31"}
+  {name:"Essencial",line:"GOURMET",notes:"Macio · Doce · Fácil",price:"R$ 48",weight:"500 g",cup:"≈ R$ 1,92 por xícara*",tone:"#F4D54A",image:productImages["Essencial"]},
+  {name:"Intenso",line:"GOURMET",notes:"Presença · Corpo · Conforto",price:"R$ 48",weight:"500 g",cup:"≈ R$ 1,92 por xícara*",tone:"#E2B52E",image:productImages["Intenso"]},
+  {name:"Caramelo",line:"CLÁSSICOS",notes:"Caramelo · Chocolate · Equilíbrio",price:"R$ 68",weight:"500 g",cup:"≈ R$ 2,72 por xícara*",tone:"#E78A38",image:productImages["Caramelo"]},
+  {name:"Doce de Leite",line:"CLÁSSICOS",notes:"Mascavo · Doce de leite · Alfajor",price:"R$ 74",weight:"500 g",cup:"≈ R$ 2,96 por xícara*",tone:"#D9A333",image:productImages["Doce de Leite"]},
+  {name:"Tangerina",line:"CLÁSSICOS",notes:"Cítrico · Doce · Fresco",price:"R$ 74",weight:"500 g",cup:"≈ R$ 2,96 por xícara*",tone:"#E88A2E",image:productImages["Tangerina"]},
+  {name:"Singular",line:"ÉPICOS",notes:"Frutado · Complexo · Evolutivo",price:"R$ 85",weight:"500 g",cup:"≈ R$ 3,40 por xícara*",tone:"#387D50",image:productImages["Singular"]},
+  {name:"Sublime",line:"ÉPICOS",notes:"Expressivo · Elegante · Descoberta",price:"R$ 85",weight:"500 g",cup:"≈ R$ 3,40 por xícara*",tone:"#4B8960",image:productImages["Sublime"]},
+  {name:"Raros",line:"RAROS",notes:"Floral · Delicado · Memorável",price:"R$ 53",weight:"250 g",cup:"≈ R$ 4,24 por xícara*",tone:"#B83A31",image:null}
 ];
 
 export default function LojaPage(){return <main className={styles.page}>
@@ -52,12 +53,12 @@ export default function LojaPage(){return <main className={styles.page}>
 
   <section id="linhas" className={styles.linesSection}>
     <div className={styles.sectionIntro}><p>ESCOLHA PELO QUE VOCÊ PROCURA</p><h2>Qual Bispo combina com hoje?</h2><span>Primeiro a sensação. Depois, se quiser, você aprofunda.</span></div>
-    <div className={styles.lineGrid}>{lines.map(line=><a key={line.name} href="#cafes" className={styles.lineCard} style={{"--tone":line.tone} as React.CSSProperties}><div className={styles.bag}><span>BISPO</span><i/></div><div><small className={styles.needLabel}>{line.need}</small><strong>{line.name}</strong><span>{line.copy}</span></div></a>)}</div>
+    <div className={styles.lineGrid}>{lines.map(line=><a key={line.name} href="#cafes" className={styles.lineCard} style={{"--tone":line.tone} as React.CSSProperties}><div className={styles.bag}>{line.image?<img src={line.image} alt={`Café Bispo ${line.name}`}/>:<><span>BISPO</span><i/></>}</div><div><small className={styles.needLabel}>{line.need}</small><strong>{line.name}</strong><span>{line.copy}</span></div></a>)}</div>
   </section>
 
   <section id="cafes" className={styles.productsSection}>
     <div className={styles.sectionIntro}><p>NOSSOS CAFÉS</p><h2>Comece por um perfil.</h2><span>Do café para todos os dias aos microlotes que aparecem poucas vezes.</span></div>
-    <div className={styles.productGrid}>{products.map(p=><article key={p.name} className={styles.productCard}><div className={styles.productVisual} style={{"--tone":p.tone} as React.CSSProperties}><div className={styles.productBag}><span>BISPO</span><i/></div></div><div className={styles.productMeta}><p>{p.line}</p><h3>{p.name}</h3><span>{p.notes}</span><div className={styles.buyRow}><div><strong>{p.price} <small>· {p.weight}</small></strong><em className={styles.cupPrice}>{p.cup}</em></div><button aria-label={`Adicionar ${p.name}`}>+ Adicionar</button></div></div></article>)}</div>
+    <div className={styles.productGrid}>{products.map(p=><article key={p.name} className={styles.productCard}><div className={styles.productVisual} style={{"--tone":p.tone} as React.CSSProperties}>{p.image?<img src={p.image} alt={`Embalagem Bispo ${p.name}`}/>:<div className={styles.productBag}><span>BISPO</span><i/></div>}</div><div className={styles.productMeta}><p>{p.line}</p><h3>{p.name}</h3><span>{p.notes}</span><div className={styles.buyRow}><div><strong>{p.price} <small>· {p.weight}</small></strong><em className={styles.cupPrice}>{p.cup}</em></div><button aria-label={`Adicionar ${p.name}`}>+ Adicionar</button></div></div></article>)}</div>
     <p className={styles.priceNote}>*Referência de 20 g de café por preparo. Frete grátis para Sul e Sudeste a partir de R$ 270.</p>
   </section>
 
@@ -68,7 +69,7 @@ export default function LojaPage(){return <main className={styles.page}>
 
   <section id="descobrir" className={styles.discovery}>
     <div className={styles.discoveryCopy}><p>NÃO SABE QUAL ESCOLHER?</p><h2>Descubra o seu paladar.</h2><span>Escolha por aromas, sabores e sensações. A experiência sensorial da Bispo traduzida para uma jornada simples, intuitiva e divertida.</span><Link href="/loja/descobrir">Descobrir meu café →</Link></div>
-    <div className={styles.discoveryPreview}><div className={styles.miniWheel}><i/><i/><i/><i/><b>BISPO</b></div><div className={styles.miniMandala}><i/><i/><i/><span>acidez</span></div></div>
+    <div className={styles.discoveryPreview}><div className={styles.miniWheel}><i/><i/><i/><i/><b>BISPO</b></div><div className={styles.miniMandala}><i/><i/><i/><span>frescor</span></div></div>
   </section>
 
   <section className={styles.valueStrip}><span>Escolhido na origem.</span><span>Provado antes da escolha.</span><span>Torra fresca.</span><span>Frete grátis Sul + Sudeste · R$ 270+</span></section>
