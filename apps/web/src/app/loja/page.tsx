@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import styles from "./page.module.css";
+import styles from "./sales.module.css";
 import { productImages } from "./product-images";
 
 const products=[
