@@ -20,7 +20,6 @@ const moments=[
 ];
 
 export default function LojaPage(){
-  const caramelo=products.find(p=>p.name==="Caramelo")!;
   return <main className={styles.page}>
     <div className={styles.commerceBar}><span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span><a href="#cafes">Comprar cafés →</a></div>
     <header className={styles.header}>
@@ -43,10 +42,10 @@ export default function LojaPage(){
         <h1 className={tight.sensoryTitle}>Doce. Confortável.<br/><em>Equilibrado.</em></h1>
         <p className={`${styles.subcopy} ${tight.shortCopy}`}>Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem outra xícara.</p>
 
-        <div className={tight.productDesireStage} data-photo-slot="hero-product" aria-label="Café Caramelo em destaque">
+        <div className={tight.productDesireStage} data-photo-slot="hero-product" aria-label="Espaço reservado para a fotografia real do café Caramelo">
           <div className={tight.productAura}/>
           <div className={tight.productShot}>
-            {caramelo.image ? <img src={caramelo.image} alt="Embalagem real do café Bispo Caramelo"/> : <div className={tight.productPlaceholder}><small>FOTO REAL</small><b>CARAMELO</b><span>entra aqui</span></div>}
+            <div className={tight.productPlaceholder}><small>PRODUTO REAL</small><b>CARAMELO</b><span>foto entra aqui</span></div>
           </div>
           <div className={`${tight.flavorWhisper} ${tight.flavorTop}`}><b>caramelo</b><span>doçura envolvente</span></div>
           <div className={`${tight.flavorWhisper} ${tight.flavorMiddle}`}><b>chocolate</b><span>corpo presente</span></div>
