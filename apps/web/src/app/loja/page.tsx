@@ -20,7 +20,7 @@ const moments=[
 ];
 
 export default function LojaPage(){
-  const caramelo=products[1];
+  const caramelo=products.find(p=>p.name==="Caramelo")!;
   return <main className={styles.page}>
     <div className={styles.commerceBar}><span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span><a href="#cafes">Comprar cafés →</a></div>
     <header className={styles.header}>
