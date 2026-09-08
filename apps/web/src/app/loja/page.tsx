@@ -20,7 +20,6 @@ const moments=[
 ];
 
 export default function LojaPage(){
-  const heroProduct={name:"Caramelo",line:"CLÁSSICOS",notes:"Caramelo · Chocolate · Equilíbrio",price:"R$ 68",weight:"500 g",tone:"#D97830",image:productImages["Caramelo"],tag:"conforto"};
   return <main className={styles.page}>
     <div className={styles.commerceBar}><span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span><a href="#cafes">Comprar cafés →</a></div>
 
@@ -36,10 +35,6 @@ export default function LojaPage(){
           <source src="/WhatsApp Video 2026-09-02 at 17.34.18.mp4" type="video/mp4"/>
         </video>
         <div className={styles.heroShade}/>
-        <div className={`${styles.heroProductCard} ${tight.heroProductCard}`}>
-          {heroProduct.image&&<img src={heroProduct.image} alt="Embalagem Bispo Caramelo"/>}
-          <div><small>{heroProduct.line}</small><b>{heroProduct.name}</b><span>{heroProduct.notes}</span><strong>{heroProduct.price} · {heroProduct.weight}</strong><a href="#cafes" className={tight.heroBuy}>Quero esse →</a></div>
-        </div>
         <div className={`${styles.heroSceneLabel} ${tight.heroSceneLabel}`}><span>CAFÉ CAINDO. AROMA SUBINDO.</span><b>É daqui que começa a vontade.</b></div>
       </div>
 
