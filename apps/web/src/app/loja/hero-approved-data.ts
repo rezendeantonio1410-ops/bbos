@@ -1,1 +1,1 @@
-export const HERO_APPROVED_DATA = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHBgkIBwgKCgkLDRYPDQwMDRsUFRAWIB0iIi
+export const HERO_APPROVED_DATA = "/brand/visuals/bispo-hero-approved-intact.jpg";
