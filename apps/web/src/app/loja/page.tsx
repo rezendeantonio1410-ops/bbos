@@ -5,6 +5,7 @@ import tight from "./sales-tight.module.css";
 import { productImages } from "./product-images";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 
+// Hero asset validated as a real JPEG blob in Git; keep this path stable.
 const products=[
   {name:"Essencial",line:"GOURMET",notes:"Macio · Doce · Fácil",price:"R$ 52",weight:"500 g",tone:"#E6C838",image:productImages["Essencial"],tag:"para todo dia"},
   {name:"Caramelo",line:"CLÁSSICOS",notes:"Caramelo · Chocolate · Equilíbrio",price:"R$ 68",weight:"500 g",tone:"#D97830",image:productImages["Caramelo"],tag:"conforto"},
