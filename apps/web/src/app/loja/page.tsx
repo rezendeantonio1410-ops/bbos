@@ -31,8 +31,8 @@ export default function LojaPage(){
 
     <section id="top" className={`${styles.hero} ${tight.hero}`}>
       <div className={`${styles.heroMedia} ${tight.heroMedia}`} data-photo-slot="hero-chemex-ceramic-nature">
-        <video className={`${styles.heroVideo} ${tight.heroVideo}`} autoPlay muted loop playsInline preload="metadata" poster="/WhatsApp Image 2026-09-02 at 17.53.29.jpeg"><source src="/WhatsApp Video 2026-09-02 at 17.34.18.mp4" type="video/mp4"/></video>
-        <div className={styles.heroShade}/><div className={`${styles.heroSceneLabel} ${tight.heroSceneLabel}`}><span>O PRIMEIRO SEGUNDO É DA XÍCARA</span><b>É daqui que começa a vontade.</b></div>
+        <img className={`${styles.heroVideo} ${tight.heroVideo}`} src="https://images.pexels.com/videos/11502960/caffeine-chemex-coffee-coffee-beans-11502960.jpeg?auto=compress&dpr=1&h=1000&w=1600" alt="Café sendo servido de uma Chemex em uma xícara, em ambiente natural"/>
+        <div className={styles.heroShade}/><div className={`${styles.heroSceneLabel} ${tight.heroSceneLabel}`}><b>É daqui que começa a vontade.</b></div>
       </div>
       <div className={`${styles.heroCopy} ${tight.heroCopy}`}>
         <div className={tight.sensoryTopline}><span>CLÁSSICOS</span><i/><b>CARAMELO</b></div>
