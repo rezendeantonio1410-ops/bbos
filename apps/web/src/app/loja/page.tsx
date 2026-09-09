@@ -4,6 +4,7 @@ import styles from "./sales.module.css";
 import tight from "./sales-tight.module.css";
 import { productImages } from "./product-images";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
+import { HERO_APPROVED_DATA } from "./hero-approved-data";
 
 const products=[
   {name:"Essencial",line:"GOURMET",notes:"Macio · Doce · Fácil",price:"R$ 52",weight:"500 g",tone:"#E6C838",image:productImages["Essencial"],tag:"para todo dia"},
@@ -32,9 +33,9 @@ export default function LojaPage(){
     <section id="top" className={`${styles.hero} ${tight.hero}`}>
       <div className={`${styles.heroMedia} ${tight.heroMedia}`} data-photo-slot="hero-chemex-ceramic-nature">
         <img
-          src="/brand/visuals/bispo-hero-approved.jpg"
+          src={HERO_APPROVED_DATA}
           alt="Chemex servindo café em xícara de cerâmica, com luz natural e natureza ao fundo"
-          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"left center",zIndex:0,display:"block"}}
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center center",zIndex:0,display:"block"}}
         />
         <div className={`${styles.heroSceneLabel} ${tight.heroSceneLabel}`}><b>É daqui que começa a vontade.</b></div>
       </div>
