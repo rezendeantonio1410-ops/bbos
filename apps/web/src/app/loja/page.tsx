@@ -31,7 +31,7 @@ export default function LojaPage(){
 
     <section id="top" className={`${styles.hero} ${tight.hero}`}>
       <div className={`${styles.heroMedia} ${tight.heroMedia}`} data-photo-slot="hero-chemex-ceramic-nature">
-        <img className={`${styles.heroVideo} ${tight.heroVideo}`} src="https://images.pexels.com/videos/11502960/caffeine-chemex-coffee-coffee-beans-11502960.jpeg?auto=compress&dpr=1&h=1000&w=1600" alt="Café sendo servido de uma Chemex em uma xícara, em ambiente natural"/>
+        <img className={`${styles.heroVideo} ${tight.heroVideo}`} src="/brand/visuals/bispo-hero-approved.jpg" alt="Chemex servindo café em xícara de cerâmica, com luz natural e natureza ao fundo"/>
         <div className={styles.heroShade}/><div className={`${styles.heroSceneLabel} ${tight.heroSceneLabel}`}><b>É daqui que começa a vontade.</b></div>
       </div>
       <div className={`${styles.heroCopy} ${tight.heroCopy}`}>
