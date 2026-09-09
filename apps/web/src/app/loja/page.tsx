@@ -3,6 +3,7 @@ import Link from "next/link";
 import styles from "./sales.module.css";
 import tight from "./sales-tight.module.css";
 import { productImages } from "./product-images";
+import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 
 const products=[
   {name:"Essencial",line:"GOURMET",notes:"Macio · Doce · Fácil",price:"R$ 52",weight:"500 g",tone:"#E6C838",image:productImages["Essencial"],tag:"para todo dia"},
@@ -20,6 +21,7 @@ const moments=[
 
 export default function LojaPage(){
   return <main className={styles.page}>
+    <ScrollToTopOnLoad/>
     <div className={styles.commerceBar}><span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span><a href="#cafes">Comprar cafés →</a></div>
     <header className={styles.header}>
       <a href="#top" className={styles.brand}><Image src="/brand/logo/bispo-logo-official-transparent.png" width={176} height={58} alt="Bispo Coffees" priority/></a>
