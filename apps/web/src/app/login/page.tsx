@@ -7,8 +7,8 @@ import { Button } from "@bbos/ui";
 import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
 import { Logo } from "@/components/logo";
 
-const API_WAKE_TIMEOUT_MS = 45000;
-const LOGIN_TIMEOUT_MS = 20000;
+const API_WAKE_TIMEOUT_MS = 75000;
+const LOGIN_TIMEOUT_MS = 30000;
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -39,8 +39,6 @@ export default function LoginPage() {
     setStatus("Conectando ao BBOS…");
 
     try {
-      // O Render pode suspender a API em staging. Acordamos o serviço antes de
-      // enviar a credencial para que um cold start não seja confundido com erro.
       const health = await fetchWithTimeout(
         "/api/health",
         { method: "GET", credentials: "include", cache: "no-store" },
@@ -78,7 +76,7 @@ export default function LoginPage() {
     } catch (cause) {
       setStatus("");
       if (cause instanceof DOMException && cause.name === "AbortError") {
-        setError("O BBOS está levando mais tempo que o normal para iniciar. Tente novamente em alguns segundos.");
+        setError("O BBOS está iniciando os serviços. Aguarde alguns segundos e tente novamente.");
       } else if (cause instanceof TypeError) {
         setError("Não foi possível conectar ao BBOS. Verifique a rede ou tente novamente.");
       } else {
