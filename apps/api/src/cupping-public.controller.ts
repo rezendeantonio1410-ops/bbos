@@ -61,6 +61,14 @@ export class CuppingPublicController {
     return this.db.cuppingPublicSession.update({ where: { id }, data: { status: CuppingPublicStatus.CLOSED, closedAt: new Date() } });
   }
 
+  @Post("sessions/:id/start")
+  async start(@Param("id") id: string, @Req() request: Request) {
+    const actor = await requireSession(request, this.auth);
+    const session = await this.db.cuppingPublicSession.findFirst({ where: { id, companyId: actor.companyId, status: CuppingPublicStatus.OPEN } });
+    if (!session) throw new BadRequestException("Sessão não encontrada ou já iniciada.");
+    return this.db.cuppingPublicSession.update({ where: { id }, data: { startedAt: new Date() } });
+  }
+
   @Get("sessions/:id/comparison")
   async comparison(@Param("id") id: string, @Req() request: Request) {
     const actor = await requireSession(request, this.auth);
@@ -87,7 +95,7 @@ export class CuppingPublicController {
   async publicSession(@Param("token") token: string) {
     const session = await this.db.cuppingPublicSession.findUnique({ where: { tokenHash: hashToken(token) }, include: { professionalSample: { select: { code: true, supplier: { select: { name: true } }, originUnit: { select: { name: true } }, harvest: true, species: true, cultivar: true, process: true } } } });
     if (!session || session.status !== CuppingPublicStatus.OPEN || (session.tokenExpiresAt && session.tokenExpiresAt < new Date())) throw new BadRequestException("Esta sessão não está disponível.");
-    return { id: session.id, code: session.code, kind: session.kind, status: session.status, sample: session.professionalSample };
+    return { id: session.id, code: session.code, kind: session.kind, status: session.status, startedAt: session.startedAt, sample: session.professionalSample };
   }
 
   @Public()

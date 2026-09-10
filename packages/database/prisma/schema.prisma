@@ -1212,6 +1212,7 @@ model CuppingPublicSession {
   createdByName       String
   createdAt           DateTime               @default(now())
   openedAt            DateTime?
+  startedAt           DateTime?
   closedAt            DateTime?
   participants        CuppingParticipant[]
 
