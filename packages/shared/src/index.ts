@@ -1,5 +1,7 @@
 export type Period = "day" | "week" | "month" | "year";
 export * from './green-coffee-receipt.js';
+export * from './cupping-mobile.js';
+export * from './cupping-scoring.js';
 export type PerformanceStatus = "on-track" | "attention" | "off-track";
 
 export type ExecutiveMetric = {
