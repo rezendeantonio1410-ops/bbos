@@ -48,8 +48,10 @@ async function fetchUpstream(
   method: string,
   body: ArrayBuffer | undefined,
 ) {
+  // Free Render services can take 50+ seconds to wake. Keep the proxy alive
+  // long enough so the first BBOS access does not fail during a cold start.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 70000);
   try {
     return await fetch(target, {
       method,
