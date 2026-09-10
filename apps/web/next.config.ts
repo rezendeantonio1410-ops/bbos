@@ -21,7 +21,11 @@ function apiBaseUrl() {
 const nextConfig: NextConfig = {
   transpilePackages: ['@bbos/ui', '@bbos/shared'],
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${apiBaseUrl()}/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${apiBaseUrl()}/:path*` },
+      { source: '/brand/products/essencial-real.jpg', destination: '/essencial.jpeg' },
+      { source: '/brand/products/singular-real.jpg', destination: '/singular.jpeg' },
+    ];
   },
 };
 
