@@ -3,201 +3,21 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import {
-  BarChart3,
-  Bell,
-  BrainCircuit,
-  Boxes,
-  ChevronDown,
-  CircleDollarSign,
-  Calculator,
-  Factory,
-  FlaskConical,
-  Gauge,
-  Globe2,
-  House,
-  LayoutDashboard,
-  Menu,
-  PackageCheck,
-  PackageOpen,
-  Search,
-  ShoppingBag,
-  Sparkles,
-  UsersRound,
-  X,
-} from "lucide-react";
+import { BarChart3,Bell,BrainCircuit,Boxes,ChevronDown,CircleDollarSign,Calculator,Factory,FlaskConical,Gauge,Globe2,House,LayoutDashboard,Menu,PackageCheck,PackageOpen,Search,ShoppingBag,Sparkles,UsersRound,X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
 import { UserAvatar } from "./user-avatar";
-import { fetchSessionIdentity, getApiRoot, type SessionIdentity, SessionError } from "@/lib/auth-session";
+import { fetchSessionIdentity,getApiRoot,type SessionIdentity,SessionError } from "@/lib/auth-session";
 import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
-import { dismissRouteHelp, recordRouteVisit, routeHelpDismissed } from "@/lib/intelligence-client";
+import { dismissRouteHelp,recordRouteVisit,routeHelpDismissed } from "@/lib/intelligence-client";
 
-type NavItem = { href: string; label: string; icon: typeof House };
-type NavGroup = { label: string; items: NavItem[] };
-
-const navGroups: NavGroup[] = [
-  {
-    label: "Visão geral",
-    items: [
-      { href: "/home", label: "Central de comando", icon: House },
-      { href: "/dashboard", label: "Executivo", icon: LayoutDashboard },
-      { href: "/dashboard-industrial", label: "Industrial", icon: Gauge },
-    ],
-  },
-  {
-    label: "Comercial",
-    items: [
-      { href: "/clientes", label: "Clientes", icon: UsersRound },
-      { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
-      { href: "/vendas", label: "Vendas", icon: BarChart3 },
-      { href: "/commerce", label: "Commerce", icon: Globe2 },
-    ],
-  },
-  {
-    label: "Operação",
-    items: [
-      { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
-      { href: "/producao", label: "Produção", icon: Factory },
-      { href: "/blends", label: "Blends", icon: Boxes },
-      { href: "/produtos", label: "Produtos", icon: PackageCheck },
-      { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
-    ],
-  },
-  {
-    label: "Gestão",
-    items: [
-      { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
-      { href: "/custos", label: "Custos", icon: Calculator },
-      { href: "/usuarios", label: "Usuários e acessos", icon: UsersRound },
-      { href: "/bi", label: "Inteligência", icon: BrainCircuit },
-    ],
-  },
-];
-
-const pageLabels = Object.fromEntries(navGroups.flatMap((group) => group.items.map((item) => [item.href, item.label])));
-
-export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [sessionUser, setSessionUser] = useState<(SessionIdentity & { initials: string; corporateTitle: string }) | null>(null);
-  const [sessionState, setSessionState] = useState<"checking" | "authenticated" | "unauthenticated" | "unavailable">("checking");
-  const [sessionAttempt, setSessionAttempt] = useState(0);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [frictionHelp, setFrictionHelp] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSessionState("checking");
-    void fetchSessionIdentity(getApiRoot()).then((identity) => {
-      if (cancelled) return;
-      setSessionUser({
-        ...identity,
-        initials: identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-        corporateTitle: identity.role === "ADMIN" ? "Sócio Administrador" : identity.role === "EXECUTIVE" ? "Diretor" : identity.role === "SALES" ? "Comercial" : identity.role,
-      });
-      setSessionState("authenticated");
-    }).catch((cause) => {
-      if (cancelled) return;
-      setSessionUser(null);
-      setSessionState(cause instanceof SessionError && cause.kind === "unavailable" ? "unavailable" : "unauthenticated");
-    });
-    return () => { cancelled = true; };
-  }, [sessionAttempt]);
-
-  useEffect(() => {
-    const onAvatarUpdated = (event: Event) => {
-      const detail = (event as CustomEvent<SessionIdentity>).detail;
-      if (detail?.id) setSessionUser((current) => current ? { ...current, ...detail } : current);
-    };
-    window.addEventListener("bbos:avatar-updated", onAvatarUpdated);
-    return () => window.removeEventListener("bbos:avatar-updated", onAvatarUpdated);
-  }, []);
-
-  useEffect(() => {
-    if (sessionState !== "unauthenticated" || pathname === "/login") return;
-    const returnTo = `${pathname}${window.location.search}`;
-    router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-  }, [pathname, router, sessionState]);
-
-  useEffect(() => {
-    if (sessionState !== "authenticated" || pathname === "/home" || pathname === "/login") return;
-    if (routeHelpDismissed(pathname)) return;
-    const signal = recordRouteVisit(pathname);
-    setFrictionHelp(signal.repeated ? signal.message ?? null : null);
-  }, [pathname, sessionState]);
-
-  const currentLabel = useMemo(() => pageLabels[pathname] ?? "BBOS", [pathname]);
-
-  if (sessionState !== "authenticated") {
-    return (
-      <div className="grid min-h-screen place-items-center bg-[var(--surface-page)] p-6">
-        <div className="text-center">
-          <p className="text-sm text-stone-600">
-            {sessionState === "checking" ? "Conectando ao BBOS…" : sessionState === "unavailable" ? "Não conseguimos conectar ao BBOS." : "Redirecionando para o login…"}
-          </p>
-          {sessionState === "checking" && <p className="mt-2 text-xs text-stone-500">Retomando a conexão com segurança…</p>}
-          {sessionState === "unavailable" && <><p className="mt-2 text-xs text-stone-600">O sistema está retomando a conexão. Isso pode levar alguns segundos.</p><button type="button" onClick={() => setSessionAttempt((attempt) => attempt + 1)} className="mt-4 rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-900">Tentar novamente</button></>}
-        </div>
-      </div>
-    );
-  }
-
-  const user = sessionUser;
-  const logout = async () => { await fetch(`${getApiRoot()}/auth/logout`, { method: "POST", credentials: "include" }); window.location.href = "/login"; };
-
-  const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-5 py-5">
-        <Logo />
-        {mobile && <button aria-label="Fechar menu" onClick={() => setMobileOpen(false)} className="rounded-lg p-2 text-stone-500 hover:bg-stone-100"><X size={18}/></button>}
-      </div>
-      <div className="mx-4 mb-4 flex items-center gap-2 rounded-2xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-warm)] px-3 py-3">
-        <span className="grid size-9 place-items-center rounded-xl bg-white text-[var(--bbos-coffee-green)] shadow-sm"><Factory size={16}/></span>
-        <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Bispo Coffees</p><p className="text-[10px] text-[var(--bbos-text-muted)]">Operação integrada</p></div>
-        <ChevronDown size={14} className="text-stone-400" />
-      </div>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
-        {navGroups.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-muted)]">{group.label}</p>
-            <div className="space-y-0.5">
-              {group.items.map(({ href, label, icon: Icon }) => {
-                const active = pathname === href || (href !== "/home" && pathname.startsWith(`${href}/`));
-                return (
-                  <Link key={href} href={href} onClick={() => mobile && setMobileOpen(false)} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${active ? "bg-[var(--bbos-nav-active)] text-[var(--bbos-text-primary)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]" : "text-[var(--bbos-text-secondary)] hover:bg-[var(--bbos-surface-subtle)] hover:text-[var(--bbos-text-primary)]"}`}>
-                    <Icon size={17} strokeWidth={active ? 2.1 : 1.7}/>
-                    <span>{label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-      <Link href="/bi" className="m-4 rounded-2xl border border-[#DDD6FE] bg-[var(--bbos-intelligence-soft)] p-4 transition hover:-translate-y-0.5 hover:shadow-sm">
-        <div className="flex items-center gap-2 text-[var(--bbos-intelligence)]"><Sparkles size={15}/><p className="text-xs font-bold">BBOS Intelligence</p></div>
-        <p className="mt-2 text-[11px] leading-4 text-[var(--bbos-text-secondary)]">Contexto, fricção e próxima melhor ação.</p>
-        <span className="mt-3 inline-flex items-center text-[10px] font-bold text-[var(--bbos-intelligence)]">Abrir inteligência</span>
-      </Link>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-[var(--surface-page)] text-[var(--bbos-text-primary)]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-[var(--bbos-border)] bg-white lg:block"><Sidebar /></aside>
-      {mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="Fechar menu" className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} /><aside className="relative h-full w-72 bg-white shadow-xl"><Sidebar mobile /></aside></div>}
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-[var(--bbos-border)] bg-white/95 backdrop-blur">
-          <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-center gap-3"><button aria-label="Abrir menu" className="rounded-xl border p-2 lg:hidden" onClick={() => setMobileOpen(true)}><Menu size={18}/></button><div className="min-w-0"><p className="truncate text-sm font-semibold">{currentLabel}</p><p className="truncate text-[10px] text-[var(--bbos-text-muted)]">Bispo Business Operating System</p></div></div>
-            <div className="flex items-center gap-2"><button className="rounded-xl p-2 text-stone-500 hover:bg-stone-100" aria-label="Buscar"><Search size={18}/></button><button className="rounded-xl p-2 text-stone-500 hover:bg-stone-100" aria-label="Notificações"><Bell size={18}/></button>{user && <div className="ml-1 flex items-center gap-2"><UserAvatar name={user.name} initials={user.initials} avatarUrl={user.avatarUrl}/><div className="hidden sm:block"><p className="text-xs font-bold">{user.name}</p><p className="text-[10px] text-[var(--bbos-text-muted)]">{user.corporateTitle}</p></div><button onClick={logout} className="ml-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-stone-500 hover:bg-stone-100">Sair</button></div>}</div>
-          </div>
-          {frictionHelp && <div className="border-t border-violet-100 bg-violet-50 px-4 py-2 text-xs text-violet-900 sm:px-6 lg:px-8"><div className="mx-auto flex max-w-[1580px] items-center justify-between gap-3"><span>{frictionHelp}</span><div className="flex items-center gap-2"><button type="button" onClick={() => window.dispatchEvent(new Event("bbos:open-assistant"))} className="font-bold">Me ajude</button><button type="button" onClick={() => { dismissRouteHelp(pathname); setFrictionHelp(null); }} aria-label="Dispensar ajuda"><X size={14}/></button></div></div></div>}
-        </header>
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
-        <footer className="border-t border-[var(--bbos-border)] px-6 py-4 text-center text-[10px] text-[var(--bbos-text-muted)]">{SYSTEM_CREATOR_CREDIT_PT}</footer>
-      </div>
-    </div>
-  );
-}
+type NavItem={href:string;label:string;icon:typeof House};type NavGroup={label:string;items:NavItem[]};
+const navGroups:NavGroup[]=[{label:"Visão geral",items:[{href:"/home",label:"Central de comando",icon:House},{href:"/dashboard",label:"Executivo",icon:LayoutDashboard},{href:"/dashboard-industrial",label:"Industrial",icon:Gauge}]},{label:"Comercial",items:[{href:"/clientes",label:"Clientes",icon:UsersRound},{href:"/pedidos",label:"Pedidos",icon:ShoppingBag},{href:"/vendas",label:"Vendas",icon:BarChart3},{href:"/commerce",label:"Commerce",icon:Globe2}]},{label:"Operação",items:[{href:"/cafe-verde",label:"Café Verde",icon:PackageOpen},{href:"/producao",label:"Produção",icon:Factory},{href:"/blends",label:"Blends",icon:Boxes},{href:"/produtos",label:"Produtos",icon:PackageCheck},{href:"/laboratorio",label:"Laboratório",icon:FlaskConical}]},{label:"Gestão",items:[{href:"/financeiro",label:"Financeiro",icon:CircleDollarSign},{href:"/custos",label:"Custos",icon:Calculator},{href:"/usuarios",label:"Usuários e acessos",icon:UsersRound},{href:"/bi",label:"Inteligência",icon:BrainCircuit}]}];
+const pageLabels=Object.fromEntries(navGroups.flatMap(g=>g.items.map(i=>[i.href,i.label])));
+export function AppShell({children}:{children:ReactNode}){const pathname=usePathname();const router=useRouter();const[sessionUser,setSessionUser]=useState<(SessionIdentity&{initials:string;corporateTitle:string})|null>(null);const[sessionState,setSessionState]=useState<"checking"|"authenticated"|"unauthenticated"|"unavailable">("checking");const[sessionAttempt,setSessionAttempt]=useState(0);const[mobileOpen,setMobileOpen]=useState(false);const[frictionHelp,setFrictionHelp]=useState<string|null>(null);
+useEffect(()=>{let cancelled=false;setSessionState("checking");void fetchSessionIdentity(getApiRoot()).then(identity=>{if(cancelled)return;setSessionUser({...identity,initials:identity.name.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),corporateTitle:identity.role==="ADMIN"?"Sócio Administrador":identity.role==="EXECUTIVE"?"Diretor":identity.role==="SALES"?"Comercial":identity.role});setSessionState("authenticated")}).catch(cause=>{if(cancelled)return;setSessionUser(null);setSessionState(cause instanceof SessionError&&cause.kind==="unavailable"?"unavailable":"unauthenticated")});return()=>{cancelled=true}},[sessionAttempt]);
+useEffect(()=>{const onAvatarUpdated=(event:Event)=>{const detail=(event as CustomEvent<SessionIdentity>).detail;if(detail?.id)setSessionUser(current=>current?{...current,...detail}:current)};window.addEventListener("bbos:avatar-updated",onAvatarUpdated);return()=>window.removeEventListener("bbos:avatar-updated",onAvatarUpdated)},[]);
+useEffect(()=>{if(sessionState!=="unauthenticated"||pathname==="/login")return;const returnTo=`${pathname}${window.location.search}`;router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`)},[pathname,router,sessionState]);useEffect(()=>{if(sessionState!=="authenticated"||pathname==="/home"||pathname==="/login"||routeHelpDismissed(pathname))return;const signal=recordRouteVisit(pathname);setFrictionHelp(signal.repeated?signal.message??null:null)},[pathname,sessionState]);const currentLabel=useMemo(()=>pageLabels[pathname]??"BBOS",[pathname]);
+if(sessionState!=="authenticated")return <div className="grid min-h-screen place-items-center bg-[var(--surface-page)] p-6"><div className="text-center"><p className="text-sm text-stone-600">{sessionState==="checking"?"Conectando ao BBOS…":sessionState==="unavailable"?"Não conseguimos conectar ao BBOS.":"Redirecionando para o login…"}</p>{sessionState==="checking"&&<p className="mt-2 text-xs text-stone-500">Retomando a conexão com segurança…</p>}{sessionState==="unavailable"&&<><p className="mt-2 text-xs text-stone-600">O sistema está retomando a conexão. Isso pode levar alguns segundos.</p><button type="button" onClick={()=>setSessionAttempt(a=>a+1)} className="mt-4 rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white">Tentar novamente</button></>}</div></div>;
+const user=sessionUser;const logout=async()=>{await fetch(`${getApiRoot()}/auth/logout`,{method:"POST",credentials:"include"});window.location.href="/login"};const Sidebar=({mobile=false}:{mobile?:boolean})=><div className="flex h-full flex-col"><div className="flex items-center justify-between px-5 py-5"><Logo/>{mobile&&<button aria-label="Fechar menu" onClick={()=>setMobileOpen(false)} className="rounded-lg p-2"><X size={18}/></button>}</div><div className="mx-4 mb-4 flex items-center gap-2 rounded-2xl border bg-[var(--bbos-surface-warm)] px-3 py-3"><span className="grid size-9 place-items-center rounded-xl bg-white"><Factory size={16}/></span><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Bispo Coffees</p><p className="text-[10px] text-[var(--bbos-text-muted)]">Operação integrada</p></div><ChevronDown size={14}/></div><nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">{navGroups.map(group=><div key={group.label}><p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-muted)]">{group.label}</p><div className="space-y-0.5">{group.items.map(({href,label,icon:Icon})=>{const active=pathname===href||(href!=="/home"&&pathname.startsWith(`${href}/`));return <Link key={href} href={href} onClick={()=>mobile&&setMobileOpen(false)} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${active?"bg-[var(--bbos-nav-active)] text-[var(--bbos-text-primary)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]":"text-[var(--bbos-text-secondary)] hover:bg-[var(--bbos-surface-subtle)]"}`}><Icon size={17}/><span>{label}</span></Link>})}</div></div>)}</nav><Link href="/bi" className="m-4 rounded-2xl border border-[#DDD6FE] bg-[var(--bbos-intelligence-soft)] p-4"><div className="flex items-center gap-2 text-[var(--bbos-intelligence)]"><Sparkles size={15}/><p className="text-xs font-bold">BBOS Intelligence</p></div><p className="mt-2 text-[11px] leading-4 text-[var(--bbos-text-secondary)]">Contexto, fricção e próxima melhor ação.</p></Link></div>;
+return <div className="min-h-screen bg-[var(--surface-page)] text-[var(--bbos-text-primary)]"><aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-white lg:block"><Sidebar/></aside>{mobileOpen&&<div className="fixed inset-0 z-50 lg:hidden"><button aria-label="Fechar menu" className="absolute inset-0 bg-black/30" onClick={()=>setMobileOpen(false)}/><aside className="relative h-full w-72 bg-white shadow-xl"><Sidebar mobile/></aside></div>}<div className="lg:pl-64"><header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur"><div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8"><div className="flex min-w-0 items-center gap-3"><button aria-label="Abrir menu" className="rounded-xl border p-2 lg:hidden" onClick={()=>setMobileOpen(true)}><Menu size={18}/></button><div><p className="text-sm font-semibold">{currentLabel}</p><p className="text-[10px] text-[var(--bbos-text-muted)]">Bispo Business Operating System</p></div></div><div className="flex items-center gap-2"><button className="rounded-xl p-2" aria-label="Buscar"><Search size={18}/></button><button className="rounded-xl p-2" aria-label="Notificações"><Bell size={18}/></button>{user&&<div className="ml-1 flex items-center gap-2"><UserAvatar name={user.name} avatarUrl={user.avatarUrl}/><div className="hidden sm:block"><p className="text-xs font-bold">{user.name}</p><p className="text-[10px] text-[var(--bbos-text-muted)]">{user.corporateTitle}</p></div><button onClick={logout} className="ml-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-stone-500">Sair</button></div>}</div></div>{frictionHelp&&<div className="border-t border-violet-100 bg-violet-50 px-4 py-2 text-xs text-violet-900"><div className="mx-auto flex max-w-[1580px] items-center justify-between gap-3"><span>{frictionHelp}</span><div className="flex gap-2"><button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:open-assistant"))} className="font-bold">Me ajude</button><button type="button" onClick={()=>{dismissRouteHelp(pathname);setFrictionHelp(null)}}><X size={14}/></button></div></div></div>}</header><main className="p-4 sm:p-6 lg:p-8">{children}</main><footer className="border-t px-6 py-4 text-center text-[10px] text-[var(--bbos-text-muted)]">{SYSTEM_CREATOR_CREDIT_PT}</footer></div></div>}
