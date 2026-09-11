@@ -9,9 +9,10 @@ import '@fontsource/montserrat/600.css';
 import './globals.css';
 import './human-experience.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
+import { BbosAssistant } from '@/components/bbos-assistant';
 
 export const metadata: Metadata = { title: 'BBOS — Bispo Coffees', description: SYSTEM_NAME, creator: SYSTEM_CREATOR, authors: [{ name: SYSTEM_CREATOR }] };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body className="font-[var(--font-inter)] antialiased">{children}</body></html>;
+  return <html lang="pt-BR"><body className="font-[var(--font-inter)] antialiased">{children}<BbosAssistant /></body></html>;
 }
