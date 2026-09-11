@@ -7,6 +7,7 @@ import '@fontsource/montserrat/300.css';
 import '@fontsource/montserrat/400.css';
 import '@fontsource/montserrat/600.css';
 import './globals.css';
+import './human-experience.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
 
 export const metadata: Metadata = { title: 'BBOS — Bispo Coffees', description: SYSTEM_NAME, creator: SYSTEM_CREATOR, authors: [{ name: SYSTEM_CREATOR }] };
