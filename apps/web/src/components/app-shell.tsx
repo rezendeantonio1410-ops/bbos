@@ -69,6 +69,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
       { href: "/custos", label: "Custos", icon: Calculator },
+      { href: "/usuarios", label: "Usuários e acessos", icon: UsersRound },
       { href: "/bi", label: "Inteligência", icon: BrainCircuit },
     ],
   },
@@ -183,41 +184,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--surface-page)] lg:grid lg:grid-cols-[250px_1fr]">
-      <aside className="hidden border-r border-[var(--surface-border)] bg-[var(--surface-sidebar)] lg:sticky lg:top-0 lg:block lg:h-screen"><Sidebar /></aside>
-
-      {mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="Fechar menu" className="absolute inset-0 bg-black/25 backdrop-blur-[1px]" onClick={() => setMobileOpen(false)}/><aside className="relative h-full w-[86%] max-w-[310px] bg-white shadow-2xl"><Sidebar mobile /></aside></div>}
-
-      <div className="min-w-0">
-        <header className="sticky top-0 z-30 flex h-[68px] items-center justify-between border-b border-[var(--surface-border)] bg-white/95 px-4 backdrop-blur md:px-7">
-          <div className="flex min-w-0 items-center gap-3">
-            <button aria-label="Abrir menu" onClick={() => setMobileOpen(true)} className="rounded-lg p-2 hover:bg-stone-100 lg:hidden"><Menu size={20}/></button>
-            <div className="hidden lg:block"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[var(--bbos-text-muted)]">Você está em</p><p className="truncate text-sm font-bold text-[var(--bbos-text-primary)]">{currentLabel}</p></div>
+    <div className="min-h-screen bg-[var(--surface-page)] text-[var(--bbos-text-primary)]">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-[var(--bbos-border)] bg-white lg:block"><Sidebar /></aside>
+      {mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="Fechar menu" className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} /><aside className="relative h-full w-72 bg-white shadow-xl"><Sidebar mobile /></aside></div>}
+      <div className="lg:pl-64">
+        <header className="sticky top-0 z-20 border-b border-[var(--bbos-border)] bg-white/95 backdrop-blur">
+          <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-3"><button aria-label="Abrir menu" className="rounded-xl border p-2 lg:hidden" onClick={() => setMobileOpen(true)}><Menu size={18}/></button><div className="min-w-0"><p className="truncate text-sm font-semibold">{currentLabel}</p><p className="truncate text-[10px] text-[var(--bbos-text-muted)]">Bispo Business Operating System</p></div></div>
+            <div className="flex items-center gap-2"><button className="rounded-xl p-2 text-stone-500 hover:bg-stone-100" aria-label="Buscar"><Search size={18}/></button><button className="rounded-xl p-2 text-stone-500 hover:bg-stone-100" aria-label="Notificações"><Bell size={18}/></button>{user && <div className="ml-1 flex items-center gap-2"><UserAvatar name={user.name} initials={user.initials} avatarUrl={user.avatarUrl}/><div className="hidden sm:block"><p className="text-xs font-bold">{user.name}</p><p className="text-[10px] text-[var(--bbos-text-muted)]">{user.corporateTitle}</p></div><button onClick={logout} className="ml-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-stone-500 hover:bg-stone-100">Sair</button></div>}</div>
           </div>
-          <div className="hidden w-full max-w-[390px] items-center gap-2 rounded-xl border border-transparent bg-[var(--bbos-surface-subtle)] px-3 py-2.5 text-stone-500 transition focus-within:border-[var(--bbos-border)] lg:flex">
-            <Search size={16}/><input aria-label="Buscar" className="w-full bg-transparent text-sm outline-none" placeholder="Buscar cliente, pedido, lote, produto…" />
-          </div>
-          <div className="flex items-center gap-2.5">
-            <Link href="/bi" className="hidden items-center gap-2 rounded-xl bg-[var(--bbos-intelligence-soft)] px-3 py-2 text-xs font-bold text-[var(--bbos-intelligence)] md:flex"><Sparkles size={14}/> Perguntar à IA</Link>
-            <button aria-label="Notificações" className="relative rounded-xl border border-[var(--bbos-border)] bg-white p-2.5 text-stone-600"><Bell size={17}/><span className="absolute right-2 top-2 size-1.5 rounded-full bg-[var(--bbos-state-attention)]" /></button>
-            <div className="hidden h-8 w-px bg-stone-200 sm:block" />
-            <div className="hidden items-center gap-2.5 sm:flex"><UserAvatar name={user?.name ?? "Usuário"} avatarUrl={user?.avatarUrl} size="medium"/><div><Link href="/perfil" className="text-xs font-semibold hover:text-forest-800">{user?.name ?? "Usuário"}</Link><p className="text-[10px] text-stone-500">{user?.corporateTitle ?? ""}</p></div></div>
-            {user && <button type="button" onClick={() => void logout()} className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-100 hover:text-stone-900">Sair</button>}
-          </div>
+          {frictionHelp && <div className="border-t border-violet-100 bg-violet-50 px-4 py-2 text-xs text-violet-900 sm:px-6 lg:px-8"><div className="mx-auto flex max-w-[1580px] items-center justify-between gap-3"><span>{frictionHelp}</span><div className="flex items-center gap-2"><button type="button" onClick={() => window.dispatchEvent(new Event("bbos:open-assistant"))} className="font-bold">Me ajude</button><button type="button" onClick={() => { dismissRouteHelp(pathname); setFrictionHelp(null); }} aria-label="Dispensar ajuda"><X size={14}/></button></div></div></div>}
         </header>
-
-        {frictionHelp && (
-          <div className="mx-4 mt-4 md:mx-7">
-            <div className="bbos-friction-banner">
-              <span><Sparkles size={16}/></span>
-              <div className="min-w-0 flex-1"><strong>Posso facilitar este caminho.</strong><p>{frictionHelp}</p></div>
-              <Link href="/bi" className="bbos-friction-action">Me ajude</Link>
-              <button aria-label="Dispensar sugestão" onClick={() => { dismissRouteHelp(pathname); setFrictionHelp(null); }} className="rounded-lg p-1.5 text-[var(--bbos-text-muted)] hover:bg-white"><X size={14}/></button>
-            </div>
-          </div>
-        )}
-
-        <main className="p-4 md:p-7 xl:p-9">{children}<footer className="mx-auto mt-10 max-w-7xl border-t border-[var(--surface-border)] pt-4 text-center text-[10px] text-stone-400"><Link href="/sobre" className="transition hover:text-stone-600">{SYSTEM_CREATOR_CREDIT_PT}</Link></footer></main>
+        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        <footer className="border-t border-[var(--bbos-border)] px-6 py-4 text-center text-[10px] text-[var(--bbos-text-muted)]">{SYSTEM_CREATOR_CREDIT_PT}</footer>
       </div>
     </div>
   );
