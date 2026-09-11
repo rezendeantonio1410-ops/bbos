@@ -1,0 +1,29 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { CheckCircle2, KeyRound, ShieldCheck, UserPlus, Users } from "lucide-react";
+
+type UserRow={id:string;name:string;email:string;role:string;active:boolean;avatarUrl?:string|null};
+
+export default function UsersPage(){
+ const[users,setUsers]=useState<UserRow[]>([]);const[loading,setLoading]=useState(true);const[error,setError]=useState("");const[saving,setSaving]=useState(false);const[done,setDone]=useState("");
+ const[name,setName]=useState("Suzi Ninov");const[email,setEmail]=useState("sninov@bispocoffees.com");const[password,setPassword]=useState("123456");const[role,setRole]=useState("ADMIN");
+ const load=async()=>{setLoading(true);setError("");try{const r=await fetch("/api/admin/users",{credentials:"include",cache:"no-store"});const b=await r.json().catch(()=>[]);if(!r.ok)throw new Error(b?.message??"Não foi possível carregar os usuários.");setUsers(b)}catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar os usuários.")}finally{setLoading(false)}};
+ useEffect(()=>{void load()},[]);
+ const create=async()=>{setSaving(true);setError("");setDone("");try{const r=await fetch("/api/admin/users",{method:"POST",headers:{"content-type":"application/json"},credentials:"include",body:JSON.stringify({name,email,password,role})});const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b?.message??"Não foi possível criar o acesso.");setDone(`${b.name} já pode acessar o BBOS com o e-mail ${b.email}.`);await load()}catch(e){setError(e instanceof Error?e.message:"Não foi possível criar o acesso.")}finally{setSaving(false)}};
+ return <div className="mx-auto max-w-6xl space-y-6">
+  <header><p className="text-[11px] font-bold uppercase tracking-[.18em] text-violet-700">Administração</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Usuários e Acessos</h1><p className="mt-1 max-w-2xl text-sm text-stone-500">Cada pessoa entra com sua própria conta. O BBOS mantém ações, sessões e identidade separadas.</p></header>
+  <div className="grid gap-5 lg:grid-cols-[1fr_.9fr]">
+   <section className="rounded-3xl border bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="rounded-2xl bg-violet-50 p-3 text-violet-700"><Users size={20}/></span><div><h2 className="font-semibold">Equipe com acesso</h2><p className="text-xs text-stone-500">Mesmo negócio, identidades independentes.</p></div></div>
+    {loading?<p className="mt-6 text-sm text-stone-500">Carregando acessos…</p>:<div className="mt-5 divide-y">{users.map(u=><div key={u.id} className="flex items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-stone-100 text-sm font-bold">{u.avatarUrl?<img src={u.avatarUrl} alt="" className="h-full w-full object-cover"/>:u.name.split(" ").map(p=>p[0]).slice(0,2).join("")}</span><div><p className="text-sm font-semibold">{u.name}</p><p className="text-xs text-stone-500">{u.email}</p></div></div><div className="text-right"><span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold">{u.role}</span><p className={`mt-1 text-[11px] ${u.active?"text-emerald-700":"text-red-600"}`}>{u.active?"Ativo":"Inativo"}</p></div></div>)}</div>}
+   </section>
+   <section className="rounded-3xl border bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="rounded-2xl bg-blue-50 p-3 text-blue-700"><UserPlus size={20}/></span><div><h2 className="font-semibold">Novo acesso</h2><p className="text-xs text-stone-500">Crie o login sem sair do BBOS.</p></div></div>
+    <div className="mt-5 space-y-4"><Label title="Nome"><input value={name} onChange={e=>setName(e.target.value)}/></Label><Label title="E-mail"><input type="email" value={email} onChange={e=>setEmail(e.target.value)}/></Label><Label title="Perfil"><select value={role} onChange={e=>setRole(e.target.value)}><option value="ADMIN">Sócio administrador (ADMIN)</option><option value="EXECUTIVE">Executivo</option><option value="FINANCE">Financeiro</option><option value="SALES">Comercial</option><option value="PRODUCTION">Produção</option></select></Label><Label title="Senha temporária"><div className="relative"><KeyRound size={15} className="absolute left-3 top-3.5 text-stone-400"/><input className="pl-9" value={password} onChange={e=>setPassword(e.target.value)} type="password"/></div><p className="mt-1 text-[11px] text-amber-700">Use apenas para o primeiro acesso. Depois evoluiremos para troca obrigatória de senha.</p></Label></div>
+    {error&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}{done&&<div className="mt-4 flex gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 size={17}/><span>{done}</span></div>}
+    <button disabled={saving} onClick={()=>void create()} className="mt-5 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving?"Criando acesso…":"Criar acesso"}</button>
+    <div className="mt-4 flex gap-2 rounded-2xl bg-violet-50 p-3 text-xs leading-5 text-violet-900"><ShieldCheck size={17} className="mt-0.5 shrink-0"/><p>Administradores têm o mesmo nível de gestão e veem os mesmos dados da empresa, mas cada ação permanece ligada ao usuário que a executou.</p></div>
+   </section>
+  </div>
+ </div>;
+}
+function Label({title,children}:{title:string;children:React.ReactNode}){return <label className="block text-sm font-semibold text-stone-700"><span>{title}</span><div className="mt-1 [&_input]:w-full [&_input]:rounded-xl [&_input]:border [&_input]:px-3 [&_input]:py-3 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:px-3 [&_select]:py-3 [&_input]:outline-none [&_select]:outline-none">{children}</div></label>}
