@@ -8,6 +8,7 @@ import '@fontsource/montserrat/400.css';
 import '@fontsource/montserrat/600.css';
 import './globals.css';
 import './human-experience.css';
+import './intelligence-native.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
 import { BbosAssistant } from '@/components/bbos-assistant';
 
