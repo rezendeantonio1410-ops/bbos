@@ -1,5 +1,5 @@
-import { HomeCommandV1 } from "@/components/home-command-v1";
+import { HomeCommandV2 } from "@/components/home-command-v2";
 
 export default function HomePage() {
-  return <HomeCommandV1 />;
+  return <HomeCommandV2 />;
 }
