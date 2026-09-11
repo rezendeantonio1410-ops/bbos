@@ -1,0 +1,80 @@
+:root{
+  --bbos-ai:#7654C7;
+  --bbos-ai-soft:#F3EEFF;
+  --bbos-ai-border:#DED4FA;
+  --bbos-blue:#4F7DB8;
+  --bbos-blue-soft:#EEF4FB;
+  --bbos-green:#0F7A6D;
+  --bbos-green-soft:#EDF7F4;
+  --bbos-amber:#C98A2E;
+  --bbos-amber-soft:#FFF5E6;
+  --bbos-red:#C95656;
+  --bbos-red-soft:#FDEEEE;
+}
+
+/* Navegação semântica: identidade Bispo permanece neutra; cor comunica contexto. */
+aside nav a[href="/home"] svg,
+aside nav a[href="/dashboard"] svg,
+aside nav a[href="/dashboard-industrial"] svg{color:var(--bbos-green)}
+aside nav a[href="/clientes"] svg,
+aside nav a[href="/pedidos"] svg,
+aside nav a[href="/vendas"] svg,
+aside nav a[href="/commerce"] svg{color:var(--bbos-blue)}
+aside nav a[href="/cafe-verde"] svg,
+aside nav a[href="/producao"] svg,
+aside nav a[href="/blends"] svg,
+aside nav a[href="/produtos"] svg,
+aside nav a[href="/laboratorio"] svg{color:var(--bbos-amber)}
+aside nav a[href="/financeiro"] svg,
+aside nav a[href="/custos"] svg{color:var(--bbos-green)}
+aside nav a[href="/bi"] svg{color:var(--bbos-ai)}
+
+aside nav a[href="/home"][class*="shadow"],
+aside nav a[href="/dashboard"][class*="shadow"],
+aside nav a[href="/dashboard-industrial"][class*="shadow"]{background:var(--bbos-green-soft)!important;box-shadow:inset 3px 0 0 var(--bbos-green)!important}
+aside nav a[href="/clientes"][class*="shadow"],
+aside nav a[href="/pedidos"][class*="shadow"],
+aside nav a[href="/vendas"][class*="shadow"],
+aside nav a[href="/commerce"][class*="shadow"]{background:var(--bbos-blue-soft)!important;box-shadow:inset 3px 0 0 var(--bbos-blue)!important}
+aside nav a[href="/cafe-verde"][class*="shadow"],
+aside nav a[href="/producao"][class*="shadow"],
+aside nav a[href="/blends"][class*="shadow"],
+aside nav a[href="/produtos"][class*="shadow"],
+aside nav a[href="/laboratorio"][class*="shadow"]{background:var(--bbos-amber-soft)!important;box-shadow:inset 3px 0 0 var(--bbos-amber)!important}
+aside nav a[href="/financeiro"][class*="shadow"],
+aside nav a[href="/custos"][class*="shadow"]{background:var(--bbos-green-soft)!important;box-shadow:inset 3px 0 0 var(--bbos-green)!important}
+aside nav a[href="/bi"][class*="shadow"]{background:var(--bbos-ai-soft)!important;box-shadow:inset 3px 0 0 var(--bbos-ai)!important}
+
+/* IA nativa: discreta quando não necessária, próxima quando chamada. */
+.bbos-ai-fab{position:fixed;right:24px;bottom:24px;z-index:45;display:flex;align-items:center;gap:7px;border:1px solid var(--bbos-ai-border);border-radius:999px;background:rgba(255,255,255,.94);padding:10px 13px;color:var(--bbos-ai);font-size:11px;font-weight:800;box-shadow:0 10px 30px rgba(57,40,93,.12);backdrop-filter:blur(14px);transition:180ms ease}
+.bbos-ai-fab:hover{transform:translateY(-2px);background:var(--bbos-ai-soft);box-shadow:0 14px 34px rgba(57,40,93,.16)}
+.bbos-ai-overlay{position:fixed;inset:0;z-index:80;display:grid;grid-template-columns:1fr minmax(360px,460px)}
+.bbos-ai-backdrop{grid-column:1;background:rgba(20,25,25,.18);backdrop-filter:blur(2px)}
+.bbos-ai-panel{grid-column:2;display:flex;min-height:100vh;max-height:100vh;flex-direction:column;border-left:1px solid var(--bbos-ai-border);background:linear-gradient(180deg,#FCFBFF 0%,#FFF 34%);box-shadow:-20px 0 60px rgba(33,27,48,.13)}
+.bbos-ai-panel>header{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;border-bottom:1px solid #ECE7F5;padding:18px 20px;background:rgba(255,255,255,.82);backdrop-filter:blur(12px)}
+.bbos-ai-panel>header span{display:block;font-size:9px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--bbos-ai)}
+.bbos-ai-panel>header strong{display:block;margin-top:2px;font-size:14px;color:#18201E}
+.bbos-ai-panel>header button{display:grid;width:32px;height:32px;place-items:center;border-radius:10px;color:#777;background:transparent}
+.bbos-ai-panel>header button:hover{background:#F3F1F6}
+.bbos-ai-panel-icon{display:grid;width:38px;height:38px;place-items:center;border-radius:12px;background:var(--bbos-ai-soft);color:var(--bbos-ai)}
+.bbos-ai-context{margin:16px 18px 4px;border:1px solid #ECE7F5;border-radius:14px;background:#FAF8FF;padding:12px 13px}
+.bbos-ai-context span{display:block;font-size:8px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#8B78B7}
+.bbos-ai-context strong{display:block;margin-top:3px;font-size:12px}.bbos-ai-context small{display:block;margin-top:4px;font-size:10px;line-height:1.45;color:#737A78}
+.bbos-ai-conversation{flex:1;overflow-y:auto;padding:16px 18px 10px}
+.bbos-ai-message{max-width:88%;border-radius:15px;padding:11px 13px;font-size:12px;line-height:1.55}
+.bbos-ai-message+.bbos-ai-message{margin-top:9px}
+.bbos-ai-message-assistant{border:1px solid #E9E3F4;background:#FAF8FF;color:#333A38}
+.bbos-ai-message-user{margin-left:auto;background:#13211E;color:#fff}
+.bbos-ai-prompts{display:flex;flex-wrap:wrap;gap:7px;padding:0 18px 12px}
+.bbos-ai-prompts button{display:inline-flex;align-items:center;gap:5px;border:1px solid #E6E0F2;border-radius:999px;background:#fff;padding:8px 10px;font-size:10px;font-weight:700;color:#675681;transition:160ms ease}
+.bbos-ai-prompts button:hover{border-color:#D4C7EF;background:var(--bbos-ai-soft)}
+.bbos-ai-input{display:flex;gap:8px;margin:0 18px;border:1px solid #DDD6EA;border-radius:14px;background:#fff;padding:7px 8px 7px 12px;box-shadow:0 8px 22px rgba(57,40,93,.06)}
+.bbos-ai-input:focus-within{border-color:#BBA8E8;box-shadow:0 0 0 3px rgba(118,84,199,.08)}
+.bbos-ai-input input{min-width:0;flex:1;background:transparent;font-size:12px;outline:none}
+.bbos-ai-input button{display:grid;width:34px;height:34px;place-items:center;border-radius:10px;background:var(--bbos-ai);color:#fff}
+.bbos-ai-trust{padding:10px 20px 16px;font-size:9px;line-height:1.45;color:#858B89}
+
+/* Alertas: cor sempre acompanhada de texto/ícone, nunca isoladamente. */
+[role="alert"],.bbos-friction-banner,.bbos-empty-guidance{position:relative}
+
+@media(max-width:760px){.bbos-ai-overlay{grid-template-columns:1fr}.bbos-ai-backdrop{display:none}.bbos-ai-panel{grid-column:1}.bbos-ai-fab{right:16px;bottom:16px}.bbos-ai-panel{width:100%}}
