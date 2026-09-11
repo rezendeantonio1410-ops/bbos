@@ -43,6 +43,18 @@ export class AdminUsersController {
     });
   }
 
+  @Patch(":id/avatar")
+  async avatar(@Req() request: any, @Param("id") id: string, @Body() body: { avatarUrl?: string | null }) {
+    const actor = await this.admin(request);
+    const target = await this.db.user.findFirst({ where: { id, companyId: actor.companyId }, select: { id: true } });
+    if (!target) throw new BadRequestException("Usuário não encontrado.");
+    const avatarUrl = body.avatarUrl ?? null;
+    if (avatarUrl !== null && (!/^data:image\/(jpeg|png|webp);base64,/i.test(avatarUrl) || avatarUrl.length > 3_000_000)) {
+      throw new BadRequestException("Envie uma imagem JPG, PNG ou WebP de até 2 MB.");
+    }
+    return this.db.user.update({ where: { id }, data: { avatarUrl }, select: { id: true, name: true, email: true, role: true, active: true, avatarUrl: true } });
+  }
+
   @Patch(":id/status")
   async status(@Req() request: any, @Param("id") id: string, @Body() body: { active?: boolean }) {
     const actor = await this.admin(request);
