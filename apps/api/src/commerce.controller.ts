@@ -10,6 +10,7 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { CommerceService } from "./commerce.service";
 import { AuthService } from "./auth.service";
 
@@ -26,6 +27,12 @@ export class CommerceController {
     return actor;
   }
 
+  private requireManagement(actor: any) {
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) {
+      throw new UnauthorizedException("Alterações de preço são restritas à Gestão.");
+    }
+  }
+
   @Get("dashboard")
   dashboard(@Query("companyId") companyId?: string) { return this.commerce.dashboard(companyId); }
 
@@ -33,7 +40,11 @@ export class CommerceController {
   channels(@Query("companyId") companyId?: string) { return this.commerce.listChannels(companyId); }
 
   @Post("channels")
-  createChannel(@Body() body: Parameters<CommerceService["createChannel"]>[0]) { return this.commerce.createChannel(body); }
+  async createChannel(@Req() request: any, @Body() body: Parameters<CommerceService["createChannel"]>[0]) {
+    const actor = await this.actor(request);
+    this.requireManagement(actor);
+    return this.commerce.createChannel({ ...body, companyId: actor.companyId });
+  }
 
   @Get("prices")
   async prices(
@@ -64,7 +75,27 @@ export class CommerceController {
   }
 
   @Post("prices")
-  createPrice(@Body() body: Parameters<CommerceService["createPrice"]>[0]) { return this.commerce.createPrice(body); }
+  async createPrice(
+    @Req() request: any,
+    @Body() body: Parameters<CommerceService["createPrice"]>[0],
+  ) {
+    const actor = await this.actor(request);
+    this.requireManagement(actor);
+    return this.commerce.createPrice({ ...body, companyId: actor.companyId });
+  }
+
+  @Get("prices/:id/history")
+  async priceHistory(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    return this.commerce.database.$queryRawUnsafe<any[]>(
+      `SELECT id, "actorName", "actorRole", "beforeSnapshot", "afterSnapshot", "createdAt"
+         FROM "PriceGovernanceEvent"
+        WHERE "productPriceId"=$1 AND "companyId"=$2
+        ORDER BY "createdAt" DESC`,
+      id,
+      actor.companyId,
+    );
+  }
 
   @Patch("prices/:id")
   async updateInternalPrice(
@@ -80,9 +111,8 @@ export class CommerceController {
     },
   ) {
     const actor = await this.actor(request);
-    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) {
-      throw new UnauthorizedException("A política interna de preços é restrita à administração/diretoria.");
-    }
+    this.requireManagement(actor);
+
     const currentRows = await this.commerce.database.$queryRawUnsafe<any[]>(
       `SELECT * FROM "ProductPrice" WHERE id=$1 AND "companyId"=$2`,
       id,
@@ -122,26 +152,58 @@ export class CommerceController {
       throw new BadRequestException("ROI mínimo inválido.");
     }
 
-    const rows = await this.commerce.database.$queryRawUnsafe<any[]>(
-      `UPDATE "ProductPrice"
-          SET price=$3,
-              "maxRequestDiscountPercent"=$4,
-              "maxApprovalDiscountPercent"=$5,
-              "minimumPrice"=$6,
-              "minimumMarginPercent"=$7,
-              "minimumRoiPercent"=$8,
-              "updatedAt"=NOW()
-        WHERE id=$1 AND "companyId"=$2
-        RETURNING *`,
-      id,
-      actor.companyId,
+    const beforeSnapshot = {
+      price: Number(current.price),
+      maxRequestDiscountPercent: Number(current.maxRequestDiscountPercent ?? 0),
+      maxApprovalDiscountPercent: Number(current.maxApprovalDiscountPercent ?? 0),
+      minimumPrice: current.minimumPrice == null ? null : Number(current.minimumPrice),
+      minimumMarginPercent: current.minimumMarginPercent == null ? null : Number(current.minimumMarginPercent),
+      minimumRoiPercent: current.minimumRoiPercent == null ? null : Number(current.minimumRoiPercent),
+    };
+    const afterSnapshot = {
       price,
-      maxRequest,
-      maxApproval,
+      maxRequestDiscountPercent: maxRequest,
+      maxApprovalDiscountPercent: maxApproval,
       minimumPrice,
-      minimumMargin,
-      minimumRoi,
-    );
-    return rows[0];
+      minimumMarginPercent: minimumMargin,
+      minimumRoiPercent: minimumRoi,
+    };
+
+    return this.commerce.database.$transaction(async (tx) => {
+      const rows = await tx.$queryRawUnsafe<any[]>(
+        `UPDATE "ProductPrice"
+            SET price=$3,
+                "maxRequestDiscountPercent"=$4,
+                "maxApprovalDiscountPercent"=$5,
+                "minimumPrice"=$6,
+                "minimumMarginPercent"=$7,
+                "minimumRoiPercent"=$8,
+                "updatedAt"=NOW()
+          WHERE id=$1 AND "companyId"=$2
+          RETURNING *`,
+        id,
+        actor.companyId,
+        price,
+        maxRequest,
+        maxApproval,
+        minimumPrice,
+        minimumMargin,
+        minimumRoi,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "PriceGovernanceEvent"
+          (id,"companyId","productPriceId","actorId","actorName","actorRole","beforeSnapshot","afterSnapshot","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,NOW())`,
+        randomUUID(),
+        actor.companyId,
+        id,
+        actor.id,
+        actor.name,
+        actor.role,
+        JSON.stringify(beforeSnapshot),
+        JSON.stringify(afterSnapshot),
+      );
+      return rows[0];
+    });
   }
 }
