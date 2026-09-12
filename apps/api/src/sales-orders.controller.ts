@@ -26,6 +26,16 @@ const termDays = (value: unknown) => {
 };
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
+type SalesOrderCommercialTerms = {
+  paymentType?: string;
+  paymentTerms?: string;
+  freightResponsibility?: "BISPO" | "CUSTOMER" | "PICKUP";
+  carrierName?: string;
+  customerReference?: string;
+  incoterm?: string;
+  incotermLocation?: string;
+};
+
 @Controller("sales-orders")
 export class SalesOrdersController {
   constructor(
@@ -144,21 +154,28 @@ export class SalesOrdersController {
   get(@Param("id") id: string) { return this.salesOrders.get(id); }
 
   @Post()
-  async create(@Body() body: CreateSalesOrderInput & { paymentType?: string; paymentTerms?: string }) {
+  async create(@Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
     const paymentType = String(body.paymentType ?? "CASH").toUpperCase();
     if (!["CASH", "TERM"].includes(paymentType)) throw new BadRequestException("Forma de pagamento inválida.");
     const paymentTerms = paymentType === "TERM" ? String(body.paymentTerms ?? "").trim() : "À vista";
     if (paymentType === "TERM" && !paymentTerms) throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
     if (!body.customerId || !body.items?.length) throw new BadRequestException("Cliente e itens são obrigatórios.");
 
+    const freightResponsibility = String(body.freightResponsibility ?? "CUSTOMER").toUpperCase();
+    if (!["BISPO", "CUSTOMER", "PICKUP"].includes(freightResponsibility)) {
+      throw new BadRequestException("Responsabilidade do frete inválida.");
+    }
+
     const pricedItems = [] as CreateSalesOrderInput["items"];
     let resolvedChannelId: string | undefined;
+    let resolvedChannelType: string | undefined;
     for (const item of body.items) {
       const price = await this.resolveInternalPrice(body.customerId, item.productVariantId);
       if (resolvedChannelId && resolvedChannelId !== price.salesChannelId) {
         throw new BadRequestException("Os itens do pedido precisam pertencer ao mesmo canal/tabela comercial.");
       }
       resolvedChannelId = price.salesChannelId;
+      resolvedChannelType = price.salesChannelType;
       pricedItems.push({ ...item, unitPrice: price.officialUnitPrice });
     }
 
@@ -169,12 +186,48 @@ export class SalesOrdersController {
       orderNumber,
       salesChannelId: resolvedChannelId,
       items: pricedItems,
+      notes: String(body.notes ?? "").trim() || undefined,
+      expectedDeliveryDate: body.expectedDeliveryDate || undefined,
     });
+
+    const carrierName = String(body.carrierName ?? "").trim() || null;
+    const customerReference = String(body.customerReference ?? "").trim() || null;
+    const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
+    const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
+
     await this.salesOrders.database.$executeRawUnsafe(
-      `UPDATE "SalesOrder" SET "paymentType"=$2, "paymentTermsSnapshot"=$3, "updatedAt"=NOW() WHERE id=$1`,
-      order.id, paymentType, paymentTerms,
+      `UPDATE "SalesOrder"
+          SET "paymentType"=$2,
+              "paymentTermsSnapshot"=$3,
+              "freightResponsibility"=$4,
+              "carrierName"=$5,
+              "customerReference"=$6,
+              "incoterm"=$7,
+              "incotermLocation"=$8,
+              "updatedAt"=NOW()
+        WHERE id=$1`,
+      order.id,
+      paymentType,
+      paymentTerms,
+      freightResponsibility,
+      carrierName,
+      customerReference,
+      incoterm,
+      incotermLocation,
     );
-    return { ...order, code: orderNumber, orderNumber, paymentType, paymentTermsSnapshot: paymentTerms };
+
+    return {
+      ...order,
+      code: orderNumber,
+      orderNumber,
+      paymentType,
+      paymentTermsSnapshot: paymentTerms,
+      freightResponsibility,
+      carrierName,
+      customerReference,
+      incoterm,
+      incotermLocation,
+    };
   }
 
   @Get(":id/discount-requests")
