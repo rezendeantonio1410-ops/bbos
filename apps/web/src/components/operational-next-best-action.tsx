@@ -12,6 +12,8 @@ type FinishedGood={sku:string;product:string;physicalUnits:number;reservedUnits:
 type InventoryLot={id:string;code:string;availableQuantityKg:number;reservedQuantityKg:number;status:string};
 type Recommendation={priority:"critical"|"attention"|"ready"|"insufficient";eyebrow:string;title:string;reason:string;impact:string;href:string;action:string};
 
+type Snapshot={orders:number;production:number;finished:number;green:number};
+
 const openSales=(s:string)=>!["DELIVERED","CANCELLED","SHIPPED"].includes(s);
 const openProduction=(s:string)=>!["completed","cancelled","COMPLETED","CANCELLED"].includes(s);
 
@@ -23,6 +25,15 @@ export function OperationalNextBestAction(){
   fetch(`${api}/inventory/finished-goods`,{credentials:"include",cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()),
   fetch(`${api}/inventory/lots`,{credentials:"include",cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()),
  ]).then(([orders,production,goods,lots])=>setData({orders,production,goods,lots})).catch(()=>setFailed(true))},[]);
+ const snapshot=React.useMemo<Snapshot>(()=>{
+  if(!data)return{orders:0,production:0,finished:0,green:0};
+  return{
+   orders:data.orders.filter(o=>openSales(o.status)).length,
+   production:data.production.filter(o=>openProduction(o.status)).length,
+   finished:data.goods.reduce((s,g)=>s+Number(g.availableUnits||0),0),
+   green:Math.round(data.lots.filter(l=>!["blocked","BLOCKED"].includes(l.status)).reduce((s,l)=>s+Number(l.availableQuantityKg||0),0)),
+  };
+ },[data]);
  const recommendation=React.useMemo<Recommendation>(()=>{
   if(failed)return{priority:"insufficient",eyebrow:"Leitura interrompida",title:"Não vou recomendar sem dados confiáveis",reason:"Uma ou mais fontes operacionais não responderam.",impact:"Evita transformar indisponibilidade em uma decisão falsa.",href:"/home",action:"Revisar Central"};
   if(!data)return{priority:"insufficient",eyebrow:"Reunindo contexto",title:"Cruzando pedidos, produção e estoque",reason:"O BBOS está formando uma leitura única do fluxo operacional.",impact:"A recomendação só aparece depois da validação das fontes.",href:"/pedidos",action:"Abrir pedidos"};
@@ -37,5 +48,18 @@ export function OperationalNextBestAction(){
   return{priority:"ready",eyebrow:"Fluxo sob controle",title:"Nenhum bloqueio cruzado identificado agora",reason:"Pedidos, produção e estoques disponíveis não geraram uma exceção operacional pelas regras atuais.",impact:"Continue acompanhando novas entradas; o BBOS recalcula a prioridade com os dados reais.",href:"/pedidos",action:"Revisar carteira"};
  },[data,failed]);
  const Icon=recommendation.priority==="critical"?ShieldAlert:recommendation.priority==="attention"?Factory:recommendation.priority==="ready"?PackageCheck:Boxes;
- return <Card className="bbos-guide-card p-5"><div className="flex items-start gap-3"><span className="bbos-guide-icon"><Icon size={17}/></span><div className="min-w-0 flex-1"><p className="bbos-eyebrow">{recommendation.eyebrow}</p><h3 className="mt-1 text-base font-bold">{recommendation.title}</h3><p className="mt-2 text-xs leading-5 text-[var(--bbos-text-secondary)]"><strong>Por quê:</strong> {recommendation.reason}</p><p className="mt-1 text-xs leading-5 text-[var(--bbos-text-secondary)]"><strong>Impacto:</strong> {recommendation.impact}</p><div className="mt-4 flex flex-wrap gap-2"><Link href={recommendation.href} className="bbos-quick-link">{recommendation.action}<ArrowRight size={12}/></Link><button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:open-assistant"))} className="bbos-quick-link"><Sparkles size={12}/> Explicar recomendação</button></div></div></div></Card>
+ const tone=recommendation.priority==="critical"?"border-red-200 bg-red-50/40":recommendation.priority==="attention"?"border-amber-200 bg-amber-50/40":recommendation.priority==="ready"?"border-emerald-200 bg-emerald-50/30":"border-stone-200 bg-white";
+ return <Card className={`overflow-hidden rounded-[20px] ${tone} p-0 shadow-none`}>
+  <div className="grid gap-5 p-5 lg:grid-cols-[1.25fr_.75fr] lg:p-6">
+   <div className="flex items-start gap-3"><span className="bbos-guide-icon"><Icon size={17}/></span><div className="min-w-0 flex-1"><p className="bbos-eyebrow">{recommendation.eyebrow}</p><h3 className="mt-1 text-lg font-bold tracking-tight">{recommendation.title}</h3><p className="mt-2 text-xs leading-5 text-[var(--bbos-text-secondary)]">{recommendation.reason}</p><p className="mt-1 text-xs leading-5 text-[var(--bbos-text-secondary)]"><strong>Impacto:</strong> {recommendation.impact}</p><div className="mt-4 flex flex-wrap items-center gap-3"><Link href={recommendation.href} className="inline-flex items-center gap-2 rounded-xl bg-[#10201d] px-4 py-2.5 text-[11px] font-extrabold text-white">{recommendation.action}<ArrowRight size={12}/></Link><button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:open-assistant"))} className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700"><Sparkles size={12}/> Por que o BBOS recomenda isso?</button></div></div></div>
+   <div className="grid grid-cols-2 gap-2 self-stretch">
+    <Signal label="Pedidos" value={String(snapshot.orders)} active={snapshot.orders>0}/>
+    <Signal label="Produção" value={String(snapshot.production)} active={snapshot.production>0}/>
+    <Signal label="Produto acabado" value={`${snapshot.finished} un.`} active={snapshot.finished>0}/>
+    <Signal label="Café verde" value={`${snapshot.green} kg`} active={snapshot.green>0}/>
+   </div>
+  </div>
+ </Card>
 }
+
+function Signal({label,value,active}:{label:string;value:string;active:boolean}){return <div className={`rounded-2xl border p-3 ${active?"border-emerald-100 bg-emerald-50/60":"border-stone-200 bg-white/70"}`}><div className="flex items-center gap-2"><span className={`size-2 rounded-full ${active?"bg-emerald-500":"bg-stone-300"}`}/><small className="text-[9px] font-bold uppercase tracking-wide text-stone-400">{label}</small></div><strong className="mt-2 block text-lg tracking-tight text-stone-900">{value}</strong></div>}
