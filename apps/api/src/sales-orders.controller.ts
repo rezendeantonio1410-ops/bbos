@@ -17,6 +17,19 @@ const termDays = (value: unknown) => {
 export class SalesOrdersController {
   constructor(private readonly salesOrders: SalesOrdersService) {}
 
+  private async nextOrderNumber() {
+    const year = new Date().getFullYear();
+    const prefix = `PV-${year}-`;
+    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(MAX(RIGHT(COALESCE("orderNumber", code), 6)::int), 0) + 1 AS next
+         FROM "SalesOrder"
+        WHERE COALESCE("orderNumber", code) LIKE $1`,
+      `${prefix}%`,
+    );
+    const next = Math.max(1, Number(rows[0]?.next ?? 1));
+    return `${prefix}${String(next).padStart(6, "0")}`;
+  }
+
   @Get()
   list() {
     return this.salesOrders.list();
@@ -25,6 +38,11 @@ export class SalesOrdersController {
   @Get("options")
   options() {
     return this.salesOrders.options();
+  }
+
+  @Get("next-number")
+  async nextNumber() {
+    return { provisional: await this.nextOrderNumber() };
   }
 
   @Get(":id")
@@ -43,7 +61,8 @@ export class SalesOrdersController {
       throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
     }
 
-    const order = await this.salesOrders.create(body);
+    const orderNumber = await this.nextOrderNumber();
+    const order = await this.salesOrders.create({ ...body, code: orderNumber, orderNumber });
     await this.salesOrders.database.$executeRawUnsafe(
       `UPDATE "SalesOrder"
           SET "paymentType"=$2, "paymentTermsSnapshot"=$3, "updatedAt"=NOW()
@@ -52,7 +71,7 @@ export class SalesOrdersController {
       paymentType,
       paymentTerms,
     );
-    return { ...order, paymentType, paymentTermsSnapshot: paymentTerms };
+    return { ...order, code: orderNumber, orderNumber, paymentType, paymentTermsSnapshot: paymentTerms };
   }
 
   @Post(":id/confirm")
