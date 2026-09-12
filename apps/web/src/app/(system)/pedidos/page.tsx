@@ -2,7 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight, Clock3, CreditCard, PackageCheck, Plus, Sparkles, X } from "lucide-react";
+import {
+  BadgeDollarSign,
+  Check,
+  ChevronRight,
+  Clock3,
+  CreditCard,
+  PackageCheck,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 
@@ -48,8 +59,27 @@ type CustomerHealth = {
   cashPurchaseAllowed?: boolean;
 };
 
+type Quote = {
+  productPriceId: string;
+  officialUnitPrice: number;
+  currency: string;
+  salesChannelId: string;
+  salesChannelName: string;
+  salesChannelType: string;
+  quantity: number;
+  totalAmount: number;
+  discountPolicy: {
+    maxRequestPercent: number;
+    maxApprovalPercent: number;
+    minimumPrice: number | null;
+    minimumMarginPercent: number | null;
+    minimumRoiPercent: number | null;
+  };
+};
+
 type OrderItem = {
   id: string;
+  productVariantId: string;
   productName: string;
   sku: string;
   quantity: number;
@@ -73,6 +103,22 @@ type Order = {
   customer: Customer;
   items: OrderItem[];
   reservations: Array<{ id: string; status: string; quantity: number }>;
+};
+
+type DiscountRequest = {
+  id: string;
+  salesOrderItemId: string;
+  officialUnitPrice: string | number;
+  requestedUnitPrice: string | number;
+  discountPercent: string | number;
+  discountAmount: string | number;
+  rationale: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  requestedByName: string;
+  decidedByName?: string | null;
+  decisionNote?: string | null;
+  createdAt: string;
+  decidedAt?: string | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -123,27 +169,25 @@ export default function OrdersPage() {
 
   const refresh = async () => {
     const API = salesOrdersApi();
-    const [a, b] = await Promise.all([
+    const [ordersResponse, optionsResponse] = await Promise.all([
       fetch(API, { credentials: "include", cache: "no-store" }),
       fetch(`${API}/options`, { credentials: "include", cache: "no-store" }),
     ]);
-    if (a.ok) setOrders(await a.json());
-    if (b.ok) {
-      const o = await b.json();
-      setCustomers(o.customers);
-      setVariants(o.variants);
+    if (ordersResponse.ok) setOrders(await ordersResponse.json());
+    if (optionsResponse.ok) {
+      const options = await optionsResponse.json();
+      setCustomers(options.customers);
+      setVariants(options.variants);
     }
   };
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useEffect(() => { void refresh(); }, []);
 
   const visible = useMemo(
-    () => (filter === "ALL" ? orders : orders.filter((i) => i.status === filter)),
+    () => (filter === "ALL" ? orders : orders.filter((item) => item.status === filter)),
     [orders, filter],
   );
-  const open = orders.filter((i) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(i.status));
+  const open = orders.filter((item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status));
   const avgTicket = orders.length
     ? orders.reduce((sum, item) => sum + Number(item.totalAmount), 0) / orders.length
     : 0;
@@ -157,12 +201,10 @@ export default function OrdersPage() {
       headers: { "content-type": "application/json" },
       body: "{}",
     });
-    const result = await response.json();
-    setMessage(
-      response.ok
-        ? `${order.orderNumber ?? order.code} atualizado com sucesso.`
-        : (result.message ?? "Não foi possível atualizar o pedido."),
-    );
+    const result = await response.json().catch(() => ({}));
+    setMessage(response.ok
+      ? `${order.orderNumber ?? order.code} atualizado com sucesso.`
+      : (result.message ?? "Não foi possível atualizar o pedido."));
     setBusy("");
     await refresh();
   };
@@ -171,78 +213,53 @@ export default function OrdersPage() {
     <div className="mx-auto max-w-[1600px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">
-            <Sparkles size={13} /> Comercial inteligente
-          </p>
+          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-violet-700"><Sparkles size={13}/> Comercial inteligente</p>
           <h1 className="mt-1 text-3xl font-bold">Pedidos</h1>
-          <p className="mt-2 text-sm text-stone-500">O BBOS acompanha cliente, estoque e condições antes de a venda avançar.</p>
+          <p className="mt-2 text-sm text-stone-500">O BBOS acompanha cliente, preço, crédito e estoque antes de a venda avançar.</p>
         </div>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
-          <Plus size={15} /> Novo pedido
-        </button>
+        <button onClick={() => setCreating(true)} className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white"><Plus size={15}/> Novo pedido</button>
       </header>
 
       {message && <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">{message}</div>}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Pedidos em aberto" value={String(open.length)} />
-        <Kpi label="Valor em carteira" value={money.format(open.reduce((s, i) => s + Number(i.totalAmount), 0))} />
-        <Kpi label="Pedidos reservados" value={String(orders.filter((i) => ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(i.status)).length)} />
-        <Kpi label="Aguardando estoque" value={String(orders.filter((i) => i.status === "CONFIRMED").length)} />
-        <Kpi label="Prontos para expedição" value={String(orders.filter((i) => ["READY_TO_SHIP", "INVOICED"].includes(i.status)).length)} />
-        <Kpi label="Ticket médio" value={money.format(avgTicket)} />
+        <Kpi label="Pedidos em aberto" value={String(open.length)}/>
+        <Kpi label="Valor em carteira" value={money.format(open.reduce((sum, item) => sum + Number(item.totalAmount), 0))}/>
+        <Kpi label="Pedidos reservados" value={String(orders.filter((item) => ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(item.status)).length)}/>
+        <Kpi label="Aguardando estoque" value={String(orders.filter((item) => item.status === "CONFIRMED").length)}/>
+        <Kpi label="Prontos para expedição" value={String(orders.filter((item) => ["READY_TO_SHIP", "INVOICED"].includes(item.status)).length)}/>
+        <Kpi label="Ticket médio" value={money.format(avgTicket)}/>
       </section>
 
       <div className="mt-7 flex flex-wrap gap-2">
         {filters.map(([value, label]) => (
-          <button key={value} onClick={() => setFilter(value)} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}>
-            {label}
-          </button>
+          <button key={value} onClick={() => setFilter(value)} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}>{label}</button>
         ))}
       </div>
 
       <section className="mt-5">
-        <div className="mb-3 flex justify-between">
-          <h2 className="text-lg font-semibold">Pedidos recentes</h2>
-          <span className="text-xs text-stone-400">{visible.length} pedidos</span>
-        </div>
+        <div className="mb-3 flex justify-between"><h2 className="text-lg font-semibold">Pedidos recentes</h2><span className="text-xs text-stone-400">{visible.length} pedidos</span></div>
         <div className="space-y-3">
           {visible.map((order) => (
             <Card key={order.id} className="p-4">
               <button onClick={() => setSelected(order)} className="w-full text-left">
                 <div className="flex justify-between">
-                  <div>
-                    <strong>{order.orderNumber ?? order.code}</strong>
-                    <p className="text-xs text-stone-500">{order.customer.name}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Status status={order.status} />
-                    <strong>{money.format(Number(order.totalAmount))}</strong>
-                    <ChevronRight size={16} />
-                  </div>
+                  <div><strong>{order.orderNumber ?? order.code}</strong><p className="text-xs text-stone-500">{order.customer.name}</p></div>
+                  <div className="flex items-center gap-2"><Status status={order.status}/><strong>{money.format(Number(order.totalAmount))}</strong><ChevronRight size={16}/></div>
                 </div>
               </button>
               <div className="mt-3 flex gap-2">
-                {order.status === "DRAFT" && (
-                  <button disabled={!!busy} onClick={() => void action(order, "confirm")} className="rounded-lg bg-forest-900 px-3 py-2 text-xs text-white">Confirmar</button>
-                )}
-                {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && (
-                  <button disabled={!!busy} onClick={() => void action(order, "cancel")} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
-                )}
+                {order.status === "DRAFT" && <button disabled={!!busy} onClick={() => void action(order, "confirm")} className="rounded-lg bg-forest-900 px-3 py-2 text-xs text-white">Confirmar</button>}
+                {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && <button disabled={!!busy} onClick={() => void action(order, "cancel")} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>}
               </div>
             </Card>
           ))}
-          {!visible.length && (
-            <Card className="py-14 text-center">
-              <PackageCheck className="mx-auto text-stone-300" />
-              <p className="mt-3 text-sm font-semibold">Nenhum pedido neste filtro</p>
-            </Card>
-          )}
+          {!visible.length && <Card className="py-14 text-center"><PackageCheck className="mx-auto text-stone-300"/><p className="mt-3 text-sm font-semibold">Nenhum pedido neste filtro</p></Card>}
         </div>
       </section>
 
-      {creating && <NewOrder customers={customers} variants={variants} onClose={() => setCreating(false)} onCreated={async () => { setCreating(false); await refresh(); }} />}
-      {selected && <OrderDrawer order={selected} onClose={() => setSelected(null)} />}
+      {creating && <NewOrder customers={customers} variants={variants} onClose={() => setCreating(false)} onCreated={async () => { setCreating(false); await refresh(); }}/>} 
+      {selected && <OrderDrawer order={selected} onClose={() => setSelected(null)} onChanged={async () => { await refresh(); const fresh = orders.find((item) => item.id === selected.id); if (fresh) setSelected(fresh); }}/>} 
     </div>
   );
 }
@@ -254,14 +271,16 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
   const [variantId, setVariantId] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [unitPrice, setUnitPrice] = useState(0);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteBusy, setQuoteBusy] = useState(false);
+  const [quoteError, setQuoteError] = useState("");
   const [error, setError] = useState("");
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
 
-  const selected = variants.find((v) => v.productVariantId === variantId);
-  const customer = customers.find((c) => c.id === customerId);
-  const orderTotal = Math.max(0, quantity * unitPrice);
+  const selected = variants.find((variant) => variant.productVariantId === variantId);
+  const customer = customers.find((candidate) => candidate.id === customerId);
+  const orderTotal = Number(quote?.totalAmount ?? 0);
   const isTerm = paymentType === "TERM";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
@@ -272,35 +291,56 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, { credentials: "include", cache: "no-store" })
-      .then(async (r) => {
-        if (!r.ok) throw new Error();
-        const data = await r.json();
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        const data = await response.json();
         setOrderNumber(data.number ?? "—");
       })
       .catch(() => setOrderNumber("—"));
   }, []);
 
   useEffect(() => {
-    if (!customerId || !isTerm) {
-      setHealth(null);
-      return;
-    }
-    const selectedCustomer = customers.find((c) => c.id === customerId);
+    if (!customerId || !isTerm) { setHealth(null); return; }
+    const selectedCustomer = customers.find((candidate) => candidate.id === customerId);
     if (selectedCustomer?.paymentTerms && selectedCustomer.paymentTerms !== "À vista") setPaymentTerms(selectedCustomer.paymentTerms);
     setHealthBusy(true);
     void fetch(`/api/customers/${customerId}/health`, { credentials: "include", cache: "no-store" })
-      .then(async (r) => {
-        if (!r.ok) throw new Error();
-        setHealth(await r.json());
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        setHealth(await response.json());
       })
       .catch(() => setHealth(null))
       .finally(() => setHealthBusy(false));
   }, [customerId, isTerm, customers]);
 
+  useEffect(() => {
+    if (!customerId || !variantId || !Number.isSafeInteger(quantity) || quantity <= 0) {
+      setQuote(null);
+      setQuoteError("");
+      return;
+    }
+    setQuoteBusy(true);
+    setQuoteError("");
+    const params = new URLSearchParams({ customerId, productVariantId: variantId, quantity: String(quantity) });
+    void fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
+        setQuote(payload);
+      })
+      .catch((cause) => {
+        setQuote(null);
+        setQuoteError(cause instanceof Error ? cause.message : "Preço interno não encontrado.");
+      })
+      .finally(() => setQuoteBusy(false));
+  }, [customerId, variantId, quantity]);
+
   const submit = async () => {
+    setError("");
     if (!selected || !customerId) return setError("Selecione cliente e produto.");
+    if (!quote) return setError("O pedido precisa de um preço interno vigente antes de ser salvo.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
-    const r = await fetch(salesOrdersApi(), {
+    const response = await fetch(salesOrdersApi(), {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
@@ -310,33 +350,31 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         customerId,
         paymentType,
         paymentTerms: isTerm ? paymentTerms : "À vista",
-        items: [{ productVariantId: selected.productVariantId, warehouseId: selected.warehouseId, quantity, unitPrice }],
+        items: [{
+          productVariantId: selected.productVariantId,
+          warehouseId: selected.warehouseId,
+          quantity,
+          unitPrice: quote.officialUnitPrice,
+        }],
       }),
     });
-    const result = await r.json();
-    if (!r.ok) return setError(result.message ?? "Não foi possível criar o pedido.");
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return setError(result.message ?? "Não foi possível criar o pedido.");
     await onCreated();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
+      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25"/>
       <aside className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-6">
         <div className="flex justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">Venda assistida</p>
-            <h2 className="mt-1 text-xl font-bold">Novo pedido</h2>
-            <p className="mt-2 text-sm font-semibold text-stone-700">{orderNumber}</p>
-          </div>
-          <button onClick={onClose}><X /></button>
+          <div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">Venda assistida</p><h2 className="mt-1 text-xl font-bold">Novo pedido</h2><p className="mt-2 text-sm font-semibold text-stone-700">{orderNumber}</p></div>
+          <button onClick={onClose}><X/></button>
         </div>
 
         <div className="mt-6 space-y-4">
           <Field label="Cliente">
-            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">Selecione</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">Selecione</option>{customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           </Field>
 
           <div>
@@ -347,55 +385,44 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
             </div>
           </div>
 
-          {isTerm && (
-            <>
-              <Field label="Condição de pagamento">
-                <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
-                  {paymentOptions.map((option) => <option key={option}>{option}</option>)}
-                </select>
-              </Field>
-              {customerId && <CreditContext loading={healthBusy} limit={limit} used={used} available={available} utilization={utilization} orderTotal={orderTotal} after={after} exceeds={exceeds} status={health?.creditStatus ?? customer?.creditStatus} reviewPending={health?.creditReviewPending} />}
-            </>
-          )}
+          {isTerm && <><Field label="Condição de pagamento"><select value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)}>{paymentOptions.map((option) => <option key={option}>{option}</option>)}</select></Field>{customerId && <CreditContext loading={healthBusy} limit={limit} used={used} available={available} utilization={utilization} orderTotal={orderTotal} after={after} exceeds={exceeds} status={health?.creditStatus ?? customer?.creditStatus} reviewPending={health?.creditReviewPending}/>}</>}
 
           <div className="rounded-2xl border bg-stone-50 p-3">
             <div className="grid grid-cols-[minmax(0,1fr)_88px_116px_118px] items-end gap-2">
               <div>
                 <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
-                <select value={variantId} onChange={(e) => setVariantId(e.target.value)} className="w-full rounded-xl border bg-white px-3 py-3 text-sm">
+                <select value={variantId} onChange={(event) => setVariantId(event.target.value)} className="w-full rounded-xl border bg-white px-3 py-3 text-sm">
                   <option value="">Selecione</option>
-                  {variants.map((v) => (
-                    <option key={v.productVariantId} value={v.productVariantId}>
-                      {v.product} · {v.presentationGrams >= 1000 ? `${v.presentationGrams / 1000} kg` : `${v.presentationGrams} g`} · {v.sku}
-                    </option>
-                  ))}
+                  {variants.map((variant) => <option key={variant.productVariantId} value={variant.productVariantId}>{variant.product} · {variant.presentationGrams >= 1000 ? `${variant.presentationGrams / 1000} kg` : `${variant.presentationGrams} g`} · {variant.sku}</option>)}
                 </select>
               </div>
               <div>
                 <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
-                <input type="number" min="1" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-full rounded-xl border bg-white px-3 py-3 text-sm" />
+                <input type="number" min="1" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} className="w-full rounded-xl border bg-white px-3 py-3 text-sm"/>
               </div>
               <div>
                 <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
-                <input type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} className="w-full rounded-xl border bg-white px-3 py-3 text-sm" />
+                <div className="rounded-xl border bg-white px-3 py-3 text-sm font-semibold text-stone-800">{quoteBusy ? "Consultando…" : quote ? money.format(quote.officialUnitPrice) : "—"}</div>
               </div>
               <div className="rounded-xl bg-white px-3 py-3 text-right">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">Total</p>
-                <p className="mt-1 text-sm font-bold text-stone-900">{money.format(orderTotal)}</p>
+                <p className="mt-1 text-sm font-bold text-stone-900">{quoteBusy ? "…" : money.format(orderTotal)}</p>
               </div>
             </div>
-            {selected && <p className="mt-2 text-[10px] text-stone-400">{selected.line} · estoque disponível {selected.availableStock} pacote(s)</p>}
+            {selected && <p className="mt-2 text-[10px] text-stone-400">{selected.line} · estoque disponível {selected.availableStock} pacote(s){quote ? ` · tabela ${quote.salesChannelName}` : ""}</p>}
+            {quoteError && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{quoteError}</p>}
+            {quote && quote.discountPolicy.maxRequestPercent > 0 && (
+              <div className="mt-2 flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-[10px] text-violet-800">
+                <ShieldCheck size={13}/><span>Política interna: desconto pode ser solicitado até {quote.discountPolicy.maxRequestPercent.toFixed(2)}%. O preço não é editável neste pedido.</span>
+              </div>
+            )}
           </div>
 
-          {isTerm && health && (
-            <p className={`rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-50 text-red-700" : "bg-stone-50 text-stone-500"}`}>
-              {exceeds ? `Excede o crédito disponível em ${money.format(orderTotal - available)}.` : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
-            </p>
-          )}
+          {isTerm && health && <p className={`rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-50 text-red-700" : "bg-stone-50 text-stone-500"}`}>{exceeds ? `Excede o crédito disponível em ${money.format(orderTotal - available)}.` : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}</p>}
 
           {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
-          <button onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white">Salvar pedido</button>
-          <p className="text-[10px] leading-4 text-stone-400">O número exibido é confirmado no salvamento. Se o pedido for cancelado depois, o número permanece no histórico e não é reutilizado.</p>
+          <button disabled={!quote || quoteBusy} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
+          <p className="text-[10px] leading-4 text-stone-400">Preço e total vêm da tabela interna vigente. Qualquer redução exige solicitação e aprovação interna após o salvamento.</p>
         </div>
       </aside>
     </div>
@@ -406,31 +433,10 @@ function CreditContext({ loading, limit, used, available, utilization, orderTota
   if (loading) return <div className="rounded-2xl border bg-stone-50 p-4 text-xs text-stone-500">Consultando crédito do cliente…</div>;
   return (
     <div className={`rounded-2xl border p-4 ${exceeds ? "border-red-200 bg-red-50" : "border-violet-100 bg-violet-50/60"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[.14em] text-violet-700">Linha de crédito vigente</p>
-          <p className="mt-1 text-xs text-stone-500">Status: {status === "APPROVED" ? "Aprovado" : status === "UNDER_REVIEW" ? "Em análise" : status === "REJECTED" ? "Reprovado" : "Não analisado"}{reviewPending ? " · revisão de limite pendente" : ""}</p>
-        </div>
-        <CreditCard size={18} className="text-violet-600" />
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <MiniCredit label="Limite" value={money.format(limit)} />
-        <MiniCredit label="Utilizado" value={money.format(used)} />
-        <MiniCredit label="Disponível" value={money.format(available)} />
-      </div>
-      <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between text-[10px] text-stone-500">
-          <span>Utilização</span><strong>{Math.round(utilization)}%</strong>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-white">
-          <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${Math.min(100, utilization)}%` }} />
-        </div>
-      </div>
-      {orderTotal > 0 && (
-        <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-100 text-red-800" : "bg-white text-stone-600"}`}>
-          {exceeds ? `Pedido acima do disponível em ${money.format(orderTotal - available)}.` : `Impacto do pedido: crédito restante ${money.format(after)}.`}
-        </div>
-      )}
+      <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-violet-700">Linha de crédito vigente</p><p className="mt-1 text-xs text-stone-500">Status: {status === "APPROVED" ? "Aprovado" : status === "UNDER_REVIEW" ? "Em análise" : status === "REJECTED" ? "Reprovado" : "Não analisado"}{reviewPending ? " · revisão de limite pendente" : ""}</p></div><CreditCard size={18} className="text-violet-600"/></div>
+      <div className="mt-4 grid grid-cols-3 gap-2"><MiniCredit label="Limite" value={money.format(limit)}/><MiniCredit label="Utilizado" value={money.format(used)}/><MiniCredit label="Disponível" value={money.format(available)}/></div>
+      <div className="mt-3"><div className="mb-1 flex items-center justify-between text-[10px] text-stone-500"><span>Utilização</span><strong>{Math.round(utilization)}%</strong></div><div className="h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${Math.min(100, utilization)}%` }}/></div></div>
+      {orderTotal > 0 && <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-100 text-red-800" : "bg-white text-stone-600"}`}>{exceeds ? `Pedido acima do disponível em ${money.format(orderTotal - available)}.` : `Impacto do pedido: crédito restante ${money.format(after)}.`}</div>}
     </div>
   );
 }
@@ -439,8 +445,118 @@ function MiniCredit({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl bg-white p-2.5"><p className="text-[9px] uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-xs font-bold text-stone-800">{value}</p></div>;
 }
 
-function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) {
-  return <div className="fixed inset-0 z-50 flex justify-end"><button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25"/><aside className="relative h-full w-full max-w-xl bg-white p-6"><div className="flex justify-between"><div><h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2><p className="text-xs text-stone-500">{order.customer.name}</p></div><button onClick={onClose}><X/></button></div><div className="mt-6"><Status status={order.status}/><div className="mt-4 flex items-center gap-2 text-xs text-stone-500"><Clock3 size={14}/> Pedido registrado no fluxo operacional.</div></div></aside></div>;
+function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () => void; onChanged: () => Promise<void> }) {
+  const [requests, setRequests] = useState<DiscountRequest[]>([]);
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [rationale, setRationale] = useState("");
+  const [selectedItemId, setSelectedItemId] = useState(order.items[0]?.id ?? "");
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
+
+  const loadRequests = async () => {
+    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-requests`, { credentials: "include", cache: "no-store" });
+    if (response.ok) setRequests(await response.json());
+  };
+
+  useEffect(() => { void loadRequests(); }, [order.id]);
+
+  useEffect(() => {
+    if (!selectedItem?.productVariantId) { setQuote(null); return; }
+    const params = new URLSearchParams({ customerId: order.customer.id, productVariantId: selectedItem.productVariantId, quantity: String(selectedItem.quantity) });
+    void fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" })
+      .then(async (response) => response.ok ? setQuote(await response.json()) : setQuote(null))
+      .catch(() => setQuote(null));
+  }, [selectedItem?.productVariantId, selectedItem?.quantity, order.customer.id]);
+
+  const requestDiscount = async () => {
+    if (!selectedItem) return;
+    setBusy(true); setError("");
+    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-request`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ salesOrderItemId: selectedItem.id, discountPercent: Number(discountPercent), rationale }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) setError(payload.message ?? "Não foi possível solicitar desconto.");
+    else { setDiscountPercent(""); setRationale(""); await loadRequests(); }
+    setBusy(false);
+  };
+
+  const decide = async (requestId: string, decision: "APPROVE" | "REJECT") => {
+    setBusy(true); setError("");
+    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-request/${requestId}/decision`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) setError(payload.message ?? "Não foi possível decidir a solicitação.");
+    else { await loadRequests(); await onChanged(); }
+    setBusy(false);
+  };
+
+  const requested = Number(discountPercent || 0);
+  const simulatedPrice = quote ? quote.officialUnitPrice * (1 - requested / 100) : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25"/>
+      <aside className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-6">
+        <div className="flex justify-between"><div><h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2><p className="text-xs text-stone-500">{order.customer.name}</p></div><button onClick={onClose}><X/></button></div>
+        <div className="mt-6"><Status status={order.status}/><div className="mt-4 flex items-center gap-2 text-xs text-stone-500"><Clock3 size={14}/> Pedido registrado no fluxo operacional.</div></div>
+
+        <div className="mt-6 space-y-2">
+          {order.items.map((item) => <div key={item.id} className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs"><strong>{item.productName}<span className="ml-1 font-normal text-stone-400">{item.sku}</span></strong><span>{item.quantity} un.</span><span>{money.format(Number(item.unitPrice ?? 0))}</span><strong className="text-right">{money.format(Number(item.totalAmount))}</strong></div>)}
+        </div>
+
+        {order.status === "DRAFT" && order.items.length > 0 && (
+          <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+            <div className="flex items-center gap-2"><BadgeDollarSign size={17} className="text-violet-700"/><div><p className="text-xs font-bold text-violet-900">Solicitar desconto</p><p className="text-[10px] text-violet-700">Controle interno. Nada desta aprovação aparece para o cliente.</p></div></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Field label="Item"><select value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)}>{order.items.map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.sku}</option>)}</select></Field>
+              <Field label="Desconto solicitado (%)"><input type="number" min="0" step="0.01" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)}/></Field>
+            </div>
+            {quote && (
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <MiniValue label="Preço oficial" value={money.format(quote.officialUnitPrice)}/>
+                <MiniValue label="Preço proposto" value={money.format(simulatedPrice)}/>
+                <MiniValue label="Máx. solicitável" value={`${quote.discountPolicy.maxRequestPercent.toFixed(2)}%`}/>
+              </div>
+            )}
+            <label className="mt-3 block text-xs font-semibold">Justificativa<textarea rows={3} value={rationale} onChange={(event) => setRationale(event.target.value)} className="mt-2 w-full rounded-xl border bg-white px-3 py-3 text-sm" placeholder="Motivo comercial da exceção..."/></label>
+            <button disabled={busy || !quote || requested <= 0 || !rationale.trim()} onClick={() => void requestDiscount()} className="mt-3 w-full rounded-xl bg-stone-950 py-3 text-xs font-bold text-white disabled:opacity-40">Enviar para aprovação</button>
+          </section>
+        )}
+
+        {requests.length > 0 && (
+          <section className="mt-6">
+            <div className="flex items-center gap-2"><ShieldCheck size={16}/><h3 className="text-sm font-semibold">Histórico interno de descontos</h3></div>
+            <div className="mt-3 space-y-2">
+              {requests.map((request) => (
+                <div key={request.id} className="rounded-xl border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-semibold">{Number(request.discountPercent).toFixed(2)}% · {money.format(Number(request.officialUnitPrice))} → {money.format(Number(request.requestedUnitPrice))}</p><Badge tone={request.status === "APPROVED" ? "success" : request.status === "REJECTED" ? "danger" : "warning"}>{request.status === "APPROVED" ? "Aprovado" : request.status === "REJECTED" ? "Recusado" : "Pendente"}</Badge></div>
+                  <p className="mt-1 text-[11px] text-stone-500">{request.rationale}</p>
+                  <p className="mt-1 text-[10px] text-stone-400">Solicitado por {request.requestedByName}</p>
+                  {request.status === "PENDING" && <div className="mt-3 flex gap-2"><button disabled={busy} onClick={() => void decide(request.id, "APPROVE")} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-[11px] font-semibold text-white"><Check size={13}/> Aprovar</button><button disabled={busy} onClick={() => void decide(request.id, "REJECT")} className="rounded-lg border px-3 py-2 text-[11px] font-semibold">Recusar</button></div>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</div>}
+      </aside>
+    </div>
+  );
+}
+
+function MiniValue({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-white p-3"><p className="text-[9px] uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 font-bold text-stone-800">{value}</p></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
