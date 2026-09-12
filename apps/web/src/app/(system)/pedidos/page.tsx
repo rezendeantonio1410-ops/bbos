@@ -327,7 +327,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
-  const [freightResponsibility, setFreightResponsibility] = useState<"BISPO" | "CUSTOMER" | "PICKUP">("CUSTOMER");
+  const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
   const [carrierName, setCarrierName] = useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [customerReference, setCustomerReference] = useState("");
@@ -405,6 +405,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     if (!selected || !customerId) return setError("Selecione cliente e produto.");
     if (!quote) return setError("O pedido precisa de um preço interno vigente antes de ser salvo.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
+    if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
 
     const response = await fetch(salesOrdersApi(), {
       method: "POST",
@@ -532,7 +533,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
             {showTerms && (
               <div className="grid gap-3 border-t p-4 sm:grid-cols-2">
                 <Field label="Frete">
-                  <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "BISPO" | "CUSTOMER" | "PICKUP")}>
+                  <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "" | "BISPO" | "CUSTOMER" | "PICKUP")}>
+                    <option value="">Selecione</option>
                     <option value="CUSTOMER">Por conta do cliente</option>
                     <option value="BISPO">Por conta da Bispo</option>
                     <option value="PICKUP">Retirada na fábrica</option>
@@ -541,7 +543,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                 <Field label="Entrega prevista">
                   <input type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} />
                 </Field>
-                {freightResponsibility !== "PICKUP" && (
+                {freightResponsibility && freightResponsibility !== "PICKUP" && (
                   <Field label="Transportadora">
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
                   </Field>
@@ -574,7 +576,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
           )}
 
           {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
-          <button disabled={!quote || quoteBusy} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
+          <button disabled={!quote || quoteBusy || !freightResponsibility} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
           <p className="text-[10px] leading-4 text-stone-400">Preço e total vêm da tabela interna vigente. Condições comerciais ficam registradas no próprio pedido.</p>
         </div>
       </aside>
@@ -749,7 +751,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
     : "A combinar";
-  const freightLabel = freightLabels[order.freightResponsibility ?? "CUSTOMER"] ?? "A combinar";
+  const freightLabel = freightLabels[order.freightResponsibility ?? ""] ?? "A combinar";
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote ? quote.officialUnitPrice * (1 - requested / 100) : 0;
 
