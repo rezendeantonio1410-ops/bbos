@@ -35,32 +35,36 @@ export class SalesOrdersController {
 
   @Post(":id/confirm")
   async confirm(@Param("id") id: string) {
-    const order = await this.salesOrders.database.salesOrder.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!order) return this.salesOrders.confirm(id);
+    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id, so."totalAmount", c.id AS "customerId", c.active,
+              c."paymentTerms", c."creditStatus", c."creditLimit"
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id = so."customerId"
+        WHERE so.id=$1`,
+      id,
+    );
+    const context = rows[0];
+    if (!context) return this.salesOrders.confirm(id);
 
-    const customer = order.customer;
-    if (!isCashTerm(customer.paymentTerms)) {
-      if (!customer.active) {
+    if (!isCashTerm(context.paymentTerms)) {
+      if (!context.active) {
         throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
       }
-      if (customer.creditStatus !== "APPROVED") {
+      if (context.creditStatus !== "APPROVED") {
         throw new BadRequestException(
           "Venda a prazo bloqueada: o cliente não possui crédito aprovado.",
         );
       }
-      const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      const exposureRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
         `SELECT COALESCE(SUM("openAmount"),0)::numeric AS total
            FROM "AccountsReceivable"
           WHERE "customerId"=$1 AND status NOT IN ('PAID','CANCELLED')`,
-        customer.id,
+        context.customerId,
       );
-      const usedCredit = Number(rows[0]?.total ?? 0);
-      const creditLimit = Number(customer.creditLimit ?? 0);
+      const usedCredit = Number(exposureRows[0]?.total ?? 0);
+      const creditLimit = Number(context.creditLimit ?? 0);
       const availableCredit = Math.max(0, creditLimit - usedCredit);
-      const orderTotal = Number(order.totalAmount ?? 0);
+      const orderTotal = Number(context.totalAmount ?? 0);
       if (orderTotal > availableCredit) {
         throw new BadRequestException(
           `Venda a prazo bloqueada: pedido de ${orderTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} excede o crédito disponível de ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`,
