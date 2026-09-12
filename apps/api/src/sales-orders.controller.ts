@@ -161,7 +161,10 @@ export class SalesOrdersController {
     if (paymentType === "TERM" && !paymentTerms) throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
     if (!body.customerId || !body.items?.length) throw new BadRequestException("Cliente e itens são obrigatórios.");
 
-    const freightResponsibility = String(body.freightResponsibility ?? "CUSTOMER").toUpperCase();
+    const freightResponsibility = String(body.freightResponsibility ?? "").trim().toUpperCase();
+    if (!freightResponsibility) {
+      throw new BadRequestException("Selecione quem será responsável pelo frete.");
+    }
     if (!["BISPO", "CUSTOMER", "PICKUP"].includes(freightResponsibility)) {
       throw new BadRequestException("Responsabilidade do frete inválida.");
     }
