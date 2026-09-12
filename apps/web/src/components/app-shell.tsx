@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   BarChart3,
   Bell,
   BrainCircuit,
@@ -39,43 +40,30 @@ type NavItem = { href: string; label: string; icon: typeof House };
 type NavGroup = { label: string; items: NavItem[]; alwaysOpen?: boolean };
 
 const navGroups: NavGroup[] = [
-  {
-    label: "Visão geral",
-    alwaysOpen: true,
-    items: [
-      { href: "/home", label: "Central de comando", icon: House },
-      { href: "/dashboard", label: "Executivo", icon: LayoutDashboard },
-      { href: "/dashboard-industrial", label: "Industrial", icon: Gauge },
-    ],
-  },
-  {
-    label: "Comercial",
-    items: [
-      { href: "/clientes", label: "Clientes", icon: UsersRound },
-      { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
-      { href: "/vendas", label: "Vendas", icon: BarChart3 },
-      { href: "/commerce", label: "Commerce", icon: Globe2 },
-    ],
-  },
-  {
-    label: "Operação",
-    items: [
-      { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
-      { href: "/producao", label: "Produção", icon: Factory },
-      { href: "/blends", label: "Blends", icon: Boxes },
-      { href: "/produtos", label: "Produtos", icon: PackageCheck },
-      { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
-    ],
-  },
-  {
-    label: "Gestão",
-    items: [
-      { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
-      { href: "/custos", label: "Custos", icon: Calculator },
-      { href: "/usuarios", label: "Usuários e acessos", icon: UsersRound },
-      { href: "/bi", label: "Inteligência", icon: BrainCircuit },
-    ],
-  },
+  { label: "Visão geral", alwaysOpen: true, items: [
+    { href: "/home", label: "Central de comando", icon: House },
+    { href: "/dashboard", label: "Executivo", icon: LayoutDashboard },
+    { href: "/dashboard-industrial", label: "Industrial", icon: Gauge },
+  ]},
+  { label: "Comercial", items: [
+    { href: "/clientes", label: "Clientes", icon: UsersRound },
+    { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
+    { href: "/vendas", label: "Vendas", icon: BarChart3 },
+    { href: "/commerce", label: "Commerce", icon: Globe2 },
+  ]},
+  { label: "Operação", items: [
+    { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
+    { href: "/producao", label: "Produção", icon: Factory },
+    { href: "/blends", label: "Blends", icon: Boxes },
+    { href: "/produtos", label: "Produtos", icon: PackageCheck },
+    { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
+  ]},
+  { label: "Gestão", items: [
+    { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
+    { href: "/custos", label: "Custos", icon: Calculator },
+    { href: "/usuarios", label: "Usuários e acessos", icon: UsersRound },
+    { href: "/bi", label: "Inteligência", icon: BrainCircuit },
+  ]},
 ];
 
 const pageLabels = Object.fromEntries(navGroups.flatMap((group) => group.items.map((item) => [item.href, item.label])));
@@ -172,7 +160,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>;
         })}
       </nav>
-      <button type="button" onClick={openAssistant} className="mx-4 mb-4 flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2.5 text-left text-[11px] font-bold text-violet-700 transition hover:bg-violet-50"><BrainCircuit size={15} /><span>Conversar com o BBOS</span></button>
+      <div className="mx-4 mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/55 p-3">
+        <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-xl bg-white text-emerald-700"><Activity size={15}/></span><div><p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-emerald-700">Operação hoje</p><p className="mt-0.5 text-[11px] font-bold text-stone-800">Sistema conectado</p></div></div>
+        <div className="mt-3 flex items-center gap-2 text-[10px] text-stone-500"><span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,.10)]"/><span>Sessão ativa · dados disponíveis</span></div>
+      </div>
     </div>
   );
 
