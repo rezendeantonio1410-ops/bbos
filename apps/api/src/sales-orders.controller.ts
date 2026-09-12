@@ -8,6 +8,10 @@ const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
   return !normalized || normalized === "à vista" || normalized === "a vista";
 };
+const termDays = (value: unknown) => {
+  const match = String(value ?? "").match(/(\d+)/);
+  return match ? Math.max(0, Number(match[1])) : 0;
+};
 
 @Controller("sales-orders")
 export class SalesOrdersController {
@@ -29,15 +33,33 @@ export class SalesOrdersController {
   }
 
   @Post()
-  create(@Body() body: CreateSalesOrderInput) {
-    return this.salesOrders.create(body);
+  async create(@Body() body: CreateSalesOrderInput & { paymentType?: string; paymentTerms?: string }) {
+    const paymentType = String(body.paymentType ?? "CASH").toUpperCase();
+    if (!["CASH", "TERM"].includes(paymentType)) {
+      throw new BadRequestException("Forma de pagamento inválida.");
+    }
+    const paymentTerms = paymentType === "TERM" ? String(body.paymentTerms ?? "").trim() : "À vista";
+    if (paymentType === "TERM" && !paymentTerms) {
+      throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
+    }
+
+    const order = await this.salesOrders.create(body);
+    await this.salesOrders.database.$executeRawUnsafe(
+      `UPDATE "SalesOrder"
+          SET "paymentType"=$2, "paymentTermsSnapshot"=$3, "updatedAt"=NOW()
+        WHERE id=$1`,
+      order.id,
+      paymentType,
+      paymentTerms,
+    );
+    return { ...order, paymentType, paymentTermsSnapshot: paymentTerms };
   }
 
   @Post(":id/confirm")
   async confirm(@Param("id") id: string) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT so.id, so."totalAmount", c.id AS "customerId", c.active,
-              c."paymentTerms", c."creditStatus", c."creditLimit"
+      `SELECT so.id, so."totalAmount", so."paymentType", so."paymentTermsSnapshot",
+              c.id AS "customerId", c.active, c."paymentTerms", c."creditStatus", c."creditLimit"
          FROM "SalesOrder" so
          JOIN "Customer" c ON c.id = so."customerId"
         WHERE so.id=$1`,
@@ -46,13 +68,16 @@ export class SalesOrdersController {
     const context = rows[0];
     if (!context) return this.salesOrders.confirm(id);
 
-    if (!isCashTerm(context.paymentTerms)) {
+    const saleIsTerm = context.paymentType === "TERM"
+      || (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
+
+    if (saleIsTerm) {
       if (!context.active) {
         throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
       }
       if (context.creditStatus !== "APPROVED") {
         throw new BadRequestException(
-          "Venda a prazo bloqueada: o cliente não possui crédito aprovado.",
+          "Venda a prazo bloqueada: o cliente não possui crédito vigente aprovado.",
         );
       }
       const exposureRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
@@ -112,7 +137,23 @@ export class SalesOrdersController {
   }
 
   @Post(":id/invoice")
-  invoice(@Param("id") id: string) {
-    return this.salesOrders.transition(id, "INVOICED");
+  async invoice(@Param("id") id: string) {
+    const result = await this.salesOrders.transition(id, "INVOICED");
+    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT "paymentType", "paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1`,
+      id,
+    );
+    const payment = rows[0];
+    if (payment && payment.paymentType !== "LEGACY") {
+      const days = payment.paymentType === "CASH" ? 0 : termDays(payment.paymentTermsSnapshot);
+      await this.salesOrders.database.$executeRawUnsafe(
+        `UPDATE "AccountsReceivable"
+            SET "dueDate" = "issueDate" + ($2::int * INTERVAL '1 day'), "updatedAt"=NOW()
+          WHERE "salesOrderId"=$1`,
+        id,
+        days,
+      );
+    }
+    return result;
   }
 }
