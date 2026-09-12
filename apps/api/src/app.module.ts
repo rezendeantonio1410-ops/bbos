@@ -15,6 +15,7 @@ import { CostingController } from "./costing.controller";
 import { CostingService } from "./costing.service";
 import { ProductionService } from "./production.service";
 import { SalesOrdersController } from "./sales-orders.controller";
+import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
 import { FinanceService } from "./finance.service";
@@ -49,6 +50,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
     ProductsController,
     CostingController,
     SalesOrdersController,
+    SalesOrderApprovalsController,
     FinanceController,
     ReconciliationController,
     CommerceController,
