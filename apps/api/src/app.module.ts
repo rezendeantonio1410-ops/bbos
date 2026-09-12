@@ -14,6 +14,7 @@ import { ProductsRepository } from "./products.repository";
 import { CostingController } from "./costing.controller";
 import { CostingService } from "./costing.service";
 import { ProductionService } from "./production.service";
+import { SalesOrderCatalogOptionsController } from "./sales-order-catalog-options.controller";
 import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
 import { SalesOrdersService } from "./sales-orders.service";
@@ -50,6 +51,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
     ProductionController,
     ProductsController,
     CostingController,
+    SalesOrderCatalogOptionsController,
     SalesOrdersController,
     SalesOrderApprovalsController,
     FinanceController,
