@@ -37,33 +37,75 @@ import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
 import { dismissRouteHelp, recordRouteVisit, routeHelpDismissed } from "@/lib/intelligence-client";
 
 type NavItem = { href: string; label: string; icon: typeof House };
-type NavGroup = { label: string; items: NavItem[]; alwaysOpen?: boolean };
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+  alwaysOpen?: boolean;
+  accentText: string;
+  accentDot: string;
+  iconText: string;
+  activeClass: string;
+  headerActiveClass: string;
+};
 
 const navGroups: NavGroup[] = [
-  { label: "Visão geral", alwaysOpen: true, items: [
-    { href: "/home", label: "Central de comando", icon: House },
-    { href: "/dashboard", label: "Executivo", icon: LayoutDashboard },
-    { href: "/dashboard-industrial", label: "Industrial", icon: Gauge },
-  ]},
-  { label: "Comercial", items: [
-    { href: "/clientes", label: "Clientes", icon: UsersRound },
-    { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
-    { href: "/vendas", label: "Vendas", icon: BarChart3 },
-    { href: "/commerce", label: "Commerce", icon: Globe2 },
-  ]},
-  { label: "Operação", items: [
-    { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
-    { href: "/producao", label: "Produção", icon: Factory },
-    { href: "/blends", label: "Blends", icon: Boxes },
-    { href: "/produtos", label: "Produtos", icon: PackageCheck },
-    { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
-  ]},
-  { label: "Gestão", items: [
-    { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
-    { href: "/custos", label: "Custos", icon: Calculator },
-    { href: "/usuarios", label: "Usuários e acessos", icon: UsersRound },
-    { href: "/bi", label: "Inteligência", icon: BrainCircuit },
-  ]},
+  {
+    label: "Visão geral",
+    alwaysOpen: true,
+    accentText: "text-[#087568]",
+    accentDot: "bg-[#087568]",
+    iconText: "text-[#087568]",
+    activeClass: "bg-[#EAF6F2] text-[#123B35] shadow-[inset_3px_0_0_#087568]",
+    headerActiveClass: "bg-[#EAF6F2]/65 text-[#087568]",
+    items: [
+      { href: "/home", label: "Central de comando", icon: House },
+      { href: "/dashboard", label: "Executivo", icon: LayoutDashboard },
+      { href: "/dashboard-industrial", label: "Industrial", icon: Gauge },
+    ],
+  },
+  {
+    label: "Comercial",
+    accentText: "text-[#3E73A8]",
+    accentDot: "bg-[#3E73A8]",
+    iconText: "text-[#3E73A8]",
+    activeClass: "bg-[#EEF5FB] text-[#244F79] shadow-[inset_3px_0_0_#3E73A8]",
+    headerActiveClass: "bg-[#EEF5FB]/75 text-[#3E73A8]",
+    items: [
+      { href: "/clientes", label: "Clientes", icon: UsersRound },
+      { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
+      { href: "/vendas", label: "Vendas", icon: BarChart3 },
+      { href: "/commerce", label: "Commerce", icon: Globe2 },
+    ],
+  },
+  {
+    label: "Operação",
+    accentText: "text-[#B87518]",
+    accentDot: "bg-[#C8923E]",
+    iconText: "text-[#B87518]",
+    activeClass: "bg-[#FFF6E6] text-[#795019] shadow-[inset_3px_0_0_#C8923E]",
+    headerActiveClass: "bg-[#FFF6E6]/80 text-[#A66714]",
+    items: [
+      { href: "/cafe-verde", label: "Café Verde", icon: PackageOpen },
+      { href: "/producao", label: "Produção", icon: Factory },
+      { href: "/blends", label: "Blends", icon: Boxes },
+      { href: "/produtos", label: "Produtos", icon: PackageCheck },
+      { href: "/laboratorio", label: "Laboratório", icon: FlaskConical },
+    ],
+  },
+  {
+    label: "Gestão",
+    accentText: "text-[#6D4FA3]",
+    accentDot: "bg-[#6D4FA3]",
+    iconText: "text-[#6D4FA3]",
+    activeClass: "bg-[#F4F0FB] text-[#523B7C] shadow-[inset_3px_0_0_#6D4FA3]",
+    headerActiveClass: "bg-[#F4F0FB]/85 text-[#6D4FA3]",
+    items: [
+      { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
+      { href: "/custos", label: "Custos", icon: Calculator },
+      { href: "/usuarios", label: "Usuários e acessos", icon: UsersRound },
+      { href: "/bi", label: "Inteligência", icon: BrainCircuit },
+    ],
+  },
 ];
 
 const pageLabels = Object.fromEntries(navGroups.flatMap((group) => group.items.map((item) => [item.href, item.label])));
@@ -147,15 +189,37 @@ export function AppShell({ children }: { children: ReactNode }) {
         <span className="grid size-9 place-items-center rounded-xl bg-white"><Factory size={16} /></span>
         <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">Bispo Coffees</p><p className="text-[10px] text-[var(--bbos-text-muted)]">Operação integrada</p></div>
       </div>
-      <nav className="flex-1 space-y-3 overflow-y-auto px-3 pb-5">
+      <nav className="flex-1 space-y-2 overflow-y-auto px-3 pb-5">
         {navGroups.map((group) => {
           const isOpen = group.alwaysOpen || expandedGroup === group.label;
           const hasActive = group.label === activeGroup;
-          return <div key={group.label}>
-            {group.alwaysOpen ? <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-muted)]">{group.label}</p> : <button type="button" onClick={() => setExpandedGroup(isOpen && !hasActive ? "" : group.label)} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-[9px] font-bold uppercase tracking-[.16em] transition ${hasActive ? "text-[var(--bbos-text-primary)]" : "text-[var(--bbos-text-muted)] hover:bg-[var(--bbos-surface-subtle)]"}`}><span>{group.label}</span><ChevronDown size={13} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} /></button>}
+          return <div key={group.label} className="rounded-2xl">
+            {group.alwaysOpen ? (
+              <div className={`flex items-center gap-2 px-3 pb-1.5 pt-1 text-[9px] font-extrabold uppercase tracking-[.16em] ${group.accentText}`}>
+                <span className={`size-1.5 rounded-full ${group.accentDot}`} />
+                <span>{group.label}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setExpandedGroup(isOpen && !hasActive ? "" : group.label)}
+                className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-[9px] font-extrabold uppercase tracking-[.16em] transition ${hasActive ? group.headerActiveClass : `${group.accentText} hover:bg-white/65`}`}
+              >
+                <span className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${group.accentDot}`} />{group.label}</span>
+                <ChevronDown size={13} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              </button>
+            )}
             {isOpen && <div className="mt-0.5 space-y-0.5">{group.items.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || (href !== "/home" && pathname.startsWith(`${href}/`));
-              return <Link key={href} href={href} onClick={() => mobile && setMobileOpen(false)} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${active ? "bg-[var(--bbos-nav-active)] text-[var(--bbos-text-primary)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]" : "text-[var(--bbos-text-secondary)] hover:bg-[var(--bbos-surface-subtle)]"}`}><Icon size={17} /><span>{label}</span></Link>;
+              return <Link
+                key={href}
+                href={href}
+                onClick={() => mobile && setMobileOpen(false)}
+                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${active ? group.activeClass : "text-[var(--bbos-text-secondary)] hover:bg-white/70"}`}
+              >
+                <Icon size={17} className={active ? "" : group.iconText} />
+                <span>{label}</span>
+              </Link>;
             })}</div>}
           </div>;
         })}
