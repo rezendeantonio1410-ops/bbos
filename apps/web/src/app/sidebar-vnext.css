@@ -1,0 +1,93 @@
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button {
+  position: relative;
+  min-height: 60px;
+  align-items: flex-start;
+  padding: 10px 12px 19px 12px !important;
+  border: 1px solid transparent;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 18px rgba(18, 34, 29, .025);
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button > span:first-child {
+  gap: 9px !important;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: .11em;
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button > span:first-child > span:first-child {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 8px !important;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.45), 0 4px 10px rgba(18,34,29,.05);
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button > span:first-child > span:first-child::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  border: 2px solid rgba(255,255,255,.92);
+}
+
+.bbos-system-vnext aside nav > div:nth-child(2) > button {
+  background: linear-gradient(135deg, rgba(238,245,251,.84), rgba(255,255,255,.72));
+  border-color: rgba(62,115,168,.11);
+}
+.bbos-system-vnext aside nav > div:nth-child(2) > button::after { content: "Clientes, pedidos e vendas"; }
+
+.bbos-system-vnext aside nav > div:nth-child(3) > button {
+  background: linear-gradient(135deg, rgba(255,246,230,.88), rgba(255,255,255,.72));
+  border-color: rgba(184,117,24,.12);
+}
+.bbos-system-vnext aside nav > div:nth-child(3) > button::after { content: "Café, produção, estoque e qualidade"; }
+
+.bbos-system-vnext aside nav > div:nth-child(4) > button {
+  background: linear-gradient(135deg, rgba(244,240,251,.88), rgba(255,255,255,.74));
+  border-color: rgba(109,79,163,.12);
+}
+.bbos-system-vnext aside nav > div:nth-child(4) > button::after { content: "Financeiro, custos, acessos e inteligência"; }
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button::after {
+  position: absolute;
+  left: 45px;
+  bottom: 8px;
+  max-width: 165px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vnext-text-3);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button:hover {
+  transform: translateY(-1px);
+  border-color: var(--vnext-border-strong);
+  box-shadow: 0 10px 22px rgba(18,34,29,.055);
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > button > svg {
+  margin-top: 4px;
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > div {
+  padding: 4px 4px 3px 8px;
+}
+
+.bbos-system-vnext aside nav > div:nth-child(n+2) > div > a {
+  min-height: 40px;
+}
+
+@media (max-height: 820px) {
+  .bbos-system-vnext aside nav > div:nth-child(n+2) > button {
+    min-height: 52px;
+    padding-bottom: 14px !important;
+  }
+  .bbos-system-vnext aside nav > div:nth-child(n+2) > button::after { display: none; }
+}
