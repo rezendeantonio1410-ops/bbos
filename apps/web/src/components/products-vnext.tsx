@@ -113,6 +113,7 @@ export function ProductsVNext() {
           const products = catalog.filter((product) => product.line === line && product.active);
           if (!products.length) return null;
           const meta = lineMeta[line];
+          if (!meta) return null;
           return (
             <div key={line} className="overflow-hidden rounded-[20px] border border-[var(--vnext-border)] bg-white/95 shadow-[var(--vnext-shadow-card)]">
               <div className="flex items-center justify-between border-b border-[var(--vnext-border)] px-5 py-4">
