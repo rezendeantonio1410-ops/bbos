@@ -19,6 +19,7 @@ import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
+import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
 import { FinanceService } from "./finance.service";
 import { ReconciliationController } from "./reconciliation.controller";
 import { ReconciliationService } from "./reconciliation.service";
@@ -59,6 +60,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
     SalesOrdersController,
     SalesOrderApprovalsController,
     FinanceController,
+    FinanceSalesScheduleController,
     ReconciliationController,
     CommerceController,
     AuthController,
