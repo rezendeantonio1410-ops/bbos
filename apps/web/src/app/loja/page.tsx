@@ -137,7 +137,7 @@ export default function LojaPage() {
           data-photo-slot="hero-chemex-ceramic-nature"
         >
           <Image
-            src="/brand/visuals/bispo-hero-approved-intact.jpg"
+            src="/brand/visuals/bispo-hero-chemex-v2.png"
             alt="Café Bispo preparado em Chemex"
             fill
             priority
