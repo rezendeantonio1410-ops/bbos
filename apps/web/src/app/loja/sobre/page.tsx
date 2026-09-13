@@ -37,18 +37,19 @@ export default function SobrePage() {
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
-          <h2>Duas trajetórias. Uma forma muito humana de escolher café.</h2>
+          <h2>Duas trajetórias que escolheram caminhar juntas.</h2>
           <span>
-            José Rezende e Suzi Ninov unem origem, prova, produção,
-            sustentabilidade e mercado para fazer uma escolha complexa chegar
-            simples à sua xícara.
+            A Bispo Coffees nasceu do encontro entre experiência e cuidado — e
+            de uma parceria construída todos os dias, dentro e fora do café.
           </span>
         </div>
         <div className={authority.peopleMarks}>
           <article className={authority.personPrimary}>
             <small>ORIGEM · QUALIDADE · MERCADO</small>
             <strong>José Rezende</strong>
-            <span>Uma vida conectando produtores, café e pessoas.</span>
+            <span>
+              Raízes no campo e uma vida conectando origens e pessoas.
+            </span>
           </article>
           <div className={authority.thread}>
             <i />
@@ -59,7 +60,7 @@ export default function SobrePage() {
           <article className={authority.personSecondary}>
             <small>PRODUÇÃO · SUSTENTABILIDADE · CRITÉRIO</small>
             <strong>Suzi Ninov</strong>
-            <span>Olhar atento para o que existe antes da xícara.</span>
+            <span>Presença, sensibilidade e cuidado em cada escolha.</span>
           </article>
         </div>
 
@@ -92,36 +93,56 @@ export default function SobrePage() {
           </figure>
         </div>
 
+        <blockquote className={authority.storyManifesto}>
+          <small>UMA HISTÓRIA COMPARTILHADA</small>
+          <p>
+            Há encontros que somam competências. O de José e Suzi construiu
+            também uma direção comum. Entre o campo, a prova, a produção e os
+            mercados, os dois aprenderam a olhar para o café pelo mesmo
+            princípio: nenhuma qualidade existe sem pessoas, confiança e
+            presença. É dessa convivência — feita de escuta, critério e decisões
+            compartilhadas — que nasce a Bispo Coffees.
+          </p>
+        </blockquote>
+
         <div className={authority.storyChapters}>
           <article>
             <small>01 · RAÍZES</small>
-            <h3>Do campo para o mundo</h3>
+            <h3>Uma vida formada pelo café</h3>
             <p>
               José cresceu em uma família de produtores de café no Norte do
-              Paraná. Desde 2003, constrói uma trajetória que atravessa prova
-              profissional, certificações, desenvolvimento de origens,
-              proximidade com produtores e abertura de mercados para cafés
-              brasileiros.
+              Paraná, entre os paralelos 22 e 23. Desde 2003, sua trajetória
+              atravessa consultoria, prova profissional, certificações,
+              sustentabilidade e desenvolvimento de origens. Tornou-se provador
+              profissional em 2004, aprofundou a metodologia SCA em 2007 e
+              conquistou a certificação Q-Grader em 2010. Do contato direto com
+              produtores à exportação, construiu mercados para cafés brasileiros
+              sem se afastar de onde tudo começa: o campo.
             </p>
           </article>
           <article>
             <small>02 · ENCONTRO</small>
-            <h3>Critério que se completa</h3>
+            <h3>O cuidado que dá sentido ao processo</h3>
             <p>
-              Suzi soma à história uma visão conectada à produção e à
-              sustentabilidade. Seu olhar amplia o cuidado: entender a origem,
-              reconhecer o potencial e preservar o valor de cada escolha até o
-              café chegar às pessoas.
+              Suzi traz uma visão conectada à produção, à sustentabilidade e às
+              relações que sustentam o negócio. Seu olhar atento amplia o
+              critério técnico: compreender a origem, reconhecer o potencial e
+              cuidar para que o valor de cada café seja preservado. Ela
+              transforma intenção em presença diária e ajuda a manter pessoas,
+              processos e propósito seguindo na mesma direção.
             </p>
           </article>
           <article>
             <small>03 · BISPO COFFEES</small>
-            <h3>Complexo para nós. Simples para você.</h3>
+            <h3>Uma escolha construída a dois</h3>
             <p>
-              A Bispo nasce da parceria dos dois. A experiência de campo e
-              mercado encontra a atenção ao processo para selecionar cafés com
-              identidade, traduzi-los por sensação e ajudar cada pessoa a
-              encontrar uma xícara que combine com ela.
+              A Bispo nasce de uma parceria que atravessa trabalho, escolhas e
+              caminhos. José e Suzi se completam porque observam por ângulos
+              diferentes e decidem com o mesmo compromisso. Juntos, selecionam
+              cafés com identidade, traduzem conhecimento em sensações simples e
+              aproximam quem produz de quem bebe. O complexo fica com eles; para
+              você, fica o prazer de encontrar uma xícara que combine com o seu
+              momento.
             </p>
           </article>
         </div>

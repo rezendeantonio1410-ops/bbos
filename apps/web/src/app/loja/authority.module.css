@@ -111,6 +111,29 @@
   font-weight: 750;
   border-bottom: 1px solid rgba(16, 32, 24, 0.3);
 }
+.storyManifesto {
+  grid-column: 2/12;
+  margin: 10px 0 4px;
+  padding: clamp(30px, 4vw, 54px);
+  border-left: 3px solid #b86d3d;
+  border-radius: 0 24px 24px 0;
+  background: #102018;
+  color: #fffdf7;
+}
+.storyManifesto small {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #d79a70;
+}
+.storyManifesto p {
+  margin: 18px 0 0;
+  max-width: 1100px;
+  font-size: clamp(22px, 2.35vw, 36px);
+  line-height: 1.24;
+  letter-spacing: -0.025em;
+  font-weight: 450;
+}
 
 @media (max-width: 900px) {
   .peopleLayer {
@@ -120,6 +143,7 @@
   }
   .peopleLead,
   .peopleMarks,
+  .storyManifesto,
   .peopleLink {
     grid-column: 1;
   }
@@ -130,6 +154,9 @@
   .personPrimary,
   .personSecondary {
     padding: 19px;
+  }
+  .storyManifesto {
+    padding: 30px;
   }
 }
 @media (max-width: 560px) {
@@ -148,6 +175,13 @@
     grid-template-columns: 1fr;
     gap: 10px;
     min-height: 0;
+  }
+  .storyManifesto {
+    margin-top: 2px;
+    padding: 25px 22px;
+  }
+  .storyManifesto p {
+    font-size: 23px;
   }
   .thread {
     display: none;
