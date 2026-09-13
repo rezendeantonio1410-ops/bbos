@@ -11,6 +11,7 @@ import './human-experience.css';
 import './intelligence-native.css';
 import './vnext.css';
 import './sidebar-vnext.css';
+import './order-drawer-vnext.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
 import { BbosAssistant } from '@/components/bbos-assistant';
 
