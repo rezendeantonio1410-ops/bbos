@@ -28,6 +28,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
+import { IntegrationsController } from "./integrations.controller";
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -58,6 +59,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
     CommerceController,
     AuthController,
     AdminCoffeeReferenceController,
+    IntegrationsController,
     BrokersController,
     CustomersController,
     CuppingController,
