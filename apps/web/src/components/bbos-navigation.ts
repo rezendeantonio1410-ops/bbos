@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   PackageCheck,
   PackageOpen,
+  PlugZap,
   Settings,
   ShoppingBag,
   UsersRound,
@@ -87,6 +88,7 @@ export const bbosNavigation: BbosNavGroup[] = [
     items: [
       { href: "/financeiro", label: "Financeiro", description: "Receber, pagar, caixa e conciliar", icon: CircleDollarSign, roles: ["ADMIN", "EXECUTIVE", "FINANCE"], keywords: ["caixa", "receber", "pagar"] },
       { href: "/custos", label: "Custos", description: "Custo real, margem e retorno", icon: Calculator, roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"], keywords: ["margem", "roi", "custeio"] },
+      { href: "/integracoes", label: "Integrações", description: "Bling, fiscal, filas e webhooks", icon: PlugZap, roles: LEADERSHIP, keywords: ["bling", "fiscal", "nfe", "webhook"] },
       { href: "/usuarios", label: "Usuários e acessos", description: "Papéis, permissões e segurança", icon: Settings, roles: ["ADMIN"], keywords: ["acesso", "perfil", "permissao"] },
       { href: "/bi", label: "Inteligência", description: "Diagnóstico, previsão e evidências", icon: BrainCircuit, roles: LEADERSHIP, keywords: ["ia", "insight", "previsao"] },
     ],
