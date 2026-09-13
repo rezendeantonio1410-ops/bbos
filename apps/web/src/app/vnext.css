@@ -1,0 +1,191 @@
+.bbos-system-vnext {
+  --vnext-bg: #F5F6F2;
+  --vnext-bg-soft: #FAFAF7;
+  --vnext-surface: rgba(255,255,255,.94);
+  --vnext-surface-solid: #FFFFFF;
+  --vnext-border: #E4E8E2;
+  --vnext-border-strong: #D6DDD7;
+  --vnext-text: #111715;
+  --vnext-text-2: #56615D;
+  --vnext-text-3: #7C8782;
+  --vnext-green: #087568;
+  --vnext-green-soft: #EAF6F2;
+  --vnext-green-mid: #B8DDD4;
+  --vnext-violet: #6D4FA3;
+  --vnext-violet-soft: #F4F0FB;
+  --vnext-blue: #3E73A8;
+  --vnext-blue-soft: #EEF5FB;
+  --vnext-amber: #B87518;
+  --vnext-amber-soft: #FFF6E6;
+  --vnext-red: #B94343;
+  --vnext-red-soft: #FFF0F0;
+  --vnext-shadow-card: 0 10px 30px rgba(23, 40, 34, .045);
+  --vnext-shadow-float: 0 18px 50px rgba(18, 34, 29, .09);
+  --vnext-radius-card: 18px;
+  --vnext-radius-control: 12px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 7% 2%, rgba(8,117,104,.035), transparent 24rem),
+    radial-gradient(circle at 95% 8%, rgba(109,79,163,.028), transparent 22rem),
+    var(--vnext-bg);
+  color: var(--vnext-text);
+}
+
+.bbos-system-vnext > aside {
+  background: rgba(250,250,247,.96) !important;
+  border-color: var(--vnext-border) !important;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.7);
+}
+
+.bbos-system-vnext > div > header {
+  background: rgba(255,255,255,.84) !important;
+  border-color: var(--vnext-border) !important;
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+}
+
+.bbos-system-vnext main {
+  position: relative;
+}
+
+.bbos-system-vnext main > div,
+.bbos-system-vnext main > section {
+  animation: vnext-enter .22s ease-out both;
+}
+
+.bbos-system-vnext [data-ui-card],
+.bbos-system-vnext .bbos-soft-card {
+  border-color: var(--vnext-border) !important;
+  background: var(--vnext-surface) !important;
+  box-shadow: var(--vnext-shadow-card) !important;
+  border-radius: var(--vnext-radius-card) !important;
+}
+
+.bbos-system-vnext [data-ui-card]:hover {
+  border-color: var(--vnext-border-strong) !important;
+}
+
+.bbos-system-vnext :is(input, select, textarea) {
+  border-color: var(--vnext-border) !important;
+  background-color: rgba(255,255,255,.96);
+  color: var(--vnext-text);
+  border-radius: var(--vnext-radius-control);
+}
+
+.bbos-system-vnext :is(input, select, textarea):hover {
+  border-color: var(--vnext-border-strong) !important;
+}
+
+.bbos-system-vnext :is(input, select, textarea):focus {
+  border-color: var(--vnext-green) !important;
+  box-shadow: 0 0 0 3px rgba(8,117,104,.09);
+}
+
+.bbos-system-vnext button,
+.bbos-system-vnext a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bbos-system-vnext button:not(:disabled):active,
+.bbos-system-vnext a:active {
+  transform: translateY(.5px);
+}
+
+.bbos-system-vnext .bg-white {
+  background-color: rgba(255,255,255,.96);
+}
+
+.bbos-system-vnext .bg-stone-50,
+.bbos-system-vnext .bg-stone-100 {
+  background-color: var(--vnext-bg-soft);
+}
+
+.bbos-system-vnext .border-stone-200,
+.bbos-system-vnext .border-stone-100 {
+  border-color: var(--vnext-border) !important;
+}
+
+.bbos-system-vnext .text-stone-950,
+.bbos-system-vnext .text-stone-900,
+.bbos-system-vnext .text-stone-800 {
+  color: var(--vnext-text) !important;
+}
+
+.bbos-system-vnext .text-stone-600,
+.bbos-system-vnext .text-stone-500 {
+  color: var(--vnext-text-2) !important;
+}
+
+.bbos-system-vnext .text-stone-400 {
+  color: var(--vnext-text-3) !important;
+}
+
+.bbos-system-vnext .text-forest-700,
+.bbos-system-vnext .text-forest-800,
+.bbos-system-vnext .text-forest-900 {
+  color: var(--vnext-green) !important;
+}
+
+.bbos-system-vnext .bg-forest-900,
+.bbos-system-vnext .bg-forest-800 {
+  background-color: #10211D !important;
+}
+
+.bbos-system-vnext .bg-emerald-50,
+.bbos-system-vnext .bg-emerald-50\/55 {
+  background-color: var(--vnext-green-soft) !important;
+}
+
+.bbos-system-vnext .text-emerald-700,
+.bbos-system-vnext .text-emerald-800 {
+  color: var(--vnext-green) !important;
+}
+
+.bbos-system-vnext .bg-violet-50 {
+  background-color: var(--vnext-violet-soft) !important;
+}
+
+.bbos-system-vnext .text-violet-700,
+.bbos-system-vnext .text-violet-900 {
+  color: var(--vnext-violet) !important;
+}
+
+.bbos-system-vnext table,
+.bbos-system-vnext [role="table"] {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.bbos-system-vnext thead,
+.bbos-system-vnext [data-table-header] {
+  color: var(--vnext-text-3);
+}
+
+.bbos-system-vnext tbody tr:hover {
+  background: rgba(8,117,104,.025);
+}
+
+.bbos-system-vnext .fixed.bg-white,
+.bbos-system-vnext aside.bg-white {
+  box-shadow: var(--vnext-shadow-float);
+}
+
+.bbos-system-vnext footer {
+  border-color: var(--vnext-border) !important;
+  color: var(--vnext-text-3) !important;
+}
+
+.bbos-system-vnext ::selection {
+  background: rgba(8,117,104,.18);
+  color: var(--vnext-text);
+}
+
+@keyframes vnext-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bbos-system-vnext main > div,
+  .bbos-system-vnext main > section { animation: none; }
+}
