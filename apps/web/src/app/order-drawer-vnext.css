@@ -1,0 +1,16 @@
+.bbos-system-vnext .fixed.inset-0 > aside.bg-white {
+  background: #ffffff !important;
+  opacity: 1 !important;
+  box-shadow: -24px 0 64px rgba(17, 23, 21, .16) !important;
+  border-left: 1px solid var(--vnext-border) !important;
+}
+
+.bbos-system-vnext .fixed.inset-0 > button.absolute.inset-0 {
+  background: rgba(15, 23, 20, .32) !important;
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+
+.bbos-system-vnext .fixed.inset-0 > aside.bg-white .bg-white {
+  background: #ffffff !important;
+}
