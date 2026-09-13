@@ -52,4 +52,32 @@ export class OperationsFlowController {
       return { ok: true };
     });
   }
+
+  @Get("demand")
+  async demand(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.db.$queryRawUnsafe<any[]>(`WITH uncovered AS (
+      SELECT soi."productVariantId", SUM(GREATEST(soi.quantity-COALESCE(r.reserved,0),0))::int AS demand
+      FROM "SalesOrderItem" soi JOIN "SalesOrder" so ON so.id=soi."salesOrderId"
+      LEFT JOIN (SELECT "salesOrderItemId",SUM(quantity)::int AS reserved FROM "InventoryReservation" WHERE status='ACTIVE' GROUP BY "salesOrderItemId") r ON r."salesOrderItemId"=soi.id
+      WHERE so."companyId"=$1 AND so.status::text IN ('CONFIRMED','RESERVED','PICKING','READY_TO_SHIP','INVOICED','IN_PRODUCTION')
+      GROUP BY soi."productVariantId"
+    ), stock AS (
+      SELECT "productVariantId",SUM("quantityOnHand"-"reservedQuantity")::int AS available FROM "FinishedProduct" WHERE "companyId"=$1 AND "productVariantId" IS NOT NULL GROUP BY "productVariantId"
+    )
+    SELECT pv.id AS "productVariantId",p.name,pv.sku,pv."netWeightGrams",COALESCE(u.demand,0)::int AS "uncoveredDemand",COALESCE(s.available,0)::int AS available,COALESCE(pol."minimumUnits",0)::int AS "minimumUnits",COALESCE(pol."targetUnits",0)::int AS "targetUnits",COALESCE(pol."safetyUnits",0)::int AS "safetyUnits",GREATEST(0,COALESCE(u.demand,0)+GREATEST(COALESCE(pol."targetUnits",0),COALESCE(pol."minimumUnits",0))+COALESCE(pol."safetyUnits",0)-COALESCE(s.available,0))::int AS "recommendedUnits"
+    FROM "ProductVariant" pv JOIN "Product" p ON p.id=pv."productId" JOIN "ProductLine" pl ON pl.id=p."productLineId"
+    LEFT JOIN uncovered u ON u."productVariantId"=pv.id LEFT JOIN stock s ON s."productVariantId"=pv.id LEFT JOIN "ProductStockPolicy" pol ON pol."productVariantId"=pv.id AND pol."companyId"=$1 AND pol.active=true
+    WHERE pl."companyId"=$1 AND pv.active=true AND p.active=true AND pl.active=true
+    ORDER BY "recommendedUnits" DESC,p.name,pv."netWeightGrams"`, actor.companyId).catch(() => []);
+  }
+
+  @Post("stock-policy/:productVariantId")
+  async stockPolicy(@Param("productVariantId") productVariantId: string, @Body() body: { minimumUnits: number; targetUnits: number; safetyUnits?: number }, @Req() request: any) {
+    const actor = await this.actor(request);
+    const values = [body.minimumUnits, body.targetUnits, body.safetyUnits ?? 0];
+    if (values.some((v) => !Number.isSafeInteger(v) || v < 0)) throw new BadRequestException("Política de estoque inválida.");
+    await this.db.$executeRawUnsafe("INSERT INTO \"ProductStockPolicy\"(id,\"companyId\",\"productVariantId\",\"minimumUnits\",\"targetUnits\",\"safetyUnits\") VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (\"companyId\",\"productVariantId\") DO UPDATE SET \"minimumUnits\"=EXCLUDED.\"minimumUnits\",\"targetUnits\"=EXCLUDED.\"targetUnits\",\"safetyUnits\"=EXCLUDED.\"safetyUnits\",active=true,\"updatedAt\"=NOW()", `policy-${productVariantId}`, actor.companyId, productVariantId, body.minimumUnits, body.targetUnits, body.safetyUnits ?? 0);
+    return { ok: true };
+  }
 }
