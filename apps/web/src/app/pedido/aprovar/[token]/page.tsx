@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
 
@@ -42,8 +43,9 @@ type Approval = {
   snapshot: Snapshot;
 };
 
-export default function PublicOrderApprovalPage({ params }: { params: { token: string } }) {
-  const token = params.token;
+export default function PublicOrderApprovalPage() {
+  const params = useParams<{ token: string }>();
+  const token = typeof params?.token === "string" ? params.token : "";
   const [approval, setApproval] = useState<Approval | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -55,6 +57,7 @@ export default function PublicOrderApprovalPage({ params }: { params: { token: s
   const api = `${getApiBaseUrl()}/sales-order-approvals/public/${token}`;
 
   const load = async () => {
+    if (!token) return;
     setBusy(true);
     setError("");
     const response = await fetch(api, { cache: "no-store" });
