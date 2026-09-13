@@ -34,8 +34,8 @@ export default function SobrePage() {
         </div>
       </header>
 
-      <section className={styles.peopleLayer}>
-        <div className={styles.peopleLead}>
+      <section className={authority.peopleLayer}>
+        <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
           <h2>Duas trajetórias. Uma forma muito humana de escolher café.</h2>
           <span>
@@ -44,19 +44,19 @@ export default function SobrePage() {
             simples à sua xícara.
           </span>
         </div>
-        <div className={styles.peopleMarks}>
-          <article className={styles.personPrimary}>
+        <div className={authority.peopleMarks}>
+          <article className={authority.personPrimary}>
             <small>ORIGEM · QUALIDADE · MERCADO</small>
             <strong>José Rezende</strong>
             <span>Uma vida conectando produtores, café e pessoas.</span>
           </article>
-          <div className={styles.thread}>
+          <div className={authority.thread}>
             <i />
             <i />
             <i />
             <i />
           </div>
-          <article className={styles.personSecondary}>
+          <article className={authority.personSecondary}>
             <small>PRODUÇÃO · SUSTENTABILIDADE · CRITÉRIO</small>
             <strong>Suzi Ninov</strong>
             <span>Olhar atento para o que existe antes da xícara.</span>
@@ -135,7 +135,7 @@ export default function SobrePage() {
           </p>
           <b>BRASIL → EUROPA → MUNDO</b>
         </div>
-        <Link className={styles.peopleLink} href="/loja#cafes">
+        <Link className={authority.peopleLink} href="/loja#cafes">
           Conhecer os cafés escolhidos por nós →
         </Link>
       </section>
