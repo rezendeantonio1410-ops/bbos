@@ -149,12 +149,14 @@ export default function SobrePage() {
 
         <div className={authority.documentaryNote}>
           <p>
-            A expansão internacional da operação, hoje também presente em
-            Barcelona, torna visível um percurso que já estava no trabalho:
-            levar a origem brasileira para novos mercados com verdade,
-            proximidade e critério.
+            Durante anos, José e Suzi conectaram produtores brasileiros ao
+            mercado europeu por meio do café verde. Desde setembro de 2026, a
+            Bispo também disponibiliza aos brasileiros cafés escolhidos com os
+            mesmos critérios e padrões aplicados aos cafés destinados à Europa.
+            Uma experiência construída entre origem e mercado que agora chega,
+            torrada, diretamente à sua xícara.
           </p>
-          <b>BRASIL → EUROPA → MUNDO</b>
+          <b>DO CAFÉ VERDE À SUA XÍCARA</b>
         </div>
         <Link className={authority.peopleLink} href="/loja#cafes">
           Conhecer os cafés escolhidos por nós →
@@ -163,7 +165,7 @@ export default function SobrePage() {
       <section className={styles.valueStrip}>
         <span>José + Suzi.</span>
         <span>Origem brasileira.</span>
-        <span>Presença em Barcelona.</span>
+        <span>Padrão Brasil e Europa.</span>
         <span>Do campo à xícara.</span>
       </section>
     </main>
