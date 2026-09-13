@@ -26,7 +26,7 @@ export class OperationsFlowActionsController {
   async requirement(@Param("productVariantId") productVariantId:string,@Body() body:{recommendedUnits:number;uncoveredDemand:number;availableUnits:number;targetUnits:number},@Req() req:any){
     const actor=await this.actor(req);if(!Number.isSafeInteger(body.recommendedUnits)||body.recommendedUnits<=0)throw new BadRequestException("Quantidade recomendada inválida.");
     const id=`req-${Date.now()}-${productVariantId}`;
-    await this.db.$executeRawUnsafe("INSERT INTO \"ProductionRequirement\"(id,\"companyId\",\"productVariantId\",\"recommendedUnits\",\"uncoveredDemand\",\"availableUnits\",\"targetUnits\",\"createdByUserId\",\"createdByName\") VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",id,actor.companyId,productVariantId,body.recommendedUnits,body.uncoveredDemand,body.availableUnits,body.targetUnits,actor.userId,actor.userName);
+    await this.db.$executeRawUnsafe("INSERT INTO \"ProductionRequirement\"(id,\"companyId\",\"productVariantId\",\"recommendedUnits\",\"uncoveredDemand\",\"availableUnits\",\"targetUnits\",\"createdByUserId\",\"createdByName\") VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",id,actor.companyId,productVariantId,body.recommendedUnits,body.uncoveredDemand,body.availableUnits,body.targetUnits,actor.id,actor.name);
     return {id,status:"OPEN"};
   }
 }
