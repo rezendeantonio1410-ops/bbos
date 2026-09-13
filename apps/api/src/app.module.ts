@@ -32,6 +32,7 @@ import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
+import { ProductionRequirementsController } from "./production-requirements.controller";
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -66,6 +67,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
     IntegrationsController,
     OperationsFlowController,
     OperationsFlowActionsController,
+    ProductionRequirementsController,
     BrokersController,
     CustomersController,
     CuppingController,
