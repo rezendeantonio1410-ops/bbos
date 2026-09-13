@@ -14,7 +14,7 @@ import {
 
 const productInclude = {
   productLine: true,
-  variants: { orderBy: { netWeightGrams: "asc" as const } },
+  variants: { where: { active: true }, orderBy: { netWeightGrams: "asc" as const } },
 } satisfies Prisma.ProductInclude;
 
 type PersistedProduct = Prisma.ProductGetPayload<{
@@ -72,7 +72,7 @@ export class ProductsRepository implements OnModuleDestroy {
   async listCatalog(companyId: string): Promise<CatalogProduct[]> {
     await this.ensureOfficialLines(this.database, companyId);
     const products = await this.database.product.findMany({
-      where: { productLine: { companyId } },
+      where: { active: true, productLine: { companyId, active: true } },
       include: productInclude,
       orderBy: [{ productLine: { sortOrder: "asc" } }, { name: "asc" }],
     });
@@ -82,10 +82,11 @@ export class ProductsRepository implements OnModuleDestroy {
   async listLines(companyId: string) {
     await this.ensureOfficialLines(this.database, companyId);
     return this.database.productLine.findMany({
-      where: { companyId },
+      where: { companyId, active: true },
       include: {
         products: {
-          include: { variants: { orderBy: { netWeightGrams: "asc" } } },
+          where: { active: true },
+          include: { variants: { where: { active: true }, orderBy: { netWeightGrams: "asc" } } },
           orderBy: { name: "asc" },
         },
       },
@@ -94,8 +95,8 @@ export class ProductsRepository implements OnModuleDestroy {
   }
 
   async findProduct(id: string, companyId: string) {
-    const product = await this.database.product.findUnique({
-      where: { id, productLine: { companyId } },
+    const product = await this.database.product.findFirst({
+      where: { id, active: true, productLine: { companyId, active: true } },
       include: productInclude,
     });
     return product ? this.toCatalogProduct(product) : null;
