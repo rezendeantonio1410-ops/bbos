@@ -3,8 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, LockKeyhole, Save } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+const API = getApiBaseUrl();
 
 const PROFILES = [
   ["DISTRIBUIDOR", "Distribuidor"],
