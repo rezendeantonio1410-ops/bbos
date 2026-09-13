@@ -72,6 +72,31 @@ const freightLabel: Record<string, string> = {
   PICKUP: "Retirada na fábrica",
 };
 
+async function resolveOrder(reference: string, signal: AbortSignal): Promise<Order> {
+  const direct = await fetch(`/api/sales-orders/${encodeURIComponent(reference)}`, {
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (direct.ok) return direct.json() as Promise<Order>;
+
+  const list = await fetch("/api/sales-orders", {
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (!list.ok) throw new Error("order");
+  const orders = (await list.json()) as Order[];
+  const normalized = decodeURIComponent(reference).trim().toUpperCase();
+  const match = orders.find((item) =>
+    [item.id, item.code, item.orderNumber]
+      .filter(Boolean)
+      .some((value) => String(value).trim().toUpperCase() === normalized),
+  );
+  if (!match) throw new Error("order");
+  return match;
+}
+
 export default function OrderDocumentPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
@@ -83,12 +108,10 @@ export default function OrderDocumentPage() {
     if (!id) return;
     const controller = new AbortController();
     Promise.all([
-      fetch(`/api/sales-orders/${id}`, { credentials: "include", cache: "no-store", signal: controller.signal }),
+      resolveOrder(id, controller.signal),
       fetch("/api/customers", { credentials: "include", cache: "no-store", signal: controller.signal }),
     ])
-      .then(async ([orderResponse, customerResponse]) => {
-        if (!orderResponse.ok) throw new Error("order");
-        const nextOrder = (await orderResponse.json()) as Order;
+      .then(async ([nextOrder, customerResponse]) => {
         const customers = customerResponse.ok ? ((await customerResponse.json()) as Customer[]) : [];
         setOrder(nextOrder);
         setCustomer(customers.find((item) => item.id === nextOrder.customer.id) ?? null);
