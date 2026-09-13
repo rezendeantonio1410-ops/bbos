@@ -26,6 +26,20 @@ const termDays = (value: unknown) => {
 };
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
+const profileChannelCode = (segment: unknown) => {
+  const normalized = String(segment ?? "").trim().toLowerCase();
+  if (normalized.includes("distrib")) return "DISTRIBUIDOR";
+  if (normalized.includes("cafeter")) return "CAFETERIA";
+  if (normalized.includes("escrit")) return "ESCRITORIO";
+  if (normalized.includes("varejo")) return "VAREJO";
+  if (normalized.includes("restaurante") || normalized.includes("hotel")) return "RESTAURANTE_HOTEL";
+  if (normalized.includes("white")) return "WHITE_LABEL";
+  if (normalized.includes("export")) return "EXPORTACAO";
+  if (normalized.includes("consum")) return "CONSUMIDOR_FINAL";
+  if (normalized.includes("outro")) return "OUTRO";
+  return null;
+};
+
 type SalesOrderCommercialTerms = {
   paymentType?: string;
   paymentTerms?: string;
@@ -63,41 +77,47 @@ export class SalesOrdersController {
   }
 
   private async resolveInternalPrice(customerId: string, productVariantId: string) {
+    const customerRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT id, "companyId", segment FROM "Customer" WHERE id=$1`,
+      customerId,
+    );
+    const customer = customerRows[0];
+    if (!customer) throw new BadRequestException("Cliente não encontrado.");
+
+    const channelCode = profileChannelCode(customer.segment);
+    if (!channelCode) {
+      throw new BadRequestException(
+        "O cliente ainda não possui um perfil comercial válido para definição de preço.",
+      );
+    }
+
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT pp.id AS "productPriceId", pp.price, pp.currency,
               pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
               pp."minimumPrice", pp."minimumMarginPercent", pp."minimumRoiPercent",
               sc.id AS "salesChannelId", sc.name AS "salesChannelName", sc.type AS "salesChannelType",
-              pv."unitCost", c.segment
-         FROM "Customer" c
-         JOIN "ProductPrice" pp
-           ON pp."companyId" = c."companyId"
-          AND pp."productVariantId" = $2
-         JOIN "SalesChannel" sc ON sc.id = pp."salesChannelId" AND sc.active = true
+              pv."unitCost"
+         FROM "ProductPrice" pp
+         JOIN "SalesChannel" sc
+           ON sc.id = pp."salesChannelId"
+          AND sc.active = true
+          AND sc.code = $3
          JOIN "ProductVariant" pv ON pv.id = pp."productVariantId"
-        WHERE c.id = $1
+        WHERE pp."companyId" = $1
+          AND pp."productVariantId" = $2
           AND pp.active = true
           AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
           AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
-        ORDER BY CASE
-          WHEN c.segment ILIKE '%distrib%' AND sc.type = 'DISTRIBUIDOR' THEN 0
-          WHEN c.segment ILIKE '%cafeter%' AND sc.type = 'CAFETERIA' THEN 0
-          WHEN c.segment ILIKE '%escrit%' AND sc.type = 'ESCRITORIO' THEN 0
-          WHEN c.segment ILIKE '%export%' AND sc.type = 'EXPORTACAO' THEN 0
-          WHEN (c.segment ILIKE '%consum%' OR c.segment ILIKE '%varejo%') AND sc.type = 'ECOMMERCE' THEN 0
-          WHEN sc.type = 'B2B' THEN 1
-          ELSE 5
-        END,
-        pp."validFrom" DESC NULLS LAST,
-        pp."createdAt" DESC
+        ORDER BY pp."validFrom" DESC NULLS LAST, pp."createdAt" DESC
         LIMIT 1`,
-      customerId,
+      customer.companyId,
       productVariantId,
+      channelCode,
     );
     const row = rows[0];
     if (!row) {
       throw new BadRequestException(
-        "Este produto ainda não possui preço interno vigente para o canal comercial deste cliente.",
+        `Preço não definido para o perfil ${String(customer.segment ?? channelCode)} deste cliente.`,
       );
     }
     return {
@@ -113,7 +133,8 @@ export class SalesOrdersController {
       minimumMarginPercent: row.minimumMarginPercent == null ? null : Number(row.minimumMarginPercent),
       minimumRoiPercent: row.minimumRoiPercent == null ? null : Number(row.minimumRoiPercent),
       unitCost: Number(row.unitCost ?? 0),
-      segment: row.segment as string | null,
+      segment: customer.segment as string | null,
+      channelCode,
     };
   }
 
