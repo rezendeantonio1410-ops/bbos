@@ -38,6 +38,7 @@ import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
 import { CuppingPublicController } from "./cupping-public.controller";
+import { StorefrontOrdersController } from "./storefront-orders.controller";
 
 @Module({
   controllers: [
@@ -66,6 +67,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
     CuppingTrainingController,
     ProfessionalSamplesController,
     CuppingPublicController,
+    StorefrontOrdersController,
   ],
   providers: [
     DashboardService,
