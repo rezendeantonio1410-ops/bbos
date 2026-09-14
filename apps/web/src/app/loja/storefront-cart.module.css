@@ -77,6 +77,24 @@
   font-size: 11px;
   opacity: 0.6;
 }
+.grind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 3px 0;
+  font-size: 9px;
+  color: #0d1d1799;
+}
+.grind select {
+  max-width: 112px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid #0d1d1725;
+  border-radius: 7px;
+  background: #fff;
+  color: #0d1d17;
+  font: inherit;
+}
 .photo {
   height: 66px;
   display: grid;

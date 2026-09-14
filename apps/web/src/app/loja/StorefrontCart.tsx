@@ -22,6 +22,8 @@ export type StoreProduct = {
   image?: string | null;
 };
 type Item = StoreProduct & { quantity: number };
+type Grind = "Grãos" | "Espresso" | "Coado" | "Prensa francesa";
+type CartItem = Item & { grind?: Grind };
 type Quote = { name: string; priceCents: number; deliveryDays: number };
 type CartApi = {
   add: (p: StoreProduct) => void;
@@ -35,7 +37,7 @@ const money = (v: number) =>
   );
 
 export function StorefrontCartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<CartItem[]>([]);
   const [visible, setVisible] = useState(false);
   const [cep, setCep] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -91,6 +93,11 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
           ),
     );
     setQuote(null);
+  };
+  const chooseGrind = (id: string, grind: Grind) => {
+    setItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, grind } : item)),
+    );
   };
   async function calculate(event: FormEvent) {
     event.preventDefault();
@@ -188,6 +195,21 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                         <small>{item.line}</small>
                         <h3>{item.name}</h3>
                         <p>{item.notes}</p>
+                        <label className={styles.grind}>
+                          <span>Moagem</span>
+                          <select
+                            value={item.grind || "Grãos"}
+                            onChange={(event) =>
+                              chooseGrind(item.id, event.target.value as Grind)
+                            }
+                            aria-label={`Moagem do café ${item.name}`}
+                          >
+                            <option>Grãos</option>
+                            <option>Espresso</option>
+                            <option>Coado</option>
+                            <option>Prensa francesa</option>
+                          </select>
+                        </label>
                         <b>{money(item.priceCents)}</b>
                       </div>
                       <div className={styles.qty}>
@@ -211,8 +233,8 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <small>LEITURA DO BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
-                      <Check /> Provado pelo Bispo, preparado com o cuidado de
-                      Suzi e da equipe.
+                      <Check /> José Rezende, o Bispo — provador e Q-Grader. Com
+                      o cuidado de Suzi e da equipe.
                     </p>
                   </section>
                   <section className={styles.choice}>
@@ -314,7 +336,11 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <b>{money(subtotal + (quote?.priceCents || 0))}</b>
                   </div>
                   <button disabled={!quote}>Continuar para pagamento →</button>
-                  {!quote && <small>Informe o CEP para continuar.</small>}
+                  <small>
+                    {quote
+                      ? "Torra própria · Escolha acompanhada · Entrega calculada pelo CEP"
+                      : "Informe o CEP para continuar."}
+                  </small>
                 </footer>
               </>
             )}
