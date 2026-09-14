@@ -260,27 +260,37 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     </div>
                     <small>Sul e Sudeste</small>
                   </section>
+                </main>
+                <footer>
                   <section className={styles.shipping}>
-                    <small>PASSO 2</small>
-                    <h3>Calcule a entrega</h3>
+                    <div className={styles.shippingTitle}>
+                      <small>PASSO 2</small>
+                      <h3>Para onde enviamos?</h3>
+                    </div>
                     <form onSubmit={calculate}>
-                      <input
-                        value={cep}
-                        onChange={(e) =>
-                          setCep(
-                            e.target.value
-                              .replace(/\D/g, "")
-                              .slice(0, 8)
-                              .replace(/(\d{5})(\d)/, "$1-$2"),
-                          )
-                        }
-                        inputMode="numeric"
-                        placeholder="00000-000"
-                        aria-label="CEP de entrega"
-                      />
-                      <button disabled={loading}>
-                        {loading ? "Calculando…" : "Calcular"}
-                      </button>
+                      <label htmlFor="cart-cep">CEP de entrega</label>
+                      <div>
+                        <input
+                          id="cart-cep"
+                          value={cep}
+                          onChange={(e) => {
+                            setQuote(null);
+                            setError("");
+                            setCep(
+                              e.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, 8)
+                                .replace(/(\d{5})(\d)/, "$1-$2"),
+                            );
+                          }}
+                          inputMode="numeric"
+                          autoComplete="postal-code"
+                          placeholder="00000-000"
+                        />
+                        <button disabled={loading} type="submit">
+                          {loading ? "Calculando…" : "Calcular"}
+                        </button>
+                      </div>
                     </form>
                     <div aria-live="polite">
                       {error && <p className={styles.error}>{error}</p>}
@@ -299,9 +309,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                       )}
                     </div>
                   </section>
-                </main>
-                <footer>
-                  <div>
+                  <div className={styles.total}>
                     <span>Total</span>
                     <b>{money(subtotal + (quote?.priceCents || 0))}</b>
                   </div>
