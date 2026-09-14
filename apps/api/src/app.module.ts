@@ -19,6 +19,7 @@ import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
+import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
 import { FinanceService } from "./finance.service";
 import { ReconciliationController } from "./reconciliation.controller";
 import { ReconciliationService } from "./reconciliation.service";
@@ -28,7 +29,11 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
+import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
+import { OperationsFlowController } from "./operations-flow.controller";
+import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
+import { ProductionRequirementsController } from "./production-requirements.controller";
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -56,11 +61,16 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     SalesOrdersController,
     SalesOrderApprovalsController,
     FinanceController,
+    FinanceSalesScheduleController,
     ReconciliationController,
     CommerceController,
     AuthController,
     AdminCoffeeReferenceController,
+    AdminUsersController,
     IntegrationsController,
+    OperationsFlowController,
+    OperationsFlowActionsController,
+    ProductionRequirementsController,
     BrokersController,
     CustomersController,
     CuppingController,
