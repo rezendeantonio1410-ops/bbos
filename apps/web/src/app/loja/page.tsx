@@ -416,7 +416,15 @@ export default function LojaPage() {
                   <p>{collection.copy}</p>
                 </header>
                 {collectionProducts.length ? (
-                  <div className={styles.productGrid}>
+                  <div
+                    className={`${styles.productGrid} ${
+                      collectionProducts.length === 1
+                        ? layers.oneProduct
+                        : collectionProducts.length === 2
+                          ? layers.twoProducts
+                          : ""
+                    }`}
+                  >
                     {collectionProducts.map((p) => (
               <article
                 key={p.name}
