@@ -20,6 +20,7 @@ import { SalesOrderApprovalsController } from "./sales-order-approvals.controlle
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
 import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
+import { FinanceAssistedReconciliationController } from "./finance-assisted-reconciliation.controller";
 import { FinanceService } from "./finance.service";
 import { ReconciliationController } from "./reconciliation.controller";
 import { ReconciliationService } from "./reconciliation.service";
@@ -62,6 +63,7 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     SalesOrderApprovalsController,
     FinanceController,
     FinanceSalesScheduleController,
+    FinanceAssistedReconciliationController,
     ReconciliationController,
     CommerceController,
     AuthController,
