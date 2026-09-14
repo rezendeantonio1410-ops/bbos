@@ -27,6 +27,17 @@ const products = [
     tag: "para todo dia",
   },
   {
+    name: "Intenso",
+    line: "GOURMET",
+    notes: "Corpo · Presença · Limpeza",
+    price: "R$ 52",
+    priceCents: 5200,
+    weight: "500 g",
+    tone: "#CDAA27",
+    image: "/brand/products/intenso-treated.webp",
+    tag: "mais corpo",
+  },
+  {
     name: "Caramelo",
     line: "CLÁSSICOS",
     notes: "Caramelo · Chocolate · Equilíbrio",
@@ -73,12 +84,12 @@ const products = [
   {
     name: "Sublime",
     line: "ÉPICOS",
-    notes: "Expressivo · Elegante · Profundo",
+    notes: "Rapadura · Caramelo · Doçura profunda",
     price: "R$ 84",
     priceCents: 8400,
     weight: "500 g",
     tone: "#4D8060",
-    image: null,
+    image: "/brand/products/sublime-treated.webp",
     tag: "experiência",
   },
 ];
