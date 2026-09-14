@@ -1,0 +1,231 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: #07130db3;
+}
+.drawer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: min(520px, 100%);
+  height: 100%;
+  overflow: auto;
+  background: #fffaf2;
+  color: #0d1d17;
+  box-shadow: -20px 0 60px #0003;
+}
+.drawer header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  padding: 22px 26px;
+  background: #fffaf2;
+  border-bottom: 1px solid #0d1d1715;
+}
+.drawer h2,
+.drawer h3 {
+  margin: 4px 0;
+  font-family: Georgia, serif;
+}
+.drawer header button {
+  border: 0;
+  background: none;
+}
+.drawer nav {
+  display: flex;
+  justify-content: space-around;
+  padding: 15px;
+  font-size: 11px;
+}
+.drawer main {
+  padding: 0 18px 150px;
+}
+.drawer article {
+  display: grid;
+  grid-template-columns: 70px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid #0d1d1715;
+}
+.drawer article h3,
+.drawer article p {
+  margin: 3px 0;
+}
+.drawer article p {
+  font-size: 11px;
+  opacity: 0.6;
+}
+.photo {
+  height: 78px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f2eadc;
+  overflow: hidden;
+}
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.qty {
+  display: flex;
+  align-items: center;
+  border: 1px solid #0d1d1725;
+  border-radius: 30px;
+}
+.qty button {
+  border: 0;
+  background: none;
+  padding: 8px;
+}
+.qty svg {
+  width: 12px;
+}
+.bispo,
+.choice,
+.shipping {
+  margin: 12px 0;
+  padding: 18px;
+  border-radius: 20px;
+  background: #f2eadc;
+}
+.bispo small,
+.choice small,
+.shipping small {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: #a2562e;
+}
+.bispo p {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+}
+.bispo svg {
+  width: 15px;
+}
+.choice > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.choice button {
+  border: 1px solid #0d1d1730;
+  border-radius: 20px;
+  background: white;
+  padding: 10px;
+  font-size: 10px;
+}
+.active {
+  background: #0d1d17 !important;
+  color: white;
+}
+.rhythm {
+  margin-top: 8px !important;
+  display: flex !important;
+}
+.rhythm p {
+  font-size: 10px;
+}
+.progress {
+  display: grid;
+  gap: 6px;
+  padding: 15px 5px;
+  font-size: 10px;
+}
+.progress > div {
+  height: 5px;
+  background: #ddd;
+  border-radius: 10px;
+}
+.progress > div span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #b76833, #e6c838);
+}
+.shipping {
+  background: #102a20;
+  color: white;
+}
+.shipping form {
+  display: flex;
+  gap: 7px;
+}
+.shipping input {
+  flex: 1;
+  min-width: 0;
+  padding: 13px;
+  border-radius: 11px;
+  border: 0;
+}
+.shipping form button {
+  border: 0;
+  border-radius: 11px;
+  padding: 12px;
+}
+.quote {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+}
+.quote span {
+  display: grid;
+}
+.error {
+  color: #ffcfcf;
+  font-size: 11px;
+}
+.drawer footer {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 100%);
+  box-sizing: border-box;
+  padding: 18px 26px;
+  background: #fffaf2;
+  border-top: 1px solid #0d1d1715;
+}
+.drawer footer div {
+  display: flex;
+  justify-content: space-between;
+}
+.drawer footer > button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 16px;
+  border: 0;
+  border-radius: 30px;
+  background: #0d1d17;
+  color: white;
+  font-weight: bold;
+}
+.drawer footer > button:disabled {
+  opacity: 0.35;
+}
+.drawer footer > small {
+  display: block;
+  text-align: center;
+  margin-top: 5px;
+}
+.empty {
+  padding: 80px;
+  text-align: center;
+}
+.empty button {
+  padding: 12px;
+  border: 0;
+  border-radius: 25px;
+  background: #0d1d17;
+  color: white;
+}
