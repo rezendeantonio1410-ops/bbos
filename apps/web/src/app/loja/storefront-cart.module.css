@@ -200,6 +200,16 @@
   padding: 13px;
   border-radius: 11px;
   border: 0;
+  background: #ffffff;
+  color: #0d1d17;
+  caret-color: #0d1d17;
+  font-size: 16px;
+  opacity: 1;
+  -webkit-text-fill-color: #0d1d17;
+}
+.shipping input::placeholder {
+  color: #818992;
+  opacity: 1;
 }
 .shipping form button {
   border: 0;
