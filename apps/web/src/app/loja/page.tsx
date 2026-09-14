@@ -660,6 +660,7 @@ export default function LojaPage() {
               width={150}
               height={50}
               alt="Bispo Coffees"
+              className={journey.footerLogo}
             />
             <p>Café para escolher, desejar, reencontrar e lembrar.</p>
           </div>

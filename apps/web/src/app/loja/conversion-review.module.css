@@ -11,6 +11,11 @@
   color: #b9632c;
 }
 
+.header :global(a[aria-label="Bispo Coffees — início"] img) {
+  filter: invert(1);
+  opacity: 0.94;
+}
+
 .actions button {
   display: grid;
   place-items: center;
@@ -111,6 +116,14 @@
   transform: translateY(-1px);
 }
 
+.productCard :global(img) {
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.productCard:hover :global(img) {
+  transform: scale(1.025);
+}
+
 .desireBand {
   background: linear-gradient(
     125deg,
@@ -150,6 +163,11 @@
   padding: 14px 16px;
   border-left: 3px solid #b9632c;
   background: rgba(255, 255, 255, 0.42);
+}
+
+.footerLogo {
+  filter: invert(1);
+  opacity: 0.94;
 }
 
 @media (max-width: 600px) {
