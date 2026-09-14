@@ -133,6 +133,15 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function continueToCheckout() {
+    if (!quote) return;
+    localStorage.setItem(
+      "bispo-checkout-v1",
+      JSON.stringify({ items, cep, quote, mode, rhythm, subtotal }),
+    );
+    window.location.assign("/loja/finalizar");
+  }
+
   return (
     <Cart.Provider value={{ add, open: () => setVisible(true), count }}>
       {children}
@@ -335,7 +344,9 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <span>Total</span>
                     <b>{money(subtotal + (quote?.priceCents || 0))}</b>
                   </div>
-                  <button disabled={!quote}>Continuar para pagamento →</button>
+                  <button disabled={!quote} onClick={continueToCheckout}>
+                    Continuar para pagamento →
+                  </button>
                   <small>
                     {quote
                       ? "Torra própria · Escolha acompanhada · Entrega calculada pelo CEP"

@@ -129,12 +129,20 @@ export default function LojaPage() {
             <Link href="/loja/sobre">Sobre a Bispo</Link>
           </nav>
           <div className={`${styles.actions} ${journey.actions}`}>
-            <button type="button" aria-label="Buscar cafés">
+            <a
+              className={journey.actionLink}
+              href="#cafes"
+              aria-label="Buscar cafés"
+            >
               <Search aria-hidden="true" />
-            </button>
-            <button type="button" aria-label="Minha conta">
+            </a>
+            <Link
+              className={journey.actionLink}
+              href="/login"
+              aria-label="Minha conta"
+            >
               <UserRound aria-hidden="true" />
-            </button>
+            </Link>
             <CartButton />
           </div>
         </header>
