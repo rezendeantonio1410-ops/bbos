@@ -41,6 +41,14 @@
   transform: scale(1.08) !important;
 }
 
+.editorialProductPhoto {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 54% !important;
+  filter: none !important;
+}
+
 .sensoryBuyRow {
   padding-top: 2px;
 }

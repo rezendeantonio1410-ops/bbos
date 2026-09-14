@@ -1,1 +1,1 @@
-export const carameloImage = "/caramelo.jpeg";
+export const carameloImage = "/brand/products/caramelo-treated.webp";

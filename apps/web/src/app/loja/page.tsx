@@ -22,7 +22,7 @@ const products = [
     priceCents: 5200,
     weight: "500 g",
     tone: "#E6C838",
-    image: "/essencial.jpeg",
+    image: "/brand/products/essencial-treated.webp",
     tag: "para todo dia",
   },
   {
@@ -33,7 +33,7 @@ const products = [
     priceCents: 6800,
     weight: "500 g",
     tone: "#D97830",
-    image: "/caramelo.jpeg",
+    image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
   },
   {
@@ -44,7 +44,7 @@ const products = [
     priceCents: 6800,
     weight: "500 g",
     tone: "#C89725",
-    image: null,
+    image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
   },
   {
@@ -66,7 +66,7 @@ const products = [
     priceCents: 8400,
     weight: "500 g",
     tone: "#3B7651",
-    image: "/singular.jpeg",
+    image: "/brand/products/singular-treated.webp",
     tag: "descoberta",
   },
   {
@@ -187,7 +187,7 @@ export default function LojaPage() {
               <div className={tight.productAura} />
               <div className={`${tight.productShot} ${review.productShot}`}>
                 <Image
-                  src="/caramelo.jpeg"
+                  src="/brand/products/caramelo-treated.webp"
                   alt="Embalagem real do café Caramelo, Bispo Coffees"
                   fill
                   sizes="(max-width: 600px) 148px, 202px"
@@ -225,7 +225,7 @@ export default function LojaPage() {
                   notes: "Caramelo · Chocolate · Equilíbrio",
                   priceCents: 6800,
                   weightGrams: 500,
-                  image: "/caramelo.jpeg",
+                  image: "/brand/products/caramelo-treated.webp",
                 }}
               >
                 Quero o Caramelo <span>→</span>
@@ -339,10 +339,12 @@ export default function LojaPage() {
                   data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
                 >
                   {p.image ? (
-                    <img
+                    <Image
                       src={p.image}
                       alt={`Embalagem Bispo ${p.name}`}
-                      className={styles.productPhoto}
+                      fill
+                      sizes="(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 33vw"
+                      className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
                     />
                   ) : (
                     <div className={tight.catalogFallback}>
