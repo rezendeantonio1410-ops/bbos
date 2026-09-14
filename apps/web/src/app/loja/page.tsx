@@ -5,6 +5,7 @@ import styles from "./sales.module.css";
 import tight from "./sales-tight.module.css";
 import review from "./hero-review.module.css";
 import journey from "./conversion-review.module.css";
+import founder from "./founder-trust.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 
 const products = [
@@ -374,6 +375,69 @@ export default function LojaPage() {
         </div>
       </section>
 
+      <section className={founder.section} data-photo-slot="founders-jose-suzi">
+        <div className={founder.photos}>
+          <figure className={founder.portrait}>
+            <img
+              src="/brand/founders/jose-rezende.jpg"
+              alt="José Rezende avaliando um café"
+            />
+            <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
+          </figure>
+          <figure className={founder.portrait}>
+            <img
+              src="/brand/founders/suzi-ninov.jpg"
+              alt="Suzi Ninov avaliando um café"
+            />
+            <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
+          </figure>
+        </div>
+        <div
+          className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
+        >
+          <small>QUEM ESCOLHE O SEU CAFÉ</small>
+          <h2>
+            Antes da sua xícara,
+            <br />
+            <em>cada café passa por nós.</em>
+          </h2>
+          <p className={founder.intro}>
+            José e Suzi unem campo, prova, produção e mercado para fazer a
+            escolha difícil antes. Você recebe um café fácil de reconhecer,
+            desejar e reencontrar.
+          </p>
+          <div className={founder.proofs}>
+            <p>
+              <b>José Rezende</b>
+              <br />
+              Desde 2003 entre produtores, prova e mercados internacionais.
+            </p>
+            <p>
+              <b>Suzi Ninov</b>
+              <br />
+              Produção, sustentabilidade e o cuidado que preserva cada escolha.
+            </p>
+          </div>
+          <p className={founder.sharedStory}>
+            Duas trajetórias, uma escolha construída em conjunto — do café verde
+            exportado para a Europa aos mesmos padrões agora servidos no Brasil.
+          </p>
+          <div className={founder.trust} aria-label="Critérios Bispo">
+            <span>Provado por nós</span>
+            <span>Torra própria</span>
+            <span>Brasil e Europa</span>
+          </div>
+          <div className={founder.actions}>
+            <a className={founder.primary} href="#cafes">
+              Ver os cafés escolhidos →
+            </a>
+            <Link className={founder.secondary} href="/loja/sobre">
+              Conhecer nossa história
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className={`${styles.discovery} ${journey.discovery}`}>
         <div className={styles.discoveryCopy}>
           <small>AINDA NÃO SABE QUAL?</small>
@@ -419,71 +483,6 @@ export default function LojaPage() {
         <a href="#cafes">Conhecer os Raros →</a>
       </section>
 
-      <section className={tight.founders} data-photo-slot="founders-jose-suzi">
-        <div
-          className={tight.foundersPhoto}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "8px",
-            overflow: "hidden",
-          }}
-        >
-          <img
-            src="/brand/founders/jose-rezende.jpg"
-            alt="José Rezende — Bispo Coffees"
-            style={{
-              width: "100%",
-              height: "100%",
-              minHeight: "420px",
-              objectFit: "cover",
-              objectPosition: "center",
-              display: "block",
-            }}
-          />
-          <img
-            src="/brand/founders/suzi-ninov.jpg"
-            alt="Suzi Ninov — Bispo Coffees"
-            style={{
-              width: "100%",
-              height: "100%",
-              minHeight: "420px",
-              objectFit: "cover",
-              objectPosition: "center",
-              display: "block",
-            }}
-          />
-        </div>
-        <div className={`${tight.foundersCopy} ${journey.foundersCopy}`}>
-          <small>BRASIL → BARCELONA → MUNDO</small>
-          <h2>
-            Duas histórias.
-            <br />
-            <em>Uma mesma obsessão pelo café.</em>
-          </h2>
-          <p>
-            <b>José Rezende — o Bispo</b>
-            <br />
-            Da lavoura à prova e ao mercado internacional, uma vida dedicada a
-            reconhecer qualidade na xícara.
-          </p>
-          <p>
-            <b>Suzi Ninov</b>
-            <br />
-            Próxima do produtor e da origem, conecta qualidade às pessoas e ao
-            trabalho que tornam cada café possível.
-          </p>
-          <p className={journey.internationalProof}>
-            <b>Uma história que atravessou fronteiras</b>
-            <br />
-            Da Bispo Coffees no Brasil à Bispo Coffees Europe SL, em Barcelona:
-            uma operação internacional construída na prática, café por café.
-          </p>
-          <Link href="/loja/sobre">
-            Conheça José, Suzi e a história da Bispo →
-          </Link>
-        </div>
-      </section>
       <section className={styles.valueStrip}>
         <span>Perfis claros.</span>
         <span>Torra própria.</span>
