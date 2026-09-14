@@ -53,6 +53,10 @@ export class FinanceAssistedReconciliationController {
 
   private async candidatesFor(id: string, companyId: string) {
     const item = await this.context(id, companyId);
+    const bankTransaction = item.bankTransaction;
+    if (!bankTransaction)
+      throw new BadRequestException("Movimentação bancária inválida para baixa assistida.");
+
     const rows = await this.db.accountsReceivable.findMany({
       where: {
         companyId,
@@ -69,9 +73,9 @@ export class FinanceAssistedReconciliationController {
         item.documentReference,
         item.counterpartyName,
         item.description,
-        item.bankTransaction.reference,
-        item.bankTransaction.counterparty,
-        item.bankTransaction.description,
+        bankTransaction.reference,
+        bankTransaction.counterparty,
+        bankTransaction.description,
       ]
         .filter(Boolean)
         .join(" "),
@@ -131,8 +135,8 @@ export class FinanceAssistedReconciliationController {
         occurredAt: item.occurredAt,
         amount: Number(item.amount),
         description: item.description,
-        counterparty: item.counterpartyName ?? item.bankTransaction.counterparty,
-        reference: item.documentReference ?? item.bankTransaction.reference,
+        counterparty: item.counterpartyName ?? bankTransaction.counterparty,
+        reference: item.documentReference ?? bankTransaction.reference,
       },
       autoEligible,
       reason: autoEligible
@@ -179,6 +183,8 @@ export class FinanceAssistedReconciliationController {
         if (item.financialTransactionId)
           return { idempotent: true, reconciliationItemId: id, financialTransactionId: item.financialTransactionId };
 
+        const bankTransaction = item.bankTransaction;
+
         await tx.$queryRaw`SELECT id FROM "AccountsReceivable" WHERE id=${receivableId} FOR UPDATE`;
         const receivable = await tx.accountsReceivable.findFirst({
           where: { id: receivableId, companyId: actor.companyId },
@@ -187,7 +193,10 @@ export class FinanceAssistedReconciliationController {
           throw new BadRequestException("Conta a receber não encontrada.");
         if (Number(receivable.openAmount) !== Number(item.amount))
           throw new BadRequestException("O saldo do título mudou; refaça a análise antes da baixa.");
-        if ([ReceivableStatus.PAID, ReceivableStatus.CANCELLED].includes(receivable.status))
+        if (
+          receivable.status === ReceivableStatus.PAID ||
+          receivable.status === ReceivableStatus.CANCELLED
+        )
           throw new BadRequestException("O título não está mais disponível para baixa.");
 
         const idempotencyKey = `BANK_RECEIPT:${item.bankTransactionId}`;
@@ -208,7 +217,7 @@ export class FinanceAssistedReconciliationController {
           data: {
             companyId: actor.companyId,
             accountsReceivableId: receivable.id,
-            financialAccountId: item.bankTransaction.financialAccountId,
+            financialAccountId: bankTransaction.financialAccountId,
             amount: item.amount,
             paidAt: item.occurredAt,
             method: "BANK_RECONCILIATION",
@@ -219,7 +228,7 @@ export class FinanceAssistedReconciliationController {
         const transaction = await tx.financialTransaction.create({
           data: {
             companyId: actor.companyId,
-            financialAccountId: item.bankTransaction.financialAccountId,
+            financialAccountId: bankTransaction.financialAccountId,
             paymentId: payment.id,
             type: FinancialTransactionType.RECEIPT,
             amount: item.amount,
