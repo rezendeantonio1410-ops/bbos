@@ -6,6 +6,7 @@ import tight from "./sales-tight.module.css";
 import review from "./hero-review.module.css";
 import journey from "./conversion-review.module.css";
 import founder from "./founder-trust.module.css";
+import layers from "./layers.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import {
   AddToCartButton,
@@ -99,6 +100,36 @@ const moments = [
   },
 ];
 
+const collections = [
+  {
+    name: "Gourmet",
+    eyebrow: "Cotidiano sofisticado",
+    copy: "Cafés fáceis de gostar e feitos para acompanhar todos os dias.",
+    tone: "#E6C838",
+  },
+  {
+    name: "Clássicos",
+    eyebrow: "Conforto e identidade",
+    copy: "Sabores familiares, doces e presentes — com a leitura do Bispo.",
+    tone: "#D97830",
+  },
+  {
+    name: "Épicos",
+    eyebrow: "Complexidade e descoberta",
+    copy: "Cafés expressivos para quem deseja explorar novas camadas da xícara.",
+    tone: "#3B7651",
+  },
+  {
+    name: "Raros",
+    eyebrow: "Pequenos lotes",
+    copy: "Experiências excepcionais, selecionadas em quantidades limitadas.",
+    tone: "#263C32",
+  },
+] as const;
+
+const collectionId = (name: string) =>
+  `camada-${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()}`;
+
 export default function LojaPage() {
   return (
     <StorefrontCartProvider>
@@ -123,7 +154,7 @@ export default function LojaPage() {
             />
           </a>
           <nav className={styles.nav} aria-label="Navegação principal">
-            <a href="#cafes">Cafés</a>
+            <a href="#camadas">Cafés</a>
             <a href="#escolher">Escolher</a>
             <Link href="/loja/descobrir">Descobrir o meu</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
@@ -241,6 +272,38 @@ export default function LojaPage() {
           </div>
         </section>
 
+        <section id="camadas" className={layers.section}>
+          <div className={layers.intro}>
+            <small>OS CAMINHOS DO BISPO</small>
+            <h2>Quatro camadas. Uma escolha para cada momento.</h2>
+            <p>
+              Do café que acompanha o cotidiano aos lotes que aparecem poucas
+              vezes. Não é uma escala de qualidade — é uma jornada de sabor,
+              ocasião e descoberta.
+            </p>
+          </div>
+          <div className={layers.grid}>
+            {collections.map((collection, index) => (
+              <a
+                key={collection.name}
+                href={`#${collectionId(collection.name)}`}
+                className={layers.card}
+                style={{ "--layer-tone": collection.tone } as React.CSSProperties}
+              >
+                <span className={layers.number}>0{index + 1}</span>
+                <i />
+                <small>{collection.eyebrow}</small>
+                <strong>{collection.name}</strong>
+                <p>{collection.copy}</p>
+                <b>Conhecer esta camada →</b>
+              </a>
+            ))}
+          </div>
+          <p className={layers.signature}>
+            Você escolhe pelo momento. <b>O Bispo conduz pela xícara.</b>
+          </p>
+        </section>
+
         <section
           className={`${tight.valueBridge} ${journey.valueBridge}`}
           aria-label="Por que Bispo"
@@ -326,8 +389,35 @@ export default function LojaPage() {
               esperar da próxima xícara.
             </p>
           </div>
-          <div className={styles.productGrid}>
-            {products.map((p) => (
+          <nav className={layers.filter} aria-label="Camadas dos cafés">
+            {collections.map((collection) => (
+              <a key={collection.name} href={`#${collectionId(collection.name)}`}>
+                {collection.name}
+              </a>
+            ))}
+          </nav>
+          {collections.map((collection) => {
+            const collectionProducts = products.filter(
+              (product) => product.line === collection.name.toUpperCase(),
+            );
+
+            return (
+              <div
+                key={collection.name}
+                id={collectionId(collection.name)}
+                className={layers.catalogLayer}
+                style={{ "--layer-tone": collection.tone } as React.CSSProperties}
+              >
+                <header className={layers.catalogHeader}>
+                  <div>
+                    <small>{collection.eyebrow}</small>
+                    <h3>{collection.name}</h3>
+                  </div>
+                  <p>{collection.copy}</p>
+                </header>
+                {collectionProducts.length ? (
+                  <div className={styles.productGrid}>
+                    {collectionProducts.map((p) => (
               <article
                 key={p.name}
                 id={p.name.toLowerCase().replaceAll(" ", "-")}
@@ -379,8 +469,18 @@ export default function LojaPage() {
                   </div>
                 </div>
               </article>
-            ))}
-          </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={layers.rareNote}>
+                    <span>EDIÇÕES LIMITADAS · 250 G</span>
+                    <strong>Os Raros aparecem quando a safra revela algo extraordinário.</strong>
+                    <Link href="/loja/descobrir">Descobrir meu perfil →</Link>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <div className={styles.allProducts}>
             <a href="#cafes">Explorar todos os cafés →</a>
             <Link href="/loja/descobrir">
