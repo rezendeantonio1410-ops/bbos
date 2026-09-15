@@ -87,7 +87,7 @@
 }
 
 .productsSection {
-  padding-top: 56px !important;
+  padding-top: 36px !important;
   padding-bottom: 58px !important;
   background: linear-gradient(
     180deg,
@@ -95,6 +95,16 @@
     #fff 74%,
     #fffaf2 100%
   ) !important;
+}
+
+.productsSection > div:first-child {
+  align-items: center;
+}
+
+.productsSection > div:first-child h2 {
+  max-width: 760px;
+  font-size: clamp(36px, 4.2vw, 58px);
+  line-height: 0.98;
 }
 
 .productCard {
@@ -200,8 +210,12 @@
   }
 
   .productsSection {
-    padding-top: 42px !important;
+    padding-top: 30px !important;
     padding-bottom: 44px !important;
+  }
+
+  .productsSection > div:first-child h2 {
+    font-size: 36px;
   }
 
   .discovery {

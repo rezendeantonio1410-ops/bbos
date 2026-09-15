@@ -267,12 +267,13 @@ export default function LojaPage() {
 
         <section id="camadas" className={layers.section}>
           <div className={layers.intro}>
-            <small>OS CAMINHOS DO BISPO</small>
-            <h2>Quatro camadas. Uma escolha para cada momento.</h2>
+            <div>
+              <small>OS CAMINHOS DO BISPO</small>
+              <h2>Quatro camadas. Escolha o seu momento.</h2>
+            </div>
             <p>
-              Do café que acompanha o cotidiano aos lotes que aparecem poucas
-              vezes. Não é uma escala de qualidade — é uma jornada de sabor,
-              ocasião e descoberta.
+              Do cotidiano aos pequenos lotes: encontre rapidamente o perfil
+              que combina com a sua xícara.
             </p>
           </div>
           <div className={layers.grid}>
@@ -285,19 +286,10 @@ export default function LojaPage() {
               >
                 <span className={layers.number}>0{index + 1}</span>
                 <i />
-                <small>{collection.eyebrow}</small>
                 <strong>{collection.name}</strong>
                 <p>{collection.copy}</p>
-                <b>Conhecer esta camada →</b>
               </a>
             ))}
-          </div>
-          <p className={layers.signature}>
-            Você escolhe pelo momento. <b>O Bispo conduz pela xícara.</b>
-          </p>
-          <div className={layers.actions}>
-            <a href="#cafes">Ver e comprar cafés →</a>
-            <Link href="/loja/descobrir">Quero ajuda para escolher</Link>
           </div>
         </section>
 
@@ -308,15 +300,11 @@ export default function LojaPage() {
           <div className={styles.sectionHeader}>
             <div>
               <small>ESCOLHA O SEU CAFÉ</small>
-              <h2>
-                Da sensação
-                <br />
-                para a sua sacola.
-              </h2>
+              <h2>Da sensação para a sua sacola.</h2>
             </div>
             <p>
-              Compare os perfis, escolha a moagem e compre com segurança. Se
-              preferir, o Bispo ajuda você a encontrar a xícara certa.
+              Compare os perfis, escolha a moagem e compre. Se preferir, o
+              Bispo ajuda você a encontrar a xícara certa.
             </p>
           </div>
           <nav className={layers.filter} aria-label="Camadas dos cafés">
