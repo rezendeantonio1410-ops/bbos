@@ -194,16 +194,27 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  min-height: 56px;
-  padding: 8px 17px 8px 9px;
+  min-height: 54px;
+  padding: 7px 16px 7px 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
   color: #fff;
   background: rgba(13, 29, 23, 0.96);
-  box-shadow: 0 14px 38px rgba(13, 29, 23, 0.24);
+  box-shadow: 0 12px 30px rgba(13, 29, 23, 0.2);
   backdrop-filter: blur(12px);
   text-decoration: none;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity 240ms ease, visibility 240ms ease, transform 240ms ease, box-shadow 180ms ease;
+}
+
+.floatingGuideVisible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .floatingGuide:hover {
@@ -212,30 +223,19 @@
 }
 
 .floatingGuide > span {
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   border: 4px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
   background: conic-gradient(#e6c838 0 25%, #d97830 25% 50%, #3b7651 50% 75%, #a7433e 75%);
   box-sizing: border-box;
 }
 
-.floatingGuide div {
-  display: grid;
-  gap: 2px;
-}
-
-.floatingGuide small {
-  font-size: 8px;
-  font-weight: 850;
-  letter-spacing: 0.12em;
-  opacity: 0.62;
-}
-
 .floatingGuide b {
   font-size: 11px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
 }
 
 @media (max-width: 600px) {
@@ -294,7 +294,13 @@
     height: 38px;
   }
 
-  .floatingGuide div {
+  .floatingGuide b {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floatingGuide {
+    transition: none;
   }
 }

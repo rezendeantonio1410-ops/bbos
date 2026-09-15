@@ -8,6 +8,7 @@ import journey from "./conversion-review.module.css";
 import founder from "./founder-trust.module.css";
 import layers from "./layers.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
+import SensoryConcierge from "./SensoryConcierge";
 import {
   AddToCartButton,
   CartButton,
@@ -483,17 +484,7 @@ export default function LojaPage() {
           </div>
         </section>
 
-        <Link
-          className={journey.floatingGuide}
-          href="/loja/descobrir"
-          aria-label="Precisa de ajuda? Descubra o seu café"
-        >
-          <span aria-hidden="true" />
-          <div>
-            <small>PRECISA DE AJUDA?</small>
-            <b>Encontre seu café →</b>
-          </div>
-        </Link>
+        <SensoryConcierge />
 
         <section className={styles.valueStrip}>
           <span>Perfis claros.</span>
