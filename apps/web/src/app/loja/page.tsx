@@ -422,17 +422,17 @@ export default function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src="/brand/founders/jose-rezende.jpg"
-                alt="José Rezende avaliando um café"
-              />
-              <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
-            </figure>
-            <figure className={founder.portrait}>
-              <img
                 src="/brand/founders/suzi-ninov.jpg"
                 alt="Suzi Ninov avaliando um café"
               />
               <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
+            </figure>
+            <figure className={founder.portrait}>
+              <img
+                src="/brand/founders/jose-rezende.jpg"
+                alt="José Rezende avaliando um café, voltado para Suzi Ninov"
+              />
+              <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
           </div>
           <div
