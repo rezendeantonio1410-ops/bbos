@@ -111,6 +111,28 @@
   scroll-margin-top: 112px;
 }
 
+/* Keep the catalogue editorial, but give it the pace of a shop. */
+.productCard > div:first-child {
+  height: 270px;
+}
+
+.productCard > div:last-child {
+  padding: 15px 17px 16px;
+}
+
+.productCard > div:last-child h3 {
+  margin-bottom: 3px;
+  font-size: 27px;
+}
+
+.productCard > div:last-child > span {
+  font-size: 12px;
+}
+
+.productCard > div:last-child > div {
+  margin-top: 12px;
+}
+
 .productCard:focus-within,
 .productCard:hover {
   border-color: color-mix(in srgb, var(--tone) 45%, transparent) !important;
@@ -259,6 +281,18 @@
 
   .productCard {
     border-radius: 20px !important;
+  }
+
+  .productCard > div:first-child {
+    height: 178px;
+  }
+
+  .productCard > div:last-child {
+    padding: 12px;
+  }
+
+  .productCard > div:last-child h3 {
+    font-size: 20px;
   }
 
   .productsSection {
