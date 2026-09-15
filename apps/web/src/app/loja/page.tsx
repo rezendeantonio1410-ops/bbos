@@ -483,37 +483,17 @@ export default function LojaPage() {
           </div>
         </section>
 
-        <section className={`${styles.discovery} ${journey.discovery}`}>
-          <div className={styles.discoveryCopy}>
-            <small>AINDA NÃO SABE QUAL?</small>
-            <h2>
-              Você sente.
-              <br />A Bispo traduz.
-            </h2>
-            <p>
-              Escolha o que quer sentir. A gente transforma isso em uma
-              recomendação simples, visual e fácil de comprar.
-            </p>
-            <Link href="/loja/descobrir">Descobrir o meu café →</Link>
+        <Link
+          className={review.floatingGuide}
+          href="/loja/descobrir"
+          aria-label="Precisa de ajuda? Descubra o seu café"
+        >
+          <span aria-hidden="true" />
+          <div>
+            <small>PRECISA DE AJUDA?</small>
+            <b>Encontre seu café →</b>
           </div>
-          <div className={styles.discoveryVisual}>
-            <div className={styles.ring}>
-              <i />
-              <i />
-              <i />
-              <i />
-              <b>
-                SUA
-                <br />
-                XÍCARA
-              </b>
-            </div>
-            <span>doce</span>
-            <span>frutado</span>
-            <span>fresco</span>
-            <span>intenso</span>
-          </div>
-        </section>
+        </Link>
 
         <section className={styles.valueStrip}>
           <span>Perfis claros.</span>

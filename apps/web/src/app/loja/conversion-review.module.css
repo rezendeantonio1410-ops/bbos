@@ -186,6 +186,58 @@
   opacity: 0.94;
 }
 
+.floatingGuide {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 56px;
+  padding: 8px 17px 8px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(13, 29, 23, 0.96);
+  box-shadow: 0 14px 38px rgba(13, 29, 23, 0.24);
+  backdrop-filter: blur(12px);
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.floatingGuide:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 44px rgba(13, 29, 23, 0.3);
+}
+
+.floatingGuide > span {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 4px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: conic-gradient(#e6c838 0 25%, #d97830 25% 50%, #3b7651 50% 75%, #a7433e 75%);
+  box-sizing: border-box;
+}
+
+.floatingGuide div {
+  display: grid;
+  gap: 2px;
+}
+
+.floatingGuide small {
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  opacity: 0.62;
+}
+
+.floatingGuide b {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
 @media (max-width: 600px) {
   .header {
     height: 62px !important;
@@ -226,5 +278,23 @@
 
   .internationalProof {
     padding: 12px 13px;
+  }
+
+  .floatingGuide {
+    right: 14px;
+    bottom: 14px;
+    width: 54px;
+    min-height: 54px;
+    padding: 8px;
+    justify-content: center;
+  }
+
+  .floatingGuide > span {
+    width: 38px;
+    height: 38px;
+  }
+
+  .floatingGuide div {
+    display: none;
   }
 }
