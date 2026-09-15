@@ -23,24 +23,23 @@ export class DashboardController {
   ): Promise<ExecutiveDashboard> {
     const data = await this.dashboard.executive(request.user!.companyId, period);
     const current = data.metricsByPeriod?.[period] ?? [];
-    const safeCurrent = current.length
-      ? current
-      : [
-          {
-            label: "Sem dados",
-            value: "Sem dados",
-            change: 0,
-            supportingText: "Nenhum registro no período",
-          },
-        ];
+    const fallbackMetric = {
+      label: "Sem dados",
+      value: "Sem dados",
+      change: 0,
+      supportingText: "Nenhum registro no período",
+    };
+    const safeCurrent = Array.from({ length: 8 }, (_, index) => current[index] ?? fallbackMetric);
+    const safePeriod = (metrics: typeof current | undefined) =>
+      Array.from({ length: 8 }, (_, index) => metrics?.[index] ?? safeCurrent[index] ?? fallbackMetric);
 
     return {
       ...data,
       metricsByPeriod: {
-        day: data.metricsByPeriod?.day?.length ? data.metricsByPeriod.day : safeCurrent,
-        week: data.metricsByPeriod?.week?.length ? data.metricsByPeriod.week : safeCurrent,
-        month: data.metricsByPeriod?.month?.length ? data.metricsByPeriod.month : safeCurrent,
-        year: data.metricsByPeriod?.year?.length ? data.metricsByPeriod.year : safeCurrent,
+        day: safePeriod(data.metricsByPeriod?.day),
+        week: safePeriod(data.metricsByPeriod?.week),
+        month: safePeriod(data.metricsByPeriod?.month),
+        year: safePeriod(data.metricsByPeriod?.year),
       },
       goals: data.goals ?? [],
       projections: data.projections ?? [],
