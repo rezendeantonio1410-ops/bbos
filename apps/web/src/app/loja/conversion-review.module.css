@@ -13,7 +13,7 @@
 
 .header :global(a[aria-label="Bispo Coffees — início"] img) {
   display: block !important;
-  filter: invert(1);
+  filter: none;
   opacity: 0.94;
 }
 
