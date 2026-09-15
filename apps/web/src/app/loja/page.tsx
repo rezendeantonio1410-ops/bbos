@@ -484,7 +484,7 @@ export default function LojaPage() {
         </section>
 
         <Link
-          className={review.floatingGuide}
+          className={journey.floatingGuide}
           href="/loja/descobrir"
           aria-label="Precisa de ajuda? Descubra o seu café"
         >
