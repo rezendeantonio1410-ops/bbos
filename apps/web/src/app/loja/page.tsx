@@ -93,24 +93,6 @@ const products = [
     tag: "experiência",
   },
 ];
-const moments = [
-  {
-    title: "Todo dia",
-    copy: "Macio, doce e fácil de reencontrar.",
-    tone: "#E6C838",
-  },
-  {
-    title: "Conforto",
-    copy: "Caramelo, chocolate e uma xícara acolhedora.",
-    tone: "#D97830",
-  },
-  {
-    title: "Frescor",
-    copy: "Fruta, leveza e uma xícara mais viva.",
-    tone: "#3B7651",
-  },
-];
-
 const collections = [
   {
     name: "Gourmet",
@@ -165,8 +147,8 @@ export default function LojaPage() {
             />
           </a>
           <nav className={styles.nav} aria-label="Navegação principal">
-            <a href="#camadas">Cafés</a>
-            <a href="#escolher">Escolher</a>
+            <a href="#cafes">Cafés</a>
+            <a href="#camadas">Escolher</a>
             <Link href="/loja/descobrir">Descobrir o meu</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
           </nav>
@@ -313,72 +295,9 @@ export default function LojaPage() {
           <p className={layers.signature}>
             Você escolhe pelo momento. <b>O Bispo conduz pela xícara.</b>
           </p>
-        </section>
-
-        <section
-          className={`${tight.valueBridge} ${journey.valueBridge}`}
-          aria-label="Por que Bispo"
-        >
-          <small>POR QUE A BISPO ENTREGA MAIS</small>
-          <h2>
-            Você não precisa entender de café
-            <br />
-            para beber um café extraordinário.
-          </h2>
-          <p>
-            A parte técnica acontece antes. Para você, fica o que importa:{" "}
-            <b>reconhecer o que gosta e escolher bem.</b>
-          </p>
-          <div>
-            <span>
-              <b>Selecionado</b>
-              <small>na origem</small>
-            </span>
-            <i />
-            <span>
-              <b>Provado</b>
-              <small>por nós</small>
-            </span>
-            <i />
-            <span>
-              <b>Torrado</b>
-              <small>para o perfil</small>
-            </span>
-          </div>
-        </section>
-
-        <section
-          id="escolher"
-          className={`${styles.choiceSection} ${journey.choiceSection}`}
-        >
-          <div className={styles.choiceIntro}>
-            <small>COMECE PELO QUE VOCÊ QUER SENTIR</small>
-            <h2>Qual xícara combina com o seu momento?</h2>
-            <p>Você escolhe a sensação. A Bispo cuida do resto.</p>
-          </div>
-          <div className={styles.choiceGrid}>
-            {moments.map((m) => (
-              <a
-                key={m.title}
-                href="#cafes"
-                className={styles.choiceCard}
-                style={{ "--tone": m.tone } as React.CSSProperties}
-              >
-                <i />
-                <span>{m.copy}</span>
-                <strong>{m.title}</strong>
-                <b>encontrar meu café →</b>
-              </a>
-            ))}
-            <Link
-              href="/loja/descobrir"
-              className={`${styles.choiceCard} ${styles.discoveryChoice}`}
-            >
-              <i />
-              <span>Quero provar algo fora do óbvio.</span>
-              <strong>Me surpreenda</strong>
-              <b>começar descoberta →</b>
-            </Link>
+          <div className={layers.actions}>
+            <a href="#cafes">Ver e comprar cafés →</a>
+            <Link href="/loja/descobrir">Quero ajuda para escolher</Link>
           </div>
         </section>
 
@@ -388,16 +307,16 @@ export default function LojaPage() {
         >
           <div className={styles.sectionHeader}>
             <div>
-              <small>CAFÉS BISPO</small>
+              <small>ESCOLHA O SEU CAFÉ</small>
               <h2>
-                Você sente primeiro.
+                Da sensação
                 <br />
-                Depois escolhe o nome.
+                para a sua sacola.
               </h2>
             </div>
             <p>
-              Perfis claros para você reconhecer o que gosta — e saber o que
-              esperar da próxima xícara.
+              Compare os perfis, escolha a moagem e compre com segurança. Se
+              preferir, o Bispo ajuda você a encontrar a xícara certa.
             </p>
           </div>
           <nav className={layers.filter} aria-label="Camadas dos cafés">
@@ -501,36 +420,10 @@ export default function LojaPage() {
             );
           })}
           <div className={styles.allProducts}>
-            <a href="#cafes">Explorar todos os cafés →</a>
+            <a href="#camadas">Voltar às quatro camadas ↑</a>
             <Link href="/loja/descobrir">
               Não sabe qual escolher? Descubra o seu →
             </Link>
-          </div>
-        </section>
-
-        <section className={`${styles.desireBand} ${journey.desireBand}`}>
-          <div>
-            <small>POR QUE BISPO</small>
-            <h2>
-              Você só precisa gostar da xícara.
-              <br />O conhecimento fica com a gente.
-            </h2>
-          </div>
-          <div className={styles.valueCards}>
-            <span>
-              <b>Escolhido pelo que entrega</b>
-              <small>Selecionamos cafés pelo resultado real na xícara.</small>
-            </span>
-            <span>
-              <b>Provado e torrado por nós</b>
-              <small>Buscamos doçura, equilíbrio e identidade.</small>
-            </span>
-            <span>
-              <b>Gostou? Você reencontra</b>
-              <small>
-                Perfis claros tornam a próxima escolha mais simples.
-              </small>
-            </span>
           </div>
         </section>
 
@@ -634,19 +527,6 @@ export default function LojaPage() {
           </div>
         </section>
 
-        <section className={`${styles.rareSection} ${journey.rareSection}`}>
-          <div>
-            <small>RAROS · PEQUENOS LOTES, GRANDES XÍCARAS</small>
-            <h2>Alguns cafés existem para ser lembrados.</h2>
-            <p>
-              Microlotes de produção limitada, escolhidos por perfis
-              extraordinários e experiências que talvez nunca se repitam da
-              mesma forma.
-            </p>
-          </div>
-          <a href="#cafes">Conhecer os Raros →</a>
-        </section>
-
         <section className={styles.valueStrip}>
           <span>Perfis claros.</span>
           <span>Torra própria.</span>
@@ -672,7 +552,7 @@ export default function LojaPage() {
           <div className={styles.footerNav}>
             <strong>Comprar</strong>
             <a href="#cafes">Todos os cafés</a>
-            <a href="#escolher">Escolher por sensação</a>
+            <a href="#camadas">Escolher por sensação</a>
           </div>
           <div className={styles.footerBottom}>
             <span>Bispo Coffees · Brasil</span>

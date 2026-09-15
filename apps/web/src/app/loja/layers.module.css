@@ -1,6 +1,6 @@
 .section {
   scroll-margin-top: 96px;
-  padding: 82px 6vw 72px;
+  padding: 68px 6vw 54px;
   color: #0d1d17;
   background: linear-gradient(180deg, #f8f2e8 0%, #fffdf8 100%);
   border-bottom: 1px solid rgba(13, 29, 23, 0.08);
@@ -8,7 +8,7 @@
 
 .intro {
   max-width: 760px;
-  margin: 0 auto 42px;
+  margin: 0 auto 32px;
   text-align: center;
 }
 
@@ -49,8 +49,8 @@
 }
 
 .card {
-  min-height: 310px;
-  padding: 27px 25px 25px;
+  min-height: 270px;
+  padding: 24px 25px 22px;
   color: inherit;
   text-decoration: none;
   border-right: 1px solid rgba(13, 29, 23, 0.08);
@@ -59,14 +59,39 @@
 
 .card:last-child { border-right: 0; }
 .card:hover { background: #fff; transform: translateY(-4px); }
-.card > i { display: block; width: 42px; height: 4px; margin: 28px 0 22px; border-radius: 99px; background: var(--layer-tone); }
+.card > i { display: block; width: 42px; height: 4px; margin: 20px 0 17px; border-radius: 99px; background: var(--layer-tone); }
 .number { font-size: 10px; font-weight: 800; letter-spacing: 0.15em; opacity: 0.42; }
 .card small { display: block; min-height: 28px; font-size: 9px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .card strong { display: block; margin: 7px 0 12px; font-family: Georgia, serif; font-size: 31px; font-weight: 500; }
-.card p { min-height: 65px; margin: 0 0 20px; color: rgba(13, 29, 23, 0.64); font-size: 12px; line-height: 1.55; }
+.card p { min-height: 58px; margin: 0 0 16px; color: rgba(13, 29, 23, 0.64); font-size: 12px; line-height: 1.55; }
 .card b { font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
 
-.signature { margin: 27px 0 0; text-align: center; font-family: Georgia, serif; font-size: 17px; }
+.signature { margin: 22px 0 0; text-align: center; font-family: Georgia, serif; font-size: 17px; }
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.actions a {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 21px;
+  border: 1px solid rgba(13, 29, 23, 0.18);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.actions a:first-child { color: #fff; background: #0d1d17; border-color: #0d1d17; }
 
 .filter {
   position: relative;
@@ -122,7 +147,7 @@
 }
 
 @media (max-width: 600px) {
-  .section { padding: 54px 20px 50px; }
+  .section { padding: 46px 20px 42px; }
   .intro { margin-bottom: 28px; }
   .intro h2 { font-size: 34px; }
   .grid { grid-template-columns: 1fr; border-radius: 22px; }
@@ -137,4 +162,6 @@
   .catalogHeader { display: block; }
   .catalogHeader p { margin-top: 12px; }
   .rareNote { padding: 27px 24px; }
+  .actions { display: grid; }
+  .actions a { width: 100%; box-sizing: border-box; }
 }
