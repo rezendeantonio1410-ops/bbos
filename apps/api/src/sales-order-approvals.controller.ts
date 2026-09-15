@@ -122,13 +122,7 @@ export class SalesOrderApprovalsController {
       );
     });
 
-    return {
-      id,
-      token,
-      path: `/pedido/aprovar/${token}`,
-      expiresAt,
-      status: "PENDING",
-    };
+    return { id, token, path: `/pedido/aprovar/${token}`, expiresAt, status: "PENDING" };
   }
 
   @Get(":orderId/history")
@@ -151,8 +145,7 @@ export class SalesOrderApprovalsController {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT id,status,snapshot,"snapshotHash","expiresAt","acceptedByName","acceptedAt"
          FROM "SalesOrderCustomerApproval"
-        WHERE "tokenHash"=$1
-        LIMIT 1`,
+        WHERE "tokenHash"=$1 LIMIT 1`,
       tokenHash,
     );
     const approval = rows[0];
@@ -213,7 +206,6 @@ export class SalesOrderApprovalsController {
       note,
     );
     if (!updated) throw new BadRequestException("O pedido já foi respondido em outra sessão.");
-
     return { ok: true, status: "APPROVED" };
   }
 }
