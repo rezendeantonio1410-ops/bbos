@@ -4,6 +4,13 @@ import type { ExecutiveDashboard, IndustrialDashboard, Period } from "@bbos/shar
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(value);
+const INSTALLED_MONTHLY_CAPACITY_KG = 5580;
+const periodCapacityKg = (period: Period) => {
+  if (period === "day") return INSTALLED_MONTHLY_CAPACITY_KG / 22;
+  if (period === "week") return (INSTALLED_MONTHLY_CAPACITY_KG / 22) * 5;
+  if (period === "year") return INSTALLED_MONTHLY_CAPACITY_KG * 12;
+  return INSTALLED_MONTHLY_CAPACITY_KG;
+};
 const periodStart = (period: Period) => {
   const now = new Date();
   const start = new Date(now);
@@ -35,7 +42,15 @@ export class DashboardService implements OnModuleDestroy {
     ]);
     const open = orders.filter((o) => !["DELIVERED", "CANCELLED"].includes(o.status)).length;
     const overdue = orders.filter((o) => o.expectedDeliveryDate && o.expectedDeliveryDate < now && !["DELIVERED", "CANCELLED"].includes(o.status)).length;
+    const greenAvailableKg = lots.reduce((sum, lot) => {
+      if (!["RECEIVED", "QUALITY_REVIEW", "APPROVED"].includes(lot.status)) return sum;
+      return sum + Math.max(0, toNumber(lot.currentWeightKg) - toNumber(lot.reservedWeightKg));
+    }, 0);
+    const finishedAvailableUnits = Math.max(0, toNumber(products._sum.quantityOnHand) - toNumber(products._sum.reservedQuantity));
+    const hasConfirmedDemand = orders.some((order) => order.status === "CONFIRMED" || order.status === "IN_PRODUCTION");
+    const productionBlocked = hasConfirmedDemand && finishedAvailableUnits <= 0 && greenAvailableKg <= 0;
     const alerts = [
+      ...(productionBlocked ? [{ tone: "CRÍTICO", title: "Produção bloqueada por falta de matéria-prima", impact: "Há pedido confirmado sem produto acabado disponível e sem café verde livre para suportar a produção.", href: "/recebimento", action: "Resolver abastecimento" }] : []),
       ...(overdue ? [{ tone: "CRÍTICO", title: `${overdue} pedido(s) atrasado(s)`, impact: "Existem pedidos com prazo vencido.", href: "/pedidos", action: "Ver pedidos" }] : []),
       ...(pendingLab ? [{ tone: "ATENÇÃO", title: `${pendingLab} lote(s) aguardam análise`, impact: "O laboratório precisa concluir a análise.", href: "/recebimento", action: "Ver recebimento" }] : []),
     ];
@@ -59,6 +74,7 @@ export class DashboardService implements OnModuleDestroy {
     void lots;
     const planned = orders.reduce((sum, o) => sum + toNumber(o.plannedWeightKg), 0);
     const actual = orders.reduce((sum, o) => sum + toNumber(o.actualOutputKg), 0);
+    const installedCapacity = periodCapacityKg(period);
     const green = batches.reduce((sum, b) => sum + toNumber(b.greenInputKg), 0);
     const roasted = batches.reduce((sum, b) => sum + toNumber(b.roastedOutputKg), 0);
     const loss = green ? ((green - roasted) / green) * 100 : 0;
@@ -77,7 +93,7 @@ export class DashboardService implements OnModuleDestroy {
         { id: "average-cost", label: "Custo médio produzido", value: "Sem dados", supportingText: "custos industriais ainda não vinculados", status: "attention" },
       ],
       goals: [{ period, targetKg: planned, actualKg: actual, attainment: planned ? (actual / planned) * 100 : 0, differenceKg: actual - planned, status: status(actual, planned) }],
-      capacity: { usedKg: actual, totalKg: planned, utilization: planned ? (actual / planned) * 100 : 0, status: status(actual, planned) },
+      capacity: { usedKg: actual, totalKg: installedCapacity, utilization: installedCapacity ? (actual / installedCapacity) * 100 : 0, status: actual <= installedCapacity ? "on-track" : "off-track" },
       orders: { open: orders.length - completed, inProgress, completed },
       productionChart: orders.slice(0, 12).reverse().map((o) => ({ label: o.plannedAt.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }), plannedKg: toNumber(o.plannedWeightKg), actualKg: toNumber(o.actualOutputKg) })),
       history: orders.slice(0, 20).map((o) => ({ id: o.id, code: o.code, blend: o.productName, plannedKg: toNumber(o.plannedWeightKg), producedKg: toNumber(o.actualOutputKg), yieldPercent: o.actualInputKg ? (toNumber(o.actualOutputKg) / toNumber(o.actualInputKg)) * 100 : 0, costPerKg: 0, status: o.status === "COMPLETED" ? "completed" : o.status === "IN_PROGRESS" ? "in-progress" : "open", completedAt: o.completedAt?.toLocaleString("pt-BR") })),
