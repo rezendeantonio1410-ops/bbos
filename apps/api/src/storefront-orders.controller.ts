@@ -246,12 +246,12 @@ export class StorefrontOrdersController {
       await transaction.$executeRawUnsafe(
         `INSERT INTO "IntegrationOutbox"
           (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,"idempotencyKey","createdAt","updatedAt")
-         VALUES ($1,$2,'BLING','STOREFRONT_ORDER_PAID','SALES_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
+         VALUES ($1,$2,'BLING','STOREFRONT_ORDER_PAID','STOREFRONT_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
          ON CONFLICT ("idempotencyKey") DO NOTHING`,
         randomUUID(),
         order.companyId,
         order.id,
-        JSON.stringify({ storefrontOrderId: order.id, code: order.code }),
+        JSON.stringify({ storefrontOrderId: order.id, code: order.code, origin: "ECOMMERCE" }),
         `bling:storefront-paid:${order.id}`,
       );
       return { id: order.id, code: order.code, status: "PAID" };
