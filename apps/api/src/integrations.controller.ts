@@ -72,7 +72,7 @@ export class IntegrationsController {
         ORDER BY "connectedAt" DESC NULLS LAST, "updatedAt" DESC
         LIMIT 2`,
     );
-    return connected.length === 1 ? connected[0].companyId : null;
+    return connected.length === 1 ? connected[0]?.companyId ?? null : null;
   }
 
   @Get("bling/readiness")
