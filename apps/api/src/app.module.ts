@@ -33,6 +33,7 @@ import { AdminCoffeeReferenceController } from "./admin-coffee-reference.control
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
 import { BlingService } from "./integrations/bling/bling.service";
+import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 import { BlingWebhookController } from "./integrations/bling/bling-webhook.controller";
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
@@ -96,6 +97,7 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     CommerceService,
     AuthService,
     BlingService,
+    BlingOutboxService,
     UnconfiguredTaxRegistryProvider,
     UnconfiguredStateRegistrationProvider,
     { provide: APP_GUARD, useClass: AuthGuard },
