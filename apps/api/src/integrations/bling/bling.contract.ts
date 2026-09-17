@@ -5,6 +5,7 @@ export const BLING_ENV = {
   clientSecret: "BLING_CLIENT_SECRET",
   redirectUri: "BLING_REDIRECT_URI",
   webhookSecret: "BLING_WEBHOOK_SECRET",
+  tokenEncryptionKey: "BLING_TOKEN_ENCRYPTION_KEY",
 } as const;
 
 export const BLING_RESOURCES = [
@@ -37,6 +38,7 @@ export type BbosBlingMapping = {
     | "SUPPLIER"
     | "GREEN_COFFEE_RECEIPT"
     | "SALES_ORDER"
+    | "STOREFRONT_ORDER"
     | "FISCAL_DOCUMENT";
   bbosAggregateId: string;
   externalId: string;
@@ -68,7 +70,13 @@ export interface ErpFiscalConnector {
  * - Every webhook must be persisted in IntegrationWebhookEvent before processing.
  */
 export function blingReadiness(env: NodeJS.ProcessEnv = process.env) {
-  const required = [BLING_ENV.clientId, BLING_ENV.clientSecret, BLING_ENV.redirectUri, BLING_ENV.webhookSecret];
+  const required = [
+    BLING_ENV.clientId,
+    BLING_ENV.clientSecret,
+    BLING_ENV.redirectUri,
+    BLING_ENV.webhookSecret,
+    BLING_ENV.tokenEncryptionKey,
+  ];
   const missingEnvironment = required.filter((key) => !env[key]?.trim());
   return {
     configured: missingEnvironment.length === 0,
