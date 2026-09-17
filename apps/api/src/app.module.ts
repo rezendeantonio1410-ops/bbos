@@ -33,6 +33,7 @@ import { AdminCoffeeReferenceController } from "./admin-coffee-reference.control
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
 import { BlingService } from "./integrations/bling/bling.service";
+import { BlingWebhookController } from "./integrations/bling/bling-webhook.controller";
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
 import { ProductionRequirementsController } from "./production-requirements.controller";
@@ -71,6 +72,7 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     AdminCoffeeReferenceController,
     AdminUsersController,
     IntegrationsController,
+    BlingWebhookController,
     OperationsFlowController,
     OperationsFlowActionsController,
     ProductionRequirementsController,
