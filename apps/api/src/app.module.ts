@@ -32,6 +32,7 @@ import { AuthGuard } from "./auth.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
+import { BlingService } from "./integrations/bling/bling.service";
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
 import { ProductionRequirementsController } from "./production-requirements.controller";
@@ -92,6 +93,7 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     ReconciliationService,
     CommerceService,
     AuthService,
+    BlingService,
     UnconfiguredTaxRegistryProvider,
     UnconfiguredStateRegistrationProvider,
     { provide: APP_GUARD, useClass: AuthGuard },
