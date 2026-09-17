@@ -5,6 +5,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UnauthorizedException,
 } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
@@ -52,10 +53,11 @@ export class IntegrationsController {
   }
 
   @Get("bling/connect")
-  async connectBling(@Req() request: any) {
+  async connectBling(@Req() request: any, @Res() response: any) {
     const actor = await this.actor(request);
     try {
-      return { authorizationUrl: await this.blingService.authorizationUrl(actor.companyId) };
+      const authorizationUrl = await this.blingService.authorizationUrl(actor.companyId);
+      return response.redirect(authorizationUrl);
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error ? error.message : "Não foi possível iniciar a conexão com o Bling.",
