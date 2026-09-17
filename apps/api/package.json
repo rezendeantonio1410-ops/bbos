@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "corepack pnpm --filter @bbos/database build && corepack pnpm --filter @bbos/shared build && nest build",
-    "start": "node dist/main.js",
+    "start": "corepack pnpm --filter @bbos/database migrate:deploy && node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts",
