@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Post,
   Query,
   Req,
   UnauthorizedException,
@@ -11,6 +12,7 @@ import { AuthService } from "./auth.service";
 import { Public } from "./auth.guard";
 import { blingReadiness } from "./integrations/bling/bling.contract";
 import { BlingService } from "./integrations/bling/bling.service";
+import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 
 @Controller("integrations")
 export class IntegrationsController {
@@ -19,6 +21,7 @@ export class IntegrationsController {
   constructor(
     private readonly auth: AuthService,
     private readonly blingService: BlingService,
+    private readonly blingOutbox: BlingOutboxService,
   ) {}
 
   private async actor(request: any) {
@@ -71,10 +74,16 @@ export class IntegrationsController {
     }
   }
 
+  @Post("bling/process-next")
+  async processNextBling(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.blingOutbox.processNext(actor.companyId);
+  }
+
   @Get("fiscal/summary")
   async fiscalSummary(@Req() request: any) {
     const actor = await this.actor(request);
-    const [documents, outbox, webhooks] = await Promise.all([
+    const [documents, outbox, webhooks, mappings] = await Promise.all([
       this.database.$queryRawUnsafe<any[]>(
         `SELECT direction,status,COUNT(*)::int AS count
            FROM "FiscalDocument"
@@ -96,7 +105,14 @@ export class IntegrationsController {
           GROUP BY status`,
         actor.companyId,
       ).catch(() => []),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT "resourceType",COUNT(*)::int AS count
+           FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+          GROUP BY "resourceType"`,
+        actor.companyId,
+      ).catch(() => []),
     ]);
-    return { documents, outbox, webhooks };
+    return { documents, outbox, webhooks, mappings };
   }
 }
