@@ -13,6 +13,7 @@ import { Public } from "./auth.guard";
 import { blingReadiness } from "./integrations/bling/bling.contract";
 import { BlingService } from "./integrations/bling/bling.service";
 import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
+import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
 
 @Controller("integrations")
 export class IntegrationsController {
@@ -22,6 +23,7 @@ export class IntegrationsController {
     private readonly auth: AuthService,
     private readonly blingService: BlingService,
     private readonly blingOutbox: BlingOutboxService,
+    private readonly blingCatalogSync: BlingCatalogSyncService,
   ) {}
 
   private async actor(request: any) {
@@ -70,6 +72,24 @@ export class IntegrationsController {
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error ? error.message : "Falha ao concluir autorização do Bling.",
+      );
+    }
+  }
+
+  @Get("bling/catalog/status")
+  async blingCatalogStatus(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.blingCatalogSync.status(actor.companyId);
+  }
+
+  @Post("bling/catalog/reconcile")
+  async reconcileBlingCatalog(@Req() request: any) {
+    const actor = await this.actor(request);
+    try {
+      return await this.blingCatalogSync.reconcile(actor.companyId);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Falha ao reconciliar catálogo com o Bling.",
       );
     }
   }
