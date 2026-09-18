@@ -112,7 +112,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          postalCode: cep.replace(/\\D/g, ""),
+          postalCode: cep.replace(/\D/g, ""),
           subtotalCents: subtotal,
           weightGrams: items.reduce(
             (s, i) => s + i.weightGrams * i.quantity,
