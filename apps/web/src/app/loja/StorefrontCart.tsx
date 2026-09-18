@@ -112,7 +112,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          postalCode: cep,
+          postalCode: cep.replace(/\\D/g, ""),
           subtotalCents: subtotal,
           weightGrams: items.reduce(
             (s, i) => s + i.weightGrams * i.quantity,
@@ -125,8 +125,9 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         throw new Error(data.message || "Não foi possível calcular.");
       setQuote(data);
     } catch (reason) {
+      console.error("Falha ao calcular o frete da loja", reason);
       setError(
-        reason instanceof Error ? reason.message : "Não foi possível calcular.",
+        "Não conseguimos calcular a entrega agora. Confira o CEP e tente novamente.",
       );
     } finally {
       setLoading(false);
