@@ -185,20 +185,32 @@ export class BlingService {
 
   async request(companyId: string, path: string, init: RequestInit = {}) {
     const token = await this.accessToken(companyId);
-    const response = await fetch(`${BLING_API_BASE_URL}${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "enable-jwt": "1",
-        ...(init.headers ?? {}),
-      },
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const response = await fetch(`${BLING_API_BASE_URL}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "enable-jwt": "1",
+          ...(init.headers ?? {}),
+        },
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (response.ok) return payload;
+
+      if (response.status === 429 && attempt < 3) {
+        const delayMs = 500 * (attempt + 1);
+        await wait(delayMs);
+        continue;
+      }
+
       throw new Error(`Bling API ${response.status}: ${JSON.stringify(payload)}`);
     }
-    return payload;
+
+    throw new Error("Bling API indisponível após novas tentativas.");
   }
 }
