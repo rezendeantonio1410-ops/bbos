@@ -6,12 +6,14 @@ import {
   Headers,
   Param,
   Post,
+  Query,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
+import { MercadoPagoService } from "./mercado-pago.service";
 
 const catalog: Record<
   string,
@@ -68,6 +70,144 @@ type CheckoutBody = {
 @Controller("storefront/orders")
 export class StorefrontOrdersController {
   private readonly database = new PrismaClient();
+
+  constructor(private readonly mercadoPago: MercadoPagoService) {}
+
+  private async markAsPaid(
+    orderId: string,
+    externalId: string,
+    provider = "MERCADO_PAGO",
+  ) {
+    return this.database.$transaction(async (transaction) => {
+      const found = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
+        orderId,
+      );
+      const order = found[0];
+      if (!order) throw new BadRequestException("Pedido não encontrado.");
+      if (order.status === "PAID")
+        return {
+          id: order.id,
+          code: order.code,
+          status: "PAID",
+          idempotent: true,
+        };
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET status='PAID',"paymentProvider"=$3,"paymentExternalId"=$2,"paidAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`,
+        order.id,
+        externalId,
+        provider,
+      );
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "IntegrationOutbox"
+          (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,"idempotencyKey","createdAt","updatedAt")
+         VALUES ($1,$2,'BLING','STOREFRONT_ORDER_PAID','STOREFRONT_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
+         ON CONFLICT ("idempotencyKey") DO NOTHING`,
+        randomUUID(),
+        order.companyId,
+        order.id,
+        JSON.stringify({
+          storefrontOrderId: order.id,
+          code: order.code,
+          origin: "ECOMMERCE",
+        }),
+        `bling:storefront-paid:${order.id}`,
+      );
+      return { id: order.id, code: order.code, status: "PAID" };
+    });
+  }
+
+  private async reconcileMercadoPago(order: {
+    id: string;
+    code: string;
+    totalCents: number;
+    paymentExternalId: string;
+  }) {
+    const providerOrder = await this.mercadoPago.getOrder(
+      order.paymentExternalId,
+    );
+    const amountCents = Math.round(
+      Number(providerOrder.total_amount || 0) * 100,
+    );
+    if (
+      providerOrder.id !== order.paymentExternalId ||
+      providerOrder.external_reference !== order.code ||
+      amountCents !== order.totalCents
+    ) {
+      console.error("Mercado Pago retornou dados divergentes para o pedido", {
+        orderId: order.id,
+        providerOrderId: providerOrder.id,
+      });
+      return { paid: false };
+    }
+    const payment = providerOrder.transactions?.payments?.find(
+      (candidate) =>
+        candidate.status === "processed" &&
+        candidate.status_detail === "accredited",
+    );
+    const paid =
+      providerOrder.status === "processed" &&
+      providerOrder.status_detail === "accredited";
+    if (paid || payment) {
+      await this.markAsPaid(order.id, providerOrder.id);
+      return { paid: true };
+    }
+    return { paid: false };
+  }
+
+  private async ensureMercadoPagoCheckout(order: any, idempotencyKey: string) {
+    if (order.paymentExternalId) {
+      const current = await this.mercadoPago.getOrder(order.paymentExternalId);
+      if (current.checkout_url)
+        return { externalId: current.id, checkoutUrl: current.checkout_url };
+    }
+    const customer = order.customer as CheckoutBody["customer"];
+    const delivery = order.delivery as CheckoutBody["delivery"];
+    const orderItems = order.items as Array<{
+      id: string;
+      name: string;
+      quantity: number;
+      grind: string;
+      unitPriceCents: number;
+    }>;
+    const providerOrder = await this.mercadoPago.createCheckout({
+      idempotencyKey: `mp-${idempotencyKey}`.slice(0, 128),
+      orderCode: order.code,
+      totalCents: order.totalCents,
+      shippingCents: order.shippingCents,
+      items: orderItems.map((item) => ({
+        externalCode: item.id,
+        title: item.name,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents,
+        description: `${item.grind} · Café Bispo`,
+      })),
+      payer: {
+        name: customer?.name || "",
+        email: customer?.email || "",
+        phone: customer?.phone || "",
+        cpf: customer?.cpf || "",
+      },
+      delivery: {
+        postalCode: delivery?.postalCode || "",
+        street: delivery?.street || "",
+        number: delivery?.number || "",
+        complement: delivery?.complement,
+        district: delivery?.district || "",
+        city: delivery?.city || "",
+        state: delivery?.state || "",
+      },
+    });
+    await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontOrder" SET "paymentProvider"='MERCADO_PAGO',"paymentExternalId"=$2,"updatedAt"=NOW() WHERE id=$1`,
+      order.id,
+      providerOrder.id,
+    );
+    return {
+      externalId: providerOrder.id,
+      checkoutUrl: providerOrder.checkout_url!,
+    };
+  }
 
   private async companyId() {
     const configured = process.env.STOREFRONT_COMPANY_ID?.trim();
@@ -147,10 +287,27 @@ export class StorefrontOrdersController {
       : 1590 + Math.max(0, Math.ceil(weightGrams / 1000) - 1) * 450;
     const companyId = await this.companyId();
     const existing = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"totalCents" FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
+      `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
       key,
     );
-    if (existing[0]) return { ...existing[0], idempotent: true };
+    if (existing[0]) {
+      const confirmationToken = randomBytes(32).toString("base64url");
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET "confirmationTokenHash"=$2,"updatedAt"=NOW() WHERE id=$1`,
+        existing[0].id,
+        tokenHash(confirmationToken),
+      );
+      const payment = await this.ensureMercadoPagoCheckout(existing[0], key);
+      return {
+        id: existing[0].id,
+        code: existing[0].code,
+        status: existing[0].status,
+        totalCents: existing[0].totalCents,
+        confirmationToken,
+        checkoutUrl: payment.checkoutUrl,
+        idempotent: true,
+      };
+    }
 
     const id = randomUUID();
     const confirmationToken = randomBytes(32).toString("base64url");
@@ -182,7 +339,26 @@ export class StorefrontOrdersController {
       subtotalCents + shippingCents,
       paymentMethod,
     );
-    return { ...rows[0], confirmationToken };
+    const completeOrder = {
+      ...rows[0],
+      customer: {
+        ...customer,
+        cpf: digits(customer.cpf),
+        phone: digits(customer.phone),
+      },
+      delivery: {
+        ...delivery,
+        postalCode: digits(delivery.postalCode),
+        state: delivery.state?.toUpperCase(),
+      },
+      items,
+    };
+    const payment = await this.ensureMercadoPagoCheckout(completeOrder, key);
+    return {
+      ...rows[0],
+      confirmationToken,
+      checkoutUrl: payment.checkoutUrl,
+    };
   }
 
   @Public()
@@ -193,14 +369,41 @@ export class StorefrontOrdersController {
   ) {
     if (!suppliedToken)
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"paidAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+    let rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,code,status,"paidAt","totalCents","paymentExternalId" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
       orderId,
       tokenHash(suppliedToken),
     );
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
+    if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
+      await this.reconcileMercadoPago(rows[0]);
+      rows = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT id,code,status,"paidAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+        orderId,
+        tokenHash(suppliedToken),
+      );
+    }
     return rows[0];
+  }
+
+  @Public()
+  @Post("mercado-pago/webhook")
+  async mercadoPagoWebhook(
+    @Query("data.id") queryDataId: string | undefined,
+    @Query("id") queryId: string | undefined,
+    @Body() body: any,
+  ) {
+    const externalId =
+      body?.data?.id || body?.id || queryDataId || queryId || undefined;
+    if (!externalId) return { received: true };
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,code,status,"totalCents","paymentExternalId" FROM "StorefrontOrder" WHERE "paymentExternalId"=$1 LIMIT 1`,
+      String(externalId),
+    );
+    if (!rows[0]) return { received: true };
+    await this.reconcileMercadoPago(rows[0]);
+    return { received: true };
   }
 
   @Public()
@@ -221,42 +424,15 @@ export class StorefrontOrdersController {
     if (!body.orderId || !body.provider || !body.externalId)
       throw new BadRequestException("Confirmação de pagamento incompleta.");
 
-    return this.database.$transaction(async (transaction) => {
-      const found = await transaction.$queryRawUnsafe<any[]>(
-        `SELECT * FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
-        body.orderId,
-      );
-      const order = found[0];
-      if (!order) throw new BadRequestException("Pedido não encontrado.");
-      if (order.status === "PAID")
-        return { id: order.id, status: order.status, idempotent: true };
-      if (!body.approved) {
-        await transaction.$executeRawUnsafe(
-          `UPDATE "StorefrontOrder" SET status='PAYMENT_FAILED',"paymentProvider"=$2,"paymentExternalId"=$3,"updatedAt"=NOW() WHERE id=$1`,
-          order.id,
-          body.provider,
-          body.externalId,
-        );
-        return { id: order.id, status: "PAYMENT_FAILED" };
-      }
-      await transaction.$executeRawUnsafe(
-        `UPDATE "StorefrontOrder" SET status='PAID',"paymentProvider"=$2,"paymentExternalId"=$3,"paidAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`,
-        order.id,
-        body.provider,
-        body.externalId,
-      );
-      await transaction.$executeRawUnsafe(
-        `INSERT INTO "IntegrationOutbox"
-          (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,"idempotencyKey","createdAt","updatedAt")
-         VALUES ($1,$2,'BLING','STOREFRONT_ORDER_PAID','STOREFRONT_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
-         ON CONFLICT ("idempotencyKey") DO NOTHING`,
-        randomUUID(),
-        order.companyId,
-        order.id,
-        JSON.stringify({ storefrontOrderId: order.id, code: order.code, origin: "ECOMMERCE" }),
-        `bling:storefront-paid:${order.id}`,
-      );
-      return { id: order.id, code: order.code, status: "PAID" };
-    });
+    if (body.approved)
+      return this.markAsPaid(body.orderId, body.externalId, body.provider);
+    const updated = await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontOrder" SET status='PAYMENT_FAILED',"paymentProvider"=$2,"paymentExternalId"=$3,"updatedAt"=NOW() WHERE id=$1`,
+      body.orderId,
+      body.provider,
+      body.externalId,
+    );
+    if (!updated) throw new BadRequestException("Pedido não encontrado.");
+    return { id: body.orderId, status: "PAYMENT_FAILED" };
   }
 }
