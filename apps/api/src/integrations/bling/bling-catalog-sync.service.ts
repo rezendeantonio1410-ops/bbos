@@ -17,6 +17,19 @@ const PRICE_BY_SLUG: Record<string, number> = {
   sublime: 84,
 };
 
+type CompanyFiscalProfile = {
+  taxRegime: "LUCRO_REAL";
+  pisCofinsRegime: "NAO_CUMULATIVO";
+  state: string;
+  cstIcms?: string | null;
+  cstPis?: string | null;
+  cstCofins?: string | null;
+  cfopIntra?: string | null;
+  cfopInter?: string | null;
+  notes?: string | null;
+  validatedByAccountant: boolean;
+};
+
 type FiscalProfile = {
   ncm: string;
   origem: number;
@@ -29,6 +42,7 @@ type FiscalProfile = {
   formato: "S";
   tipoProducao: "P" | "T";
   descricaoCurta: string;
+  cest?: string | null;
 };
 
 @Injectable()
@@ -99,6 +113,61 @@ export class BlingCatalogSyncService {
     return this.saveResourceMap(companyId, "STOREFRONT_PRODUCT", slug, externalId, metadata);
   }
 
+  private defaultCompanyFiscalProfile(): CompanyFiscalProfile {
+    return {
+      taxRegime: "LUCRO_REAL",
+      pisCofinsRegime: "NAO_CUMULATIVO",
+      state: "PR",
+      cstIcms: null,
+      cstPis: null,
+      cstCofins: null,
+      cfopIntra: null,
+      cfopInter: null,
+      notes: "CST, CFOP e alíquotas devem ser validados com a contabilidade antes da primeira NF-e real.",
+      validatedByAccountant: false,
+    };
+  }
+
+  async companyFiscalProfile(companyId: string) {
+    const row = await this.getResourceMap(companyId, "COMPANY_FISCAL_PROFILE", "company");
+    return {
+      ...this.defaultCompanyFiscalProfile(),
+      ...(row?.metadata && typeof row.metadata === "object" ? row.metadata : {}),
+      taxRegime: "LUCRO_REAL",
+      pisCofinsRegime: "NAO_CUMULATIVO",
+    } as CompanyFiscalProfile;
+  }
+
+  async saveCompanyFiscalProfile(companyId: string, patch: Record<string, unknown>) {
+    const current = await this.companyFiscalProfile(companyId);
+    const next: CompanyFiscalProfile = {
+      ...current,
+      ...patch,
+      taxRegime: "LUCRO_REAL",
+      pisCofinsRegime: "NAO_CUMULATIVO",
+      state: String(patch.state ?? current.state ?? "PR").trim().toUpperCase(),
+      cstIcms: patch.cstIcms == null ? current.cstIcms ?? null : String(patch.cstIcms).trim() || null,
+      cstPis: patch.cstPis == null ? current.cstPis ?? null : String(patch.cstPis).trim() || null,
+      cstCofins: patch.cstCofins == null ? current.cstCofins ?? null : String(patch.cstCofins).trim() || null,
+      cfopIntra: patch.cfopIntra == null ? current.cfopIntra ?? null : String(patch.cfopIntra).trim() || null,
+      cfopInter: patch.cfopInter == null ? current.cfopInter ?? null : String(patch.cfopInter).trim() || null,
+      notes: patch.notes == null ? current.notes ?? null : String(patch.notes).trim() || null,
+      validatedByAccountant: Boolean(patch.validatedByAccountant ?? current.validatedByAccountant),
+    };
+    if (!/^[A-Z]{2}$/.test(next.state)) throw new Error("UF fiscal inválida.");
+    for (const value of [next.cfopIntra, next.cfopInter]) {
+      if (value && !/^\d{4}$/.test(value)) throw new Error("CFOP deve conter 4 dígitos.");
+    }
+    await this.saveResourceMap(
+      companyId,
+      "COMPANY_FISCAL_PROFILE",
+      "company",
+      companyId,
+      next,
+    );
+    return next;
+  }
+
   private defaultProfile(row: any): FiscalProfile {
     const kg = Math.max(0.001, Number(row.netWeightGrams ?? 0) / 1000);
     return {
@@ -113,6 +182,7 @@ export class BlingCatalogSyncService {
       formato: "S",
       tipoProducao: "P",
       descricaoCurta: `${row.name} — café torrado`,
+      cest: null,
     };
   }
 
@@ -133,6 +203,7 @@ export class BlingCatalogSyncService {
       situacao: source.situacao === "I" ? "I" : "A",
       tipoProducao: source.tipoProducao === "T" ? "T" : "P",
       descricaoCurta: String(source.descricaoCurta ?? base.descricaoCurta).trim(),
+      cest: source.cest ? String(source.cest).replace(/\D/g, "") : null,
     };
   }
 
@@ -141,6 +212,7 @@ export class BlingCatalogSyncService {
     if (!Number.isInteger(profile.origem) || profile.origem < 0 || profile.origem > 8) {
       throw new Error("Origem fiscal deve ser um código entre 0 e 8.");
     }
+    if (profile.cest && !/^\d{7}$/.test(profile.cest)) throw new Error("CEST deve conter 7 dígitos.");
     if (!profile.unidade || profile.unidade.length > 6) throw new Error("Unidade fiscal inválida.");
     if (!Number.isFinite(profile.preco) || profile.preco < 0) throw new Error("Preço de venda inválido.");
     if (!Number.isFinite(profile.pesoLiquido) || profile.pesoLiquido <= 0) throw new Error("Peso líquido inválido.");
@@ -171,6 +243,7 @@ export class BlingCatalogSyncService {
       tributacao: {
         origem: profile.origem,
         ncm: profile.ncm,
+        ...(profile.cest ? { cest: profile.cest } : {}),
       },
     };
   }
@@ -214,16 +287,18 @@ export class BlingCatalogSyncService {
   }
 
   async profiles(companyId: string) {
-    const [local, profileMaps, productMaps] = await Promise.all([
+    const [local, profileMaps, productMaps, companyProfile] = await Promise.all([
       this.localCatalog(),
       this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE"),
       this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
+      this.companyFiscalProfile(companyId),
     ]);
     const profiles = new Map(profileMaps.map((row) => [String(row.internalKey), row]));
     const products = new Map(productMaps.map((row) => [String(row.internalKey), row]));
 
     return {
       defaultNcm: DEFAULT_NCM,
+      companyProfile,
       items: local.map((row) => ({
         slug: row.slug,
         name: row.name,
@@ -244,13 +319,7 @@ export class BlingCatalogSyncService {
     const next = this.normalizeProfile(row, { ...(current?.metadata ?? {}), ...patch });
     this.validateProfile(next);
 
-    await this.saveResourceMap(
-      companyId,
-      "STOREFRONT_PRODUCT_PROFILE",
-      slug,
-      slug,
-      next,
-    );
+    await this.saveResourceMap(companyId, "STOREFRONT_PRODUCT_PROFILE", slug, slug, next);
 
     const productMap = await this.getResourceMap(companyId, "STOREFRONT_PRODUCT", slug);
     if (productMap?.externalId) {
@@ -273,6 +342,7 @@ export class BlingCatalogSyncService {
               ...(existing?.tributacao ?? {}),
               origem: next.origem,
               ncm: next.ncm,
+              ...(next.cest ? { cest: next.cest } : {}),
             },
           }),
         },
@@ -352,6 +422,7 @@ export class BlingCatalogSyncService {
 
     const profileMaps = await this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE");
     const profiles = new Map(profileMaps.map((row) => [String(row.internalKey), row]));
+    const companyProfile = await this.companyFiscalProfile(companyId);
 
     const created: any[] = [];
     const linkedExisting: any[] = [];
@@ -399,6 +470,10 @@ export class BlingCatalogSyncService {
           blingName: row.name,
           source: "CREATED_BY_BBOS",
           fiscalProfile: profile,
+          companyFiscalProfile: {
+            taxRegime: companyProfile.taxRegime,
+            pisCofinsRegime: companyProfile.pisCofinsRegime,
+          },
         });
         created.push({ slug, name: row.name, sku, blingProductId: externalId, profile });
       } catch (error) {
@@ -414,6 +489,7 @@ export class BlingCatalogSyncService {
     const status = await this.status(companyId);
     return {
       governedBy: "BBOS",
+      companyFiscalProfile: companyProfile,
       created,
       linkedExisting,
       failed,
