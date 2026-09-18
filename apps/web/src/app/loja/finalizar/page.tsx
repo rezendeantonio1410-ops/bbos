@@ -93,6 +93,7 @@ export default function CheckoutPage() {
     code: string;
     status: string;
     confirmationToken?: string;
+    checkoutUrl?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -103,6 +104,8 @@ export default function CheckoutPage() {
         setCheckout(parsed);
         setData((current) => ({ ...current, postalCode: parsed.cep }));
       }
+      const paymentOrder = sessionStorage.getItem("bispo-payment-order");
+      if (paymentOrder) setOrder(JSON.parse(paymentOrder));
     } catch {}
   }, []);
 
@@ -147,6 +150,7 @@ export default function CheckoutPage() {
       localStorage.removeItem("bispo-cart-v2");
       localStorage.removeItem("bispo-checkout-v1");
       sessionStorage.removeItem("bispo-checkout-idempotency");
+      sessionStorage.removeItem("bispo-payment-order");
       setOrder((previous) => previous && { ...previous, status: "PAID" });
       setMessage(
         `Pagamento do pedido ${current.code} confirmado. Sua sacola foi concluída.`,
@@ -156,6 +160,16 @@ export default function CheckoutPage() {
     const timer = window.setInterval(poll, 4000);
     return () => window.clearInterval(timer);
   }, [order?.confirmationToken, order?.id, order?.status]);
+
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("payment");
+    if (result === "failure")
+      setMessage("O pagamento não foi concluído. Você pode tentar novamente.");
+    if (result === "pending")
+      setMessage("O Mercado Pago está processando o pagamento.");
+    if (result === "success")
+      setMessage("Pagamento recebido. Estamos confirmando com o Mercado Pago…");
+  }, []);
 
   const total = useMemo(
     () => (checkout?.subtotal || 0) + (checkout?.quote.priceCents || 0),
@@ -214,13 +228,28 @@ export default function CheckoutPage() {
           result.message || "Não foi possível preparar o pedido.",
         );
       setOrder(result);
-      setMessage(
-        `Pedido ${result.code} salvo no BBOS. Aguardando conexão do pagamento.`,
+      sessionStorage.setItem(
+        "bispo-payment-order",
+        JSON.stringify({
+          id: result.id,
+          code: result.code,
+          status: result.status,
+          confirmationToken: result.confirmationToken,
+        }),
       );
       if (result.status === "PAID") {
         localStorage.removeItem("bispo-cart-v2");
         localStorage.removeItem("bispo-checkout-v1");
         sessionStorage.removeItem("bispo-checkout-idempotency");
+        sessionStorage.removeItem("bispo-payment-order");
+        setMessage(`Pagamento do pedido ${result.code} já está confirmado.`);
+      } else if (result.checkoutUrl) {
+        setMessage(
+          "Pedido preparado. Abrindo o ambiente seguro do Mercado Pago…",
+        );
+        window.location.assign(result.checkoutUrl);
+      } else {
+        throw new Error("O endereço seguro de pagamento não foi recebido.");
       }
     } catch (reason) {
       setMessage(
@@ -396,12 +425,15 @@ export default function CheckoutPage() {
                 Cartão
               </label>
             </div>
-            <button disabled={submitting || Boolean(order)} type="submit">
+            <button
+              disabled={submitting || order?.status === "PAID"}
+              type="submit"
+            >
               {submitting
-                ? "Salvando com segurança…"
-                : order
-                  ? "Pedido preparado"
-                  : "Preparar pedido no BBOS →"}
+                ? "Conectando ao Mercado Pago…"
+                : order?.status === "PAID"
+                  ? "Pagamento confirmado"
+                  : "Pagar com Mercado Pago →"}
             </button>
             {message && (
               <p className={styles.message} role="status">
