@@ -15,6 +15,7 @@ const PRICE_BY_SLUG: Record<string, number> = {
   tangerina: 68,
   singular: 84,
   sublime: 84,
+  raros: 52,
 };
 
 type CompanyFiscalProfile = {
@@ -57,7 +58,7 @@ export class BlingCatalogSyncService {
          FROM "Product" p
          JOIN "ProductVariant" pv ON pv."productId"=p.id
         WHERE p.active=true AND pv.active=true
-          AND p.slug IN ('essencial','caramelo','doce-de-leite','tangerina','singular','sublime')
+          AND p.slug IN ('essencial','caramelo','doce-de-leite','tangerina','singular','sublime','raros')
         ORDER BY p.slug,pv."netWeightGrams"`,
     );
   }
