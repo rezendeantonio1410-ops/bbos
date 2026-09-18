@@ -30,6 +30,7 @@ CREATE TRIGGER "GreenCoffeeReceipt_derive_lot_cost_trg"
 AFTER INSERT OR UPDATE OF "netWeightKg", "purchaseId" ON "GreenCoffeeReceipt"
 FOR EACH ROW EXECUTE FUNCTION bbos_derive_receipt_lot_cost();
 
+-- Backfill historical lots whose receipt is linked to a priced purchase but whose lot cost was left at zero.
 UPDATE "CoffeeLot" l
    SET "purchaseCost" = COALESCE(NULLIF(p."pricePerKg", 0), p."totalValue" / NULLIF(p."contractedWeightKg", 0), 0) * r."netWeightKg",
        "landedCost"   = COALESCE(NULLIF(p."pricePerKg", 0), p."totalValue" / NULLIF(p."contractedWeightKg", 0), 0) * r."netWeightKg"
@@ -108,6 +109,7 @@ CREATE TRIGGER "ProductionOrder_guard_completion_trg"
 BEFORE UPDATE OF status ON "ProductionOrder"
 FOR EACH ROW EXECUTE FUNCTION bbos_guard_production_completion();
 
+-- Every finished-goods production entry must leave an auditable packaging event in the industrial timeline.
 CREATE OR REPLACE FUNCTION bbos_record_pack_event_from_finished_goods()
 RETURNS trigger AS $$
 BEGIN

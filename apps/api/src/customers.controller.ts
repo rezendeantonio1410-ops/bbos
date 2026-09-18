@@ -56,15 +56,20 @@ export class CustomersController {
     const availableCredit = Math.max(0, creditLimit - openReceivables);
 
     let health = "HEALTHY";
-    let guidance = "Cliente apto para compras à vista.";
+    let guidance = customer.creditStatus === "APPROVED"
+      ? `Crédito vigente de ${creditLimit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Disponível ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
+      : "Cliente apto para compras à vista.";
     if (overdueCount > 0) {
       health = maxDaysOverdue >= 30 ? "BLOCKED" : "ATTENTION";
       guidance = maxDaysOverdue >= 30
         ? `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Venda a prazo exige análise.`
         : `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Revise antes de vender a prazo.`;
+    } else if (customer.creditStatus === "APPROVED" && customer.creditReviewPending) {
+      health = "HEALTHY";
+      guidance = `Crédito vigente continua válido (${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} disponível). Há uma revisão de limite em análise.`;
     } else if (customer.creditStatus === "UNDER_REVIEW") {
       health = "ATTENTION";
-      guidance = "Crédito pendente de aprovação. Compras à vista continuam liberadas.";
+      guidance = "Primeira análise de crédito pendente. Compras à vista continuam liberadas.";
     } else if (customer.creditStatus === "REJECTED") {
       health = "BLOCKED";
       guidance = "Crédito não aprovado. Compras à vista continuam liberadas; venda a prazo permanece bloqueada.";
@@ -75,6 +80,7 @@ export class CustomersController {
 
     return {
       ...customer,
+      creditReviewPending: Boolean(customer.creditReviewPending),
       cashPurchaseAllowed: customer.active !== false,
       termPurchaseAllowed: customer.active !== false && customer.creditStatus === "APPROVED" && overdueCount === 0,
       financialHealth: {
@@ -94,13 +100,28 @@ export class CustomersController {
     const actor = await this.actor(request);
     const [customers, health] = await Promise.all([
       this.db.$queryRawUnsafe<any[]>(
-        `SELECT id, "companyId", name, "legalName", "tradeName", "taxId", segment,
-                email, phone, "postalCode", address, district, city, state,
-                "paymentTerms", active, "creditStatus", "creditLimit", "creditNotes",
-                "creditReviewedAt", "creditReviewedBy", "createdAt", "updatedAt"
-           FROM "Customer"
-          WHERE "companyId" = $1
-          ORDER BY name ASC`,
+        `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId", c.segment,
+                c.email, c.phone, c."postalCode", c.address, c.district, c.city, c.state,
+                c."paymentTerms", c.active, c."creditStatus", c."creditLimit", c."creditNotes",
+                c."creditReviewedAt", c."creditReviewedBy", c."createdAt", c."updatedAt",
+                EXISTS (
+                  SELECT 1
+                    FROM "CustomerCreditEvent" req
+                   WHERE req."customerId" = c.id
+                     AND req."companyId" = c."companyId"
+                     AND req."eventType" = 'REQUEST'
+                     AND NOT EXISTS (
+                       SELECT 1
+                         FROM "CustomerCreditEvent" dec
+                        WHERE dec."customerId" = c.id
+                          AND dec."companyId" = c."companyId"
+                          AND dec."eventType" = 'DECISION'
+                          AND dec."createdAt" > req."createdAt"
+                     )
+                ) AS "creditReviewPending"
+           FROM "Customer" c
+          WHERE c."companyId" = $1
+          ORDER BY c.name ASC`,
         actor.companyId,
       ),
       this.health(actor.companyId),
@@ -113,12 +134,38 @@ export class CustomersController {
   async getHealth(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
     const customer = (await this.db.$queryRawUnsafe<any[]>(
-      `SELECT id, name, "tradeName", active, "creditStatus", "creditLimit", "paymentTerms"
-         FROM "Customer" WHERE id=$1 AND "companyId"=$2`, id, actor.companyId,
+      `SELECT c.id, c.name, c."tradeName", c.active, c."creditStatus", c."creditLimit", c."paymentTerms",
+              EXISTS (
+                SELECT 1 FROM "CustomerCreditEvent" req
+                 WHERE req."customerId"=c.id AND req."companyId"=c."companyId" AND req."eventType"='REQUEST'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM "CustomerCreditEvent" dec
+                      WHERE dec."customerId"=c.id AND dec."companyId"=c."companyId" AND dec."eventType"='DECISION'
+                        AND dec."createdAt" > req."createdAt"
+                   )
+              ) AS "creditReviewPending"
+         FROM "Customer" c WHERE c.id=$1 AND c."companyId"=$2`, id, actor.companyId,
     ))[0];
     if (!customer) throw new NotFoundException("Cliente não encontrado.");
     const financial = (await this.health(actor.companyId, id))[0];
     return this.decorate(customer, financial);
+  }
+
+  @Get(":id/credit-history")
+  async creditHistory(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({ where: { id, companyId: actor.companyId } });
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT id, "eventType", "requestedLimit", "requestedTerms", "monthlyVolume", rationale,
+              "decisionStatus", "decidedLimit", "decisionTerms", notes,
+              "actorId", "actorName", "actorRole", "createdAt"
+         FROM "CustomerCreditEvent"
+        WHERE "companyId"=$1 AND "customerId"=$2
+        ORDER BY "createdAt" DESC`,
+      actor.companyId,
+      id,
+    );
   }
 
   @Post()
@@ -149,6 +196,67 @@ export class CustomersController {
       body.active !== false, initialCreditStatus,
     );
     return this.decorate(rows[0], null);
+  }
+
+  @Post(":id/credit-request")
+  async requestCredit(@Param("id") id: string, @Req() request: any, @Body() body: Record<string, any>) {
+    const actor = await this.actor(request);
+    const customer = (await this.db.$queryRawUnsafe<any[]>(
+      `SELECT id, "companyId", "creditStatus", "creditLimit", "paymentTerms" FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
+      id,
+      actor.companyId,
+    ))[0];
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+    const pending = (await this.db.$queryRawUnsafe<any[]>(
+      `SELECT EXISTS (
+         SELECT 1 FROM "CustomerCreditEvent" req
+          WHERE req."customerId"=$1 AND req."companyId"=$2 AND req."eventType"='REQUEST'
+            AND NOT EXISTS (
+              SELECT 1 FROM "CustomerCreditEvent" dec
+               WHERE dec."customerId"=$1 AND dec."companyId"=$2 AND dec."eventType"='DECISION'
+                 AND dec."createdAt" > req."createdAt"
+            )
+       ) AS pending`,
+      id,
+      actor.companyId,
+    ))[0]?.pending;
+    if (pending) throw new BadRequestException("Já existe uma solicitação de crédito aguardando decisão.");
+
+    const requestedLimit = Number(body.requestedLimit ?? 0);
+    if (!Number.isFinite(requestedLimit) || requestedLimit <= 0) {
+      throw new BadRequestException("Informe um limite de crédito solicitado maior que zero.");
+    }
+    const requestedTerms = String(body.requestedTerms ?? "").trim();
+    if (!requestedTerms) throw new BadRequestException("Informe a condição de pagamento solicitada.");
+    const monthlyVolume = body.monthlyVolume === undefined || body.monthlyVolume === "" ? null : Number(body.monthlyVolume);
+    if (monthlyVolume !== null && (!Number.isFinite(monthlyVolume) || monthlyVolume < 0)) {
+      throw new BadRequestException("Volume mensal estimado inválido.");
+    }
+    const rationale = String(body.rationale ?? "").trim();
+    if (!rationale) throw new BadRequestException("Informe a justificativa da solicitação de crédito.");
+
+    const keepsCurrentApproval = customer.creditStatus === "APPROVED";
+    await this.db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "CustomerCreditEvent"
+          (id, "companyId", "customerId", "eventType", "requestedLimit", "requestedTerms", "monthlyVolume", rationale,
+           "actorId", "actorName", "actorRole", "createdAt")
+         VALUES ($1,$2,$3,'REQUEST',$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        randomUUID(), actor.companyId, id, requestedLimit, requestedTerms, monthlyVolume, rationale,
+        actor.id ?? null, actor.name, actor.role ?? null,
+      );
+      if (!keepsCurrentApproval) {
+        await tx.$executeRawUnsafe(
+          `UPDATE "Customer" SET "creditStatus"='UNDER_REVIEW', "updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$2`,
+          id,
+          actor.companyId,
+        );
+      }
+    });
+
+    return { ok: true, status: keepsCurrentApproval ? "APPROVED" : "UNDER_REVIEW", creditReviewPending: true };
   }
 
   @Patch(":id")
@@ -202,14 +310,31 @@ export class CustomersController {
     if (!CREDIT_STATUSES.includes(status as any)) throw new BadRequestException("Status de crédito inválido.");
     const limit = Number(body.creditLimit ?? 0);
     if (!Number.isFinite(limit) || limit < 0) throw new BadRequestException("Limite de crédito inválido.");
-    const rows = await this.db.$queryRawUnsafe<any[]>(
-      `UPDATE "Customer" SET "creditStatus"=$3, "creditLimit"=$4, "creditNotes"=$5,
-         "creditReviewedAt"=NOW(), "creditReviewedBy"=$6, "updatedAt"=NOW()
-       WHERE id=$1 AND "companyId"=$2 RETURNING *`,
-      id, actor.companyId, status, limit, body.notes?.trim() || null, actor.name,
-    );
-    if (!rows.length) throw new NotFoundException("Cliente não encontrado.");
+    const decisionTerms = String(body.paymentTerms ?? "").trim() || null;
+    const notes = String(body.notes ?? "").trim() || null;
+
+    let updated: any;
+    await this.db.$transaction(async (tx) => {
+      const rows = await tx.$queryRawUnsafe<any[]>(
+        `UPDATE "Customer" SET "creditStatus"=$3, "creditLimit"=$4, "creditNotes"=$5,
+           "creditReviewedAt"=NOW(), "creditReviewedBy"=$6,
+           "paymentTerms"=COALESCE($7,"paymentTerms"), "updatedAt"=NOW()
+         WHERE id=$1 AND "companyId"=$2 RETURNING *`,
+        id, actor.companyId, status, limit, notes, actor.name, decisionTerms,
+      );
+      if (!rows.length) throw new NotFoundException("Cliente não encontrado.");
+      updated = rows[0];
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "CustomerCreditEvent"
+          (id, "companyId", "customerId", "eventType", "decisionStatus", "decidedLimit", "decisionTerms", notes,
+           "actorId", "actorName", "actorRole", "createdAt")
+         VALUES ($1,$2,$3,'DECISION',$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        randomUUID(), actor.companyId, id, status, limit, decisionTerms, notes,
+        actor.id ?? null, actor.name, actor.role ?? null,
+      );
+    });
+
     const financial = (await this.health(actor.companyId, id))[0];
-    return this.decorate(rows[0], financial);
+    return this.decorate(updated, financial);
   }
 }

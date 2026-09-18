@@ -88,6 +88,25 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
     try {
       const response = await fetchUpstream(request, target, method, body);
+
+      // Backward-compatible OAuth handoff: older API revisions returned
+      // { authorizationUrl } as JSON, while newer ones return a 302 directly.
+      // Normalize both shapes here so /api/integrations/bling/connect always
+      // behaves as a browser redirect from the BBOS app domain.
+      if (
+        method === "GET" &&
+        path.join("/") === "integrations/bling/connect" &&
+        response.ok &&
+        response.headers.get("content-type")?.includes("application/json")
+      ) {
+        const payload = await response.clone().json().catch(() => null) as
+          | { authorizationUrl?: string }
+          | null;
+        if (payload?.authorizationUrl) {
+          return NextResponse.redirect(payload.authorizationUrl, 302);
+        }
+      }
+
       const responseHeaders = new Headers(response.headers);
       responseHeaders.delete("content-encoding");
       responseHeaders.delete("content-length");
