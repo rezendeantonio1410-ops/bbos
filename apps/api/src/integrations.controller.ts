@@ -171,6 +171,27 @@ export class IntegrationsController {
     return this.blingCatalogSync.profiles(actor.companyId);
   }
 
+  @Get("bling/fiscal-profile")
+  async companyFiscalProfile(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.blingCatalogSync.companyFiscalProfile(actor.companyId);
+  }
+
+  @Patch("bling/fiscal-profile")
+  async saveCompanyFiscalProfile(
+    @Req() request: any,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const actor = await this.actor(request);
+    try {
+      return await this.blingCatalogSync.saveCompanyFiscalProfile(actor.companyId, body ?? {});
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Falha ao salvar perfil fiscal da empresa.",
+      );
+    }
+  }
+
   @Patch("bling/catalog/profiles/:slug")
   async saveBlingCatalogProfile(
     @Req() request: any,
