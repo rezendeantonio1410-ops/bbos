@@ -10,12 +10,13 @@ function stableId(value: string) {
 const DEFAULT_NCM = "09012100";
 const PRICE_BY_SLUG: Record<string, number> = {
   essencial: 52,
+  intenso: 52,
   caramelo: 68,
   "doce-de-leite": 68,
   tangerina: 68,
   singular: 84,
   sublime: 84,
-  raros: 52,
+  raros: 54,
 };
 
 type CompanyFiscalProfile = {
@@ -58,7 +59,7 @@ export class BlingCatalogSyncService {
          FROM "Product" p
          JOIN "ProductVariant" pv ON pv."productId"=p.id
         WHERE p.active=true AND pv.active=true
-          AND p.slug IN ('essencial','caramelo','doce-de-leite','tangerina','singular','sublime','raros')
+          AND p.slug IN ('essencial','intenso','caramelo','doce-de-leite','tangerina','singular','sublime','raros')
         ORDER BY p.slug,pv."netWeightGrams"`,
     );
   }
