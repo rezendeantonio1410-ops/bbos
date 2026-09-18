@@ -92,7 +92,12 @@ export class MercadoPagoService {
       body = {};
     }
     if (!response.ok) {
-      const code = body?.code || body?.error || `HTTP_${response.status}`;
+      const code =
+        body?.code ||
+        body?.error ||
+        body?.errors?.[0]?.code ||
+        body?.details?.[0]?.code ||
+        `HTTP_${response.status}`;
       console.error("Mercado Pago recusou a operação", {
         status: response.status,
         code,
@@ -158,16 +163,6 @@ export class MercadoPagoService {
             street_number: input.delivery.number,
             neighborhood: input.delivery.district,
             city: input.delivery.city,
-          },
-        },
-        shipment: {
-          address: {
-            zip_code: input.delivery.postalCode.replace(/\D/g, ""),
-            street_name: input.delivery.street,
-            street_number: input.delivery.number,
-            city: input.delivery.city,
-            state: input.delivery.state,
-            complement: input.delivery.complement || undefined,
           },
         },
         config: {
