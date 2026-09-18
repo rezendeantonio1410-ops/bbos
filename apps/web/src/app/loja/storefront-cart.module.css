@@ -242,13 +242,26 @@
   padding: 12px;
 }
 .quote {
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 7px;
+  padding: 9px 10px;
+  border: 1px solid #ffffff38;
+  border-radius: 10px;
+  background: #ffffff0d;
+  color: white;
+  text-align: left;
   font-size: 10px;
 }
 .quote span {
   display: grid;
+}
+.selectedQuote {
+  border-color: #e9ce78;
+  background: #ffffff1f;
+  box-shadow: 0 0 0 1px #e9ce7840;
 }
 .error {
   color: #ffcfcf;

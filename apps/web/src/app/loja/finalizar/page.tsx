@@ -18,7 +18,7 @@ type CheckoutState = {
   subtotal: number;
   mode: "now" | "return";
   rhythm: number;
-  quote: { name: string; priceCents: number; deliveryDays: number };
+  quote: { id: string; name: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number; expiresAt: string };
 };
 type FormData = {
   name: string;
@@ -188,6 +188,7 @@ export default function CheckoutPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           idempotencyKey,
+          shippingQuoteId: checkout.quote.id,
           paymentMethod,
           customer: {
             name: data.name,
@@ -427,8 +428,7 @@ export default function CheckoutPage() {
           ))}
           <div className={styles.delivery}>
             <span>
-              Estimativa de entrega · até {checkout.quote.deliveryDays} dias
-              úteis
+              {checkout.quote.carrierName} · {checkout.quote.serviceName} · até {checkout.quote.deliveryDays} dias úteis
             </span>
             <b>
               {checkout.quote.priceCents

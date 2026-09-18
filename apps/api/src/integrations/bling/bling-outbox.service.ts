@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
 import { createHash } from "node:crypto";
 import { BlingService } from "./bling.service";
+import { StorefrontLifecycleService } from "../../storefront-lifecycle.service";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -11,7 +12,10 @@ function stableId(value: string) {
 export class BlingOutboxService {
   private readonly database = new PrismaClient();
 
-  constructor(private readonly bling: BlingService) {}
+  constructor(
+    private readonly bling: BlingService,
+    private readonly lifecycle: StorefrontLifecycleService,
+  ) {}
 
   private async mapResource(
     companyId: string,
@@ -107,7 +111,22 @@ export class BlingOutboxService {
     if (order.status !== "PAID") throw new Error(`StorefrontOrder ${order.code} não está pago.`);
 
     const prior = await this.getMap(row.companyId, "STOREFRONT_ORDER", order.id);
-    if (prior?.externalId) return { externalId: prior.externalId, idempotent: true };
+    if (prior?.externalId) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET status='PREPARING',"updatedAt"=NOW() WHERE id=$1 AND status='PAID'`,
+        order.id,
+      );
+      await this.lifecycle.record(
+        order.id,
+        "PREPARING",
+        "Pedido em preparação",
+        "Seu café entrou na fila de separação e preparação da Bispo Coffees.",
+        "BLING",
+        `storefront:preparing:${order.id}`,
+        { blingOrderId: prior.externalId },
+      );
+      return { externalId: prior.externalId, idempotent: true };
+    }
 
     const contactId = await this.ensureContact(row.companyId, order.customer, order.delivery);
     const items = Array.isArray(order.items) ? order.items : [];
@@ -140,27 +159,40 @@ export class BlingOutboxService {
       code: order.code,
       origin: "ECOMMERCE",
     });
+    await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontOrder" SET status='PREPARING',"updatedAt"=NOW() WHERE id=$1 AND status='PAID'`,
+      order.id,
+    );
+    await this.lifecycle.record(
+      order.id,
+      "PREPARING",
+      "Pedido em preparação",
+      "Seu café entrou na fila de separação e preparação da Bispo Coffees.",
+      "BLING",
+      `storefront:preparing:${order.id}`,
+      { blingOrderId: externalId },
+    );
     return { externalId, idempotent: false };
   }
 
   async processNext(companyId?: string) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,"companyId","eventType","aggregateType","aggregateId",payload,attempts
-       FROM "IntegrationOutbox"
-       WHERE provider='BLING' AND status IN ('PENDING','FAILED')
-         AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
-         AND ($1::text IS NULL OR "companyId"=$1)
-       ORDER BY "createdAt" ASC
-       LIMIT 1`,
+      `WITH candidate AS (
+         SELECT id FROM "IntegrationOutbox"
+          WHERE provider='BLING' AND status IN ('PENDING','FAILED')
+            AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
+            AND ($1::text IS NULL OR "companyId"=$1)
+          ORDER BY "createdAt" ASC
+          FOR UPDATE SKIP LOCKED LIMIT 1
+       )
+       UPDATE "IntegrationOutbox" o
+          SET status='PROCESSING',attempts=o.attempts+1,"lastError"=NULL,"updatedAt"=NOW()
+         FROM candidate WHERE o.id=candidate.id
+       RETURNING o.id,o."companyId",o."eventType",o."aggregateType",o."aggregateId",o.payload,o.attempts`,
       companyId ?? null,
     );
     const row = rows[0];
     if (!row) return { processed: false, reason: "EMPTY" };
-
-    await this.database.$executeRawUnsafe(
-      `UPDATE "IntegrationOutbox" SET status='PROCESSING',attempts=attempts+1,"lastError"=NULL,"updatedAt"=NOW() WHERE id=$1`,
-      row.id,
-    );
 
     try {
       let result: any;
@@ -176,7 +208,7 @@ export class BlingOutboxService {
       return { processed: true, outboxId: row.id, eventType: row.eventType, result };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const attempts = Number(row.attempts ?? 0) + 1;
+      const attempts = Number(row.attempts ?? 1);
       const retryMinutes = Math.min(60, Math.max(2, 2 ** Math.min(attempts, 5)));
       await this.database.$executeRawUnsafe(
         `UPDATE "IntegrationOutbox"

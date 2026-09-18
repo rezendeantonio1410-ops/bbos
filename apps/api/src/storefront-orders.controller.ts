@@ -14,6 +14,8 @@ import { PrismaClient } from "@bbos/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
+import { StorefrontShippingService } from "./storefront-shipping.service";
+import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 
 const catalog: Record<
   string,
@@ -52,6 +54,7 @@ function validCpf(value: unknown) {
 
 type CheckoutBody = {
   idempotencyKey?: string;
+  shippingQuoteId?: string;
   paymentMethod?: string;
   customer?: { name?: string; email?: string; phone?: string; cpf?: string };
   delivery?: {
@@ -71,14 +74,18 @@ type CheckoutBody = {
 export class StorefrontOrdersController {
   private readonly database = new PrismaClient();
 
-  constructor(private readonly mercadoPago: MercadoPagoService) {}
+  constructor(
+    private readonly mercadoPago: MercadoPagoService,
+    private readonly shipping: StorefrontShippingService,
+    private readonly lifecycle: StorefrontLifecycleService,
+  ) {}
 
   private async markAsPaid(
     orderId: string,
     externalId: string,
     provider = "MERCADO_PAGO",
   ) {
-    return this.database.$transaction(async (transaction) => {
+    const result = await this.database.$transaction(async (transaction) => {
       const found = await transaction.$queryRawUnsafe<any[]>(
         `SELECT * FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
         orderId,
@@ -115,6 +122,16 @@ export class StorefrontOrdersController {
       );
       return { id: order.id, code: order.code, status: "PAID" };
     });
+    await this.lifecycle.record(
+      orderId,
+      "PAYMENT_CONFIRMED",
+      "Pagamento confirmado",
+      "Seu pagamento foi aprovado e o pedido seguirá para preparação.",
+      provider === "MERCADO_PAGO" ? "MERCADO_PAGO" : "BBOS",
+      `storefront:payment-confirmed:${orderId}`,
+      { externalId, provider },
+    );
+    return result;
   }
 
   private async reconcileMercadoPago(order: {
@@ -280,12 +297,15 @@ export class StorefrontOrdersController {
     });
     const subtotalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
     const weightGrams = items.reduce((sum, item) => sum + item.weightGrams, 0);
-    const region = Number(digits(delivery.postalCode).slice(0, 1));
-    const free = subtotalCents >= 27000 && [0, 1, 2, 8, 9].includes(region);
-    const shippingCents = free
-      ? 0
-      : 1590 + Math.max(0, Math.ceil(weightGrams / 1000) - 1) * 450;
     const companyId = await this.companyId();
+    if (!body.shippingQuoteId?.trim())
+      throw new BadRequestException("Calcule e escolha uma modalidade de frete antes de pagar.");
+    const quote = await this.shipping.validateQuote(companyId, body.shippingQuoteId.trim(), {
+      postalCode: delivery.postalCode || "",
+      subtotalCents,
+      weightGrams,
+    });
+    const shippingCents = Number(quote.customerPriceCents);
     const existing = await this.database.$queryRawUnsafe<any[]>(
       `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
       key,
@@ -314,8 +334,10 @@ export class StorefrontOrdersController {
     const code = `WEB-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${id.slice(0, 6).toUpperCase()}`;
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `INSERT INTO "StorefrontOrder"
-        (id,"companyId",code,status,"idempotencyKey","confirmationTokenHash",customer,delivery,items,recurrence,"subtotalCents","shippingCents","totalCents","requestedPaymentMethod","createdAt","updatedAt")
-       VALUES ($1,$2,$3,'AWAITING_PAYMENT',$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,NOW(),NOW())
+        (id,"companyId",code,status,"idempotencyKey","confirmationTokenHash",customer,delivery,items,recurrence,
+         "subtotalCents","shippingCents","totalCents","requestedPaymentMethod","shippingQuoteId","shippingProvider",
+         "shippingServiceId","shippingServiceName","carrierName","estimatedDeliveryDays","createdAt","updatedAt")
+       VALUES ($1,$2,$3,'AWAITING_PAYMENT',$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW(),NOW())
        RETURNING id,code,status,"subtotalCents","shippingCents","totalCents"`,
       id,
       companyId,
@@ -338,6 +360,26 @@ export class StorefrontOrdersController {
       shippingCents,
       subtotalCents + shippingCents,
       paymentMethod,
+      quote.id,
+      quote.provider,
+      quote.serviceId,
+      quote.serviceName,
+      quote.carrierName,
+      quote.deliveryDays,
+    );
+    const claimed = await this.database.$executeRawUnsafe(
+      `UPDATE "ShippingQuote" SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
+      quote.id,
+    );
+    if (!claimed) throw new BadRequestException("Esta cotação já foi utilizada. Calcule novamente.");
+    await this.lifecycle.record(
+      id,
+      "ORDER_RECEIVED",
+      "Pedido recebido",
+      "Recebemos os dados do seu pedido e reservamos o valor do frete escolhido.",
+      "BBOS",
+      `storefront:received:${id}`,
+      { shippingQuoteId: quote.id, carrierName: quote.carrierName, serviceName: quote.serviceName },
     );
     const completeOrder = {
       ...rows[0],
@@ -370,21 +412,38 @@ export class StorefrontOrdersController {
     if (!suppliedToken)
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     let rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"paidAt","totalCents","paymentExternalId" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+      `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
+         FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE) LIMIT 1`,
       orderId,
       tokenHash(suppliedToken),
+      this.lifecycle.validTrackingToken(orderId, suppliedToken),
     );
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT id,code,status,"paidAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+        `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
+           FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE) LIMIT 1`,
         orderId,
         tokenHash(suppliedToken),
+        this.lifecycle.validTrackingToken(orderId, suppliedToken),
       );
     }
-    return rows[0];
+    const [events, shipments] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT "eventType",title,detail,"occurredAt" FROM "StorefrontOrderEvent"
+          WHERE "storefrontOrderId"=$1 AND public=TRUE ORDER BY "occurredAt" ASC`,
+        orderId,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT status,"serviceName","carrierName","trackingCode","trackingUrl","postedAt","deliveredAt"
+           FROM "Shipment" WHERE "storefrontOrderId"=$1 LIMIT 1`,
+        orderId,
+      ),
+    ]);
+    const { paymentExternalId: _privatePaymentId, ...publicOrder } = rows[0];
+    return { ...publicOrder, events, shipment: shipments[0] ?? null };
   }
 
   @Public()

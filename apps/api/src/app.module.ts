@@ -50,6 +50,13 @@ import { ProfessionalSamplesController } from "./professional-samples.controller
 import { CuppingPublicController } from "./cupping-public.controller";
 import { StorefrontOrdersController } from "./storefront-orders.controller";
 import { MercadoPagoService } from "./mercado-pago.service";
+import { StorefrontShippingController } from "./storefront-shipping.controller";
+import { StorefrontShippingService } from "./storefront-shipping.service";
+import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
+import { CustomerNotificationService } from "./customer-notification.service";
+import { IntegrationWorkerService } from "./integration-worker.service";
+import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
+import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
 
 @Module({
   controllers: [
@@ -86,6 +93,8 @@ import { MercadoPagoService } from "./mercado-pago.service";
     ProfessionalSamplesController,
     CuppingPublicController,
     StorefrontOrdersController,
+    StorefrontShippingController,
+    StorefrontFulfillmentController,
   ],
   providers: [
     DashboardService,
@@ -104,6 +113,11 @@ import { MercadoPagoService } from "./mercado-pago.service";
     UnconfiguredTaxRegistryProvider,
     UnconfiguredStateRegistrationProvider,
     MercadoPagoService,
+    StorefrontShippingService,
+    StorefrontLifecycleService,
+    CustomerNotificationService,
+    IntegrationWorkerService,
+    MelhorEnvioShipmentService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
