@@ -27,6 +27,7 @@ const catalog: Record<
   tangerina: { name: "Tangerina", unitPriceCents: 6800, weightGrams: 500 },
   singular: { name: "Singular", unitPriceCents: 8400, weightGrams: 500 },
   sublime: { name: "Sublime", unitPriceCents: 8400, weightGrams: 500 },
+  raros: { name: "Raros", unitPriceCents: 5200, weightGrams: 250 },
 };
 const grinds = new Set(["Grãos", "Espresso", "Coado", "Prensa francesa"]);
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
