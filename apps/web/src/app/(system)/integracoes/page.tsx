@@ -315,15 +315,15 @@ export default function IntegrationsPage() {
         <div className="rounded-[24px] border border-stone-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-2xl bg-blue-50 text-blue-700"><Webhook size={18}/></span>
-            <div><p className="text-sm font-bold">Eventos e retorno</p><p className="mt-1 text-xs text-stone-400">Fila idempotente e webhooks persistidos</p></div>
+            <div><p className="text-sm font-bold">Fluxos de integração</p><p className="mt-1 text-xs text-stone-400">Saída BBOS → Bling e retornos Bling → BBOS</p></div>
           </div>
           <div className="mt-5 space-y-3">
             <Rows title="Documentos" rows={summary?.documents} />
-            <Rows title="Fila" rows={summary?.outbox} />
-            <Rows title="Webhooks" rows={summary?.webhooks} />
+            <Rows title="Fila de saída BBOS → Bling" rows={summary?.outbox} />
+            <Rows title="Retornos Bling → BBOS" rows={summary?.webhooks} />
           </div>
           <button type="button" onClick={() => void processNext()} disabled={!connected || processing || !catalogReady} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-3 text-xs font-bold text-white disabled:opacity-40">
-            {processing ? <LoaderCircle size={15} className="animate-spin"/> : <PlayCircle size={15}/>} Processar próximo evento
+            {processing ? <LoaderCircle size={15} className="animate-spin"/> : <PlayCircle size={15}/>} Processar próxima saída
           </button>
         </div>
       </section>
