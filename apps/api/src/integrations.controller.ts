@@ -1,8 +1,11 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   HttpCode,
+  Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -162,6 +165,28 @@ export class IntegrationsController {
     return this.blingCatalogSync.status(actor.companyId);
   }
 
+  @Get("bling/catalog/profiles")
+  async blingCatalogProfiles(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.blingCatalogSync.profiles(actor.companyId);
+  }
+
+  @Patch("bling/catalog/profiles/:slug")
+  async saveBlingCatalogProfile(
+    @Req() request: any,
+    @Param("slug") slug: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const actor = await this.actor(request);
+    try {
+      return await this.blingCatalogSync.saveProfile(actor.companyId, slug, body ?? {});
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Falha ao salvar parametrização do produto.",
+      );
+    }
+  }
+
   @Post("bling/catalog/reconcile")
   async reconcileBlingCatalog(@Req() request: any) {
     const actor = await this.actor(request);
@@ -170,6 +195,18 @@ export class IntegrationsController {
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error ? error.message : "Falha ao reconciliar catálogo com o Bling.",
+      );
+    }
+  }
+
+  @Post("bling/catalog/create-missing")
+  async createMissingBlingProducts(@Req() request: any) {
+    const actor = await this.actor(request);
+    try {
+      return await this.blingCatalogSync.createMissing(actor.companyId);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Falha ao criar produtos ausentes no Bling.",
       );
     }
   }
