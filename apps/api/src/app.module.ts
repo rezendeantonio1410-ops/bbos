@@ -39,6 +39,7 @@ import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
 import { CuppingPublicController } from "./cupping-public.controller";
 import { StorefrontOrdersController } from "./storefront-orders.controller";
+import { MercadoPagoService } from "./mercado-pago.service";
 
 @Module({
   controllers: [
@@ -82,6 +83,7 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     AuthService,
     UnconfiguredTaxRegistryProvider,
     UnconfiguredStateRegistrationProvider,
+    MercadoPagoService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
