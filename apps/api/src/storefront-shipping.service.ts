@@ -112,6 +112,16 @@ export class StorefrontShippingService {
       });
       throw new ServiceUnavailableException("Nenhuma modalidade de entrega está habilitada no Melhor Envio para este CEP.");
     }
+    const serviceErrors = options
+      .filter((option: any) => option?.error)
+      .map((option: any) => ({
+        id: option.id,
+        name: option.name,
+        error: option.error,
+      }));
+    if (serviceErrors.length) {
+      console.error("Melhor Envio recusou serviços da cotação", { serviceErrors });
+    }
     return options
       .filter((option: any) => !option?.error && option?.id && Number(option?.custom_price ?? option?.price) >= 0)
       .map((option: any) => ({
