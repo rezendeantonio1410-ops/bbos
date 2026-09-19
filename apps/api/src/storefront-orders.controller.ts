@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -74,6 +75,33 @@ function validCpf(value: unknown) {
     if (check !== Number(cpf[size])) return false;
   }
   return true;
+}
+
+function secureEqual(value: string, expected: string) {
+  const a = Buffer.from(value);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function findString(
+  value: unknown,
+  predicate: (candidate: string) => boolean,
+  depth = 0,
+): string | undefined {
+  if (depth > 8 || value == null) return undefined;
+  if (typeof value === "string") return predicate(value) ? value : undefined;
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      const found = findString(child, predicate, depth + 1);
+      if (found) return found;
+    }
+  } else if (typeof value === "object") {
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      const found = findString(child, predicate, depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
 }
 
 type CheckoutBody = {
@@ -307,6 +335,96 @@ export class StorefrontOrdersController {
       JSON.stringify(tracking),
     );
     return { status: mappedStatus, trackingCode, tracking };
+  }
+
+  @Public()
+  @Post("bling/webhook")
+  async blingWebhook(
+    @Req() request: any,
+    @Headers("x-bling-signature-256") suppliedSignature: string | undefined,
+    @Body() body: any,
+  ) {
+    const secret =
+      process.env.BLING_CLIENT_SECRET?.trim() ||
+      process.env.BLING_WEBHOOK_SECRET?.trim();
+    const rawBody = request.rawBody as Buffer | undefined;
+    if (!secret || !rawBody || !suppliedSignature)
+      throw new UnauthorizedException("Webhook do Bling não autorizado.");
+    const hex = createHmac("sha256", secret).update(rawBody).digest("hex");
+    const base64 = createHmac("sha256", secret)
+      .update(rawBody)
+      .digest("base64");
+    if (
+      !secureEqual(suppliedSignature, hex) &&
+      !secureEqual(suppliedSignature, base64)
+    )
+      throw new UnauthorizedException("Assinatura do Bling inválida.");
+
+    const eventName = String(body?.event || body?.type || "unknown");
+    const providerEventId = String(
+      body?.eventId ||
+        body?.id ||
+        createHash("sha256").update(rawBody).digest("hex"),
+    );
+    const orderCode = findString(body?.data ?? body, (value) =>
+      /^WEB-\d{8}-[A-Z0-9]{6}$/i.test(value.trim()),
+    )?.trim();
+    const accessKeyValue = findString(body?.data ?? body, (value) =>
+      /^\d{44}$/.test(digits(value)),
+    );
+    const accessKey = digits(accessKeyValue);
+    const orderRows = orderCode
+      ? await this.database.$queryRawUnsafe<any[]>(
+          `SELECT id,"companyId" FROM "StorefrontOrder" WHERE code=$1 LIMIT 1`,
+          orderCode,
+        )
+      : [];
+    const order = orderRows[0];
+
+    const inserted = await this.database.$queryRawUnsafe<any[]>(
+      `INSERT INTO "IntegrationWebhookEvent"
+        (id,"companyId",provider,"providerEventId","eventName",payload,status,"receivedAt")
+       VALUES ($1,$2,'BLING',$3,$4,$5::jsonb,'RECEIVED',NOW())
+       ON CONFLICT (provider,"providerEventId") DO NOTHING
+       RETURNING id`,
+      randomUUID(),
+      order?.companyId ?? null,
+      providerEventId,
+      eventName,
+      JSON.stringify(body),
+    );
+    if (!inserted[0]) return { received: true, idempotent: true };
+
+    if (!order || accessKey.length !== 44) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "IntegrationWebhookEvent" SET status='IGNORED',"processedAt"=NOW(),"lastError"=$2 WHERE id=$1`,
+        inserted[0].id,
+        !order
+          ? "Pedido BBOS não identificado no evento."
+          : "Chave da NF-e ainda não disponível.",
+      );
+      return { received: true, awaitingData: true };
+    }
+
+    try {
+      const shipment = await this.issueShipment(order.id, {
+        invoiceKey: accessKey,
+      });
+      await this.database.$executeRawUnsafe(
+        `UPDATE "IntegrationWebhookEvent" SET status='PROCESSED',"processedAt"=NOW() WHERE id=$1`,
+        inserted[0].id,
+      );
+      return { received: true, shipment };
+    } catch (error) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "IntegrationWebhookEvent" SET status='ERROR',"processedAt"=NOW(),"lastError"=$2 WHERE id=$1`,
+        inserted[0].id,
+        error instanceof Error
+          ? error.message.slice(0, 500)
+          : "Erro desconhecido",
+      );
+      throw error;
+    }
   }
 
   private async reconcileMercadoPago(order: {
