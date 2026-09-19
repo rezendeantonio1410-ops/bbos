@@ -210,9 +210,9 @@ export default function LojaPage() {
             <div><small>DA ORIGEM À XÍCARA</small><h2>O café começa muito antes do primeiro gole.</h2><p>Relação, prova e escolha. Cada lote chega com uma história que José e Suzi fazem questão de preservar.</p></div>
           </article>
           <aside className={brand.photoManifest} data-photo-slot="sectional-ritual-new-photo">
-            <span>FOTO EDITORIAL 02</span>
+            <span>UM RITUAL PARA LEMBRAR</span>
             <strong>O seu ritual, com a assinatura Bispo.</strong>
-            <p>Espaço preparado para a nova fotografia de preparo e desejo.</p>
+            <p>Café para preparar com tempo, reconhecer na xícara e querer reencontrar.</p>
           </aside>
         </section>
 
@@ -368,9 +368,8 @@ export default function LojaPage() {
               <em>cada café passa por nós.</em>
             </h2>
             <p className={founder.intro}>
-              José é o Bispo. José e Suzi são a Bispo Coffees: duas histórias
-              próprias no café, unidas para escolher, provar e preservar a
-              identidade de cada xícara.
+              José e Suzi trazem duas histórias próprias no café, unidas para
+              escolher, provar e preservar a identidade de cada xícara.
             </p>
             <div className={founder.proofs}>
               <p>

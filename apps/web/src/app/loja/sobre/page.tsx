@@ -39,7 +39,7 @@ export default function SobrePage() {
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
-          <h2>José é o Bispo. José e Suzi são a Bispo Coffees.</h2>
+          <h2>José e Suzi. Duas histórias, uma Bispo Coffees.</h2>
           <span>
             Duas histórias próprias no café, uma parceria de vida e uma marca
             construída pelos dois — com conhecimento, sensibilidade e presença.
@@ -101,11 +101,11 @@ export default function SobrePage() {
         <blockquote className={authority.storyManifesto}>
           <small>UMA HISTÓRIA COMPARTILHADA</small>
           <p>
-            José é o Bispo — o apelido, a trajetória e a autoridade que deram
-            origem ao nome. Suzi é cofundadora, tem sua própria história no café
-            e participa das escolhas que definem a marca. Entre o campo, a
-            prova, a produção e os mercados, os dois construíram uma direção
-            comum. José e Suzi, juntos, são a Bispo Coffees.
+            Duas trajetórias próprias no café encontraram uma direção comum.
+            José traz a experiência da origem, da prova e dos mercados. Suzi,
+            sua história na produção, na sustentabilidade e no cuidado. É desse
+            encontro — feito de escolhas compartilhadas — que nasce a Bispo
+            Coffees.
           </p>
         </blockquote>
 
