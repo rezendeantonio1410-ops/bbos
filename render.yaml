@@ -64,6 +64,8 @@ services:
     branch: staging/cupping-sensory
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @bbos/web build
     startCommand: pnpm --filter @bbos/web start
+    domains:
+      - loja.bispocoffees.com.br
     envVars:
       - key: NODE_ENV
         value: production

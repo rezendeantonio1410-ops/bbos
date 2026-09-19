@@ -24,6 +24,7 @@ import { MercadoPagoService } from "./mercado-pago.service";
 import { verifyShippingQuote } from "./storefront-shipping.controller";
 import { StorefrontEmailService } from "./storefront-email.service";
 import { MelhorEnvioService } from "./melhor-envio.service";
+import { StorefrontInventoryService } from "./storefront-inventory.service";
 
 const catalog: Record<
   string,
@@ -130,6 +131,7 @@ export class StorefrontOrdersController {
     private readonly mercadoPago: MercadoPagoService,
     private readonly email: StorefrontEmailService,
     private readonly melhorEnvio: MelhorEnvioService,
+    private readonly storefrontInventory: StorefrontInventoryService,
   ) {}
 
   private async markAsPaid(
@@ -183,6 +185,12 @@ export class StorefrontOrdersController {
     });
     await this.email.sendPaidOrder(orderId).catch((error) =>
       console.error("Falha ao enviar confirmação da loja", {
+        orderId,
+        message: error instanceof Error ? error.message : "erro desconhecido",
+      }),
+    );
+    await this.storefrontInventory.ensureReserved(orderId).catch((error) =>
+      console.error("Pedido pago aguardando regularização de estoque", {
         orderId,
         message: error instanceof Error ? error.message : "erro desconhecido",
       }),
@@ -334,7 +342,43 @@ export class StorefrontOrdersController {
       trackingCode,
       JSON.stringify(tracking),
     );
+    if (mappedStatus === "DELIVERED")
+      await this.storefrontInventory.markDelivered(orderId).catch((error) =>
+        console.error("Entrega recebida antes da baixa operacional", {
+          orderId,
+          message: error instanceof Error ? error.message : "erro desconhecido",
+        }),
+      );
     return { status: mappedStatus, trackingCode, tracking };
+  }
+
+  @Post(":orderId/fulfillment/picking")
+  startPicking(@Param("orderId") orderId: string) {
+    return this.storefrontInventory.startPicking(orderId);
+  }
+
+  @Post(":orderId/fulfillment/ready")
+  completePicking(
+    @Param("orderId") orderId: string,
+    @Body() body: { pickedByItem?: Record<string, number> },
+  ) {
+    if (!body.pickedByItem || typeof body.pickedByItem !== "object")
+      throw new BadRequestException(
+        "Informe as quantidades conferidas por item.",
+      );
+    return this.storefrontInventory.completePicking(orderId, body.pickedByItem);
+  }
+
+  @Post(":orderId/fulfillment/shipped")
+  async markShipped(@Param("orderId") orderId: string) {
+    const result = await this.storefrontInventory.markShipped(orderId);
+    await this.email.sendShippedOrder(orderId).catch((error) =>
+      console.error("Falha ao enviar aviso de expedição", {
+        orderId,
+        message: error instanceof Error ? error.message : "erro desconhecido",
+      }),
+    );
+    return result;
   }
 
   @Public()
@@ -693,13 +737,13 @@ export class StorefrontOrdersController {
     if (!suppliedToken)
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     let rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+      `SELECT id,code,status,"fulfillmentStatus","paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
       orderId,
       tokenHash(suppliedToken),
     );
     if (!rows[0] && validTrackingToken(suppliedToken, orderId))
       rows = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT id,code,status,"paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 LIMIT 1`,
+        `SELECT id,code,status,"fulfillmentStatus","paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 LIMIT 1`,
         orderId,
       );
     if (!rows[0])
@@ -707,7 +751,7 @@ export class StorefrontOrdersController {
     if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT id,code,status,"paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+        `SELECT id,code,status,"fulfillmentStatus","paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
         orderId,
         tokenHash(suppliedToken),
       );
@@ -737,6 +781,13 @@ export class StorefrontOrdersController {
         detail: "Seu café seguirá para preparação e embalagem.",
         occurredAt: order.paidAt,
       });
+    if (order.fulfillmentStatus === "RESERVED")
+      events.push({
+        eventType: "STOCK_RESERVED",
+        title: "Cafés reservados",
+        detail: "Os cafés do seu pedido foram separados no estoque.",
+        occurredAt: order.updatedAt,
+      });
     if (shipment?.generatedAt)
       events.push({
         eventType: "SHIPMENT_PREPARED",
@@ -748,6 +799,7 @@ export class StorefrontOrdersController {
       id: order.id,
       code: order.code,
       status: order.status,
+      fulfillmentStatus: order.fulfillmentStatus,
       paidAt: order.paidAt,
       totalCents: order.totalCents,
       carrierName: shipping.carrierName || "Entrega Bispo",

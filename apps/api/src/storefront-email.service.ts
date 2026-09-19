@@ -141,4 +141,95 @@ export class StorefrontEmailService {
       throw error;
     }
   }
+
+  async sendShippedOrder(orderId: string) {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    const from = process.env.STOREFRONT_EMAIL_FROM?.trim();
+    const webUrl = process.env.STOREFRONT_WEB_URL?.trim()?.replace(/\/$/, "");
+    if (!apiKey || !from || !webUrl) return { sent: false, configured: false };
+
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT o.id,o.code,o.customer,s."trackingCode"
+         FROM "StorefrontOrder" o
+         LEFT JOIN "StorefrontShipment" s ON s."orderId"=o.id
+        WHERE o.id=$1 AND o."fulfillmentStatus"='SHIPPED' LIMIT 1`,
+      orderId,
+    );
+    const order = rows[0];
+    if (!order) return { sent: false, configured: true };
+    const recipient = String(order.customer?.email || "")
+      .trim()
+      .toLowerCase();
+    if (!recipient) return { sent: false, configured: true };
+
+    const claimed = await this.database.$queryRawUnsafe<any[]>(
+      `INSERT INTO "StorefrontNotification" (id,"orderId",type,status,recipient,attempts,"createdAt","updatedAt")
+       VALUES ($1,$2,'ORDER_SHIPPED','PROCESSING',$3,1,NOW(),NOW())
+       ON CONFLICT ("orderId",type) DO UPDATE
+         SET status='PROCESSING',attempts="StorefrontNotification".attempts+1,"updatedAt"=NOW(),"lastError"=NULL
+       WHERE "StorefrontNotification".status='FAILED'
+       RETURNING id`,
+      randomUUID(),
+      orderId,
+      recipient,
+    );
+    if (!claimed[0]) return { sent: false, configured: true, duplicate: true };
+
+    const token = this.trackingToken(order.id);
+    const trackingUrl = `${webUrl}/loja/pedido/${encodeURIComponent(order.id)}?token=${encodeURIComponent(token)}`;
+    const firstName = escapeHtml(
+      String(order.customer?.name || "").split(" ")[0],
+    );
+    const trackingCode = order.trackingCode
+      ? `<p style="margin:18px 0 0;color:#59615d;font-size:14px">Código de rastreio: <strong>${escapeHtml(order.trackingCode)}</strong></p>`
+      : "";
+    const html = `<!doctype html><html><body style="margin:0;background:#f3f1ec;color:#10201b;font-family:Arial,sans-serif">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:34px 16px">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff">
+          <tr><td style="padding:34px 40px;border-top:5px solid #10201b"><div style="font-size:27px;letter-spacing:.15em">BISPO</div><div style="margin-top:3px;color:#7b817c;font-size:10px;letter-spacing:.28em">TRUE COFFEE</div></td></tr>
+          <tr><td style="padding:12px 40px 36px">
+            <div style="color:#7b6147;font-size:11px;letter-spacing:.16em">SEU CAFÉ ESTÁ A CAMINHO · ${escapeHtml(order.code)}</div>
+            <h1 style="margin:18px 0 12px;font-family:Georgia,serif;font-size:34px;font-weight:400;line-height:1.1">Da Bispo para a sua porta.</h1>
+            <p style="margin:0;color:#59615d;font-size:15px;line-height:1.7">Olá, ${firstName}. Seu café foi conferido com cuidado e já saiu para encontrar você.</p>
+            ${trackingCode}
+            <a href="${trackingUrl}" style="display:block;margin-top:28px;padding:16px;background:#10201b;color:#fff;text-align:center;text-decoration:none;font-size:13px;letter-spacing:.08em">ACOMPANHAR A ENTREGA →</a>
+            <p style="margin:28px 0 0;color:#7b817c;font-size:12px;line-height:1.6">José e Suzi agradecem a sua escolha. Esperamos que a chegada seja apenas o começo de um bom ritual.</p>
+          </td></tr>
+        </table>
+      </td></tr></table></body></html>`;
+
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+          "idempotency-key": `bispo-order-shipped-${order.id}`,
+        },
+        body: JSON.stringify({
+          from,
+          to: [recipient],
+          subject: `Seu café está a caminho · ${order.code}`,
+          html,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(`Resend ${response.status}`);
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontNotification" SET status='SENT',"providerId"=$2,"sentAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`,
+        claimed[0].id,
+        result.id || null,
+      );
+      return { sent: true, configured: true };
+    } catch (error) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontNotification" SET status='FAILED',"lastError"=$2,"updatedAt"=NOW() WHERE id=$1`,
+        claimed[0].id,
+        error instanceof Error
+          ? error.message.slice(0, 500)
+          : "Falha desconhecida",
+      );
+      throw error;
+    }
+  }
 }
