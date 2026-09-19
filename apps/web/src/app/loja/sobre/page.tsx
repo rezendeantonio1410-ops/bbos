@@ -2,10 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import styles from "../page.module.css";
 import authority from "../authority.module.css";
+import brand from "../brand-review.module.css";
+import storyBrand from "./brand.module.css";
 
 export default function SobrePage() {
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${brand.storefront} ${storyBrand.page}`}>
       <div className={styles.commerceBar}>
         <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
         <Link href="/loja#cafes">Escolher cafés →</Link>
@@ -37,10 +39,10 @@ export default function SobrePage() {
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
-          <h2>Duas trajetórias que escolheram caminhar juntas.</h2>
+          <h2>José e Suzi. Duas histórias, uma Bispo Coffees.</h2>
           <span>
-            A Bispo Coffees nasce de duas histórias completas no café — e de uma
-            parceria construída no campo, na prova e nas escolhas de cada dia.
+            Duas histórias próprias no café, uma parceria de vida e uma marca
+            construída pelos dois — com conhecimento, sensibilidade e presença.
           </span>
         </div>
         <div className={authority.peopleMarks}>
@@ -60,7 +62,10 @@ export default function SobrePage() {
           <article className={authority.personSecondary}>
             <small>PRODUÇÃO · SUSTENTABILIDADE · CRITÉRIO</small>
             <strong>Suzi Ninov</strong>
-            <span>Planta, solo e conhecimento transformados em qualidade.</span>
+            <span>
+              Cofundadora, com história própria no café, visão e critério em
+              cada escolha.
+            </span>
           </article>
         </div>
 

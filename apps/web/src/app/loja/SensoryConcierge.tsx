@@ -31,7 +31,7 @@ export default function SensoryConcierge() {
       aria-hidden={!visible}
       tabIndex={visible ? 0 : -1}
     >
-      <span aria-hidden="true" />
+      <span aria-hidden="true"><i>B</i></span>
       <b>O Bispo ajuda você a escolher →</b>
     </Link>
   );

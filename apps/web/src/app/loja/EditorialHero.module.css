@@ -1,0 +1,38 @@
+.hero{--scene-tone:#f96d01;display:grid;grid-template-columns:1.08fr .92fr;min-height:calc(100svh - 104px);color:#0e191d;background:#ebebeb;border-bottom:1px solid rgba(14,25,29,.1)}
+.media{position:relative;min-height:620px;overflow:hidden;background:#0e191d}
+.sceneImage{object-fit:cover;opacity:0;transform:scale(1.025);transition:opacity .8s ease,transform 6.8s ease}
+.activeImage{opacity:1;transform:scale(1.075)}
+.mediaShade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(10,10,10,.52)),linear-gradient(90deg,rgba(10,10,10,.08),transparent 42%)}
+.mediaSignature{position:absolute;left:5vw;bottom:34px;display:grid;gap:5px;color:#fff;text-shadow:0 1px 18px rgba(0,0,0,.28)}
+.mediaSignature span{font-size:9px;font-weight:800;letter-spacing:.2em}
+.mediaSignature b{font:400 17px/1.2 var(--font-manrope)}
+.controls{position:absolute;right:28px;bottom:27px;display:flex;align-items:center;gap:9px;color:#fff}
+.controls button{width:38px;height:38px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.5);border-radius:50%;color:#fff;background:rgba(10,10,10,.22);backdrop-filter:blur(8px);cursor:pointer;transition:background .2s ease,transform .2s ease}
+.controls button:hover{background:#fff;color:#0e191d;transform:translateY(-2px)}
+.controls svg{width:15px;stroke-width:1.5}
+.controls span{min-width:48px;text-align:center;font-size:9px;letter-spacing:.12em}
+.copy{position:relative;padding:clamp(34px,4vw,72px);display:flex;justify-content:center;flex-direction:column;background:linear-gradient(145deg,#f4f1eb,#ebebeb 74%);overflow:hidden}
+.copy:before{content:"";position:absolute;top:0;left:0;width:4px;height:100%;background:var(--scene-tone);transition:background .5s ease}
+.topline{display:flex;align-items:center;gap:13px;font-size:9px;font-weight:850;letter-spacing:.19em}
+.topline i{width:32px;height:2px;background:var(--scene-tone);transition:background .5s ease}
+.topline b{font-weight:700}
+.copy h1{max-width:720px;margin:20px 0 16px;font:400 clamp(48px,5vw,82px)/.92 var(--font-manrope);letter-spacing:-.055em}
+.copy h1 em{color:var(--scene-tone);font-family:Georgia,serif;font-weight:400;transition:color .5s ease}
+.intro{max-width:650px;margin:0 0 22px;color:rgba(14,25,29,.68);font-size:16px;line-height:1.55}
+.productStage{min-height:188px;display:grid;grid-template-columns:210px 1fr;align-items:center;gap:24px;margin:3px 0 18px;border-block:1px solid rgba(14,25,29,.11)}
+.productImage{position:relative;width:210px;height:164px;overflow:hidden;background:#e5e0d8}
+.productImage img{object-fit:cover;object-position:center 56%;transform:scale(1.04);transition:opacity .35s ease}
+.productReading{display:grid;gap:8px;padding-right:12px}
+.productReading small,.buyRow small{font-size:8px;font-weight:850;letter-spacing:.16em;color:rgba(14,25,29,.56)}
+.productReading strong{font:400 21px/1.25 Georgia,serif}
+.productReading span{font-size:10px;color:rgba(14,25,29,.58)}
+.buyRow{display:flex;align-items:end;justify-content:space-between;gap:22px}
+.buyRow>div{display:grid;gap:3px}.buyRow strong{font:500 31px/1 var(--font-manrope)}
+.buyRow button{min-width:220px;min-height:54px;padding:0 20px;display:flex;align-items:center;justify-content:space-between;border:0;border-radius:3px;color:#fff;background:#0e191d;font-size:10px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .2s ease,transform .2s ease}
+.buyRow button:hover{background:#0a0a0a;transform:translateY(-2px)}
+.assist{margin-top:15px;color:rgba(14,25,29,.66);font-size:10px;text-decoration:none}.assist:hover{color:#0e191d}
+.dots{position:absolute;right:clamp(34px,4vw,72px);top:30px;display:flex;gap:7px}
+.dots button{width:19px;height:2px;padding:0;border:0;background:rgba(14,25,29,.2);cursor:pointer;transition:width .25s ease,background .25s ease}.dots .activeDot{width:38px;background:var(--scene-tone)}
+@media(max-width:960px){.hero{grid-template-columns:1fr;min-height:auto}.media{min-height:56svh}.copy{padding:42px 6vw 48px}.copy h1{font-size:clamp(48px,10vw,70px)}.dots{top:23px}}
+@media(max-width:600px){.media{min-height:430px}.mediaSignature{left:20px;bottom:20px}.controls{right:16px;bottom:16px}.controls span{display:none}.copy{padding:38px 20px 42px}.copy h1{margin-top:18px;font-size:45px}.intro{font-size:14px}.productStage{grid-template-columns:132px 1fr;gap:14px;min-height:154px}.productImage{width:132px;height:132px}.productReading strong{font-size:16px}.buyRow{align-items:stretch;flex-direction:column}.buyRow button{width:100%;min-width:0}.dots{right:20px;top:21px}}
+@media(prefers-reduced-motion:reduce){.sceneImage,.controls button,.buyRow button,.dots button{transition:none}.activeImage{transform:none}}
