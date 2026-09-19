@@ -38,7 +38,9 @@ export class StorefrontLifecycleService {
   ) {
     return this.database.$transaction(async (transaction) => {
       const orders = await transaction.$queryRawUnsafe<any[]>(
-        `SELECT id,"companyId",code,customer FROM "StorefrontOrder" WHERE id=$1 LIMIT 1`,
+        `SELECT id,"companyId",code,customer,delivery,items,"subtotalCents","shippingCents","totalCents",
+                "shippingServiceName","carrierName","estimatedDeliveryDays"
+           FROM "StorefrontOrder" WHERE id=$1 LIMIT 1`,
         orderId,
       );
       const order = orders[0];
@@ -63,7 +65,22 @@ export class StorefrontLifecycleService {
            VALUES ($1,$2,$3,$4,'EMAIL',$5,'ORDER_STATUS',$6::jsonb,'PENDING',0,$7,NOW(),NOW())
            ON CONFLICT ("idempotencyKey") DO NOTHING`,
           randomUUID(), order.companyId, order.id, eventId, email,
-          JSON.stringify({ orderCode: order.code, eventType, title, detail, trackingUrl: token ? `${publicBase}/loja/pedido/${order.id}?token=${encodeURIComponent(token)}` : null }),
+          JSON.stringify({
+            orderCode: order.code,
+            eventType,
+            title,
+            detail,
+            trackingUrl: token ? `${publicBase}/loja/pedido/${order.id}?token=${encodeURIComponent(token)}` : null,
+            customer: order.customer,
+            delivery: order.delivery,
+            items: order.items,
+            subtotalCents: order.subtotalCents,
+            shippingCents: order.shippingCents,
+            totalCents: order.totalCents,
+            shippingServiceName: order.shippingServiceName,
+            carrierName: order.carrierName,
+            estimatedDeliveryDays: order.estimatedDeliveryDays,
+          }),
           `notify:email:${idempotencyKey}`,
         );
       }

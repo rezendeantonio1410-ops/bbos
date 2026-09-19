@@ -30,7 +30,11 @@ export class MelhorEnvioShipmentService {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      console.error("Melhor Envio recusou a operação", { path, status: response.status });
+      console.error("Melhor Envio recusou a operação", {
+        path,
+        status: response.status,
+        error: body?.message || body?.error || body?.errors || undefined,
+      });
       throw new ServiceUnavailableException(`Melhor Envio indisponível para esta operação (${response.status}).`);
     }
     return body;
@@ -40,6 +44,23 @@ export class MelhorEnvioShipmentService {
     const value = process.env[name]?.trim();
     if (!value) throw new ServiceUnavailableException(`${name} não configurado.`);
     return value;
+  }
+
+  private async printWhenReady(externalId: string) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        const printed = await this.request("/me/shipment/print", {
+          method: "POST",
+          body: JSON.stringify({ orders: [externalId], mode: "public" }),
+        });
+        const url = String(printed?.url || printed?.data?.url || "");
+        if (url) return url;
+      } catch (error) {
+        if (attempt === 5) throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+    throw new ServiceUnavailableException("A etiqueta foi gerada, mas o PDF ainda não ficou disponível.");
   }
 
   private sender() {
@@ -176,13 +197,13 @@ export class MelhorEnvioShipmentService {
     await this.request("/me/shipment/checkout", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
     await this.database.$executeRawUnsafe(`UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`, shipmentId);
     await this.request("/me/shipment/generate", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
-    const printed = await this.request("/me/shipment/print", { method: "POST", body: JSON.stringify({ orders: [externalId], mode: "public" }) });
-    const labelUrl = String(printed?.url || printed?.data?.url || "");
+    const labelUrl = await this.printWhenReady(externalId);
     const details = await this.request(`/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => ({}));
     const trackingCode = String(details?.tracking || details?.tracking_code || "") || null;
+    const trackingUrl = String(details?.tracking_url || details?.tracking?.url || "") || null;
     await this.database.$executeRawUnsafe(
-      `UPDATE "Shipment" SET status='LABEL_READY',"labelUrl"=$2,"trackingCode"=$3,metadata=$4::jsonb,"updatedAt"=NOW() WHERE id=$1`,
-      shipmentId, labelUrl || null, trackingCode, JSON.stringify(details || {}),
+      `UPDATE "Shipment" SET status='LABEL_READY',"labelUrl"=$2,"trackingCode"=$3,"trackingUrl"=$4,metadata=$5::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+      shipmentId, labelUrl || null, trackingCode, trackingUrl, JSON.stringify(details || {}),
     );
     await this.lifecycle.record(
       order.id,
@@ -193,7 +214,7 @@ export class MelhorEnvioShipmentService {
       `storefront:shipment-created:${order.id}`,
       { shipmentId, externalId, carrierName: order.carrierName, serviceName: order.serviceName },
     );
-    return { id: shipmentId, externalId, status: "LABEL_READY", labelUrl, trackingCode };
+    return { id: shipmentId, externalId, status: "LABEL_READY", labelUrl, trackingCode, trackingUrl };
   }
 
   async applyTrackingUpdate(externalId: string, statusValue: string, payload: unknown) {

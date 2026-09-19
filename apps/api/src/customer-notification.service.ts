@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
+import { renderCustomerEmail } from "./customer-email-template";
 
 @Injectable()
 export class CustomerNotificationService {
@@ -12,9 +13,12 @@ export class CustomerNotificationService {
     if (!apiKey || !from)
       throw new Error("RESEND_API_KEY/STOREFRONT_FROM_EMAIL não configurados.");
     const payload = row.payload || {};
-    const tracking = payload.trackingUrl
-      ? `<p><a href="${String(payload.trackingUrl).replace(/"/g, "&quot;")}">Acompanhar meu pedido</a></p>`
-      : "";
+    const logoUrl =
+      process.env.STOREFRONT_EMAIL_LOGO_URL?.trim() ||
+      "https://app.bispocoffees.com.br/brand/logo/bispo-logo-official-transparent.png";
+    const sealUrl =
+      process.env.STOREFRONT_EMAIL_SEAL_URL?.trim() ||
+      "https://app.bispocoffees.com.br/brand/logo/bispo-seal-black.jpg";
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -26,7 +30,7 @@ export class CustomerNotificationService {
         to: [row.destination],
         ...(replyTo ? { reply_to: replyTo } : {}),
         subject: `${payload.title} · pedido ${payload.orderCode}`,
-        html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#0c241b"><h1 style="font-size:24px">${payload.title}</h1><p>${payload.detail}</p><p><strong>Pedido:</strong> ${payload.orderCode}</p>${tracking}<p>Bispo Coffees · True Coffee</p></div>`,
+        html: renderCustomerEmail(payload, { logoUrl, sealUrl }),
       }),
     });
     const body = await response.json().catch(() => ({}));
