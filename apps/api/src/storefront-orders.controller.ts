@@ -22,6 +22,7 @@ import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { verifyShippingQuote } from "./storefront-shipping.controller";
 import { StorefrontEmailService } from "./storefront-email.service";
+import { MelhorEnvioService } from "./melhor-envio.service";
 
 const catalog: Record<
   string,
@@ -100,6 +101,7 @@ export class StorefrontOrdersController {
   constructor(
     private readonly mercadoPago: MercadoPagoService,
     private readonly email: StorefrontEmailService,
+    private readonly melhorEnvio: MelhorEnvioService,
   ) {}
 
   private async markAsPaid(
@@ -138,6 +140,17 @@ export class StorefrontOrdersController {
         JSON.stringify({ storefrontOrderId: order.id, code: order.code }),
         `bling:storefront-paid:${order.id}`,
       );
+      const shipping = order.delivery?.shipping;
+      if (shipping?.providerServiceId)
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "StorefrontShipment"
+            (id,"orderId",provider,status,"providerServiceId","createdAt","updatedAt")
+           VALUES ($1,$2,'MELHOR_ENVIO','WAITING_INVOICE',$3,NOW(),NOW())
+           ON CONFLICT ("orderId") DO NOTHING`,
+          randomUUID(),
+          order.id,
+          Number(shipping.providerServiceId),
+        );
       return { id: order.id, code: order.code, status: "PAID" };
     });
     await this.email.sendPaidOrder(orderId).catch((error) =>
@@ -147,6 +160,153 @@ export class StorefrontOrdersController {
       }),
     );
     return result;
+  }
+
+  @Post(":orderId/shipment/issue")
+  async issueShipment(
+    @Param("orderId") orderId: string,
+    @Body() body: { invoiceKey?: string },
+  ) {
+    const invoiceKey = digits(body.invoiceKey);
+    if (invoiceKey.length !== 44)
+      throw new BadRequestException("Informe a chave de 44 dígitos da NF-e.");
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT o.*,s.id AS "shipmentId",s.status AS "shipmentStatus",
+              s."providerServiceId",s."providerShipmentId",s."labelUrl"
+         FROM "StorefrontOrder" o
+         JOIN "StorefrontShipment" s ON s."orderId"=o.id
+        WHERE o.id=$1 LIMIT 1`,
+      orderId,
+    );
+    const order = rows[0];
+    if (!order) throw new BadRequestException("Remessa não encontrada.");
+    if (order.status !== "PAID")
+      throw new BadRequestException("O pagamento ainda não foi confirmado.");
+    if (order.shipmentStatus === "LABEL_READY")
+      return {
+        status: order.shipmentStatus,
+        labelUrl: order.labelUrl,
+        idempotent: true,
+      };
+
+    const customer = order.customer as CheckoutBody["customer"];
+    const delivery = order.delivery as CheckoutBody["delivery"];
+    const items = order.items as Array<{
+      name: string;
+      quantity: number;
+      unitPriceCents: number;
+      weightGrams: number;
+    }>;
+    const claimed = await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontShipment"
+          SET status='PROCESSING',"invoiceKey"=$2,"lastError"=NULL,"updatedAt"=NOW()
+        WHERE id=$1 AND (
+          status IN ('WAITING_INVOICE','ERROR') OR
+          (status='PROCESSING' AND "updatedAt" < NOW() - INTERVAL '10 minutes')
+        )`,
+      order.shipmentId,
+      invoiceKey,
+    );
+    if (!claimed)
+      throw new BadRequestException(
+        "Esta remessa já está sendo processada. Atualize a página em instantes.",
+      );
+    try {
+      let providerShipmentId = order.providerShipmentId as string | null;
+      if (!providerShipmentId) {
+        const created = await this.melhorEnvio.createShipment({
+          serviceId: Number(order.providerServiceId),
+          orderCode: order.code,
+          orderUrl: `${process.env.STOREFRONT_WEB_URL || ""}/pedido/${order.id}`,
+          invoiceKey,
+          recipient: {
+            name: customer?.name || "",
+            email: customer?.email || "",
+            phone: digits(customer?.phone),
+            document: digits(customer?.cpf),
+            address: delivery?.street || "",
+            complement: delivery?.complement || "",
+            number: delivery?.number || "",
+            district: delivery?.district || "",
+            city: delivery?.city || "",
+            postal_code: digits(delivery?.postalCode),
+            state_abbr: delivery?.state?.toUpperCase() || "",
+          },
+          products: items.map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+            unitaryValueCents: item.unitPriceCents,
+          })),
+          weightGrams: items.reduce((sum, item) => sum + item.weightGrams, 0),
+          insuredValueCents: order.subtotalCents,
+        });
+        providerShipmentId = created.providerShipmentId;
+        await this.database.$executeRawUnsafe(
+          `UPDATE "StorefrontShipment" SET "providerShipmentId"=$2,"updatedAt"=NOW() WHERE id=$1`,
+          order.shipmentId,
+          providerShipmentId,
+        );
+      }
+      const completed =
+        await this.melhorEnvio.completeShipment(providerShipmentId);
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontShipment"
+            SET status='LABEL_READY',"labelUrl"=$2,"purchasedAt"=COALESCE("purchasedAt",NOW()),"generatedAt"=NOW(),"updatedAt"=NOW()
+          WHERE id=$1`,
+        order.shipmentId,
+        completed.labelUrl,
+      );
+      return { status: "LABEL_READY", ...completed };
+    } catch (error) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontShipment" SET status='ERROR',"lastError"=$2,"updatedAt"=NOW() WHERE id=$1`,
+        order.shipmentId,
+        error instanceof Error
+          ? error.message.slice(0, 500)
+          : "Erro desconhecido",
+      );
+      throw error;
+    }
+  }
+
+  @Post(":orderId/shipment/sync")
+  async syncShipment(@Param("orderId") orderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,"providerShipmentId",status FROM "StorefrontShipment" WHERE "orderId"=$1 LIMIT 1`,
+      orderId,
+    );
+    const shipment = rows[0];
+    if (!shipment?.providerShipmentId)
+      throw new BadRequestException("A etiqueta ainda não foi gerada.");
+    const tracking = await this.melhorEnvio.track(shipment.providerShipmentId);
+    const providerEvent =
+      tracking?.[shipment.providerShipmentId] ??
+      Object.values(tracking || {})[0] ??
+      {};
+    const providerStatus = String(
+      (providerEvent as any)?.status || "",
+    ).toLowerCase();
+    const mappedStatus = providerStatus.includes("deliver")
+      ? "DELIVERED"
+      : providerStatus.includes("transit")
+        ? "IN_TRANSIT"
+        : providerStatus.includes("post")
+          ? "POSTED"
+          : shipment.status;
+    const trackingCode =
+      (providerEvent as any)?.tracking ||
+      (providerEvent as any)?.tracking_code ||
+      null;
+    await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontShipment"
+          SET status=$2,"trackingCode"=COALESCE($3,"trackingCode"),"trackingPayload"=$4::jsonb,"lastTrackedAt"=NOW(),"updatedAt"=NOW()
+        WHERE id=$1`,
+      shipment.id,
+      mappedStatus,
+      trackingCode,
+      JSON.stringify(tracking),
+    );
+    return { status: mappedStatus, trackingCode, tracking };
   }
 
   private async reconcileMercadoPago(order: {
@@ -436,6 +596,14 @@ export class StorefrontOrdersController {
     }
     const order = rows[0];
     const shipping = order.delivery?.shipping ?? {};
+    const shipmentRows = await this.database
+      .$queryRawUnsafe<any[]>(
+        `SELECT status,"labelUrl","trackingCode","trackingPayload","generatedAt","lastTrackedAt"
+         FROM "StorefrontShipment" WHERE "orderId"=$1 LIMIT 1`,
+        order.id,
+      )
+      .catch(() => []);
+    const shipment = shipmentRows[0] ?? null;
     const events = [
       {
         eventType: "ORDER_RECEIVED",
@@ -451,6 +619,13 @@ export class StorefrontOrdersController {
         detail: "Seu café seguirá para preparação e embalagem.",
         occurredAt: order.paidAt,
       });
+    if (shipment?.generatedAt)
+      events.push({
+        eventType: "SHIPMENT_PREPARED",
+        title: "Entrega preparada",
+        detail: "Seu café está pronto para seguir viagem.",
+        occurredAt: shipment.generatedAt,
+      });
     return {
       id: order.id,
       code: order.code,
@@ -461,7 +636,14 @@ export class StorefrontOrdersController {
       shippingServiceName: shipping.serviceName || "Entrega cuidadosa",
       estimatedDeliveryDays: shipping.deliveryDays || null,
       events,
-      shipment: null,
+      shipment: shipment
+        ? {
+            status: shipment.status,
+            trackingCode: shipment.trackingCode,
+            tracking: shipment.trackingPayload,
+            lastTrackedAt: shipment.lastTrackedAt,
+          }
+        : null,
     };
   }
 

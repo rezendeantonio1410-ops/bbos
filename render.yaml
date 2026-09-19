@@ -54,6 +54,8 @@ services:
         sync: false
       - key: MELHOR_ENVIO_USER_AGENT
         value: BBOS Bispo Coffees (jrezende@bispocoffees.com)
+      - key: MELHOR_ENVIO_SENDER_JSON
+        sync: false
 
   - type: web
     name: bbos-web-staging
