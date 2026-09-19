@@ -795,6 +795,22 @@ export class StorefrontOrdersController {
         detail: "Seu café está pronto para seguir viagem.",
         occurredAt: shipment.generatedAt,
       });
+    if (new Set(["POSTED", "IN_TRANSIT", "DELIVERED"]).has(shipment?.status))
+      events.push({
+        eventType: "IN_TRANSIT",
+        title: "Seu café está a caminho",
+        detail: shipment.trackingCode
+          ? `Rastreio ${shipment.trackingCode}.`
+          : "A entrega já saiu para encontrar você.",
+        occurredAt: shipment.lastTrackedAt || order.updatedAt,
+      });
+    if (shipment?.status === "DELIVERED")
+      events.push({
+        eventType: "DELIVERED",
+        title: "Entregue",
+        detail: "Seu café chegou. Agora, o ritual é seu.",
+        occurredAt: shipment.lastTrackedAt || order.updatedAt,
+      });
     return {
       id: order.id,
       code: order.code,
