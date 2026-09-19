@@ -7,6 +7,7 @@ import review from "./hero-review.module.css";
 import journey from "./conversion-review.module.css";
 import founder from "./founder-trust.module.css";
 import layers from "./layers.module.css";
+import brand from "./brand-review.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import {
@@ -23,7 +24,7 @@ const products = [
     price: "R$ 52",
     priceCents: 5200,
     weight: "500 g",
-    tone: "#E6C838",
+    tone: "#D8B832",
     image: "/brand/products/essencial-treated.webp",
     tag: "para todo dia",
   },
@@ -34,7 +35,7 @@ const products = [
     price: "R$ 52",
     priceCents: 5200,
     weight: "500 g",
-    tone: "#CDAA27",
+    tone: "#BFA12D",
     image: "/brand/products/intenso-treated.webp",
     tag: "mais corpo",
   },
@@ -45,7 +46,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#D97830",
+    tone: "#C46F32",
     image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
   },
@@ -56,7 +57,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#C89725",
+    tone: "#C28F32",
     image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
   },
@@ -67,7 +68,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#E48725",
+    tone: "#D47A30",
     image: null,
     tag: "frescor",
   },
@@ -78,7 +79,7 @@ const products = [
     price: "R$ 84",
     priceCents: 8400,
     weight: "500 g",
-    tone: "#3B7651",
+    tone: "#657862",
     image: "/brand/products/singular-treated.webp",
     tag: "descoberta",
   },
@@ -89,7 +90,7 @@ const products = [
     price: "R$ 84",
     priceCents: 8400,
     weight: "500 g",
-    tone: "#4D8060",
+    tone: "#596D5D",
     image: "/brand/products/sublime-treated.webp",
     tag: "experiência",
   },
@@ -99,25 +100,25 @@ const collections = [
     name: "Gourmet",
     eyebrow: "Cotidiano sofisticado",
     copy: "Cafés fáceis de gostar e feitos para acompanhar todos os dias.",
-    tone: "#E6C838",
+    tone: "#D8B832",
   },
   {
     name: "Clássicos",
     eyebrow: "Conforto e identidade",
     copy: "Sabores familiares, doces e presentes — com a leitura do Bispo.",
-    tone: "#D97830",
+    tone: "#C46F32",
   },
   {
     name: "Épicos",
     eyebrow: "Complexidade e descoberta",
     copy: "Cafés expressivos para quem deseja explorar novas camadas da xícara.",
-    tone: "#3B7651",
+    tone: "#657862",
   },
   {
     name: "Raros",
     eyebrow: "Pequenos lotes",
     copy: "Experiências excepcionais, selecionadas em quantidades limitadas.",
-    tone: "#263C32",
+    tone: "#0E191D",
   },
 ] as const;
 
@@ -127,7 +128,7 @@ const collectionId = (name: string) =>
 export default function LojaPage() {
   return (
     <StorefrontCartProvider>
-      <main className={styles.page}>
+      <main className={`${styles.page} ${brand.storefront}`}>
         <ScrollToTopOnLoad />
         <div className={styles.commerceBar}>
           <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
@@ -446,9 +447,9 @@ export default function LojaPage() {
               <em>cada café passa por nós.</em>
             </h2>
             <p className={founder.intro}>
-              José e Suzi unem campo, prova, produção e mercado para fazer a
-              escolha difícil antes. Você recebe um café fácil de reconhecer,
-              desejar e reencontrar.
+              José é o Bispo. José e Suzi são a Bispo Coffees: duas histórias
+              próprias no café, unidas para escolher, provar e preservar a
+              identidade de cada xícara.
             </p>
             <div className={founder.proofs}>
               <p>
@@ -459,14 +460,14 @@ export default function LojaPage() {
               <p>
                 <b>Suzi Ninov</b>
                 <br />
-                Produção, sustentabilidade e o cuidado que preserva cada
-                escolha.
+                Cofundadora, com trajetória própria no café, visão de produção,
+                sustentabilidade e o cuidado que preserva cada escolha.
               </p>
             </div>
             <p className={founder.sharedStory}>
-              Duas trajetórias, uma escolha construída em conjunto — do café
-              verde exportado para a Europa aos mesmos padrões agora servidos no
-              Brasil.
+              Parceiros de vida e de projeto, constroem juntos a Bispo de
+              verdade — do café verde levado ao mercado europeu à xícara
+              servida no Brasil.
             </p>
             <div className={founder.trust} aria-label="Critérios Bispo">
               <span>Provado por nós</span>

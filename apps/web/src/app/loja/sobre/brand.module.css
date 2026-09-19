@@ -1,0 +1,10 @@
+.page { background: #ebebeb; color: #0e191d; }
+.page :global(h1),.page :global(h2),.page :global(h3),.page :global(blockquote p) { font-family: var(--font-manrope); font-weight: 300; }
+.page :global([class*="peopleLayer"]) { background: #ebebeb !important; }
+.page :global([class*="peopleLead"]) p { color: #0e191d !important; }
+.page :global([class*="personPrimary"]) { background: #0e191d !important; border-radius: 8px !important; }
+.page :global([class*="personSecondary"]) { background: #e0eae9 !important; color: #0e191d !important; border-radius: 8px !important; }
+.page :global([class*="fieldShot"]) { border-radius: 10px !important; }
+.page :global([class*="storyManifesto"]) { background: #0e191d !important; border-left-color: #e0eae9 !important; border-radius: 0 8px 8px 0 !important; }
+.page :global([class*="storyChapters"]) { border-radius: 8px !important; }
+.page :global([class*="storyChapters"]) article { background: #fff !important; }

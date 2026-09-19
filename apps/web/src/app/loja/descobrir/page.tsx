@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import styles from "./page.module.css";
+import brand from "./brand.module.css";
 
 const R = "https://raw.githubusercontent.com/rezendeantonio1410-ops/bbos/staging/cupping-mobile-v2/apps/web/public";
 const img = (p: string) => R + p;
@@ -84,13 +85,13 @@ const acids = [
 ];
 
 const productMap = {
-  fruitFresh: { name: "Tangerina", line: "CLÁSSICOS", price: "R$ 74", perCup: "≈ R$ 2,96/xícara", profile: "Cítrico · Refrescante · Delicado" },
-  fruitExplorer: { name: "Singular", line: "ÉPICOS", price: "R$ 85", perCup: "≈ R$ 3,40/xícara", profile: "Frutado · Complexo · Evolutivo" },
-  sweetSoft: { name: "Doce de Leite", line: "CLÁSSICOS", price: "R$ 74", perCup: "≈ R$ 2,96/xícara", profile: "Açúcar mascavo · Alfajor · Doçura" },
+  fruitFresh: { name: "Tangerina", line: "CLÁSSICOS", price: "R$ 68", perCup: "≈ R$ 2,72/xícara", profile: "Cítrico · Refrescante · Delicado" },
+  fruitExplorer: { name: "Singular", line: "ÉPICOS", price: "R$ 84", perCup: "≈ R$ 3,36/xícara", profile: "Frutado · Complexo · Evolutivo" },
+  sweetSoft: { name: "Doce de Leite", line: "CLÁSSICOS", price: "R$ 68", perCup: "≈ R$ 2,72/xícara", profile: "Açúcar mascavo · Alfajor · Doçura" },
   sweetDaily: { name: "Caramelo", line: "CLÁSSICOS", price: "R$ 68", perCup: "≈ R$ 2,72/xícara", profile: "Caramelo · Chocolate · Equilíbrio" },
-  cocoaBody: { name: "Sublime", line: "ÉPICOS", price: "R$ 85", perCup: "≈ R$ 3,40/xícara", profile: "Rapadura · Caramelo · Corpo" },
-  gentle: { name: "Essencial", line: "GOURMET", price: "R$ 48", perCup: "≈ R$ 1,92/xícara", profile: "Suavidade · Praticidade · Equilíbrio" },
-  intense: { name: "Intenso", line: "GOURMET", price: "R$ 48", perCup: "≈ R$ 1,92/xícara", profile: "Corpo · Presença · Limpeza" },
+  cocoaBody: { name: "Sublime", line: "ÉPICOS", price: "R$ 84", perCup: "≈ R$ 3,36/xícara", profile: "Rapadura · Caramelo · Corpo" },
+  gentle: { name: "Essencial", line: "GOURMET", price: "R$ 52", perCup: "≈ R$ 2,08/xícara", profile: "Suavidade · Praticidade · Equilíbrio" },
+  intense: { name: "Intenso", line: "GOURMET", price: "R$ 52", perCup: "≈ R$ 2,08/xícara", profile: "Corpo · Presença · Limpeza" },
 };
 
 type Phase = "aroma-family" | "aroma-sub" | "aroma-desc" | "flavor-family" | "flavor-sub" | "flavor-desc" | "acid" | "profile" | "desire" | "product";
@@ -239,10 +240,10 @@ function Shell({ children }: { children: ReactNode }) {
       .${styles.bispoWhisper}{margin-top:9px;padding:10px 14px}
     }
     .cupRevealButton{display:block;margin:0 auto;border:0;background:transparent;padding:0;cursor:pointer;border-radius:48px;transition:transform .2s ease,filter .2s ease}.cupRevealButton:hover{transform:scale(1.02);filter:drop-shadow(0 18px 34px rgba(45,28,18,.12))}.tapHint{margin:10px auto 0!important;font-size:12px!important;opacity:.6!important;line-height:1.3!important}.cupRevealButton:focus-visible{outline:2px solid #101a1d;outline-offset:8px}.cupRevealButton .${styles.cupWorld}{pointer-events:none}
-    .flavorStage{background:linear-gradient(145deg,#fffaf2,#f5eee3)!important;border-color:#eadfce!important}
+    .flavorStage{background:#ebebeb!important;border-color:#d5dcda!important}
     .flavorCompass{width:min(760px,72vw);margin:auto;position:relative;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px}
     .flavorCompass.two{grid-template-columns:1fr 1fr;max-width:720px}
-    .flavorChoice{min-height:180px;border:0;border-radius:28px;background:color-mix(in srgb,var(--tone) 12%,#fff);display:grid;grid-template-columns:130px 1fr;grid-template-rows:1fr auto;align-items:center;text-align:left;padding:18px 22px;cursor:pointer;box-shadow:0 14px 34px #4c38220d;transition:.2s}
+    .flavorChoice{min-height:180px;border:1px solid #0e191d18;border-radius:12px;background:color-mix(in srgb,var(--tone) 9%,#fff);display:grid;grid-template-columns:130px 1fr;grid-template-rows:1fr auto;align-items:center;text-align:left;padding:18px 22px;cursor:pointer;box-shadow:none;transition:.2s}
     .flavorChoice:hover{transform:translateY(-3px);box-shadow:0 20px 42px #4c382218}
     .flavorChoice>span{grid-row:1/3;width:112px;height:112px;border-radius:50%;background:#fff;display:grid;place-items:center;overflow:hidden;box-shadow:inset 0 0 0 1px #0000000b}
     .flavorChoice img{width:92%;height:92%;object-fit:contain}
@@ -252,5 +253,5 @@ function Shell({ children }: { children: ReactNode }) {
     .flavorStage .${styles.descriptorTile}>span{background:#fffaf3;border-radius:30px;padding:14px}.flavorStage .${styles.descriptorTile} img{border-radius:18px}
     @media(max-width:700px){.cupRevealButton{width:100%}.tapHint{text-align:center}.flavorCompass,.flavorCompass.two{width:100%;grid-template-columns:1fr;gap:10px;padding:0}.flavorChoice{min-height:116px;grid-template-columns:92px 1fr;padding:12px 14px;border-radius:20px}.flavorChoice>span{width:78px;height:78px}.flavorChoice strong{font-size:16px}.flavorCore{position:static;transform:none;grid-row:1;width:86px;height:86px;margin:0 auto 4px;order:-1}.flavorCompass{display:flex;flex-direction:column}.flavorCompass .flavorCore{order:-1}.flavorStage .${styles.descriptorTile}>span{padding:8px}}
   `;
-  return <main className={styles.page}><style>{responsive}</style><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
+  return <main className={`${styles.page} ${brand.page}`}><style>{responsive}</style><header className={styles.header}><Link href="/loja" className={styles.brand}><img src="/brand/logo/bispo-logo-official-transparent.png" alt="Bispo Coffees"/></Link><div className={styles.headerCopy}><span>DESCUBRA O SEU CAFÉ</span></div><Link href="/loja" className={styles.close}>×</Link></header>{children}</main>;
 }

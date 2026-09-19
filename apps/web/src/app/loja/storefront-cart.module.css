@@ -18,8 +18,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fffaf2;
-  color: #0d1d17;
+  background: #fff;
+  color: #0e191d;
   box-shadow: -20px 0 60px #0003;
 }
 .drawer header {
@@ -28,7 +28,7 @@
   display: flex;
   justify-content: space-between;
   padding: 14px 22px;
-  background: #fffaf2;
+  background: #fff;
   border-bottom: 1px solid #0d1d1715;
 }
 .drawer header h2 {
@@ -41,7 +41,7 @@
 .drawer h2,
 .drawer h3 {
   margin: 4px 0;
-  font-family: Georgia, serif;
+  font-family: var(--font-manrope);
 }
 .drawer header button {
   border: 0;
@@ -100,7 +100,7 @@
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: #f2eadc;
+  background: #ebebeb;
   overflow: hidden;
 }
 .photo img {
@@ -128,7 +128,7 @@
   margin: 6px 0;
   padding: 10px 13px;
   border-radius: 14px;
-  background: #f2eadc;
+  background: #e0eae9;
 }
 .bispo small,
 .choice small,
@@ -157,8 +157,7 @@
 .choice h3 {
   margin: 3px 0 6px;
   font:
-    500 17px/1.05 Georgia,
-    serif;
+    400 17px/1.05 var(--font-manrope);
 }
 .choice button {
   border: 1px solid #0d1d1730;
@@ -193,10 +192,10 @@
 .progress > div span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #b76833, #e6c838);
+  background: #c46f32;
 }
 .shipping {
-  background: #102a20;
+  background: #0e191d;
   color: white;
 }
 .shippingTitle {
@@ -259,9 +258,9 @@
   display: grid;
 }
 .selectedQuote {
-  border-color: #e9ce78;
+  border-color: #e0eae9;
   background: #ffffff1f;
-  box-shadow: 0 0 0 1px #e9ce7840;
+  box-shadow: 0 0 0 1px #e0eae940;
 }
 .error {
   color: #ffcfcf;
@@ -275,7 +274,7 @@
   overflow-y: auto;
   box-sizing: border-box;
   padding: 10px 22px 12px;
-  background: #fffaf2;
+  background: #fff;
   border-top: 1px solid #0d1d1715;
 }
 .total {
@@ -296,8 +295,8 @@
   margin-top: 7px;
   padding: 13px;
   border: 0;
-  border-radius: 30px;
-  background: #0d1d17;
+  border-radius: 4px;
+  background: #0e191d;
   color: white;
   font-weight: bold;
 }

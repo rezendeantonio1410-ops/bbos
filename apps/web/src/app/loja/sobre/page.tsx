@@ -2,10 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import styles from "../page.module.css";
 import authority from "../authority.module.css";
+import brand from "../brand-review.module.css";
+import storyBrand from "./brand.module.css";
 
 export default function SobrePage() {
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${brand.storefront} ${storyBrand.page}`}>
       <div className={styles.commerceBar}>
         <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
         <Link href="/loja#cafes">Escolher cafés →</Link>
@@ -37,10 +39,10 @@ export default function SobrePage() {
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
-          <h2>Duas trajetórias que escolheram caminhar juntas.</h2>
+          <h2>José é o Bispo. José e Suzi são a Bispo Coffees.</h2>
           <span>
-            A Bispo Coffees nasceu do encontro entre experiência e cuidado — e
-            de uma parceria construída todos os dias, dentro e fora do café.
+            Duas histórias próprias no café, uma parceria de vida e uma marca
+            construída pelos dois — com conhecimento, sensibilidade e presença.
           </span>
         </div>
         <div className={authority.peopleMarks}>
@@ -60,7 +62,10 @@ export default function SobrePage() {
           <article className={authority.personSecondary}>
             <small>PRODUÇÃO · SUSTENTABILIDADE · CRITÉRIO</small>
             <strong>Suzi Ninov</strong>
-            <span>Presença, sensibilidade e cuidado em cada escolha.</span>
+            <span>
+              Cofundadora, com história própria no café, visão e critério em
+              cada escolha.
+            </span>
           </article>
         </div>
 
@@ -96,12 +101,11 @@ export default function SobrePage() {
         <blockquote className={authority.storyManifesto}>
           <small>UMA HISTÓRIA COMPARTILHADA</small>
           <p>
-            Há encontros que somam competências. O de José e Suzi construiu
-            também uma direção comum. Entre o campo, a prova, a produção e os
-            mercados, os dois aprenderam a olhar para o café pelo mesmo
-            princípio: nenhuma qualidade existe sem pessoas, confiança e
-            presença. É dessa convivência — feita de escuta, critério e decisões
-            compartilhadas — que nasce a Bispo Coffees.
+            José é o Bispo — o apelido, a trajetória e a autoridade que deram
+            origem ao nome. Suzi é cofundadora, tem sua própria história no café
+            e participa das escolhas que definem a marca. Entre o campo, a
+            prova, a produção e os mercados, os dois construíram uma direção
+            comum. José e Suzi, juntos, são a Bispo Coffees.
           </p>
         </blockquote>
 
@@ -122,14 +126,13 @@ export default function SobrePage() {
           </article>
           <article>
             <small>02 · ENCONTRO</small>
-            <h3>O cuidado que dá sentido ao processo</h3>
+            <h3>Uma história própria dentro do café</h3>
             <p>
-              Suzi traz uma visão conectada à produção, à sustentabilidade e às
-              relações que sustentam o negócio. Seu olhar atento amplia o
-              critério técnico: compreender a origem, reconhecer o potencial e
-              cuidar para que o valor de cada café seja preservado. Ela
-              transforma intenção em presença diária e ajuda a manter pessoas,
-              processos e propósito seguindo na mesma direção.
+              Suzi construiu sua relação com o café por meio da produção, da
+              sustentabilidade e das relações que sustentam o negócio. Seu olhar
+              amplia o critério técnico: compreender a origem, reconhecer o
+              potencial e preservar o valor de cada café. Como cofundadora, ela
+              participa da direção, das escolhas e da identidade da Bispo.
             </p>
           </article>
           <article>
