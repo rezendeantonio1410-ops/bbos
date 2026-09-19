@@ -186,7 +186,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
               </button>
             </header>
             <nav aria-label="Etapas">
-              <strong>1 Café</strong>
+              <strong>1 Sua escolha</strong>
               <span>2 Entrega</span>
               <span>3 Pagamento</span>
             </nav>
@@ -257,25 +257,24 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <small>LEITURA DO BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
-                      <Check /> Escolhido por José e Suzi — origem, prova e
-                      produção em uma mesma decisão.
+                      <Check /> Escolhido por José e Suzi, da origem à xícara.
                     </p>
                   </section>
                   <section className={styles.choice}>
-                    <small>COMO VOCÊ QUER RECEBER?</small>
-                    <h3>Hoje — ou no seu ritmo.</h3>
+                    <small>SUA EXPERIÊNCIA</small>
+                    <h3>Uma vez — ou no seu ritmo.</h3>
                     <div>
                       <button
                         className={mode === "now" ? styles.active : ""}
                         onClick={() => setMode("now")}
                       >
-                        Quero experimentar agora
+                        Comprar uma vez
                       </button>
                       <button
                         className={mode === "return" ? styles.active : ""}
                         onClick={() => setMode("return")}
                       >
-                        Quero reencontrar este café
+                        Receber regularmente
                       </button>
                     </div>
                     {mode === "return" && (
@@ -311,7 +310,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                   <section className={styles.shipping}>
                     <div className={styles.shippingTitle}>
                       <small>PASSO 2</small>
-                      <h3>Para onde enviamos?</h3>
+                      <h3>Onde entregamos seu café?</h3>
                     </div>
                     <form onSubmit={calculate}>
                       <label htmlFor="cart-cep">CEP de entrega</label>
@@ -413,10 +412,17 @@ export function CartButton() {
       onClick={cart.open}
       aria-label={"Sacola com " + cart.count + " itens"}
     >
-      <svg className={styles.bispoBagIcon} viewBox="0 0 32 36" aria-hidden="true">
+      <svg
+        className={styles.bispoBagIcon}
+        viewBox="0 0 32 36"
+        aria-hidden="true"
+      >
         <path d="M5.5 11.5h21l-1.4 20H6.9l-1.4-20Z" />
         <path d="M10.5 12V8.6A5.5 5.5 0 0 1 16 3.1a5.5 5.5 0 0 1 5.5 5.5V12" />
-        <path className={styles.bispoBagLetter} d="M12.1 17.1h4.8c2.2 0 3.5 1 3.5 2.6 0 1.1-.6 1.9-1.6 2.3 1.3.3 2.1 1.2 2.1 2.5 0 1.8-1.5 3-3.9 3h-4.9V17.1Zm4.5 4c1 0 1.6-.4 1.6-1.2 0-.7-.6-1.1-1.6-1.1h-2.3v2.3h2.3Zm.2 4.6c1.2 0 1.9-.5 1.9-1.4s-.7-1.4-1.9-1.4h-2.5v2.8h2.5Z" />
+        <path
+          className={styles.bispoBagLetter}
+          d="M12.1 17.1h4.8c2.2 0 3.5 1 3.5 2.6 0 1.1-.6 1.9-1.6 2.3 1.3.3 2.1 1.2 2.1 2.5 0 1.8-1.5 3-3.9 3h-4.9V17.1Zm4.5 4c1 0 1.6-.4 1.6-1.2 0-.7-.6-1.1-1.6-1.1h-2.3v2.3h2.3Zm.2 4.6c1.2 0 1.9-.5 1.9-1.4s-.7-1.4-1.9-1.4h-2.5v2.8h2.5Z"
+        />
       </svg>
       {cart.count > 0 && <span>{cart.count}</span>}
     </button>

@@ -3,43 +3,60 @@
   inset: 0;
   z-index: 1000;
 }
-.bispoBagIcon { width: 21px; height: 24px; overflow: visible; }
-.bispoBagIcon > path { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
-.bispoBagIcon .bispoBagLetter { fill: currentColor; stroke: none; }
+.bispoBagIcon {
+  width: 21px;
+  height: 24px;
+  overflow: visible;
+}
+.bispoBagIcon > path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bispoBagIcon .bispoBagLetter {
+  fill: currentColor;
+  stroke: none;
+}
 .backdrop {
   position: absolute;
   inset: 0;
   border: 0;
-  background: #07130db3;
+  background: #06100db8;
+  backdrop-filter: blur(2px);
 }
 .drawer {
   position: absolute;
   right: 0;
   top: 0;
-  width: min(520px, 100%);
+  width: min(560px, 100%);
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
+  background: #fbfaf7;
   color: #0e191d;
-  box-shadow: -20px 0 60px #0003;
+  box-shadow: -28px 0 80px #0004;
 }
 .drawer header {
   flex: 0 0 auto;
   z-index: 2;
   display: flex;
   justify-content: space-between;
-  padding: 14px 22px;
-  background: #fff;
+  padding: 22px 28px 20px;
+  background: #fbfaf7;
   border-bottom: 1px solid #0d1d1715;
 }
 .drawer header h2 {
-  font-size: 20px;
+  font-size: 25px;
+  font-weight: 450;
   line-height: 1.05;
 }
 .drawer header small {
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
 }
 .drawer h2,
 .drawer h3 {
@@ -49,78 +66,111 @@
 .drawer header button {
   border: 0;
   background: none;
+  color: #0e191d;
+  cursor: pointer;
 }
 .drawer nav {
   flex: 0 0 auto;
   display: flex;
-  justify-content: space-around;
-  padding: 10px 15px;
-  font-size: 11px;
+  justify-content: space-between;
+  padding: 14px 30px 13px;
+  border-bottom: 1px solid #0d1d1712;
+  color: #0d1d1773;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.drawer nav strong {
+  position: relative;
+  color: #0d1d17;
+  font-weight: 700;
+}
+.drawer nav strong::after {
+  position: absolute;
+  right: 0;
+  bottom: -14px;
+  left: 0;
+  height: 2px;
+  background: #0d1d17;
+  content: "";
 }
 .drawer main {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 18px 18px;
+  padding: 9px 28px 22px;
   overscroll-behavior: contain;
 }
 .drawer article {
   display: grid;
-  grid-template-columns: 60px 1fr auto;
-  gap: 12px;
+  grid-template-columns: 78px 1fr auto;
+  gap: 16px;
   align-items: center;
-  padding: 9px 0;
-  border-top: 1px solid #0d1d1715;
+  padding: 14px 0 16px;
+  border-bottom: 1px solid #0d1d1715;
 }
 .drawer article h3,
 .drawer article p {
   margin: 3px 0;
 }
 .drawer article p {
-  font-size: 11px;
+  font-size: 10px;
   opacity: 0.6;
+}
+.drawer article h3 {
+  font-size: 20px;
+  font-weight: 450;
+}
+.drawer article > div:nth-child(2) > small {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.drawer article > div:nth-child(2) > b {
+  font-size: 17px;
+  font-weight: 650;
 }
 .grind {
   display: flex;
   align-items: center;
   gap: 5px;
   margin: 3px 0;
-  font-size: 9px;
+  font-size: 8px;
   color: #0d1d1799;
 }
 .grind select {
-  max-width: 112px;
-  height: 22px;
+  max-width: 128px;
+  height: 25px;
   padding: 0 5px;
   border: 1px solid #0d1d1725;
-  border-radius: 7px;
-  background: #fff;
+  border-radius: 2px;
+  background: transparent;
   color: #0d1d17;
   font: inherit;
 }
 .photo {
-  height: 66px;
+  height: 82px;
   display: grid;
   place-items: center;
-  border-radius: 4px;
-  background: #ebebeb;
+  border-radius: 2px;
+  background: #f0eee9;
   overflow: hidden;
 }
 .photo img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 .qty {
   display: flex;
   align-items: center;
-  border: 1px solid #0d1d1725;
+  border: 1px solid #0d1d1720;
   border-radius: 999px;
 }
 .qty button {
   border: 0;
   background: none;
-  padding: 8px;
+  padding: 9px;
+  cursor: pointer;
 }
 .qty svg {
   width: 12px;
@@ -128,23 +178,25 @@
 .bispo,
 .choice,
 .shipping {
-  margin: 6px 0;
-  padding: 10px 13px;
-  border-radius: 5px;
-  background: #e0eae9;
+  margin: 10px 0;
+  padding: 14px 16px;
+  border-radius: 2px;
+  background: #f3efe7;
 }
 .bispo small,
 .choice small,
 .shipping small {
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  color: #a2562e;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #7b6147;
 }
 .bispo p {
   display: flex;
-  gap: 6px;
-  margin: 4px 0 0;
-  font-size: 11px;
+  gap: 8px;
+  margin: 5px 0 0;
+  color: #27312d;
+  font-size: 10px;
 }
 .bispo h3 {
   display: none;
@@ -155,20 +207,20 @@
 .choice > div {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 .choice h3 {
-  margin: 3px 0 6px;
-  font:
-    400 17px/1.05 var(--font-manrope);
+  margin: 4px 0 9px;
+  font: 400 18px/1.15 var(--font-manrope);
 }
 .choice button {
   border: 1px solid #0d1d1730;
-  border-radius: 20px;
+  border-radius: 999px;
   background: white;
-  min-height: 34px;
-  padding: 6px 9px;
-  font-size: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 9px;
+  cursor: pointer;
 }
 .active {
   background: #0d1d17 !important;
@@ -184,7 +236,7 @@
 .progress {
   display: grid;
   gap: 6px;
-  padding: 6px 5px;
+  padding: 5px 1px 1px;
   font-size: 10px;
 }
 .progress > div {
@@ -195,11 +247,12 @@
 .progress > div span {
   display: block;
   height: 100%;
-  background: #f96d01;
+  background: #d26021;
 }
 .shipping {
-  background: #0e191d;
-  color: white;
+  border: 1px solid #0d1d1717;
+  background: #f6f4ef;
+  color: #0e191d;
 }
 .shippingTitle {
   display: block !important;
@@ -213,7 +266,7 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #fffaf2b3;
+  color: #0d1d1780;
 }
 .shipping form > div {
   display: grid !important;
@@ -224,9 +277,9 @@
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  padding: 13px;
-  border-radius: 11px;
-  border: 0;
+  padding: 12px 13px;
+  border-radius: 2px;
+  border: 1px solid #0d1d1725;
   background: #ffffff;
   color: #0d1d17;
   caret-color: #0d1d17;
@@ -240,8 +293,11 @@
 }
 .shipping form button {
   border: 0;
-  border-radius: 11px;
-  padding: 12px;
+  border-radius: 2px;
+  padding: 12px 18px;
+  background: #0d1d17;
+  color: white;
+  cursor: pointer;
 }
 .quote {
   width: 100%;
@@ -250,10 +306,10 @@
   align-items: center;
   margin-top: 7px;
   padding: 9px 10px;
-  border: 1px solid #ffffff38;
-  border-radius: 10px;
-  background: #ffffff0d;
-  color: white;
+  border: 1px solid #0d1d1725;
+  border-radius: 2px;
+  background: white;
+  color: #0d1d17;
   text-align: left;
   font-size: 10px;
 }
@@ -261,12 +317,12 @@
   display: grid;
 }
 .selectedQuote {
-  border-color: #e0eae9;
-  background: #ffffff1f;
-  box-shadow: 0 0 0 1px #e0eae940;
+  border-color: #0d1d17;
+  background: #f3efe7;
+  box-shadow: 0 0 0 1px #0d1d17;
 }
 .error {
-  color: #ffcfcf;
+  color: #a22e27;
   font-size: 11px;
 }
 .drawer footer {
@@ -276,21 +332,27 @@
   max-height: 42vh;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 10px 22px 12px;
-  background: #fff;
+  padding: 12px 28px 16px;
+  background: #fbfaf7;
   border-top: 1px solid #0d1d1715;
 }
 .total {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  padding-top: 3px;
+  font-size: 14px;
+}
+.total b {
+  font-size: 20px;
 }
 .drawer footer .shipping {
   margin: 0 0 7px;
   padding: 10px 12px;
-  border-radius: 5px;
+  border-radius: 2px;
 }
 .drawer footer .shipping h3 {
-  font-size: 18px;
+  font-size: 17px;
   margin-bottom: 6px;
 }
 .drawer footer > button {
@@ -298,10 +360,13 @@
   margin-top: 7px;
   padding: 13px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 2px;
   background: #0e191d;
   color: white;
-  font-weight: bold;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
 }
 .drawer footer > button:disabled {
   opacity: 0.35;
@@ -310,6 +375,8 @@
   display: block;
   text-align: center;
   margin-top: 5px;
+  color: #0d1d1780;
+  font-size: 9px;
 }
 .empty {
   padding: 80px;
@@ -324,14 +391,24 @@
 }
 @media (max-width: 560px) {
   .drawer header {
-    padding: 12px 16px;
+    padding: 18px 18px 16px;
   }
   .drawer main {
-    padding-inline: 12px;
+    padding-inline: 18px;
   }
   .drawer footer {
-    padding: 9px 14px 11px;
+    padding: 10px 18px 13px;
     max-height: 44vh;
+  }
+  .drawer nav {
+    padding-inline: 20px;
+  }
+  .drawer article {
+    grid-template-columns: 68px 1fr;
+  }
+  .qty {
+    grid-column: 2;
+    width: max-content;
   }
   .choice > div {
     grid-template-columns: 1fr;
