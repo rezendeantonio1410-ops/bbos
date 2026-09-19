@@ -122,7 +122,10 @@ const collections = [
 ] as const;
 
 const collectionId = (name: string) =>
-  `camada-${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()}`;
+  `camada-${name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()}`;
 
 export default function LojaPage() {
   return (
@@ -273,8 +276,8 @@ export default function LojaPage() {
               <h2>Quatro camadas. Escolha o seu momento.</h2>
             </div>
             <p>
-              Do cotidiano aos pequenos lotes: encontre rapidamente o perfil
-              que combina com a sua xícara.
+              Do cotidiano aos pequenos lotes: encontre rapidamente o perfil que
+              combina com a sua xícara.
             </p>
           </div>
           <div className={layers.grid}>
@@ -283,7 +286,9 @@ export default function LojaPage() {
                 key={collection.name}
                 href={`#${collectionId(collection.name)}`}
                 className={layers.card}
-                style={{ "--layer-tone": collection.tone } as React.CSSProperties}
+                style={
+                  { "--layer-tone": collection.tone } as React.CSSProperties
+                }
               >
                 <span className={layers.number}>0{index + 1}</span>
                 <i />
@@ -304,13 +309,16 @@ export default function LojaPage() {
               <h2>Da sensação para a sua sacola.</h2>
             </div>
             <p>
-              Compare os perfis, escolha a moagem e compre. Se preferir, o
-              Bispo ajuda você a encontrar a xícara certa.
+              Compare os perfis, escolha a moagem e compre. Se preferir, o Bispo
+              ajuda você a encontrar a xícara certa.
             </p>
           </div>
           <nav className={layers.filter} aria-label="Camadas dos cafés">
             {collections.map((collection) => (
-              <a key={collection.name} href={`#${collectionId(collection.name)}`}>
+              <a
+                key={collection.name}
+                href={`#${collectionId(collection.name)}`}
+              >
                 {collection.name}
               </a>
             ))}
@@ -325,7 +333,9 @@ export default function LojaPage() {
                 key={collection.name}
                 id={collectionId(collection.name)}
                 className={layers.catalogLayer}
-                style={{ "--layer-tone": collection.tone } as React.CSSProperties}
+                style={
+                  { "--layer-tone": collection.tone } as React.CSSProperties
+                }
               >
                 <header className={layers.catalogHeader}>
                   <div>
@@ -345,63 +355,66 @@ export default function LojaPage() {
                     }`}
                   >
                     {collectionProducts.map((p) => (
-              <article
-                key={p.name}
-                id={p.name.toLowerCase().replaceAll(" ", "-")}
-                className={`${styles.productCard} ${journey.productCard}`}
-                style={{ "--tone": p.tone } as React.CSSProperties}
-              >
-                <div
-                  className={styles.productVisual}
-                  data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
-                >
-                  {p.image ? (
-                    <Image
-                      src={p.image}
-                      alt={`Embalagem Bispo ${p.name}`}
-                      fill
-                      sizes="(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 33vw"
-                      className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
-                    />
-                  ) : (
-                    <div className={tight.catalogFallback}>
-                      <span>BISPO</span>
-                      <b>{p.name}</b>
-                      <small>EMBALAGEM EM PREPARAÇÃO</small>
-                    </div>
-                  )}
-                  <small>{p.tag}</small>
-                </div>
-                <div className={styles.productMeta}>
-                  <p>{p.line}</p>
-                  <h3>{p.name}</h3>
-                  <span>{p.notes}</span>
-                  <div className={styles.buyRow}>
-                    <strong>
-                      {p.price} <small>· {p.weight}</small>
-                    </strong>
-                    <AddToCartButton
-                      product={{
-                        id: p.name.toLowerCase().replaceAll(" ", "-"),
-                        name: p.name,
-                        line: p.line,
-                        notes: p.notes,
-                        priceCents: p.priceCents,
-                        weightGrams: 500,
-                        image: p.image,
-                      }}
-                    >
-                      Quero esse →
-                    </AddToCartButton>
-                  </div>
-                </div>
-              </article>
+                      <article
+                        key={p.name}
+                        id={p.name.toLowerCase().replaceAll(" ", "-")}
+                        className={`${styles.productCard} ${journey.productCard}`}
+                        style={{ "--tone": p.tone } as React.CSSProperties}
+                      >
+                        <div
+                          className={styles.productVisual}
+                          data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
+                        >
+                          {p.image ? (
+                            <Image
+                              src={p.image}
+                              alt={`Embalagem Bispo ${p.name}`}
+                              fill
+                              sizes="(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 33vw"
+                              className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
+                            />
+                          ) : (
+                            <div className={tight.catalogFallback}>
+                              <span>BISPO</span>
+                              <b>{p.name}</b>
+                              <small>EMBALAGEM EM PREPARAÇÃO</small>
+                            </div>
+                          )}
+                          <small>{p.tag}</small>
+                        </div>
+                        <div className={styles.productMeta}>
+                          <p>{p.line}</p>
+                          <h3>{p.name}</h3>
+                          <span>{p.notes}</span>
+                          <div className={styles.buyRow}>
+                            <strong>
+                              {p.price} <small>· {p.weight}</small>
+                            </strong>
+                            <AddToCartButton
+                              product={{
+                                id: p.name.toLowerCase().replaceAll(" ", "-"),
+                                name: p.name,
+                                line: p.line,
+                                notes: p.notes,
+                                priceCents: p.priceCents,
+                                weightGrams: 500,
+                                image: p.image,
+                              }}
+                            >
+                              Quero esse →
+                            </AddToCartButton>
+                          </div>
+                        </div>
+                      </article>
                     ))}
                   </div>
                 ) : (
                   <div className={layers.rareNote}>
                     <span>EDIÇÕES LIMITADAS · 250 G</span>
-                    <strong>Os Raros aparecem quando a safra revela algo extraordinário.</strong>
+                    <strong>
+                      Os Raros aparecem quando a safra revela algo
+                      extraordinário.
+                    </strong>
                     <Link href="/loja/descobrir">Descobrir meu perfil →</Link>
                   </div>
                 )}
@@ -454,19 +467,20 @@ export default function LojaPage() {
               <p>
                 <b>José Rezende</b>
                 <br />
-                Desde 2003 entre produtores, prova e mercados internacionais.
+                Origem, prova e mercados construídos ao lado de produtores desde
+                2003.
               </p>
               <p>
                 <b>Suzi Ninov</b>
                 <br />
-                Produção, sustentabilidade e o cuidado que preserva cada
-                escolha.
+                Agronomia, sustentabilidade e conhecimento que começa na planta
+                e chega à xícara.
               </p>
             </div>
             <p className={founder.sharedStory}>
-              Duas trajetórias, uma escolha construída em conjunto — do café
-              verde exportado para a Europa aos mesmos padrões agora servidos no
-              Brasil.
+              Duas autoridades complementares, uma escolha construída em
+              conjunto — do campo brasileiro aos mercados do mundo, e de volta à
+              sua xícara.
             </p>
             <div className={founder.trust} aria-label="Critérios Bispo">
               <span>Provado por nós</span>

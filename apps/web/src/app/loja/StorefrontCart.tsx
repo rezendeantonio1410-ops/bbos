@@ -257,8 +257,8 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <small>LEITURA DO BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
-                      <Check /> José Rezende, o Bispo — provador e Q-Grader. Com
-                      o cuidado de Suzi e da equipe.
+                      <Check /> Escolhido por José e Suzi — origem, prova e
+                      produção em uma mesma decisão.
                     </p>
                   </section>
                   <section className={styles.choice}>
@@ -350,9 +350,16 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                         >
                           <span>
                             <b>{option.name}</b>
-                            <small>{option.carrierName} · até {option.deliveryDays} dias úteis</small>
+                            <small>
+                              {option.carrierName} · até {option.deliveryDays}{" "}
+                              dias úteis
+                            </small>
                           </span>
-                          <strong>{option.priceCents ? money(option.priceCents) : "Grátis"}</strong>
+                          <strong>
+                            {option.priceCents
+                              ? money(option.priceCents)
+                              : "Grátis"}
+                          </strong>
                         </button>
                       ))}
                     </div>

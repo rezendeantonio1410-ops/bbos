@@ -18,7 +18,15 @@ type CheckoutState = {
   subtotal: number;
   mode: "now" | "return";
   rhythm: number;
-  quote: { id: string; name: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number; expiresAt: string };
+  quote: {
+    id: string;
+    name: string;
+    serviceName: string;
+    carrierName: string;
+    priceCents: number;
+    deliveryDays: number;
+    expiresAt: string;
+  };
 };
 type FormData = {
   name: string;
@@ -460,7 +468,8 @@ export default function CheckoutPage() {
           ))}
           <div className={styles.delivery}>
             <span>
-              {checkout.quote.carrierName} · {checkout.quote.serviceName} · até {checkout.quote.deliveryDays} dias úteis
+              {checkout.quote.carrierName} · {checkout.quote.serviceName} · até{" "}
+              {checkout.quote.deliveryDays} dias úteis
             </span>
             <b>
               {checkout.quote.priceCents
@@ -478,7 +487,8 @@ export default function CheckoutPage() {
             <strong>{money(total)}</strong>
           </div>
           <p className={styles.proof}>
-            Escolhido pelo Bispo, preparado com o cuidado de Suzi e da equipe.
+            Escolhido por José e Suzi, preparado para chegar à sua melhor
+            xícara.
           </p>
         </aside>
       </div>
