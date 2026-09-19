@@ -78,7 +78,7 @@ export class StorefrontShippingService {
       body: JSON.stringify({
         from: { postal_code: this.originPostalCode() },
         to: { postal_code: digits(input.postalCode) },
-        package: this.packageFor(input.weightGrams),
+        volumes: [this.packageFor(input.weightGrams)],
         ...(selectedServices.length ? { services: selectedServices.join(",") } : {}),
       }),
     });
