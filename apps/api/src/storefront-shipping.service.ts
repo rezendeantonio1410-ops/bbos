@@ -83,7 +83,16 @@ export class StorefrontShippingService {
       }),
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok || !Array.isArray(body)) {
+    const options = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.data)
+        ? body.data
+        : body && typeof body === "object"
+          ? Object.values(body).filter(
+              (value: any) => value && typeof value === "object" && (value.id || value.error),
+            )
+          : [];
+    if (!response.ok) {
       const providerError = body && typeof body === "object"
         ? {
             message: (body as any).message,
@@ -97,7 +106,13 @@ export class StorefrontShippingService {
       });
       throw new ServiceUnavailableException("Não foi possível obter o frete real agora. Tente novamente em instantes.");
     }
-    return body
+    if (!options.length) {
+      console.error("Melhor Envio não retornou serviços de frete", {
+        bodyKeys: body && typeof body === "object" ? Object.keys(body) : [],
+      });
+      throw new ServiceUnavailableException("Nenhuma modalidade de entrega está habilitada no Melhor Envio para este CEP.");
+    }
+    return options
       .filter((option: any) => !option?.error && option?.id && Number(option?.custom_price ?? option?.price) >= 0)
       .map((option: any) => ({
         provider: "MELHOR_ENVIO" as const,
