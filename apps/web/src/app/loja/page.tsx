@@ -10,6 +10,7 @@ import layers from "./layers.module.css";
 import brand from "./brand-review.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
+import EditorialHero from "./EditorialHero";
 import {
   AddToCartButton,
   CartButton,
@@ -24,7 +25,7 @@ const products = [
     price: "R$ 52",
     priceCents: 5200,
     weight: "500 g",
-    tone: "#D8B832",
+    tone: "#E9BB00",
     image: "/brand/products/essencial-treated.webp",
     tag: "para todo dia",
   },
@@ -35,7 +36,7 @@ const products = [
     price: "R$ 52",
     priceCents: 5200,
     weight: "500 g",
-    tone: "#BFA12D",
+    tone: "#E9BB00",
     image: "/brand/products/intenso-treated.webp",
     tag: "mais corpo",
   },
@@ -46,7 +47,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#C46F32",
+    tone: "#F96D01",
     image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
   },
@@ -57,7 +58,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#C28F32",
+    tone: "#F96D01",
     image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
   },
@@ -68,7 +69,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#D47A30",
+    tone: "#F96D01",
     image: null,
     tag: "frescor",
   },
@@ -79,7 +80,7 @@ const products = [
     price: "R$ 84",
     priceCents: 8400,
     weight: "500 g",
-    tone: "#657862",
+    tone: "#5C7D5F",
     image: "/brand/products/singular-treated.webp",
     tag: "descoberta",
   },
@@ -90,7 +91,7 @@ const products = [
     price: "R$ 84",
     priceCents: 8400,
     weight: "500 g",
-    tone: "#596D5D",
+    tone: "#5C7D5F",
     image: "/brand/products/sublime-treated.webp",
     tag: "experiência",
   },
@@ -98,27 +99,27 @@ const products = [
 const collections = [
   {
     name: "Gourmet",
-    eyebrow: "Cotidiano sofisticado",
-    copy: "Cafés fáceis de gostar e feitos para acompanhar todos os dias.",
-    tone: "#D8B832",
+    eyebrow: "Para começar",
+    copy: "Cafés fáceis de gostar, escolhidos para transformar o cotidiano em ritual.",
+    tone: "#E9BB00",
   },
   {
     name: "Clássicos",
-    eyebrow: "Conforto e identidade",
-    copy: "Sabores familiares, doces e presentes — com a leitura do Bispo.",
-    tone: "#C46F32",
+    eyebrow: "A linha de conforto",
+    copy: "Perfis doces, envolventes e fáceis de reconhecer, com personalidade.",
+    tone: "#F96D01",
   },
   {
     name: "Épicos",
-    eyebrow: "Complexidade e descoberta",
-    copy: "Cafés expressivos para quem deseja explorar novas camadas da xícara.",
-    tone: "#657862",
+    eyebrow: "Para explorar",
+    copy: "Cafés de alta pontuação para quem busca complexidade e descoberta.",
+    tone: "#5C7D5F",
   },
   {
     name: "Raros",
-    eyebrow: "Pequenos lotes",
-    copy: "Experiências excepcionais, selecionadas em quantidades limitadas.",
-    tone: "#0E191D",
+    eyebrow: "Edições limitadas",
+    copy: "O extraordinário em pequenas edições: microlotes de produção limitada.",
+    tone: "#FF0000",
   },
 ] as const;
 
@@ -173,99 +174,7 @@ export default function LojaPage() {
           </div>
         </header>
 
-        <section
-          id="top"
-          className={`${styles.hero} ${tight.hero} ${review.hero}`}
-        >
-          <div
-            className={`${styles.heroMedia} ${tight.heroMedia} ${review.heroMedia}`}
-            data-photo-slot="hero-chemex-ceramic-nature"
-          >
-            <Image
-              src="/brand/visuals/bispo-hero-chemex-v2.png"
-              alt="Café Bispo preparado em Chemex"
-              fill
-              priority
-              sizes="(max-width: 960px) 100vw, 52vw"
-            />
-          </div>
-          <div
-            className={`${styles.heroCopy} ${tight.heroCopy} ${review.heroCopy}`}
-          >
-            <div className={tight.sensoryTopline}>
-              <span>CLÁSSICOS</span>
-              <i />
-              <b>CARAMELO</b>
-            </div>
-            <h1 className={tight.sensoryTitle}>
-              Doce. Confortável.
-              <br />
-              <em>Equilibrado.</em>
-            </h1>
-            <p className={`${styles.subcopy} ${tight.shortCopy}`}>
-              Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem
-              outra xícara.
-            </p>
-            <div
-              className={`${tight.productDesireStage} ${review.productDesireStage}`}
-              data-photo-slot="hero-product-real-caramelo"
-            >
-              <div className={tight.productAura} />
-              <div className={`${tight.productShot} ${review.productShot}`}>
-                <Image
-                  src="/brand/products/caramelo-treated.webp"
-                  alt="Embalagem real do café Caramelo, Bispo Coffees"
-                  fill
-                  sizes="(max-width: 600px) 148px, 202px"
-                />
-              </div>
-              <div className={`${tight.flavorWhisper} ${tight.flavorTop}`}>
-                <b>caramelo</b>
-                <span>doçura envolvente</span>
-              </div>
-              <div className={`${tight.flavorWhisper} ${tight.flavorMiddle}`}>
-                <b>chocolate</b>
-                <span>corpo presente</span>
-              </div>
-              <div className={`${tight.flavorWhisper} ${tight.flavorBottom}`}>
-                <b>equilíbrio</b>
-                <span>acidez delicada</span>
-              </div>
-            </div>
-            <div className={tight.sensoryPromise}>
-              <span>100% Arábica</span>
-              <span>Torra própria</span>
-              <span>Selecionado na origem</span>
-            </div>
-            <div className={`${tight.sensoryBuyRow} ${review.sensoryBuyRow}`}>
-              <div>
-                <small>500 g · em grãos</small>
-                <strong>R$ 68,00</strong>
-              </div>
-              <AddToCartButton
-                className={`${tight.sensoryCta} ${review.sensoryCta}`}
-                product={{
-                  id: "caramelo",
-                  name: "Caramelo",
-                  line: "CLÁSSICOS",
-                  notes: "Caramelo · Chocolate · Equilíbrio",
-                  priceCents: 6800,
-                  weightGrams: 500,
-                  image: "/brand/products/caramelo-treated.webp",
-                }}
-              >
-                Quero o Caramelo <span>→</span>
-              </AddToCartButton>
-            </div>
-            <Link
-              className={`${tight.sensoryAssist} ${review.sensoryAssist}`}
-              href="/loja/descobrir"
-            >
-              <span>Não é o seu perfil?</span> Descubra o café que combina com
-              você <b>→</b>
-            </Link>
-          </div>
-        </section>
+        <EditorialHero />
 
         <section id="camadas" className={layers.section}>
           <div className={layers.intro}>
@@ -293,6 +202,18 @@ export default function LojaPage() {
               </a>
             ))}
           </div>
+        </section>
+
+        <section className={brand.editorialBridge} aria-label="A experiência Bispo">
+          <article className={brand.editorialLead} data-photo-slot="sectional-origin-new-photo">
+            <Image src="/brand/story/jose-origem.jpeg" alt="A leitura da origem pela Bispo Coffees" fill sizes="(max-width: 800px) 100vw, 58vw" />
+            <div><small>DA ORIGEM À XÍCARA</small><h2>O café começa muito antes do primeiro gole.</h2><p>Relação, prova e escolha. Cada lote chega com uma história que José e Suzi fazem questão de preservar.</p></div>
+          </article>
+          <aside className={brand.photoManifest} data-photo-slot="sectional-ritual-new-photo">
+            <span>FOTO EDITORIAL 02</span>
+            <strong>O seu ritual, com a assinatura Bispo.</strong>
+            <p>Espaço preparado para a nova fotografia de preparo e desejo.</p>
+          </aside>
         </section>
 
         <section
@@ -368,7 +289,7 @@ export default function LojaPage() {
                     <div className={tight.catalogFallback}>
                       <span>BISPO</span>
                       <b>{p.name}</b>
-                      <small>EMBALAGEM EM PREPARAÇÃO</small>
+                      <small>NOVA COLHEITA · EM BREVE</small>
                     </div>
                   )}
                   <small>{p.tag}</small>

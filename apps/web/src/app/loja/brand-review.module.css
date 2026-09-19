@@ -3,9 +3,10 @@
   --bispo-chinese: #0e191d;
   --bispo-sand: #ebebeb;
   --bispo-platinum: #e0eae9;
-  --bispo-orange: #c46f32;
-  --bispo-yellow: #d8b832;
-  --bispo-green: #657862;
+  --bispo-orange: #f96d01;
+  --bispo-yellow: #e9bb00;
+  --bispo-green: #5c7d5f;
+  --bispo-red: #ff0000;
   color: var(--bispo-chinese);
   background: #fff;
   font-family: var(--font-inter);
@@ -49,6 +50,38 @@
 .storefront :global([class*="founder-trust_copy"]) { background: var(--bispo-sand) !important; }
 .storefront :global([class*="sharedStory"]) { background: var(--bispo-platinum) !important; border-left-color: var(--bispo-chinese) !important; }
 .storefront :global([class*="trust_"]) :global(span) { border-radius: 3px !important; background: #fff !important; }
+
+.editorialBridge {
+  display: grid;
+  grid-template-columns: 1.55fr .75fr;
+  min-height: 500px;
+  color: #fff;
+  background: #0e191d;
+}
+
+.editorialLead {
+  position: relative;
+  min-height: 500px;
+  overflow: hidden;
+}
+
+.editorialLead > img { object-fit: cover; object-position: center 44%; filter: saturate(.82) contrast(1.03); }
+.editorialLead::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10,10,10,.7), transparent 70%), linear-gradient(0deg, rgba(10,10,10,.45), transparent 65%); }
+.editorialLead > div { position: absolute; z-index: 2; left: 5vw; bottom: 54px; max-width: 590px; }
+.editorialLead small,.photoManifest span { font-size: 9px; font-weight: 850; letter-spacing: .2em; }
+.editorialLead h2 { margin: 12px 0; font: 400 clamp(36px,4vw,62px)/.98 var(--font-manrope); letter-spacing: -.045em; }
+.editorialLead p { max-width: 520px; margin: 0; color: rgba(255,255,255,.76); font-size: 14px; line-height: 1.6; }
+.photoManifest { padding: 54px 4vw; display: flex; flex-direction: column; justify-content: flex-end; border-left: 1px solid rgba(255,255,255,.15); background: linear-gradient(145deg,#13262b,#0e191d); }
+.photoManifest span { color: #e0eae9; opacity: .62; }
+.photoManifest strong { max-width: 390px; margin: 14px 0; font: 400 clamp(28px,3vw,46px)/1.03 Georgia,serif; }
+.photoManifest p { max-width: 320px; margin: 0; color: rgba(255,255,255,.58); font-size: 12px; line-height: 1.55; }
+
+@media (max-width: 800px) {
+  .editorialBridge { grid-template-columns: 1fr; }
+  .editorialLead { min-height: 470px; }
+  .photoManifest { min-height: 260px; padding: 36px 22px; }
+  .editorialLead > div { left: 22px; right: 22px; bottom: 30px; }
+}
 
 @media (max-width: 600px) {
   .storefront :global([class*="productCard"]) { border-radius: 10px !important; }
