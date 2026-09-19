@@ -1,22 +1,26 @@
 import { NextResponse } from "next/server";
+
 export async function POST(request: Request) {
-  const body = await request.json();
-  const postalCode = String(body.postalCode || "").replace(/\D/g, "");
-  const subtotalCents = Number(body.subtotalCents || 0);
-  const weightGrams = Number(body.weightGrams || 0);
-  if (postalCode.length !== 8 || subtotalCents <= 0 || weightGrams <= 0)
+  const configuredBase =
+    process.env.BBOS_API_INTERNAL_URL ||
+    process.env.API_INTERNAL_URL ||
+    process.env.API_URL ||
+    process.env.NEXT_PUBLIC_API_URL;
+  if (!configuredBase)
     return NextResponse.json(
-      { message: "Dados de entrega inválidos." },
-      { status: 400 },
+      { message: "A conexão segura com o BBOS ainda não está configurada." },
+      { status: 503 },
     );
-  const region = Number(postalCode.slice(0, 1));
-  const free = subtotalCents >= 27000 && [0, 1, 2, 8, 9].includes(region);
-  const priceCents = free
-    ? 0
-    : 1590 + Math.max(0, Math.ceil(weightGrams / 1000) - 1) * 450;
-  return NextResponse.json({
-    name: free ? "Entrega Bispo gratuita" : "Entrega econômica",
-    priceCents,
-    deliveryDays: region >= 8 ? 4 : 7,
+  const root = configuredBase.replace(/\/$/, "");
+  const apiBase = root.endsWith("/api") ? root : `${root}/api`;
+  const response = await fetch(`${apiBase}/storefront/shipping/quotes`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: await request.text(),
+    cache: "no-store",
+  });
+  return new NextResponse(await response.text(), {
+    status: response.status,
+    headers: { "content-type": "application/json" },
   });
 }

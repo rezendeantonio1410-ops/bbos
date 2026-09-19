@@ -24,7 +24,15 @@ export type StoreProduct = {
 type Item = StoreProduct & { quantity: number };
 type Grind = "Grãos" | "Espresso" | "Coado" | "Prensa francesa";
 type CartItem = Item & { grind?: Grind };
-type Quote = { name: string; priceCents: number; deliveryDays: number };
+type Quote = {
+  id: string;
+  name: string;
+  serviceName: string;
+  carrierName: string;
+  priceCents: number;
+  deliveryDays: number;
+  expiresAt: string;
+};
 type CartApi = {
   add: (p: StoreProduct) => void;
   open: () => void;
@@ -41,6 +49,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState(false);
   const [cep, setCep] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"now" | "return">("now");
@@ -82,6 +91,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         : [...current, { ...product, quantity: 1 }];
     });
     setQuote(null);
+    setQuotes([]);
     setVisible(true);
   };
   const quantity = (id: string, next: number) => {
@@ -93,6 +103,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
           ),
     );
     setQuote(null);
+    setQuotes([]);
   };
   const chooseGrind = (id: string, grind: Grind) => {
     setItems((current) =>
@@ -112,7 +123,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          postalCode: cep.replace(/\D/g, ""),
+          postalCode: cep,
           subtotalCents: subtotal,
           weightGrams: items.reduce(
             (s, i) => s + i.weightGrams * i.quantity,
@@ -123,11 +134,14 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.message || "Não foi possível calcular.");
-      setQuote(data);
+      const options = Array.isArray(data.options) ? data.options : [];
+      if (!options.length)
+        throw new Error("Nenhuma modalidade de entrega disponível.");
+      setQuotes(options);
+      setQuote(options[0]);
     } catch (reason) {
-      console.error("Falha ao calcular o frete da loja", reason);
       setError(
-        "Não conseguimos calcular a entrega agora. Confira o CEP e tente novamente.",
+        reason instanceof Error ? reason.message : "Não foi possível calcular.",
       );
     } finally {
       setLoading(false);
@@ -307,6 +321,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                           value={cep}
                           onChange={(e) => {
                             setQuote(null);
+                            setQuotes([]);
                             setError("");
                             setCep(
                               e.target.value
@@ -326,19 +341,20 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     </form>
                     <div aria-live="polite">
                       {error && <p className={styles.error}>{error}</p>}
-                      {quote && (
-                        <p className={styles.quote}>
+                      {quotes.map((option) => (
+                        <button
+                          type="button"
+                          key={option.id}
+                          className={`${styles.quote} ${quote?.id === option.id ? styles.selectedQuote : ""}`}
+                          onClick={() => setQuote(option)}
+                        >
                           <span>
-                            <b>{quote.name}</b>
-                            <small>até {quote.deliveryDays} dias úteis</small>
+                            <b>{option.name}</b>
+                            <small>{option.carrierName} · até {option.deliveryDays} dias úteis</small>
                           </span>
-                          <strong>
-                            {quote.priceCents
-                              ? money(quote.priceCents)
-                              : "Grátis"}
-                          </strong>
-                        </p>
-                      )}
+                          <strong>{option.priceCents ? money(option.priceCents) : "Grátis"}</strong>
+                        </button>
+                      ))}
                     </div>
                   </section>
                   <div className={styles.total}>
