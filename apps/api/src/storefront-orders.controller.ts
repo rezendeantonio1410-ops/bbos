@@ -4,13 +4,14 @@ import {
   Controller,
   Get,
   Headers,
+  OnModuleInit,
   Param,
   Post,
   Query,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { PrismaClient, SalesOrderStatus } from "@bbos/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
@@ -71,7 +72,7 @@ type CheckoutBody = {
 };
 
 @Controller("storefront/orders")
-export class StorefrontOrdersController {
+export class StorefrontOrdersController implements OnModuleInit {
   private readonly database = new PrismaClient();
 
   constructor(
@@ -79,6 +80,207 @@ export class StorefrontOrdersController {
     private readonly shipping: StorefrontShippingService,
     private readonly lifecycle: StorefrontLifecycleService,
   ) {}
+
+  async onModuleInit() {
+    const pending = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT so.id
+         FROM "StorefrontOrder" so
+         LEFT JOIN "SalesOrder" s
+           ON s."companyId"=so."companyId" AND s.code=so.code
+        WHERE s.id IS NULL
+        ORDER BY so."createdAt" ASC
+        LIMIT 100`,
+    );
+    for (const order of pending) {
+      try {
+        await this.syncSalesOrder(order.id);
+      } catch (error) {
+        console.error("Não foi possível sincronizar pedido da loja no BBOS", {
+          storefrontOrderId: order.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private async syncSalesOrder(storefrontOrderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "StorefrontOrder" WHERE id=$1 LIMIT 1`,
+      storefrontOrderId,
+    );
+    const storefront = rows[0];
+    if (!storefront)
+      throw new BadRequestException("Pedido da loja não encontrado.");
+
+    const customerData = storefront.customer as CheckoutBody["customer"];
+    const delivery = storefront.delivery as CheckoutBody["delivery"];
+    const storefrontItems = storefront.items as Array<{
+      id: string;
+      name: string;
+      quantity: number;
+      grind: string;
+      unitPriceCents: number;
+      totalCents: number;
+    }>;
+
+    return this.database.$transaction(async (transaction) => {
+      const channel =
+        (await transaction.salesChannel.findFirst({
+          where: {
+            companyId: storefront.companyId,
+            type: "ECOMMERCE",
+            active: true,
+          },
+          orderBy: { createdAt: "asc" },
+        })) ??
+        (await transaction.salesChannel.upsert({
+          where: {
+            companyId_code: {
+              companyId: storefront.companyId,
+              code: "ECOMMERCE",
+            },
+          },
+          update: { active: true, name: "Loja online", currency: "BRL" },
+          create: {
+            companyId: storefront.companyId,
+            code: "ECOMMERCE",
+            name: "Loja online",
+            type: "ECOMMERCE",
+            active: true,
+            country: "BR",
+            currency: "BRL",
+          },
+        }));
+
+      const cpf = digits(customerData?.cpf);
+      let customer = cpf
+        ? await transaction.customer.findFirst({
+            where: { companyId: storefront.companyId, taxId: cpf },
+          })
+        : null;
+      if (customer) {
+        customer = await transaction.customer.update({
+          where: { id: customer.id },
+          data: { name: customerData?.name?.trim() || customer.name },
+        });
+      } else {
+        customer = await transaction.customer.create({
+          data: {
+            companyId: storefront.companyId,
+            name: customerData?.name?.trim() || "Cliente da loja",
+            taxId: cpf || null,
+            segment: "E-commerce",
+          },
+        });
+      }
+
+      const slugs = storefrontItems.map((item) => item.id);
+      const variants = await transaction.productVariant.findMany({
+        where: {
+          active: true,
+          netWeightGrams: { in: [250, 500] },
+          product: {
+            active: true,
+            slug: { in: slugs },
+            productLine: { companyId: storefront.companyId, active: true },
+          },
+        },
+        include: { product: true },
+      });
+      const variantBySlug = new Map(
+        variants.map((variant) => [variant.product.slug, variant]),
+      );
+      const missing = storefrontItems.find(
+        (item) => !variantBySlug.has(item.id),
+      );
+      if (missing)
+        throw new ServiceUnavailableException(
+          `O produto ${missing.name} ainda não está vinculado ao catálogo interno.`,
+        );
+
+      const status =
+        storefront.status === "PAID"
+          ? SalesOrderStatus.CONFIRMED
+          : SalesOrderStatus.DRAFT;
+      const existing = await transaction.salesOrder.findUnique({
+        where: {
+          companyId_code: {
+            companyId: storefront.companyId,
+            code: storefront.code,
+          },
+        },
+      });
+      if (existing) {
+        if (
+          status === SalesOrderStatus.CONFIRMED &&
+          existing.status === SalesOrderStatus.DRAFT
+        ) {
+          return transaction.salesOrder.update({
+            where: { id: existing.id },
+            data: { status: SalesOrderStatus.CONFIRMED },
+          });
+        }
+        return existing;
+      }
+
+      const totalQuantity = storefrontItems.reduce(
+        (sum, item) => sum + item.quantity,
+        0,
+      );
+      const address = [
+        `${delivery?.street || ""}, ${delivery?.number || ""}`,
+        delivery?.complement,
+        delivery?.district,
+        `${delivery?.city || ""}/${delivery?.state || ""}`,
+        `CEP ${digits(delivery?.postalCode)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const grindSummary = storefrontItems
+        .map((item) => `${item.name}: ${item.grind}`)
+        .join("; ");
+
+      return transaction.salesOrder.create({
+        data: {
+          companyId: storefront.companyId,
+          customerId: customer.id,
+          salesChannelId: channel.id,
+          code: storefront.code,
+          orderNumber: storefront.code,
+          status,
+          quantity: totalQuantity,
+          unitPrice: totalQuantity
+            ? storefront.subtotalCents / 100 / totalQuantity
+            : 0,
+          subtotal: storefront.subtotalCents / 100,
+          freight: storefront.shippingCents / 100,
+          discount: 0,
+          totalAmount: storefront.totalCents / 100,
+          orderDate: storefront.createdAt,
+          notes: [
+            `Loja online · ${customerData?.email || ""} · ${customerData?.phone || ""}`,
+            `Entrega: ${address}`,
+            `Moagem: ${grindSummary}`,
+            `Pagamento: ${storefront.requestedPaymentMethod}`,
+          ].join("\n"),
+          items: {
+            create: storefrontItems.map((item) => {
+              const variant = variantBySlug.get(item.id)!;
+              return {
+                companyId: storefront.companyId,
+                productVariantId: variant.id,
+                productName: item.name,
+                sku: variant.sku,
+                quantity: item.quantity,
+                unitPrice: item.unitPriceCents / 100,
+                totalAmount: item.totalCents / 100,
+              };
+            }),
+          },
+        },
+      });
+    });
+  }
 
   private async markAsPaid(
     orderId: string,
@@ -131,6 +333,7 @@ export class StorefrontOrdersController {
       `storefront:payment-confirmed:${orderId}`,
       { externalId, provider },
     );
+    await this.syncSalesOrder(orderId);
     return result;
   }
 
@@ -299,12 +502,18 @@ export class StorefrontOrdersController {
     const weightGrams = items.reduce((sum, item) => sum + item.weightGrams, 0);
     const companyId = await this.companyId();
     if (!body.shippingQuoteId?.trim())
-      throw new BadRequestException("Calcule e escolha uma modalidade de frete antes de pagar.");
-    const quote = await this.shipping.validateQuote(companyId, body.shippingQuoteId.trim(), {
-      postalCode: delivery.postalCode || "",
-      subtotalCents,
-      weightGrams,
-    });
+      throw new BadRequestException(
+        "Calcule e escolha uma modalidade de frete antes de pagar.",
+      );
+    const quote = await this.shipping.validateQuote(
+      companyId,
+      body.shippingQuoteId.trim(),
+      {
+        postalCode: delivery.postalCode || "",
+        subtotalCents,
+        weightGrams,
+      },
+    );
     const shippingCents = Number(quote.customerPriceCents);
     const existing = await this.database.$queryRawUnsafe<any[]>(
       `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
@@ -317,6 +526,7 @@ export class StorefrontOrdersController {
         existing[0].id,
         tokenHash(confirmationToken),
       );
+      await this.syncSalesOrder(existing[0].id);
       const payment = await this.ensureMercadoPagoCheckout(existing[0], key);
       return {
         id: existing[0].id,
@@ -371,7 +581,10 @@ export class StorefrontOrdersController {
       `UPDATE "ShippingQuote" SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
       quote.id,
     );
-    if (!claimed) throw new BadRequestException("Esta cotação já foi utilizada. Calcule novamente.");
+    if (!claimed)
+      throw new BadRequestException(
+        "Esta cotação já foi utilizada. Calcule novamente.",
+      );
     await this.lifecycle.record(
       id,
       "ORDER_RECEIVED",
@@ -379,8 +592,13 @@ export class StorefrontOrdersController {
       "Recebemos os dados do seu pedido e reservamos o valor do frete escolhido.",
       "BBOS",
       `storefront:received:${id}`,
-      { shippingQuoteId: quote.id, carrierName: quote.carrierName, serviceName: quote.serviceName },
+      {
+        shippingQuoteId: quote.id,
+        carrierName: quote.carrierName,
+        serviceName: quote.serviceName,
+      },
     );
+    await this.syncSalesOrder(id);
     const completeOrder = {
       ...rows[0],
       customer: {
@@ -420,6 +638,7 @@ export class StorefrontOrdersController {
     );
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
+    await this.syncSalesOrder(orderId);
     if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
