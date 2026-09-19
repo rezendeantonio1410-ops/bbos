@@ -87,6 +87,8 @@ export class StorefrontShippingService {
       ? body
       : Array.isArray(body?.data)
         ? body.data
+        : body && typeof body === "object" && ((body as any).id || (body as any).error)
+          ? [body]
         : body && typeof body === "object"
           ? Object.values(body).filter(
               (value: any) => value && typeof value === "object" && (value.id || value.error),
