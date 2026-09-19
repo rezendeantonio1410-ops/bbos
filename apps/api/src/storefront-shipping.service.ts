@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
 import { createHash, randomUUID } from "node:crypto";
+import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 
 export type ShippingQuoteRequest = {
   postalCode: string;
@@ -14,6 +15,8 @@ const cents = (value: unknown) => Math.round(Number(value) * 100);
 @Injectable()
 export class StorefrontShippingService {
   private readonly database = new PrismaClient();
+
+  constructor(private readonly melhorEnvioAuth: MelhorEnvioAuthService) {}
 
   private provider() {
     return (process.env.SHIPPING_PROVIDER?.trim().toUpperCase() || "FIXED") as
@@ -57,9 +60,8 @@ export class StorefrontShippingService {
     };
   }
 
-  private async melhorEnvio(input: ShippingQuoteRequest) {
-    const token = process.env.MELHOR_ENVIO_ACCESS_TOKEN?.trim();
-    if (!token) throw new ServiceUnavailableException("A cotação do Melhor Envio ainda não está configurada.");
+  private async melhorEnvio(companyId: string, input: ShippingQuoteRequest) {
+    const token = await this.melhorEnvioAuth.accessToken(companyId);
     const base = (process.env.MELHOR_ENVIO_API_URL?.trim() || "https://melhorenvio.com.br/api/v2").replace(/\/$/, "");
     const selectedServices = (process.env.MELHOR_ENVIO_SERVICE_IDS || "")
       .split(",")
@@ -124,7 +126,7 @@ export class StorefrontShippingService {
       !Number.isSafeInteger(input.weightGrams) || input.weightGrams <= 0
     ) throw new BadRequestException("Dados de entrega inválidos.");
 
-    const options = this.provider() === "MELHOR_ENVIO" ? await this.melhorEnvio(input) : this.fixed(input);
+    const options = this.provider() === "MELHOR_ENVIO" ? await this.melhorEnvio(companyId, input) : this.fixed(input);
     if (!options.length) throw new ServiceUnavailableException("Nenhuma modalidade de entrega está disponível para este CEP.");
     const free = this.isFreeShipping(input.postalCode, input.subtotalCents);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);

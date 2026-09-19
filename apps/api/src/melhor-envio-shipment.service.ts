@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, ServiceUnavailableException } from "@n
 import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
+import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -9,15 +10,17 @@ const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 export class MelhorEnvioShipmentService {
   private readonly database = new PrismaClient();
 
-  constructor(private readonly lifecycle: StorefrontLifecycleService) {}
+  constructor(
+    private readonly lifecycle: StorefrontLifecycleService,
+    private readonly melhorEnvioAuth: MelhorEnvioAuthService,
+  ) {}
 
   private base() {
     return (process.env.MELHOR_ENVIO_API_URL?.trim() || "https://melhorenvio.com.br/api/v2").replace(/\/$/, "");
   }
 
-  private async request(path: string, init?: RequestInit) {
-    const token = process.env.MELHOR_ENVIO_ACCESS_TOKEN?.trim();
-    if (!token) throw new ServiceUnavailableException("MELHOR_ENVIO_ACCESS_TOKEN não configurado.");
+  private async request(companyId: string, path: string, init?: RequestInit) {
+    const token = await this.melhorEnvioAuth.accessToken(companyId);
     const response = await fetch(`${this.base()}${path}`, {
       ...init,
       headers: {
@@ -46,10 +49,10 @@ export class MelhorEnvioShipmentService {
     return value;
   }
 
-  private async printWhenReady(externalId: string) {
+  private async printWhenReady(companyId: string, externalId: string) {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       try {
-        const printed = await this.request("/me/shipment/print", {
+        const printed = await this.request(companyId, "/me/shipment/print", {
           method: "POST",
           body: JSON.stringify({ orders: [externalId], mode: "public" }),
         });
@@ -135,7 +138,7 @@ export class MelhorEnvioShipmentService {
     const items = Array.isArray(order.items) ? order.items : [];
     let externalId = prior[0]?.externalId || "";
     if (!externalId) {
-      const cartResult = await this.request("/me/cart", {
+      const cartResult = await this.request(order.companyId, "/me/cart", {
         method: "POST",
         body: JSON.stringify({
         service: Number(order.serviceId),
@@ -194,11 +197,11 @@ export class MelhorEnvioShipmentService {
       shipmentId, externalId,
     );
 
-    await this.request("/me/shipment/checkout", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
+    await this.request(order.companyId, "/me/shipment/checkout", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
     await this.database.$executeRawUnsafe(`UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`, shipmentId);
-    await this.request("/me/shipment/generate", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
-    const labelUrl = await this.printWhenReady(externalId);
-    const details = await this.request(`/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => ({}));
+    await this.request(order.companyId, "/me/shipment/generate", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
+    const labelUrl = await this.printWhenReady(order.companyId, externalId);
+    const details = await this.request(order.companyId, `/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => ({}));
     const trackingCode = String(details?.tracking || details?.tracking_code || "") || null;
     const trackingUrl = String(details?.tracking_url || details?.tracking?.url || "") || null;
     await this.database.$executeRawUnsafe(

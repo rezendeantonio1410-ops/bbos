@@ -20,6 +20,7 @@ import { blingReadiness } from "./integrations/bling/bling.contract";
 import { BlingService } from "./integrations/bling/bling.service";
 import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
+import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -34,7 +35,33 @@ export class IntegrationsController {
     private readonly blingService: BlingService,
     private readonly blingOutbox: BlingOutboxService,
     private readonly blingCatalogSync: BlingCatalogSyncService,
+    private readonly melhorEnvioAuth: MelhorEnvioAuthService,
   ) {}
+
+  @Get("melhor-envio/connect")
+  async connectMelhorEnvio(@Req() request: any, @Res() response: any) {
+    const actor = await this.actor(request);
+    try {
+      return response.redirect(await this.melhorEnvioAuth.authorizationUrl(actor.companyId));
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Não foi possível conectar o Melhor Envio.",
+      );
+    }
+  }
+
+  @Public()
+  @Get("melhor-envio/callback")
+  async melhorEnvioCallback(@Query("code") code?: string, @Query("state") state?: string) {
+    if (!code || !state) throw new BadRequestException("Callback OAuth do Melhor Envio incompleto.");
+    try {
+      return await this.melhorEnvioAuth.completeAuthorization(code, state);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Falha ao concluir autorização do Melhor Envio.",
+      );
+    }
+  }
 
   private async actor(request: any) {
     const actor = await this.auth.resolve(this.auth.readToken(request));

@@ -57,6 +57,7 @@ import { CustomerNotificationService } from "./customer-notification.service";
 import { IntegrationWorkerService } from "./integration-worker.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
+import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 
 @Module({
   controllers: [
@@ -118,6 +119,7 @@ import { StorefrontFulfillmentController } from "./storefront-fulfillment.contro
     CustomerNotificationService,
     IntegrationWorkerService,
     MelhorEnvioShipmentService,
+    MelhorEnvioAuthService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
