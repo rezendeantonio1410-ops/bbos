@@ -11,10 +11,17 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { verifyShippingQuote } from "./storefront-shipping.controller";
+import { StorefrontEmailService } from "./storefront-email.service";
 
 const catalog: Record<
   string,
@@ -36,6 +43,24 @@ const grinds = new Set(["Grãos", "Espresso", "Coado", "Prensa francesa"]);
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 const tokenHash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+function validTrackingToken(value: string, orderId: string) {
+  const secret = process.env.STOREFRONT_TRACKING_SECRET?.trim();
+  const [payload, supplied] = String(value || "").split(".");
+  if (!secret || !payload || !supplied) return false;
+  const expected = createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64url");
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
+    return parsed.orderId === orderId && Number(parsed.expiresAt) > Date.now();
+  } catch {
+    return false;
+  }
+}
 
 function validCpf(value: unknown) {
   const cpf = digits(value);
@@ -72,14 +97,17 @@ type CheckoutBody = {
 export class StorefrontOrdersController {
   private readonly database = new PrismaClient();
 
-  constructor(private readonly mercadoPago: MercadoPagoService) {}
+  constructor(
+    private readonly mercadoPago: MercadoPagoService,
+    private readonly email: StorefrontEmailService,
+  ) {}
 
   private async markAsPaid(
     orderId: string,
     externalId: string,
     provider = "MERCADO_PAGO",
   ) {
-    return this.database.$transaction(async (transaction) => {
+    const result = await this.database.$transaction(async (transaction) => {
       const found = await transaction.$queryRawUnsafe<any[]>(
         `SELECT * FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
         orderId,
@@ -112,6 +140,13 @@ export class StorefrontOrdersController {
       );
       return { id: order.id, code: order.code, status: "PAID" };
     });
+    await this.email.sendPaidOrder(orderId).catch((error) =>
+      console.error("Falha ao enviar confirmação da loja", {
+        orderId,
+        message: error instanceof Error ? error.message : "erro desconhecido",
+      }),
+    );
+    return result;
   }
 
   private async reconcileMercadoPago(order: {
@@ -380,6 +415,11 @@ export class StorefrontOrdersController {
       orderId,
       tokenHash(suppliedToken),
     );
+    if (!rows[0] && validTrackingToken(suppliedToken, orderId))
+      rows = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT id,code,status,"paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 LIMIT 1`,
+        orderId,
+      );
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {

@@ -40,6 +40,12 @@ services:
         sync: false
       - key: PAYMENT_WEBHOOK_SECRET
         generateValue: true
+      - key: STOREFRONT_TRACKING_SECRET
+        generateValue: true
+      - key: RESEND_API_KEY
+        sync: false
+      - key: STOREFRONT_EMAIL_FROM
+        value: Bispo Coffees <pedidos@envios.bispocoffees.com.br>
 
   - type: web
     name: bbos-web-staging

@@ -41,6 +41,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
 import { StorefrontOrdersController } from "./storefront-orders.controller";
 import { StorefrontShippingController } from "./storefront-shipping.controller";
 import { MercadoPagoService } from "./mercado-pago.service";
+import { StorefrontEmailService } from "./storefront-email.service";
 
 @Module({
   controllers: [
@@ -86,6 +87,7 @@ import { MercadoPagoService } from "./mercado-pago.service";
     UnconfiguredTaxRegistryProvider,
     UnconfiguredStateRegistrationProvider,
     MercadoPagoService,
+    StorefrontEmailService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
