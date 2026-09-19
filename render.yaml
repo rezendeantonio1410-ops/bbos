@@ -46,6 +46,14 @@ services:
         sync: false
       - key: STOREFRONT_EMAIL_FROM
         value: Bispo Coffees <pedidos@envios.bispocoffees.com.br>
+      - key: MELHOR_ENVIO_API_URL
+        sync: false
+      - key: MELHOR_ENVIO_ACCESS_TOKEN
+        sync: false
+      - key: MELHOR_ENVIO_ORIGIN_POSTAL_CODE
+        sync: false
+      - key: MELHOR_ENVIO_USER_AGENT
+        value: BBOS Bispo Coffees (jrezende@bispocoffees.com)
 
   - type: web
     name: bbos-web-staging

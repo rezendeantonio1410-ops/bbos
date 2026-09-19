@@ -42,6 +42,7 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
 import { StorefrontShippingController } from "./storefront-shipping.controller";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { StorefrontEmailService } from "./storefront-email.service";
+import { MelhorEnvioService } from "./melhor-envio.service";
 
 @Module({
   controllers: [
@@ -88,6 +89,7 @@ import { StorefrontEmailService } from "./storefront-email.service";
     UnconfiguredStateRegistrationProvider,
     MercadoPagoService,
     StorefrontEmailService,
+    MelhorEnvioService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Public } from "./auth.guard";
+import { MelhorEnvioService } from "./melhor-envio.service";
 
 type QuotePayload = {
   postalCode: string;
@@ -17,6 +18,9 @@ type QuotePayload = {
   carrierName: string;
   priceCents: number;
   deliveryDays: number;
+  provider?: "melhor_envio";
+  providerServiceId?: number;
+  commercialPriceCents?: number;
   expiresAt: string;
 };
 
@@ -72,9 +76,11 @@ export function verifyShippingQuote(
 
 @Controller("storefront/shipping")
 export class StorefrontShippingController {
+  constructor(private readonly melhorEnvio: MelhorEnvioService) {}
+
   @Public()
   @Post("quotes")
-  quote(
+  async quote(
     @Body()
     body: {
       postalCode?: string;
@@ -99,31 +105,21 @@ export class StorefrontShippingController {
 
     const region = Number(postalCode[0]);
     const free = subtotalCents >= 27000 && [0, 1, 2, 8, 9].includes(region);
-    const extraKilos = Math.max(0, Math.ceil(weightGrams / 1000) - 1);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const base = {
+    const providerQuotes = await this.melhorEnvio.calculate({
       postalCode,
       subtotalCents,
       weightGrams,
-      carrierName: "Entrega Bispo",
+    });
+    const options: QuotePayload[] = providerQuotes.map((quote) => ({
+      postalCode,
+      subtotalCents,
+      weightGrams,
       expiresAt,
-    };
-    const options: QuotePayload[] = [
-      {
-        ...base,
-        name: "Entrega cuidadosa",
-        serviceName: "Econômica",
-        priceCents: free ? 0 : 1590 + extraKilos * 450,
-        deliveryDays: [8, 9].includes(region) ? 5 : 7,
-      },
-      {
-        ...base,
-        name: "Entrega mais rápida",
-        serviceName: "Expressa",
-        priceCents: 2490 + extraKilos * 650,
-        deliveryDays: [8, 9].includes(region) ? 2 : 4,
-      },
-    ];
+      ...quote,
+      name: `${quote.carrierName} · ${quote.serviceName}`,
+      priceCents: free ? 0 : quote.commercialPriceCents,
+    }));
     return {
       options: options.map((option) => ({
         ...option,
