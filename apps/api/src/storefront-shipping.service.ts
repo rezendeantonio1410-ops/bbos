@@ -84,7 +84,17 @@ export class StorefrontShippingService {
     });
     const body = await response.json().catch(() => null);
     if (!response.ok || !Array.isArray(body)) {
-      console.error("Melhor Envio recusou a cotação", { status: response.status });
+      const providerError = body && typeof body === "object"
+        ? {
+            message: (body as any).message,
+            error: (body as any).error,
+            errors: (body as any).errors,
+          }
+        : undefined;
+      console.error("Melhor Envio recusou a cotação", {
+        status: response.status,
+        providerError,
+      });
       throw new ServiceUnavailableException("Não foi possível obter o frete real agora. Tente novamente em instantes.");
     }
     return body
