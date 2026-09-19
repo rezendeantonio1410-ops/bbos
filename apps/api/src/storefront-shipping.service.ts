@@ -122,8 +122,18 @@ export class StorefrontShippingService {
     if (serviceErrors.length) {
       console.error("Melhor Envio recusou serviços da cotação", { serviceErrors });
     }
-    return options
-      .filter((option: any) => !option?.error && option?.id && Number(option?.custom_price ?? option?.price) >= 0)
+    const eligibleOptions = options.filter(
+      (option: any) => !option?.error && option?.id && Number(option?.custom_price ?? option?.price) >= 0,
+    );
+    if (!eligibleOptions.length) {
+      console.log(`ME_QUOTE_DIAGNOSTIC ${JSON.stringify(options.map((option: any) => ({
+        id: option?.id,
+        name: option?.name,
+        error: option?.error,
+        price: option?.custom_price ?? option?.price,
+      })))}`);
+    }
+    return eligibleOptions
       .map((option: any) => ({
         provider: "MELHOR_ENVIO" as const,
         serviceId: String(option.id),
