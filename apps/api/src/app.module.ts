@@ -39,6 +39,7 @@ import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
 import { CuppingPublicController } from "./cupping-public.controller";
 import { StorefrontOrdersController } from "./storefront-orders.controller";
+import { StorefrontShippingController } from "./storefront-shipping.controller";
 import { MercadoPagoService } from "./mercado-pago.service";
 
 @Module({
@@ -69,6 +70,7 @@ import { MercadoPagoService } from "./mercado-pago.service";
     ProfessionalSamplesController,
     CuppingPublicController,
     StorefrontOrdersController,
+    StorefrontShippingController,
   ],
   providers: [
     DashboardService,

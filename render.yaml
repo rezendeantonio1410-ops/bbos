@@ -28,6 +28,18 @@ services:
         sync: false
       - key: BBOS_BOOTSTRAP_ADMIN_NAME
         sync: false
+      - key: STOREFRONT_COMPANY_ID
+        sync: false
+      - key: STOREFRONT_WEB_URL
+        sync: false
+      - key: STOREFRONT_API_PUBLIC_URL
+        sync: false
+      - key: STOREFRONT_QUOTE_SECRET
+        generateValue: true
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        generateValue: true
 
   - type: web
     name: bbos-web-staging

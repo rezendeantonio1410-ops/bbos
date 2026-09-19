@@ -14,6 +14,7 @@ import { PrismaClient } from "@bbos/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
+import { verifyShippingQuote } from "./storefront-shipping.controller";
 
 const catalog: Record<
   string,
@@ -51,6 +52,7 @@ function validCpf(value: unknown) {
 
 type CheckoutBody = {
   idempotencyKey?: string;
+  shippingQuoteId?: string;
   paymentMethod?: string;
   customer?: { name?: string; email?: string; phone?: string; cpf?: string };
   delivery?: {
@@ -275,11 +277,14 @@ export class StorefrontOrdersController {
     });
     const subtotalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
     const weightGrams = items.reduce((sum, item) => sum + item.weightGrams, 0);
-    const region = Number(digits(delivery.postalCode).slice(0, 1));
-    const free = subtotalCents >= 27000 && [0, 1, 2, 8, 9].includes(region);
-    const shippingCents = free
-      ? 0
-      : 1590 + Math.max(0, Math.ceil(weightGrams / 1000) - 1) * 450;
+    if (!body.shippingQuoteId)
+      throw new BadRequestException("Calcule a entrega antes de continuar.");
+    const shippingQuote = verifyShippingQuote(body.shippingQuoteId, {
+      postalCode: delivery.postalCode || "",
+      subtotalCents,
+      weightGrams,
+    });
+    const shippingCents = shippingQuote.priceCents;
     const companyId = await this.companyId();
     const existing = await this.database.$queryRawUnsafe<any[]>(
       `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
@@ -326,6 +331,12 @@ export class StorefrontOrdersController {
         ...delivery,
         postalCode: digits(delivery.postalCode),
         state: delivery.state?.toUpperCase(),
+        shipping: {
+          name: shippingQuote.name,
+          serviceName: shippingQuote.serviceName,
+          carrierName: shippingQuote.carrierName,
+          deliveryDays: shippingQuote.deliveryDays,
+        },
       }),
       JSON.stringify(items),
       JSON.stringify(body.recurrence ?? { mode: "now" }),
@@ -365,7 +376,7 @@ export class StorefrontOrdersController {
     if (!suppliedToken)
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     let rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"paidAt","totalCents","paymentExternalId" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+      `SELECT id,code,status,"paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
       orderId,
       tokenHash(suppliedToken),
     );
@@ -374,12 +385,40 @@ export class StorefrontOrdersController {
     if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT id,code,status,"paidAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
+        `SELECT id,code,status,"paidAt","totalCents","paymentExternalId",delivery,"createdAt","updatedAt" FROM "StorefrontOrder" WHERE id=$1 AND "confirmationTokenHash"=$2 LIMIT 1`,
         orderId,
         tokenHash(suppliedToken),
       );
     }
-    return rows[0];
+    const order = rows[0];
+    const shipping = order.delivery?.shipping ?? {};
+    const events = [
+      {
+        eventType: "ORDER_RECEIVED",
+        title: "Pedido recebido",
+        detail: "Sua escolha foi registrada pela Bispo Coffees.",
+        occurredAt: order.createdAt,
+      },
+    ];
+    if (order.paidAt)
+      events.push({
+        eventType: "PAYMENT_CONFIRMED",
+        title: "Pagamento confirmado",
+        detail: "Seu café seguirá para preparação e embalagem.",
+        occurredAt: order.paidAt,
+      });
+    return {
+      id: order.id,
+      code: order.code,
+      status: order.status,
+      paidAt: order.paidAt,
+      totalCents: order.totalCents,
+      carrierName: shipping.carrierName || "Entrega Bispo",
+      shippingServiceName: shipping.serviceName || "Entrega cuidadosa",
+      estimatedDeliveryDays: shipping.deliveryDays || null,
+      events,
+      shipment: null,
+    };
   }
 
   @Public()

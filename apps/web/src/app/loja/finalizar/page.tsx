@@ -163,6 +163,11 @@ export default function CheckoutPage() {
       setMessage(
         `Pagamento do pedido ${current.code} confirmado. Sua sacola foi concluída.`,
       );
+      window.setTimeout(() => {
+        window.location.assign(
+          `/loja/pedido/${encodeURIComponent(order.id)}?token=${encodeURIComponent(order.confirmationToken!)}`,
+        );
+      }, 1200);
     };
     void poll();
     const timer = window.setInterval(poll, 4000);
