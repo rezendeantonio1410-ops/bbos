@@ -4,6 +4,17 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
+const DEFAULT_SCOPES = [
+  "shipping-calculate",
+  "cart-read",
+  "cart-write",
+  "shipping-checkout",
+  "shipping-generate",
+  "shipping-print",
+  "orders-read",
+  "shipping-tracking",
+].join(" ");
+
 @Injectable()
 export class MelhorEnvioAuthService {
   private readonly database = new PrismaClient();
@@ -70,6 +81,7 @@ export class MelhorEnvioAuthService {
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
+    url.searchParams.set("scope", process.env.MELHOR_ENVIO_SCOPES?.trim() || DEFAULT_SCOPES);
     return url.toString();
   }
 
