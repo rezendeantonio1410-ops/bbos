@@ -15,6 +15,7 @@ import {
   type CreateSalesOrderInput,
 } from "./sales-orders.service";
 import { AuthService } from "./auth.service";
+import { StorefrontShippingService } from "./storefront-shipping.service";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -34,6 +35,8 @@ type SalesOrderCommercialTerms = {
   customerReference?: string;
   incoterm?: string;
   incotermLocation?: string;
+  shippingQuoteId?: string;
+  destinationPostalCode?: string;
 };
 
 @Controller("sales-orders")
@@ -41,6 +44,7 @@ export class SalesOrdersController {
   constructor(
     private readonly salesOrders: SalesOrdersService,
     private readonly auth: AuthService,
+    private readonly shipping: StorefrontShippingService,
   ) {}
 
   private async actor(request: any) {
@@ -150,11 +154,53 @@ export class SalesOrdersController {
     };
   }
 
+  @Post("shipping-quotes")
+  async shippingQuotes(
+    @Req() request: any,
+    @Body() body: { customerId?: string; productVariantId?: string; quantity?: number },
+  ) {
+    const actor = await this.actor(request);
+    const customerId = String(body.customerId ?? "").trim();
+    const productVariantId = String(body.productVariantId ?? "").trim();
+    const quantity = Number(body.quantity ?? 0);
+    if (!customerId || !productVariantId || !Number.isSafeInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException("Cliente, produto e quantidade são obrigatórios para cotar o frete.");
+    }
+    const [customer, variant] = await Promise.all([
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT id, "companyId", "postalCode" FROM "Customer" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+        customerId,
+        actor.companyId,
+      ),
+      this.salesOrders.database.productVariant.findFirst({
+        where: { id: productVariantId, product: { productLine: { companyId: actor.companyId } } },
+        select: { netWeightGrams: true },
+      }),
+    ]);
+    const postalCode = String(customer[0]?.postalCode ?? "").replace(/\D/g, "");
+    if (postalCode.length !== 8) {
+      throw new BadRequestException("Cadastre um CEP válido no cliente antes de cotar o frete.");
+    }
+    if (!variant) throw new BadRequestException("Produto não encontrado para esta empresa.");
+    const price = await this.resolveInternalPrice(customerId, productVariantId);
+    const result = await this.shipping.quote(
+      actor.companyId,
+      {
+        postalCode,
+        subtotalCents: Math.round(price.officialUnitPrice * quantity * 100),
+        weightGrams: variant.netWeightGrams * quantity,
+      },
+      { allowFreeShipping: false, includeAllServices: true },
+    );
+    return { ...result, postalCode };
+  }
+
   @Get(":id")
   get(@Param("id") id: string) { return this.salesOrders.get(id); }
 
   @Post()
-  async create(@Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
+  async create(@Req() request: any, @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
+    const actor = await this.actor(request);
     const paymentType = String(body.paymentType ?? "CASH").toUpperCase();
     if (!["CASH", "TERM"].includes(paymentType)) throw new BadRequestException("Forma de pagamento inválida.");
     const paymentTerms = paymentType === "TERM" ? String(body.paymentTerms ?? "").trim() : "À vista";
@@ -182,6 +228,26 @@ export class SalesOrdersController {
       pricedItems.push({ ...item, unitPrice: price.officialUnitPrice });
     }
 
+    let shippingQuote: any = null;
+    if (resolvedChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER") {
+      if (!body.shippingQuoteId || !body.destinationPostalCode) {
+        throw new BadRequestException("Calcule e selecione o frete do distribuidor antes de salvar o pedido.");
+      }
+      const variants = await this.salesOrders.database.productVariant.findMany({
+        where: { id: { in: pricedItems.map((item) => item.productVariantId) } },
+        select: { id: true, netWeightGrams: true },
+      });
+      const weightById = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
+      const subtotalCents = Math.round(pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) * 100);
+      const weightGrams = pricedItems.reduce((sum, item) => sum + item.quantity * Number(weightById.get(item.productVariantId) ?? 0), 0);
+      shippingQuote = await this.shipping.validateQuote(actor.companyId, body.shippingQuoteId, {
+        postalCode: body.destinationPostalCode,
+        subtotalCents,
+        weightGrams,
+      });
+      body.freight = Number(shippingQuote.customerPriceCents) / 100;
+    }
+
     const orderNumber = await this.nextOrderNumber();
     const order = await this.salesOrders.create({
       ...body,
@@ -193,7 +259,7 @@ export class SalesOrdersController {
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
     });
 
-    const carrierName = String(body.carrierName ?? "").trim() || null;
+    const carrierName = shippingQuote?.carrierName ?? (String(body.carrierName ?? "").trim() || null);
     const customerReference = String(body.customerReference ?? "").trim() || null;
     const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
     const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
@@ -207,6 +273,11 @@ export class SalesOrdersController {
               "customerReference"=$6,
               "incoterm"=$7,
               "incotermLocation"=$8,
+              "shippingQuoteId"=$9,
+              "shippingProvider"=$10,
+              "shippingServiceId"=$11,
+              "shippingServiceName"=$12,
+              "estimatedDeliveryDays"=$13,
               "updatedAt"=NOW()
         WHERE id=$1`,
       order.id,
@@ -217,7 +288,19 @@ export class SalesOrdersController {
       customerReference,
       incoterm,
       incotermLocation,
+      shippingQuote?.id ?? null,
+      shippingQuote?.provider ?? null,
+      shippingQuote?.serviceId ?? null,
+      shippingQuote?.serviceName ?? null,
+      shippingQuote?.deliveryDays ?? null,
     );
+
+    if (shippingQuote) {
+      await this.salesOrders.database.$executeRawUnsafe(
+        `UPDATE "ShippingQuote" SET status='USED', "usedAt"=NOW(), "updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
+        shippingQuote.id,
+      );
+    }
 
     return {
       ...order,
@@ -230,6 +313,12 @@ export class SalesOrdersController {
       customerReference,
       incoterm,
       incotermLocation,
+      freight: body.freight ?? 0,
+      shippingQuoteId: shippingQuote?.id ?? null,
+      shippingProvider: shippingQuote?.provider ?? null,
+      shippingServiceId: shippingQuote?.serviceId ?? null,
+      shippingServiceName: shippingQuote?.serviceName ?? null,
+      estimatedDeliveryDays: shippingQuote?.deliveryDays ?? null,
     };
   }
 

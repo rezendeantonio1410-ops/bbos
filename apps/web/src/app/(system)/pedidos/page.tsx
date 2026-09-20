@@ -72,6 +72,15 @@ type Quote = {
   };
 };
 
+type ShippingQuoteOption = {
+  id: string;
+  serviceName: string;
+  carrierName: string;
+  priceCents: number;
+  deliveryDays: number;
+  expiresAt: string;
+};
+
 type OrderItem = {
   id: string;
   productVariantId: string;
@@ -327,6 +336,11 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
+  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>([]);
+  const [shippingQuoteId, setShippingQuoteId] = useState("");
+  const [shippingPostalCode, setShippingPostalCode] = useState("");
+  const [shippingBusy, setShippingBusy] = useState(false);
+  const [shippingError, setShippingError] = useState("");
   const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
   const [carrierName, setCarrierName] = useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
@@ -341,7 +355,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
 
   const selected = variants.find((variant) => variant.productVariantId === variantId);
   const customer = customers.find((candidate) => candidate.id === customerId);
-  const orderTotal = Number(quote?.totalAmount ?? 0);
+  const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
+  const freightAmount = Number(selectedShippingQuote?.priceCents ?? 0) / 100;
+  const orderTotal = Number(quote?.totalAmount ?? 0) + freightAmount;
   const isTerm = paymentType === "TERM";
   const isExport = quote?.salesChannelType === "EXPORTACAO";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
@@ -400,12 +416,51 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
       .finally(() => setQuoteBusy(false));
   }, [customerId, variantId, quantity]);
 
+  useEffect(() => {
+    setShippingQuotes([]);
+    setShippingQuoteId("");
+    setShippingPostalCode("");
+    setShippingError("");
+  }, [customerId, variantId, quantity]);
+
+  useEffect(() => {
+    if (quote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
+  }, [quote?.salesChannelType]);
+
+  const calculateShipping = async () => {
+    if (!customerId || !variantId || !quote) return;
+    setShippingBusy(true);
+    setShippingError("");
+    setShippingQuotes([]);
+    setShippingQuoteId("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/shipping-quotes`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ customerId, productVariantId: variantId, quantity }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível cotar o frete.");
+      setShippingQuotes(payload.options ?? []);
+      setShippingPostalCode(payload.postalCode ?? "");
+      if (payload.options?.length === 1) setShippingQuoteId(payload.options[0].id);
+    } catch (cause) {
+      setShippingError(cause instanceof Error ? cause.message : "Não foi possível cotar o frete.");
+    } finally {
+      setShippingBusy(false);
+    }
+  };
+
   const submit = async () => {
     setError("");
     if (!selected || !customerId) return setError("Selecione cliente e produto.");
     if (!quote) return setError("O pedido precisa de um preço interno vigente antes de ser salvo.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
     if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
+    if (quote.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
+      return setError("Calcule e selecione uma opção de frete para o distribuidor.");
+    }
 
     const response = await fetch(salesOrdersApi(), {
       method: "POST",
@@ -418,7 +473,10 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         paymentType,
         paymentTerms: isTerm ? paymentTerms : "À vista",
         freightResponsibility,
-        carrierName,
+        carrierName: selectedShippingQuote?.carrierName ?? carrierName,
+        freight: freightAmount,
+        shippingQuoteId: selectedShippingQuote?.id,
+        destinationPostalCode: shippingPostalCode || undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -548,6 +606,36 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
                   </Field>
                 )}
+                {freightResponsibility === "CUSTOMER" && quote?.salesChannelType === "DISTRIBUIDOR" && (
+                  <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-emerald-950">Cotação do frete · Melhor Envio</p>
+                        <p className="mt-1 text-[10px] text-emerald-800">Por conta do comprador. Consulte todas as modalidades disponíveis para o CEP cadastrado.</p>
+                      </div>
+                      <button type="button" disabled={shippingBusy || !quote} onClick={() => void calculateShipping()} className="rounded-lg bg-emerald-950 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-40">
+                        {shippingBusy ? "Consultando…" : shippingQuotes.length ? "Cotar novamente" : "Cotar transportadoras"}
+                      </button>
+                    </div>
+                    {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
+                    {shippingQuotes.length > 0 && (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {shippingQuotes.map((option) => (
+                          <label key={option.id} className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}>
+                            <input type="radio" name="shipping-quote" value={option.id} checked={shippingQuoteId === option.id} onChange={() => setShippingQuoteId(option.id)} className="sr-only" />
+                            <span className="flex items-start justify-between gap-3">
+                              <span>
+                                <b className="block text-xs text-stone-900">{option.carrierName} · {option.serviceName}</b>
+                                <small className="mt-1 block text-[10px] text-stone-500">Até {option.deliveryDays} dias úteis</small>
+                              </span>
+                              <b className="whitespace-nowrap text-xs text-stone-900">{money.format(option.priceCents / 100)}</b>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <Field label="Referência / PO do cliente">
                   <input value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} placeholder="Opcional" />
                 </Field>
@@ -576,7 +664,13 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
           )}
 
           {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
-          <button disabled={!quote || quoteBusy || !freightResponsibility} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
+          {selectedShippingQuote && (
+            <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
+              <span className="text-stone-500">Produtos + frete por conta do comprador</span>
+              <b>{money.format(orderTotal)}</b>
+            </div>
+          )}
+          <button disabled={!quote || quoteBusy || !freightResponsibility || (quote.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote)} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
           <p className="text-[10px] leading-4 text-stone-400">Preço e total vêm da tabela interna vigente. Condições comerciais ficam registradas no próprio pedido.</p>
         </div>
       </aside>

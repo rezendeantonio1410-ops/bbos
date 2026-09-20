@@ -60,7 +60,11 @@ export class StorefrontShippingService {
     };
   }
 
-  private async melhorEnvio(companyId: string, input: ShippingQuoteRequest) {
+  private async melhorEnvio(
+    companyId: string,
+    input: ShippingQuoteRequest,
+    policy: { includeAllServices?: boolean } = {},
+  ) {
     const token = await this.melhorEnvioAuth.accessToken(companyId);
     const base = (process.env.MELHOR_ENVIO_API_URL?.trim() || "https://melhorenvio.com.br/api/v2").replace(/\/$/, "");
     const selectedServices = (process.env.MELHOR_ENVIO_SERVICE_IDS || "")
@@ -79,7 +83,7 @@ export class StorefrontShippingService {
         from: { postal_code: this.originPostalCode() },
         to: { postal_code: digits(input.postalCode) },
         volumes: [this.packageFor(input.weightGrams)],
-        ...(selectedServices.length ? { services: selectedServices.join(",") } : {}),
+        ...(!policy.includeAllServices && selectedServices.length ? { services: selectedServices.join(",") } : {}),
       }),
     });
     const body = await response.json().catch(() => null);
@@ -161,7 +165,11 @@ export class StorefrontShippingService {
     }];
   }
 
-  async quote(companyId: string, request: ShippingQuoteRequest) {
+  async quote(
+    companyId: string,
+    request: ShippingQuoteRequest,
+    policy: { allowFreeShipping?: boolean; includeAllServices?: boolean } = {},
+  ) {
     const input = {
       postalCode: digits(request.postalCode),
       subtotalCents: Number(request.subtotalCents),
@@ -173,9 +181,11 @@ export class StorefrontShippingService {
       !Number.isSafeInteger(input.weightGrams) || input.weightGrams <= 0
     ) throw new BadRequestException("Dados de entrega inválidos.");
 
-    const options = this.provider() === "MELHOR_ENVIO" ? await this.melhorEnvio(companyId, input) : this.fixed(input);
+    const options = this.provider() === "MELHOR_ENVIO"
+      ? await this.melhorEnvio(companyId, input, policy)
+      : this.fixed(input);
     if (!options.length) throw new ServiceUnavailableException("Nenhuma modalidade de entrega está disponível para este CEP.");
-    const free = this.isFreeShipping(input.postalCode, input.subtotalCents);
+    const free = policy.allowFreeShipping !== false && this.isFreeShipping(input.postalCode, input.subtotalCents);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
     const packageData = this.packageFor(input.weightGrams);
     const result = [];
