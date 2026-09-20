@@ -100,25 +100,25 @@ const collections = [
   {
     name: "Gourmet",
     eyebrow: "Para começar",
-    copy: "Cafés fáceis de gostar, escolhidos para transformar o cotidiano em ritual.",
+    copy: "Perfis macios e doces para a xícara de todos os dias.",
     tone: "#E9BB00",
   },
   {
     name: "Clássicos",
     eyebrow: "A linha de conforto",
-    copy: "Perfis doces, envolventes e fáceis de reconhecer, com personalidade.",
+    copy: "Doçura reconhecível, corpo e equilíbrio.",
     tone: "#F96D01",
   },
   {
     name: "Épicos",
     eyebrow: "Para explorar",
-    copy: "Cafés de alta pontuação para quem busca complexidade e descoberta.",
+    copy: "Lotes de maior complexidade e leitura sensorial mais longa.",
     tone: "#5C7D5F",
   },
   {
     name: "Raros",
     eyebrow: "Edições limitadas",
-    copy: "O extraordinário em pequenas edições: microlotes de produção limitada.",
+    copy: "Microlotes selecionados em volumes pequenos e safras específicas.",
     tone: "#FF0000",
   },
 ] as const;
@@ -186,8 +186,8 @@ export default function LojaPage() {
               <h2>Quatro camadas. Escolha o seu momento.</h2>
             </div>
             <p>
-              Do cotidiano aos pequenos lotes: encontre rapidamente o perfil que
-              combina com a sua xícara.
+              Do cotidiano aos microlotes, compare os perfis e escolha com
+              clareza.
             </p>
           </div>
           <div className={layers.grid}>
@@ -236,11 +236,11 @@ export default function LojaPage() {
             className={brand.photoManifest}
             data-photo-slot="sectional-ritual-new-photo"
           >
-            <span>UM RITUAL PARA LEMBRAR</span>
-            <strong>O seu ritual, com a assinatura Bispo.</strong>
+            <span>SELEÇÃO BISPO</span>
+            <strong>Da origem, à torra, à xícara.</strong>
             <p>
-              Café para preparar com tempo, reconhecer na xícara e querer
-              reencontrar.
+              Cada lote é escolhido por José e Suzi, torrado pela Bispo e
+              apresentado pelo seu perfil sensorial.
             </p>
           </aside>
         </section>
@@ -252,7 +252,7 @@ export default function LojaPage() {
           <div className={styles.sectionHeader}>
             <div>
               <small>ESCOLHA O SEU CAFÉ</small>
-              <h2>Da sensação para a sua sacola.</h2>
+              <h2>Escolha pelo perfil.</h2>
             </div>
             <p>
               Compare os perfis, escolha a moagem e compre. Se preferir, o Bispo
@@ -459,7 +459,7 @@ export default function LojaPage() {
               alt="Bispo Coffees"
               className={journey.footerLogo}
             />
-            <p>Café para escolher, desejar, reencontrar e lembrar.</p>
+            <p>Sourcing Brazilian Coffees for the World.</p>
           </div>
           <div className={styles.footerNav}>
             <strong>Explorar</strong>
