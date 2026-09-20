@@ -171,6 +171,27 @@
   font-size: 11px;
   opacity: 0.62;
 }
+.breakdown {
+  padding: 10px 0;
+  border-top: 1px solid #0d1d1715;
+}
+.breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+.breakdown span {
+  color: #53605c;
+}
+.breakdown .discount,
+.breakdown .discount span {
+  color: #17634e;
+}
+.breakdown .discount strong {
+  letter-spacing: 0.04em;
+}
 .delivery {
   align-items: center;
 }

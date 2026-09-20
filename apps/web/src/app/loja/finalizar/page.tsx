@@ -190,6 +190,8 @@ export default function CheckoutPage() {
     () => (checkout?.subtotal || 0) - (checkout?.discountCents || 0) + (checkout?.quote.priceCents || 0),
     [checkout],
   );
+  const discountCents = checkout?.discountCents || 0;
+  const netSubtotal = Math.max(0, (checkout?.subtotal || 0) - discountCents);
   const change = (field: keyof FormData, value: string) =>
     setData((current) => ({ ...current, [field]: value }));
 
@@ -474,6 +476,26 @@ export default function CheckoutPage() {
               <strong>{money(item.priceCents * item.quantity)}</strong>
             </article>
           ))}
+          <div className={styles.breakdown}>
+            <div>
+              <span>Subtotal dos produtos</span>
+              <b>{money(checkout.subtotal)}</b>
+            </div>
+            {discountCents > 0 && (
+              <>
+                <div className={styles.discount}>
+                  <span>
+                    Cupom <strong>{checkout.couponCode}</strong>
+                  </span>
+                  <b>−{money(discountCents)}</b>
+                </div>
+                <div>
+                  <span>Subtotal após desconto</span>
+                  <b>{money(netSubtotal)}</b>
+                </div>
+              </>
+            )}
+          </div>
           <div className={styles.delivery}>
             <span>
               {checkout.quote.carrierName} · {checkout.quote.serviceName} · até{" "}
