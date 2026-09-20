@@ -21,6 +21,7 @@ import { getApiBaseUrl } from "@/lib/api-url";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
 const freightLabels: Record<string, string> = {
   BISPO: "Frete por conta da Bispo",
@@ -78,7 +79,18 @@ type ShippingQuoteOption = {
   carrierName: string;
   priceCents: number;
   deliveryDays: number;
+  carrierLogoUrl?: string | null;
+  postingType?: string;
   expiresAt: string;
+};
+
+type ShippingSummary = {
+  originPostalCode: string;
+  destinationPostalCode: string;
+  weightGrams: number;
+  widthCm: number;
+  heightCm: number;
+  lengthCm: number;
 };
 
 type OrderItem = {
@@ -339,6 +351,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>([]);
   const [shippingQuoteId, setShippingQuoteId] = useState("");
   const [shippingPostalCode, setShippingPostalCode] = useState("");
+  const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
+  const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
   const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
@@ -356,6 +370,10 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const selected = variants.find((variant) => variant.productVariantId === variantId);
   const customer = customers.find((candidate) => candidate.id === customerId);
   const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
+  const sortedShippingQuotes = useMemo(
+    () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
+    [shippingQuotes, shippingSort],
+  );
   const freightAmount = Number(selectedShippingQuote?.priceCents ?? 0) / 100;
   const orderTotal = Number(quote?.totalAmount ?? 0) + freightAmount;
   const isTerm = paymentType === "TERM";
@@ -420,6 +438,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     setShippingQuotes([]);
     setShippingQuoteId("");
     setShippingPostalCode("");
+    setShippingSummary(null);
     setShippingError("");
   }, [customerId, variantId, quantity]);
 
@@ -444,6 +463,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível cotar o frete.");
       setShippingQuotes(payload.options ?? []);
       setShippingPostalCode(payload.postalCode ?? "");
+      setShippingSummary(payload.summary ?? null);
       if (payload.options?.length === 1) setShippingQuoteId(payload.options[0].id);
     } catch (cause) {
       setShippingError(cause instanceof Error ? cause.message : "Não foi possível cotar o frete.");
@@ -618,20 +638,55 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                       </button>
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
+                    {shippingSummary && (
+                      <div className="mt-3 grid gap-2 rounded-xl bg-emerald-950 p-3 text-white sm:grid-cols-[1.4fr_.8fr_.8fr]">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Origem</small>
+                            <b className="text-xs">{formatPostalCode(shippingSummary.originPostalCode)}</b>
+                          </div>
+                          <span className="text-emerald-300">→</span>
+                          <div>
+                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Destino</small>
+                            <b className="text-xs">{formatPostalCode(shippingSummary.destinationPostalCode)}</b>
+                          </div>
+                        </div>
+                        <div>
+                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Peso</small>
+                          <b className="text-xs">{(shippingSummary.weightGrams / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</b>
+                        </div>
+                        <div>
+                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Embalagem cotada</small>
+                          <b className="text-xs">{shippingSummary.widthCm} × {shippingSummary.heightCm} × {shippingSummary.lengthCm} cm</b>
+                        </div>
+                      </div>
+                    )}
                     {shippingQuotes.length > 0 && (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {shippingQuotes.map((option) => (
+                      <div className="mt-3">
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-stone-500">Ordenar por</span>
+                          <button type="button" onClick={() => setShippingSort("PRICE")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "PRICE" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Mais barato</button>
+                          <button type="button" onClick={() => setShippingSort("TIME")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "TIME" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Menor prazo</button>
+                        </div>
+                        <div className="grid gap-2">
+                        {sortedShippingQuotes.map((option) => (
                           <label key={option.id} className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}>
                             <input type="radio" name="shipping-quote" value={option.id} checked={shippingQuoteId === option.id} onChange={() => setShippingQuoteId(option.id)} className="sr-only" />
-                            <span className="flex items-start justify-between gap-3">
-                              <span>
-                                <b className="block text-xs text-stone-900">{option.carrierName} · {option.serviceName}</b>
-                                <small className="mt-1 block text-[10px] text-stone-500">Até {option.deliveryDays} dias úteis</small>
+                            <span className="grid items-center gap-3 sm:grid-cols-[1.4fr_1fr_.7fr_.7fr]">
+                              <span className="flex min-w-0 items-center gap-2">
+                                {option.carrierLogoUrl ? <img src={option.carrierLogoUrl} alt="" className="h-6 w-10 object-contain" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-100 text-[9px] font-bold">{option.carrierName.slice(0, 2).toUpperCase()}</span>}
+                                <span className="min-w-0">
+                                  <b className="block truncate text-xs text-stone-900">{option.carrierName}</b>
+                                  <small className="block truncate text-[10px] text-stone-500">{option.serviceName}</small>
+                                </span>
                               </span>
-                              <b className="whitespace-nowrap text-xs text-stone-900">{money.format(option.priceCents / 100)}</b>
+                              <small className="text-[10px] text-stone-500">{option.postingType}</small>
+                              <small className="text-[10px] font-semibold text-stone-700">Até {option.deliveryDays} dias úteis</small>
+                              <b className="whitespace-nowrap text-right text-xs text-stone-900">{money.format(option.priceCents / 100)}</b>
                             </span>
                           </label>
                         ))}
+                        </div>
                       </div>
                     )}
                   </div>

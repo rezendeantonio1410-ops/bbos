@@ -147,6 +147,10 @@ export class StorefrontShippingService {
         carrierName: String(option.company?.name || "Transportadora"),
         providerPriceCents: cents(option.custom_price ?? option.price),
         deliveryDays: Math.max(1, Number(option.custom_delivery_time ?? option.delivery_time ?? 1)),
+        carrierLogoUrl: option.company?.picture ? String(option.company.picture) : null,
+        postingType: String(option.company?.name ?? "").toLowerCase().includes("correios")
+          ? "Agência dos Correios"
+          : "Ponto da transportadora",
         rawResponse: option,
       }));
   }
@@ -210,10 +214,24 @@ export class StorefrontShippingService {
         priceCents: customerPriceCents,
         providerPriceCents: option.providerPriceCents,
         deliveryDays: option.deliveryDays,
+        carrierLogoUrl: (option as any).carrierLogoUrl ?? null,
+        postingType: (option as any).postingType ?? "Postagem conforme modalidade",
         expiresAt: expiresAt.toISOString(),
       });
     }
-    return { provider: this.provider(), provisional: this.provider() === "FIXED", options: result };
+    return {
+      provider: this.provider(),
+      provisional: this.provider() === "FIXED",
+      summary: {
+        originPostalCode: this.originPostalCode(),
+        destinationPostalCode: input.postalCode,
+        weightGrams: input.weightGrams,
+        widthCm: packageData.width,
+        heightCm: packageData.height,
+        lengthCm: packageData.length,
+      },
+      options: result,
+    };
   }
 
   async validateQuote(companyId: string, quoteId: string, input: ShippingQuoteRequest) {
