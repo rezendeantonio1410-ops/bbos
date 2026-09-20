@@ -93,6 +93,18 @@ type ShippingSummary = {
   lengthCm: number;
 };
 
+type DraftOrderLine = {
+  id: string;
+  variantId: string;
+  quantity: number;
+};
+
+const newDraftLine = (): DraftOrderLine => ({
+  id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+  variantId: "",
+  quantity: 1,
+});
+
 type OrderItem = {
   id: string;
   productVariantId: string;
@@ -343,9 +355,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [customerId, setCustomerId] = useState("");
   const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
-  const [variantId, setVariantId] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [lines, setLines] = useState<DraftOrderLine[]>(() => [newDraftLine()]);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>([]);
@@ -367,17 +378,22 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
 
-  const selected = variants.find((variant) => variant.productVariantId === variantId);
   const customer = customers.find((candidate) => candidate.id === customerId);
+  const completeLines = useMemo(
+    () => lines.filter((line) => line.variantId && Number.isSafeInteger(line.quantity) && line.quantity > 0),
+    [lines],
+  );
+  const firstQuote = completeLines.length ? quotes[completeLines[0]!.id] : undefined;
   const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
   const sortedShippingQuotes = useMemo(
     () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
     [shippingQuotes, shippingSort],
   );
   const freightAmount = Number(selectedShippingQuote?.priceCents ?? 0) / 100;
-  const orderTotal = Number(quote?.totalAmount ?? 0) + freightAmount;
+  const productsTotal = completeLines.reduce((sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0), 0);
+  const orderTotal = productsTotal + freightAmount;
   const isTerm = paymentType === "TERM";
-  const isExport = quote?.salesChannelType === "EXPORTACAO";
+  const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
   const available = Number(health?.financialHealth?.availableCredit ?? Math.max(0, limit - used));
@@ -413,26 +429,33 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   }, [customerId, isTerm, customers]);
 
   useEffect(() => {
-    if (!customerId || !variantId || !Number.isSafeInteger(quantity) || quantity <= 0) {
-      setQuote(null);
+    if (!customerId || !completeLines.length) {
+      setQuotes({});
       setQuoteError("");
       return;
     }
+    let cancelled = false;
     setQuoteBusy(true);
     setQuoteError("");
-    const params = new URLSearchParams({ customerId, productVariantId: variantId, quantity: String(quantity) });
-    void fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
-        setQuote(payload);
+    void Promise.all(completeLines.map(async (line) => {
+      const params = new URLSearchParams({ customerId, productVariantId: line.variantId, quantity: String(line.quantity) });
+      const response = await fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
+      return [line.id, payload] as const;
+    }))
+      .then((entries) => {
+        if (!cancelled) setQuotes(Object.fromEntries(entries));
       })
       .catch((cause) => {
-        setQuote(null);
-        setQuoteError(cause instanceof Error ? cause.message : "Preço interno não encontrado.");
+        if (!cancelled) {
+          setQuotes({});
+          setQuoteError(cause instanceof Error ? cause.message : "Preço interno não encontrado.");
+        }
       })
-      .finally(() => setQuoteBusy(false));
-  }, [customerId, variantId, quantity]);
+      .finally(() => { if (!cancelled) setQuoteBusy(false); });
+    return () => { cancelled = true; };
+  }, [customerId, completeLines]);
 
   useEffect(() => {
     setShippingQuotes([]);
@@ -440,14 +463,14 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, variantId, quantity]);
+  }, [customerId, lines]);
 
   useEffect(() => {
-    if (quote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
-  }, [quote?.salesChannelType]);
+    if (firstQuote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
+  }, [firstQuote?.salesChannelType]);
 
   const calculateShipping = async () => {
-    if (!customerId || !variantId || !quote) return;
+    if (!customerId || !completeLines.length || completeLines.some((line) => !quotes[line.id])) return;
     setShippingBusy(true);
     setShippingError("");
     setShippingQuotes([]);
@@ -457,7 +480,10 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ customerId, productVariantId: variantId, quantity }),
+        body: JSON.stringify({
+          customerId,
+          items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível cotar o frete.");
@@ -474,11 +500,11 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
 
   const submit = async () => {
     setError("");
-    if (!selected || !customerId) return setError("Selecione cliente e produto.");
-    if (!quote) return setError("O pedido precisa de um preço interno vigente antes de ser salvo.");
+    if (!customerId || !completeLines.length) return setError("Selecione o cliente e ao menos um produto.");
+    if (completeLines.length !== lines.length || completeLines.some((line) => !quotes[line.id])) return setError("Todos os itens precisam de produto, quantidade e preço vigente.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
     if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
-    if (quote.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
+    if (firstQuote?.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
       return setError("Calcule e selecione uma opção de frete para o distribuidor.");
     }
 
@@ -502,12 +528,15 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         notes,
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
-        items: [{
-          productVariantId: selected.productVariantId,
-          warehouseId: selected.warehouseId,
-          quantity,
-          unitPrice: quote.officialUnitPrice,
-        }],
+        items: completeLines.map((line) => {
+          const variant = variants.find((candidate) => candidate.productVariantId === line.variantId)!;
+          return {
+            productVariantId: variant.productVariantId,
+            warehouseId: variant.warehouseId,
+            quantity: line.quantity,
+            unitPrice: quotes[line.id]!.officialUnitPrice,
+          };
+        }),
       }),
     });
 
@@ -569,35 +598,62 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
             </>
           )}
 
-          <div className="rounded-2xl border bg-stone-50 p-3">
-            <div className="grid grid-cols-[minmax(0,1fr)_88px_122px_122px] items-end gap-2">
+          <section className="rounded-2xl border bg-stone-50 p-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
-                <select value={variantId} onChange={(event) => setVariantId(event.target.value)} className="w-full rounded-xl border bg-white px-3 py-3 text-sm">
-                  <option value="">Selecione</option>
-                  {variants.map((variant) => (
-                    <option key={variant.productVariantId} value={variant.productVariantId}>
-                      {variant.product} · {variant.presentationGrams >= 1000 ? `${variant.presentationGrams / 1000} kg` : `${variant.presentationGrams} g`} · {variant.sku}
-                    </option>
-                  ))}
-                </select>
+                <p className="text-xs font-bold">Produtos do pedido</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">Adicione quantos produtos o distribuidor desejar.</p>
               </div>
-              <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
-                <input type="number" min="1" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} className="w-full rounded-xl border bg-white px-3 py-3 text-sm" />
-              </div>
-              <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
-                <div className="rounded-xl border bg-white px-3 py-3 text-sm font-semibold">{quoteBusy ? "Consultando…" : quote ? money.format(quote.officialUnitPrice) : "—"}</div>
-              </div>
-              <div className="rounded-xl bg-white px-3 py-3 text-right">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">Total</p>
-                <p className="mt-1 text-sm font-bold">{quoteBusy ? "…" : money.format(orderTotal)}</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setLines(variants.map((variant) => ({ ...newDraftLine(), variantId: variant.productVariantId })))} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600">Adicionar todos</button>
+                <button type="button" onClick={() => setLines((current) => [...current, newDraftLine()])} className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"><Plus size={12} className="mr-1 inline" /> Produto</button>
               </div>
             </div>
-            {selected && <p className="mt-2 text-[10px] text-stone-400">{selected.line} · estoque disponível {selected.availableStock} pacote(s){quote ? ` · tabela ${quote.salesChannelName}` : ""}</p>}
+
+            <div className="space-y-2">
+              {lines.map((line, index) => {
+                const selectedVariant = variants.find((variant) => variant.productVariantId === line.variantId);
+                const lineQuote = quotes[line.id];
+                return (
+                  <div key={line.id} className="rounded-xl border bg-white p-3">
+                    <div className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_32px]">
+                      <div>
+                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
+                        <select value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-3 py-2.5 text-xs">
+                          <option value="">Selecione</option>
+                          {variants.map((variant) => (
+                            <option key={variant.productVariantId} value={variant.productVariantId} disabled={lines.some((item) => item.id !== line.id && item.variantId === variant.productVariantId)}>
+                              {variant.product} · {variant.presentationGrams >= 1000 ? `${variant.presentationGrams / 1000} kg` : `${variant.presentationGrams} g`} · {variant.sku}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
+                        <input type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, quantity: Math.max(1, Number(event.target.value)) } : item))} className="w-full rounded-lg border bg-white px-3 py-2.5 text-xs" />
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
+                        <div className="rounded-lg border bg-stone-50 px-3 py-2.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(lineQuote.officialUnitPrice) : "—"}</div>
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2.5 text-right text-xs font-bold">{lineQuote ? money.format(lineQuote.totalAmount) : "—"}</div>
+                      </div>
+                      <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
+                    </div>
+                    {selectedVariant && <p className="mt-2 text-[9px] text-stone-400">{selectedVariant.line} · estoque disponível {selectedVariant.availableStock} pacote(s){lineQuote ? ` · tabela ${lineQuote.salesChannelName}` : ""}</p>}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-forest-900 px-4 py-3 text-white">
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Subtotal dos produtos</span>
+              <b className="text-sm">{quoteBusy ? "Consultando…" : money.format(productsTotal)}</b>
+            </div>
             {quoteError && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{quoteError}</p>}
-          </div>
+          </section>
 
           <section className="rounded-2xl border border-stone-200 bg-white">
             <button type="button" onClick={() => setShowTerms((value) => !value)} className="flex w-full items-center justify-between px-4 py-3 text-left">
@@ -626,14 +682,14 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
                   </Field>
                 )}
-                {freightResponsibility === "CUSTOMER" && quote?.salesChannelType === "DISTRIBUIDOR" && (
+                {freightResponsibility === "CUSTOMER" && firstQuote?.salesChannelType === "DISTRIBUIDOR" && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-xs font-bold text-emerald-950">Cotação do frete · Melhor Envio</p>
                         <p className="mt-1 text-[10px] text-emerald-800">Por conta do comprador. Consulte todas as modalidades disponíveis para o CEP cadastrado.</p>
                       </div>
-                      <button type="button" disabled={shippingBusy || !quote} onClick={() => void calculateShipping()} className="rounded-lg bg-emerald-950 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-40">
+                      <button type="button" disabled={shippingBusy || quoteBusy || !completeLines.length || completeLines.some((line) => !quotes[line.id])} onClick={() => void calculateShipping()} className="rounded-lg bg-emerald-950 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-40">
                         {shippingBusy ? "Consultando…" : shippingQuotes.length ? "Cotar novamente" : "Cotar transportadoras"}
                       </button>
                     </div>
@@ -725,7 +781,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
               <b>{money.format(orderTotal)}</b>
             </div>
           )}
-          <button disabled={!quote || quoteBusy || !freightResponsibility || (quote.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote)} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
+          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (firstQuote?.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote)} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
           <p className="text-[10px] leading-4 text-stone-400">Preço e total vêm da tabela interna vigente. Condições comerciais ficam registradas no próprio pedido.</p>
         </div>
       </aside>

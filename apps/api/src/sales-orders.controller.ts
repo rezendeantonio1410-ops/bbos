@@ -157,38 +157,69 @@ export class SalesOrdersController {
   @Post("shipping-quotes")
   async shippingQuotes(
     @Req() request: any,
-    @Body() body: { customerId?: string; productVariantId?: string; quantity?: number },
+    @Body() body: {
+      customerId?: string;
+      productVariantId?: string;
+      quantity?: number;
+      items?: Array<{ productVariantId?: string; quantity?: number }>;
+    },
   ) {
     const actor = await this.actor(request);
     const customerId = String(body.customerId ?? "").trim();
-    const productVariantId = String(body.productVariantId ?? "").trim();
-    const quantity = Number(body.quantity ?? 0);
-    if (!customerId || !productVariantId || !Number.isSafeInteger(quantity) || quantity <= 0) {
-      throw new BadRequestException("Cliente, produto e quantidade são obrigatórios para cotar o frete.");
+    const requestedItems = body.items?.length
+      ? body.items.map((item) => ({
+          productVariantId: String(item.productVariantId ?? "").trim(),
+          quantity: Number(item.quantity ?? 0),
+        }))
+      : [{
+          productVariantId: String(body.productVariantId ?? "").trim(),
+          quantity: Number(body.quantity ?? 0),
+        }];
+    if (
+      !customerId || !requestedItems.length ||
+      requestedItems.some((item) => !item.productVariantId || !Number.isSafeInteger(item.quantity) || item.quantity <= 0)
+    ) {
+      throw new BadRequestException("Cliente, produtos e quantidades são obrigatórios para cotar o frete.");
     }
-    const [customer, variant] = await Promise.all([
+    if (new Set(requestedItems.map((item) => item.productVariantId)).size !== requestedItems.length) {
+      throw new BadRequestException("Agrupe o mesmo produto em um único item antes de cotar o frete.");
+    }
+    const productVariantIds = requestedItems.map((item) => item.productVariantId);
+    const [customer, variants] = await Promise.all([
       this.salesOrders.database.$queryRawUnsafe<any[]>(
         `SELECT id, "companyId", "postalCode" FROM "Customer" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
         customerId,
         actor.companyId,
       ),
-      this.salesOrders.database.productVariant.findFirst({
-        where: { id: productVariantId, product: { productLine: { companyId: actor.companyId } } },
-        select: { netWeightGrams: true },
+      this.salesOrders.database.productVariant.findMany({
+        where: { id: { in: productVariantIds }, product: { productLine: { companyId: actor.companyId } } },
+        select: { id: true, netWeightGrams: true },
       }),
     ]);
     const postalCode = String(customer[0]?.postalCode ?? "").replace(/\D/g, "");
     if (postalCode.length !== 8) {
       throw new BadRequestException("Cadastre um CEP válido no cliente antes de cotar o frete.");
     }
-    if (!variant) throw new BadRequestException("Produto não encontrado para esta empresa.");
-    const price = await this.resolveInternalPrice(customerId, productVariantId);
+    if (variants.length !== requestedItems.length) throw new BadRequestException("Um ou mais produtos não foram encontrados para esta empresa.");
+    const weights = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
+    let subtotalCents = 0;
+    let weightGrams = 0;
+    let salesChannelId = "";
+    for (const item of requestedItems) {
+      const price = await this.resolveInternalPrice(customerId, item.productVariantId);
+      if (salesChannelId && salesChannelId !== price.salesChannelId) {
+        throw new BadRequestException("Os produtos precisam usar a mesma tabela comercial.");
+      }
+      salesChannelId = price.salesChannelId;
+      subtotalCents += Math.round(price.officialUnitPrice * item.quantity * 100);
+      weightGrams += Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
+    }
     const result = await this.shipping.quote(
       actor.companyId,
       {
         postalCode,
-        subtotalCents: Math.round(price.officialUnitPrice * quantity * 100),
-        weightGrams: variant.netWeightGrams * quantity,
+        subtotalCents,
+        weightGrams,
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
