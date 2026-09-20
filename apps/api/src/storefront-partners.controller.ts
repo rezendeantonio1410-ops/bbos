@@ -13,6 +13,17 @@ import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 
+const internationalPhone = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = `+${raw.replace(/\D/g, "")}`;
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized))
+    throw new BadRequestException(
+      "Telefone inválido. Use o padrão internacional, por exemplo +5543991820201.",
+    );
+  return normalized;
+};
+
 @Controller("storefront/partners")
 export class StorefrontPartnersController {
   private readonly database = new PrismaClient();
@@ -59,7 +70,7 @@ export class StorefrontPartnersController {
       name,
       taxId,
       String(body.contactName ?? "").trim() || null,
-      String(body.phone ?? "").trim() || null,
+      internationalPhone(body.phone),
       String(body.email ?? "").trim() || null,
       String(body.pixKey ?? "").trim() || null,
       body.active !== false,
@@ -92,7 +103,7 @@ export class StorefrontPartnersController {
       name,
       taxId,
       String(value.contactName ?? "").trim() || null,
-      String(value.phone ?? "").trim() || null,
+      internationalPhone(value.phone),
       String(value.email ?? "").trim() || null,
       String(value.pixKey ?? "").trim() || null,
       value.active !== false,

@@ -172,8 +172,16 @@ export default function StorefrontPartnersPage() {
                   defaultValue={selected?.contactName}
                 />
               </Field>
-              <Field label="Telefone/WhatsApp">
-                <input name="phone" defaultValue={selected?.phone} />
+              <Field label="Telefone/WhatsApp internacional">
+                <input
+                  name="phone"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="+5543991820201"
+                  pattern="\+[1-9][0-9]{7,14}"
+                  title="Use +, código do país, DDD e número. Ex.: +5543991820201"
+                  defaultValue={selected?.phone}
+                />
               </Field>
               <Field label="E-mail">
                 <input
