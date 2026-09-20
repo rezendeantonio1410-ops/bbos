@@ -268,7 +268,9 @@ export class StorefrontOrdersController implements OnModuleInit {
             storefront.couponCode
               ? `Cupom: ${storefront.couponCode} · Desconto: R$ ${(Number(storefront.discountCents || 0) / 100).toFixed(2)}`
               : null,
-          ].filter(Boolean).join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n"),
           items: {
             create: storefrontItems.map((item) => {
               const variant = variantBySlug.get(item.id)!;
@@ -330,19 +332,28 @@ export class StorefrontOrdersController implements OnModuleInit {
       );
       if (order.couponId && order.commissionCents > 0) {
         const couponRows = await transaction.$queryRawUnsafe<any[]>(
-          `SELECT c.*, b.name AS "ownerName" FROM "StorefrontCoupon" c JOIN "Broker" b ON b.id=c."brokerId" WHERE c.id=$1 FOR UPDATE`,
+          `SELECT c.*, b.name AS "ownerName" FROM "StorefrontCoupon" c JOIN "StorefrontPartner" b ON b.id=c."partnerId" WHERE c.id=$1 FOR UPDATE`,
           order.couponId,
         );
         const coupon = couponRows[0];
-        if (!coupon) throw new BadRequestException("Cupom do pedido não encontrado.");
+        if (!coupon)
+          throw new BadRequestException("Cupom do pedido não encontrado.");
         const redemptionId = randomUUID();
         await transaction.$executeRawUnsafe(
           `INSERT INTO "StorefrontCouponRedemption"
-            (id,"companyId","couponId","storefrontOrderId","brokerId","couponCode","grossSubtotalCents","discountCents","netSubtotalCents","commissionCents",status,"reservedAt","createdAt","updatedAt")
+            (id,"companyId","couponId","storefrontOrderId","partnerId","couponCode","grossSubtotalCents","discountCents","netSubtotalCents","commissionCents",status,"reservedAt","createdAt","updatedAt")
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'RESERVED',NOW(),NOW(),NOW())
            ON CONFLICT ("storefrontOrderId") DO NOTHING`,
-          redemptionId, order.companyId, coupon.id, order.id, coupon.brokerId, order.couponCode,
-          order.subtotalCents, order.discountCents, order.subtotalCents - order.discountCents, order.commissionCents,
+          redemptionId,
+          order.companyId,
+          coupon.id,
+          order.id,
+          coupon.partnerId,
+          order.couponCode,
+          order.subtotalCents,
+          order.discountCents,
+          order.subtotalCents - order.discountCents,
+          order.commissionCents,
         );
         const redemption = await transaction.$queryRawUnsafe<any[]>(
           `SELECT id FROM "StorefrontCouponRedemption" WHERE "storefrontOrderId"=$1 LIMIT 1`,
@@ -351,14 +362,17 @@ export class StorefrontOrdersController implements OnModuleInit {
         await transaction.$executeRawUnsafe(
           `UPDATE "StorefrontCoupon" SET "usageCount"="usageCount"+1,"updatedAt"=NOW()
             WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM "AccountsPayable" WHERE "brokerCommissionPayableKey"=$2)`,
-          coupon.id, `coupon:${redemption[0].id}`,
+          coupon.id,
+          `coupon:${redemption[0].id}`,
         );
         await transaction.$executeRawUnsafe(
           `INSERT INTO "AccountsPayable"
-            (id,"companyId","brokerId",description,"issueDate","dueDate",amount,"openAmount",status,category,notes,"brokerCommissionPayableKey","createdAt","updatedAt")
+            (id,"companyId","storefrontPartnerId",description,"issueDate","dueDate",amount,"openAmount",status,category,notes,"brokerCommissionPayableKey","createdAt","updatedAt")
            VALUES ($1,$2,$3,$4,NOW(),NOW(),$5,$5,'OPEN','COMISSAO_CUPOM',$6,$7,NOW(),NOW())
            ON CONFLICT ("brokerCommissionPayableKey") DO NOTHING`,
-          randomUUID(), order.companyId, coupon.brokerId,
+          randomUUID(),
+          order.companyId,
+          coupon.partnerId,
           `Comissão reservada · cupom ${order.couponCode} · pedido ${order.code}`,
           Number(order.commissionCents) / 100,
           `Reserva automática no pagamento. Beneficiário: ${coupon.ownerName}.`,

@@ -451,6 +451,7 @@ model Company {
   screenClassifications     ScreenClassification[]
   supplierBankAccounts      SupplierBankAccount[]
   brokers                   Broker[]
+  storefrontPartners        StorefrontPartner[]
   cuppingSessions           CuppingSession[]
   cuppingParticipantInvites CuppingParticipantInvite[]
   cuppingTrainingSessions   CuppingTrainingSession[]
@@ -557,6 +558,26 @@ model Broker {
   accountsPayable AccountsPayable[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
+
+  @@unique([companyId, taxId])
+  @@index([companyId, active])
+}
+
+model StorefrontPartner {
+  id              String            @id @default(cuid())
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  taxId           String?
+  contactName     String?
+  phone           String?
+  email           String?
+  pixKey          String?
+  bankDetails     Json?
+  active          Boolean           @default(true)
+  accountsPayable AccountsPayable[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
@@ -1825,6 +1846,8 @@ model AccountsPayable {
   supplier                   Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   brokerId                   String?
   broker                     Broker?                         @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  storefrontPartnerId        String?
+  storefrontPartner          StorefrontPartner?              @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
   costCenterId               String?
   costCenter                 CostCenter?                     @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   description                String
@@ -1847,6 +1870,7 @@ model AccountsPayable {
   @@index([companyId, status, dueDate])
   @@index([costCenterId, dueDate])
   @@index([purchaseId, dueDate])
+  @@index([storefrontPartnerId, dueDate])
 }
 
 model Payment {

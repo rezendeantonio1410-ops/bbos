@@ -60,6 +60,7 @@ import { StorefrontFulfillmentController } from "./storefront-fulfillment.contro
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { StorefrontCouponsController } from "./storefront-coupons.controller";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
+import { StorefrontPartnersController } from "./storefront-partners.controller";
 
 @Module({
   controllers: [
@@ -99,6 +100,7 @@ import { StorefrontCouponsService } from "./storefront-coupons.service";
     StorefrontShippingController,
     StorefrontFulfillmentController,
     StorefrontCouponsController,
+    StorefrontPartnersController,
   ],
   providers: [
     DashboardService,
