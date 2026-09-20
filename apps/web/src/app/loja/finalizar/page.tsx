@@ -18,7 +18,17 @@ type CheckoutState = {
   subtotal: number;
   mode: "now" | "return";
   rhythm: number;
-  quote: { id: string; name: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number; expiresAt: string };
+  couponCode?: string;
+  discountCents?: number;
+  quote: {
+    id: string;
+    name: string;
+    serviceName: string;
+    carrierName: string;
+    priceCents: number;
+    deliveryDays: number;
+    expiresAt: string;
+  };
 };
 type FormData = {
   name: string;
@@ -93,6 +103,7 @@ export default function CheckoutPage() {
     code: string;
     status: string;
     confirmationToken?: string;
+    checkoutUrl?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -103,6 +114,8 @@ export default function CheckoutPage() {
         setCheckout(parsed);
         setData((current) => ({ ...current, postalCode: parsed.cep }));
       }
+      const paymentOrder = sessionStorage.getItem("bispo-payment-order");
+      if (paymentOrder) setOrder(JSON.parse(paymentOrder));
     } catch {}
   }, []);
 
@@ -147,18 +160,34 @@ export default function CheckoutPage() {
       localStorage.removeItem("bispo-cart-v2");
       localStorage.removeItem("bispo-checkout-v1");
       sessionStorage.removeItem("bispo-checkout-idempotency");
+      sessionStorage.removeItem("bispo-payment-order");
       setOrder((previous) => previous && { ...previous, status: "PAID" });
       setMessage(
         `Pagamento do pedido ${current.code} confirmado. Sua sacola foi concluída.`,
       );
+      window.setTimeout(() => {
+        window.location.assign(
+          `/loja/pedido/${encodeURIComponent(order.id)}?token=${encodeURIComponent(order.confirmationToken!)}`,
+        );
+      }, 1200);
     };
     void poll();
     const timer = window.setInterval(poll, 4000);
     return () => window.clearInterval(timer);
   }, [order?.confirmationToken, order?.id, order?.status]);
 
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("payment");
+    if (result === "failure")
+      setMessage("O pagamento não foi concluído. Você pode tentar novamente.");
+    if (result === "pending")
+      setMessage("O Mercado Pago está processando o pagamento.");
+    if (result === "success")
+      setMessage("Pagamento recebido. Estamos confirmando com o Mercado Pago…");
+  }, []);
+
   const total = useMemo(
-    () => (checkout?.subtotal || 0) + (checkout?.quote.priceCents || 0),
+    () => (checkout?.subtotal || 0) - (checkout?.discountCents || 0) + (checkout?.quote.priceCents || 0),
     [checkout],
   );
   const change = (field: keyof FormData, value: string) =>
@@ -189,6 +218,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           idempotencyKey,
           shippingQuoteId: checkout.quote.id,
+          couponCode: checkout.couponCode,
           paymentMethod,
           customer: {
             name: data.name,
@@ -215,13 +245,28 @@ export default function CheckoutPage() {
           result.message || "Não foi possível preparar o pedido.",
         );
       setOrder(result);
-      setMessage(
-        `Pedido ${result.code} salvo no BBOS. Aguardando conexão do pagamento.`,
+      sessionStorage.setItem(
+        "bispo-payment-order",
+        JSON.stringify({
+          id: result.id,
+          code: result.code,
+          status: result.status,
+          confirmationToken: result.confirmationToken,
+        }),
       );
       if (result.status === "PAID") {
         localStorage.removeItem("bispo-cart-v2");
         localStorage.removeItem("bispo-checkout-v1");
         sessionStorage.removeItem("bispo-checkout-idempotency");
+        sessionStorage.removeItem("bispo-payment-order");
+        setMessage(`Pagamento do pedido ${result.code} já está confirmado.`);
+      } else if (result.checkoutUrl) {
+        setMessage(
+          "Pedido preparado. Abrindo o ambiente seguro do Mercado Pago…",
+        );
+        window.location.assign(result.checkoutUrl);
+      } else {
+        throw new Error("O endereço seguro de pagamento não foi recebido.");
       }
     } catch (reason) {
       setMessage(
@@ -397,12 +442,15 @@ export default function CheckoutPage() {
                 Cartão
               </label>
             </div>
-            <button disabled={submitting || Boolean(order)} type="submit">
+            <button
+              disabled={submitting || order?.status === "PAID"}
+              type="submit"
+            >
               {submitting
-                ? "Salvando com segurança…"
-                : order
-                  ? "Pedido preparado"
-                  : "Preparar pedido no BBOS →"}
+                ? "Conectando ao Mercado Pago…"
+                : order?.status === "PAID"
+                  ? "Pagamento confirmado"
+                  : "Pagar com Mercado Pago →"}
             </button>
             {message && (
               <p className={styles.message} role="status">
@@ -428,7 +476,8 @@ export default function CheckoutPage() {
           ))}
           <div className={styles.delivery}>
             <span>
-              {checkout.quote.carrierName} · {checkout.quote.serviceName} · até {checkout.quote.deliveryDays} dias úteis
+              {checkout.quote.carrierName} · {checkout.quote.serviceName} · até{" "}
+              {checkout.quote.deliveryDays} dias úteis
             </span>
             <b>
               {checkout.quote.priceCents
@@ -446,7 +495,8 @@ export default function CheckoutPage() {
             <strong>{money(total)}</strong>
           </div>
           <p className={styles.proof}>
-            Escolhido pelo Bispo, preparado com o cuidado de Suzi e da equipe.
+            Escolhido por José e Suzi, preparado para chegar à sua melhor
+            xícara.
           </p>
         </aside>
       </div>

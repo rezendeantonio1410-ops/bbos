@@ -11,7 +11,7 @@
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 28px;
   padding: clamp(54px, 6vw, 92px) 5vw clamp(48px, 5vw, 76px);
-  background: linear-gradient(180deg, #fffdf7 0%, #f8f4ea 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #ebebeb 100%);
 }
 .peopleLead {
   grid-column: 1/7;
@@ -19,7 +19,7 @@
 }
 .peopleLead p {
   margin: 0 0 15px;
-  color: #9b532d;
+  color: #0e191d;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.15em;
@@ -37,7 +37,7 @@
   display: block;
   margin-top: 20px;
   max-width: 680px;
-  color: rgba(16, 32, 24, 0.68);
+  color: rgba(14, 25, 29, 0.68);
   font-size: 16px;
   line-height: 1.55;
 }
@@ -55,12 +55,12 @@
   justify-content: flex-end;
   padding: 24px;
   border-radius: 22px;
-  background: #102018;
+  background: #0e191d;
   color: #fff;
 }
 .personSecondary {
-  background: #e8ddd0;
-  color: #102018;
+  background: #e0eae9;
+  color: #0e191d;
 }
 .personPrimary small,
 .personSecondary small {
@@ -98,33 +98,33 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #b86d3d;
+  background: #0a0a0a;
 }
 .peopleLink {
   grid-column: 1/-1;
   width: max-content;
   margin-top: 3px;
   padding-bottom: 4px;
-  color: #102018;
+  color: #0e191d;
   text-decoration: none;
   font-size: 14px;
   font-weight: 750;
-  border-bottom: 1px solid rgba(16, 32, 24, 0.3);
+  border-bottom: 1px solid rgba(14, 25, 29, 0.3);
 }
 .storyManifesto {
   grid-column: 2/12;
   margin: 10px 0 4px;
   padding: clamp(30px, 4vw, 54px);
-  border-left: 3px solid #b86d3d;
+  border-left: 3px solid #ffffff;
   border-radius: 0 24px 24px 0;
-  background: #102018;
-  color: #fffdf7;
+  background: #0e191d;
+  color: #ffffff;
 }
 .storyManifesto small {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.15em;
-  color: #d79a70;
+  color: #e0eae9;
 }
 .storyManifesto p {
   margin: 18px 0 0;
@@ -197,7 +197,7 @@
   min-height: 390px;
   border-radius: 24px;
   overflow: hidden;
-  background: #e9ece6;
+  background: #e0eae9;
 }
 .fieldShot img {
   position: absolute;
@@ -260,12 +260,12 @@
 }
 .storyChapters article {
   padding: 24px;
-  background: #f8f5ed;
+  background: #ffffff;
 }
 .storyChapters small {
   font-size: 9px;
   letter-spacing: 0.14em;
-  color: #9b532d;
+  color: #0e191d;
 }
 .storyChapters h3 {
   margin: 14px 0 9px;
@@ -274,10 +274,13 @@
   color: #0e191d;
 }
 .storyChapters p {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 12px;
   line-height: 1.6;
   color: rgba(14, 25, 29, 0.67);
+}
+.storyChapters p:last-child {
+  margin-bottom: 0;
 }
 .documentaryNote {
   grid-column: 1/-1;

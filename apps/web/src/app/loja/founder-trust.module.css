@@ -35,8 +35,11 @@
   height: 100%;
   display: block;
   object-fit: cover;
-  object-position: center;
+  object-position: center 30%;
 }
+
+.portrait:first-child img { object-position: 58% center; }
+.portrait:nth-child(2) img { object-position: 48% center; }
 
 .portrait figcaption {
   position: absolute;
@@ -110,7 +113,7 @@
   box-sizing: border-box;
   padding: 0 17px !important;
   margin: 0 !important;
-  border-radius: 999px;
+  border-radius: 3px;
   border-bottom: 0 !important;
   font-size: 9px !important;
 }

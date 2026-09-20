@@ -1,1 +1,336 @@
-.page{min-height:100vh;background:#f5efe4;color:#0d2119;padding:24px}.page>header{max-width:900px;margin:auto;display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.15em}.page>header a{display:grid;color:inherit;text-decoration:none;font-size:24px;letter-spacing:.04em}.page>header small{font:italic 9px Georgia,serif;text-align:center}.hero{max-width:900px;margin:60px auto 28px;text-align:center}.hero>svg{width:28px}.hero p{margin:16px 0 5px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a25732}.hero h1{margin:0;font:500 clamp(34px,6vw,64px)/1 Georgia,serif}.hero small{display:block;margin-top:14px;color:#5e6964}.timeline{max-width:760px;margin:auto;background:#fffaf2;border:1px solid #0d211914;border-radius:28px;padding:28px}.timeline article{display:grid;grid-template-columns:42px 1fr;gap:14px;position:relative;padding-bottom:28px}.timeline article:not(:last-of-type):before{content:"";position:absolute;left:20px;top:39px;bottom:2px;width:1px;background:#c7bba9}.timeline article>span{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#123126;color:#fff}.timeline article svg{width:17px}.timeline time{font-size:10px;color:#8b725f;text-transform:uppercase;letter-spacing:.08em}.timeline h2{margin:4px 0;font:500 23px Georgia,serif}.timeline p{margin:0;color:#63706a;font-size:13px;line-height:1.5}.pending{opacity:.48}.pending>span{background:transparent!important;color:#123126!important;border:1px solid #123126}.timeline aside{display:flex;align-items:center;gap:14px;padding:18px;border-radius:18px;background:#102a20;color:white}.timeline aside>svg{width:23px}.timeline aside div{display:grid;flex:1}.timeline aside small{font-size:9px;letter-spacing:.1em;color:#d9b48e}.timeline aside a{color:white;font-size:11px;font-weight:700}.error,.loading{max-width:760px;margin:40px auto;text-align:center}.error{color:#9b2c2c}@media(max-width:600px){.page{padding:18px 12px}.page>header>span{display:none}.hero{margin-top:42px}.timeline{padding:20px 16px}.timeline aside{align-items:flex-start;flex-wrap:wrap}.timeline aside a{width:100%;padding-left:37px}}
+.page {
+  min-height: 100vh;
+  padding: 24px;
+  color: #0e191d;
+  background: #ebebeb;
+}
+.page > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 900px;
+  margin: auto;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+}
+.page > header a {
+  display: grid;
+  color: inherit;
+  font-size: 24px;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+.page > header small {
+  font:
+    italic 9px Georgia,
+    serif;
+  text-align: center;
+}
+.hero {
+  max-width: 900px;
+  margin: 60px auto 28px;
+  text-align: center;
+}
+.hero > svg {
+  width: 28px;
+}
+.hero p {
+  margin: 16px 0 5px;
+  color: #0e191d;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.hero h1 {
+  margin: 0;
+  font:
+    500 clamp(34px, 6vw, 64px) / 1 Georgia,
+    serif;
+}
+.hero small {
+  display: block;
+  margin-top: 14px;
+  color: #596367;
+}
+.journey {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 900px;
+  margin: 0 auto 22px;
+  overflow: hidden;
+  border: 1px solid rgba(14, 25, 29, 0.12);
+  border-radius: 28px;
+  background: #fff;
+}
+.journey article {
+  position: relative;
+  min-width: 0;
+  padding: 20px 20px 24px;
+}
+.journey article + article {
+  border-left: 1px solid rgba(14, 25, 29, 0.12);
+}
+.journey small {
+  display: block;
+  margin-top: 13px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+.journey h2 {
+  margin: 6px 0;
+  font:
+    500 24px / 1.05 Georgia,
+    serif;
+}
+.journey p {
+  margin: 0;
+  color: #667073;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.vanScene {
+  position: relative;
+  height: 82px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff 0 66%, #e0eae9 66%);
+}
+.road {
+  position: absolute;
+  right: 0;
+  bottom: 12px;
+  left: 0;
+  height: 1px;
+  background: rgba(14, 25, 29, 0.24);
+}
+.van {
+  position: absolute;
+  bottom: 13px;
+  left: calc(50% - 58px);
+  width: 116px;
+  height: 45px;
+  border: 2px solid #0a0a0a;
+  border-radius: 8px 17px 5px 5px;
+  background: #f9f8f3;
+  box-shadow: 0 7px 15px rgba(14, 25, 29, 0.12);
+}
+.van::after {
+  position: absolute;
+  top: 21px;
+  right: -2px;
+  width: 8px;
+  height: 10px;
+  border: 2px solid #0a0a0a;
+  border-left: 0;
+  border-radius: 0 6px 3px 0;
+  background: #f9f8f3;
+  content: "";
+}
+.vanSeal {
+  position: absolute;
+  top: 8px;
+  left: 15px;
+  width: 32px;
+  height: 30px;
+  background-image: url("/brand/logo/bispo-logo-official-transparent.png");
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: 108px 30px;
+}
+.vanWindow {
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  width: 28px;
+  height: 15px;
+  border: 1px solid #0a0a0a;
+  border-radius: 3px 9px 2px 2px;
+  background: #e0eae9;
+}
+.vanLight {
+  position: absolute;
+  top: 28px;
+  right: -4px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid #0a0a0a;
+  border-radius: 50%;
+  background: #fff;
+}
+.wheelFront,
+.wheelBack {
+  position: absolute;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  background: #0a0a0a;
+}
+.wheelBack {
+  left: 18px;
+}
+.wheelFront {
+  right: 15px;
+}
+.vanMoving .road::after {
+  position: absolute;
+  top: -7px;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed rgba(14, 25, 29, 0.22);
+  animation: roadMove 1.2s linear infinite;
+  content: "";
+}
+.vanMoving .van {
+  animation: vanRide 1.2s ease-in-out infinite;
+}
+.timeline {
+  max-width: 760px;
+  margin: auto;
+  padding: 28px;
+  border: 1px solid rgba(14, 25, 29, 0.08);
+  border-radius: 28px;
+  background: #fff;
+}
+.timeline article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 14px;
+  padding-bottom: 28px;
+}
+.timeline article:not(:last-of-type)::before {
+  position: absolute;
+  top: 39px;
+  bottom: 2px;
+  left: 20px;
+  width: 1px;
+  background: #c9cdcc;
+  content: "";
+}
+.timeline article > span {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #0e191d;
+  color: #fff;
+}
+.timeline article svg {
+  width: 17px;
+}
+.timeline time {
+  color: #667073;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.timeline h2 {
+  margin: 4px 0;
+  font:
+    500 23px Georgia,
+    serif;
+}
+.timeline p {
+  margin: 0;
+  color: #63706a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pending {
+  opacity: 0.48;
+}
+.pending > span {
+  border: 1px solid #0e191d;
+  background: transparent !important;
+  color: #0e191d !important;
+}
+.timeline aside {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #0e191d;
+  color: #fff;
+}
+.timeline aside > svg {
+  width: 23px;
+}
+.timeline aside div {
+  display: grid;
+  flex: 1;
+}
+.timeline aside small {
+  color: #e0eae9;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+.timeline aside a {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.error,
+.loading {
+  max-width: 760px;
+  margin: 40px auto;
+  text-align: center;
+}
+.error {
+  color: #8b2020;
+}
+@keyframes vanRide {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes roadMove {
+  to {
+    transform: translateX(-18px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vanMoving .road::after,
+  .vanMoving .van {
+    animation: none;
+  }
+}
+@media (max-width: 700px) {
+  .journey {
+    grid-template-columns: 1fr;
+  }
+  .journey article + article {
+    border-top: 1px solid rgba(14, 25, 29, 0.12);
+    border-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  .page {
+    padding: 18px 12px;
+  }
+  .page > header > span {
+    display: none;
+  }
+  .hero {
+    margin-top: 42px;
+  }
+  .timeline {
+    padding: 20px 16px;
+  }
+  .timeline aside {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .timeline aside a {
+    width: 100%;
+    padding-left: 37px;
+  }
+}

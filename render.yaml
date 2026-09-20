@@ -3,7 +3,7 @@ services:
     name: bbos-api-staging
     runtime: node
     rootDir: .
-    branch: staging/cupping-sensory
+    branch: codex/storefront-rc1-final
     buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:migrate:deploy && pnpm db:seed:coffee-references && pnpm --filter @bbos/api build
     startCommand: pnpm --filter @bbos/api start
     healthCheckPath: /api/health
@@ -28,12 +28,36 @@ services:
         sync: false
       - key: BBOS_BOOTSTRAP_ADMIN_NAME
         sync: false
+      - key: STOREFRONT_COMPANY_ID
+        sync: false
+      - key: STOREFRONT_WEB_URL
+        sync: false
+      - key: STOREFRONT_API_PUBLIC_URL
+        sync: false
+      - key: STOREFRONT_QUOTE_SECRET
+        generateValue: true
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        generateValue: true
+      - key: ORDER_TRACKING_SECRET
+        generateValue: true
+      - key: MELHOR_ENVIO_API_URL
+        sync: false
+      - key: MELHOR_ENVIO_ACCESS_TOKEN
+        sync: false
+      - key: SHIPPING_ORIGIN_POSTAL_CODE
+        sync: false
+      - key: MELHOR_ENVIO_USER_AGENT
+        value: BBOS Bispo Coffees (jrezende@bispocoffees.com)
+      - key: SHIPPING_SENDER_DOCUMENT
+        sync: false
 
   - type: web
     name: bbos-web-staging
     runtime: node
     rootDir: .
-    branch: staging/cupping-sensory
+    branch: codex/storefront-rc1-final
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @bbos/web build
     startCommand: pnpm --filter @bbos/web start
     envVars:

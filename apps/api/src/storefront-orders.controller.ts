@@ -17,6 +17,7 @@ import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
+import { StorefrontCouponsService } from "./storefront-coupons.service";
 
 const catalog: Record<
   string,
@@ -69,6 +70,7 @@ type CheckoutBody = {
   };
   items?: Array<{ id?: string; quantity?: number; grind?: string }>;
   recurrence?: { mode?: string; rhythmDays?: number };
+  couponCode?: string;
 };
 
 @Controller("storefront/orders")
@@ -79,6 +81,7 @@ export class StorefrontOrdersController implements OnModuleInit {
     private readonly mercadoPago: MercadoPagoService,
     private readonly shipping: StorefrontShippingService,
     private readonly lifecycle: StorefrontLifecycleService,
+    private readonly coupons: StorefrontCouponsService,
   ) {}
 
   async onModuleInit() {
@@ -254,7 +257,7 @@ export class StorefrontOrdersController implements OnModuleInit {
             : 0,
           subtotal: storefront.subtotalCents / 100,
           freight: storefront.shippingCents / 100,
-          discount: 0,
+          discount: (storefront.discountCents || 0) / 100,
           totalAmount: storefront.totalCents / 100,
           orderDate: storefront.createdAt,
           notes: [
@@ -262,7 +265,10 @@ export class StorefrontOrdersController implements OnModuleInit {
             `Entrega: ${address}`,
             `Moagem: ${grindSummary}`,
             `Pagamento: ${storefront.requestedPaymentMethod}`,
-          ].join("\n"),
+            storefront.couponCode
+              ? `Cupom: ${storefront.couponCode} · Desconto: R$ ${(Number(storefront.discountCents || 0) / 100).toFixed(2)}`
+              : null,
+          ].filter(Boolean).join("\n"),
           items: {
             create: storefrontItems.map((item) => {
               const variant = variantBySlug.get(item.id)!;
@@ -322,6 +328,43 @@ export class StorefrontOrdersController implements OnModuleInit {
         }),
         `bling:storefront-paid:${order.id}`,
       );
+      if (order.couponId && order.commissionCents > 0) {
+        const couponRows = await transaction.$queryRawUnsafe<any[]>(
+          `SELECT c.*, b.name AS "ownerName" FROM "StorefrontCoupon" c JOIN "Broker" b ON b.id=c."brokerId" WHERE c.id=$1 FOR UPDATE`,
+          order.couponId,
+        );
+        const coupon = couponRows[0];
+        if (!coupon) throw new BadRequestException("Cupom do pedido não encontrado.");
+        const redemptionId = randomUUID();
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "StorefrontCouponRedemption"
+            (id,"companyId","couponId","storefrontOrderId","brokerId","couponCode","grossSubtotalCents","discountCents","netSubtotalCents","commissionCents",status,"reservedAt","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'RESERVED',NOW(),NOW(),NOW())
+           ON CONFLICT ("storefrontOrderId") DO NOTHING`,
+          redemptionId, order.companyId, coupon.id, order.id, coupon.brokerId, order.couponCode,
+          order.subtotalCents, order.discountCents, order.subtotalCents - order.discountCents, order.commissionCents,
+        );
+        const redemption = await transaction.$queryRawUnsafe<any[]>(
+          `SELECT id FROM "StorefrontCouponRedemption" WHERE "storefrontOrderId"=$1 LIMIT 1`,
+          order.id,
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "StorefrontCoupon" SET "usageCount"="usageCount"+1,"updatedAt"=NOW()
+            WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM "AccountsPayable" WHERE "brokerCommissionPayableKey"=$2)`,
+          coupon.id, `coupon:${redemption[0].id}`,
+        );
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "AccountsPayable"
+            (id,"companyId","brokerId",description,"issueDate","dueDate",amount,"openAmount",status,category,notes,"brokerCommissionPayableKey","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,NOW(),NOW(),$5,$5,'OPEN','COMISSAO_CUPOM',$6,$7,NOW(),NOW())
+           ON CONFLICT ("brokerCommissionPayableKey") DO NOTHING`,
+          randomUUID(), order.companyId, coupon.brokerId,
+          `Comissão reservada · cupom ${order.couponCode} · pedido ${order.code}`,
+          Number(order.commissionCents) / 100,
+          `Reserva automática no pagamento. Beneficiário: ${coupon.ownerName}.`,
+          `coupon:${redemption[0].id}`,
+        );
+      }
       return { id: order.id, code: order.code, status: "PAID" };
     });
     await this.lifecycle.record(
@@ -395,6 +438,8 @@ export class StorefrontOrdersController implements OnModuleInit {
       orderCode: order.code,
       totalCents: order.totalCents,
       shippingCents: order.shippingCents,
+      discountCents: order.discountCents || 0,
+      couponCode: order.couponCode || undefined,
       items: orderItems.map((item) => ({
         externalCode: item.id,
         title: item.name,
@@ -501,6 +546,9 @@ export class StorefrontOrdersController implements OnModuleInit {
     const subtotalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
     const weightGrams = items.reduce((sum, item) => sum + item.weightGrams, 0);
     const companyId = await this.companyId();
+    const coupon = body.couponCode?.trim()
+      ? await this.coupons.calculate(companyId, body.couponCode, subtotalCents)
+      : null;
     if (!body.shippingQuoteId?.trim())
       throw new BadRequestException(
         "Calcule e escolha uma modalidade de frete antes de pagar.",
@@ -546,8 +594,8 @@ export class StorefrontOrdersController implements OnModuleInit {
       `INSERT INTO "StorefrontOrder"
         (id,"companyId",code,status,"idempotencyKey","confirmationTokenHash",customer,delivery,items,recurrence,
          "subtotalCents","shippingCents","totalCents","requestedPaymentMethod","shippingQuoteId","shippingProvider",
-         "shippingServiceId","shippingServiceName","carrierName","estimatedDeliveryDays","createdAt","updatedAt")
-       VALUES ($1,$2,$3,'AWAITING_PAYMENT',$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW(),NOW())
+         "shippingServiceId","shippingServiceName","carrierName","estimatedDeliveryDays","couponId","couponCode","discountCents","commissionCents","createdAt","updatedAt")
+       VALUES ($1,$2,$3,'AWAITING_PAYMENT',$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW(),NOW())
        RETURNING id,code,status,"subtotalCents","shippingCents","totalCents"`,
       id,
       companyId,
@@ -568,7 +616,7 @@ export class StorefrontOrdersController implements OnModuleInit {
       JSON.stringify(body.recurrence ?? { mode: "now" }),
       subtotalCents,
       shippingCents,
-      subtotalCents + shippingCents,
+      (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
       paymentMethod,
       quote.id,
       quote.provider,
@@ -576,6 +624,10 @@ export class StorefrontOrdersController implements OnModuleInit {
       quote.serviceName,
       quote.carrierName,
       quote.deliveryDays,
+      coupon?.id ?? null,
+      coupon?.code ?? null,
+      coupon?.discountCents ?? 0,
+      coupon?.commissionCents ?? 0,
     );
     const claimed = await this.database.$executeRawUnsafe(
       `UPDATE "ShippingQuote" SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,

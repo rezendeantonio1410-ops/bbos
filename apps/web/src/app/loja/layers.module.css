@@ -1,20 +1,23 @@
 .section {
   scroll-margin-top: 96px;
-  padding: 82px 6vw 72px;
+  padding: 36px 5vw 32px;
   color: #0d1d17;
-  background: linear-gradient(180deg, #f8f2e8 0%, #fffdf8 100%);
+  background: #ebebeb;
   border-bottom: 1px solid rgba(13, 29, 23, 0.08);
 }
 
 .intro {
-  max-width: 760px;
-  margin: 0 auto 42px;
-  text-align: center;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: end;
+  gap: 36px;
+  max-width: 1420px;
+  margin: 0 auto 22px;
 }
 
 .intro small,
 .catalogHeader small {
-  color: #b9632c;
+  color: #0e191d;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.18em;
@@ -22,10 +25,10 @@
 }
 
 .intro h2 {
-  margin: 12px 0 16px;
-  font-family: Georgia, serif;
-  font-size: clamp(34px, 3.3vw, 52px);
-  font-weight: 500;
+  margin: 8px 0 0;
+  font-family: var(--font-manrope);
+  font-size: clamp(30px, 2.6vw, 42px);
+  font-weight: 300;
   line-height: 1.02;
   letter-spacing: -0.035em;
 }
@@ -34,7 +37,7 @@
   margin: 0;
   color: rgba(13, 29, 23, 0.67);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.5;
 }
 
 .grid {
@@ -43,14 +46,14 @@
   max-width: 1420px;
   margin: 0 auto;
   border: 1px solid rgba(13, 29, 23, 0.09);
-  border-radius: 28px;
+  border-radius: 14px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.72);
 }
 
 .card {
-  min-height: 310px;
-  padding: 27px 25px 25px;
+  min-height: 148px;
+  padding: 17px 20px 16px;
   color: inherit;
   text-decoration: none;
   border-right: 1px solid rgba(13, 29, 23, 0.08);
@@ -59,14 +62,39 @@
 
 .card:last-child { border-right: 0; }
 .card:hover { background: #fff; transform: translateY(-4px); }
-.card > i { display: block; width: 42px; height: 4px; margin: 28px 0 22px; border-radius: 99px; background: var(--layer-tone); }
+.card > i { display: block; width: 36px; height: 3px; margin: 9px 0 10px; background: var(--layer-tone); }
 .number { font-size: 10px; font-weight: 800; letter-spacing: 0.15em; opacity: 0.42; }
-.card small { display: block; min-height: 28px; font-size: 9px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
-.card strong { display: block; margin: 7px 0 12px; font-family: Georgia, serif; font-size: 31px; font-weight: 500; }
-.card p { min-height: 65px; margin: 0 0 20px; color: rgba(13, 29, 23, 0.64); font-size: 12px; line-height: 1.55; }
+.card small { display: block; font-size: 9px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
+.card strong { display: block; margin: 0 0 7px; font-family: var(--font-manrope); font-size: 25px; font-weight: 300; }
+.card p { margin: 0; color: rgba(13, 29, 23, 0.64); font-size: 11px; line-height: 1.45; }
 .card b { font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
 
-.signature { margin: 27px 0 0; text-align: center; font-family: Georgia, serif; font-size: 17px; }
+.signature { margin: 22px 0 0; text-align: center; font-family: var(--font-manrope); font-size: 17px; font-weight: 300; }
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.actions a {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 21px;
+  border: 1px solid rgba(13, 29, 23, 0.18);
+  border-radius: 4px;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.actions a:first-child { color: #fff; background: #0e191d; border-color: #0e191d; }
 
 .filter {
   position: relative;
@@ -76,21 +104,21 @@
   gap: 6px;
   width: max-content;
   max-width: 100%;
-  margin: 34px auto 46px;
+  margin: 20px auto 30px;
   padding: 6px;
   border: 1px solid rgba(13, 29, 23, 0.09);
-  border-radius: 999px;
-  background: rgba(255, 253, 248, 0.94);
-  box-shadow: 0 10px 32px rgba(13, 29, 23, 0.08);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: none;
   backdrop-filter: blur(12px);
 }
 
-.filter a { padding: 10px 18px; border-radius: 999px; color: inherit; font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-decoration: none; text-transform: uppercase; }
+.filter a { padding: 10px 18px; border-radius: 2px; color: inherit; font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-decoration: none; text-transform: uppercase; }
 .filter a:hover { color: #fff; background: #0d1d17; }
 
-.catalogLayer { scroll-margin-top: 104px; max-width: 1280px; margin: 0 auto 42px; }
-.catalogHeader { display: flex; align-items: end; justify-content: space-between; gap: 40px; margin-bottom: 24px; padding-top: 17px; border-top: 4px solid var(--layer-tone); }
-.catalogHeader h3 { margin: 5px 0 0; font-family: Georgia, serif; font-size: clamp(34px, 3vw, 48px); font-weight: 500; }
+.catalogLayer { scroll-margin-top: 104px; max-width: 1280px; margin: 0 auto 24px; }
+.catalogHeader { display: flex; align-items: end; justify-content: space-between; gap: 40px; margin-bottom: 18px; padding-top: 14px; border-top: 4px solid var(--layer-tone); }
+.catalogHeader h3 { margin: 5px 0 0; font-family: var(--font-manrope); font-size: clamp(34px, 3vw, 48px); font-weight: 300; }
 .catalogHeader p { max-width: 480px; margin: 0; color: rgba(13, 29, 23, 0.65); font-size: 13px; line-height: 1.55; }
 
 .oneProduct,
@@ -109,12 +137,13 @@
   max-width: 940px;
 }
 
-.rareNote { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 30px; padding: 32px 36px; border-radius: 24px; color: #fff; background: #263c32; }
-.rareNote span { color: #e6c838; font-size: 9px; font-weight: 800; letter-spacing: 0.14em; }
-.rareNote strong { font-family: Georgia, serif; font-size: 21px; font-weight: 500; }
+.rareNote { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 30px; padding: 32px 36px; border-radius: 8px; color: #fff; background: #0e191d; }
+.rareNote span { color: #ebebeb; font-size: 9px; font-weight: 800; letter-spacing: 0.14em; }
+.rareNote strong { font-family: var(--font-manrope); font-size: 21px; font-weight: 300; }
 .rareNote a { color: #fff; font-size: 10px; font-weight: 800; text-decoration: none; text-transform: uppercase; }
 
 @media (max-width: 960px) {
+  .intro { grid-template-columns: 1fr; gap: 10px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .card:nth-child(2) { border-right: 0; }
   .card:nth-child(-n + 2) { border-bottom: 1px solid rgba(13, 29, 23, 0.08); }
@@ -122,19 +151,23 @@
 }
 
 @media (max-width: 600px) {
-  .section { padding: 54px 20px 50px; }
-  .intro { margin-bottom: 28px; }
-  .intro h2 { font-size: 34px; }
-  .grid { grid-template-columns: 1fr; border-radius: 22px; }
-  .card { min-height: 0; padding: 23px 22px; border-right: 0; border-bottom: 1px solid rgba(13, 29, 23, 0.08); }
-  .card:last-child { border-bottom: 0; }
-  .card > i { margin: 17px 0 15px; }
-  .card small, .card p { min-height: 0; }
-  .card strong { font-size: 27px; }
-  .filter { justify-content: flex-start; width: calc(100vw - 40px); margin: 26px 0 36px; overflow-x: auto; }
+  .section { padding: 30px 18px 26px; }
+  .intro { margin-bottom: 18px; }
+  .intro h2 { font-size: 29px; }
+  .intro p { font-size: 13px; }
+  .grid { grid-template-columns: repeat(2, 1fr); border-radius: 12px; }
+  .card { min-height: 142px; padding: 16px 14px; border-bottom: 1px solid rgba(13, 29, 23, 0.08); }
+  .card:nth-child(2) { border-right: 0; }
+  .card:nth-child(-n + 2) { border-bottom: 1px solid rgba(13, 29, 23, 0.08); }
+  .card:nth-child(n + 3) { border-bottom: 0; }
+  .card strong { font-size: 23px; }
+  .card p { font-size: 10px; }
+  .filter { justify-content: flex-start; width: calc(100vw - 40px); margin: 18px 0 26px; overflow-x: auto; }
   .filter a { white-space: nowrap; padding: 9px 13px; }
-  .catalogLayer { margin-bottom: 34px; }
+  .catalogLayer { margin-bottom: 24px; }
   .catalogHeader { display: block; }
   .catalogHeader p { margin-top: 12px; }
   .rareNote { padding: 27px 24px; }
+  .actions { display: grid; }
+  .actions a { width: 100%; box-sizing: border-box; }
 }

@@ -2,10 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import styles from "../page.module.css";
 import authority from "../authority.module.css";
+import brand from "../brand-review.module.css";
+import storyBrand from "./brand.module.css";
 
 export default function SobrePage() {
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${brand.storefront} ${storyBrand.page}`}>
       <div className={styles.commerceBar}>
         <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
         <Link href="/loja#cafes">Escolher cafés →</Link>
@@ -37,10 +39,10 @@ export default function SobrePage() {
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
-          <h2>Duas trajetórias que escolheram caminhar juntas.</h2>
+          <h2>José e Suzi. Duas histórias, uma Bispo Coffees.</h2>
           <span>
-            A Bispo Coffees nasceu do encontro entre experiência e cuidado — e
-            de uma parceria construída todos os dias, dentro e fora do café.
+            Duas histórias próprias no café, uma parceria de vida e uma marca
+            construída pelos dois — com conhecimento, sensibilidade e presença.
           </span>
         </div>
         <div className={authority.peopleMarks}>
@@ -48,7 +50,7 @@ export default function SobrePage() {
             <small>ORIGEM · QUALIDADE · MERCADO</small>
             <strong>José Rezende</strong>
             <span>
-              Raízes no campo e uma vida conectando origens e pessoas.
+              Origem, prova e uma vida conectando produtores a mercados.
             </span>
           </article>
           <div className={authority.thread}>
@@ -60,7 +62,10 @@ export default function SobrePage() {
           <article className={authority.personSecondary}>
             <small>PRODUÇÃO · SUSTENTABILIDADE · CRITÉRIO</small>
             <strong>Suzi Ninov</strong>
-            <span>Presença, sensibilidade e cuidado em cada escolha.</span>
+            <span>
+              Cofundadora, com história própria no café, visão e critério em
+              cada escolha.
+            </span>
           </article>
         </div>
 
@@ -96,65 +101,81 @@ export default function SobrePage() {
         <blockquote className={authority.storyManifesto}>
           <small>UMA HISTÓRIA COMPARTILHADA</small>
           <p>
-            Há encontros que somam competências. O de José e Suzi construiu
-            também uma direção comum. Entre o campo, a prova, a produção e os
-            mercados, os dois aprenderam a olhar para o café pelo mesmo
-            princípio: nenhuma qualidade existe sem pessoas, confiança e
-            presença. É dessa convivência — feita de escuta, critério e decisões
-            compartilhadas — que nasce a Bispo Coffees.
+            José conhece o café pela origem, pela prova e pelo mercado. Suzi o
+            conhece pela planta, pelo solo e pelas pessoas. A Bispo nasce do
+            encontro entre essas duas autoridades — diferentes, inteiras e
+            complementares — e de uma convicção comum: qualidade só existe
+            quando conhecimento, confiança e presença percorrem todo o caminho.
           </p>
         </blockquote>
 
         <div className={authority.storyChapters}>
           <article>
-            <small>01 · RAÍZES</small>
-            <h3>Uma vida formada pelo café</h3>
+            <small>01 · JOSÉ REZENDE</small>
+            <h3>Da origem brasileira aos mercados do mundo</h3>
             <p>
-              José cresceu em uma família de produtores de café no Norte do
-              Paraná, entre os paralelos 22 e 23. Desde 2003, sua trajetória
-              atravessa consultoria, prova profissional, certificações,
-              sustentabilidade e desenvolvimento de origens. Tornou-se provador
-              profissional em 2004, aprofundou a metodologia SCA em 2007 e
-              conquistou a certificação Q-Grader em 2010. Do contato direto com
-              produtores à exportação, construiu mercados para cafés brasileiros
-              sem se afastar de onde tudo começa: o campo.
+              Filho de produtores, José cresceu entre lavouras do Norte do
+              Paraná e fez do café o fio de sua vida. Desde 2003, atua ao lado
+              de produtores em qualidade, produtividade, processamento e acesso
+              a mercados. Tornou-se provador profissional em 2004, aprofundou a
+              metodologia SCA e conquistou a certificação Q-Grader em 2010.
+            </p>
+            <p>
+              Sua trajetória atravessa o Norte Novo e o Norte Pioneiro do
+              Paraná, formação de provadores, iniciativas de indicação
+              geográfica, certificação Fairtrade e projetos com organizações de
+              produtores também em São Paulo. Como cofundador da Capricornio
+              Coffees, ajudou a apresentar cafés brasileiros a compradores de
+              diferentes continentes sem perder a proximidade com a origem.
             </p>
           </article>
           <article>
-            <small>02 · ENCONTRO</small>
-            <h3>O cuidado que dá sentido ao processo</h3>
+            <small>02 · SUZI NINOV</small>
+            <h3>A ciência do cultivo com atenção às pessoas</h3>
             <p>
-              Suzi traz uma visão conectada à produção, à sustentabilidade e às
-              relações que sustentam o negócio. Seu olhar atento amplia o
-              critério técnico: compreender a origem, reconhecer o potencial e
-              cuidar para que o valor de cada café seja preservado. Ela
-              transforma intenção em presença diária e ajuda a manter pessoas,
-              processos e propósito seguindo na mesma direção.
+              Criada no campo, no Rio Grande do Sul, Suzi encontrou no Paraná
+              sua vocação para a cafeicultura. Sua experiência agronômica une
+              nutrição, produtividade e sustentabilidade a uma compreensão
+              profunda da planta e dos recursos finitos do solo. Para ela, um
+              café de alta qualidade começa no respeito ao organismo vivo e a
+              quem o cultiva.
+            </p>
+            <p>
+              Ao longo da carreira no agronegócio, tornou-se referência para
+              produtores e organizações, levando conhecimento técnico até a
+              prática. Em 2017, um dos cafeicultores acompanhados por ela
+              conquistou o prêmio de melhor café do Brasil. Na Bispo, Suzi é
+              fundadora e protagonista: sua leitura da produção sustenta cada
+              escolha que chega à xícara.
             </p>
           </article>
           <article>
             <small>03 · BISPO COFFEES</small>
-            <h3>Uma escolha construída a dois</h3>
+            <h3>Duas autoridades, uma assinatura</h3>
             <p>
-              A Bispo nasce de uma parceria que atravessa trabalho, escolhas e
-              caminhos. José e Suzi se completam porque observam por ângulos
-              diferentes e decidem com o mesmo compromisso. Juntos, selecionam
-              cafés com identidade, traduzem conhecimento em sensações simples e
-              aproximam quem produz de quem bebe. O complexo fica com eles; para
-              você, fica o prazer de encontrar uma xícara que combine com o seu
-              momento.
+              José e Suzi chegam à mesma decisão por conhecimentos diferentes.
+              Ele lê a origem, a prova e o mercado; ela lê a planta, o solo e o
+              processo. Juntos, selecionam cafés com identidade, traduzem anos
+              de experiência em sensações claras e aproximam quem produz de quem
+              bebe.
+            </p>
+            <p>
+              “Bispo” é como José é conhecido há anos, mas a marca só é inteira
+              porque carrega também a história, o critério e a presença de Suzi.
+              O nome é singular; a construção é dos dois. O complexo fica com
+              eles. Para você, fica o prazer de reconhecer uma xícara que vale
+              reencontrar.
             </p>
           </article>
         </div>
 
         <div className={authority.documentaryNote}>
           <p>
-            Durante anos, José e Suzi conectaram produtores brasileiros ao
-            mercado europeu por meio do café verde. Desde setembro de 2026, a
-            Bispo também disponibiliza aos brasileiros cafés escolhidos com os
-            mesmos critérios e padrões aplicados aos cafés destinados à Europa.
-            Uma experiência construída entre origem e mercado que agora chega,
-            torrada, diretamente à sua xícara.
+            A experiência construída por José e Suzi entre lavouras, prova,
+            sustentabilidade e mercados internacionais chega agora à xícara.
+            Cafés brasileiros escolhidos com o mesmo rigor aplicado às origens
+            apresentadas ao mundo — torrados para revelar identidade, não para
+            escondê-la.
           </p>
           <b>DO CAFÉ VERDE À SUA XÍCARA</b>
         </div>

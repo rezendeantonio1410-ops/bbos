@@ -58,6 +58,8 @@ import { IntegrationWorkerService } from "./integration-worker.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
+import { StorefrontCouponsController } from "./storefront-coupons.controller";
+import { StorefrontCouponsService } from "./storefront-coupons.service";
 
 @Module({
   controllers: [
@@ -96,6 +98,7 @@ import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
     StorefrontOrdersController,
     StorefrontShippingController,
     StorefrontFulfillmentController,
+    StorefrontCouponsController,
   ],
   providers: [
     DashboardService,
@@ -120,6 +123,7 @@ import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
     IntegrationWorkerService,
     MelhorEnvioShipmentService,
     MelhorEnvioAuthService,
+    StorefrontCouponsService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

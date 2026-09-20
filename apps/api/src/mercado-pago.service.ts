@@ -14,6 +14,8 @@ type MercadoPagoCheckoutInput = {
   totalCents: number;
   items: MercadoPagoItem[];
   shippingCents: number;
+  discountCents?: number;
+  couponCode?: string;
   payer: {
     name: string;
     email: string;
@@ -115,7 +117,7 @@ export class MercadoPagoService {
     const lastName = names.join(" ") || firstName;
     const phone = input.payer.phone.replace(/\D/g, "");
     const returnBase = `${this.storefrontUrl()}/loja/finalizar`;
-    const checkoutItems = input.items.map((item) => ({
+    let checkoutItems = input.items.map((item) => ({
       external_code: item.externalCode,
       title: item.title,
       description: item.description || `Café Bispo ${item.title}`,
@@ -123,6 +125,16 @@ export class MercadoPagoService {
       quantity: item.quantity,
       unit_price: money(item.unitPriceCents),
     }));
+    if ((input.discountCents || 0) > 0) {
+      checkoutItems = [{
+        external_code: "CAFE_BISPO",
+        title: "Cafés Bispo",
+        description: `Seleção de cafés · cupom ${input.couponCode || "aplicado"}`,
+        category_id: "food",
+        quantity: 1,
+        unit_price: money(input.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0) - (input.discountCents || 0)),
+      }];
+    }
     if (input.shippingCents > 0) {
       checkoutItems.push({
         external_code: "FRETE",

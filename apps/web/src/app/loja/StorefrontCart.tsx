@@ -54,6 +54,10 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"now" | "return">("now");
   const [rhythm, setRhythm] = useState(30);
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; discountCents: number } | null>(null);
+  const [couponMessage, setCouponMessage] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
 
   useEffect(() => {
     try {
@@ -92,6 +96,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     });
     setQuote(null);
     setQuotes([]);
+    setCoupon(null);
     setVisible(true);
   };
   const quantity = (id: string, next: number) => {
@@ -104,6 +109,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     );
     setQuote(null);
     setQuotes([]);
+    setCoupon(null);
   };
   const chooseGrind = (id: string, grind: Grind) => {
     setItems((current) =>
@@ -135,7 +141,8 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
       if (!response.ok)
         throw new Error(data.message || "Não foi possível calcular.");
       const options = Array.isArray(data.options) ? data.options : [];
-      if (!options.length) throw new Error("Nenhuma modalidade de entrega disponível.");
+      if (!options.length)
+        throw new Error("Nenhuma modalidade de entrega disponível.");
       setQuotes(options);
       setQuote(options[0]);
     } catch (reason) {
@@ -147,11 +154,33 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function applyCoupon() {
+    setCouponMessage("");
+    setCouponLoading(true);
+    try {
+      const response = await fetch("/api/storefront/coupons/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: couponInput, subtotalCents: subtotal }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Não foi possível aplicar o cupom.");
+      setCoupon({ code: data.code, discountCents: data.discountCents });
+      setCouponInput(data.code);
+      setCouponMessage(`Cupom ${data.code} aplicado.`);
+    } catch (reason) {
+      setCoupon(null);
+      setCouponMessage(reason instanceof Error ? reason.message : "Não foi possível aplicar o cupom.");
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
   function continueToCheckout() {
     if (!quote) return;
     localStorage.setItem(
       "bispo-checkout-v1",
-      JSON.stringify({ items, cep, quote, mode, rhythm, subtotal }),
+      JSON.stringify({ items, cep, quote, mode, rhythm, subtotal, couponCode: coupon?.code, discountCents: coupon?.discountCents || 0 }),
     );
     window.location.assign("/loja/finalizar");
   }
@@ -175,7 +204,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
             <header>
               <div>
                 <small>SUA ESCOLHA</small>
-                <h2 id="cart-title">Sacola Bispo</h2>
+                <h2 id="cart-title">Seu café está na sacola</h2>
               </div>
               <button
                 onClick={() => setVisible(false)}
@@ -185,7 +214,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
               </button>
             </header>
             <nav aria-label="Etapas">
-              <strong>1 Café</strong>
+              <strong>1 Sua escolha</strong>
               <span>2 Entrega</span>
               <span>3 Pagamento</span>
             </nav>
@@ -256,25 +285,24 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <small>LEITURA DO BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
-                      <Check /> José Rezende, o Bispo — provador e Q-Grader. Com
-                      o cuidado de Suzi e da equipe.
+                      <Check /> Escolhido por José e Suzi, da origem à xícara.
                     </p>
                   </section>
                   <section className={styles.choice}>
-                    <small>COMO VOCÊ QUER RECEBER?</small>
-                    <h3>Hoje — ou no seu ritmo.</h3>
+                    <small>SUA EXPERIÊNCIA</small>
+                    <h3>Uma vez — ou no seu ritmo.</h3>
                     <div>
                       <button
                         className={mode === "now" ? styles.active : ""}
                         onClick={() => setMode("now")}
                       >
-                        Quero experimentar agora
+                        Comprar uma vez
                       </button>
                       <button
                         className={mode === "return" ? styles.active : ""}
                         onClick={() => setMode("return")}
                       >
-                        Quero reencontrar este café
+                        Receber regularmente
                       </button>
                     </div>
                     {mode === "return" && (
@@ -310,7 +338,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                   <section className={styles.shipping}>
                     <div className={styles.shippingTitle}>
                       <small>PASSO 2</small>
-                      <h3>Para onde enviamos?</h3>
+                      <h3>Onde entregamos seu café?</h3>
                     </div>
                     <form onSubmit={calculate}>
                       <label htmlFor="cart-cep">CEP de entrega</label>
@@ -349,19 +377,34 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                         >
                           <span>
                             <b>{option.name}</b>
-                            <small>{option.carrierName} · até {option.deliveryDays} dias úteis</small>
+                            <small>
+                              {option.carrierName} · até {option.deliveryDays}{" "}
+                              dias úteis
+                            </small>
                           </span>
-                          <strong>{option.priceCents ? money(option.priceCents) : "Grátis"}</strong>
+                          <strong>
+                            {option.priceCents
+                              ? money(option.priceCents)
+                              : "Grátis"}
+                          </strong>
                         </button>
                       ))}
                     </div>
                   </section>
+                  <section className={styles.coupon}>
+                    <label htmlFor="cart-coupon">Cupom de benefício</label>
+                    <div>
+                      <input id="cart-coupon" value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCoupon(null); setCouponMessage(""); }} placeholder="EX.: FELIPE" />
+                      <button type="button" onClick={applyCoupon} disabled={couponLoading || !couponInput.trim()}>{couponLoading ? "Aplicando…" : "Aplicar"}</button>
+                    </div>
+                    {couponMessage && <small className={coupon ? styles.couponOk : styles.error}>{couponMessage}</small>}
+                  </section>
                   <div className={styles.total}>
                     <span>Total</span>
-                    <b>{money(subtotal + (quote?.priceCents || 0))}</b>
+                    <b>{money(subtotal - (coupon?.discountCents || 0) + (quote?.priceCents || 0))}</b>
                   </div>
                   <button disabled={!quote} onClick={continueToCheckout}>
-                    Continuar para pagamento →
+                    Finalizar minha escolha →
                   </button>
                   <small>
                     {quote
@@ -405,7 +448,18 @@ export function CartButton() {
       onClick={cart.open}
       aria-label={"Sacola com " + cart.count + " itens"}
     >
-      <ShoppingBag />
+      <svg
+        className={styles.bispoBagIcon}
+        viewBox="0 0 32 36"
+        aria-hidden="true"
+      >
+        <path d="M5.5 11.5h21l-1.4 20H6.9l-1.4-20Z" />
+        <path d="M10.5 12V8.6A5.5 5.5 0 0 1 16 3.1a5.5 5.5 0 0 1 5.5 5.5V12" />
+        <path
+          className={styles.bispoBagLetter}
+          d="M12.1 17.1h4.8c2.2 0 3.5 1 3.5 2.6 0 1.1-.6 1.9-1.6 2.3 1.3.3 2.1 1.2 2.1 2.5 0 1.8-1.5 3-3.9 3h-4.9V17.1Zm4.5 4c1 0 1.6-.4 1.6-1.2 0-.7-.6-1.1-1.6-1.1h-2.3v2.3h2.3Zm.2 4.6c1.2 0 1.9-.5 1.9-1.4s-.7-1.4-1.9-1.4h-2.5v2.8h2.5Z"
+        />
+      </svg>
       {cart.count > 0 && <span>{cart.count}</span>}
     </button>
   );
