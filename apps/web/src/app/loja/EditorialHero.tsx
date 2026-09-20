@@ -28,7 +28,7 @@ const scenes = [
     title: "Todo dia pode ter",
     italic: "um grande café.",
     copy: "Macio, doce e fácil de reencontrar. O cotidiano transformado em ritual.",
-    image: "/brand/visuals/bispo-hero-approved.jpg",
+    image: "/essencial.jpeg",
     product: "/brand/products/essencial-treated.webp",
     notes: "Macio · Doce · Fácil",
     price: "R$ 52,00",
