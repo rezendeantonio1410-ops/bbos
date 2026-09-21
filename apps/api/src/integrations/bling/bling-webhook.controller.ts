@@ -12,12 +12,16 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Public } from "../../auth.guard";
 import type { BlingWebhookEnvelope } from "./bling.contract";
 import { BlingService } from "./bling.service";
+import { MelhorEnvioShipmentService } from "../../melhor-envio-shipment.service";
 
 @Controller("integrations/bling/webhooks")
 export class BlingWebhookController {
   private readonly database = new PrismaClient();
 
-  constructor(private readonly bling: BlingService) {}
+  constructor(
+    private readonly bling: BlingService,
+    private readonly shipment: MelhorEnvioShipmentService,
+  ) {}
 
   private validSignature(rawBody: Buffer, supplied?: string) {
     const clientSecret = process.env.BLING_CLIENT_SECRET?.trim();
@@ -195,7 +199,50 @@ export class BlingWebhookController {
       body.eventId,
     ).catch(() => undefined);
 
-    return { processed: true, fiscalId, externalId, status, number, series, accessKey };
+    let fulfillment: any = null;
+    let fulfillmentError: string | null = null;
+    if (status === "AUTHORIZED") {
+      const fiscalRows = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT "salesOrderId" FROM "FiscalDocument" WHERE id=$1 LIMIT 1`,
+        fiscalId,
+      );
+      const salesOrderId = fiscalRows[0]?.salesOrderId as string | undefined;
+      if (salesOrderId) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET status='INVOICED',"invoicedAt"=COALESCE("invoicedAt",NOW()),"updatedAt"=NOW()
+            WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
+          salesOrderId,
+        );
+        const shippingRows = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT "shippingProvider","shippingQuoteId" FROM "SalesOrder" WHERE id=$1 LIMIT 1`,
+          salesOrderId,
+        );
+        if (
+          shippingRows[0]?.shippingProvider === "MELHOR_ENVIO" &&
+          shippingRows[0]?.shippingQuoteId
+        ) {
+          try {
+            fulfillment = await this.shipment.createLabelForSalesOrder(salesOrderId);
+          } catch (error) {
+            fulfillmentError =
+              error instanceof Error ? error.message : String(error);
+          }
+        }
+      }
+    }
+
+    return {
+      processed: true,
+      fiscalId,
+      externalId,
+      status,
+      number,
+      series,
+      accessKey,
+      fulfillment,
+      fulfillmentError,
+    };
   }
 
   @Public()
