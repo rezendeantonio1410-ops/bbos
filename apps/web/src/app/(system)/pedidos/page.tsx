@@ -357,6 +357,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
   const [lines, setLines] = useState<DraftOrderLine[]>(() => [newDraftLine()]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [lineQuoteErrors, setLineQuoteErrors] = useState<Record<string, string>>({});
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>([]);
@@ -431,6 +432,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   useEffect(() => {
     if (!customerId || !completeLines.length) {
       setQuotes({});
+      setLineQuoteErrors({});
       setQuoteError("");
       return;
     }
@@ -438,19 +440,24 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     setQuoteBusy(true);
     setQuoteError("");
     void Promise.all(completeLines.map(async (line) => {
-      const params = new URLSearchParams({ customerId, productVariantId: line.variantId, quantity: String(line.quantity) });
-      const response = await fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
-      return [line.id, payload] as const;
+      try {
+        const params = new URLSearchParams({ customerId, productVariantId: line.variantId, quantity: String(line.quantity) });
+        const response = await fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
+        return { id: line.id, quote: payload as Quote, error: "" };
+      } catch (cause) {
+        return { id: line.id, quote: null, error: cause instanceof Error ? cause.message : "Preço interno não encontrado." };
+      }
     }))
-      .then((entries) => {
-        if (!cancelled) setQuotes(Object.fromEntries(entries));
-      })
-      .catch((cause) => {
+      .then((results) => {
         if (!cancelled) {
-          setQuotes({});
-          setQuoteError(cause instanceof Error ? cause.message : "Preço interno não encontrado.");
+          setQuotes(results.reduce<Record<string, Quote>>((acc, result) => {
+            if (result.quote) acc[result.id] = result.quote;
+            return acc;
+          }, {}));
+          setLineQuoteErrors(Object.fromEntries(results.filter((result) => result.error).map((result) => [result.id, result.error])));
+          setQuoteError(results.some((result) => result.error) ? "Existem produtos sem preço vigente. Verifique os itens destacados." : "");
         }
       })
       .finally(() => { if (!cancelled) setQuoteBusy(false); });
@@ -643,6 +650,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                       <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
                     </div>
                     {selectedVariant && <p className="mt-2 text-[9px] text-stone-400">{selectedVariant.line} · estoque disponível {selectedVariant.availableStock} pacote(s){lineQuote ? ` · tabela ${lineQuote.salesChannelName}` : ""}</p>}
+                    {lineQuoteErrors[line.id] && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[10px] text-amber-800">{lineQuoteErrors[line.id]}</p>}
                   </div>
                 );
               })}
