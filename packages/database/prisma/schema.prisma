@@ -1741,6 +1741,18 @@ model SalesOrder {
   discount               Decimal                 @default(0) @db.Decimal(14, 2)
   freight                Decimal                 @default(0) @db.Decimal(14, 2)
   notes                  String?
+  paymentType            String                  @default("LEGACY")
+  paymentTermsSnapshot   String?
+  freightResponsibility  String?
+  carrierName            String?
+  customerReference      String?
+  incoterm               String?
+  incotermLocation       String?
+  shippingQuoteId        String?
+  shippingProvider       String?
+  shippingServiceId      String?
+  shippingServiceName    String?
+  estimatedDeliveryDays  Int?
   invoicedAt             DateTime?
   deliveredAt            DateTime?
   costEvents             CostEvent[]
