@@ -365,6 +365,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [shippingPostalCode, setShippingPostalCode] = useState("");
   const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
   const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
+  const [packageWidthCm, setPackageWidthCm] = useState("");
+  const [packageHeightCm, setPackageHeightCm] = useState("");
+  const [packageLengthCm, setPackageLengthCm] = useState("");
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
   const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
@@ -490,6 +493,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         body: JSON.stringify({
           customerId,
           items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
+          packageWidthCm: Number(packageWidthCm),
+          packageHeightCm: Number(packageHeightCm),
+          packageLengthCm: Number(packageLengthCm),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -530,6 +536,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         freight: freightAmount,
         shippingQuoteId: selectedShippingQuote?.id,
         destinationPostalCode: shippingPostalCode || undefined,
+        packageWidthCm: packageWidthCm ? Number(packageWidthCm) : undefined,
+        packageHeightCm: packageHeightCm ? Number(packageHeightCm) : undefined,
+        packageLengthCm: packageLengthCm ? Number(packageLengthCm) : undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -555,7 +564,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-white p-6">
+      <aside className="relative h-full w-full max-w-6xl overflow-y-auto bg-white p-6">
         <div className="flex justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">Venda assistida</p>
@@ -692,14 +701,38 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                 )}
                 {freightResponsibility === "CUSTOMER" && firstQuote?.salesChannelType === "DISTRIBUIDOR" && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold text-emerald-950">Cotação do frete · Melhor Envio</p>
-                        <p className="mt-1 text-[10px] text-emerald-800">Por conta do comprador. Consulte todas as modalidades disponíveis para o CEP cadastrado.</p>
+                        <p className="mt-1 text-[10px] text-emerald-800">Informe as medidas reais da caixa. O BBOS consulta todas as modalidades disponíveis para o CEP cadastrado.</p>
                       </div>
-                      <button type="button" disabled={shippingBusy || quoteBusy || !completeLines.length || completeLines.some((line) => !quotes[line.id])} onClick={() => void calculateShipping()} className="rounded-lg bg-emerald-950 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-40">
-                        {shippingBusy ? "Consultando…" : shippingQuotes.length ? "Cotar novamente" : "Cotar transportadoras"}
+                      <button
+                        type="button"
+                        disabled={
+                          shippingBusy ||
+                          quoteBusy ||
+                          !completeLines.length ||
+                          completeLines.some((line) => !quotes[line.id]) ||
+                          !packageWidthCm ||
+                          !packageHeightCm ||
+                          !packageLengthCm
+                        }
+                        onClick={() => void calculateShipping()}
+                        className="rounded-lg bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
+                      >
+                        {shippingBusy ? "Consultando todas…" : shippingQuotes.length ? "Cotar novamente" : "Ver todas as cotações"}
                       </button>
+                    </div>
+                    <div className="mt-3 grid gap-2 rounded-xl border border-emerald-100 bg-white p-3 sm:grid-cols-3">
+                      <Field label="Largura da caixa (cm)">
+                        <input type="number" min="1" step="1" inputMode="numeric" value={packageWidthCm} onChange={(event) => setPackageWidthCm(event.target.value)} placeholder="Ex.: 30" />
+                      </Field>
+                      <Field label="Altura da caixa (cm)">
+                        <input type="number" min="1" step="1" inputMode="numeric" value={packageHeightCm} onChange={(event) => setPackageHeightCm(event.target.value)} placeholder="Ex.: 30" />
+                      </Field>
+                      <Field label="Comprimento da caixa (cm)">
+                        <input type="number" min="1" step="1" inputMode="numeric" value={packageLengthCm} onChange={(event) => setPackageLengthCm(event.target.value)} placeholder="Ex.: 55" />
+                      </Field>
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
                     {shippingSummary && (
@@ -732,7 +765,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                           <button type="button" onClick={() => setShippingSort("PRICE")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "PRICE" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Mais barato</button>
                           <button type="button" onClick={() => setShippingSort("TIME")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "TIME" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Menor prazo</button>
                         </div>
-                        <div className="grid gap-2">
+                        <div className="grid gap-2 lg:grid-cols-2">
                         {sortedShippingQuotes.map((option) => (
                           <label key={option.id} className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}>
                             <input type="radio" name="shipping-quote" value={option.id} checked={shippingQuoteId === option.id} onChange={() => setShippingQuoteId(option.id)} className="sr-only" />
