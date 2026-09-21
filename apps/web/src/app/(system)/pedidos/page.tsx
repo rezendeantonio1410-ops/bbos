@@ -133,6 +133,7 @@ type OrderItem = {
   quantity: number;
   unitPrice?: string;
   totalAmount: string;
+  reservations?: Array<{ id: string; status: string; quantity: number }>;
 };
 
 type Order = {
@@ -1204,6 +1205,50 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     order.notes ? `Observações: ${order.notes}` : "",
   ].filter(Boolean).join("\n");
 
+  const operationalAction = async (
+    endpoint: string,
+    body: Record<string, unknown> = {},
+  ) => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/${endpoint}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : payload.message?.message ?? "Não foi possível avançar o pedido.",
+        );
+      }
+      await onChanged();
+      if (endpoint === "invoice") await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Não foi possível avançar o pedido.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPicking = async () => {
+    const pickedByItem = Object.fromEntries(
+      order.items.map((item) => {
+        const activeReservation = item.reservations?.find(
+          (reservation) => reservation.status === "ACTIVE",
+        );
+        return [item.id, Number(activeReservation?.quantity ?? item.quantity)];
+      }),
+    );
+    await operationalAction("picking/confirm", { pickedByItem });
+  };
+
   const generateLabel = async () => {
     setFulfillmentBusy(true);
     setError("");
@@ -1283,6 +1328,67 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               ))}
             </div>
 
+            {["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(order.status) && (
+              <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-stone-900">Próxima ação operacional</p>
+                    <p className="mt-1 text-[10px] text-stone-600">
+                      {order.status === "RESERVED"
+                        ? "O estoque está reservado. Inicie a separação física do pedido."
+                        : order.status === "PICKING"
+                          ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                          : order.status === "READY_TO_SHIP"
+                            ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                            : fulfillment?.labelUrl
+                              ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                              : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                    </p>
+                  </div>
+                  {order.status === "RESERVED" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("picking")}
+                      className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Processando…" : "Iniciar separação"}
+                    </button>
+                  )}
+                  {order.status === "PICKING" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void confirmPicking()}
+                      className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Processando…" : "Confirmar separação"}
+                    </button>
+                  )}
+                  {order.status === "READY_TO_SHIP" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("invoice")}
+                      className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
+                    </button>
+                  )}
+                  {order.status === "INVOICED" && fulfillment?.labelUrl && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("ship")}
+                      className="rounded-xl bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Processando…" : "Confirmar expedição"}
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
             <section className="mt-5 rounded-2xl border p-4">
               <p className="text-xs font-bold">Condições comerciais</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1304,7 +1410,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {fulfillment?.labelUrl
                         ? "Etiqueta pronta para impressão."
                         : order.status === "INVOICED"
-                          ? "NF-e autorizada: a etiqueta pode ser gerada automaticamente ou por contingência aqui."
+                          ? "Faturamento solicitado. A etiqueta será liberada quando a NF-e estiver autorizada; se necessário, tente a geração por contingência."
                           : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
                   </div>
