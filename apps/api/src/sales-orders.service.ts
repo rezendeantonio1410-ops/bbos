@@ -415,6 +415,23 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Somente pedidos reservados e prontos para expedição podem ser expedidos.",
           );
+        if (order.shippingProvider === "MELHOR_ENVIO") {
+          const shipments = await transaction.$queryRawUnsafe<any[]>(
+            `SELECT status,"labelUrl" FROM "Shipment" WHERE "salesOrderId"=$1 LIMIT 1`,
+            order.id,
+          );
+          const shipment = shipments[0];
+          if (
+            !shipment?.labelUrl ||
+            !["LABEL_READY", "POSTED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
+              String(shipment.status),
+            )
+          ) {
+            throw new BadRequestException(
+              "A etiqueta do Melhor Envio precisa estar pronta antes de expedir o pedido.",
+            );
+          }
+        }
         const active = order.reservations
           .filter((item) => item.status === InventoryReservationStatus.ACTIVE)
           .sort((a, b) =>
