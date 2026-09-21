@@ -172,6 +172,29 @@ type ShipmentInfo = {
   externalId?: string | null;
 };
 
+type PostingAgency = {
+  id: string;
+  name: string;
+  companyName?: string;
+  address?: string;
+  district?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  locationLine?: string;
+  phone?: string;
+  mapsUrl?: string | null;
+};
+
+type PostingAgencyResponse = {
+  carrierName: string;
+  serviceName: string;
+  origin: { city: string; state: string | null; postalCode: string };
+  agencies: PostingAgency[];
+};
+
+
+
 type DiscountRequest = {
   id: string;
   salesOrderItemId: string;
@@ -1090,6 +1113,8 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [copied, setCopied] = useState(false);
   const [fulfillment, setFulfillment] = useState<ShipmentInfo | null>(null);
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
+  const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
+  const [postingBusy, setPostingBusy] = useState(false);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1116,6 +1141,27 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   useEffect(() => {
     void loadFulfillment();
   }, [order.id]);
+
+  const loadPostingAgencies = async () => {
+    if (order.shippingProvider !== "MELHOR_ENVIO") {
+      setPosting(null);
+      return;
+    }
+    setPostingBusy(true);
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/posting-agencies`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (response.ok) setPosting(await response.json());
+    } finally {
+      setPostingBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPostingAgencies();
+  }, [order.id, order.shippingProvider]);
 
   useEffect(() => {
     if (!selectedItem?.productVariantId) {
@@ -1439,6 +1485,66 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     Rastreio: <b>{fulfillment.trackingCode}</b>
                   </p>
                 )}
+
+                <div className="mt-4 border-t border-emerald-100 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">Onde postar</p>
+                      <p className="mt-1 text-[10px] text-emerald-700">
+                        {postingBusy
+                          ? "Consultando unidades disponíveis no Melhor Envio…"
+                          : posting?.agencies?.length
+                            ? `Unidades disponíveis para ${posting.carrierName} · ${posting.serviceName} na região de ${posting.origin.city}.`
+                            : "Nenhuma unidade de postagem retornada para a região configurada da Bispo."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadPostingAgencies()}
+                      className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[10px] font-bold text-emerald-900"
+                    >
+                      Atualizar
+                    </button>
+                  </div>
+
+                  {posting?.agencies?.length ? (
+                    <div className="mt-3 grid gap-2">
+                      {posting.agencies.slice(0, 4).map((agency, index) => (
+                        <div key={agency.id} className="rounded-xl border border-emerald-100 bg-white p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                {index === 0 && (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800">
+                                    Opção de postagem
+                                  </span>
+                                )}
+                                <p className="text-[11px] font-bold text-stone-900">{agency.name}</p>
+                              </div>
+                              {agency.address && (
+                                <p className="mt-1 text-[10px] text-stone-700">{agency.address}</p>
+                              )}
+                              <p className="mt-1 text-[10px] text-stone-500">
+                                {[agency.district, agency.city, agency.state].filter(Boolean).join(" · ")}
+                                {agency.postalCode ? ` · CEP ${agency.postalCode}` : ""}
+                              </p>
+                            </div>
+                            {agency.mapsUrl && (
+                              <a
+                                href={agency.mapsUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg bg-emerald-950 px-3 py-2 text-[10px] font-bold text-white"
+                              >
+                                Abrir rota
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </section>
             )}
 
