@@ -105,6 +105,71 @@ export class BlingWebhookController {
       fiscalId = direct[0]?.id;
     }
 
+    if (!fiscalId) {
+      const blingOrderId = String(
+        (note as any)?.pedidoVenda?.id ??
+        (note as any)?.pedido?.id ??
+        (note as any)?.idPedidoVenda ??
+        "",
+      ).trim();
+
+      if (blingOrderId) {
+        const salesMap = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT "internalKey" FROM "IntegrationResourceMap"
+            WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='SALES_ORDER'
+              AND "externalId"=$2
+            LIMIT 1`,
+          companyId,
+          blingOrderId,
+        );
+        const salesOrderId = salesMap[0]?.internalKey as string | undefined;
+        if (salesOrderId) {
+          const rows = await this.database.$queryRawUnsafe<any[]>(
+            `SELECT id FROM "FiscalDocument"
+              WHERE "companyId"=$1 AND "salesOrderId"=$2 AND direction='OUTBOUND'
+              ORDER BY "createdAt" DESC LIMIT 1`,
+            companyId,
+            salesOrderId,
+          );
+          fiscalId = rows[0]?.id;
+        }
+
+        if (!fiscalId) {
+          const storefrontMap = await this.database.$queryRawUnsafe<any[]>(
+            `SELECT "internalKey" FROM "IntegrationResourceMap"
+              WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='STOREFRONT_ORDER'
+                AND "externalId"=$2
+              LIMIT 1`,
+            companyId,
+            blingOrderId,
+          );
+          const storefrontId = storefrontMap[0]?.internalKey as string | undefined;
+          if (storefrontId) {
+            const linked = await this.database.$queryRawUnsafe<any[]>(
+              `SELECT so.id
+                 FROM "StorefrontOrder" sfo
+                 JOIN "SalesOrder" so ON so."companyId"=sfo."companyId"
+                  AND COALESCE(so."orderNumber",so.code)=sfo.code
+                WHERE sfo.id=$1
+                LIMIT 1`,
+              storefrontId,
+            ).catch(() => []);
+            const salesOrderId = linked[0]?.id;
+            if (salesOrderId) {
+              const rows = await this.database.$queryRawUnsafe<any[]>(
+                `SELECT id FROM "FiscalDocument"
+                  WHERE "companyId"=$1 AND "salesOrderId"=$2 AND direction='OUTBOUND'
+                  ORDER BY "createdAt" DESC LIMIT 1`,
+                companyId,
+                salesOrderId,
+              );
+              fiscalId = rows[0]?.id;
+            }
+          }
+        }
+      }
+    }
+
     if (!fiscalId) return { processed: false, externalId, status };
 
     await this.database.$executeRawUnsafe(
@@ -125,7 +190,7 @@ export class BlingWebhookController {
 
     await this.database.$executeRawUnsafe(
       `UPDATE "IntegrationWebhookEvent"
-          SET status='PROCESSED',"processedAt"=NOW(),"updatedAt"=COALESCE("updatedAt",NOW())
+          SET status='PROCESSED',"processedAt"=NOW()
         WHERE provider='BLING' AND "providerEventId"=$1`,
       body.eventId,
     ).catch(() => undefined);
