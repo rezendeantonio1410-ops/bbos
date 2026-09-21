@@ -138,21 +138,89 @@ export class FinanceService implements OnModuleDestroy {
   listAccounts(companyId?: string) {
     return this.database.financialAccount.findMany({
       where: { active: true, ...(companyId ? { companyId } : {}) },
+      include: { financialInstitution: true },
       orderBy: { name: "asc" },
     });
   }
-  createAccount(input: {
+
+  listInstitutions(companyId?: string) {
+    return this.database.financialInstitution.findMany({
+      where: { active: true, ...(companyId ? { companyId } : {}) },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async createInstitution(input: {
     companyId: string;
     name: string;
+    code?: string;
+    country?: string;
+  }) {
+    const name = String(input.name ?? "").trim();
+    if (!name) throw new BadRequestException("Nome da instituição é obrigatório.");
+    const code = String(input.code ?? "").trim() || null;
+    const existing = await this.database.financialInstitution.findFirst({
+      where: {
+        companyId: input.companyId,
+        OR: [
+          { name: { equals: name, mode: "insensitive" } },
+          ...(code ? [{ code }] : []),
+        ],
+      },
+    });
+    if (existing) return existing;
+    return this.database.financialInstitution.create({
+      data: {
+        companyId: input.companyId,
+        name,
+        code,
+        country: String(input.country ?? "BR").trim().toUpperCase() || "BR",
+      },
+    });
+  }
+
+  async createAccount(input: {
+    companyId: string;
+    financialInstitutionId?: string;
+    name: string;
     type: "CASH" | "BANK" | "DIGITAL_ACCOUNT" | "OTHER";
+    currency?: string;
+    bankCode?: string;
+    branch?: string;
+    accountNumberMasked?: string;
+    country?: string;
     openingBalance?: number;
   }) {
+    const name = String(input.name ?? "").trim();
+    if (!name) throw new BadRequestException("Nome da conta é obrigatório.");
+    let institution = null;
+    if (input.financialInstitutionId) {
+      institution = await this.database.financialInstitution.findFirst({
+        where: { id: input.financialInstitutionId, companyId: input.companyId, active: true },
+      });
+      if (!institution) throw new BadRequestException("Instituição financeira inválida.");
+    }
+    const currency = String(input.currency ?? "BRL").trim().toUpperCase() || "BRL";
+    const duplicate = await this.database.financialAccount.findFirst({
+      where: {
+        companyId: input.companyId,
+        active: true,
+        name: { equals: name, mode: "insensitive" },
+      },
+    });
+    if (duplicate) throw new BadRequestException("Já existe uma conta financeira ativa com este nome.");
     return this.database.financialAccount.create({
       data: {
         companyId: input.companyId,
-        name: input.name,
+        financialInstitutionId: institution?.id,
+        name,
         type: input.type,
-        openingBalance: input.openingBalance ?? 0,
+        currency,
+        bankCode: String(input.bankCode ?? institution?.code ?? "").trim() || null,
+        branch: String(input.branch ?? "").trim() || null,
+        accountNumberMasked: String(input.accountNumberMasked ?? "").trim() || null,
+        country: String(input.country ?? institution?.country ?? "BR").trim().toUpperCase() || "BR",
+        openingBalance: Number.isFinite(Number(input.openingBalance)) ? Number(input.openingBalance) : 0,
       },
     });
   }
