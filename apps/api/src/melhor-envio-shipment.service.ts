@@ -437,11 +437,34 @@ export class MelhorEnvioShipmentService {
          "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,"updatedAt"=NOW() WHERE id=$1`,
       shipment.id, mapping.status, JSON.stringify(payload || {}),
     );
-    await this.database.$executeRawUnsafe(`UPDATE "StorefrontOrder" SET status=$2,"updatedAt"=NOW() WHERE id=$1`, shipment.storefrontOrderId, mapping.order);
-    await this.lifecycle.record(
-      shipment.storefrontOrderId, mapping.event, mapping.title, mapping.detail, "CARRIER",
-      `storefront:${mapping.event.toLowerCase()}:${shipment.storefrontOrderId}`, { externalId, status: statusValue },
-    );
-    return { updated: true, status: mapping.status };
+    if (shipment.storefrontOrderId) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET status=$2,"updatedAt"=NOW() WHERE id=$1`,
+        shipment.storefrontOrderId,
+        mapping.order,
+      );
+      await this.lifecycle.record(
+        shipment.storefrontOrderId,
+        mapping.event,
+        mapping.title,
+        mapping.detail,
+        "CARRIER",
+        `storefront:${mapping.event.toLowerCase()}:${shipment.storefrontOrderId}`,
+        { externalId, status: statusValue },
+      );
+    } else if (shipment.salesOrderId && mapping.status === "DELIVERED") {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrder"
+            SET status='DELIVERED',"deliveredAt"=COALESCE("deliveredAt",NOW()),"updatedAt"=NOW()
+          WHERE id=$1 AND status='SHIPPED'`,
+        shipment.salesOrderId,
+      );
+    }
+    return {
+      updated: true,
+      status: mapping.status,
+      salesOrderId: shipment.salesOrderId ?? null,
+      storefrontOrderId: shipment.storefrontOrderId ?? null,
+    };
   }
 }
