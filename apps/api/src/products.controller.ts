@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -9,7 +10,10 @@ import {
   Post,
   Req,
   ServiceUnavailableException,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
 import {
   isProductLine,
@@ -93,6 +97,66 @@ export class ProductsController {
     try {
       const actor = await requireSession(req, this.auth);
       return await this.products.updateVariant(id, input, actor.companyId);
+    } catch (error) {
+      throwProductError(error);
+    }
+  }
+
+  @Post(":id/storefront-images")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      fileFilter: (_request, file, callback) => {
+        const allowed = ["image/jpeg", "image/png", "image/webp"];
+        callback(
+          allowed.includes(file.mimetype)
+            ? null
+            : new BadRequestException("Envie uma imagem JPG, PNG ou WebP."),
+          allowed.includes(file.mimetype),
+        );
+      },
+    }),
+  )
+  async uploadStorefrontImage(
+    @Param("id") id: string,
+    @UploadedFile()
+    file: { originalname: string; mimetype: string; buffer: Buffer } | undefined,
+    @Req() req: Request,
+  ) {
+    try {
+      if (!file) throw new BadRequestException("Selecione uma imagem para enviar.");
+      const actor = await requireSession(req, this.auth);
+      return await this.products.addStorefrontImage(id, actor.companyId, file);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throwProductError(error);
+    }
+  }
+
+  @Patch(":id/storefront-images/:imageId")
+  async updateStorefrontImage(
+    @Param("id") id: string,
+    @Param("imageId") imageId: string,
+    @Body() input: { isPrimary?: boolean; useInHero?: boolean; sortOrder?: number },
+    @Req() req: Request,
+  ) {
+    try {
+      const actor = await requireSession(req, this.auth);
+      return await this.products.updateStorefrontImage(id, imageId, actor.companyId, input);
+    } catch (error) {
+      throwProductError(error);
+    }
+  }
+
+  @Delete(":id/storefront-images/:imageId")
+  async deleteStorefrontImage(
+    @Param("id") id: string,
+    @Param("imageId") imageId: string,
+    @Req() req: Request,
+  ) {
+    try {
+      const actor = await requireSession(req, this.auth);
+      return await this.products.deleteStorefrontImage(id, imageId, actor.companyId);
     } catch (error) {
       throwProductError(error);
     }

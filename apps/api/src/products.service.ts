@@ -49,6 +49,35 @@ export class ProductsService {
     return this.repository.updateVariant(id, input, companyId);
   }
 
+  addStorefrontImage(
+    productId: string,
+    companyId: string,
+    file: { originalname: string; mimetype: string; buffer: Buffer },
+  ) {
+    return this.repository.addStorefrontImage(productId, companyId, file);
+  }
+
+  updateStorefrontImage(
+    productId: string,
+    imageId: string,
+    companyId: string,
+    input: { isPrimary?: boolean; useInHero?: boolean; sortOrder?: number },
+  ) {
+    return this.repository.updateStorefrontImage(productId, imageId, companyId, input);
+  }
+
+  deleteStorefrontImage(productId: string, imageId: string, companyId: string) {
+    return this.repository.deleteStorefrontImage(productId, imageId, companyId);
+  }
+
+  listPublicStorefrontImages(companyId: string) {
+    return this.repository.listPublicStorefrontImages(companyId);
+  }
+
+  getPublicStorefrontImage(imageId: string, companyId: string) {
+    return this.repository.getPublicStorefrontImage(imageId, companyId);
+  }
+
   getPresentationRules() {
     return PRODUCT_LINES.map((line: ProductLine) => ({
       line,

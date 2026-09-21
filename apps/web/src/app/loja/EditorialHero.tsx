@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AddToCartButton } from "./StorefrontCart";
 import styles from "./EditorialHero.module.css";
+import type { StorefrontImageSelection } from "@/lib/storefront-images";
 
 const scenes = [
   {
@@ -66,10 +67,21 @@ const scenes = [
   },
 ] as const;
 
-export default function EditorialHero() {
+export default function EditorialHero({
+  productImages = {},
+}: {
+  productImages?: StorefrontImageSelection;
+}) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
-  const scene = scenes[active] ?? scenes[0]!;
+  const selectedScene = scenes[active] ?? scenes[0]!;
+  const scene = {
+    ...selectedScene,
+    product:
+      productImages[selectedScene.name]?.hero ??
+      productImages[selectedScene.name]?.primary ??
+      selectedScene.product,
+  };
 
   useEffect(() => {
     if (paused) return;
@@ -126,12 +138,9 @@ export default function EditorialHero() {
         <p className={styles.intro}>{scene.copy}</p>
         <div className={styles.productStage}>
           <div className={styles.productImage}>
-            <Image
+            <img
               src={scene.product}
               alt={`Café ${scene.name}`}
-              fill
-              sizes="210px"
-              unoptimized
             />
           </div>
           <div className={styles.productReading}>

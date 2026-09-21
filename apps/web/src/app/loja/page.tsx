@@ -11,6 +11,7 @@ import brand from "./brand-review.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
+import { loadStorefrontImages } from "@/lib/storefront-images";
 import {
   AddToCartButton,
   CartButton,
@@ -129,7 +130,14 @@ const collectionId = (name: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()}`;
 
-export default function LojaPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LojaPage() {
+  const storefrontImages = await loadStorefrontImages();
+  const catalogProducts = products.map((product) => ({
+    ...product,
+    image: storefrontImages[product.name]?.primary ?? product.image,
+  }));
   return (
     <StorefrontCartProvider>
       <main className={`${styles.page} ${brand.storefront}`}>
@@ -177,7 +185,7 @@ export default function LojaPage() {
           </div>
         </header>
 
-        <EditorialHero />
+        <EditorialHero productImages={storefrontImages} />
 
         <section id="camadas" className={layers.section}>
           <div className={layers.intro}>
@@ -270,7 +278,7 @@ export default function LojaPage() {
             ))}
           </nav>
           {collections.map((collection) => {
-            const collectionProducts = products.filter(
+            const collectionProducts = catalogProducts.filter(
               (product) => product.line === collection.name.toUpperCase(),
             );
 
@@ -312,13 +320,10 @@ export default function LojaPage() {
                           data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
                         >
                           {p.image ? (
-                            <Image
+                            <img
                               src={p.image}
                               alt={`Embalagem Bispo ${p.name}`}
-                              fill
-                              sizes="(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 33vw"
                               className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
-                              unoptimized
                             />
                           ) : (
                             <div className={tight.catalogFallback}>

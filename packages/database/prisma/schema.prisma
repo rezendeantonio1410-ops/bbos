@@ -1618,11 +1618,30 @@ model Product {
   description   String
   active        Boolean          @default(true)
   variants      ProductVariant[]
+  storefrontImages StorefrontProductImage[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   @@unique([productLineId, slug])
   @@unique([productLineId, code])
+}
+
+model StorefrontProductImage {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fileName    String
+  mimeType    String
+  data        Bytes
+  sortOrder   Int      @default(0)
+  isPrimary   Boolean  @default(false)
+  useInHero   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+  @@index([productId, isPrimary])
+  @@index([productId, useInHero])
 }
 
 model ProductVariant {

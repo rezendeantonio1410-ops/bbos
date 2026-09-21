@@ -15,6 +15,18 @@ import {
 const productInclude = {
   productLine: true,
   variants: { where: { active: true }, orderBy: { netWeightGrams: "asc" as const } },
+  storefrontImages: {
+    orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }],
+    select: {
+      id: true,
+      fileName: true,
+      mimeType: true,
+      sortOrder: true,
+      isPrimary: true,
+      useInHero: true,
+      updatedAt: true,
+    },
+  },
 } satisfies Prisma.ProductInclude;
 
 type PersistedProduct = Prisma.ProductGetPayload<{
@@ -225,6 +237,155 @@ export class ProductsRepository implements OnModuleDestroy {
     });
   }
 
+  async addStorefrontImage(
+    productId: string,
+    companyId: string,
+    file: { originalname: string; mimetype: string; buffer: Buffer },
+  ) {
+    return this.database.$transaction(async (transaction) => {
+      const product = await transaction.product.findFirst({
+        where: { id: productId, productLine: { companyId } },
+        include: { storefrontImages: { select: { id: true } } },
+      });
+      if (!product) throw new Error("Produto não encontrado.");
+      const firstImage = product.storefrontImages.length === 0;
+      const last = await transaction.storefrontProductImage.findFirst({
+        where: { productId },
+        orderBy: { sortOrder: "desc" },
+        select: { sortOrder: true },
+      });
+      const image = await transaction.storefrontProductImage.create({
+        data: {
+          productId,
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+          data: Uint8Array.from(file.buffer),
+          sortOrder: (last?.sortOrder ?? -1) + 1,
+          isPrimary: firstImage,
+          useInHero: firstImage,
+        },
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          sortOrder: true,
+          isPrimary: true,
+          useInHero: true,
+          updatedAt: true,
+        },
+      });
+      return { ...image, updatedAt: image.updatedAt.toISOString() };
+    });
+  }
+
+  async updateStorefrontImage(
+    productId: string,
+    imageId: string,
+    companyId: string,
+    input: { isPrimary?: boolean; useInHero?: boolean; sortOrder?: number },
+  ) {
+    return this.database.$transaction(async (transaction) => {
+      const current = await transaction.storefrontProductImage.findFirst({
+        where: { id: imageId, productId, product: { productLine: { companyId } } },
+      });
+      if (!current) throw new Error("Imagem não encontrada.");
+      if (input.isPrimary === true) {
+        await transaction.storefrontProductImage.updateMany({
+          where: { productId, id: { not: imageId } },
+          data: { isPrimary: false },
+        });
+      }
+      if (input.useInHero === true) {
+        await transaction.storefrontProductImage.updateMany({
+          where: { productId, id: { not: imageId } },
+          data: { useInHero: false },
+        });
+      }
+      const image = await transaction.storefrontProductImage.update({
+        where: { id: imageId },
+        data: {
+          isPrimary: input.isPrimary,
+          useInHero: input.useInHero,
+          sortOrder: input.sortOrder,
+        },
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          sortOrder: true,
+          isPrimary: true,
+          useInHero: true,
+          updatedAt: true,
+        },
+      });
+      return { ...image, updatedAt: image.updatedAt.toISOString() };
+    });
+  }
+
+  async deleteStorefrontImage(productId: string, imageId: string, companyId: string) {
+    return this.database.$transaction(async (transaction) => {
+      const current = await transaction.storefrontProductImage.findFirst({
+        where: { id: imageId, productId, product: { productLine: { companyId } } },
+      });
+      if (!current) throw new Error("Imagem não encontrada.");
+      await transaction.storefrontProductImage.delete({ where: { id: imageId } });
+      const next = await transaction.storefrontProductImage.findFirst({
+        where: { productId },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      });
+      if (next && (current.isPrimary || current.useInHero)) {
+        await transaction.storefrontProductImage.update({
+          where: { id: next.id },
+          data: {
+            isPrimary: current.isPrimary ? true : next.isPrimary,
+            useInHero: current.useInHero ? true : next.useInHero,
+          },
+        });
+      }
+      return { deleted: true };
+    });
+  }
+
+  async listPublicStorefrontImages(companyId: string) {
+    const products = await this.database.product.findMany({
+      where: { active: true, productLine: { companyId, active: true } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        storefrontImages: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            isPrimary: true,
+            useInHero: true,
+            updatedAt: true,
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+    return products.map((product) => ({
+      ...product,
+      storefrontImages: product.storefrontImages.map((image) => ({
+        ...image,
+        updatedAt: image.updatedAt.toISOString(),
+      })),
+    }));
+  }
+
+  async getPublicStorefrontImage(imageId: string, companyId: string) {
+    return this.database.storefrontProductImage.findFirst({
+      where: {
+        id: imageId,
+        product: { active: true, productLine: { companyId, active: true } },
+      },
+      select: { data: true, mimeType: true, fileName: true, updatedAt: true },
+    });
+  }
+
   private async ensureOfficialLines(
     database: Pick<PrismaClient, "productLine"> | Prisma.TransactionClient,
     companyId: string,
@@ -291,6 +452,10 @@ export class ProductsRepository implements OnModuleDestroy {
       active: product.active,
       marginPercent: 0,
       productionKg: 0,
+      storefrontImages: product.storefrontImages.map((image) => ({
+        ...image,
+        updatedAt: image.updatedAt.toISOString(),
+      })),
       skus: product.variants.map((variant) => ({
         id: variant.id,
         line,

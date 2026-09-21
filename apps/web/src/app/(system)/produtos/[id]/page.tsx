@@ -14,6 +14,7 @@ import {
   PRODUCT_LINE_META,
 } from "@bbos/shared/product-presentation";
 import { loadProduct } from "@/lib/product-catalog-api";
+import { StorefrontProductImages } from "@/components/storefront-product-images";
 
 const currency = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -82,6 +83,11 @@ export default async function ProductDetailPage({
           value={`${number.format(product.productionKg)} kg`}
         />
       </section>
+      <StorefrontProductImages
+        productId={product.id}
+        productName={product.name}
+        initialImages={product.storefrontImages ?? []}
+      />
       <section className="mt-7">
         <div className="flex justify-between">
           <h2 className="text-lg font-bold">SKUs / Apresentações</h2>

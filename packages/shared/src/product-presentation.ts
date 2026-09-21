@@ -70,7 +70,18 @@ export type CatalogProduct = {
   active: boolean;
   marginPercent: number;
   productionKg: number;
+  storefrontImages?: StorefrontProductImage[];
   skus: CatalogSku[];
+};
+
+export type StorefrontProductImage = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  useInHero: boolean;
+  updatedAt: string;
 };
 
 export type ProductionVariantEligibility = {
