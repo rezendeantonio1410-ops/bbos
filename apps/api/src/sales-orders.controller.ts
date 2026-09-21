@@ -585,12 +585,39 @@ export class SalesOrdersController {
   @Post(":id/invoice")
   async invoice(@Param("id") id: string) {
     const result = await this.salesOrders.transition(id, "INVOICED");
-    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(`SELECT "paymentType", "paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1`, id);
+    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT "companyId","paymentType","paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1`,
+      id,
+    );
     const payment = rows[0];
     if (payment && payment.paymentType !== "LEGACY") {
-      const days = payment.paymentType === "CASH" ? 0 : termDays(payment.paymentTermsSnapshot);
-      await this.salesOrders.database.$executeRawUnsafe(`UPDATE "AccountsReceivable" SET "dueDate" = "issueDate" + ($2::int * INTERVAL '1 day'), "updatedAt"=NOW() WHERE "salesOrderId"=$1`, id, days);
+      const days =
+        payment.paymentType === "CASH"
+          ? 0
+          : termDays(payment.paymentTermsSnapshot);
+      await this.salesOrders.database.$executeRawUnsafe(
+        `UPDATE "AccountsReceivable"
+            SET "dueDate" = "issueDate" + ($2::int * INTERVAL '1 day'), "updatedAt"=NOW()
+          WHERE "salesOrderId"=$1`,
+        id,
+        days,
+      );
     }
-    return result;
+    if (payment?.companyId) {
+      const idempotencyKey = `bling:sales-order-invoice:${id}`;
+      await this.salesOrders.database.$executeRawUnsafe(
+        `INSERT INTO "IntegrationOutbox"
+          (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,
+           "idempotencyKey","createdAt","updatedAt")
+         VALUES ($1,$2,'BLING','SALES_ORDER_INVOICE_REQUESTED','SALES_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
+         ON CONFLICT ("idempotencyKey") DO NOTHING`,
+        randomUUID(),
+        payment.companyId,
+        id,
+        JSON.stringify({ salesOrderId: id }),
+        idempotencyKey,
+      );
+    }
+    return { ...result, fiscalDispatch: "QUEUED" };
   }
 }
