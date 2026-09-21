@@ -91,6 +91,8 @@ type ShippingSummary = {
   widthCm: number;
   heightCm: number;
   lengthCm: number;
+  packageCount?: number;
+  weightPerPackageGrams?: number;
 };
 
 type DraftOrderLine = {
@@ -370,6 +372,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [packageWidthCm, setPackageWidthCm] = useState("");
   const [packageHeightCm, setPackageHeightCm] = useState("");
   const [packageLengthCm, setPackageLengthCm] = useState("");
+  const [packageCount, setPackageCount] = useState("1");
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
   const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
@@ -397,6 +400,10 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   );
   const freightAmount = Number(selectedShippingQuote?.priceCents ?? 0) / 100;
   const productsTotal = completeLines.reduce((sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0), 0);
+  const totalWeightGrams = completeLines.reduce((sum, line) => {
+    const variant = variants.find((candidate) => candidate.productVariantId === line.variantId);
+    return sum + Number(variant?.presentationGrams ?? 0) * line.quantity;
+  }, 0);
   const orderTotal = productsTotal + freightAmount;
   const isTerm = paymentType === "TERM";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
@@ -470,12 +477,19 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   }, [customerId, completeLines]);
 
   useEffect(() => {
+    if (!customPackage && packagePreset === "P") {
+      const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
+      setPackageCount(String(suggested));
+    }
+  }, [customPackage, packagePreset, totalWeightGrams]);
+
+  useEffect(() => {
     setShippingQuotes([]);
     setShippingQuoteId("");
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, lines, customPackage, packagePreset, packageWidthCm, packageHeightCm, packageLengthCm]);
+  }, [customerId, lines, customPackage, packagePreset, packageWidthCm, packageHeightCm, packageLengthCm, packageCount]);
 
   useEffect(() => {
     if (firstQuote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
@@ -498,6 +512,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
           packageWidthCm: customPackage ? (packageWidthCm ? Number(packageWidthCm) : undefined) : (packagePreset === "P" ? 35 : undefined),
           packageHeightCm: customPackage ? (packageHeightCm ? Number(packageHeightCm) : undefined) : (packagePreset === "P" ? 22 : undefined),
           packageLengthCm: customPackage ? (packageLengthCm ? Number(packageLengthCm) : undefined) : (packagePreset === "P" ? 11 : undefined),
+          packageCount: Math.max(1, Number(packageCount) || 1),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -541,6 +556,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         packageWidthCm: customPackage ? (packageWidthCm ? Number(packageWidthCm) : undefined) : (packagePreset === "P" ? 35 : undefined),
         packageHeightCm: customPackage ? (packageHeightCm ? Number(packageHeightCm) : undefined) : (packagePreset === "P" ? 22 : undefined),
         packageLengthCm: customPackage ? (packageLengthCm ? Number(packageLengthCm) : undefined) : (packagePreset === "P" ? 11 : undefined),
+        packageCount: Math.max(1, Number(packageCount) || 1),
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -715,7 +731,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                           quoteBusy ||
                           !completeLines.length ||
                           completeLines.some((line) => !quotes[line.id]) ||
-                          (customPackage && (!packageWidthCm || !packageHeightCm || !packageLengthCm))
+                          (customPackage && (!packageWidthCm || !packageHeightCm || !packageLengthCm)) ||
+                          !Number.isSafeInteger(Number(packageCount)) || Number(packageCount) < 1
                         }
                         onClick={() => void calculateShipping()}
                         className="rounded-lg bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
@@ -751,19 +768,27 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                           </button>
                         </div>
                       </div>
-                      {customPackage && (
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                          <Field label="Largura da caixa (cm)">
-                            <input type="number" min="1" step="1" inputMode="numeric" value={packageWidthCm} onChange={(event) => setPackageWidthCm(event.target.value)} placeholder="Ex.: 30" />
-                          </Field>
-                          <Field label="Altura da caixa (cm)">
-                            <input type="number" min="1" step="1" inputMode="numeric" value={packageHeightCm} onChange={(event) => setPackageHeightCm(event.target.value)} placeholder="Ex.: 30" />
-                          </Field>
-                          <Field label="Comprimento da caixa (cm)">
-                            <input type="number" min="1" step="1" inputMode="numeric" value={packageLengthCm} onChange={(event) => setPackageLengthCm(event.target.value)} placeholder="Ex.: 55" />
-                          </Field>
-                        </div>
-                      )}
+                      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                        {customPackage && (
+                          <>
+                            <Field label="Largura da caixa (cm)">
+                              <input type="number" min="1" step="1" inputMode="numeric" value={packageWidthCm} onChange={(event) => setPackageWidthCm(event.target.value)} placeholder="Ex.: 30" />
+                            </Field>
+                            <Field label="Altura da caixa (cm)">
+                              <input type="number" min="1" step="1" inputMode="numeric" value={packageHeightCm} onChange={(event) => setPackageHeightCm(event.target.value)} placeholder="Ex.: 30" />
+                            </Field>
+                            <Field label="Comprimento da caixa (cm)">
+                              <input type="number" min="1" step="1" inputMode="numeric" value={packageLengthCm} onChange={(event) => setPackageLengthCm(event.target.value)} placeholder="Ex.: 55" />
+                            </Field>
+                          </>
+                        )}
+                        <Field label="Quantidade de caixas">
+                          <input type="number" min="1" max="50" step="1" inputMode="numeric" value={packageCount} onChange={(event) => setPackageCount(event.target.value)} />
+                        </Field>
+                      </div>
+                      <p className="mt-2 text-[10px] text-stone-500">
+                        O peso total do pedido será distribuído entre as caixas para a cotação. Use caixas com medidas iguais nesta cotação.
+                      </p>
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
                     {shippingSummary && (
