@@ -248,6 +248,11 @@ export class SalesOrdersController {
     return { ...result, postalCode };
   }
 
+  @Get(":id/posting-agencies")
+  postingAgencies(@Param("id") id: string) {
+    return this.shipment.postingAgenciesForSalesOrder(id);
+  }
+
   @Get(":id/fulfillment")
   async fulfillment(@Param("id") id: string) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
