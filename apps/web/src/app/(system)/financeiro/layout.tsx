@@ -7,6 +7,7 @@ const links=[
  ["/financeiro/pagar","Pagar"],
  ["/financeiro/agenda-vendas","Agenda de vendas"],
  ["/financeiro/fluxo-caixa","Fluxo de caixa"],
+ ["/financeiro/bancos-contas","Bancos e contas"],
  ["/financeiro/conciliacao","Conciliação"],
 ] as const;
 export default function FinanceLayout({children}:{children:ReactNode}){
