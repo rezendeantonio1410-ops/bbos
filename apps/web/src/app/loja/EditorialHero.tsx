@@ -56,7 +56,7 @@ const scenes = [
     name: "Sublime",
     title: "Escolhido por quem",
     italic: "vive o café.",
-    copy: "José lê a origem. Suzi reconhece o cuidado. Juntos, escolhem o que chega à sua xícara.",
+    copy: "José lê a origem. Suzi trabalhou na construção desse grão. Juntos, escolhem o que chega à sua xícara.",
     image: "/brand/story/suzi-fragrancia.jpeg",
     product: "/brand/products/sublime-treated.webp",
     notes: "Rapadura · Caramelo · Doçura profunda",
