@@ -11,6 +11,7 @@ export type ShippingQuoteRequest = {
   packageHeightCm?: number;
   packageLengthCm?: number;
   packageCount?: number;
+  packages?: Array<{ widthCm: number; heightCm: number; lengthCm: number; weightGrams?: number }>;
 };
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
@@ -38,8 +39,16 @@ export class StorefrontShippingService {
   }
 
   private fingerprint(input: ShippingQuoteRequest) {
+    const packagesKey = input.packages?.length
+      ? JSON.stringify(input.packages.map((item) => ({
+          widthCm: Number(item.widthCm),
+          heightCm: Number(item.heightCm),
+          lengthCm: Number(item.lengthCm),
+          weightGrams: item.weightGrams == null ? null : Number(item.weightGrams),
+        })))
+      : "";
     return createHash("sha256")
-      .update(`${digits(input.postalCode)}:${input.subtotalCents}:${input.weightGrams}:${input.packageWidthCm ?? ""}:${input.packageHeightCm ?? ""}:${input.packageLengthCm ?? ""}:${input.packageCount ?? 1}`)
+      .update(`${digits(input.postalCode)}:${input.subtotalCents}:${input.weightGrams}:${input.packageWidthCm ?? ""}:${input.packageHeightCm ?? ""}:${input.packageLengthCm ?? ""}:${input.packageCount ?? 1}:${packagesKey}`)
       .digest("hex");
   }
 
@@ -87,14 +96,21 @@ export class StorefrontShippingService {
       body: JSON.stringify({
         from: { postal_code: this.originPostalCode() },
         to: { postal_code: digits(input.postalCode) },
-        volumes: Array.from({ length: Math.max(1, input.packageCount ?? 1) }, () => this.packageFor(
-          Math.ceil(input.weightGrams / Math.max(1, input.packageCount ?? 1)),
-          {
-            widthCm: input.packageWidthCm,
-            heightCm: input.packageHeightCm,
-            lengthCm: input.packageLengthCm,
-          },
-        )),
+        volumes: input.packages?.length
+          ? input.packages.map((item) => ({
+              width: Number(item.widthCm),
+              height: Number(item.heightCm),
+              length: Number(item.lengthCm),
+              weight: Math.max(0.3, Number(item.weightGrams ?? 0) / 1000),
+            }))
+          : Array.from({ length: Math.max(1, input.packageCount ?? 1) }, () => this.packageFor(
+              Math.ceil(input.weightGrams / Math.max(1, input.packageCount ?? 1)),
+              {
+                widthCm: input.packageWidthCm,
+                heightCm: input.packageHeightCm,
+                lengthCm: input.packageLengthCm,
+              },
+            )),
         ...(!policy.includeAllServices && selectedServices.length ? { services: selectedServices.join(",") } : {}),
       }),
     });
@@ -194,6 +210,12 @@ export class StorefrontShippingService {
       packageHeightCm: request.packageHeightCm == null ? undefined : Number(request.packageHeightCm),
       packageLengthCm: request.packageLengthCm == null ? undefined : Number(request.packageLengthCm),
       packageCount: request.packageCount == null ? 1 : Number(request.packageCount),
+      packages: request.packages?.map((item) => ({
+        widthCm: Number(item.widthCm),
+        heightCm: Number(item.heightCm),
+        lengthCm: Number(item.lengthCm),
+        weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
+      })),
     };
     if (
       input.postalCode.length !== 8 ||
@@ -202,8 +224,16 @@ export class StorefrontShippingService {
       [input.packageWidthCm, input.packageHeightCm, input.packageLengthCm].some(
         (value) => value != null && (!Number.isFinite(value) || value <= 0),
       ) ||
-      !Number.isSafeInteger(input.packageCount) || input.packageCount < 1 || input.packageCount > 50
-    ) throw new BadRequestException("Dados de entrega, dimensões ou quantidade de caixas inválidos.");
+      !Number.isSafeInteger(input.packageCount) || input.packageCount < 1 || input.packageCount > 50 ||
+      (input.packages?.length
+        ? input.packages.length > 50 || input.packages.some((item) =>
+            !Number.isFinite(item.widthCm) || item.widthCm <= 0 ||
+            !Number.isFinite(item.heightCm) || item.heightCm <= 0 ||
+            !Number.isFinite(item.lengthCm) || item.lengthCm <= 0 ||
+            item.weightGrams == null || !Number.isFinite(item.weightGrams) || item.weightGrams <= 0
+          )
+        : false)
+    ) throw new BadRequestException("Dados de entrega, dimensões, pesos ou quantidade de caixas inválidos.");
 
     const options = this.provider() === "MELHOR_ENVIO"
       ? await this.melhorEnvio(companyId, input, policy)
@@ -211,14 +241,21 @@ export class StorefrontShippingService {
     if (!options.length) throw new ServiceUnavailableException("Nenhuma modalidade de entrega está disponível para este CEP.");
     const free = policy.allowFreeShipping !== false && this.isFreeShipping(input.postalCode, input.subtotalCents);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const packageCount = Math.max(1, input.packageCount ?? 1);
+    const packageCount = input.packages?.length || Math.max(1, input.packageCount ?? 1);
     const packageWeightGrams = Math.ceil(input.weightGrams / packageCount);
-    const packageData = this.packageFor(packageWeightGrams, {
-      widthCm: input.packageWidthCm,
-      heightCm: input.packageHeightCm,
-      lengthCm: input.packageLengthCm,
-    });
-    const packagePayload = packageCount === 1 ? packageData : Array.from({ length: packageCount }, () => packageData);
+    const packagePayload = input.packages?.length
+      ? input.packages.map((item) => ({
+          width: Number(item.widthCm),
+          height: Number(item.heightCm),
+          length: Number(item.lengthCm),
+          weight: Math.max(0.3, Number(item.weightGrams) / 1000),
+        }))
+      : Array.from({ length: packageCount }, () => this.packageFor(packageWeightGrams, {
+          widthCm: input.packageWidthCm,
+          heightCm: input.packageHeightCm,
+          lengthCm: input.packageLengthCm,
+        }));
+    const packageData = packagePayload[0]!;
     const result = [];
     for (const option of options) {
       const id = randomUUID();
@@ -257,7 +294,8 @@ export class StorefrontShippingService {
         heightCm: packageData.height,
         lengthCm: packageData.length,
         packageCount,
-        weightPerPackageGrams: packageWeightGrams,
+        weightPerPackageGrams: input.packages?.length ? undefined : packageWeightGrams,
+        packages: packagePayload,
       },
       options: result,
     };
