@@ -141,12 +141,18 @@ type Order = {
   orderNumber?: string;
   status: string;
   totalAmount: string;
+  freight?: string | number;
   orderedAt: string;
   expectedDeliveryDate?: string | null;
   paymentType?: string | null;
   paymentTermsSnapshot?: string | null;
   freightResponsibility?: string | null;
   carrierName?: string | null;
+  shippingProvider?: string | null;
+  shippingQuoteId?: string | null;
+  shippingServiceId?: string | null;
+  shippingServiceName?: string | null;
+  estimatedDeliveryDays?: number | null;
   customerReference?: string | null;
   incoterm?: string | null;
   incotermLocation?: string | null;
@@ -154,6 +160,15 @@ type Order = {
   customer: Customer;
   items: OrderItem[];
   reservations: Array<{ id: string; status: string; quantity: number }>;
+};
+
+type ShipmentInfo = {
+  id: string;
+  status: string;
+  labelUrl?: string | null;
+  trackingCode?: string | null;
+  trackingUrl?: string | null;
+  externalId?: string | null;
 };
 
 type DiscountRequest = {
@@ -1072,6 +1087,8 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [fulfillment, setFulfillment] = useState<ShipmentInfo | null>(null);
+  const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1085,6 +1102,18 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
 
   useEffect(() => {
     void loadRequests();
+  }, [order.id]);
+
+  const loadFulfillment = async () => {
+    const response = await fetch(`${salesOrdersApi()}/${order.id}/fulfillment`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (response.ok) setFulfillment(await response.json());
+  };
+
+  useEffect(() => {
+    void loadFulfillment();
   }, [order.id]);
 
   useEffect(() => {
@@ -1153,7 +1182,9 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
     : "A combinar";
-  const freightLabel = freightLabels[order.freightResponsibility ?? ""] ?? "A combinar";
+  const freightLabel = order.shippingServiceName
+    ? `${order.carrierName ?? "Transportadora"} · ${order.shippingServiceName} · ${money.format(Number(order.freight ?? 0))}`
+    : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote ? quote.officialUnitPrice * (1 - requested / 100) : 0;
 
@@ -1172,6 +1203,27 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     order.incoterm ? `Incoterm: ${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}` : "",
     order.notes ? `Observações: ${order.notes}` : "",
   ].filter(Boolean).join("\n");
+
+  const generateLabel = async () => {
+    setFulfillmentBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/label`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Não foi possível gerar a etiqueta.");
+      }
+      setFulfillment(payload);
+      await onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível gerar a etiqueta.");
+    } finally {
+      setFulfillmentBusy(false);
+    }
+  };
 
   const copySummary = async () => {
     try {
@@ -1242,6 +1294,47 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 {order.incoterm && <MiniValue label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
               </div>
             </section>
+
+            {order.shippingProvider === "MELHOR_ENVIO" && (
+              <section className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-950">Expedição · Melhor Envio</p>
+                    <p className="mt-1 text-[10px] text-emerald-800">
+                      {fulfillment?.labelUrl
+                        ? "Etiqueta pronta para impressão."
+                        : order.status === "INVOICED"
+                          ? "NF-e autorizada: a etiqueta pode ser gerada automaticamente ou por contingência aqui."
+                          : "A etiqueta será liberada após a autorização da NF-e."}
+                    </p>
+                  </div>
+                  {fulfillment?.labelUrl ? (
+                    <a
+                      href={fulfillment.labelUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                    >
+                      Abrir etiqueta
+                    </a>
+                  ) : order.status === "INVOICED" ? (
+                    <button
+                      type="button"
+                      disabled={fulfillmentBusy}
+                      onClick={() => void generateLabel()}
+                      className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                    </button>
+                  ) : null}
+                </div>
+                {fulfillment?.trackingCode && (
+                  <p className="mt-3 text-[11px] text-emerald-900">
+                    Rastreio: <b>{fulfillment.trackingCode}</b>
+                  </p>
+                )}
+              </section>
+            )}
 
             {order.status === "DRAFT" && order.items.length > 0 && (
               <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
