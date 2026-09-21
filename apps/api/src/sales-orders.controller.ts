@@ -40,6 +40,7 @@ type SalesOrderCommercialTerms = {
   packageWidthCm?: number;
   packageHeightCm?: number;
   packageLengthCm?: number;
+  packageCount?: number;
 };
 
 @Controller("sales-orders")
@@ -168,6 +169,7 @@ export class SalesOrdersController {
       packageWidthCm?: number;
       packageHeightCm?: number;
       packageLengthCm?: number;
+      packageCount?: number;
     },
   ) {
     const actor = await this.actor(request);
@@ -229,6 +231,7 @@ export class SalesOrdersController {
         packageWidthCm: body.packageWidthCm,
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
+        packageCount: body.packageCount,
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
@@ -287,6 +290,7 @@ export class SalesOrdersController {
         packageWidthCm: body.packageWidthCm,
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
+        packageCount: body.packageCount,
       });
       body.freight = Number(shippingQuote.customerPriceCents) / 100;
     }
