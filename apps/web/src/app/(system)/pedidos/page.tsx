@@ -366,6 +366,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
   const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
   const [customPackage, setCustomPackage] = useState(false);
+  const [packagePreset, setPackagePreset] = useState<"P">("P");
   const [packageWidthCm, setPackageWidthCm] = useState("");
   const [packageHeightCm, setPackageHeightCm] = useState("");
   const [packageLengthCm, setPackageLengthCm] = useState("");
@@ -474,7 +475,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, lines, customPackage, packageWidthCm, packageHeightCm, packageLengthCm]);
+  }, [customerId, lines, customPackage, packagePreset, packageWidthCm, packageHeightCm, packageLengthCm]);
 
   useEffect(() => {
     if (firstQuote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
@@ -494,9 +495,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         body: JSON.stringify({
           customerId,
           items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
-          packageWidthCm: customPackage && packageWidthCm ? Number(packageWidthCm) : undefined,
-          packageHeightCm: customPackage && packageHeightCm ? Number(packageHeightCm) : undefined,
-          packageLengthCm: customPackage && packageLengthCm ? Number(packageLengthCm) : undefined,
+          packageWidthCm: customPackage ? (packageWidthCm ? Number(packageWidthCm) : undefined) : (packagePreset === "P" ? 35 : undefined),
+          packageHeightCm: customPackage ? (packageHeightCm ? Number(packageHeightCm) : undefined) : (packagePreset === "P" ? 22 : undefined),
+          packageLengthCm: customPackage ? (packageLengthCm ? Number(packageLengthCm) : undefined) : (packagePreset === "P" ? 11 : undefined),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -537,9 +538,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         freight: freightAmount,
         shippingQuoteId: selectedShippingQuote?.id,
         destinationPostalCode: shippingPostalCode || undefined,
-        packageWidthCm: customPackage && packageWidthCm ? Number(packageWidthCm) : undefined,
-        packageHeightCm: customPackage && packageHeightCm ? Number(packageHeightCm) : undefined,
-        packageLengthCm: customPackage && packageLengthCm ? Number(packageLengthCm) : undefined,
+        packageWidthCm: customPackage ? (packageWidthCm ? Number(packageWidthCm) : undefined) : (packagePreset === "P" ? 35 : undefined),
+        packageHeightCm: customPackage ? (packageHeightCm ? Number(packageHeightCm) : undefined) : (packagePreset === "P" ? 22 : undefined),
+        packageLengthCm: customPackage ? (packageLengthCm ? Number(packageLengthCm) : undefined) : (packagePreset === "P" ? 11 : undefined),
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -727,16 +728,19 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Embalagem da cotação</p>
                           <p className="mt-1 text-[10px] text-stone-500">
-                            Use a embalagem padrão da Bispo ou personalize as medidas desta caixa.
+                            Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg ou 5 pacotes de 500 g. Personalize as medidas quando necessário.
                           </p>
                         </div>
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => setCustomPackage(false)}
-                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                            onClick={() => {
+                              setCustomPackage(false);
+                              setPackagePreset("P");
+                            }}
+                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage && packagePreset === "P" ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
                           >
-                            Padrão Bispo
+                            Caixa P · 35 × 22 × 11 cm
                           </button>
                           <button
                             type="button"
