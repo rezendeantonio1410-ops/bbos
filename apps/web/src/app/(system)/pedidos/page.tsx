@@ -782,12 +782,40 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                             </Field>
                           </>
                         )}
-                        <Field label="Quantidade de caixas">
-                          <input type="number" min="1" max="50" step="1" inputMode="numeric" value={packageCount} onChange={(event) => setPackageCount(event.target.value)} />
-                        </Field>
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-semibold text-stone-700">Caixas do envio</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPackageCount((current) => String(Math.max(1, Number(current) - 1)))}
+                              disabled={Number(packageCount) <= 1}
+                              className="h-10 w-10 rounded-lg border bg-white text-base font-bold text-stone-700 disabled:opacity-30"
+                              aria-label="Remover uma caixa"
+                            >
+                              −
+                            </button>
+                            <div className="min-w-[84px] rounded-lg border bg-stone-50 px-3 py-2.5 text-center text-xs font-bold text-stone-900">
+                              {Math.max(1, Number(packageCount) || 1)} {Math.max(1, Number(packageCount) || 1) === 1 ? "caixa" : "caixas"}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPackageCount((current) => String(Math.min(50, Math.max(1, Number(current) || 1) + 1)))}
+                              className="rounded-lg bg-emerald-950 px-3 py-2.5 text-[10px] font-bold text-white"
+                            >
+                              + Adicionar caixa
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {Array.from({ length: Math.max(1, Number(packageCount) || 1) }).map((_, index) => (
+                          <span key={index} className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-900">
+                            Caixa {index + 1}
+                          </span>
+                        ))}
                       </div>
                       <p className="mt-2 text-[10px] text-stone-500">
-                        O peso total do pedido será distribuído entre as caixas para a cotação. Use caixas com medidas iguais nesta cotação.
+                        O peso total do pedido será distribuído entre as caixas para a cotação. Nesta etapa, as caixas usam as mesmas medidas informadas acima.
                       </p>
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
