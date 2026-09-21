@@ -41,6 +41,7 @@ type SalesOrderCommercialTerms = {
   packageHeightCm?: number;
   packageLengthCm?: number;
   packageCount?: number;
+  packages?: Array<{ widthCm: number; heightCm: number; lengthCm: number; weightGrams?: number }>;
 };
 
 @Controller("sales-orders")
@@ -170,6 +171,7 @@ export class SalesOrdersController {
       packageHeightCm?: number;
       packageLengthCm?: number;
       packageCount?: number;
+      packages?: Array<{ widthCm?: number; heightCm?: number; lengthCm?: number; weightGrams?: number }>;
     },
   ) {
     const actor = await this.actor(request);
@@ -232,6 +234,12 @@ export class SalesOrdersController {
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
         packageCount: body.packageCount,
+        packages: body.packages?.map((item) => ({
+          widthCm: Number(item.widthCm),
+          heightCm: Number(item.heightCm),
+          lengthCm: Number(item.lengthCm),
+          weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
+        })),
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
@@ -291,6 +299,12 @@ export class SalesOrdersController {
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
         packageCount: body.packageCount,
+        packages: body.packages?.map((item) => ({
+          widthCm: Number(item.widthCm),
+          heightCm: Number(item.heightCm),
+          lengthCm: Number(item.lengthCm),
+          weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
+        })),
       });
       body.freight = Number(shippingQuote.customerPriceCents) / 100;
     }
