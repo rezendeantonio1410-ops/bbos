@@ -220,6 +220,90 @@ export class MelhorEnvioShipmentService {
     return { id: shipmentId, externalId, status: "LABEL_READY", labelUrl, trackingCode, trackingUrl };
   }
 
+  async postingAgenciesForSalesOrder(orderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,so."companyId",so."shippingProvider",so."shippingQuoteId",
+              q."carrierName",q."serviceName",q."serviceId",q."rawResponse"
+         FROM "SalesOrder" so
+         JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+        WHERE so.id=$1 LIMIT 1`,
+      orderId,
+    );
+    const order = rows[0];
+    if (!order) throw new BadRequestException("Pedido ou cotação de frete não encontrado.");
+    if (order.shippingProvider !== "MELHOR_ENVIO")
+      throw new BadRequestException("Este pedido não utiliza Melhor Envio.");
+
+    const sender = this.sender();
+    const carrierCompanyId = String(order.rawResponse?.company?.id ?? "").trim();
+    const params = new URLSearchParams({
+      country: "BR",
+      state: String(process.env.SHIPPING_SENDER_STATE?.trim() || "PR").toUpperCase(),
+      city: sender.city,
+    });
+    if (carrierCompanyId) params.set("company", carrierCompanyId);
+
+    const response = await this.request(
+      order.companyId,
+      `/me/shipment/agencies?${params.toString()}`,
+      { method: "GET" },
+    );
+    const rawAgencies = Array.isArray(response)
+      ? response
+      : Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.agencies)
+          ? response.agencies
+          : [];
+
+    const agencies = rawAgencies.map((agency: any) => {
+      const address = agency?.address ?? agency?.agency_address ?? {};
+      const city = address?.city ?? agency?.city ?? {};
+      const state = address?.state ?? agency?.state ?? {};
+      const street =
+        address?.address ?? address?.street ?? agency?.address ?? agency?.street ?? "";
+      const number = address?.number ?? agency?.number ?? "";
+      const district = address?.district ?? address?.neighborhood ?? agency?.district ?? "";
+      const postalCode =
+        address?.postal_code ?? address?.postalCode ?? agency?.postal_code ?? agency?.postalCode ?? "";
+      const cityName = typeof city === "string" ? city : (city?.city ?? city?.name ?? agency?.city_name ?? sender.city);
+      const stateCode = typeof state === "string" ? state : (state?.state_abbr ?? state?.abbr ?? state?.code ?? agency?.state_abbr ?? params.get("state"));
+      const id = String(agency?.id ?? agency?.agency_id ?? agency?.agencyId ?? "");
+      const name = String(agency?.name ?? agency?.company_name ?? agency?.agency_name ?? `Agência ${id}`);
+      const addressLine = [street, number].filter(Boolean).join(", ");
+      const locationLine = [district, cityName, stateCode].filter(Boolean).join(" · ");
+      const mapsQuery = [addressLine, district, cityName, stateCode, postalCode].filter(Boolean).join(", ");
+      return {
+        id,
+        name,
+        companyName: String(agency?.company_name ?? agency?.company?.name ?? order.carrierName ?? ""),
+        address: addressLine,
+        district: String(district || ""),
+        city: String(cityName || ""),
+        state: String(stateCode || ""),
+        postalCode: String(postalCode || ""),
+        locationLine,
+        phone: String(agency?.phone ?? agency?.telephone ?? ""),
+        latitude: Number(agency?.latitude ?? address?.latitude ?? NaN),
+        longitude: Number(agency?.longitude ?? address?.longitude ?? NaN),
+        mapsUrl: mapsQuery
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+          : null,
+      };
+    }).filter((agency: any) => agency.id);
+
+    return {
+      carrierName: order.carrierName,
+      serviceName: order.serviceName,
+      serviceId: order.serviceId,
+      origin: {
+        city: sender.city,
+        state: params.get("state"),
+        postalCode: sender.postal_code,
+      },
+      agencies,
+    };
+  }
   async createLabelForSalesOrder(orderId: string) {
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
