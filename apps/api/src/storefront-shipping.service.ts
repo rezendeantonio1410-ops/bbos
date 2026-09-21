@@ -7,6 +7,9 @@ export type ShippingQuoteRequest = {
   postalCode: string;
   subtotalCents: number;
   weightGrams: number;
+  packageWidthCm?: number;
+  packageHeightCm?: number;
+  packageLengthCm?: number;
 };
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
@@ -35,7 +38,7 @@ export class StorefrontShippingService {
 
   private fingerprint(input: ShippingQuoteRequest) {
     return createHash("sha256")
-      .update(`${digits(input.postalCode)}:${input.subtotalCents}:${input.weightGrams}`)
+      .update(`${digits(input.postalCode)}:${input.subtotalCents}:${input.weightGrams}:${input.packageWidthCm ?? ""}:${input.packageHeightCm ?? ""}:${input.packageLengthCm ?? ""}`)
       .digest("hex");
   }
 
@@ -44,8 +47,9 @@ export class StorefrontShippingService {
     return subtotalCents >= 27000 && [0, 1, 2, 3, 8, 9].includes(prefix);
   }
 
-  private packageFor(weightGrams: number) {
-    const number = (name: string, fallback: number) => {
+  private packageFor(weightGrams: number, override?: { widthCm?: number; heightCm?: number; lengthCm?: number }) {
+    const number = (name: string, fallback: number, custom?: number) => {
+      if (Number.isFinite(custom) && Number(custom) > 0) return Number(custom);
       const configured = process.env[name]?.trim();
       if (this.provider() === "MELHOR_ENVIO" && !configured)
         throw new ServiceUnavailableException(`${name} não configurado com a medida real da embalagem.`);
@@ -53,9 +57,9 @@ export class StorefrontShippingService {
       return Number.isFinite(value) && value > 0 ? value : fallback;
     };
     return {
-      width: number("SHIPPING_PACKAGE_WIDTH_CM", 18),
-      height: number("SHIPPING_PACKAGE_HEIGHT_CM", 14),
-      length: number("SHIPPING_PACKAGE_LENGTH_CM", 24),
+      width: number("SHIPPING_PACKAGE_WIDTH_CM", 18, override?.widthCm),
+      height: number("SHIPPING_PACKAGE_HEIGHT_CM", 14, override?.heightCm),
+      length: number("SHIPPING_PACKAGE_LENGTH_CM", 24, override?.lengthCm),
       weight: Math.max(0.3, weightGrams / 1000),
     };
   }
@@ -82,7 +86,11 @@ export class StorefrontShippingService {
       body: JSON.stringify({
         from: { postal_code: this.originPostalCode() },
         to: { postal_code: digits(input.postalCode) },
-        volumes: [this.packageFor(input.weightGrams)],
+        volumes: [this.packageFor(input.weightGrams, {
+          widthCm: input.packageWidthCm,
+          heightCm: input.packageHeightCm,
+          lengthCm: input.packageLengthCm,
+        })],
         ...(!policy.includeAllServices && selectedServices.length ? { services: selectedServices.join(",") } : {}),
       }),
     });
@@ -178,12 +186,18 @@ export class StorefrontShippingService {
       postalCode: digits(request.postalCode),
       subtotalCents: Number(request.subtotalCents),
       weightGrams: Number(request.weightGrams),
+      packageWidthCm: request.packageWidthCm == null ? undefined : Number(request.packageWidthCm),
+      packageHeightCm: request.packageHeightCm == null ? undefined : Number(request.packageHeightCm),
+      packageLengthCm: request.packageLengthCm == null ? undefined : Number(request.packageLengthCm),
     };
     if (
       input.postalCode.length !== 8 ||
       !Number.isSafeInteger(input.subtotalCents) || input.subtotalCents <= 0 ||
-      !Number.isSafeInteger(input.weightGrams) || input.weightGrams <= 0
-    ) throw new BadRequestException("Dados de entrega inválidos.");
+      !Number.isSafeInteger(input.weightGrams) || input.weightGrams <= 0 ||
+      [input.packageWidthCm, input.packageHeightCm, input.packageLengthCm].some(
+        (value) => value != null && (!Number.isFinite(value) || value <= 0),
+      )
+    ) throw new BadRequestException("Dados de entrega ou dimensões da embalagem inválidos.");
 
     const options = this.provider() === "MELHOR_ENVIO"
       ? await this.melhorEnvio(companyId, input, policy)
@@ -191,7 +205,11 @@ export class StorefrontShippingService {
     if (!options.length) throw new ServiceUnavailableException("Nenhuma modalidade de entrega está disponível para este CEP.");
     const free = policy.allowFreeShipping !== false && this.isFreeShipping(input.postalCode, input.subtotalCents);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const packageData = this.packageFor(input.weightGrams);
+    const packageData = this.packageFor(input.weightGrams, {
+      widthCm: input.packageWidthCm,
+      heightCm: input.packageHeightCm,
+      lengthCm: input.packageLengthCm,
+    });
     const result = [];
     for (const option of options) {
       const id = randomUUID();
