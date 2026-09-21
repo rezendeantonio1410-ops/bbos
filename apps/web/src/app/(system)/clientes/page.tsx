@@ -11,6 +11,7 @@ import {
   History,
   Info,
   MapPin,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -38,6 +39,9 @@ type Customer = {
   segment?: string | null;
   email?: string | null;
   phone?: string | null;
+  postalCode?: string | null;
+  address?: string | null;
+  district?: string | null;
   city?: string | null;
   state?: string | null;
   paymentTerms?: string | null;
@@ -80,6 +84,7 @@ export default function CustomersPage() {
   const [error,setError] = useState("");
   const [search,setSearch] = useState("");
   const [showNew,setShowNew] = useState(false);
+  const [editCustomer,setEditCustomer] = useState<Customer|null>(null);
   const [form,setForm] = useState(emptyCustomer);
   const [saving,setSaving] = useState(false);
   const [cepBusy,setCepBusy] = useState(false);
@@ -124,6 +129,34 @@ export default function CustomersPage() {
       if(!response.ok) throw new Error(payload?.message ?? "Não foi possível cadastrar o cliente.");
       setForm(emptyCustomer); setShowNew(false); await load();
     } catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível cadastrar o cliente.");}
+    finally{setSaving(false);}
+  };
+
+  const openEdit = (customer:Customer) => {
+    setError("");
+    setEditCustomer(customer);
+    setForm({
+      name:customer.name??"", legalName:customer.legalName??"", tradeName:customer.tradeName??"",
+      taxId:customer.taxId??"", segment:customer.segment??"", email:customer.email??"",
+      phone:customer.phone??"", postalCode:customer.postalCode??"", address:customer.address??"",
+      district:customer.district??"", city:customer.city??"", state:customer.state??"",
+      paymentTerms:customer.paymentTerms??"",
+    });
+  };
+
+  const saveCustomer = async () => {
+    if(!editCustomer) return;
+    if(!form.name.trim()) return setError("O nome do cliente é obrigatório.");
+    setSaving(true); setError("");
+    try {
+      const response=await fetch(`/api/customers/${editCustomer.id}`,{
+        method:"PATCH", headers:{"content-type":"application/json"}, credentials:"include",
+        body:JSON.stringify({...form,active:editCustomer.active}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(payload?.message??"Não foi possível atualizar o cliente.");
+      setEditCustomer(null); setForm(emptyCustomer); await load();
+    } catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível atualizar o cliente.");}
     finally{setSaving(false);}
   };
 
@@ -207,7 +240,7 @@ export default function CustomersPage() {
     <div className="rounded-2xl border bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-xl bg-stone-100 px-3 py-2.5 text-stone-500"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Busque por cliente, CNPJ, cidade ou segmento..." className="w-full bg-transparent text-sm outline-none"/></div><span className="text-xs text-stone-500">{filtered.length} cliente(s)</span></div>
       {error&&<div className="m-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {loading?<div className="p-12 text-center text-sm text-stone-500">Estou organizando seus clientes…</div>:filtered.length===0?<div className="p-14 text-center"><Building2 className="mx-auto text-stone-300"/><p className="mt-3 font-semibold">Ainda não há clientes aqui</p><p className="mt-1 text-sm text-stone-500">Cadastre o primeiro. O BBOS vai guiando você.</p></div>:<div className="divide-y">{filtered.map(customer=><CustomerRow key={customer.id} customer={customer} onRequest={()=>openRequest(customer)} onCredit={()=>openCredit(customer)}/>)}</div>}
+      {loading?<div className="p-12 text-center text-sm text-stone-500">Estou organizando seus clientes…</div>:filtered.length===0?<div className="p-14 text-center"><Building2 className="mx-auto text-stone-300"/><p className="mt-3 font-semibold">Ainda não há clientes aqui</p><p className="mt-1 text-sm text-stone-500">Cadastre o primeiro. O BBOS vai guiando você.</p></div>:<div className="divide-y">{filtered.map(customer=><CustomerRow key={customer.id} customer={customer} onEdit={()=>openEdit(customer)} onRequest={()=>openRequest(customer)} onCredit={()=>openCredit(customer)}/>)}</div>}
     </div>
 
     {showNew&&<div className="fixed inset-0 z-50 flex justify-end bg-black/30"><aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
@@ -230,6 +263,28 @@ export default function CustomersPage() {
       <div className="mt-6 rounded-2xl bg-violet-50 p-4 text-sm text-violet-900"><div className="flex gap-3"><Sparkles className="mt-0.5 shrink-0" size={18}/><p>Depois de salvar, eu vou acompanhar crédito, títulos em aberto e atrasos deste cliente e avisar a equipe no momento da venda.</p></div></div>
       {error&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <button disabled={saving} onClick={()=>void createCustomer()} className="mt-6 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando…":"Cadastrar cliente"}</button>
+    </aside></div>}
+
+    {editCustomer&&<div className="fixed inset-0 z-50 flex justify-end bg-black/30"><aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.18em] text-blue-700">Cadastro do cliente</p><h2 className="mt-1 text-2xl font-semibold">Editar cliente</h2><p className="mt-1 text-sm text-stone-500">Atualize os dados comerciais e de entrega.</p></div><button onClick={()=>{setEditCustomer(null);setForm(emptyCustomer);}} className="rounded-xl border p-2"><X size={18}/></button></div>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Field label="Nome do cliente" wide><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
+        <Field label="Razão social"><input value={form.legalName} onChange={e=>setForm({...form,legalName:e.target.value})}/></Field>
+        <Field label="Nome fantasia"><input value={form.tradeName} onChange={e=>setForm({...form,tradeName:e.target.value})}/></Field>
+        <Field label="CPF / CNPJ"><input value={form.taxId} onChange={e=>setForm({...form,taxId:e.target.value})}/></Field>
+        <Field label="Segmento"><select value={form.segment} onChange={e=>setForm({...form,segment:e.target.value})}><option value="">Escolha o perfil</option>{segments.map(s=><option key={s}>{s}</option>)}</select></Field>
+        <Field label="E-mail"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
+        <Field label="Telefone / WhatsApp" help="Formato internacional: +5543999999999"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="+5543999999999"/></Field>
+        <Field label="CEP"><div className="flex gap-2"><input className="flex-1" value={form.postalCode} onChange={e=>setForm({...form,postalCode:e.target.value})}/><button type="button" onClick={()=>void findCep()} disabled={cepBusy} className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white">{cepBusy?"Buscando…":"Buscar"}</button></div></Field>
+        <Field label="UF"><select value={form.state} onChange={e=>setForm({...form,state:e.target.value,city:""})}><option value="">Estado</option>{states.map(s=><option key={s}>{s}</option>)}</select></Field>
+        <Field label="Cidade"><input value={form.city} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
+        <Field label="Bairro"><input value={form.district} onChange={e=>setForm({...form,district:e.target.value})}/></Field>
+        <Field label="Endereço" wide><input value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
+        <Field label="Condição de pagamento" wide><select value={form.paymentTerms} onChange={e=>setForm({...form,paymentTerms:e.target.value})}><option value="">Definir depois</option>{paymentOptions.map(p=><option key={p}>{p}</option>)}</select></Field>
+        <Field label="Status do cadastro" wide><select value={editCustomer.active?"ACTIVE":"INACTIVE"} onChange={e=>setEditCustomer({...editCustomer,active:e.target.value==="ACTIVE"})}><option value="ACTIVE">Ativo</option><option value="INACTIVE">Inativo</option></select></Field>
+      </div>
+      {error&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      <button disabled={saving} onClick={()=>void saveCustomer()} className="mt-6 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando…":"Salvar alterações"}</button>
     </aside></div>}
 
     {requestCustomer&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4"><div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
@@ -263,14 +318,14 @@ export default function CustomersPage() {
   </div>;
 }
 
-function CustomerRow({customer,onRequest,onCredit}:{customer:Customer;onRequest:()=>void;onCredit:()=>void}){
+function CustomerRow({customer,onEdit,onRequest,onCredit}:{customer:Customer;onEdit:()=>void;onRequest:()=>void;onCredit:()=>void}){
   const h=customer.financialHealth;
   const style=h.health==="HEALTHY"?"bg-emerald-50 text-emerald-800 border-emerald-100":h.health==="INFO"?"bg-blue-50 text-blue-800 border-blue-100":h.health==="ATTENTION"?"bg-amber-50 text-amber-900 border-amber-100":"bg-red-50 text-red-800 border-red-100";
   const Icon=h.health==="HEALTHY"?CheckCircle2:h.health==="BLOCKED"?ShieldAlert:h.health==="ATTENTION"?AlertTriangle:Info;
   return <div className="p-5 transition hover:bg-stone-50/60"><div className="grid gap-4 lg:grid-cols-[1.2fr_1.5fr_auto] lg:items-center">
     <div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{customer.tradeName||customer.name}</p>{customer.segment&&<span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">{customer.segment}</span>}</div><p className="mt-1 text-xs text-stone-500">{customer.taxId||"CPF/CNPJ ainda não informado"}</p>{customer.city&&<p className="mt-1 flex items-center gap-1 text-xs text-stone-400"><MapPin size={12}/>{customer.city}{customer.state?`/${customer.state}`:""}</p>}</div>
     <div className={`rounded-xl border px-4 py-3 ${style}`}><div className="flex gap-2"><Icon size={17} className="mt-0.5 shrink-0"/><div><p className="text-xs font-bold">{h.health==="HEALTHY"?"Tudo em ordem":h.health==="INFO"?"BBOS orienta":h.health==="ATTENTION"?"Vale conferir":"Atenção antes de vender"}</p><p className="mt-1 text-xs leading-5 opacity-90">{h.guidance}</p></div></div></div>
-    <div className="flex flex-wrap items-center gap-2 lg:justify-end"><div className="mr-1 text-right"><p className="text-[10px] uppercase tracking-wider text-stone-400">Crédito</p><p className="text-sm font-semibold">{creditLabel[customer.creditStatus]}</p>{customer.creditStatus==="APPROVED"&&<p className="text-xs text-stone-500">Disponível {money(h.availableCredit)}</p>}</div>{customer.creditStatus!=="UNDER_REVIEW"&&<button onClick={onRequest} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"><Send size={14}/> Solicitar crédito</button>}<button onClick={onCredit} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"><BadgeDollarSign size={15}/> {customer.creditStatus==="UNDER_REVIEW"?"Analisar":"Histórico"}<ChevronRight size={14}/></button></div>
+    <div className="flex flex-wrap items-center gap-2 lg:justify-end"><div className="mr-1 text-right"><p className="text-[10px] uppercase tracking-wider text-stone-400">Crédito</p><p className="text-sm font-semibold">{creditLabel[customer.creditStatus]}</p>{customer.creditStatus==="APPROVED"&&<p className="text-xs text-stone-500">Disponível {money(h.availableCredit)}</p>}</div><button onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"><Pencil size={14}/> Editar</button>{customer.creditStatus!=="UNDER_REVIEW"&&<button onClick={onRequest} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"><Send size={14}/> Solicitar crédito</button>}<button onClick={onCredit} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"><BadgeDollarSign size={15}/> {customer.creditStatus==="UNDER_REVIEW"?"Analisar":"Histórico"}<ChevronRight size={14}/></button></div>
   </div></div>;
 }
 
