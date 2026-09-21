@@ -37,6 +37,9 @@ type SalesOrderCommercialTerms = {
   incotermLocation?: string;
   shippingQuoteId?: string;
   destinationPostalCode?: string;
+  packageWidthCm?: number;
+  packageHeightCm?: number;
+  packageLengthCm?: number;
 };
 
 @Controller("sales-orders")
@@ -162,6 +165,9 @@ export class SalesOrdersController {
       productVariantId?: string;
       quantity?: number;
       items?: Array<{ productVariantId?: string; quantity?: number }>;
+      packageWidthCm?: number;
+      packageHeightCm?: number;
+      packageLengthCm?: number;
     },
   ) {
     const actor = await this.actor(request);
@@ -220,6 +226,9 @@ export class SalesOrdersController {
         postalCode,
         subtotalCents,
         weightGrams,
+        packageWidthCm: body.packageWidthCm,
+        packageHeightCm: body.packageHeightCm,
+        packageLengthCm: body.packageLengthCm,
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
@@ -275,6 +284,9 @@ export class SalesOrdersController {
         postalCode: body.destinationPostalCode,
         subtotalCents,
         weightGrams,
+        packageWidthCm: body.packageWidthCm,
+        packageHeightCm: body.packageHeightCm,
+        packageLengthCm: body.packageLengthCm,
       });
       body.freight = Number(shippingQuote.customerPriceCents) / 100;
     }
