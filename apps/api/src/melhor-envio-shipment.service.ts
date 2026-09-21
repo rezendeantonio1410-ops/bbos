@@ -163,7 +163,7 @@ export class MelhorEnvioShipmentService {
           unitary_value: Number(item.unitPriceCents) / 100,
           weight: Math.max(0.001, Number(item.weightGrams || 0) / 1000 / Math.max(1, Number(item.quantity))),
         })),
-        volumes: [order.package],
+        volumes: Array.isArray(order.package) ? order.package : [order.package],
         options: { insurance_value: Number(order.subtotalCents) / 100, receipt: false, own_hand: false, reverse: false, non_commercial: false },
         }),
       });
@@ -218,6 +218,201 @@ export class MelhorEnvioShipmentService {
       { shipmentId, externalId, carrierName: order.carrierName, serviceName: order.serviceName },
     );
     return { id: shipmentId, externalId, status: "LABEL_READY", labelUrl, trackingCode, trackingUrl };
+  }
+
+  async createLabelForSalesOrder(orderId: string) {
+    const orders = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
+              q."serviceId",q."serviceName",q."carrierName",
+              c.name AS "customerName",c."taxId" AS "customerTaxId",
+              c.email AS "customerEmail",c.phone AS "customerPhone",
+              c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
+              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState"
+         FROM "SalesOrder" so
+         JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 LIMIT 1`,
+      orderId,
+    );
+    const order = orders[0];
+    if (!order) throw new BadRequestException("Pedido comercial ou cotação de frete não encontrado.");
+    if (order.shippingProvider !== "MELHOR_ENVIO")
+      throw new BadRequestException("Este pedido comercial não utiliza Melhor Envio.");
+
+    const authorized = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,"accessKey" FROM "FiscalDocument"
+        WHERE "salesOrderId"=$1 AND direction='OUTBOUND' AND status='AUTHORIZED'
+        ORDER BY "updatedAt" DESC LIMIT 1`,
+      orderId,
+    );
+    if (!authorized[0])
+      throw new BadRequestException("A etiqueta só pode ser comprada após a autorização da NF-e.");
+
+    const prior = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "Shipment" WHERE "salesOrderId"=$1 LIMIT 1`,
+      orderId,
+    );
+    if (prior[0]?.labelUrl) return { ...prior[0], idempotent: true };
+
+    const items = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT soi.id,soi."productName",soi.quantity,soi."unitPrice",pv."netWeightGrams"
+         FROM "SalesOrderItem" soi
+         JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+        WHERE soi."salesOrderId"=$1
+        ORDER BY soi."createdAt" ASC`,
+      orderId,
+    );
+    if (!items.length) throw new BadRequestException("Pedido comercial sem itens para expedição.");
+
+    const shipmentId = prior[0]?.id || randomUUID();
+    if (!prior[0]) {
+      await this.database.$executeRawUnsafe(
+        `INSERT INTO "Shipment"
+          (id,"companyId","storefrontOrderId","salesOrderId","shippingQuoteId",provider,status,
+           "serviceId","serviceName","carrierName","providerPriceCents","customerPriceCents",
+           metadata,"createdAt","updatedAt")
+         VALUES ($1,$2,NULL,$3,$4,'MELHOR_ENVIO','PENDING',$5,$6,$7,$8,$9,'{}'::jsonb,NOW(),NOW())`,
+        shipmentId,
+        order.companyId,
+        order.id,
+        order.shippingQuoteId,
+        order.serviceId,
+        order.serviceName,
+        order.carrierName,
+        order.providerPriceCents,
+        order.customerPriceCents,
+      );
+    }
+
+    const rawAddress = String(order.customerAddress || "").trim();
+    const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9\/-]*)\s*$/);
+    const street = String(addressMatch?.[1] || rawAddress).trim();
+    const number = String(addressMatch?.[2] || "S/N").trim();
+    if (!street || !order.customerPostalCode || !order.customerCity || !order.customerState) {
+      throw new BadRequestException(
+        "Complete endereço, CEP, cidade e UF do cliente antes de gerar a etiqueta.",
+      );
+    }
+
+    const packagePayload = Array.isArray(order.package) ? order.package : [order.package];
+    let externalId = prior[0]?.externalId || "";
+    if (!externalId) {
+      const cartResult = await this.request(order.companyId, "/me/cart", {
+        method: "POST",
+        body: JSON.stringify({
+          service: Number(order.serviceId),
+          from: this.sender(),
+          to: {
+            name: order.customerName,
+            phone: digits(order.customerPhone),
+            email: order.customerEmail,
+            document: digits(order.customerTaxId),
+            address: street,
+            complement: "",
+            number,
+            district: order.customerDistrict || "",
+            city: order.customerCity,
+            state_abbr: order.customerState,
+            country_id: "BR",
+            postal_code: digits(order.customerPostalCode),
+          },
+          products: items.map((item: any) => ({
+            name: item.productName,
+            quantity: Number(item.quantity),
+            unitary_value: Number(item.unitPrice),
+            weight: Math.max(
+              0.001,
+              Number(item.netWeightGrams || 0) / 1000,
+            ),
+          })),
+          volumes: packagePayload,
+          options: {
+            insurance_value: Number(order.subtotal || order.totalAmount || 0),
+            receipt: false,
+            own_hand: false,
+            reverse: false,
+            non_commercial: false,
+            invoice: { key: String(authorized[0].accessKey || "") || undefined },
+          },
+        }),
+      });
+      externalId = String(cartResult?.id || "");
+      const cartPriceCents = Math.round(
+        Number(cartResult?.price || cartResult?.custom_price || 0) * 100,
+      );
+      if (
+        cartPriceCents > 0 &&
+        cartPriceCents !== Number(order.providerPriceCents)
+      ) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "Shipment" SET status='EXCEPTION',metadata=$2::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+          shipmentId,
+          JSON.stringify({
+            reason: "PRICE_CHANGED",
+            quotedCents: Number(order.providerPriceCents),
+            cartPriceCents,
+            cartResult,
+          }),
+        );
+        throw new BadRequestException(
+          "O valor da transportadora mudou após a cotação. Pedido enviado para conferência.",
+        );
+      }
+    }
+
+    if (!externalId)
+      throw new ServiceUnavailableException(
+        "Melhor Envio não retornou o identificador da remessa.",
+      );
+
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment" SET "externalId"=$2,status='CARTED',"updatedAt"=NOW() WHERE id=$1`,
+      shipmentId,
+      externalId,
+    );
+    await this.request(order.companyId, "/me/shipment/checkout", {
+      method: "POST",
+      body: JSON.stringify({ orders: [externalId] }),
+    });
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
+      shipmentId,
+    );
+    await this.request(order.companyId, "/me/shipment/generate", {
+      method: "POST",
+      body: JSON.stringify({ orders: [externalId] }),
+    });
+    const labelUrl = await this.printWhenReady(order.companyId, externalId);
+    const details = await this.request(
+      order.companyId,
+      `/me/orders/${encodeURIComponent(externalId)}`,
+      { method: "GET" },
+    ).catch(() => ({}));
+    const trackingCode =
+      String(details?.tracking || details?.tracking_code || "") || null;
+    const trackingUrl =
+      String(details?.tracking_url || details?.tracking?.url || "") || null;
+
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment"
+          SET status='LABEL_READY',"labelUrl"=$2,"trackingCode"=$3,"trackingUrl"=$4,
+              metadata=$5::jsonb,"updatedAt"=NOW()
+        WHERE id=$1`,
+      shipmentId,
+      labelUrl || null,
+      trackingCode,
+      trackingUrl,
+      JSON.stringify(details || {}),
+    );
+
+    return {
+      id: shipmentId,
+      externalId,
+      status: "LABEL_READY",
+      labelUrl,
+      trackingCode,
+      trackingUrl,
+    };
   }
 
   async applyTrackingUpdate(externalId: string, statusValue: string, payload: unknown) {
