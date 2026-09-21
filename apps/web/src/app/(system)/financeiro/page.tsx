@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   CreditCard,
   GitCompareArrows,
+  Landmark,
   TrendingUp,
 } from "lucide-react";
 import { Card } from "@bbos/ui";
@@ -174,10 +175,11 @@ export default function FinancePage() {
         </Card>
       </section>
 
-      <section className="mt-6 grid gap-3 md:grid-cols-4">
+      <section className="mt-6 grid gap-3 md:grid-cols-5">
         <Quick href="/financeiro/receber" title="Contas a receber" detail="A vencer, vencidos e pagamentos parciais" />
         <Quick href="/financeiro/pagar" title="Contas a pagar" detail="Fornecedores e centros de custo" />
         <Quick href="/financeiro/fluxo-caixa" title="Fluxo de caixa" detail="Realizado, projeção e movimentações" />
+        <Quick href="/financeiro/bancos-contas" title="Bancos e contas" detail="Contas permanentes, moeda, agência e saldo inicial" icon={Landmark} />
         <Quick href="/financeiro/conciliacao" title="Conciliação" detail="Compare movimentos e confirme divergências" icon={GitCompareArrows} />
       </section>
     </div>
