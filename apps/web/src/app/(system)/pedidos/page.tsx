@@ -365,6 +365,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [shippingPostalCode, setShippingPostalCode] = useState("");
   const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
   const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
+  const [customPackage, setCustomPackage] = useState(false);
   const [packageWidthCm, setPackageWidthCm] = useState("");
   const [packageHeightCm, setPackageHeightCm] = useState("");
   const [packageLengthCm, setPackageLengthCm] = useState("");
@@ -473,7 +474,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, lines]);
+  }, [customerId, lines, customPackage, packageWidthCm, packageHeightCm, packageLengthCm]);
 
   useEffect(() => {
     if (firstQuote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
@@ -493,9 +494,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         body: JSON.stringify({
           customerId,
           items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
-          packageWidthCm: Number(packageWidthCm),
-          packageHeightCm: Number(packageHeightCm),
-          packageLengthCm: Number(packageLengthCm),
+          packageWidthCm: customPackage && packageWidthCm ? Number(packageWidthCm) : undefined,
+          packageHeightCm: customPackage && packageHeightCm ? Number(packageHeightCm) : undefined,
+          packageLengthCm: customPackage && packageLengthCm ? Number(packageLengthCm) : undefined,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -536,9 +537,9 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         freight: freightAmount,
         shippingQuoteId: selectedShippingQuote?.id,
         destinationPostalCode: shippingPostalCode || undefined,
-        packageWidthCm: packageWidthCm ? Number(packageWidthCm) : undefined,
-        packageHeightCm: packageHeightCm ? Number(packageHeightCm) : undefined,
-        packageLengthCm: packageLengthCm ? Number(packageLengthCm) : undefined,
+        packageWidthCm: customPackage && packageWidthCm ? Number(packageWidthCm) : undefined,
+        packageHeightCm: customPackage && packageHeightCm ? Number(packageHeightCm) : undefined,
+        packageLengthCm: customPackage && packageLengthCm ? Number(packageLengthCm) : undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -713,9 +714,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                           quoteBusy ||
                           !completeLines.length ||
                           completeLines.some((line) => !quotes[line.id]) ||
-                          !packageWidthCm ||
-                          !packageHeightCm ||
-                          !packageLengthCm
+                          (customPackage && (!packageWidthCm || !packageHeightCm || !packageLengthCm))
                         }
                         onClick={() => void calculateShipping()}
                         className="rounded-lg bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
@@ -723,16 +722,44 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                         {shippingBusy ? "Consultando todas…" : shippingQuotes.length ? "Cotar novamente" : "Ver todas as cotações"}
                       </button>
                     </div>
-                    <div className="mt-3 grid gap-2 rounded-xl border border-emerald-100 bg-white p-3 sm:grid-cols-3">
-                      <Field label="Largura da caixa (cm)">
-                        <input type="number" min="1" step="1" inputMode="numeric" value={packageWidthCm} onChange={(event) => setPackageWidthCm(event.target.value)} placeholder="Ex.: 30" />
-                      </Field>
-                      <Field label="Altura da caixa (cm)">
-                        <input type="number" min="1" step="1" inputMode="numeric" value={packageHeightCm} onChange={(event) => setPackageHeightCm(event.target.value)} placeholder="Ex.: 30" />
-                      </Field>
-                      <Field label="Comprimento da caixa (cm)">
-                        <input type="number" min="1" step="1" inputMode="numeric" value={packageLengthCm} onChange={(event) => setPackageLengthCm(event.target.value)} placeholder="Ex.: 55" />
-                      </Field>
+                    <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Embalagem da cotação</p>
+                          <p className="mt-1 text-[10px] text-stone-500">
+                            Use a embalagem padrão da Bispo ou personalize as medidas desta caixa.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCustomPackage(false)}
+                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                          >
+                            Padrão Bispo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomPackage(true)}
+                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                          >
+                            Personalizar medidas
+                          </button>
+                        </div>
+                      </div>
+                      {customPackage && (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          <Field label="Largura da caixa (cm)">
+                            <input type="number" min="1" step="1" inputMode="numeric" value={packageWidthCm} onChange={(event) => setPackageWidthCm(event.target.value)} placeholder="Ex.: 30" />
+                          </Field>
+                          <Field label="Altura da caixa (cm)">
+                            <input type="number" min="1" step="1" inputMode="numeric" value={packageHeightCm} onChange={(event) => setPackageHeightCm(event.target.value)} placeholder="Ex.: 30" />
+                          </Field>
+                          <Field label="Comprimento da caixa (cm)">
+                            <input type="number" min="1" step="1" inputMode="numeric" value={packageLengthCm} onChange={(event) => setPackageLengthCm(event.target.value)} placeholder="Ex.: 55" />
+                          </Field>
+                        </div>
+                      )}
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
                     {shippingSummary && (
