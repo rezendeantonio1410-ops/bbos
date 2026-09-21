@@ -16,6 +16,7 @@ import {
 } from "./sales-orders.service";
 import { AuthService } from "./auth.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
+import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -50,6 +51,7 @@ export class SalesOrdersController {
     private readonly salesOrders: SalesOrdersService,
     private readonly auth: AuthService,
     private readonly shipping: StorefrontShippingService,
+    private readonly shipment: MelhorEnvioShipmentService,
   ) {}
 
   private async actor(request: any) {
@@ -244,6 +246,20 @@ export class SalesOrdersController {
       { allowFreeShipping: false, includeAllServices: true },
     );
     return { ...result, postalCode };
+  }
+
+  @Get(":id/fulfillment")
+  async fulfillment(@Param("id") id: string) {
+    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT s.* FROM "Shipment" s WHERE s."salesOrderId"=$1 LIMIT 1`,
+      id,
+    );
+    return rows[0] ?? null;
+  }
+
+  @Post(":id/label")
+  label(@Param("id") id: string) {
+    return this.shipment.createLabelForSalesOrder(id);
   }
 
   @Get(":id")
