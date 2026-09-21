@@ -24,17 +24,34 @@
 
 .storefront :global([class*="commerceBar"]) { background: var(--bispo-black); }
 .storefront :global([class*="header"]) {
-  background: rgba(255, 255, 255, .97) !important;
+  background: #fff !important;
   border-bottom-color: rgba(14, 25, 29, .1) !important;
+  backdrop-filter: none !important;
 }
 .storefront :global([class*="heroCopy"]),
 .storefront :global([class*="hero_"]) { background-color: var(--bispo-sand) !important; }
 .storefront :global([class*="choiceSection"]) { background: var(--bispo-chinese) !important; }
 .storefront :global([class*="productsSection"]) { background: #fff !important; }
 .storefront :global([class*="productCard"]) {
-  border-radius: 14px !important;
+  border-radius: 4px !important;
   border-color: rgba(14, 25, 29, .12) !important;
   box-shadow: none !important;
+  transform: none !important;
+}
+.storefront :global([class*="productVisual"]) {
+  background: color-mix(in srgb, var(--tone) 10%, #ebebeb) !important;
+}
+.storefront :global([class*="productVisual"])::after {
+  display: none !important;
+}
+.storefront :global([class*="productVisual"]) > :global(small) {
+  padding: 6px 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border-bottom: 2px solid var(--tone);
+}
+.storefront :global([class*="productPhoto"]) {
+  filter: none !important;
 }
 .storefront :global([class*="productMeta"]) { border-top: 1px solid rgba(14, 25, 29, .08); }
 .storefront :global([class*="productCard"]) :global(button),
@@ -42,8 +59,8 @@
 .storefront :global([class*="primaryCta"]) { background: var(--bispo-chinese) !important; border-radius: 4px !important; box-shadow: none !important; }
 .storefront :global([class*="desireBand"]),
 .storefront :global([class*="institutional"]) { background: var(--bispo-platinum) !important; }
-.storefront :global([class*="discovery_"]) { border-radius: 14px !important; box-shadow: none !important; }
-.storefront :global([class*="rareSection"]) { background: var(--bispo-black) !important; border-radius: 14px !important; box-shadow: none !important; }
+.storefront :global([class*="discovery_"]) { border-radius: 4px !important; box-shadow: none !important; }
+.storefront :global([class*="rareSection"]) { background: var(--bispo-black) !important; border-radius: 4px !important; box-shadow: none !important; }
 .storefront :global([class*="valueStrip"]) { background: var(--bispo-chinese) !important; }
 .storefront :global([class*="footer"]) { background: var(--bispo-sand) !important; }
 .storefront :global([class*="founder-trust_section"]),
@@ -84,5 +101,5 @@
 }
 
 @media (max-width: 600px) {
-  .storefront :global([class*="productCard"]) { border-radius: 10px !important; }
+  .storefront :global([class*="productCard"]) { border-radius: 3px !important; }
 }
