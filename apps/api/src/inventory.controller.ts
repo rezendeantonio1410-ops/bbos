@@ -10,6 +10,7 @@ import {
   type OnModuleDestroy,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { randomUUID } from "node:crypto";
 import {
   EventType,
   FinishedGoodsMovementType,
@@ -82,6 +83,97 @@ export class InventoryController implements OnModuleDestroy {
     return balances.map((balance) => this.finishedGoodsView(balance));
   }
 
+  @Get("finished-goods/options")
+  async finishedGoodsOptions(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const variants = await this.database.productVariant.findMany({
+      where: {
+        active: true,
+        product: { active: true, productLine: { active: true, companyId: actor.companyId } },
+      },
+      include: { product: { include: { productLine: true } } },
+      orderBy: [{ product: { name: "asc" } }, { netWeightGrams: "asc" }],
+    });
+    return {
+      variants: variants.map((variant) => ({
+        id: variant.id, sku: variant.sku, product: variant.product.name,
+        line: variant.product.productLine.name, lineCode: variant.product.productLine.code,
+        presentationGrams: variant.netWeightGrams, salesUnit: variant.salesUnit,
+      })),
+    };
+  }
+
+  @Post("finished-goods/stock-in")
+  async stockInFinishedGoods(
+    @Body() body: { productVariantId?: string; quantity?: number; reason?: string },
+    @Req() req: Request,
+  ) {
+    const actor = await requireSession(req, this.auth);
+    const productVariantId = String(body.productVariantId ?? "").trim();
+    const quantity = Number(body.quantity ?? 0);
+    if (!productVariantId) throw new BadRequestException("Selecione o produto.");
+    if (!Number.isSafeInteger(quantity) || quantity <= 0)
+      throw new BadRequestException("Quantidade deve ser um número inteiro maior que zero.");
+
+    return this.database.$transaction(async (transaction) => {
+      const variant = await transaction.productVariant.findFirst({
+        where: {
+          id: productVariantId, active: true,
+          product: { active: true, productLine: { active: true, companyId: actor.companyId } },
+        },
+        include: { product: { include: { productLine: true } } },
+      });
+      if (!variant) throw new NotFoundException("Produto acabado não encontrado.");
+
+      let warehouse = await transaction.warehouse.findFirst({
+        where: { companyId: actor.companyId, code: "PA" },
+      });
+      if (!warehouse) {
+        warehouse = await transaction.warehouse.create({
+          data: { id: randomUUID(), companyId: actor.companyId, name: "Produto Acabado", code: "PA", type: "FINISHED_GOODS" },
+        });
+      }
+
+      let balance = await transaction.finishedProduct.findFirst({
+        where: { companyId: actor.companyId, productVariantId: variant.id, warehouseId: warehouse.id },
+      });
+      if (!balance) {
+        const price = await transaction.productPrice.findFirst({
+          where: { companyId: actor.companyId, productVariantId: variant.id, active: true },
+          orderBy: { price: "asc" },
+        });
+        balance = await transaction.finishedProduct.create({
+          data: {
+            id: randomUUID(), companyId: actor.companyId, warehouseId: warehouse.id,
+            productVariantId: variant.id, sku: variant.sku, name: variant.product.name,
+            line: variant.product.productLine.code, packageWeightG: variant.netWeightGrams,
+            quantityOnHand: 0, reservedQuantity: 0, standardPrice: price?.price ?? 0,
+          },
+        });
+      }
+
+      const updated = await transaction.finishedProduct.update({
+        where: { id: balance.id }, data: { quantityOnHand: { increment: quantity } },
+      });
+
+      await transaction.finishedGoodsMovement.create({
+        data: {
+          id: randomUUID(), companyId: actor.companyId, finishedProductId: updated.id,
+          productVariantId: variant.id, warehouseId: warehouse.id, type: FinishedGoodsMovementType.ADJUSTMENT_IN,
+          packageQuantity: quantity, unit: variant.salesUnit,
+          totalWeightKg: (quantity * variant.netWeightGrams) / 1000,
+          sourceType: "MANUAL_STOCK_IN", sourceId: actor.id,
+          reason: String(body.reason ?? "").trim() || ("Entrada manual por " + actor.name),
+        },
+      });
+
+      return {
+        ok: true, productVariantId: variant.id, sku: variant.sku, product: variant.product.name,
+        quantityAdded: quantity, physicalUnits: updated.quantityOnHand, reservedUnits: updated.reservedQuantity,
+        availableUnits: updated.quantityOnHand - updated.reservedQuantity, warehouse: warehouse.name,
+      };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
   @Get("finished-goods/:productVariantId/movements")
   async listFinishedGoodsMovements(
     @Param("productVariantId") productVariantId: string,
