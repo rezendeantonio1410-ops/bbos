@@ -175,6 +175,203 @@ export class BlingOutboxService {
     return { externalId, idempotent: false };
   }
 
+  private async processSalesOrderInvoice(row: any) {
+    const orders = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.*,c.name AS "customerName",c."taxId" AS "customerTaxId",
+              c.email AS "customerEmail",c.phone AS "customerPhone",
+              c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
+              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState"
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
+      row.aggregateId,
+      row.companyId,
+    );
+    const order = orders[0];
+    if (!order) throw new Error("SalesOrder da fila não foi encontrado.");
+    if (!["READY_TO_SHIP", "INVOICED"].includes(String(order.status))) {
+      throw new Error(
+        `SalesOrder ${order.code} precisa estar pronto para expedição antes do faturamento.`,
+      );
+    }
+
+    const items = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT soi.*,pv.id AS "variantId",pv.sku,p."slug"
+         FROM "SalesOrderItem" soi
+         JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+         JOIN "Product" p ON p.id=pv."productId"
+        WHERE soi."salesOrderId"=$1
+        ORDER BY soi."createdAt" ASC`,
+      order.id,
+    );
+    if (!items.length) throw new Error("Pedido comercial sem itens.");
+
+    let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
+    if (!salesMap?.externalId) {
+      const rawAddress = String(order.customerAddress || "").trim();
+      const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9\/-]*)\s*$/);
+      const street = String(addressMatch?.[1] || rawAddress).trim();
+      const number = String(addressMatch?.[2] || "S/N").trim();
+
+      const contactId = await this.ensureContact(
+        row.companyId,
+        {
+          name: order.customerName,
+          cpf: order.customerTaxId,
+          email: order.customerEmail,
+          phone: order.customerPhone,
+        },
+        {
+          street,
+          number,
+          complement: "",
+          district: order.customerDistrict,
+          postalCode: order.customerPostalCode,
+          city: order.customerCity,
+          state: order.customerState,
+        },
+      );
+
+      const blingItems = [];
+      for (const item of items) {
+        const productId = await this.productExternalId(row.companyId, {
+          id: item.slug,
+        });
+        blingItems.push({
+          produto: { id: Number(productId) },
+          quantidade: Number(item.quantity),
+          valor: Number(item.unitPrice),
+          descricao: item.productName,
+          codigo: item.sku,
+        });
+      }
+
+      const packageRows = order.shippingQuoteId
+        ? await this.database.$queryRawUnsafe<any[]>(
+            `SELECT package FROM "ShippingQuote" WHERE id=$1 LIMIT 1`,
+            order.shippingQuoteId,
+          )
+        : [];
+      const packagePayload = packageRows[0]?.package;
+      const packageCount = Array.isArray(packagePayload)
+        ? packagePayload.length
+        : packagePayload
+          ? 1
+          : 0;
+      const grossWeight =
+        Array.isArray(packagePayload)
+          ? packagePayload.reduce(
+              (sum: number, pkg: any) =>
+                sum + Number(pkg?.weight ?? pkg?.weightGrams ?? 0) / (pkg?.weightGrams ? 1000 : 1),
+              0,
+            )
+          : Number(packagePayload?.weight ?? 0);
+
+      const result = await this.bling.request(row.companyId, "/pedidos/vendas", {
+        method: "POST",
+        body: JSON.stringify({
+          numeroLoja: order.orderNumber ?? order.code,
+          contato: { id: Number(contactId) },
+          itens: blingItems,
+          observacoes: `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
+          transporte: {
+            fretePorConta: order.freightResponsibility === "CUSTOMER" ? 1 : 0,
+            frete: Number(order.freight ?? 0),
+            quantidadeVolumes: packageCount || undefined,
+            pesoBruto: grossWeight || undefined,
+            prazoEntrega: Number(order.estimatedDeliveryDays ?? 0) || undefined,
+          },
+        }),
+      });
+      const externalId = String(result?.data?.id ?? result?.id ?? "");
+      if (!externalId)
+        throw new Error("Bling não retornou o ID do pedido de venda comercial.");
+      await this.mapResource(row.companyId, "SALES_ORDER", order.id, externalId, {
+        code: order.code,
+        origin: "BBOS_COMERCIAL",
+      });
+      salesMap = { externalId };
+    }
+
+    const priorFiscal = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "FiscalDocument"
+        WHERE "companyId"=$1 AND "salesOrderId"=$2 AND direction='OUTBOUND'
+        ORDER BY "createdAt" DESC LIMIT 1`,
+      row.companyId,
+      order.id,
+    );
+    if (
+      priorFiscal[0]?.externalId &&
+      ["SENT", "AUTHORIZED"].includes(String(priorFiscal[0]?.status))
+    ) {
+      return {
+        blingOrderId: salesMap.externalId,
+        fiscalId: priorFiscal[0].id,
+        blingNfeId: priorFiscal[0].externalId,
+        idempotent: true,
+      };
+    }
+
+    const natureza = process.env.BLING_NFE_NATUREZA_OPERACAO?.trim();
+    const nfeResult = await this.bling.request(row.companyId, "/nfe", {
+      method: "POST",
+      body: JSON.stringify({
+        pedidoVendaId: Number(salesMap.externalId),
+        tipo: 1,
+        ...(natureza ? { naturezaOperacao: natureza } : {}),
+      }),
+    });
+    const blingNfeId = String(nfeResult?.data?.id ?? nfeResult?.id ?? "");
+    if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
+
+    const fiscalId = priorFiscal[0]?.id || `fiscal-${stableId(`${row.companyId}:${order.id}:NFE`)}`;
+    if (priorFiscal[0]) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "FiscalDocument"
+            SET status='SENT',"externalProvider"='BLING',"externalId"=$2,
+                "payloadSnapshot"=$3::jsonb,"updatedAt"=NOW()
+          WHERE id=$1`,
+        fiscalId,
+        blingNfeId,
+        JSON.stringify({ create: nfeResult, blingOrderId: salesMap.externalId }),
+      );
+    } else {
+      await this.database.$executeRawUnsafe(
+        `INSERT INTO "FiscalDocument"
+          (id,"companyId",direction,"documentType",status,"customerId","salesOrderId",
+           "externalProvider","externalId","totalAmount","payloadSnapshot","createdAt","updatedAt")
+         VALUES ($1,$2,'OUTBOUND','NFE','SENT',$3,$4,'BLING',$5,$6,$7::jsonb,NOW(),NOW())`,
+        fiscalId,
+        row.companyId,
+        order.customerId,
+        order.id,
+        blingNfeId,
+        Number(order.totalAmount),
+        JSON.stringify({ create: nfeResult, blingOrderId: salesMap.externalId }),
+      );
+    }
+    await this.mapResource(
+      row.companyId,
+      "FISCAL_DOCUMENT",
+      fiscalId,
+      blingNfeId,
+      { salesOrderId: order.id, blingOrderId: salesMap.externalId },
+    );
+
+    await this.bling.request(
+      row.companyId,
+      `/nfe/${encodeURIComponent(blingNfeId)}/enviar?enviarEmail=false`,
+      { method: "POST" },
+    );
+
+    return {
+      blingOrderId: salesMap.externalId,
+      fiscalId,
+      blingNfeId,
+      idempotent: false,
+    };
+  }
+
   async processNext(companyId?: string) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `WITH candidate AS (
@@ -198,6 +395,11 @@ export class BlingOutboxService {
       let result: any;
       if (row.eventType === "STOREFRONT_ORDER_PAID" && row.aggregateType === "STOREFRONT_ORDER") {
         result = await this.processStorefrontPaid(row);
+      } else if (
+        row.eventType === "SALES_ORDER_INVOICE_REQUESTED" &&
+        row.aggregateType === "SALES_ORDER"
+      ) {
+        result = await this.processSalesOrderInvoice(row);
       } else {
         throw new Error(`Evento Bling ainda não implementado: ${row.eventType}/${row.aggregateType}`);
       }
