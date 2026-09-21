@@ -126,7 +126,13 @@ export default function EditorialHero() {
         <p className={styles.intro}>{scene.copy}</p>
         <div className={styles.productStage}>
           <div className={styles.productImage}>
-            <Image src={scene.product} alt={`Café ${scene.name}`} fill sizes="210px" />
+            <Image
+              src={scene.product}
+              alt={`Café ${scene.name}`}
+              fill
+              sizes="210px"
+              unoptimized
+            />
           </div>
           <div className={styles.productReading}>
             <small>LEITURA SENSORIAL</small>

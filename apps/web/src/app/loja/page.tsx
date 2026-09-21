@@ -318,6 +318,7 @@ export default function LojaPage() {
                               fill
                               sizes="(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 33vw"
                               className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
+                              unoptimized
                             />
                           ) : (
                             <div className={tight.catalogFallback}>
