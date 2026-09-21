@@ -52,28 +52,70 @@ export class BlingOutboxService {
     return rows[0] ?? null;
   }
 
+  private normalizeBlingPhone(value: unknown) {
+    let normalized = String(value ?? "").replace(/\D/g, "");
+    if (normalized.startsWith("55") && normalized.length > 11) {
+      normalized = normalized.slice(2);
+    }
+    return normalized;
+  }
+
+  private async findContactByDocument(companyId: string, document: string) {
+    const paths = [
+      `/contatos?numeroDocumento=${encodeURIComponent(document)}`,
+      `/contatos?criterio=${encodeURIComponent(document)}`,
+    ];
+    for (const path of paths) {
+      try {
+        const result = await this.bling.request(companyId, path, { method: "GET" });
+        const list = Array.isArray(result?.data) ? result.data : [];
+        const exact = list.find(
+          (contact: any) =>
+            String(contact?.numeroDocumento ?? contact?.cnpj ?? contact?.cpf ?? "")
+              .replace(/\D/g, "") === document,
+        );
+        if (exact?.id) return String(exact.id);
+        if (list[0]?.id) return String(list[0].id);
+      } catch {
+        // tenta o próximo filtro disponível na API
+      }
+    }
+    return null;
+  }
+
   private async ensureContact(companyId: string, customer: any, delivery: any) {
-    const document = String(customer?.cpf ?? "").replace(/\D/g, "");
-    if (!document) throw new Error("Pedido e-commerce sem CPF para integração Bling.");
+    const document = String(customer?.cpf ?? customer?.taxId ?? "").replace(/\D/g, "");
+    if (!document) throw new Error("Pedido sem CPF/CNPJ para integração Bling.");
 
     const existing = await this.getMap(companyId, "CONTACT_DOCUMENT", document);
     if (existing?.externalId) return existing.externalId as string;
 
+    const remoteId = await this.findContactByDocument(companyId, document);
+    if (remoteId) {
+      await this.mapResource(companyId, "CONTACT_DOCUMENT", document, remoteId, {
+        email: customer?.email,
+        source: "FOUND_BY_DOCUMENT",
+      });
+      return remoteId;
+    }
+
+    const phone = this.normalizeBlingPhone(customer?.phone);
     const payload = await this.bling.request(companyId, "/contatos", {
       method: "POST",
       body: JSON.stringify({
         nome: customer?.name,
-        tipo: "F",
+        tipo: document.length === 11 ? "F" : "J",
+        situacao: "A",
         numeroDocumento: document,
         email: customer?.email,
-        celular: customer?.phone,
+        celular: phone || undefined,
         endereco: {
           geral: {
             endereco: delivery?.street,
             numero: delivery?.number,
             complemento: delivery?.complement,
             bairro: delivery?.district,
-            cep: delivery?.postalCode,
+            cep: String(delivery?.postalCode ?? "").replace(/\D/g, ""),
             municipio: delivery?.city,
             uf: delivery?.state,
           },
