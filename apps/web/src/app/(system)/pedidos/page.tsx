@@ -101,10 +101,28 @@ type DraftOrderLine = {
   quantity: number;
 };
 
+type PackageBox = {
+  id: string;
+  widthCm: string;
+  heightCm: string;
+  lengthCm: string;
+  weightKg: string;
+};
+
+const randomId = () => typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+
 const newDraftLine = (): DraftOrderLine => ({
-  id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+  id: randomId(),
   variantId: "",
   quantity: 1,
+});
+
+const newPackageBox = (source?: Partial<PackageBox>): PackageBox => ({
+  id: randomId(),
+  widthCm: source?.widthCm ?? "35",
+  heightCm: source?.heightCm ?? "22",
+  lengthCm: source?.lengthCm ?? "11",
+  weightKg: source?.weightKg ?? "",
 });
 
 type OrderItem = {
@@ -368,11 +386,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
   const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
   const [customPackage, setCustomPackage] = useState(false);
-  const [packagePreset, setPackagePreset] = useState<"P">("P");
-  const [packageWidthCm, setPackageWidthCm] = useState("");
-  const [packageHeightCm, setPackageHeightCm] = useState("");
-  const [packageLengthCm, setPackageLengthCm] = useState("");
-  const [packageCount, setPackageCount] = useState("1");
+  const [packageBoxes, setPackageBoxes] = useState<PackageBox[]>(() => [newPackageBox()]);
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
   const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
@@ -477,11 +491,15 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   }, [customerId, completeLines]);
 
   useEffect(() => {
-    if (!customPackage && packagePreset === "P") {
+    if (!customPackage) {
       const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
-      setPackageCount(String(suggested));
+      setPackageBoxes((current) => Array.from({ length: suggested }, (_, index) =>
+        current[index]
+          ? { ...current[index]!, widthCm: "35", heightCm: "22", lengthCm: "11", weightKg: "" }
+          : newPackageBox(),
+      ));
     }
-  }, [customPackage, packagePreset, totalWeightGrams]);
+  }, [customPackage, totalWeightGrams]);
 
   useEffect(() => {
     setShippingQuotes([]);
@@ -489,11 +507,31 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, lines, customPackage, packagePreset, packageWidthCm, packageHeightCm, packageLengthCm, packageCount]);
+  }, [customerId, lines, customPackage, packageBoxes]);
 
   useEffect(() => {
     if (firstQuote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
   }, [firstQuote?.salesChannelType]);
+
+  const shippingPackages = () => {
+    const count = Math.max(1, packageBoxes.length);
+    const explicitWeightGrams = packageBoxes.map((box) => {
+      const kg = Number(box.weightKg);
+      return Number.isFinite(kg) && kg > 0 ? Math.round(kg * 1000) : 0;
+    });
+    const explicitTotal = explicitWeightGrams.reduce((sum, value) => sum + value, 0);
+    const missing = explicitWeightGrams.filter((value) => value <= 0).length;
+    const automaticWeight = missing > 0
+      ? Math.max(1, Math.ceil(Math.max(0, totalWeightGrams - explicitTotal) / missing))
+      : 0;
+
+    return packageBoxes.map((box, index) => ({
+      widthCm: Number(box.widthCm),
+      heightCm: Number(box.heightCm),
+      lengthCm: Number(box.lengthCm),
+      weightGrams: explicitWeightGrams[index] > 0 ? explicitWeightGrams[index] : automaticWeight,
+    }));
+  };
 
   const calculateShipping = async () => {
     if (!customerId || !completeLines.length || completeLines.some((line) => !quotes[line.id])) return;
@@ -509,10 +547,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         body: JSON.stringify({
           customerId,
           items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
-          packageWidthCm: customPackage ? (packageWidthCm ? Number(packageWidthCm) : undefined) : (packagePreset === "P" ? 35 : undefined),
-          packageHeightCm: customPackage ? (packageHeightCm ? Number(packageHeightCm) : undefined) : (packagePreset === "P" ? 22 : undefined),
-          packageLengthCm: customPackage ? (packageLengthCm ? Number(packageLengthCm) : undefined) : (packagePreset === "P" ? 11 : undefined),
-          packageCount: Math.max(1, Number(packageCount) || 1),
+          packages: shippingPackages(),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -731,8 +766,12 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                           quoteBusy ||
                           !completeLines.length ||
                           completeLines.some((line) => !quotes[line.id]) ||
-                          (customPackage && (!packageWidthCm || !packageHeightCm || !packageLengthCm)) ||
-                          !Number.isSafeInteger(Number(packageCount)) || Number(packageCount) < 1
+                          !packageBoxes.length ||
+                          packageBoxes.some((box) =>
+                            !Number.isFinite(Number(box.widthCm)) || Number(box.widthCm) <= 0 ||
+                            !Number.isFinite(Number(box.heightCm)) || Number(box.heightCm) <= 0 ||
+                            !Number.isFinite(Number(box.lengthCm)) || Number(box.lengthCm) <= 0
+                          )
                         }
                         onClick={() => void calculateShipping()}
                         className="rounded-lg bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
@@ -743,79 +782,115 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                     <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Embalagem da cotação</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Volumes da cotação</p>
                           <p className="mt-1 text-[10px] text-stone-500">
-                            Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg ou 5 pacotes de 500 g. Personalize as medidas quando necessário.
+                            Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg. Cada caixa pode ter medidas e peso diferentes.
                           </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => {
                               setCustomPackage(false);
-                              setPackagePreset("P");
+                              const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
+                              setPackageBoxes(Array.from({ length: suggested }, () => newPackageBox()));
                             }}
-                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage && packagePreset === "P" ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
                           >
-                            Caixa P · 35 × 22 × 11 cm
+                            Usar Caixa P
                           </button>
                           <button
                             type="button"
                             onClick={() => setCustomPackage(true)}
                             className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
                           >
-                            Personalizar medidas
+                            Personalizar caixas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomPackage(true);
+                              setPackageBoxes((current) => [...current, newPackageBox(current[current.length - 1])]);
+                            }}
+                            className="rounded-lg bg-emerald-950 px-3 py-2 text-[10px] font-bold text-white"
+                          >
+                            + Adicionar caixa
                           </button>
                         </div>
                       </div>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                        {customPackage && (
-                          <>
-                            <Field label="Largura da caixa (cm)">
-                              <input type="number" min="1" step="1" inputMode="numeric" value={packageWidthCm} onChange={(event) => setPackageWidthCm(event.target.value)} placeholder="Ex.: 30" />
-                            </Field>
-                            <Field label="Altura da caixa (cm)">
-                              <input type="number" min="1" step="1" inputMode="numeric" value={packageHeightCm} onChange={(event) => setPackageHeightCm(event.target.value)} placeholder="Ex.: 30" />
-                            </Field>
-                            <Field label="Comprimento da caixa (cm)">
-                              <input type="number" min="1" step="1" inputMode="numeric" value={packageLengthCm} onChange={(event) => setPackageLengthCm(event.target.value)} placeholder="Ex.: 55" />
-                            </Field>
-                          </>
-                        )}
-                        <div>
-                          <p className="mb-1.5 text-[10px] font-semibold text-stone-700">Caixas do envio</p>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setPackageCount((current) => String(Math.max(1, Number(current) - 1)))}
-                              disabled={Number(packageCount) <= 1}
-                              className="h-10 w-10 rounded-lg border bg-white text-base font-bold text-stone-700 disabled:opacity-30"
-                              aria-label="Remover uma caixa"
-                            >
-                              −
-                            </button>
-                            <div className="min-w-[84px] rounded-lg border bg-stone-50 px-3 py-2.5 text-center text-xs font-bold text-stone-900">
-                              {Math.max(1, Number(packageCount) || 1)} {Math.max(1, Number(packageCount) || 1) === 1 ? "caixa" : "caixas"}
+
+                      <div className="mt-3 space-y-2">
+                        {packageBoxes.map((box, index) => {
+                          const automaticKg = packageBoxes.length
+                            ? totalWeightGrams / packageBoxes.length / 1000
+                            : 0;
+                          return (
+                            <div key={box.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                              <div className="mb-2 flex items-center justify-between">
+                                <b className="text-[11px] text-stone-800">Caixa {index + 1}</b>
+                                <button
+                                  type="button"
+                                  disabled={packageBoxes.length === 1}
+                                  onClick={() => {
+                                    setCustomPackage(true);
+                                    setPackageBoxes((current) => current.filter((item) => item.id !== box.id));
+                                  }}
+                                  className="rounded-lg px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-25"
+                                >
+                                  Remover
+                                </button>
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-4">
+                                <Field label="Largura (cm)">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={box.widthCm}
+                                    disabled={!customPackage}
+                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, widthCm: event.target.value } : item))}
+                                  />
+                                </Field>
+                                <Field label="Altura (cm)">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={box.heightCm}
+                                    disabled={!customPackage}
+                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, heightCm: event.target.value } : item))}
+                                  />
+                                </Field>
+                                <Field label="Comprimento (cm)">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={box.lengthCm}
+                                    disabled={!customPackage}
+                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, lengthCm: event.target.value } : item))}
+                                  />
+                                </Field>
+                                <Field label="Peso da caixa (kg)">
+                                  <input
+                                    type="number"
+                                    min="0.1"
+                                    step="0.1"
+                                    value={box.weightKg}
+                                    onChange={(event) => {
+                                      setCustomPackage(true);
+                                      setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, weightKg: event.target.value } : item));
+                                    }}
+                                    placeholder={automaticKg > 0 ? `Auto: ${automaticKg.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}` : "Automático"}
+                                  />
+                                </Field>
+                              </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setPackageCount((current) => String(Math.min(50, Math.max(1, Number(current) || 1) + 1)))}
-                              className="rounded-lg bg-emerald-950 px-3 py-2.5 text-[10px] font-bold text-white"
-                            >
-                              + Adicionar caixa
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {Array.from({ length: Math.max(1, Number(packageCount) || 1) }).map((_, index) => (
-                          <span key={index} className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-900">
-                            Caixa {index + 1}
-                          </span>
-                        ))}
+                          );
+                        })}
                       </div>
                       <p className="mt-2 text-[10px] text-stone-500">
-                        O peso total do pedido será distribuído entre as caixas para a cotação. Nesta etapa, as caixas usam as mesmas medidas informadas acima.
+                        Se o peso de uma caixa ficar em branco, o BBOS distribui automaticamente o peso restante do pedido entre as caixas sem peso informado.
                       </p>
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
