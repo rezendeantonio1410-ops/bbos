@@ -529,7 +529,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
       widthCm: Number(box.widthCm),
       heightCm: Number(box.heightCm),
       lengthCm: Number(box.lengthCm),
-      weightGrams: explicitWeightGrams[index] > 0 ? explicitWeightGrams[index] : automaticWeight,
+      weightGrams: (explicitWeightGrams[index] ?? 0) > 0 ? (explicitWeightGrams[index] ?? 0) : automaticWeight,
     }));
   };
 
