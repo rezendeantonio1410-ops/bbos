@@ -19,6 +19,18 @@ const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
   return !normalized || normalized === "à vista" || normalized === "a vista";
 };
+const optionalText = (value: unknown) => {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+};
+const internationalPhone = (value: unknown) => {
+  const normalized = String(value ?? "").trim().replace(/[\s().-]/g, "");
+  if (!normalized) return null;
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
+    throw new BadRequestException("Telefone inválido. Use o formato internacional, por exemplo +5543999999999.");
+  }
+  return normalized;
+};
 
 @Controller("customers")
 export class CustomersController {
@@ -190,7 +202,7 @@ export class CustomersController {
        RETURNING *`,
       id, actor.companyId, name,
       body.legalName?.trim() || null, body.tradeName?.trim() || null, taxId,
-      body.segment?.trim() || null, body.email?.trim() || null, body.phone?.trim() || null,
+      optionalText(body.segment), optionalText(body.email), internationalPhone(body.phone),
       body.postalCode?.trim() || null, body.address?.trim() || null, body.district?.trim() || null,
       body.city?.trim() || null, body.state?.trim() || null, paymentTerms,
       body.active !== false, initialCreditStatus,
@@ -286,7 +298,7 @@ export class CustomersController {
       taxId,
       body.segment === undefined ? current.segment : (body.segment?.trim() || null),
       body.email === undefined ? current.email : (body.email?.trim() || null),
-      body.phone === undefined ? current.phone : (body.phone?.trim() || null),
+      body.phone === undefined ? current.phone : internationalPhone(body.phone),
       body.postalCode === undefined ? current.postalCode : (body.postalCode?.trim() || null),
       body.address === undefined ? current.address : (body.address?.trim() || null),
       body.district === undefined ? current.district : (body.district?.trim() || null),
