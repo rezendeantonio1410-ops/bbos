@@ -61,6 +61,16 @@ const movementLabels: Record<InventoryMovementType, string> = {
 const inputClass =
   "w-full rounded-xl border bg-stone-50 px-3 py-2.5 text-sm outline-none focus:border-forest-700 focus:bg-white";
 
+type FinishedGoodsOption = {
+  id: string;
+  sku: string;
+  product: string;
+  line: string;
+  lineCode: string;
+  presentationGrams: number;
+  salesUnit: string;
+};
+
 type FinishedGoodsStock = {
   finishedProductId: string;
   productVariantId: string | null;
@@ -609,6 +619,10 @@ export default function InventoryPage() {
   const [movementOpen, setMovementOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGoodsStock[]>([]);
+  const [finishedGoodsOptions, setFinishedGoodsOptions] = useState<FinishedGoodsOption[]>([]);
+  const [stockVariantId, setStockVariantId] = useState("");
+  const [stockQuantity, setStockQuantity] = useState("1");
+  const [stockBusy, setStockBusy] = useState(false);
   const inventoryDemoDashboard = { alerts: [] as InventoryAlert[] };
   useEffect(() => {
     const api = getApiBaseUrl();
@@ -627,8 +641,12 @@ export default function InventoryPage() {
         cache: "no-store",
         credentials: "include",
       }).then((response) => (response.ok ? response.json() : [])),
+      fetch(`${api}/inventory/finished-goods/options`, {
+        cache: "no-store",
+        credentials: "include",
+      }).then((response) => (response.ok ? response.json() : { variants: [] })),
     ])
-      .then(([goods, rawLots, rawMovements]) => {
+      .then(([goods, rawLots, rawMovements, stockOptions]) => {
         setFinishedGoods(goods as FinishedGoodsStock[]);
         setLots(
           (rawLots as Array<Record<string, unknown>>).map((lot) => {
@@ -694,13 +712,53 @@ export default function InventoryPage() {
           }),
         );
         setMovements(rawMovements as InventoryMovement[]);
+        const options = (stockOptions as { variants?: FinishedGoodsOption[] }).variants ?? [];
+        setFinishedGoodsOptions(options);
+        setStockVariantId((current) => current || options[0]?.id || "");
       })
       .catch(() => {
         setFinishedGoods([]);
         setLots([]);
         setMovements([]);
+        setFinishedGoodsOptions([]);
       });
   }, []);
+
+  const stockInFinishedGoods = async () => {
+    const quantity = Number(stockQuantity);
+    if (!stockVariantId || !Number.isSafeInteger(quantity) || quantity <= 0) {
+      setResult("Selecione o produto e informe uma quantidade inteira maior que zero.");
+      return;
+    }
+    setStockBusy(true);
+    try {
+      const api = getApiBaseUrl();
+      const response = await fetch(`${api}/inventory/finished-goods/stock-in`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          productVariantId: stockVariantId,
+          quantity,
+          reason: "Entrada manual de produto acabado pelo BBOS",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível registrar a entrada.");
+      const goodsResponse = await fetch(`${api}/inventory/finished-goods`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (goodsResponse.ok) setFinishedGoods(await goodsResponse.json());
+      setStockQuantity("1");
+      setResult(`Entrada registrada: ${payload.product} · ${payload.sku} · +${payload.quantityAdded} un. · disponível ${payload.availableUnits} un.`);
+    } catch (error) {
+      setResult(error instanceof Error ? error.message : "Não foi possível registrar a entrada.");
+    } finally {
+      setStockBusy(false);
+    }
+  };
+
   const finishedGoodsByLine = useMemo(
     () =>
       Object.entries(
@@ -833,6 +891,39 @@ export default function InventoryPage() {
           </h2>
         </div>
         <Card className="mt-4 p-5">
+          <div className="mb-5 grid gap-3 rounded-2xl border border-forest-100 bg-forest-50/40 p-4 md:grid-cols-[1fr_130px_auto] md:items-end">
+            <label className="text-xs font-semibold">
+              Entrada manual de produto acabado
+              <select
+                value={stockVariantId}
+                onChange={(event) => setStockVariantId(event.target.value)}
+                className={`${inputClass} mt-2`}
+              >
+                {finishedGoodsOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.product} · {option.sku} · {option.presentationGrams === 1000 ? "1 kg" : `${option.presentationGrams} g`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold">
+              Quantidade
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={stockQuantity}
+                onChange={(event) => setStockQuantity(event.target.value)}
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <Button
+              disabled={stockBusy || !stockVariantId}
+              onClick={() => void stockInFinishedGoods()}
+            >
+              {stockBusy ? "Registrando…" : "Registrar entrada"}
+            </Button>
+          </div>
           {finishedGoodsByLine.length ? (
             <div className="space-y-5">
               {finishedGoodsByLine.map(([lineName, items]) => (
@@ -896,7 +987,7 @@ export default function InventoryPage() {
                 Nenhum saldo de produto acabado
               </p>
               <p className="mt-1 text-xs text-stone-400">
-                As conclusões de OP criarão os saldos por SKU automaticamente.
+                Registre uma entrada acima ou conclua uma OP para criar o saldo por SKU.
               </p>
             </div>
           )}
