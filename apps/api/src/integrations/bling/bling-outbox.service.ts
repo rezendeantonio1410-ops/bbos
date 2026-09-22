@@ -352,14 +352,16 @@ export class BlingOutboxService {
       row.companyId,
       order.id,
     );
+    const priorFiscalExternalId = String(priorFiscal[0]?.externalId ?? "").trim();
     if (
-      priorFiscal[0]?.externalId &&
+      priorFiscalExternalId &&
+      priorFiscalExternalId !== "0" &&
       ["SENT", "AUTHORIZED"].includes(String(priorFiscal[0]?.status))
     ) {
       return {
         blingOrderId: salesMap.externalId,
         fiscalId: priorFiscal[0].id,
-        blingNfeId: priorFiscal[0].externalId,
+        blingNfeId: priorFiscalExternalId,
         idempotent: true,
       };
     }
@@ -375,7 +377,8 @@ export class BlingOutboxService {
       remoteSalesOrder?.data?.notaFiscal?.id ??
         remoteSalesOrder?.notaFiscal?.id ??
         "",
-    );
+    ).trim();
+    if (blingNfeId === "0") blingNfeId = "";
     let nfeResult: any = {
       data: { idNotaFiscal: blingNfeId },
       recoveredFromSalesOrder: Boolean(blingNfeId),

@@ -603,7 +603,8 @@ export class SalesOrdersController {
   @Post(":id/invoice")
   async invoice(@Param("id") id: string) {
     const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus"
+      `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus",
+              f."externalId" AS "fiscalExternalId"
          FROM "SalesOrder" so
          LEFT JOIN LATERAL (
            SELECT status FROM "FiscalDocument"
@@ -616,7 +617,13 @@ export class SalesOrdersController {
     const rejectedRetry =
       fiscalRows[0]?.orderStatus === "INVOICED" &&
       fiscalRows[0]?.fiscalStatus === "REJECTED";
-    const result = rejectedRetry
+    const invalidSentRetry =
+      fiscalRows[0]?.orderStatus === "INVOICED" &&
+      fiscalRows[0]?.fiscalStatus === "SENT" &&
+      (!String(fiscalRows[0]?.fiscalExternalId ?? "").trim() ||
+        String(fiscalRows[0]?.fiscalExternalId).trim() === "0");
+    const fiscalRetry = rejectedRetry || invalidSentRetry;
+    const result = fiscalRetry
       ? { orderId: id, idempotent: true, status: "INVOICED", fiscalRetry: true }
       : await this.salesOrders.transition(id, "INVOICED");
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
@@ -655,7 +662,7 @@ export class SalesOrdersController {
         id,
         JSON.stringify({ salesOrderId: id }),
         idempotencyKey,
-        rejectedRetry,
+        fiscalRetry,
       );
     }
     return { ...result, fiscalDispatch: "QUEUED" };
