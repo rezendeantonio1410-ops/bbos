@@ -164,12 +164,16 @@ type Order = {
 };
 
 type ShipmentInfo = {
-  id: string;
-  status: string;
+  id?: string | null;
+  status?: string | null;
   labelUrl?: string | null;
   trackingCode?: string | null;
   trackingUrl?: string | null;
   externalId?: string | null;
+  fiscalStatus?: string | null;
+  fiscalNumber?: string | null;
+  sefazStatusCode?: string | null;
+  sefazMessage?: string | null;
 };
 
 type PostingAgency = {
@@ -1455,6 +1459,8 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     <p className="mt-1 text-[10px] text-emerald-800">
                       {fulfillment?.labelUrl
                         ? "Etiqueta pronta para impressão."
+                        : fulfillment?.fiscalStatus === "REJECTED"
+                          ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
                         : order.status === "INVOICED"
                           ? "Faturamento solicitado. A etiqueta será liberada quando a NF-e estiver autorizada; se necessário, tente a geração por contingência."
                           : "A etiqueta será liberada após a autorização da NF-e."}
@@ -1469,7 +1475,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     >
                       Abrir etiqueta
                     </a>
-                  ) : order.status === "INVOICED" ? (
+                  ) : order.status === "INVOICED" && fulfillment?.fiscalStatus !== "REJECTED" ? (
                     <button
                       type="button"
                       disabled={fulfillmentBusy}

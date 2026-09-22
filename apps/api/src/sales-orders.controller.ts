@@ -256,7 +256,20 @@ export class SalesOrdersController {
   @Get(":id/fulfillment")
   async fulfillment(@Param("id") id: string) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT s.* FROM "Shipment" s WHERE s."salesOrderId"=$1 LIMIT 1`,
+      `SELECT s.*,
+              f.status::text AS "fiscalStatus",
+              f."externalId" AS "fiscalExternalId",
+              f.number AS "fiscalNumber",
+              f."payloadSnapshot"->>'sefazStatusCode' AS "sefazStatusCode",
+              f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage"
+         FROM "SalesOrder" so
+         LEFT JOIN LATERAL (
+           SELECT * FROM "FiscalDocument"
+            WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
+            ORDER BY "createdAt" DESC LIMIT 1
+         ) f ON TRUE
+         LEFT JOIN "Shipment" s ON s."salesOrderId"=so.id
+        WHERE so.id=$1 LIMIT 1`,
       id,
     );
     return rows[0] ?? null;

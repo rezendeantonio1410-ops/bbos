@@ -436,16 +436,21 @@ export class BlingOutboxService {
       `/nfe/${encodeURIComponent(blingNfeId)}/enviar?enviarEmail=false`,
       { method: "POST" },
     );
+    const sefaz = this.sefazAuthorization(sendResult);
     await this.database.$executeRawUnsafe(
       `UPDATE "FiscalDocument"
-          SET "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $2::jsonb,
+          SET status=$2,
+              "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $3::jsonb,
               "updatedAt"=NOW()
         WHERE id=$1`,
       fiscalId,
+      sefaz.status,
       JSON.stringify({
         authorizationAttemptCount: 1,
         authorizationRequestedAt,
         blingSend: sendResult,
+        sefazStatusCode: sefaz.code,
+        sefazMessage: sefaz.message,
       }),
     );
 
@@ -492,6 +497,24 @@ export class BlingOutboxService {
       allowed: !Number.isFinite(lastAttempt) || Date.now() - lastAttempt >= waitMs,
       count,
     };
+  }
+
+  private sefazAuthorization(response: any) {
+    const xml = String(response?.data?.xml ?? response?.xml ?? "");
+    const codes = [...xml.matchAll(/<cStat>(\d+)<\/cStat>/g)].map((match) => Number(match[1]));
+    const messages = [...xml.matchAll(/<xMotivo>([^<]+)<\/xMotivo>/g)].map((match) => match[1]);
+    const code = codes.at(-1) ?? null;
+    const message = messages.at(-1) ?? null;
+    return {
+      code,
+      message,
+      status:
+        code === 100 || code === 150
+          ? "AUTHORIZED"
+          : code !== null && code >= 200
+            ? "REJECTED"
+            : "SENT",
+    } as const;
   }
 
   private async processLegacyFiscalReady(row: any) {
@@ -547,26 +570,40 @@ export class BlingOutboxService {
       let note = detail?.data ?? detail ?? {};
       let status = this.fiscalStatus(note?.situacao);
       let retrySnapshot: Record<string, unknown> = {};
+      const storedSefaz = this.sefazAuthorization(row.payloadSnapshot?.blingSend);
+      if (status === "SENT" && storedSefaz.status !== "SENT") {
+        status = storedSefaz.status;
+        retrySnapshot = {
+          sefazStatusCode: storedSefaz.code,
+          sefazMessage: storedSefaz.message,
+        };
+      }
 
-      if (this.fiscalStatusCode(note?.situacao) === 1) {
+      if (status === "SENT" && this.fiscalStatusCode(note?.situacao) === 1) {
         const retry = this.authorizationRetry(row.payloadSnapshot);
         if (retry.allowed) {
           const requestedAt = new Date().toISOString();
           let sendResult: unknown = null;
           let authorizationLastError: string | null = null;
+          let sefazStatusCode: number | null = null;
+          let sefazMessage: string | null = null;
           try {
             sendResult = await this.bling.request(
               row.companyId,
               `/nfe/${encodeURIComponent(row.externalId)}/enviar?enviarEmail=false`,
               { method: "POST" },
             );
+            const sefaz = this.sefazAuthorization(sendResult);
+            sefazStatusCode = sefaz.code;
+            sefazMessage = sefaz.message;
             const refreshed = await this.bling.request(
               row.companyId,
               `/nfe/${encodeURIComponent(row.externalId)}`,
               { method: "GET" },
             );
             note = refreshed?.data ?? refreshed ?? note;
-            status = this.fiscalStatus(note?.situacao);
+            status =
+              sefaz.status === "SENT" ? this.fiscalStatus(note?.situacao) : sefaz.status;
           } catch (error) {
             authorizationLastError = error instanceof Error ? error.message : String(error);
           }
@@ -575,6 +612,8 @@ export class BlingOutboxService {
             authorizationRequestedAt: requestedAt,
             blingSend: sendResult,
             authorizationLastError,
+            sefazStatusCode,
+            sefazMessage,
           };
         }
       }
