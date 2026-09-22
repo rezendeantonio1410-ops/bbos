@@ -3,16 +3,12 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { AddToCartButton, type StoreProduct } from "./StorefrontCart";
+import { AddToCartButton, type StoreProduct, type StoreProductStory } from "./StorefrontCart";
 import styles from "./product-details.module.css";
 import fixStyles from "./product-details-fix.module.css";
 
-export type ProductStory = {
-  promise: string;
+export type ProductStory = StoreProductStory & {
   description: string;
-  founderNote: string;
-  bestFor: string;
-  brew: string;
   sensory: { label: string; value: number }[];
 };
 
@@ -65,7 +61,7 @@ export default function ProductDetails({ product, story }: Props) {
                 <p>{story.promise}</p>
                 <div className={styles.quickBuy}>
                   <span><b>{product.priceLabel}</b> · {product.weightLabel}</span>
-                  <AddToCartButton product={product}>Comprar agora →</AddToCartButton>
+                  <AddToCartButton product={{ ...product, story }}>Comprar agora →</AddToCartButton>
                 </div>
               </div>
             </div>

@@ -424,6 +424,7 @@ export default async function LojaPage() {
                                 priceCents: p.priceCents,
                                 weightGrams: 500,
                                 image: p.image,
+                                story: p.story,
                               }}
                             >
                               Quero esse →
