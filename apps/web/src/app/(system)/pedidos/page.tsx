@@ -1144,7 +1144,14 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
 
   useEffect(() => {
     void loadFulfillment();
-  }, [order.id]);
+    if (order.status !== "INVOICED") return;
+
+    const refreshTimer = window.setInterval(() => {
+      void loadFulfillment();
+    }, 5000);
+
+    return () => window.clearInterval(refreshTimer);
+  }, [order.id, order.status]);
 
   const loadPostingAgencies = async () => {
     if (order.shippingProvider !== "MELHOR_ENVIO") {
@@ -1473,8 +1480,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                         ? "Etiqueta pronta para impressão."
                         : fulfillment?.fiscalStatus === "REJECTED"
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
+                        : fulfillment?.fiscalStatus === "AUTHORIZED"
+                          ? "NF-e autorizada. A etiqueta já pode ser gerada."
                         : order.status === "INVOICED"
-                          ? "Faturamento solicitado. A etiqueta será liberada quando a NF-e estiver autorizada; se necessário, tente a geração por contingência."
+                          ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
                           : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
                   </div>
@@ -1496,7 +1505,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     >
                       {busy ? "Reprocessando…" : "Reprocessar NF-e"}
                     </button>
-                  ) : order.status === "INVOICED" ? (
+                  ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
                     <button
                       type="button"
                       disabled={fulfillmentBusy}
