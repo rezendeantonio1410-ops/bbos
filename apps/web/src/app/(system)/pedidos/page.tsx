@@ -1378,14 +1378,16 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               ))}
             </div>
 
-            {["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(order.status) && (
+            {["CONFIRMED", "RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(order.status) && (
               <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold text-stone-900">Próxima ação operacional</p>
                     <p className="mt-1 text-[10px] text-stone-600">
-                      {order.status === "RESERVED"
-                        ? "O estoque está reservado. Inicie a separação física do pedido."
+                      {order.status === "CONFIRMED"
+                        ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
+                        : order.status === "RESERVED"
+                          ? "O estoque está reservado. Inicie a separação física do pedido."
                         : order.status === "PICKING"
                           ? "Confirme que a quantidade separada corresponde à quantidade reservada."
                           : order.status === "READY_TO_SHIP"
@@ -1395,6 +1397,16 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                               : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
+                  {order.status === "CONFIRMED" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("reserve")}
+                      className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Reservando…" : "Reservar estoque"}
+                    </button>
+                  )}
                   {order.status === "RESERVED" && (
                     <button
                       type="button"
