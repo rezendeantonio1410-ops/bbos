@@ -362,12 +362,36 @@ export class BlingOutboxService {
       };
     }
 
-    const nfeResult = await this.bling.request(
-      row.companyId,
-      `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}/gerar-nfe`,
-      { method: "POST" },
+    const remoteSalesOrder = await this.bling
+      .request(
+        row.companyId,
+        `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
+        { method: "GET" },
+      )
+      .catch(() => null);
+    let blingNfeId = String(
+      remoteSalesOrder?.data?.notaFiscal?.id ??
+        remoteSalesOrder?.notaFiscal?.id ??
+        "",
     );
-    const blingNfeId = String(nfeResult?.data?.id ?? nfeResult?.id ?? "");
+    let nfeResult: any = {
+      data: { idNotaFiscal: blingNfeId },
+      recoveredFromSalesOrder: Boolean(blingNfeId),
+    };
+    if (!blingNfeId) {
+      nfeResult = await this.bling.request(
+        row.companyId,
+        `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}/gerar-nfe`,
+        { method: "POST" },
+      );
+      blingNfeId = String(
+        nfeResult?.data?.idNotaFiscal ??
+          nfeResult?.idNotaFiscal ??
+          nfeResult?.data?.id ??
+          nfeResult?.id ??
+          "",
+      );
+    }
     if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
 
     const fiscalId = priorFiscal[0]?.id || `fiscal-${stableId(`${row.companyId}:${order.id}:NFE`)}`;
@@ -431,6 +455,7 @@ export class BlingOutboxService {
                 AND (
                   "lastError" LIKE '%A data para geração das parcelas é inválida%'
                   OR "lastError" LIKE '%A nota deve ter ao menos um item%'
+                  OR "lastError" = 'Bling não retornou o ID da NF-e criada.'
                 )
               )
             )
