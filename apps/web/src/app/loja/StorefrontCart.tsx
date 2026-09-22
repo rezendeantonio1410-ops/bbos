@@ -321,6 +321,10 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                         <small>{item.line}</small>
                         <h3>{item.name}</h3>
                         <p>{item.notes}</p>
+                        <p className={styles.productFacts}>
+                          {item.weightGrams} g <span aria-hidden="true">·</span>{" "}
+                          Torra média <span aria-hidden="true">·</span> Café torrado
+                        </p>
                         <label className={styles.grind}>
                           <span>Moagem</span>
                           <select

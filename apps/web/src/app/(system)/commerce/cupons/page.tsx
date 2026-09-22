@@ -158,7 +158,7 @@ export default function CouponsPage() {
             className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
           >
             <Field label="Código">
-              <input name="code" required placeholder="FELIPE" />
+              <input name="code" required placeholder="CUPOM10" />
             </Field>
             <Field label="Parceiro proprietário">
               <select name="partnerId" required>
