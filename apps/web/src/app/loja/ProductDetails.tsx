@@ -42,7 +42,7 @@ export default function ProductDetails({ product, story }: Props) {
 
   return (
     <>
-      <button className={`${styles.open} ${fixStyles.open}`} type="button" onClick={() => setOpen(true)}>
+      <button className={`${styles.open} ${fixStyles.open} ${fixStyles.storyCta} ${fixStyles.readMore}`} type="button" onClick={() => setOpen(true)}>
         Conhecer este café →
       </button>
       {open && createPortal(

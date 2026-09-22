@@ -1,4 +1,4 @@
-.open.open.open.open {
+.open.storyCta.readMore {
   display: flex;
   width: 100%;
   min-height: 42px;
@@ -14,7 +14,7 @@
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.open.open.open.open:hover {
+.open.storyCta.readMore:hover {
   border-color: #0e191d;
   background: #f7f2ea !important;
 }
