@@ -125,6 +125,8 @@ export default function OrderDocumentV2() {
   }, [id]);
 
   const businessNumber = order?.orderNumber ?? order?.code ?? "Pedido-Bispo";
+  const provisional = order?.status === "DRAFT";
+  const fileName = `${businessNumber}${provisional ? "-PROVISORIO" : ""}.pdf`;
 
   useEffect(() => {
     if (!order) return;
@@ -156,7 +158,7 @@ export default function OrderDocumentV2() {
   return (
     <main className="min-h-screen bg-[#EEEDEA] py-8 print:bg-white print:py-0">
       <div className="screen-only mx-auto mb-4 flex max-w-[210mm] items-center justify-between px-4">
-        <p className="text-xs font-semibold text-stone-500">Nome do arquivo: <strong className="text-stone-800">{businessNumber}.pdf</strong></p>
+        <p className="text-xs font-semibold text-stone-500">Nome do arquivo: <strong className="text-stone-800">{fileName}</strong></p>
         <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-[#0E191D] px-4 py-3 text-sm font-bold text-white shadow-lg">
           <Printer size={16} /> Gerar / salvar PDF
         </button>
@@ -176,7 +178,7 @@ export default function OrderDocumentV2() {
             <div className="mt-4">
               <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#087568]">Bispo Coffees</p>
               <p className="mt-1 text-[10px] font-medium text-stone-500">Sourcing Brazilian Coffees for the World.</p>
-              <h1 className="mt-4 text-xl font-bold tracking-tight">Confirmação de Pedido</h1>
+              <h1 className="mt-4 text-xl font-bold tracking-tight">{provisional ? "Proposta Comercial Provisória" : "Confirmação de Pedido"}</h1>
               <p className="mt-1 text-[10px] text-stone-500">Documento comercial para conferência do cliente</p>
             </div>
           </div>
@@ -184,9 +186,16 @@ export default function OrderDocumentV2() {
             <p className="text-[9px] font-extrabold uppercase tracking-[.16em] text-stone-400">Pedido</p>
             <p className="mt-1 text-[26px] font-black tracking-tight text-[#0E191D]">{businessNumber}</p>
             <p className="mt-2 text-[10px] text-stone-500">Emitido em {date.format(new Date(order.orderedAt))}</p>
-            <span className="mt-4 inline-flex rounded-full bg-[#EAF6F2] px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-wide text-[#087568]">{statusLabel[order.status] ?? order.status}</span>
+            <span className={`mt-4 inline-flex rounded-full px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-wide ${provisional ? "bg-amber-100 text-amber-900" : "bg-[#EAF6F2] text-[#087568]"}`}>{provisional ? "Provisório" : (statusLabel[order.status] ?? order.status)}</span>
           </div>
         </header>
+
+        {provisional && (
+          <section className="mt-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <p className="text-[10px] font-black uppercase tracking-[.14em]">Documento provisório — aguardando confirmação do cliente</p>
+            <p className="mt-1 text-[10px] leading-4">Esta proposta serve somente para conferência. Não confirma a venda, não reserva estoque, não gera cobrança e não constitui documento fiscal.</p>
+          </section>
+        )}
 
         <section className="mt-6 grid grid-cols-2 gap-4">
           <Block title="Cliente / faturamento">
@@ -263,8 +272,8 @@ export default function OrderDocumentV2() {
             <p className="mt-1">Sourcing Brazilian Coffees for the World.</p>
           </div>
           <div className="text-right">
-            <p>Documento comercial · {businessNumber}</p>
-            <p className="mt-1 font-semibold text-stone-600">Arquivo: {businessNumber}.pdf</p>
+            <p>{provisional ? "Documento comercial provisório" : "Documento comercial"} · {businessNumber}</p>
+            <p className="mt-1 font-semibold text-stone-600">Arquivo: {fileName}</p>
           </div>
         </footer>
       </article>

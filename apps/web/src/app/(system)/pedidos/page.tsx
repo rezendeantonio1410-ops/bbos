@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   BadgeDollarSign,
   Check,
@@ -18,6 +19,8 @@ import {
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { OrderPdfLink } from "@/components/order-pdf-link";
+import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -48,6 +51,8 @@ type Customer = {
   creditStatus?: "NOT_ANALYZED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
   creditLimit?: string | number;
 };
+
+type Broker = { id: string; name: string; tradeName?: string | null };
 
 type CustomerHealth = {
   creditStatus?: string;
@@ -158,6 +163,10 @@ type Order = {
   incoterm?: string | null;
   incotermLocation?: string | null;
   notes?: string | null;
+  brokerId?: string | null;
+  brokerCommissionPercent?: string | number | null;
+  brokerCommissionAmount?: string | number | null;
+  broker?: Broker | null;
   customer: Customer;
   items: OrderItem[];
   reservations: Array<{ id: string; status: string; quantity: number }>;
@@ -172,6 +181,9 @@ type ShipmentInfo = {
   externalId?: string | null;
   fiscalStatus?: string | null;
   fiscalNumber?: string | null;
+  fiscalPdfUrl?: string | null;
+  fiscalDanfeUrl?: string | null;
+  fiscalXmlUrl?: string | null;
   sefazStatusCode?: string | null;
   sefazMessage?: string | null;
 };
@@ -250,6 +262,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<StockOption[]>([]);
+  const [brokers, setBrokers] = useState<Broker[]>([]);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
@@ -268,6 +281,7 @@ export default function OrdersPage() {
       const options = await optionsResponse.json();
       setCustomers(options.customers);
       setVariants(options.variants);
+      setBrokers(options.brokers ?? []);
     }
   };
 
@@ -372,9 +386,7 @@ export default function OrdersPage() {
                 </div>
               </button>
               <div className="mt-3 flex gap-2">
-                {order.status === "DRAFT" && (
-                  <button disabled={!!busy} onClick={() => void action(order, "confirm")} className="rounded-lg bg-forest-900 px-3 py-2 text-xs text-white">Confirmar</button>
-                )}
+                <OrderPdfLink orderNumber={order.orderNumber ?? order.code} compact provisional={order.status === "DRAFT"} />
                 {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && (
                   <button disabled={!!busy} onClick={() => void action(order, "cancel")} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
                 )}
@@ -394,6 +406,7 @@ export default function OrdersPage() {
         <NewOrder
           customers={customers}
           variants={variants}
+          brokers={brokers}
           onClose={() => setCreating(false)}
           onCreated={async () => {
             setCreating(false);
@@ -413,7 +426,7 @@ export default function OrdersPage() {
   );
 }
 
-function NewOrder({ customers, variants, onClose, onCreated }: { customers: Customer[]; variants: StockOption[]; onClose: () => void; onCreated: () => Promise<void> }) {
+function NewOrder({ customers, variants, brokers, onClose, onCreated }: { customers: Customer[]; variants: StockOption[]; brokers: Broker[]; onClose: () => void; onCreated: () => Promise<void> }) {
   const [orderNumber, setOrderNumber] = useState("Gerando…");
   const [customerId, setCustomerId] = useState("");
   const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
@@ -439,6 +452,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
   const [notes, setNotes] = useState("");
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
+  const [brokerId, setBrokerId] = useState("");
+  const [brokerCommissionPercent, setBrokerCommissionPercent] = useState("");
   const [showTerms, setShowTerms] = useState(true);
   const [error, setError] = useState("");
   const [health, setHealth] = useState<CustomerHealth | null>(null);
@@ -462,6 +477,7 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     return sum + Number(variant?.presentationGrams ?? 0) * line.quantity;
   }, 0);
   const orderTotal = productsTotal + freightAmount;
+  const brokerCommission = brokerId ? productsTotal * Number(brokerCommissionPercent || 0) / 100 : 0;
   const isTerm = paymentType === "TERM";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
@@ -637,6 +653,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
         notes,
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
+        brokerId: brokerId || undefined,
+        brokerCommissionPercent: brokerId ? Number(brokerCommissionPercent || 0) : undefined,
         items: completeLines.map((line) => {
           const variant = variants.find((candidate) => candidate.productVariantId === line.variantId)!;
           return {
@@ -654,20 +672,22 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
     await onCreated();
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside className="relative h-full w-full max-w-6xl overflow-y-auto bg-white p-6">
-        <div className="flex justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">Venda assistida</p>
-            <h2 className="mt-1 text-xl font-bold">Novo pedido</h2>
-            <p className="mt-2 text-sm font-semibold text-stone-700">{orderNumber}</p>
+      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh w-full max-w-6xl flex-col overflow-hidden border-l bg-white shadow-2xl">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">Novo pedido</h2>
+            <span className="shrink-0 text-xs font-semibold text-stone-500">{orderNumber}</span>
+            <span className="min-w-0 truncate text-xs text-stone-500">
+              <b className="text-stone-800">Comprador:</b> {customer?.name ?? "selecione o cliente"}
+            </span>
           </div>
-          <button onClick={onClose}><X /></button>
-        </div>
+          <button type="button" aria-label="Fechar novo pedido" onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"><X size={19} /></button>
+        </header>
 
-        <div className="mt-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
           <Field label="Cliente">
             <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
               <option value="">Selecione</option>
@@ -707,8 +727,8 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
             </>
           )}
 
-          <section className="rounded-2xl border bg-stone-50 p-3">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <section className="rounded-2xl border bg-stone-50 p-2.5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
                 <p className="mt-0.5 text-[10px] text-stone-400">Adicione quantos produtos o distribuidor desejar.</p>
@@ -719,16 +739,16 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {lines.map((line, index) => {
                 const selectedVariant = variants.find((variant) => variant.productVariantId === line.variantId);
                 const lineQuote = quotes[line.id];
                 return (
-                  <div key={line.id} className="rounded-xl border bg-white p-3">
-                    <div className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_32px]">
+                  <div key={line.id} className="rounded-lg border bg-white px-2.5 py-2">
+                    <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_30px]">
                       <div>
-                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
-                        <select value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-3 py-2.5 text-xs">
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
+                        <select value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs">
                           <option value="">Selecione</option>
                           {variants.map((variant) => (
                             <option key={variant.productVariantId} value={variant.productVariantId} disabled={lines.some((item) => item.id !== line.id && item.variantId === variant.productVariantId)}>
@@ -738,27 +758,27 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                         </select>
                       </div>
                       <div>
-                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
-                        <input type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, quantity: Math.max(1, Number(event.target.value)) } : item))} className="w-full rounded-lg border bg-white px-3 py-2.5 text-xs" />
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
+                        <input type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, quantity: Math.max(1, Number(event.target.value)) } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs" />
                       </div>
                       <div>
-                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
-                        <div className="rounded-lg border bg-stone-50 px-3 py-2.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(lineQuote.officialUnitPrice) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
+                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(lineQuote.officialUnitPrice) : "—"}</div>
                       </div>
                       <div>
-                        <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
-                        <div className="rounded-lg bg-stone-50 px-3 py-2.5 text-right text-xs font-bold">{lineQuote ? money.format(lineQuote.totalAmount) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
+                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(lineQuote.totalAmount) : "—"}</div>
                       </div>
                       <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
                     </div>
-                    {selectedVariant && <p className="mt-2 text-[9px] text-stone-400">{selectedVariant.line} · estoque disponível {selectedVariant.availableStock} pacote(s){lineQuote ? ` · tabela ${lineQuote.salesChannelName}` : ""}</p>}
-                    {lineQuoteErrors[line.id] && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[10px] text-amber-800">{lineQuoteErrors[line.id]}</p>}
+                    {selectedVariant && <p className="mt-1 text-[9px] leading-tight text-stone-400">{selectedVariant.line} · estoque disponível {selectedVariant.availableStock} pacote(s){lineQuote ? ` · tabela ${lineQuote.salesChannelName}` : ""}</p>}
+                    {lineQuoteErrors[line.id] && <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-800">{lineQuoteErrors[line.id]}</p>}
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-forest-900 px-4 py-3 text-white">
+            <div className="mt-2 flex items-center justify-between rounded-xl bg-forest-900 px-4 py-2 text-white">
               <span className="text-[10px] font-semibold uppercase tracking-wider">Subtotal dos produtos</span>
               <b className="text-sm">{quoteBusy ? "Consultando…" : money.format(productsTotal)}</b>
             </div>
@@ -792,6 +812,22 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
                   </Field>
                 )}
+                <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Corretor e comissão · opcional</p>
+                  <p className="mt-1 text-[10px] text-stone-500">A comissão é calculada sobre os produtos, sem incluir o frete. No faturamento, o BBOS registra o total a receber e a comissão a pagar separadamente.</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px_170px]">
+                    <Field label="Corretor">
+                      <select value={brokerId} onChange={(event) => { setBrokerId(event.target.value); if (!event.target.value) setBrokerCommissionPercent(""); }}>
+                        <option value="">Sem corretor</option>
+                        {brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.tradeName || broker.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Comissão (%)">
+                      <input type="number" min="0" max="100" step="0.01" disabled={!brokerId} value={brokerCommissionPercent} onChange={(event) => setBrokerCommissionPercent(event.target.value)} placeholder="0,00" />
+                    </Field>
+                    <div><p className="mb-1.5 text-[10px] font-semibold text-stone-600">Valor a pagar</p><div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">{money.format(brokerCommission)}</div></div>
+                  </div>
+                </div>
                 {freightResponsibility === "CUSTOMER" && firstQuote?.salesChannelType === "DISTRIBUIDOR" && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1022,10 +1058,10 @@ function NewOrder({ customers, variants, onClose, onCreated }: { customers: Cust
             </div>
           )}
           <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (firstQuote?.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote)} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
-          <p className="text-[10px] leading-4 text-stone-400">Preço e total vêm da tabela interna vigente. Condições comerciais ficam registradas no próprio pedido.</p>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1346,7 +1382,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
             <h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2>
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
-          <button onClick={onClose}><X /></button>
+          <div className="flex items-center gap-2">
+            <OrderPdfLink orderNumber={order.orderNumber ?? order.code} provisional={order.status === "DRAFT"} />
+            <button onClick={onClose}><X /></button>
+          </div>
         </div>
 
         <div className="mt-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1">
@@ -1467,8 +1506,13 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 {order.carrierName && <MiniValue label="Transportadora" value={order.carrierName} />}
                 {order.customerReference && <MiniValue label="Referência" value={order.customerReference} />}
                 {order.incoterm && <MiniValue label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
+                {order.broker && <MiniValue label="Corretor" value={`${order.broker.tradeName || order.broker.name} · ${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`} />}
               </div>
             </section>
+
+            {(order.status === "DRAFT" || order.status === "CONFIRMED") && (
+              <OrderCustomerApprovalActions orderId={order.id} onAccepted={onChanged} />
+            )}
 
             {order.shippingProvider === "MELHOR_ENVIO" && (
               <section className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
@@ -1487,34 +1531,46 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                           : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
                   </div>
-                  {fulfillment?.labelUrl ? (
-                    <a
-                      href={fulfillment.labelUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
-                    >
-                      Abrir etiqueta
-                    </a>
-                  ) : fulfillment?.fiscalStatus === "REJECTED" ? (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void operationalAction("invoice")}
-                      className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-                    >
-                      {busy ? "Reprocessando…" : "Reprocessar NF-e"}
-                    </button>
-                  ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
-                    <button
-                      type="button"
-                      disabled={fulfillmentBusy}
-                      onClick={() => void generateLabel()}
-                      className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-                    >
-                      {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
-                    </button>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl) && (
+                      <a
+                        href={fulfillment.fiscalPdfUrl || fulfillment.fiscalDanfeUrl || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
+                      >
+                        Ver NF-e{fulfillment.fiscalNumber ? ` nº ${fulfillment.fiscalNumber}` : ""}
+                      </a>
+                    )}
+                    {fulfillment?.labelUrl ? (
+                      <a
+                        href={fulfillment.labelUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                      >
+                        Abrir etiqueta
+                      </a>
+                    ) : fulfillment?.fiscalStatus === "REJECTED" ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void operationalAction("invoice")}
+                        className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy ? "Reprocessando…" : "Reprocessar NF-e"}
+                      </button>
+                    ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
+                      <button
+                        type="button"
+                        disabled={fulfillmentBusy}
+                        onClick={() => void generateLabel()}
+                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 {fulfillment?.trackingCode && (
                   <p className="mt-3 text-[11px] text-emerald-900">

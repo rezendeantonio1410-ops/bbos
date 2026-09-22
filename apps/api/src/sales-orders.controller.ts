@@ -43,6 +43,8 @@ type SalesOrderCommercialTerms = {
   packageLengthCm?: number;
   packageCount?: number;
   packages?: Array<{ widthCm: number; heightCm: number; lengthCm: number; weightGrams?: number }>;
+  brokerId?: string;
+  brokerCommissionPercent?: number;
 };
 
 @Controller("sales-orders")
@@ -132,7 +134,10 @@ export class SalesOrdersController {
   list() { return this.salesOrders.list(); }
 
   @Get("options")
-  options() { return this.salesOrders.options(); }
+  async options(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.salesOrders.options(actor.companyId);
+  }
 
   @Get("next-number")
   async nextNumber() { return { number: await this.nextOrderNumber() }; }
@@ -300,6 +305,17 @@ export class SalesOrdersController {
       pricedItems.push({ ...item, unitPrice: price.officialUnitPrice });
     }
 
+    const brokerId = String(body.brokerId ?? "").trim() || undefined;
+    const brokerCommissionPercent = brokerId ? Number(body.brokerCommissionPercent ?? 0) : 0;
+    if (!Number.isFinite(brokerCommissionPercent) || brokerCommissionPercent < 0 || brokerCommissionPercent > 100) {
+      throw new BadRequestException("A comissão do corretor deve estar entre 0% e 100%.");
+    }
+    if (!brokerId && Number(body.brokerCommissionPercent ?? 0) > 0) {
+      throw new BadRequestException("Selecione o corretor para registrar a comissão.");
+    }
+    const commissionBase = pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) - Number(body.discount ?? 0);
+    const brokerCommissionAmount = brokerId ? roundMoney(Math.max(0, commissionBase) * brokerCommissionPercent / 100) : 0;
+
     let shippingQuote: any = null;
     if (resolvedChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER") {
       if (!body.shippingQuoteId || !body.destinationPostalCode) {
@@ -336,6 +352,9 @@ export class SalesOrdersController {
       code: orderNumber,
       orderNumber,
       salesChannelId: resolvedChannelId,
+      brokerId,
+      brokerCommissionPercent: brokerId ? brokerCommissionPercent : undefined,
+      brokerCommissionAmount: brokerId ? brokerCommissionAmount : undefined,
       items: pricedItems,
       notes: String(body.notes ?? "").trim() || undefined,
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
@@ -401,6 +420,9 @@ export class SalesOrdersController {
       shippingServiceId: shippingQuote?.serviceId ?? null,
       shippingServiceName: shippingQuote?.serviceName ?? null,
       estimatedDeliveryDays: shippingQuote?.deliveryDays ?? null,
+      brokerId: brokerId ?? null,
+      brokerCommissionPercent: brokerId ? brokerCommissionPercent : null,
+      brokerCommissionAmount: brokerId ? brokerCommissionAmount : null,
     };
   }
 

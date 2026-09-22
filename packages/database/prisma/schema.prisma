@@ -555,6 +555,7 @@ model Broker {
   bankDetails     Json?
   active          Boolean               @default(true)
   purchases       GreenCoffeePurchase[]
+  salesOrders     SalesOrder[]
   accountsPayable AccountsPayable[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -576,8 +577,8 @@ model StorefrontPartner {
   bankDetails     Json?
   active          Boolean           @default(true)
   accountsPayable AccountsPayable[]
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
@@ -1609,35 +1610,35 @@ model ProductLine {
 }
 
 model Product {
-  id            String           @id @default(cuid())
-  productLineId String
-  productLine   ProductLine      @relation(fields: [productLineId], references: [id], onDelete: Restrict)
-  code          String
-  name          String
-  slug          String
-  description   String
-  active        Boolean          @default(true)
-  variants      ProductVariant[]
+  id               String                   @id @default(cuid())
+  productLineId    String
+  productLine      ProductLine              @relation(fields: [productLineId], references: [id], onDelete: Restrict)
+  code             String
+  name             String
+  slug             String
+  description      String
+  active           Boolean                  @default(true)
+  variants         ProductVariant[]
   storefrontImages StorefrontProductImage[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   @@unique([productLineId, slug])
   @@unique([productLineId, code])
 }
 
 model StorefrontProductImage {
-  id          String   @id @default(cuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  fileName    String
-  mimeType    String
-  data        Bytes
-  sortOrder   Int      @default(0)
-  isPrimary   Boolean  @default(false)
-  useInHero   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  data      Bytes
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  useInHero Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([productId, sortOrder])
   @@index([productId, isPrimary])
@@ -1719,52 +1720,57 @@ model ProductPrice {
 }
 
 model SalesOrder {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerId             String
-  customer               Customer                @relation(fields: [customerId], references: [id])
-  salesChannelId         String?
-  salesChannel           SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
-  finishedProductId      String?
-  finishedProduct        FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
-  code                   String
-  orderNumber            String?
-  status                 SalesOrderStatus        @default(DRAFT)
-  quantity               Int
-  unitPrice              Decimal                 @db.Decimal(14, 2)
-  totalAmount            Decimal                 @db.Decimal(14, 2)
-  orderedAt              DateTime                @default(now())
-  orderDate              DateTime?
-  expectedDeliveryDate   DateTime?
-  subtotal               Decimal?                @db.Decimal(14, 2)
-  discount               Decimal                 @default(0) @db.Decimal(14, 2)
-  freight                Decimal                 @default(0) @db.Decimal(14, 2)
-  notes                  String?
-  paymentType            String                  @default("LEGACY")
-  paymentTermsSnapshot   String?
-  freightResponsibility  String?
-  carrierName            String?
-  customerReference      String?
-  incoterm               String?
-  incotermLocation       String?
-  shippingQuoteId        String?
-  shippingProvider       String?
-  shippingServiceId      String?
-  shippingServiceName    String?
-  estimatedDeliveryDays  Int?
-  invoicedAt             DateTime?
-  deliveredAt            DateTime?
-  costEvents             CostEvent[]
-  items                  SalesOrderItem[]
-  reservations           InventoryReservation[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  accountsReceivable     AccountsReceivable[]
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                      String                  @id @default(cuid())
+  companyId               String
+  company                 Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId              String
+  customer                Customer                @relation(fields: [customerId], references: [id])
+  brokerId                String?
+  broker                  Broker?                 @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerCommissionPercent Decimal?                @db.Decimal(7, 4)
+  brokerCommissionAmount  Decimal?                @db.Decimal(14, 2)
+  salesChannelId          String?
+  salesChannel            SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
+  finishedProductId       String?
+  finishedProduct         FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
+  code                    String
+  orderNumber             String?
+  status                  SalesOrderStatus        @default(DRAFT)
+  quantity                Int
+  unitPrice               Decimal                 @db.Decimal(14, 2)
+  totalAmount             Decimal                 @db.Decimal(14, 2)
+  orderedAt               DateTime                @default(now())
+  orderDate               DateTime?
+  expectedDeliveryDate    DateTime?
+  subtotal                Decimal?                @db.Decimal(14, 2)
+  discount                Decimal                 @default(0) @db.Decimal(14, 2)
+  freight                 Decimal                 @default(0) @db.Decimal(14, 2)
+  notes                   String?
+  paymentType             String                  @default("LEGACY")
+  paymentTermsSnapshot    String?
+  freightResponsibility   String?
+  carrierName             String?
+  customerReference       String?
+  incoterm                String?
+  incotermLocation        String?
+  shippingQuoteId         String?
+  shippingProvider        String?
+  shippingServiceId       String?
+  shippingServiceName     String?
+  estimatedDeliveryDays   Int?
+  invoicedAt              DateTime?
+  deliveredAt             DateTime?
+  costEvents              CostEvent[]
+  items                   SalesOrderItem[]
+  reservations            InventoryReservation[]
+  finishedGoodsMovements  FinishedGoodsMovement[]
+  accountsReceivable      AccountsReceivable[]
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
 
   @@unique([companyId, code])
   @@index([customerId, status])
+  @@index([brokerId])
   @@index([salesChannelId, status])
 }
 

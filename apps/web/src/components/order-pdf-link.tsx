@@ -2,7 +2,7 @@
 
 import { FileText } from "lucide-react";
 
-export function OrderPdfLink({ orderNumber, compact = false }: { orderNumber: string; compact?: boolean }) {
+export function OrderPdfLink({ orderNumber, compact = false, provisional = false }: { orderNumber: string; compact?: boolean; provisional?: boolean }) {
   const href = `/pedido/documento/${encodeURIComponent(orderNumber)}`;
   return (
     <a
@@ -15,7 +15,7 @@ export function OrderPdfLink({ orderNumber, compact = false }: { orderNumber: st
         : "inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs font-bold text-stone-800 transition hover:border-stone-300 hover:bg-stone-50"}
     >
       <FileText size={compact ? 13 : 14} />
-      {compact ? "PDF" : "PDF / Conferência"}
+      {compact ? (provisional ? "PDF provisório" : "PDF") : (provisional ? "Gerar PDF provisório" : "PDF / Conferência")}
     </a>
   );
 }

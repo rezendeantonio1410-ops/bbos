@@ -26,6 +26,9 @@ export type CreateSalesOrderInput = {
   expectedDeliveryDate?: string;
   discount?: number;
   freight?: number;
+  brokerId?: string;
+  brokerCommissionPercent?: number;
+  brokerCommissionAmount?: number;
   notes?: string;
   items: Array<{
     productVariantId: string;
@@ -59,11 +62,14 @@ export class SalesOrdersService implements OnModuleDestroy {
     return order;
   }
 
-  async options() {
-    const [customers, balances] = await Promise.all([
-      this.database.customer.findMany({ orderBy: { name: "asc" } }),
+  async options(companyId?: string) {
+    const [customers, balances, brokers] = await Promise.all([
+      this.database.customer.findMany({ where: companyId ? { companyId } : undefined, orderBy: { name: "asc" } }),
       this.database.finishedProduct.findMany({
-        where: { productVariantId: { not: null } },
+        where: {
+          productVariantId: { not: null },
+          ...(companyId ? { productVariant: { product: { productLine: { companyId } } } } : {}),
+        },
         include: {
           warehouse: true,
           productVariant: {
@@ -71,9 +77,11 @@ export class SalesOrdersService implements OnModuleDestroy {
           },
         },
       }),
+      this.database.broker.findMany({ where: { active: true, ...(companyId ? { companyId } : {}) }, orderBy: { name: "asc" } }),
     ]);
     return {
       customers,
+      brokers,
       variants: balances.map((item) => ({
         productVariantId: item.productVariantId,
         warehouseId: item.warehouseId,
@@ -115,6 +123,12 @@ export class SalesOrdersService implements OnModuleDestroy {
           where: { id: input.customerId },
         });
         if (!customer) throw new BadRequestException("Cliente não encontrado.");
+        if (input.brokerId) {
+          const broker = await transaction.broker.findFirst({
+            where: { id: input.brokerId, companyId: customer.companyId, active: true },
+          });
+          if (!broker) throw new BadRequestException("Corretor inválido ou inativo para esta empresa.");
+        }
         const salesChannel = input.salesChannelId
           ? await transaction.salesChannel.findFirst({ where: { id: input.salesChannelId, companyId: customer.companyId, active: true } })
           : null;
@@ -157,6 +171,9 @@ export class SalesOrdersService implements OnModuleDestroy {
           data: {
             companyId: customer.companyId,
             customerId: customer.id,
+            brokerId: input.brokerId,
+            brokerCommissionPercent: input.brokerCommissionPercent,
+            brokerCommissionAmount: input.brokerCommissionAmount,
             salesChannelId: salesChannel?.id,
             code: input.code,
             orderNumber: input.orderNumber ?? input.code,
@@ -513,7 +530,18 @@ export class SalesOrdersService implements OnModuleDestroy {
     return this.database.$transaction(async (transaction) => {
       const order = await transaction.salesOrder.findUnique({
         where: { id },
-        select: { id: true, status: true, companyId: true, customerId: true, totalAmount: true },
+        select: {
+          id: true,
+          status: true,
+          companyId: true,
+          customerId: true,
+          totalAmount: true,
+          orderNumber: true,
+          code: true,
+          brokerId: true,
+          brokerCommissionPercent: true,
+          brokerCommissionAmount: true,
+        },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
       if (order.status === status)
@@ -549,6 +577,31 @@ export class SalesOrdersService implements OnModuleDestroy {
               status: "OPEN",
             },
           });
+        }
+        if (order.brokerId && Number(order.brokerCommissionAmount ?? 0) > 0) {
+          const payableKey = `sales-order:${order.id}:broker-commission`;
+          const existingPayable = await transaction.accountsPayable.findUnique({
+            where: { brokerCommissionPayableKey: payableKey },
+          });
+          if (!existingPayable) {
+            const issueDate = new Date();
+            await transaction.accountsPayable.create({
+              data: {
+                companyId: order.companyId,
+                brokerId: order.brokerId,
+                supplierId: null,
+                brokerCommissionPayableKey: payableKey,
+                description: `${order.orderNumber ?? order.code} · comissão de corretagem da venda`,
+                issueDate,
+                dueDate: issueDate,
+                amount: order.brokerCommissionAmount!,
+                openAmount: order.brokerCommissionAmount!,
+                status: "OPEN",
+                category: "COMISSAO_VENDA",
+                notes: `Comissão de ${order.brokerCommissionPercent ?? 0}% sobre os produtos do pedido.`,
+              },
+            });
+          }
         }
       }
       return { orderId: id, idempotent: false, status };
@@ -619,6 +672,7 @@ export class SalesOrdersService implements OnModuleDestroy {
 
   private readonly orderInclude = {
     customer: true,
+    broker: true,
     salesChannel: true,
     finishedProduct: true,
     items: {
