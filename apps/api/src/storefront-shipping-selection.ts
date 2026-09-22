@@ -11,6 +11,7 @@ export type CustomerShippingLabel =
 
 export function selectCustomerShippingOptions<T extends RankableShippingOption>(
   options: T[],
+  freeShipping = false,
 ): Array<T & { customerLabel: CustomerShippingLabel }> {
   if (!options.length) return [];
 
@@ -27,6 +28,10 @@ export function selectCustomerShippingOptions<T extends RankableShippingOption>(
       a.option.providerPriceCents - b.option.providerPriceCents ||
       a.index - b.index,
   )[0]!.option;
+
+  if (freeShipping) {
+    return [{ ...cheapest, customerLabel: "Mais econômico" }];
+  }
 
   if (cheapest.serviceId === fastest.serviceId) {
     return [{ ...cheapest, customerLabel: "Mais econômico e rápido" }];
