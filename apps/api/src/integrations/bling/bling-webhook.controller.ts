@@ -67,9 +67,9 @@ export class BlingWebhookController {
         ? ((value as any).id ?? (value as any).valor ?? (value as any).codigo)
         : value,
     );
-    if (code === 5 || code === 6) return "AUTHORIZED";
-    if (code === 2) return "CANCELLED";
-    if (code === 4 || code === 9 || code === 11) return "REJECTED";
+    if (code === 6 || code === 7) return "AUTHORIZED";
+    if (code === 3) return "CANCELLED";
+    if (code === 5 || code === 10 || code === 12) return "REJECTED";
     return "SENT";
   }
 

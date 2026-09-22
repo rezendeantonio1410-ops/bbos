@@ -260,7 +260,7 @@ export class BlingOutboxService {
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
     if (!salesMap?.externalId) {
       const rawAddress = String(order.customerAddress || "").trim();
-      const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9\/-]*)\s*$/);
+      const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/);
       const street = String(addressMatch?.[1] || rawAddress).trim();
       const number = String(addressMatch?.[2] || "S/N").trim();
 
@@ -430,10 +430,23 @@ export class BlingOutboxService {
       { salesOrderId: order.id, blingOrderId: salesMap.externalId },
     );
 
-    await this.bling.request(
+    const authorizationRequestedAt = new Date().toISOString();
+    const sendResult = await this.bling.request(
       row.companyId,
       `/nfe/${encodeURIComponent(blingNfeId)}/enviar?enviarEmail=false`,
       { method: "POST" },
+    );
+    await this.database.$executeRawUnsafe(
+      `UPDATE "FiscalDocument"
+          SET "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $2::jsonb,
+              "updatedAt"=NOW()
+        WHERE id=$1`,
+      fiscalId,
+      JSON.stringify({
+        authorizationAttemptCount: 1,
+        authorizationRequestedAt,
+        blingSend: sendResult,
+      }),
     );
 
     return {
@@ -450,15 +463,73 @@ export class BlingOutboxService {
         ? ((value as any).id ?? (value as any).valor ?? (value as any).codigo)
         : value,
     );
-    if (code === 5 || code === 6) return "AUTHORIZED";
-    if (code === 2) return "CANCELLED";
-    if (code === 4 || code === 9 || code === 11) return "REJECTED";
+    // Bling NF-e status codes (API v3):
+    // 1 pending, 3 cancelled, 4 awaiting receipt, 5 rejected,
+    // 6 authorized, 7 DANFE issued, 9 awaiting protocol,
+    // 10 denied, 11 status query and 12 blocked.
+    if (code === 6 || code === 7) return "AUTHORIZED";
+    if (code === 3) return "CANCELLED";
+    if (code === 5 || code === 10 || code === 12) return "REJECTED";
     return "SENT";
+  }
+
+  private fiscalStatusCode(value: unknown) {
+    return Number(
+      typeof value === "object" && value !== null
+        ? ((value as any).id ?? (value as any).valor ?? (value as any).codigo)
+        : value,
+    );
+  }
+
+  private authorizationRetry(snapshot: any) {
+    const count = Number(snapshot?.authorizationAttemptCount ?? 0);
+    if (count >= 3) return { allowed: false, count };
+    const lastAttempt = new Date(
+      String(snapshot?.authorizationRequestedAt ?? snapshot?.authorizationRetriedAt ?? ""),
+    ).getTime();
+    const waitMs = count <= 1 ? 2 * 60_000 : 10 * 60_000;
+    return {
+      allowed: !Number.isFinite(lastAttempt) || Date.now() - lastAttempt >= waitMs,
+      count,
+    };
+  }
+
+  private async processLegacyFiscalReady(row: any) {
+    const documents = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,status,"externalId","salesOrderId" FROM "FiscalDocument"
+        WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+      row.aggregateId,
+      row.companyId,
+    );
+    const document = documents[0];
+    if (!document) throw new Error("FiscalDocument da fila não foi encontrado.");
+
+    if (
+      document.externalId ||
+      ["SENT", "AUTHORIZED", "REJECTED", "CANCELLED"].includes(String(document.status))
+    ) {
+      return {
+        fiscalId: document.id,
+        blingNfeId: document.externalId,
+        status: document.status,
+        idempotent: true,
+        legacyEvent: true,
+      };
+    }
+    if (!document.salesOrderId) {
+      throw new Error("Documento fiscal sem pedido comercial vinculado.");
+    }
+    return this.processSalesOrderInvoice({
+      ...row,
+      aggregateId: document.salesOrderId,
+      aggregateType: "SALES_ORDER",
+      eventType: "SALES_ORDER_INVOICE_REQUESTED",
+    });
   }
 
   private async reconcileSentInvoice() {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT f.id,f."companyId",f."externalId",f."salesOrderId"
+      `SELECT f.id,f."companyId",f."externalId",f."salesOrderId",f."payloadSnapshot"
          FROM "FiscalDocument" f
         WHERE f."externalProvider"='BLING' AND f.status='SENT' AND f."externalId" IS NOT NULL
         ORDER BY f."updatedAt" ASC
@@ -473,8 +544,40 @@ export class BlingOutboxService {
         `/nfe/${encodeURIComponent(row.externalId)}`,
         { method: "GET" },
       );
-      const note = detail?.data ?? detail ?? {};
-      const status = this.fiscalStatus(note?.situacao);
+      let note = detail?.data ?? detail ?? {};
+      let status = this.fiscalStatus(note?.situacao);
+      let retrySnapshot: Record<string, unknown> = {};
+
+      if (this.fiscalStatusCode(note?.situacao) === 1) {
+        const retry = this.authorizationRetry(row.payloadSnapshot);
+        if (retry.allowed) {
+          const requestedAt = new Date().toISOString();
+          let sendResult: unknown = null;
+          let authorizationLastError: string | null = null;
+          try {
+            sendResult = await this.bling.request(
+              row.companyId,
+              `/nfe/${encodeURIComponent(row.externalId)}/enviar?enviarEmail=false`,
+              { method: "POST" },
+            );
+            const refreshed = await this.bling.request(
+              row.companyId,
+              `/nfe/${encodeURIComponent(row.externalId)}`,
+              { method: "GET" },
+            );
+            note = refreshed?.data ?? refreshed ?? note;
+            status = this.fiscalStatus(note?.situacao);
+          } catch (error) {
+            authorizationLastError = error instanceof Error ? error.message : String(error);
+          }
+          retrySnapshot = {
+            authorizationAttemptCount: retry.count + 1,
+            authorizationRequestedAt: requestedAt,
+            blingSend: sendResult,
+            authorizationLastError,
+          };
+        }
+      }
       const accessKey = String(note?.chaveAcesso ?? note?.chave ?? "").trim() || null;
       const number = note?.numero == null ? null : String(note.numero);
       const series = note?.serie == null ? null : String(note.serie);
@@ -491,7 +594,11 @@ export class BlingOutboxService {
         number,
         series,
         accessKey,
-        JSON.stringify({ blingNfe: note, reconciledAt: new Date().toISOString() }),
+        JSON.stringify({
+          blingNfe: note,
+          reconciledAt: new Date().toISOString(),
+          ...retrySnapshot,
+        }),
       );
 
       let fulfillment: any = null;
@@ -579,6 +686,11 @@ export class BlingOutboxService {
         row.aggregateType === "SALES_ORDER"
       ) {
         result = await this.processSalesOrderInvoice(row);
+      } else if (
+        row.eventType === "FISCAL_DOCUMENT_READY" &&
+        row.aggregateType === "FISCAL_DOCUMENT"
+      ) {
+        result = await this.processLegacyFiscalReady(row);
       } else {
         throw new Error(`Evento Bling ainda não implementado: ${row.eventType}/${row.aggregateType}`);
       }
