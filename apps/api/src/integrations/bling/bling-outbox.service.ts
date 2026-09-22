@@ -609,7 +609,7 @@ export class BlingOutboxService {
       let status = this.fiscalStatus(note?.situacao);
       let retrySnapshot: Record<string, unknown> = {};
       const storedSefaz = this.sefazAuthorization(row.payloadSnapshot?.blingSend);
-      if (status === "SENT" && storedSefaz.status !== "SENT") {
+      if (storedSefaz.status !== "SENT") {
         status = storedSefaz.status;
         retrySnapshot = {
           sefazStatusCode: storedSefaz.code,
