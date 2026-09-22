@@ -54,3 +54,14 @@ test("returns the single available option once", () => {
   assert.equal(result[0]?.serviceId, "ONLY");
   assert.equal(result[0]?.customerLabel, "Mais econômico e rápido");
 });
+
+test("returns only the lowest provider cost when shipping is free", () => {
+  const result = selectCustomerShippingOptions([
+    quote("STANDARD", 1455, 3),
+    quote("EXPRESS", 1958, 2),
+  ], true);
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.serviceId, "STANDARD");
+  assert.equal(result[0]?.customerLabel, "Mais econômico");
+});

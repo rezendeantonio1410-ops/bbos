@@ -239,11 +239,11 @@ export class StorefrontShippingService {
     const providerOptions = this.provider() === "MELHOR_ENVIO"
       ? await this.melhorEnvio(companyId, input, policy)
       : this.fixed(input);
+    const free = policy.allowFreeShipping !== false && this.isFreeShipping(input.postalCode, input.subtotalCents);
     const options = policy.includeAllServices
       ? providerOptions
-      : selectCustomerShippingOptions(providerOptions);
+      : selectCustomerShippingOptions(providerOptions, free);
     if (!options.length) throw new ServiceUnavailableException("Nenhuma modalidade de entrega está disponível para este CEP.");
-    const free = policy.allowFreeShipping !== false && this.isFreeShipping(input.postalCode, input.subtotalCents);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
     const packageCount = input.packages?.length || Math.max(1, input.packageCount ?? 1);
     const packageWeightGrams = Math.ceil(input.weightGrams / packageCount);
