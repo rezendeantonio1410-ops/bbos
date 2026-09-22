@@ -11,6 +11,7 @@ import brand from "./brand-review.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
+import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { loadStorefrontImages } from "@/lib/storefront-images";
 import {
   AddToCartButton,
@@ -29,6 +30,14 @@ const products = [
     tone: "#E9BB00",
     image: "/brand/products/essencial-treated.webp",
     tag: "para todo dia",
+    story: {
+      promise: "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
+      description: "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. É uma escolha segura para quem está começando no café especial ou quer simplicidade bem-feita todos os dias.",
+      founderNote: "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
+      bestFor: "rotina, café da manhã e quem prefere uma xícara macia",
+      brew: "coado, cafeteira elétrica ou prensa francesa",
+      sensory: [{ label: "Doçura", value: 72 }, { label: "Corpo", value: 48 }, { label: "Frescor", value: 38 }, { label: "Intensidade", value: 44 }],
+    } satisfies ProductStory,
   },
   {
     name: "Intenso",
@@ -40,6 +49,14 @@ const products = [
     tone: "#E9BB00",
     image: "/brand/products/intenso-treated.webp",
     tag: "mais corpo",
+    story: {
+      promise: "Mais presença no primeiro gole, com corpo marcante e uma finalização limpa.",
+      description: "É a escolha para quem associa uma boa xícara à intensidade. A sensação é mais encorpada e direta, mas sem deixar o sabor pesado ou confuso.",
+      founderNote: "Aqui buscamos presença com limpeza. Ele entrega intensidade sem esconder a qualidade da xícara.",
+      bestFor: "quem gosta de café forte, leite e manhãs de mais energia",
+      brew: "espresso, moka italiana ou prensa francesa",
+      sensory: [{ label: "Doçura", value: 55 }, { label: "Corpo", value: 86 }, { label: "Frescor", value: 34 }, { label: "Intensidade", value: 88 }],
+    } satisfies ProductStory,
   },
   {
     name: "Caramelo",
@@ -51,6 +68,14 @@ const products = [
     tone: "#F96D01",
     image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
+    story: {
+      promise: "Doçura reconhecível, chocolate e equilíbrio: uma xícara acolhedora que convida ao próximo gole.",
+      description: "O perfil lembra caramelo e chocolate sem precisar procurar demais. O corpo é redondo, a doçura permanece e o conjunto funciona tanto puro quanto acompanhado.",
+      founderNote: "O Caramelo traduz muito do que acreditamos: sabor fácil de reconhecer, equilíbrio e vontade de repetir a xícara.",
+      bestFor: "pausas confortáveis, receber pessoas e acompanhar doces",
+      brew: "coado, espresso ou prensa francesa",
+      sensory: [{ label: "Doçura", value: 88 }, { label: "Corpo", value: 70 }, { label: "Frescor", value: 42 }, { label: "Intensidade", value: 66 }],
+    } satisfies ProductStory,
   },
   {
     name: "Doce de Leite",
@@ -62,6 +87,14 @@ const products = [
     tone: "#F96D01",
     image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
+    story: {
+      promise: "Uma xícara gulosa e macia, com lembranças de açúcar mascavo, doce de leite e alfajor.",
+      description: "A experiência começa na doçura e termina com sensação cremosa e prolongada. É um café para quem procura conforto, mas quer um perfil com personalidade própria.",
+      founderNote: "Este é o nosso convite para perceber que o café pode ser naturalmente doce e cheio de referências afetivas.",
+      bestFor: "uma pausa especial, sobremesas e quem valoriza doçura",
+      brew: "coado ou prensa francesa, valorizando textura e doçura",
+      sensory: [{ label: "Doçura", value: 94 }, { label: "Corpo", value: 76 }, { label: "Frescor", value: 36 }, { label: "Intensidade", value: 64 }],
+    } satisfies ProductStory,
   },
   {
     name: "Tangerina",
@@ -73,6 +106,14 @@ const products = [
     tone: "#F96D01",
     image: null,
     tag: "frescor",
+    story: {
+      promise: "Cítrico, doce e fresco: um perfil luminoso para quem gosta de uma xícara viva.",
+      description: "A lembrança de tangerina traz brilho sem perder a doçura. É uma porta de entrada acessível para sabores frutados e uma escolha especialmente agradável em preparos filtrados.",
+      founderNote: "Queríamos um frutado claro e alegre, capaz de apresentar frescor sem transformar a xícara em algo difícil.",
+      bestFor: "dias quentes, coados e quem quer explorar perfis frutados",
+      brew: "coado ou preparo gelado",
+      sensory: [{ label: "Doçura", value: 72 }, { label: "Corpo", value: 45 }, { label: "Frescor", value: 90 }, { label: "Intensidade", value: 58 }],
+    } satisfies ProductStory,
   },
   {
     name: "Singular",
@@ -84,6 +125,14 @@ const products = [
     tone: "#5C7D5F",
     image: "/brand/products/singular-treated.webp",
     tag: "descoberta",
+    story: {
+      promise: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
+      description: "Há mais camadas para perceber e novas sensações aparecem ao longo da xícara. É indicado para quem já gosta de café especial ou quer descobrir até onde uma origem bem trabalhada pode chegar.",
+      founderNote: "O Singular fica na memória porque não entrega tudo de uma vez. É um café para provar com curiosidade.",
+      bestFor: "degustação, presentes e momentos de descoberta",
+      brew: "coado, com água e proporção controladas",
+      sensory: [{ label: "Doçura", value: 78 }, { label: "Corpo", value: 58 }, { label: "Frescor", value: 84 }, { label: "Intensidade", value: 72 }],
+    } satisfies ProductStory,
   },
   {
     name: "Sublime",
@@ -95,6 +144,14 @@ const products = [
     tone: "#5C7D5F",
     image: "/brand/products/sublime-treated.webp",
     tag: "experiência",
+    story: {
+      promise: "Rapadura, caramelo e doçura profunda em uma xícara longa, densa e contemplativa.",
+      description: "O perfil combina doçura intensa e corpo envolvente, com final persistente. É uma experiência mais profunda para quem procura concentração de sabor sem abrir mão do equilíbrio.",
+      founderNote: "O Sublime representa profundidade: uma doçura que ocupa a boca, permanece e ainda preserva elegância.",
+      bestFor: "rituais sem pressa, presentes e quem busca profundidade",
+      brew: "prensa francesa, espresso ou coado mais concentrado",
+      sensory: [{ label: "Doçura", value: 92 }, { label: "Corpo", value: 88 }, { label: "Frescor", value: 40 }, { label: "Intensidade", value: 82 }],
+    } satisfies ProductStory,
   },
 ];
 const collections = [
@@ -338,6 +395,22 @@ export default async function LojaPage() {
                           <p>{p.line}</p>
                           <h3>{p.name}</h3>
                           <span>{p.notes}</span>
+                          <ProductDetails
+                            product={{
+                              id: p.name.toLowerCase().replaceAll(" ", "-"),
+                              name: p.name,
+                              line: p.line,
+                              notes: p.notes,
+                              priceCents: p.priceCents,
+                              weightGrams: 500,
+                              image: p.image,
+                              priceLabel: p.price,
+                              weightLabel: p.weight,
+                              tag: p.tag,
+                              tone: p.tone,
+                            }}
+                            story={p.story}
+                          />
                           <div className={styles.buyRow}>
                             <strong>
                               {p.price} <small>· {p.weight}</small>
