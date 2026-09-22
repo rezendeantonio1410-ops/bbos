@@ -362,15 +362,11 @@ export class BlingOutboxService {
       };
     }
 
-    const natureza = process.env.BLING_NFE_NATUREZA_OPERACAO?.trim();
-    const nfeResult = await this.bling.request(row.companyId, "/nfe", {
-      method: "POST",
-      body: JSON.stringify({
-        pedidoVendaId: Number(salesMap.externalId),
-        tipo: 1,
-        ...(natureza ? { naturezaOperacao: natureza } : {}),
-      }),
-    });
+    const nfeResult = await this.bling.request(
+      row.companyId,
+      `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}/gerar-nfe`,
+      { method: "POST" },
+    );
     const blingNfeId = String(nfeResult?.data?.id ?? nfeResult?.id ?? "");
     if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
 
@@ -432,7 +428,10 @@ export class BlingOutboxService {
               OR (
                 status='FAILED'
                 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'
-                AND "lastError" LIKE '%A data para geração das parcelas é inválida%'
+                AND (
+                  "lastError" LIKE '%A data para geração das parcelas é inválida%'
+                  OR "lastError" LIKE '%A nota deve ter ao menos um item%'
+                )
               )
             )
             AND ($1::text IS NULL OR "companyId"=$1)
