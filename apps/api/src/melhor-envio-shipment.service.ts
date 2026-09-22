@@ -33,12 +33,22 @@ export class MelhorEnvioShipmentService {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
+      const providerMessage = String(
+        body?.message ||
+        body?.error ||
+        (body?.errors ? JSON.stringify(body.errors) : "") ||
+        "",
+      ).trim();
       console.error("Melhor Envio recusou a operação", {
         path,
         status: response.status,
-        error: body?.message || body?.error || body?.errors || undefined,
+        error: providerMessage || undefined,
       });
-      throw new ServiceUnavailableException(`Melhor Envio indisponível para esta operação (${response.status}).`);
+      throw new ServiceUnavailableException(
+        providerMessage
+          ? `Melhor Envio: ${providerMessage}`
+          : `Melhor Envio indisponível para esta operação (${response.status}).`,
+      );
     }
     return body;
   }
@@ -369,7 +379,7 @@ export class MelhorEnvioShipmentService {
     }
 
     const rawAddress = String(order.customerAddress || "").trim();
-    const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9\/-]*)\s*$/);
+    const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/);
     const street = String(addressMatch?.[1] || rawAddress).trim();
     const number = String(addressMatch?.[2] || "S/N").trim();
     if (!street || !order.customerPostalCode || !order.customerCity || !order.customerState) {
