@@ -260,6 +260,9 @@ export class SalesOrdersController {
               f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId",
               f.number AS "fiscalNumber",
+              f."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "fiscalPdfUrl",
+              f."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "fiscalDanfeUrl",
+              f."payloadSnapshot"#>>'{blingNfe,xml}' AS "fiscalXmlUrl",
               f."payloadSnapshot"->>'sefazStatusCode' AS "sefazStatusCode",
               f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage"
          FROM "SalesOrder" so
