@@ -602,7 +602,23 @@ export class SalesOrdersController {
 
   @Post(":id/invoice")
   async invoice(@Param("id") id: string) {
-    const result = await this.salesOrders.transition(id, "INVOICED");
+    const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus"
+         FROM "SalesOrder" so
+         LEFT JOIN LATERAL (
+           SELECT status FROM "FiscalDocument"
+            WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
+            ORDER BY "createdAt" DESC LIMIT 1
+         ) f ON TRUE
+        WHERE so.id=$1 LIMIT 1`,
+      id,
+    );
+    const rejectedRetry =
+      fiscalRows[0]?.orderStatus === "INVOICED" &&
+      fiscalRows[0]?.fiscalStatus === "REJECTED";
+    const result = rejectedRetry
+      ? { orderId: id, idempotent: true, status: "INVOICED", fiscalRetry: true }
+      : await this.salesOrders.transition(id, "INVOICED");
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT "companyId","paymentType","paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1`,
       id,
@@ -628,12 +644,18 @@ export class SalesOrdersController {
           (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,
            "idempotencyKey","createdAt","updatedAt")
          VALUES ($1,$2,'BLING','SALES_ORDER_INVOICE_REQUESTED','SALES_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
-         ON CONFLICT ("idempotencyKey") DO NOTHING`,
+         ON CONFLICT ("idempotencyKey") DO UPDATE SET
+           status=CASE WHEN $6::boolean THEN 'PENDING' ELSE "IntegrationOutbox".status END,
+           attempts=CASE WHEN $6::boolean THEN 0 ELSE "IntegrationOutbox".attempts END,
+           "lastError"=CASE WHEN $6::boolean THEN NULL ELSE "IntegrationOutbox"."lastError" END,
+           "nextAttemptAt"=CASE WHEN $6::boolean THEN NULL ELSE "IntegrationOutbox"."nextAttemptAt" END,
+           "updatedAt"=NOW()`,
         randomUUID(),
         payment.companyId,
         id,
         JSON.stringify({ salesOrderId: id }),
         idempotencyKey,
+        rejectedRetry,
       );
     }
     return { ...result, fiscalDispatch: "QUEUED" };

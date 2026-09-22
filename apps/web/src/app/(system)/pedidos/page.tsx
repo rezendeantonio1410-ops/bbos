@@ -1475,7 +1475,16 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     >
                       Abrir etiqueta
                     </a>
-                  ) : order.status === "INVOICED" && fulfillment?.fiscalStatus !== "REJECTED" ? (
+                  ) : fulfillment?.fiscalStatus === "REJECTED" ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("invoice")}
+                      className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Reprocessando…" : "Reprocessar NF-e"}
+                    </button>
+                  ) : order.status === "INVOICED" ? (
                     <button
                       type="button"
                       disabled={fulfillmentBusy}
