@@ -663,6 +663,12 @@ export class BlingOutboxService {
                   OR "lastError" = 'Bling não retornou o ID da NF-e criada.'
                 )
               )
+              OR (
+                status='FAILED'
+                AND "eventType"='FISCAL_DOCUMENT_READY'
+                AND "aggregateType"='FISCAL_DOCUMENT'
+                AND "lastError" LIKE 'Evento Bling ainda não implementado:%'
+              )
             )
             AND ($1::text IS NULL OR "companyId"=$1)
           ORDER BY "createdAt" ASC
