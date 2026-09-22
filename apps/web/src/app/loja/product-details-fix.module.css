@@ -1,0 +1,20 @@
+.open.open {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(14, 25, 29, 0.24);
+  border-radius: 999px;
+  background: #fff !important;
+  color: #0e191d !important;
+  padding: 10px 14px;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.open.open:hover {
+  border-color: #0e191d;
+  background: #f7f2ea !important;
+}

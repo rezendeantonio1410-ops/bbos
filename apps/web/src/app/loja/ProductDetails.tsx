@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { AddToCartButton, type StoreProduct } from "./StorefrontCart";
 import styles from "./product-details.module.css";
+import fixStyles from "./product-details-fix.module.css";
 
 export type ProductStory = {
   promise: string;
@@ -40,10 +42,10 @@ export default function ProductDetails({ product, story }: Props) {
 
   return (
     <>
-      <button className={styles.open} type="button" onClick={() => setOpen(true)}>
-        Conhecer este café
+      <button className={`${styles.open} ${fixStyles.open}`} type="button" onClick={() => setOpen(true)}>
+        Conhecer este café →
       </button>
-      {open && (
+      {open && createPortal(
         <div className={styles.layer}>
           <button className={styles.backdrop} type="button" aria-label="Fechar detalhes" onClick={() => setOpen(false)} />
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={`story-${product.id}`}>
@@ -102,7 +104,8 @@ export default function ProductDetails({ product, story }: Props) {
               </figure>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
