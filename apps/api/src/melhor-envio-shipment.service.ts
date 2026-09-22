@@ -77,12 +77,19 @@ export class MelhorEnvioShipmentService {
   }
 
   private sender() {
+    const document = digits(this.required("SHIPPING_SENDER_CPF"));
+    const companyDocument = digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112");
+    if (document.length !== 11)
+      throw new ServiceUnavailableException("SHIPPING_SENDER_CPF deve conter um CPF válido com 11 dígitos.");
+    if (companyDocument.length !== 14)
+      throw new ServiceUnavailableException("SHIPPING_SENDER_DOCUMENT deve conter um CNPJ válido com 14 dígitos.");
+
     return {
       name: process.env.SHIPPING_SENDER_NAME?.trim() || "Bispo Coffees Ltda",
       phone: digits(this.required("SHIPPING_SENDER_PHONE")),
       email: this.required("SHIPPING_SENDER_EMAIL"),
-      document: digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112"),
-      company_document: digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112"),
+      document,
+      company_document: companyDocument,
       state_register: digits(this.required("SHIPPING_SENDER_STATE_REGISTER")),
       address: this.required("SHIPPING_SENDER_ADDRESS"),
       complement: process.env.SHIPPING_SENDER_COMPLEMENT?.trim() || "",
