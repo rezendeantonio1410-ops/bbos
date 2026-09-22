@@ -31,6 +31,7 @@ type Quote = {
   carrierName: string;
   priceCents: number;
   deliveryDays: number;
+  customerLabel?: string | null;
   expiresAt: string;
 };
 type CartApi = {
@@ -376,6 +377,11 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                           onClick={() => setQuote(option)}
                         >
                           <span>
+                            {option.customerLabel && (
+                              <small className={styles.quoteLabel}>
+                                {option.customerLabel}
+                              </small>
+                            )}
                             <b>{option.name}</b>
                             <small>
                               {option.carrierName} · até {option.deliveryDays}{" "}
