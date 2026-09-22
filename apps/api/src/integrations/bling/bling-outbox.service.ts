@@ -375,8 +375,8 @@ export class BlingOutboxService {
       .catch(() => null);
     let blingNfeId = String(
       remoteSalesOrder?.data?.notaFiscal?.id ??
-        remoteSalesOrder?.notaFiscal?.id ??
-        "",
+      remoteSalesOrder?.notaFiscal?.id ??
+      "",
     ).trim();
     if (blingNfeId === "0") blingNfeId = "";
     let nfeResult: any = {
@@ -440,18 +440,45 @@ export class BlingOutboxService {
       { method: "POST" },
     );
     const sefaz = this.sefazAuthorization(sendResult);
+    let authorizedNote: any = null;
+    if (sefaz.status === "AUTHORIZED") {
+      authorizedNote = await this.bling
+        .request(
+          row.companyId,
+          `/nfe/${encodeURIComponent(blingNfeId)}`,
+          { method: "GET" },
+        )
+        .then((detail) => detail?.data ?? detail ?? null)
+        .catch(() => null);
+    }
+    const accessKey = String(
+      authorizedNote?.chaveAcesso ?? authorizedNote?.chave ?? "",
+    ).trim() || null;
+    const number = authorizedNote?.numero == null
+      ? null
+      : String(authorizedNote.numero);
+    const series = authorizedNote?.serie == null
+      ? null
+      : String(authorizedNote.serie);
     await this.database.$executeRawUnsafe(
       `UPDATE "FiscalDocument"
           SET status=$2,
-              "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $3::jsonb,
+              number=COALESCE($3,number),series=COALESCE($4,series),
+              "accessKey"=COALESCE($5,"accessKey"),
+              "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $6::jsonb,
               "updatedAt"=NOW()
         WHERE id=$1`,
       fiscalId,
       sefaz.status,
+      number,
+      series,
+      accessKey,
       JSON.stringify({
         authorizationAttemptCount: 1,
         authorizationRequestedAt,
         blingSend: sendResult,
+        blingNfe: authorizedNote,
+        reconciledAt: authorizedNote ? new Date().toISOString() : null,
         sefazStatusCode: sefaz.code,
         sefazMessage: sefaz.message,
       }),
@@ -557,7 +584,15 @@ export class BlingOutboxService {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT f.id,f."companyId",f."externalId",f."salesOrderId",f."payloadSnapshot"
          FROM "FiscalDocument" f
-        WHERE f."externalProvider"='BLING' AND f.status='SENT' AND f."externalId" IS NOT NULL
+        WHERE f."externalProvider"='BLING'
+          AND f."externalId" IS NOT NULL
+          AND (
+            f.status='SENT'
+            OR (
+              f.status='AUTHORIZED'
+              AND NOT (COALESCE(f."payloadSnapshot",'{}'::jsonb) ? 'blingNfe')
+            )
+          )
         ORDER BY f."updatedAt" ASC
         LIMIT 1`,
     );
