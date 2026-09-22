@@ -3,6 +3,7 @@ import { PrismaClient } from "@bbos/database";
 import { createHash } from "node:crypto";
 import { BlingService } from "./bling.service";
 import { StorefrontLifecycleService } from "../../storefront-lifecycle.service";
+import { MelhorEnvioShipmentService } from "../../melhor-envio-shipment.service";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -21,6 +22,7 @@ export class BlingOutboxService {
   constructor(
     private readonly bling: BlingService,
     private readonly lifecycle: StorefrontLifecycleService,
+    private readonly shipment: MelhorEnvioShipmentService,
   ) {}
 
   private async mapResource(
@@ -442,7 +444,103 @@ export class BlingOutboxService {
     };
   }
 
+  private fiscalStatus(value: unknown) {
+    const code = Number(
+      typeof value === "object" && value !== null
+        ? ((value as any).id ?? (value as any).valor ?? (value as any).codigo)
+        : value,
+    );
+    if (code === 5 || code === 6) return "AUTHORIZED";
+    if (code === 2) return "CANCELLED";
+    if (code === 4 || code === 9 || code === 11) return "REJECTED";
+    return "SENT";
+  }
+
+  private async reconcileSentInvoice() {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT f.id,f."companyId",f."externalId",f."salesOrderId"
+         FROM "FiscalDocument" f
+        WHERE f."externalProvider"='BLING' AND f.status='SENT' AND f."externalId" IS NOT NULL
+        ORDER BY f."updatedAt" ASC
+        LIMIT 1`,
+    );
+    const row = rows[0];
+    if (!row) return { processed: false, reason: "EMPTY" };
+
+    try {
+      const detail = await this.bling.request(
+        row.companyId,
+        `/nfe/${encodeURIComponent(row.externalId)}`,
+        { method: "GET" },
+      );
+      const note = detail?.data ?? detail ?? {};
+      const status = this.fiscalStatus(note?.situacao);
+      const accessKey = String(note?.chaveAcesso ?? note?.chave ?? "").trim() || null;
+      const number = note?.numero == null ? null : String(note.numero);
+      const series = note?.serie == null ? null : String(note.serie);
+
+      await this.database.$executeRawUnsafe(
+        `UPDATE "FiscalDocument"
+            SET status=$2,number=COALESCE($3,number),series=COALESCE($4,series),
+                "accessKey"=COALESCE($5,"accessKey"),
+                "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $6::jsonb,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        row.id,
+        status,
+        number,
+        series,
+        accessKey,
+        JSON.stringify({ blingNfe: note, reconciledAt: new Date().toISOString() }),
+      );
+
+      let fulfillment: any = null;
+      let fulfillmentError: string | null = null;
+      if (status === "AUTHORIZED" && row.salesOrderId) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET status='INVOICED',"invoicedAt"=COALESCE("invoicedAt",NOW()),"updatedAt"=NOW()
+            WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
+          row.salesOrderId,
+        );
+        const shippingRows = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT "shippingProvider","shippingQuoteId" FROM "SalesOrder" WHERE id=$1 LIMIT 1`,
+          row.salesOrderId,
+        );
+        if (
+          shippingRows[0]?.shippingProvider === "MELHOR_ENVIO" &&
+          shippingRows[0]?.shippingQuoteId
+        ) {
+          try {
+            fulfillment = await this.shipment.createLabelForSalesOrder(row.salesOrderId);
+          } catch (error) {
+            fulfillmentError = error instanceof Error ? error.message : String(error);
+          }
+        }
+      }
+
+      return {
+        processed: true,
+        fiscalId: row.id,
+        externalId: row.externalId,
+        status,
+        number,
+        series,
+        accessKey,
+        fulfillment,
+        fulfillmentError,
+      };
+    } catch (error) {
+      return {
+        processed: false,
+        fiscalId: row.id,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   async processNext(companyId?: string) {
+    await this.reconcileSentInvoice();
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `WITH candidate AS (
          SELECT id FROM "IntegrationOutbox"
