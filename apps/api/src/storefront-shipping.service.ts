@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, ServiceUnavailableException } from "@n
 import { PrismaClient } from "@bbos/database";
 import { createHash, randomUUID } from "node:crypto";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
+import { selectCustomerShippingOptions } from "./storefront-shipping-selection";
 
 export type ShippingQuoteRequest = {
   postalCode: string;
@@ -235,9 +236,12 @@ export class StorefrontShippingService {
         : false)
     ) throw new BadRequestException("Dados de entrega, dimensões, pesos ou quantidade de caixas inválidos.");
 
-    const options = this.provider() === "MELHOR_ENVIO"
+    const providerOptions = this.provider() === "MELHOR_ENVIO"
       ? await this.melhorEnvio(companyId, input, policy)
       : this.fixed(input);
+    const options = policy.includeAllServices
+      ? providerOptions
+      : selectCustomerShippingOptions(providerOptions);
     if (!options.length) throw new ServiceUnavailableException("Nenhuma modalidade de entrega está disponível para este CEP.");
     const free = policy.allowFreeShipping !== false && this.isFreeShipping(input.postalCode, input.subtotalCents);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
@@ -280,6 +284,7 @@ export class StorefrontShippingService {
         deliveryDays: option.deliveryDays,
         carrierLogoUrl: (option as any).carrierLogoUrl ?? null,
         postingType: (option as any).postingType ?? "Postagem conforme modalidade",
+        customerLabel: "customerLabel" in option ? option.customerLabel : null,
         expiresAt: expiresAt.toISOString(),
       });
     }
