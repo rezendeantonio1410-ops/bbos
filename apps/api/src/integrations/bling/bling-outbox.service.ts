@@ -8,6 +8,12 @@ function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
+function toBlingDate(value: unknown) {
+  const parsed = value instanceof Date ? value : new Date(String(value ?? ""));
+  const resolved = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  return resolved.toISOString().slice(0, 10);
+}
+
 @Injectable()
 export class BlingOutboxService {
   private readonly database = new PrismaClient();
@@ -189,6 +195,7 @@ export class BlingOutboxService {
       method: "POST",
       body: JSON.stringify({
         numeroLoja: order.code,
+        data: toBlingDate(order.createdAt),
         contato: { id: Number(contactId) },
         itens: blingItems,
         observacoes: `Origem: ECOMMERCE | BBOS: ${order.code}`,
@@ -313,6 +320,7 @@ export class BlingOutboxService {
         method: "POST",
         body: JSON.stringify({
           numeroLoja: order.orderNumber ?? order.code,
+          data: toBlingDate(order.orderDate ?? order.orderedAt ?? order.createdAt),
           contato: { id: Number(contactId) },
           itens: blingItems,
           observacoes: `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
@@ -419,7 +427,14 @@ export class BlingOutboxService {
       `WITH candidate AS (
          SELECT id FROM "IntegrationOutbox"
           WHERE provider='BLING' AND status IN ('PENDING','FAILED')
-            AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
+            AND (
+              "nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW()
+              OR (
+                status='FAILED'
+                AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'
+                AND "lastError" LIKE '%A data para geração das parcelas é inválida%'
+              )
+            )
             AND ($1::text IS NULL OR "companyId"=$1)
           ORDER BY "createdAt" ASC
           FOR UPDATE SKIP LOCKED LIMIT 1
