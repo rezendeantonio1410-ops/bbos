@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import {
+  CSSProperties,
   createContext,
   FormEvent,
   ReactNode,
@@ -513,15 +514,17 @@ function useCart() {
 export function AddToCartButton({
   product,
   className,
+  style,
   children,
 }: {
   product: StoreProduct;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   const cart = useCart();
   return (
-    <button className={className} onClick={() => cart.add(product)}>
+    <button className={className} style={style} onClick={() => cart.add(product)}>
       {children}
     </button>
   );

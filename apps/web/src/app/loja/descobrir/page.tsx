@@ -7,6 +7,7 @@ import guideStyles from "./simple-guide.module.css";
 import trailStyles from "./journey-trail.module.css";
 import sensoryStyles from "./sensory-system.module.css";
 import brand from "./brand.module.css";
+import { AddToCartButton, StorefrontCartProvider } from "../StorefrontCart";
 
 const styles = {
   ...baseStyles,
@@ -153,6 +154,7 @@ const products = {
     image: "/brand/products/essencial-treated.webp",
     copy: "Uma xícara tranquila e versátil para fazer parte da rotina.",
     id: "essencial",
+    priceCents: 5200,
   },
   intenso: {
     name: "Intenso",
@@ -162,6 +164,7 @@ const products = {
     image: "/brand/products/intenso-treated.webp",
     copy: "Mais intensidade, sem esconder a limpeza e o equilíbrio.",
     id: "intenso",
+    priceCents: 5200,
   },
   caramelo: {
     name: "Caramelo",
@@ -171,6 +174,7 @@ const products = {
     image: "/brand/products/caramelo-treated.webp",
     copy: "Doçura reconhecível e conforto desde o primeiro gole.",
     id: "caramelo",
+    priceCents: 6800,
   },
   doce: {
     name: "Doce de Leite",
@@ -180,6 +184,7 @@ const products = {
     image: "/brand/products/doce-de-leite-treated.webp",
     copy: "Uma xícara gulosa, macia e cheia de referências afetivas.",
     id: "doce-de-leite",
+    priceCents: 6800,
   },
   singular: {
     name: "Singular",
@@ -189,6 +194,7 @@ const products = {
     image: "/brand/products/singular-treated.webp",
     copy: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
     id: "singular",
+    priceCents: 8400,
   },
   sublime: {
     name: "Sublime",
@@ -198,6 +204,7 @@ const products = {
     image: "/brand/products/sublime-treated.webp",
     copy: "Doçura profunda e corpo envolvente para um ritual sem pressa.",
     id: "sublime",
+    priceCents: 8400,
   },
 };
 
@@ -310,15 +317,23 @@ export default function Page() {
                 {recommendation.price} <small>· 500 g</small>
               </b>
               <div className={styles.resultActions}>
-                <Link
-                  href={`/loja#${recommendation.id}`}
+                <AddToCartButton
+                  product={{
+                    id: recommendation.id,
+                    name: recommendation.name,
+                    line: recommendation.line,
+                    notes: recommendation.profile,
+                    priceCents: recommendation.priceCents,
+                    weightGrams: 500,
+                    image: recommendation.image,
+                  }}
                   style={{
                     background: lineColor.background,
                     color: lineColor.foreground,
                   }}
                 >
-                  Ver e comprar →
-                </Link>
+                  Adicionar à sacola →
+                </AddToCartButton>
                 <button type="button" onClick={restart}>
                   Descobrir outro perfil
                 </button>
@@ -533,26 +548,28 @@ function ChoiceTrail({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className={`${styles.page} ${brand.page}`}>
-      <header className={styles.header}>
-        <Link href="/loja" className={styles.brand}>
-          <img
-            src="/brand/logo/bispo-logo-official-transparent.png"
-            alt="Bispo Coffees"
-          />
-        </Link>
-        <div className={styles.headerCopy}>
-          <b aria-hidden="true">B</b>
-          <span>
-            <strong>O Bispo ajuda você a escolher seu café</strong>
-            <small>3 escolhas · menos de um minuto</small>
-          </span>
-        </div>
-        <Link href="/loja" className={styles.close} aria-label="Fechar">
-          ×
-        </Link>
-      </header>
-      {children}
-    </main>
+    <StorefrontCartProvider>
+      <main className={`${styles.page} ${brand.page}`}>
+        <header className={styles.header}>
+          <Link href="/loja" className={styles.brand}>
+            <img
+              src="/brand/logo/bispo-logo-official-transparent.png"
+              alt="Bispo Coffees"
+            />
+          </Link>
+          <div className={styles.headerCopy}>
+            <b aria-hidden="true">B</b>
+            <span>
+              <strong>O Bispo ajuda você a escolher seu café</strong>
+              <small>3 escolhas · menos de um minuto</small>
+            </span>
+          </div>
+          <Link href="/loja" className={styles.close} aria-label="Fechar">
+            ×
+          </Link>
+        </header>
+        {children}
+      </main>
+    </StorefrontCartProvider>
   );
 }
