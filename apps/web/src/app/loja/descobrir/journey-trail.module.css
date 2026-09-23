@@ -106,6 +106,38 @@
 .matchReason span { font-size: 9px; font-weight: 750; }
 .matchReason i { font-size: 9px; font-style: normal; opacity: .35; }
 
+.versatileChoice { grid-column: 1 / -1; min-height: 108px !important; }
+
+.grindGuide {
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px solid #ded8cf;
+  border-radius: 14px;
+  background: #fffdf9;
+}
+
+.grindGuide > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  align-items: end;
+}
+
+.grindGuide > div small {
+  grid-column: 1 / -1;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .13em;
+  color: #173c2e;
+}
+
+.grindGuide > div strong { font-size: 16px; }
+.grindGuide > div b { font-size: 11px; color: #8e2721; }
+.grindGuide > p { margin: 8px 0 0; font-size: 9px; line-height: 1.45; opacity: .7; }
+.grindGuide em { font-style: normal; font-weight: 800; }
+.grindGuide footer { margin-top: 9px; padding-top: 8px; border-top: 1px solid #ece7df; font-size: 8px; line-height: 1.4; }
+.grindGuide footer span { margin-right: 5px; font-weight: 900; letter-spacing: .08em; color: #173c2e; }
+
 @media (max-width: 700px) {
   .choiceTrail { padding: 12px; margin-bottom: 16px; overflow: hidden; }
   .choiceTrail > div { align-items: center; }
@@ -127,5 +159,7 @@
   .resultTrail .trailStep { display: flex; padding: 7px 9px; }
   .resultTrail .trailStep span { display: grid; }
   .resultTrail .trailStep strong { max-width: none; }
+  .versatileChoice { min-height: 100px !important; }
+  .grindGuide > div strong { font-size: 14px; }
   .matchReason { padding: 10px; }
 }
