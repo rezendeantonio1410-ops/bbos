@@ -56,7 +56,7 @@ export class CustomerNotificationService {
        UPDATE "CustomerNotificationOutbox" n
           SET status='PROCESSING',attempts=n.attempts+1,"lastError"=NULL,"updatedAt"=NOW()
          FROM candidate WHERE n.id=candidate.id
-       RETURNING n.*`,
+       RETURNING n.id,n.channel,n.destination,n.payload,n.attempts`,
       activationDate,
     );
     const row = rows[0];
