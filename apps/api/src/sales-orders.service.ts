@@ -27,7 +27,9 @@ export type CreateSalesOrderInput = {
   discount?: number;
   freight?: number;
   brokerId?: string;
+  brokerCommissionMode?: "PERCENTAGE" | "PER_PACKAGE";
   brokerCommissionPercent?: number;
+  brokerCommissionPerPackage?: number;
   brokerCommissionAmount?: number;
   notes?: string;
   items: Array<{
@@ -172,7 +174,9 @@ export class SalesOrdersService implements OnModuleDestroy {
             companyId: customer.companyId,
             customerId: customer.id,
             brokerId: input.brokerId,
+            brokerCommissionMode: input.brokerCommissionMode,
             brokerCommissionPercent: input.brokerCommissionPercent,
+            brokerCommissionPerPackage: input.brokerCommissionPerPackage,
             brokerCommissionAmount: input.brokerCommissionAmount,
             salesChannelId: salesChannel?.id,
             code: input.code,
@@ -540,6 +544,8 @@ export class SalesOrdersService implements OnModuleDestroy {
           code: true,
           brokerId: true,
           brokerCommissionPercent: true,
+          brokerCommissionMode: true,
+          brokerCommissionPerPackage: true,
           brokerCommissionAmount: true,
         },
       });
@@ -598,7 +604,9 @@ export class SalesOrdersService implements OnModuleDestroy {
                 openAmount: order.brokerCommissionAmount!,
                 status: "OPEN",
                 category: "COMISSAO_VENDA",
-                notes: `Comissão de ${order.brokerCommissionPercent ?? 0}% sobre os produtos do pedido.`,
+                notes: order.brokerCommissionMode === "PER_PACKAGE"
+                  ? `Comissão de R$ ${Number(order.brokerCommissionPerPackage ?? 0).toFixed(2).replace(".", ",")} por pacote vendido.`
+                  : `Comissão de ${order.brokerCommissionPercent ?? 0}% sobre os produtos do pedido.`,
               },
             });
           }
