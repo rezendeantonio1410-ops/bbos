@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
 import { Prisma } from "@bbos/database";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 import { Public } from "./auth.guard";
 import { SalesOrdersService } from "./sales-orders.service";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -21,7 +22,11 @@ const isCashTerm = (value: unknown) => {
 
 @Controller("sales-order-approvals")
 export class SalesOrderApprovalsController {
-  constructor(private readonly salesOrders: SalesOrdersService, private readonly auth: AuthService) {}
+  constructor(
+    private readonly salesOrders: SalesOrdersService,
+    private readonly auth: AuthService,
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+  ) {}
 
   private async actor(request: any) {
     const actor = await this.auth.resolve(this.auth.readToken(request));
@@ -143,8 +148,12 @@ export class SalesOrderApprovalsController {
   @Get("public/:token")
   async publicView(@Param("token") token: string) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT id,status,snapshot,"expiresAt","acceptedByName","acceptedAt","viewedAt","verificationRequired","termsText"
-         FROM "SalesOrderCustomerApproval" WHERE "tokenHash"=$1 LIMIT 1`, sha256(token),
+      `SELECT a.id,a.status,a.snapshot,a."expiresAt",a."acceptedByName",a."acceptedAt",a."viewedAt",
+              a."verificationRequired",a."termsText",(NULLIF(TRIM(c.email),'') IS NOT NULL) AS "emailConfigured"
+         FROM "SalesOrderCustomerApproval" a
+         JOIN "SalesOrder" so ON so.id=a."salesOrderId"
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE a."tokenHash"=$1 LIMIT 1`, sha256(token),
     );
     const approval = rows[0];
     if (!approval) throw new BadRequestException("Link de confirmação inválido.");
@@ -173,13 +182,13 @@ export class SalesOrderApprovalsController {
     const forwarded = String(request.headers?.["x-forwarded-for"] ?? "").split(",")[0]?.trim() ?? "";
     const ip = forwarded || request.ip || request.socket?.remoteAddress || "unknown";
 
-    return this.salesOrders.database.$transaction(async (tx) => {
+    const result = await this.salesOrders.database.$transaction(async (tx) => {
       const approvals = await tx.$queryRawUnsafe<any[]>(
         `SELECT * FROM "SalesOrderCustomerApproval" WHERE "tokenHash"=$1 LIMIT 1 FOR UPDATE`, sha256(token),
       );
       const approval = approvals[0];
       if (!approval) throw new BadRequestException("Link de confirmação inválido.");
-      if (approval.status === "APPROVED") return { ok: true, status: "APPROVED", idempotent: true };
+      if (approval.status === "APPROVED") return { ok: true, status: "APPROVED", idempotent: true, salesOrderId: approval.salesOrderId };
       if (!["PENDING", "VIEWED"].includes(approval.status)) throw new BadRequestException("Este link não está mais disponível para confirmação.");
       if (new Date(approval.expiresAt).getTime() < Date.now()) throw new BadRequestException("Este link de confirmação expirou.");
       if (approval.verificationRequired && (!body.code || sha256(String(body.code).trim()) !== approval.verificationCodeHash)) {
@@ -188,12 +197,23 @@ export class SalesOrderApprovalsController {
 
       const locked = await tx.$queryRawUnsafe<any[]>(
         `SELECT so.id,so.status,so."paymentType",so."paymentTermsSnapshot",so."totalAmount",
-                c.id AS "customerId",c.active,c."paymentTerms",c."creditStatus",c."creditLimit"
+                c.id AS "customerId",c.active,c.email,c."paymentTerms",c."creditStatus",c."creditLimit"
            FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
           WHERE so.id=$1 FOR UPDATE OF so`, approval.salesOrderId,
       );
       const order = locked[0];
       if (!order || order.status !== "DRAFT") throw new BadRequestException("Este pedido não está mais provisório e não pode ser confirmado por este link.");
+      const suppliedEmail = String(body.email ?? "").trim().toLowerCase();
+      if (!String(order.email ?? "").trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(suppliedEmail)) {
+        throw new BadRequestException("Informe um e-mail válido para receber a confirmação e acompanhar o pedido.");
+      }
+      if (!String(order.email ?? "").trim()) {
+        await tx.$executeRawUnsafe(
+          `UPDATE "Customer" SET email=$2,"updatedAt"=NOW() WHERE id=$1`,
+          order.customerId,
+          suppliedEmail,
+        );
+      }
 
       const current = await this.snapshot(approval.salesOrderId, tx);
       const publicSnapshot = { ...current } as any;
@@ -232,7 +252,48 @@ export class SalesOrderApprovalsController {
       await tx.$executeRawUnsafe(
         `UPDATE "SalesOrder" SET status='CONFIRMED', "updatedAt"=NOW() WHERE id=$1 AND status='DRAFT'`, approval.salesOrderId,
       );
-      return { ok: true, status: "APPROVED", orderStatus: "CONFIRMED", acceptedAt };
+      return { ok: true, status: "APPROVED", orderStatus: "CONFIRMED", acceptedAt, salesOrderId: approval.salesOrderId };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    await this.customerLifecycle.record(
+      result.salesOrderId,
+      "ORDER_CONFIRMED",
+      "Pedido confirmado",
+      "Recebemos sua confirmação. Seu pedido seguirá agora para separação e preparação.",
+      "BBOS",
+      `sales-order:confirmed:${result.salesOrderId}`,
+      { acceptedByName: name },
+    );
+    return result;
+  }
+
+  @Public()
+  @Get("public/tracking/:orderId")
+  async tracking(@Param("orderId") orderId: string, @Query("token") token: string) {
+    if (!this.customerLifecycle.validTrackingToken(orderId, String(token ?? ""))) {
+      throw new UnauthorizedException("Acompanhamento do pedido não autorizado.");
+    }
+    const orders = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,COALESCE(so."orderNumber",so.code) AS "orderNumber",so.status,
+              so."totalAmount",so."updatedAt",c.name AS "customerName"
+         FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 LIMIT 1`,
+      orderId,
+    );
+    if (!orders[0]) throw new BadRequestException("Pedido não encontrado.");
+    const [events, shipments] = await Promise.all([
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT "eventType",title,detail,"occurredAt"
+           FROM "SalesOrderCustomerEvent"
+          WHERE "salesOrderId"=$1 AND public=TRUE ORDER BY "occurredAt" ASC`,
+        orderId,
+      ),
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT status,"serviceName","carrierName","trackingCode","trackingUrl","postedAt","deliveredAt"
+           FROM "Shipment" WHERE "salesOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
+        orderId,
+      ),
+    ]);
+    return { ...orders[0], events, shipment: shipments[0] ?? null };
   }
 }

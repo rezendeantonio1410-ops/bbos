@@ -17,6 +17,7 @@ import {
   salesInventoryBalance,
   shipSalesStock,
 } from "@bbos/shared";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 
 export type CreateSalesOrderInput = {
   code: string;
@@ -43,6 +44,8 @@ export type CreateSalesOrderInput = {
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
   readonly database = new PrismaClient();
+
+  constructor(private readonly customerLifecycle: SalesOrderCustomerLifecycleService) {}
 
   onModuleDestroy() {
     return this.database.$disconnect();
@@ -404,7 +407,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async ship(id: string) {
-    return this.database.$transaction(
+    const result = await this.database.$transaction(
       async (transaction) => {
         const order = await transaction.salesOrder.findUnique({
           where: { id },
@@ -519,6 +522,15 @@ export class SalesOrdersService implements OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
+    await this.customerLifecycle.record(
+      id,
+      "SHIPPED",
+      "Pedido a caminho",
+      "Seu pedido foi expedido pela Bispo Coffees e está a caminho.",
+      "BBOS",
+      `sales-order:shipped:${id}`,
+    );
+    return result;
   }
 
   async transition(
@@ -531,7 +543,7 @@ export class SalesOrdersService implements OnModuleDestroy {
       INVOICED: [SalesOrderStatus.READY_TO_SHIP],
     };
     const status = SalesOrderStatus[target];
-    return this.database.$transaction(async (transaction) => {
+    const result = await this.database.$transaction(async (transaction) => {
       const order = await transaction.salesOrder.findUnique({
         where: { id },
         select: {
@@ -614,6 +626,17 @@ export class SalesOrdersService implements OnModuleDestroy {
       }
       return { orderId: id, idempotent: false, status };
     });
+    if (target === "PICKING") {
+      await this.customerLifecycle.record(
+        id,
+        "PREPARING",
+        "Pedido em preparação",
+        "Seu café entrou na fila de separação e preparação da Bispo Coffees.",
+        "BBOS",
+        `sales-order:preparing:${id}`,
+      );
+    }
+    return result;
   }
 
   async confirmPicking(id: string, pickedByItem: Record<string, number>) {

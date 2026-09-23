@@ -51,6 +51,7 @@ const postalCode = (value: unknown) => {
 
 const statusIndex: Record<string, number> = {
   ORDER_RECEIVED: 0,
+  ORDER_CONFIRMED: 0,
   PAYMENT_CONFIRMED: 0,
   PREPARING: 1,
   INVOICE_AUTHORIZED: 2,

@@ -40,6 +40,7 @@ type Approval = {
   acceptedByName?: string | null;
   acceptedAt?: string | null;
   verificationRequired: boolean;
+  emailConfigured: boolean;
   termsText: string;
   snapshot: Snapshot;
 };
@@ -49,6 +50,7 @@ export default function PublicOrderApprovalPage() {
   const token = typeof params?.token === "string" ? params.token : "";
   const [approval, setApproval] = useState<Approval | null>(null);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(true);
   const [sending, setSending] = useState(false);
@@ -78,13 +80,14 @@ export default function PublicOrderApprovalPage() {
 
   const approve = async () => {
     if (!name.trim()) return setError("Confirme o nome de quem está aprovando.");
+    if (!approval?.emailConfigured && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Informe um e-mail válido para receber a confirmação.");
     if (approval?.verificationRequired && !/^\d{6}$/.test(code)) return setError("Digite o código de seis dígitos recebido no WhatsApp.");
     setSending(true);
     setError("");
     const response = await fetch(`${api}/accept`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, code }),
+      body: JSON.stringify({ name, email: email.trim() || undefined, code }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) setError(payload.message ?? "Não foi possível confirmar o pedido.");
@@ -140,6 +143,7 @@ export default function PublicOrderApprovalPage() {
         <section className="mt-4 rounded-3xl border bg-white p-5">
           <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 text-violet-700" size={19}/><div><h2 className="text-base font-bold">Tudo certo com o pedido?</h2><p className="mt-1 text-xs leading-5 text-stone-500">Confira os itens, o frete e o total. A confirmação vale para esta versão exata.</p></div></div>
           <label className="mt-4 block text-xs font-semibold">Confirmado por<input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-sm" /></label>
+          {!approval.emailConfigured && <label className="mt-3 block text-xs font-semibold">E-mail para confirmação e acompanhamento<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className="mt-2 w-full rounded-xl border px-3 py-3 text-sm" placeholder="nome@empresa.com.br" /></label>}
           {approval.verificationRequired && <label className="mt-3 block text-xs font-semibold">Código recebido no WhatsApp<input value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" className="mt-2 w-full rounded-xl border px-3 py-3 text-center text-xl font-bold tracking-[.35em]" placeholder="000000" /></label>}
           <p className="mt-3 text-[10px] leading-4 text-stone-400">Ao tocar no botão, você declara que conferiu e concorda com produtos, quantidades, valores, frete, prazo e condições desta proposta.</p>
           {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}

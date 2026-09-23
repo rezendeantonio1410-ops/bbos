@@ -3,6 +3,7 @@ import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -13,6 +14,7 @@ export class MelhorEnvioShipmentService {
   constructor(
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly melhorEnvioAuth: MelhorEnvioAuthService,
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
 
   private base() {
@@ -33,12 +35,22 @@ export class MelhorEnvioShipmentService {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
+      const providerMessage = String(
+        body?.message ||
+        body?.error ||
+        (body?.errors ? JSON.stringify(body.errors) : "") ||
+        "",
+      ).trim();
       console.error("Melhor Envio recusou a operação", {
         path,
         status: response.status,
-        error: body?.message || body?.error || body?.errors || undefined,
+        error: providerMessage || undefined,
       });
-      throw new ServiceUnavailableException(`Melhor Envio indisponível para esta operação (${response.status}).`);
+      throw new ServiceUnavailableException(
+        providerMessage
+          ? `Melhor Envio: ${providerMessage}`
+          : `Melhor Envio indisponível para esta operação (${response.status}).`,
+      );
     }
     return body;
   }
@@ -67,12 +79,19 @@ export class MelhorEnvioShipmentService {
   }
 
   private sender() {
+    const document = digits(this.required("SHIPPING_SENDER_CPF"));
+    const companyDocument = digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112");
+    if (document.length !== 11)
+      throw new ServiceUnavailableException("SHIPPING_SENDER_CPF deve conter um CPF válido com 11 dígitos.");
+    if (companyDocument.length !== 14)
+      throw new ServiceUnavailableException("SHIPPING_SENDER_DOCUMENT deve conter um CNPJ válido com 14 dígitos.");
+
     return {
       name: process.env.SHIPPING_SENDER_NAME?.trim() || "Bispo Coffees Ltda",
       phone: digits(this.required("SHIPPING_SENDER_PHONE")),
       email: this.required("SHIPPING_SENDER_EMAIL"),
-      document: digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112"),
-      company_document: digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112"),
+      document,
+      company_document: companyDocument,
       state_register: digits(this.required("SHIPPING_SENDER_STATE_REGISTER")),
       address: this.required("SHIPPING_SENDER_ADDRESS"),
       complement: process.env.SHIPPING_SENDER_COMPLEMENT?.trim() || "",
@@ -369,7 +388,7 @@ export class MelhorEnvioShipmentService {
     }
 
     const rawAddress = String(order.customerAddress || "").trim();
-    const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9\/-]*)\s*$/);
+    const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/);
     const street = String(addressMatch?.[1] || rawAddress).trim();
     const number = String(addressMatch?.[2] || "S/N").trim();
     if (!street || !order.customerPostalCode || !order.customerCity || !order.customerState) {
@@ -489,6 +508,16 @@ export class MelhorEnvioShipmentService {
       JSON.stringify(details || {}),
     );
 
+    await this.customerLifecycle.record(
+      order.id,
+      "SHIPMENT_CREATED",
+      "Envio preparado",
+      "A etiqueta de transporte foi emitida e o pedido está pronto para postagem.",
+      "MELHOR_ENVIO",
+      `sales-order:shipment-created:${order.id}`,
+      { shipmentId, externalId, trackingCode, trackingUrl },
+    );
+
     return {
       id: shipmentId,
       externalId,
@@ -536,12 +565,25 @@ export class MelhorEnvioShipmentService {
         `storefront:${mapping.event.toLowerCase()}:${shipment.storefrontOrderId}`,
         { externalId, status: statusValue },
       );
-    } else if (shipment.salesOrderId && mapping.status === "DELIVERED") {
+    } else if (shipment.salesOrderId) {
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrder"
-            SET status='DELIVERED',"deliveredAt"=COALESCE("deliveredAt",NOW()),"updatedAt"=NOW()
-          WHERE id=$1 AND status='SHIPPED'`,
+            SET status=$2,
+                "shippedAt"=CASE WHEN $2='SHIPPED' THEN COALESCE("shippedAt",NOW()) ELSE "shippedAt" END,
+                "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,
+                "updatedAt"=NOW()
+          WHERE id=$1 AND status IN ('INVOICED','SHIPPED','DELIVERED')`,
         shipment.salesOrderId,
+        mapping.order,
+      );
+      await this.customerLifecycle.record(
+        shipment.salesOrderId,
+        mapping.event,
+        mapping.title,
+        mapping.detail,
+        "CARRIER",
+        `sales-order:${mapping.event.toLowerCase()}:${shipment.salesOrderId}`,
+        { externalId, status: statusValue },
       );
     }
     return {
