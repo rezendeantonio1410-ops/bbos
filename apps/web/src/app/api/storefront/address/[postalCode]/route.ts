@@ -26,6 +26,7 @@ export async function GET(
       district: data.bairro || "",
       city: data.localidade || "",
       state: data.uf || "",
+      ibgeCityCode: data.ibge || "",
     });
   } catch {
     return NextResponse.json(

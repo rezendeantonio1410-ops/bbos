@@ -463,6 +463,12 @@ export default function SuppliersPage() {
       setCepStatus("error");
     }
   };
+  useEffect(() => {
+    if (supplierCountry !== "Brasil") return;
+    if (supplierCep.replace(/\D/g, "").length !== 8) return;
+    const timer = window.setTimeout(() => void handleCepLookup(), 250);
+    return () => window.clearTimeout(timer);
+  }, [supplierCep, supplierCountry]);
   const saveUnit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!unitSupplier) return;
@@ -978,12 +984,12 @@ export default function SuppliersPage() {
                     pattern="[0-9]{5}-?[0-9]{3}"
                     placeholder="00000-000"
                     value={supplierCep.replace(/(\d{5})(\d)/, "$1-$2")}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setCepStatus("idle");
                       setSupplierCep(
                         event.target.value.replace(/\D/g, "").slice(0, 8),
-                      )
-                    }
-                    onBlur={() => void handleCepLookup()}
+                      );
+                    }}
                     className={input}
                   />
                   {cepStatus !== "idle" && (
@@ -991,7 +997,9 @@ export default function SuppliersPage() {
                       {cepStatus === "loading"
                         ? "Consultando CEP..."
                         : cepStatus === "found"
-                          ? "Endereço encontrado."
+                          ? supplierAddress || supplierDistrict
+                            ? "Endereço preenchido automaticamente."
+                            : "CEP geral: município e estado preenchidos. Informe o logradouro."
                           : cepStatus === "not-found"
                             ? "CEP não encontrado."
                             : "Serviço de CEP indisponível."}
