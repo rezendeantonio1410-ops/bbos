@@ -14,6 +14,7 @@
     "test:storefront-shipping-selection": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/storefront-shipping-selection.test.ts",
     "test:broker-commission": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/broker-commission.test.ts",
     "test:purchase-confirmation-pdf": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-confirmation-pdf.test.ts"
+    ,"test:nfe-inbound": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/nfe-inbound.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",

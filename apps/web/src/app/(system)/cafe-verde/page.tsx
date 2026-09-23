@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import * as React from "react";
-import { ArrowRight, FlaskConical, PackageOpen, RefreshCw, ShoppingBag, Warehouse } from "lucide-react";
+import { ArrowRight, FileInput, FlaskConical, PackageOpen, RefreshCw, ShoppingBag, Warehouse } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
@@ -12,7 +12,7 @@ const API = getApiBaseUrl();
 type Purchase = { approvalStatus: string; externalAcceptanceStatus: string; operationalStatus: string; balanceKg: number };
 type ReceiptOptions = { purchases?: Purchase[] };
 type StockSummary = { activeLots?: number; attentionLots?: number; blockedLots?: number };
-const INITIAL_COUNTS = { purchases: 0, delivery: 0, receipts: 0, stock: 0, attention: 0, blocked: 0 };
+const INITIAL_COUNTS = { purchases: 0, fiscal: 0, delivery: 0, receipts: 0, stock: 0, attention: 0, blocked: 0 };
 
 async function getJson<T>(url: string, retries = 2): Promise<T> {
   let lastError: unknown;
@@ -45,16 +45,19 @@ export default function GreenCoffeeHome() {
       getJson<ReceiptOptions>(`${API}/receipts/options`),
       getJson<unknown[]>(`${API}/receipts`),
       getJson<StockSummary>(`${API}/inventory/summary`),
+      getJson<{documents?: unknown[]}>(`${API}/fiscal-inbound`),
       fetchSessionIdentity(API),
     ]);
-    const [purchasesResult, optionsResult, receiptsResult, stockResult, sessionResult] = results;
+    const [purchasesResult, optionsResult, receiptsResult, stockResult, fiscalResult, sessionResult] = results;
     if (sessionResult.status === "fulfilled") setSession(sessionResult.value);
     const purchases = purchasesResult.status === "fulfilled" ? purchasesResult.value : null;
     const options = optionsResult.status === "fulfilled" ? optionsResult.value : null;
     const receipts = receiptsResult.status === "fulfilled" ? receiptsResult.value : null;
     const stock = stockResult.status === "fulfilled" ? stockResult.value : null;
+    const fiscal = fiscalResult.status === "fulfilled" ? fiscalResult.value : null;
     setCounts((current) => ({
       purchases: purchases?.length ?? current.purchases,
+      fiscal: fiscal?.documents?.length ?? current.fiscal,
       delivery: options?.purchases?.filter((purchase) => purchase.approvalStatus === "APPROVED" && purchase.externalAcceptanceStatus === "ACCEPTED" && purchase.operationalStatus === "AWAITING_DELIVERY" && purchase.balanceKg > 0).length ?? current.delivery,
       receipts: receipts?.length ?? current.receipts,
       stock: stock?.activeLots ?? current.stock,
@@ -92,6 +95,7 @@ export default function GreenCoffeeHome() {
 
   const cards = [
     { href: "/compras-cafe-verde", label: "Compras", description: "Negociações, aprovações e contratos.", count: counts.purchases, icon: ShoppingBag, tone: "border-stone-200" },
+    { href: "/notas-entrada", label: "Notas de entrada", description: "NF-e emitidas para o CNPJ, XML e conciliação.", count: counts.fiscal, icon: FileInput, tone: "border-emerald-200" },
     { href: "/recebimento", label: "Aguardando entrega", description: "Negócios confirmados com saldo físico a receber.", count: counts.delivery, icon: PackageOpen, tone: "border-amber-200" },
     { href: "/recebimento", label: "Recebimentos", description: "Entradas físicas, NF e recebimentos parciais.", count: counts.receipts, icon: PackageOpen, tone: "border-blue-200" },
     { href: "/laboratorio", label: "Laboratório", description: "Quarentena, amostras e liberação de qualidade.", count: counts.attention || "—", icon: FlaskConical, tone: "border-amber-200" },
@@ -105,7 +109,7 @@ export default function GreenCoffeeHome() {
     {referenceMessage && <p className="text-sm font-semibold text-forest-800">{referenceMessage}</p>}
     {warning && <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{warning}</div>}
 
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{cards.map(({ href, label, description, count, icon: Icon, tone }) => <Link key={label} href={href} className="group"><Card className={`h-full border-2 ${tone} p-5 transition group-hover:-translate-y-0.5 group-hover:shadow-md`}><div className="flex items-start justify-between gap-3"><span className="grid size-11 place-items-center rounded-xl bg-stone-50 text-forest-800"><Icon size={20}/></span><strong className="text-2xl">{count}</strong></div><h2 className="mt-5 text-lg font-bold">{label}</h2><p className="mt-2 min-h-10 text-sm leading-5 text-stone-500">{description}</p><span className="mt-5 inline-flex items-center gap-1 text-xs font-bold text-forest-700">Abrir etapa<ArrowRight size={14}/></span></Card></Link>)}</section>
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">{cards.map(({ href, label, description, count, icon: Icon, tone }) => <Link key={label} href={href} className="group"><Card className={`h-full border-2 ${tone} p-5 transition group-hover:-translate-y-0.5 group-hover:shadow-md`}><div className="flex items-start justify-between gap-3"><span className="grid size-11 place-items-center rounded-xl bg-stone-50 text-forest-800"><Icon size={20}/></span><strong className="text-2xl">{count}</strong></div><h2 className="mt-5 text-lg font-bold">{label}</h2><p className="mt-2 min-h-10 text-sm leading-5 text-stone-500">{description}</p><span className="mt-5 inline-flex items-center gap-1 text-xs font-bold text-forest-700">Abrir etapa<ArrowRight size={14}/></span></Card></Link>)}</section>
 
     <Card className="p-5"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Regra operacional</p><p className="mt-2 text-sm font-semibold text-stone-800">Café recebido não significa café disponível para produção.</p><p className="mt-1 text-xs leading-5 text-stone-500">Somente lotes liberados pela Qualidade entram na disponibilidade produtiva. Recebimentos divergentes, amostras pendentes e lotes bloqueados permanecem visíveis, mas não utilizáveis.</p></div><Link href="/compras-cafe-verde-v2" className="shrink-0 rounded-xl bg-forest-900 px-4 py-2.5 text-xs font-bold text-white">Nova compra</Link></div></Card>
   </div>;

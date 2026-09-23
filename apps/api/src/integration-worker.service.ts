@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 import { CustomerNotificationService } from "./customer-notification.service";
+import { FiscalInboundService } from "./fiscal-inbound.service";
 
 @Injectable()
 export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -11,6 +12,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly bling: BlingOutboxService,
     private readonly notifications: CustomerNotificationService,
+    private readonly fiscalInbound: FiscalInboundService,
   ) {}
 
   onModuleInit() {
@@ -32,6 +34,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.bling.processNext();
       await this.notifications.processNext();
+      await this.fiscalInbound.syncConfiguredCompanies();
     } catch (error) {
       this.logger.error(error instanceof Error ? error.message : String(error));
     } finally {

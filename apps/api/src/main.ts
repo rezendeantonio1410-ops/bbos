@@ -1,12 +1,14 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { bootstrapAdminFromEnvironment } from './bootstrap-admin';
 
 async function bootstrap() {
   const bootstrapResult = await bootstrapAdminFromEnvironment();
   if (bootstrapResult) console.log(`BBOS admin bootstrap ${bootstrapResult.created ? "created" : "verified"} for configured account.`);
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  app.useBodyParser('json', { limit: '2mb' });
   app.setGlobalPrefix('api');
   const configuredOrigins = process.env.WEB_URL?.split(',').map((origin) => origin.trim()).filter(Boolean);
   app.enableCors({ origin: configuredOrigins?.length ? configuredOrigins : process.env.NODE_ENV === 'production' ? false : true, credentials: true });

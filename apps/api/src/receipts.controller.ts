@@ -44,6 +44,7 @@ type ConfirmReceiptBody = {
   process?: string;
   supplierLotCode?: string;
   invoiceNumber?: string;
+  fiscalDocumentId?: string;
   transportDocument?: string;
   purchaseOrderNumber?: string;
   notes?: string;
@@ -285,7 +286,7 @@ export class ReceiptsController {
       };
     return this.database.$transaction(
       async (transaction) => {
-        const [supplier, warehouse, purchase] = await Promise.all([
+        const [supplier, warehouse, purchase, fiscalDocuments] = await Promise.all([
           transaction.supplier.findFirst({
             where: { id: body.supplierId, companyId: body.companyId },
           }),
@@ -296,6 +297,18 @@ export class ReceiptsController {
             where: { id: body.purchaseId, companyId: body.companyId },
             include: { receipts: { select: { netWeightKg: true } }, professionalSample: true },
           }),
+          body.fiscalDocumentId
+            ? transaction.$queryRawUnsafe<any[]>(
+                `SELECT f.id,f.status,f."supplierId",f.number,f."accessKey",a."purchaseId"
+                   FROM "FiscalDocument" f
+                   LEFT JOIN "FiscalDocumentAllocation" a ON a."fiscalDocumentId"=f.id AND a."purchaseId"=$3 AND a."allocationType"='GREEN_COFFEE_PURCHASE'
+                  WHERE f.id=$1 AND f."companyId"=$2 AND f.direction='INBOUND'
+                  LIMIT 1`,
+                body.fiscalDocumentId,
+                body.companyId,
+                body.purchaseId,
+              )
+            : Promise.resolve([]),
         ]);
         if (
           !supplier ||
@@ -310,6 +323,15 @@ export class ReceiptsController {
           throw new BadRequestException("A compra precisa estar aprovada internamente.");
         if (purchase.externalAcceptanceStatus !== "ACCEPTED")
           throw new BadRequestException("O aceite externo do fornecedor é necessário antes do recebimento.");
+        const fiscalDocument = fiscalDocuments[0];
+        if (body.fiscalDocumentId && !fiscalDocument)
+          throw new BadRequestException("A NF-e selecionada não pertence à empresa ativa.");
+        if (fiscalDocument && fiscalDocument.status !== "AUTHORIZED")
+          throw new BadRequestException("A NF-e selecionada ainda não possui XML autorizado.");
+        if (fiscalDocument?.supplierId && fiscalDocument.supplierId !== supplier.id)
+          throw new BadRequestException("A NF-e selecionada pertence a outro fornecedor.");
+        if (fiscalDocument && !fiscalDocument.purchaseId)
+          throw new BadRequestException("Concilie a NF-e com esta compra antes do recebimento físico.");
         const sequence =
           (await transaction.greenCoffeeReceipt.count({
             where: { companyId: body.companyId },
@@ -401,7 +423,7 @@ export class ReceiptsController {
             variety: body.variety,
             process: body.process,
             supplierLotCode: body.supplierLotCode,
-            invoiceNumber: body.invoiceNumber,
+            invoiceNumber: fiscalDocument?.number ?? body.invoiceNumber,
             transportDocument: body.transportDocument,
             purchaseOrderNumber: body.purchaseOrderNumber,
             notes: body.notes,
@@ -432,6 +454,31 @@ export class ReceiptsController {
         await transaction.greenCoffeeLabSample.create({
           data: { receiptId: receipt.id, sampleNumber },
         });
+        if (fiscalDocument) {
+          await transaction.$executeRawUnsafe(
+            `UPDATE "FiscalDocumentAllocation"
+                SET "receiptId"=$3,"updatedAt"=NOW()
+              WHERE "fiscalDocumentId"=$1 AND "purchaseId"=$2 AND "receiptId" IS NULL`,
+            fiscalDocument.id,
+            purchase.id,
+            receipt.id,
+          );
+          await transaction.$executeRawUnsafe(
+            `UPDATE "FiscalDocument"
+                SET "greenCoffeeReceiptId"=COALESCE("greenCoffeeReceiptId",$2),"updatedAt"=NOW()
+              WHERE id=$1`,
+            fiscalDocument.id,
+            receipt.id,
+          );
+          await transaction.$executeRawUnsafe(
+            `INSERT INTO "FiscalDocumentEvent" (id,"fiscalDocumentId",type,source,status,message,payload,"occurredAt")
+             VALUES ($1,$2,'PHYSICAL_RECEIPT','BBOS','LINKED',$3,$4::jsonb,NOW())`,
+            `fiscal-event-${crypto.randomUUID()}`,
+            fiscalDocument.id,
+            `NF-e vinculada ao recebimento ${receiptNumber}`,
+            JSON.stringify({ purchaseId: purchase.id, receiptId: receipt.id, receiptNumber, lotId: lot.id, lotCode }),
+          );
+        }
         if (purchase.professionalSample) {
           const professionalSequence =
             (await transaction.professionalCoffeeSample.count({ where: { companyId: body.companyId } })) + 1;

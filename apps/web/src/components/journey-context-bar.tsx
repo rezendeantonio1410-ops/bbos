@@ -35,7 +35,7 @@ const management: Journey = {
   label: "Ciclo financeiro",
   steps: [
     { label: "Operação", href: "/home", match: ["/home"] },
-    { label: "Documento", href: "/financeiro", match: ["/fiscal"] },
+    { label: "Documento", href: "/notas-entrada", match: ["/notas-entrada", "/fiscal"] },
     { label: "Título", href: "/financeiro", match: ["/financeiro"] },
     { label: "Pagamento", href: "/financeiro", match: ["/financeiro"] },
     { label: "Conciliação", href: "/financeiro", match: ["/financeiro"] },
@@ -46,7 +46,7 @@ const management: Journey = {
 function journeyForPath(pathname: string): Journey | null {
   if (["/cafe-verde", "/compras-cafe-verde", "/recebimento", "/laboratorio", "/producao", "/blends", "/produtos"].some((prefix) => pathname.startsWith(prefix))) return operational;
   if (["/clientes", "/pedidos", "/vendas", "/commerce", "/expedicao"].some((prefix) => pathname.startsWith(prefix))) return commercial;
-  if (["/financeiro", "/custos", "/fiscal", "/integracoes"].some((prefix) => pathname.startsWith(prefix))) return management;
+  if (["/notas-entrada", "/financeiro", "/custos", "/fiscal", "/integracoes"].some((prefix) => pathname.startsWith(prefix))) return management;
   return null;
 }
 

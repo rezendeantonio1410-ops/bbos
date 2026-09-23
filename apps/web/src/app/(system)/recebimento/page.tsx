@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
@@ -53,7 +54,9 @@ type Opt = {
   users: O[];
   purchases: P[];
   currentUser?: SessionIdentity;
+  fiscalDocuments?: FiscalDocument[];
 };
+type FiscalDocument = { id: string; number: string | null; accessKey: string; status: string; issuerName: string | null; totalAmount: string | number | null; matchStatus: string; purchaseIds: string[] };
 type Row = {
   id: string;
   receiptNumber: string;
@@ -135,6 +138,7 @@ function Wizard({
     sampleCollected: true,
     visualCondition: "NORMAL",
     invoiceNumber: "",
+    fiscalDocumentId: "",
     transportDocument: "",
     notes: "",
     unit: "KG",
@@ -170,6 +174,8 @@ function Wizard({
     }
   };
   const purchase = o.purchases.find((p) => p.id === d.purchaseId);
+  const purchaseFiscalDocuments = (o.fiscalDocuments ?? []).filter((document) => document.purchaseIds?.includes(d.purchaseId) && document.status === "AUTHORIZED");
+  const selectedFiscalDocument = purchaseFiscalDocuments.find((document) => document.id === d.fiscalDocumentId);
   const contractedKg = Number(purchase?.contractedWeightKg ?? 0);
   const receivedAfterKg = Number(purchase?.receivedKg ?? 0) + net;
   const differenceKg = receivedAfterKg - contractedKg;
@@ -514,17 +520,7 @@ function Wizard({
                 <div className="sm:col-span-2 rounded-xl bg-stone-50 p-4">
                   <b>Compra vinculada:</b> {purchase?.purchaseNumber}
                 </div>
-                <F
-                  l="Nota Fiscal · XML/PDF"
-                  c={
-                    <input
-                      className={css}
-                      value={d.invoiceNumber}
-                      onChange={(e) => set("invoiceNumber", e.target.value)}
-                      placeholder="Número ou referência do arquivo"
-                    />
-                  }
-                />
+                <div className="sm:col-span-2"><F l="NF-e capturada e conciliada" c={<select className={css} value={d.fiscalDocumentId} onChange={(e) => set("fiscalDocumentId", e.target.value)}><option value="">Receber com pendência fiscal</option>{purchaseFiscalDocuments.map((document) => <option key={document.id} value={document.id}>NF-e {document.number ?? "identificada"} · {document.issuerName ?? "emitente"} · {Number(document.totalAmount ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</option>)}</select>}/>{selectedFiscalDocument ? <p className="mt-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">XML autorizado encontrado · chave {selectedFiscalDocument.accessKey}</p> : <p className="mt-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Sem uma NF-e vinculada, o recebimento será registrado com pendência fiscal. <Link href="/notas-entrada" className="font-bold underline">Abrir Notas de entrada</Link></p>}</div>
                 <F
                   l="CT-e / MDF-e / transporte"
                   c={
@@ -627,10 +623,11 @@ export default function Page() {
     Promise.all([
       req<Opt>(`${API}/options`, { credentials: "include" }),
       req<Row[]>(API, { credentials: "include" }),
+      req<{ documents: FiscalDocument[] }>(`${ROOT}/fiscal-inbound`, { credentials: "include" }),
       fetchSessionIdentity(ROOT),
       ])
-      .then(async ([a, b, identity]) => {
-        setO({ ...a, currentUser: identity });
+      .then(async ([a, b, fiscal, identity]) => {
+        setO({ ...a, currentUser: identity, fiscalDocuments: fiscal.documents });
         setRows(b);
       })
       .catch((e) => setErr(String(e)));

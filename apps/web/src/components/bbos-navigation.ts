@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   PackageCheck,
   PackageOpen,
+  FileInput,
   PlugZap,
   Settings,
   ShoppingBag,
@@ -86,6 +87,7 @@ export const bbosNavigation: BbosNavGroup[] = [
     description: "Financeiro, custos e governança",
     tone: "violet",
     items: [
+      { href: "/notas-entrada", label: "Notas de entrada", description: "Captura, classificação e alocação fiscal", icon: FileInput, roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"], keywords: ["nfe", "nota fiscal", "xml", "sefaz", "entrada", "embalagem", "gas"] },
       { href: "/financeiro", label: "Financeiro", description: "Receber, pagar, caixa e conciliar", icon: CircleDollarSign, roles: ["ADMIN", "EXECUTIVE", "FINANCE"], keywords: ["caixa", "receber", "pagar"] },
       { href: "/custos", label: "Custos", description: "Custo real, margem e retorno", icon: Calculator, roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"], keywords: ["margem", "roi", "custeio"] },
       { href: "/integracoes", label: "Integrações", description: "Bling, fiscal, filas e webhooks", icon: PlugZap, roles: LEADERSHIP, keywords: ["bling", "fiscal", "nfe", "webhook"] },

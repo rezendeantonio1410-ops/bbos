@@ -63,6 +63,8 @@ import { StorefrontCouponsController } from "./storefront-coupons.controller";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontPartnersController } from "./storefront-partners.controller";
 import { StorefrontCatalogController } from "./storefront-catalog.controller";
+import { FiscalInboundController } from "./fiscal-inbound.controller";
+import { FiscalInboundService } from "./fiscal-inbound.service";
 
 @Module({
   controllers: [
@@ -104,6 +106,7 @@ import { StorefrontCatalogController } from "./storefront-catalog.controller";
     StorefrontCouponsController,
     StorefrontPartnersController,
     StorefrontCatalogController,
+    FiscalInboundController,
   ],
   providers: [
     DashboardService,
@@ -130,6 +133,7 @@ import { StorefrontCatalogController } from "./storefront-catalog.controller";
     MelhorEnvioShipmentService,
     MelhorEnvioAuthService,
     StorefrontCouponsService,
+    FiscalInboundService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
