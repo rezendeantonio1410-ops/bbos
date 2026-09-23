@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import Link from "next/link";
 import { AddToCartButton, type StoreProduct, type StoreProductStory } from "./StorefrontCart";
 import styles from "./product-details.module.css";
 import fixStyles from "./product-details-fix.module.css";
@@ -33,9 +34,11 @@ type Props = {
     tone: string;
   };
   story: ProductStory;
+  detailHref?: string;
+  detailLabel?: string;
 };
 
-export default function ProductDetails({ product, story }: Props) {
+export default function ProductDetails({ product, story, detailHref, detailLabel = "Conhecer este café →" }: Props) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -51,10 +54,16 @@ export default function ProductDetails({ product, story }: Props) {
 
   return (
     <>
-      <button className={`${styles.open} ${fixStyles.open} ${fixStyles.storyCta} ${fixStyles.readMore}`} type="button" onClick={() => setOpen(true)}>
-        Conhecer este café →
-      </button>
-      {open && createPortal(
+      {detailHref ? (
+        <Link className={`${styles.open} ${fixStyles.open} ${fixStyles.storyCta} ${fixStyles.readMore}`} href={detailHref}>
+          {detailLabel}
+        </Link>
+      ) : (
+        <button className={`${styles.open} ${fixStyles.open} ${fixStyles.storyCta} ${fixStyles.readMore}`} type="button" onClick={() => setOpen(true)}>
+          {detailLabel}
+        </button>
+      )}
+      {!detailHref && open && createPortal(
         <div className={styles.layer}>
           <button className={styles.backdrop} type="button" aria-label="Fechar detalhes" onClick={() => setOpen(false)} />
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={`story-${product.id}`}>
