@@ -92,6 +92,7 @@ type Species = {
 type Unit = {
   id: string;
   name: string;
+  originType: "FARM" | "COOPERATIVE_UNIT" | "ORIGIN_UNIT";
   state: string;
   municipality?: string | null;
   ibgeCityCode?: string | null;
@@ -106,6 +107,34 @@ type Unit = {
     cultivar?: { name: string } | null;
     harvest?: string | null;
   }[];
+};
+const originTypeText: Record<Unit["originType"], string> = {
+  FARM: "Fazenda / propriedade",
+  COOPERATIVE_UNIT: "Unidade da cooperativa",
+  ORIGIN_UNIT: "Unidade de origem / recebimento",
+};
+const originVocabulary = (supplierType: string) => {
+  if (supplierType === "COOPERATIVE") return {
+    action: "Unidades e origens",
+    empty: "Nenhuma unidade ou origem vinculada à cooperativa.",
+    title: "Nova unidade ou origem da cooperativa",
+    name: "Nome da unidade ou propriedade",
+    saved: "Unidade/origem da cooperativa cadastrada.",
+  };
+  if (supplierType === "RURAL_PERSON") return {
+    action: "Fazendas",
+    empty: "Nenhuma fazenda ou propriedade cadastrada.",
+    title: "Nova fazenda ou propriedade",
+    name: "Nome da fazenda ou propriedade",
+    saved: "Fazenda/propriedade cadastrada.",
+  };
+  return {
+    action: "Unidades e origens",
+    empty: "Nenhuma unidade ou origem cadastrada.",
+    title: "Nova unidade ou origem",
+    name: "Nome da unidade ou origem",
+    saved: "Unidade/origem cadastrada.",
+  };
 };
 type Supplier = {
   id: string;
@@ -459,7 +488,7 @@ export default function SuppliersPage() {
           },
         );
       setUnitSupplier(null);
-      setMessage("Unidade/fazenda cadastrada.");
+      setMessage(originVocabulary(unitSupplier.supplierType).saved);
       await load();
     } catch (error) {
       setMessage(
@@ -661,7 +690,7 @@ export default function SuppliersPage() {
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold"
                 >
                   <Plus size={14} />
-                  Unidades/fazendas
+                  {originVocabulary(supplier.supplierType).action}
                 </button>
               </div>
             </div>
@@ -677,6 +706,9 @@ export default function SuppliersPage() {
                       · {unit.active ? "Ativa" : "Inativa"}
                     </span>
                   </p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-forest-700">
+                    {originTypeText[unit.originType] ?? "Origem"}
+                  </p>
                   <p className="mt-1 text-xs text-stone-500">
                     {unit.municipality || "—"}/{unit.state} ·{" "}
                     {unit.coffeeRegion?.name || "Região não informada"}
@@ -685,7 +717,7 @@ export default function SuppliersPage() {
               ))}
               {supplier.originUnits.length === 0 && (
                 <p className="rounded-xl border border-dashed p-4 text-sm text-stone-500">
-                  Nenhuma unidade/fazenda cadastrada.
+                  {originVocabulary(supplier.supplierType).empty}
                 </p>
               )}
             </div>
@@ -1122,16 +1154,33 @@ export default function SuppliersPage() {
                 <p className="text-xs font-bold uppercase text-forest-700">
                   {unitSupplier.name}
                 </p>
-                <h2 className="text-xl font-bold">Nova unidade/fazenda</h2>
+                <h2 className="text-xl font-bold">{originVocabulary(unitSupplier.supplierType).title}</h2>
               </div>
               <button type="button" onClick={() => setUnitSupplier(null)}>
                 <X />
               </button>
             </div>
+            {unitSupplier.supplierType === "COOPERATIVE" && (
+              <p className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-950">
+                Cadastre a unidade local da cooperativa como <b>Unidade da cooperativa</b>. Quando houver rastreabilidade até uma propriedade produtora, cadastre-a como <b>Fazenda / propriedade</b>.
+              </p>
+            )}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <label className="text-sm font-semibold">
-                Nome da Fazenda/Unidade
+                {originVocabulary(unitSupplier.supplierType).name}
                 <input required name="name" className={input} />
+              </label>
+              <label className="text-sm font-semibold">
+                Tipo de origem
+                <select
+                  name="originType"
+                  className={input}
+                  defaultValue={unitSupplier.supplierType === "COOPERATIVE" ? "COOPERATIVE_UNIT" : unitSupplier.supplierType === "RURAL_PERSON" ? "FARM" : "ORIGIN_UNIT"}
+                >
+                  <option value="COOPERATIVE_UNIT">Unidade da cooperativa</option>
+                  <option value="FARM">Fazenda / propriedade</option>
+                  <option value="ORIGIN_UNIT">Unidade de origem / recebimento</option>
+                </select>
               </label>
               <label className="text-sm font-semibold">
                 CPF/CNPJ próprio
@@ -1306,7 +1355,7 @@ export default function SuppliersPage() {
               </div>
             </div>
             <button className="mt-5 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">
-              Salvar unidade/fazenda
+              Salvar origem
             </button>
           </form>
         </div>

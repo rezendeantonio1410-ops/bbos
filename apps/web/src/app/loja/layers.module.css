@@ -136,6 +136,26 @@
   max-width: 940px;
 }
 
+.rarePackagePlaceholder {
+  position: relative;
+  z-index: 2;
+  width: 48%;
+  height: 76%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px 10px 22px 22px;
+  color: #fff8ec;
+  background: linear-gradient(155deg, #9d332c, #641a17);
+  box-shadow: 0 22px 38px rgba(76, 16, 13, 0.24);
+}
+.rarePackagePlaceholder::before { content: ""; position: absolute; top: 10px; left: 12px; right: 12px; height: 2px; background: rgba(255,255,255,.42); }
+.rarePackagePlaceholder small { margin-bottom: 30px; font-size: 7px !important; letter-spacing: .2em; opacity: .72; }
+.rarePackagePlaceholder span { font-size: 24px; font-weight: 300; letter-spacing: .14em; }
+.rarePackagePlaceholder b { margin-top: 7px; font-family: Georgia, serif; font-size: 27px; font-weight: 400; }
+.rarePackagePlaceholder em { position: absolute; bottom: 19px; font-size: 9px; font-style: normal; letter-spacing: .12em; }
+
 .rareNote { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 30px; padding: 32px 36px; border-radius: 8px; color: #fff; background: #0e191d; }
 .rareNote span { color: #ebebeb; font-size: 9px; font-weight: 800; letter-spacing: 0.14em; }
 .rareNote strong { font-family: var(--font-manrope); font-size: 21px; font-weight: 300; }

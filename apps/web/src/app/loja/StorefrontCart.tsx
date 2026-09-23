@@ -12,6 +12,15 @@ import {
 import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
 import styles from "./storefront-cart.module.css";
 
+export type StoreProductStory = {
+  promise: string;
+  founderNote: string;
+  bestFor: string;
+  brew: string;
+  description?: string;
+  sensory?: { label: string; value: number }[];
+};
+
 export type StoreProduct = {
   id: string;
   name: string;
@@ -20,6 +29,7 @@ export type StoreProduct = {
   priceCents: number;
   weightGrams: number;
   image?: string | null;
+  story?: StoreProductStory;
 };
 type Item = StoreProduct & { quantity: number };
 type Grind = "Grãos" | "Espresso" | "Coado" | "Prensa francesa";
@@ -31,7 +41,6 @@ type Quote = {
   carrierName: string;
   priceCents: number;
   deliveryDays: number;
-  customerLabel?: string | null;
   expiresAt: string;
 };
 type CartApi = {
@@ -44,6 +53,76 @@ const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     v / 100,
   );
+
+const cartProductStories: Record<string, StoreProductStory> = {
+  essencial: {
+    promise: "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
+    founderNote: "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
+    bestFor: "Rotina, café da manhã e quem prefere uma xícara macia.",
+    brew: "Coado, cafeteira elétrica ou prensa francesa.",
+  },
+  intenso: {
+    promise: "Mais presença no primeiro gole, com corpo marcante e uma finalização limpa.",
+    founderNote: "Aqui buscamos presença com limpeza. Ele entrega intensidade sem esconder a qualidade da xícara.",
+    bestFor: "Quem gosta de café forte, leite e manhãs de mais energia.",
+    brew: "Espresso, moka italiana ou prensa francesa.",
+  },
+  caramelo: {
+    promise: "Doçura reconhecível, chocolate e equilíbrio: uma xícara acolhedora que convida ao próximo gole.",
+    founderNote: "O Caramelo traduz muito do que acreditamos: sabor fácil de reconhecer, equilíbrio e vontade de repetir a xícara.",
+    bestFor: "Pausas confortáveis, receber pessoas e acompanhar doces.",
+    brew: "Coado, espresso ou prensa francesa.",
+  },
+  "doce-de-leite": {
+    promise: "Uma xícara gulosa e macia, com lembranças de açúcar mascavo, doce de leite e alfajor.",
+    founderNote: "Este é o nosso convite para perceber que o café pode ser naturalmente doce e cheio de referências afetivas.",
+    bestFor: "Uma pausa especial, sobremesas e quem valoriza doçura.",
+    brew: "Coado ou prensa francesa, valorizando textura e doçura.",
+  },
+  tangerina: {
+    promise: "Cítrico, doce e fresco: um perfil luminoso para quem gosta de uma xícara viva.",
+    founderNote: "Queríamos um frutado claro e alegre, capaz de apresentar frescor sem transformar a xícara em algo difícil.",
+    bestFor: "Dias quentes, coados e quem quer explorar perfis frutados.",
+    brew: "Coado ou preparo gelado.",
+  },
+  singular: {
+    promise: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
+    founderNote: "O Singular fica na memória porque não entrega tudo de uma vez. É um café para provar com curiosidade.",
+    bestFor: "Degustação, presentes e momentos de descoberta.",
+    brew: "Coado, com água e proporção controladas.",
+  },
+  sublime: {
+    promise: "Rapadura, caramelo e doçura profunda em uma xícara longa, densa e contemplativa.",
+    founderNote: "O Sublime representa profundidade: uma doçura que ocupa a boca, permanece e ainda preserva elegância.",
+    bestFor: "Rituais sem pressa, presentes e quem busca profundidade.",
+    brew: "Prensa francesa, espresso ou coado mais concentrado.",
+  },
+  raros: {
+    promise: "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
+    founderNote: "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, José e Suzi escolheram este pequeno lote como uma raridade Bispo.",
+    bestFor: "Degustar com atenção, presentear e conhecer a expressão do Norte do Paraná.",
+    brew: "Coado, com água filtrada e preparo cuidadoso.",
+  },
+};
+
+function CartItemStory({ item }: { item: CartItem }) {
+  const story = item.story ?? cartProductStories[item.id];
+  if (!story) return null;
+
+  return (
+    <details className={styles.itemStory}>
+      <summary>Conhecer este café <span>+</span></summary>
+      <div>
+        <p className={styles.storyPromise}>{story.promise}</p>
+        <dl>
+          <div><dt>Combina com</dt><dd>{story.bestFor}</dd></div>
+          <div><dt>Para preparar</dt><dd>{story.brew}</dd></div>
+        </dl>
+        <blockquote>“{story.founderNote}”<cite>José e Suzi · curadoria Bispo</cite></blockquote>
+      </div>
+    </details>
+  );
+}
 
 export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -284,6 +363,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                           <Plus />
                         </button>
                       </div>
+                      <CartItemStory item={item} />
                     </article>
                   ))}
                   <section className={styles.bispo}>
@@ -381,11 +461,6 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                           onClick={() => setQuote(option)}
                         >
                           <span>
-                            {option.customerLabel && (
-                              <small className={styles.quoteLabel}>
-                                {option.customerLabel}
-                              </small>
-                            )}
                             <b>{option.name}</b>
                             <small>
                               {option.carrierName} · até {option.deliveryDays}{" "}
@@ -404,7 +479,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                   <section className={styles.coupon}>
                     <label htmlFor="cart-coupon">Cupom de benefício</label>
                     <div>
-                      <input id="cart-coupon" value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCoupon(null); setCouponMessage(""); }} placeholder="EX.: FELIPE" />
+                      <input id="cart-coupon" value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCoupon(null); setCouponMessage(""); }} placeholder="Digite seu cupom" />
                       <button type="button" onClick={applyCoupon} disabled={couponLoading || !couponInput.trim()}>{couponLoading ? "Aplicando…" : "Aplicar"}</button>
                     </div>
                     {couponMessage && <small className={coupon ? styles.couponOk : styles.error}>{couponMessage}</small>}
