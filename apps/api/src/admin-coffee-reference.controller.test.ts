@@ -24,3 +24,11 @@ test("reference initialization requires a session and an administrative role", (
 test("production initialization does not create the staging supplier", () => {
   assert.match(source, /seedCoffeeReferences\(this\.db, false, actor\.companyId\)/);
 });
+
+test("deployment reference seed does not recreate the staging supplier", () => {
+  const runnerSource = readFileSync(
+    join(__dirname, "../../../packages/database/prisma/seed-coffee-references-runner.ts"),
+    "utf8",
+  );
+  assert.match(runnerSource, /seedCoffeeReferences\(prisma, false\)/);
+});
