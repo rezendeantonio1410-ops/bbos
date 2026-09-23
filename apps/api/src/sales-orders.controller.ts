@@ -44,7 +44,9 @@ type SalesOrderCommercialTerms = {
   packageCount?: number;
   packages?: Array<{ widthCm: number; heightCm: number; lengthCm: number; weightGrams?: number }>;
   brokerId?: string;
+  brokerCommissionMode?: "PERCENTAGE" | "PER_PACKAGE";
   brokerCommissionPercent?: number;
+  brokerCommissionPerPackage?: number;
 };
 
 @Controller("sales-orders")
@@ -322,15 +324,28 @@ export class SalesOrdersController {
     }
 
     const brokerId = String(body.brokerId ?? "").trim() || undefined;
-    const brokerCommissionPercent = brokerId ? Number(body.brokerCommissionPercent ?? 0) : 0;
-    if (!Number.isFinite(brokerCommissionPercent) || brokerCommissionPercent < 0 || brokerCommissionPercent > 100) {
-      throw new BadRequestException("A comissão do corretor deve estar entre 0% e 100%.");
+    const brokerCommissionMode = brokerId ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase() : undefined;
+    if (brokerCommissionMode && !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)) {
+      throw new BadRequestException("Modalidade de comissão inválida.");
     }
-    if (!brokerId && Number(body.brokerCommissionPercent ?? 0) > 0) {
+    const brokerCommissionPercent = brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(body.brokerCommissionPercent ?? 0) : 0;
+    const brokerCommissionPerPackage = brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(body.brokerCommissionPerPackage ?? 0) : 0;
+    if (!Number.isFinite(brokerCommissionPercent) || brokerCommissionPercent < 0 || brokerCommissionPercent > 100) {
+      throw new BadRequestException("A comissão percentual deve estar entre 0% e 100%.");
+    }
+    if (!Number.isFinite(brokerCommissionPerPackage) || brokerCommissionPerPackage < 0) {
+      throw new BadRequestException("O valor da comissão por pacote não pode ser negativo.");
+    }
+    if (!brokerId && (Number(body.brokerCommissionPercent ?? 0) > 0 || Number(body.brokerCommissionPerPackage ?? 0) > 0)) {
       throw new BadRequestException("Selecione o corretor para registrar a comissão.");
     }
     const commissionBase = pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) - Number(body.discount ?? 0);
-    const brokerCommissionAmount = brokerId ? roundMoney(Math.max(0, commissionBase) * brokerCommissionPercent / 100) : 0;
+    const commissionPackageQuantity = pricedItems.reduce((sum, item) => sum + item.quantity, 0);
+    const brokerCommissionAmount = brokerId
+      ? roundMoney(brokerCommissionMode === "PER_PACKAGE"
+        ? commissionPackageQuantity * brokerCommissionPerPackage
+        : Math.max(0, commissionBase) * brokerCommissionPercent / 100)
+      : 0;
 
     let shippingQuote: any = null;
     if (resolvedChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER") {
@@ -369,7 +384,9 @@ export class SalesOrdersController {
       orderNumber,
       salesChannelId: resolvedChannelId,
       brokerId,
-      brokerCommissionPercent: brokerId ? brokerCommissionPercent : undefined,
+      brokerCommissionMode: brokerId ? brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE" : undefined,
+      brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : undefined,
+      brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : undefined,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : undefined,
       items: pricedItems,
       notes: String(body.notes ?? "").trim() || undefined,
@@ -437,7 +454,9 @@ export class SalesOrdersController {
       shippingServiceName: shippingQuote?.serviceName ?? null,
       estimatedDeliveryDays: shippingQuote?.deliveryDays ?? null,
       brokerId: brokerId ?? null,
-      brokerCommissionPercent: brokerId ? brokerCommissionPercent : null,
+      brokerCommissionMode: brokerId ? brokerCommissionMode : null,
+      brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : null,
+      brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : null,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : null,
     };
   }

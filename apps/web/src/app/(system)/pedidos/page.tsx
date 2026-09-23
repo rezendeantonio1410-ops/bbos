@@ -164,7 +164,9 @@ type Order = {
   incotermLocation?: string | null;
   notes?: string | null;
   brokerId?: string | null;
+  brokerCommissionMode?: string | null;
   brokerCommissionPercent?: string | number | null;
+  brokerCommissionPerPackage?: string | number | null;
   brokerCommissionAmount?: string | number | null;
   broker?: Broker | null;
   customer: Customer;
@@ -453,7 +455,9 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
   const [brokerId, setBrokerId] = useState("");
+  const [brokerCommissionMode, setBrokerCommissionMode] = useState<"PERCENTAGE" | "PER_PACKAGE">("PERCENTAGE");
   const [brokerCommissionPercent, setBrokerCommissionPercent] = useState("");
+  const [brokerCommissionPerPackage, setBrokerCommissionPerPackage] = useState("");
   const [showTerms, setShowTerms] = useState(true);
   const [error, setError] = useState("");
   const [health, setHealth] = useState<CustomerHealth | null>(null);
@@ -477,7 +481,12 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
     return sum + Number(variant?.presentationGrams ?? 0) * line.quantity;
   }, 0);
   const orderTotal = productsTotal + freightAmount;
-  const brokerCommission = brokerId ? productsTotal * Number(brokerCommissionPercent || 0) / 100 : 0;
+  const totalPackages = completeLines.reduce((sum, line) => sum + line.quantity, 0);
+  const brokerCommission = brokerId
+    ? brokerCommissionMode === "PER_PACKAGE"
+      ? totalPackages * Number(brokerCommissionPerPackage || 0)
+      : productsTotal * Number(brokerCommissionPercent || 0) / 100
+    : 0;
   const isTerm = paymentType === "TERM";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
@@ -654,7 +663,9 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
         brokerId: brokerId || undefined,
-        brokerCommissionPercent: brokerId ? Number(brokerCommissionPercent || 0) : undefined,
+        brokerCommissionMode: brokerId ? brokerCommissionMode : undefined,
+        brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(brokerCommissionPercent || 0) : undefined,
+        brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(brokerCommissionPerPackage || 0) : undefined,
         items: completeLines.map((line) => {
           const variant = variants.find((candidate) => candidate.productVariantId === line.variantId)!;
           return {
@@ -814,19 +825,32 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                 )}
                 <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Corretor e comissão · opcional</p>
-                  <p className="mt-1 text-[10px] text-stone-500">A comissão é calculada sobre os produtos, sem incluir o frete. No faturamento, o BBOS registra o total a receber e a comissão a pagar separadamente.</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px_170px]">
+                  <p className="mt-1 text-[10px] text-stone-500">Escolha percentual sobre os produtos ou valor fixo por pacote. O frete nunca entra na comissão.</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
                     <Field label="Corretor">
-                      <select value={brokerId} onChange={(event) => { setBrokerId(event.target.value); if (!event.target.value) setBrokerCommissionPercent(""); }}>
+                      <select value={brokerId} onChange={(event) => { setBrokerId(event.target.value); if (!event.target.value) { setBrokerCommissionPercent(""); setBrokerCommissionPerPackage(""); } }}>
                         <option value="">Sem corretor</option>
                         {brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.tradeName || broker.name}</option>)}
                       </select>
                     </Field>
-                    <Field label="Comissão (%)">
-                      <input type="number" min="0" max="100" step="0.01" disabled={!brokerId} value={brokerCommissionPercent} onChange={(event) => setBrokerCommissionPercent(event.target.value)} placeholder="0,00" />
+                    <Field label="Forma da comissão">
+                      <select disabled={!brokerId} value={brokerCommissionMode} onChange={(event) => setBrokerCommissionMode(event.target.value as "PERCENTAGE" | "PER_PACKAGE")}>
+                        <option value="PERCENTAGE">Percentual</option>
+                        <option value="PER_PACKAGE">Valor por pacote</option>
+                      </select>
                     </Field>
+                    {brokerCommissionMode === "PERCENTAGE" ? (
+                      <Field label="Comissão (%)">
+                        <input type="number" min="0" max="100" step="0.01" disabled={!brokerId} value={brokerCommissionPercent} onChange={(event) => setBrokerCommissionPercent(event.target.value)} placeholder="0,00" />
+                      </Field>
+                    ) : (
+                      <Field label="Valor por pacote">
+                        <input type="number" min="0" step="0.01" disabled={!brokerId} value={brokerCommissionPerPackage} onChange={(event) => setBrokerCommissionPerPackage(event.target.value)} placeholder="R$ 0,00" />
+                      </Field>
+                    )}
                     <div><p className="mb-1.5 text-[10px] font-semibold text-stone-600">Valor a pagar</p><div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">{money.format(brokerCommission)}</div></div>
                   </div>
+                  {brokerId && brokerCommissionMode === "PER_PACKAGE" && <p className="mt-2 text-[10px] text-stone-500">{totalPackages} pacote(s) × {money.format(Number(brokerCommissionPerPackage || 0))} por pacote.</p>}
                 </div>
                 {freightResponsibility === "CUSTOMER" && firstQuote?.salesChannelType === "DISTRIBUIDOR" && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
@@ -1506,7 +1530,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 {order.carrierName && <MiniValue label="Transportadora" value={order.carrierName} />}
                 {order.customerReference && <MiniValue label="Referência" value={order.customerReference} />}
                 {order.incoterm && <MiniValue label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
-                {order.broker && <MiniValue label="Corretor" value={`${order.broker.tradeName || order.broker.name} · ${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`} />}
+                {order.broker && <MiniValue label="Corretor" value={`${order.broker.tradeName || order.broker.name} · ${order.brokerCommissionMode === "PER_PACKAGE" ? `${money.format(Number(order.brokerCommissionPerPackage ?? 0))}/pacote` : `${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`} · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`} />}
               </div>
             </section>
 
