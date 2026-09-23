@@ -1,0 +1,294 @@
+.moodSymbol,
+.methodMark,
+.momentMark {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.sweetSymbol {
+  background: #fbf4e9 !important;
+}
+.intenseSymbol {
+  background: #e9efec !important;
+}
+.freshSymbol {
+  background: #f6f4dc !important;
+}
+.complexSymbol {
+  background: #eaf2ed !important;
+}
+
+.moodSymbol {
+  width: 132px;
+  height: 116px;
+}
+.sweetSymbol .moodSymbol span {
+  position: absolute;
+  border-radius: 50%;
+  border-style: solid;
+}
+.sweetSymbol .moodSymbol span:nth-child(1) {
+  inset: 3px 38px 42px 4px;
+  border-width: 12px;
+  border-color: #e9a51d;
+}
+.sweetSymbol .moodSymbol span:nth-child(2) {
+  inset: 29px 10px 18px 45px;
+  border-width: 12px;
+  border-color: #f2c54b;
+}
+.sweetSymbol .moodSymbol span:nth-child(3) {
+  inset: 70px 42px 2px 15px;
+  border-width: 10px;
+  border-color: #ed725b;
+}
+
+.intenseSymbol .moodSymbol span {
+  position: absolute;
+  left: 4px;
+  height: 31px;
+  clip-path: polygon(8% 12%, 92% 0, 100% 66%, 80% 100%, 4% 83%, 0 34%);
+  background: #123f33;
+}
+.intenseSymbol .moodSymbol span:nth-child(1) {
+  bottom: 3px;
+  width: 124px;
+}
+.intenseSymbol .moodSymbol span:nth-child(2) {
+  bottom: 35px;
+  left: 15px;
+  width: 104px;
+  opacity: 0.72;
+  transform: rotate(-3deg);
+}
+.intenseSymbol .moodSymbol span:nth-child(3) {
+  bottom: 68px;
+  left: 34px;
+  width: 78px;
+  opacity: 0.4;
+  transform: rotate(3deg);
+}
+
+.freshSymbol .moodSymbol span {
+  position: absolute;
+  width: 42px;
+  height: 70px;
+  border-radius: 70% 8% 70% 8%;
+  transform: rotate(36deg);
+}
+.freshSymbol .moodSymbol span:nth-child(1) {
+  left: 6px;
+  bottom: 2px;
+  background: #5c7d5f;
+}
+.freshSymbol .moodSymbol span:nth-child(2) {
+  left: 43px;
+  bottom: 25px;
+  background: #b8c947;
+  transform: rotate(24deg);
+}
+.freshSymbol .moodSymbol span:nth-child(3) {
+  left: 76px;
+  bottom: 48px;
+  background: #e9bb00;
+  transform: rotate(14deg);
+}
+.freshSymbol .moodSymbol span:nth-child(4) {
+  left: 106px;
+  bottom: 78px;
+  width: 18px;
+  height: 31px;
+  background: #f4d55b;
+  transform: rotate(7deg);
+}
+
+.complexSymbol .moodSymbol span {
+  position: absolute;
+  width: 80px;
+  height: 76px;
+  border-radius: 61% 39% 54% 46% / 44% 63% 37% 56%;
+  mix-blend-mode: multiply;
+}
+.complexSymbol .moodSymbol span:nth-child(1) {
+  left: 2px;
+  top: 3px;
+  background: rgba(92, 125, 95, 0.65);
+  transform: rotate(-15deg);
+}
+.complexSymbol .moodSymbol span:nth-child(2) {
+  right: 0;
+  top: 17px;
+  background: rgba(233, 187, 0, 0.48);
+  transform: rotate(38deg);
+}
+.complexSymbol .moodSymbol span:nth-child(3) {
+  left: 25px;
+  bottom: 0;
+  background: rgba(18, 63, 51, 0.48);
+  transform: rotate(77deg);
+}
+.complexSymbol .moodSymbol span:nth-child(4) {
+  right: 13px;
+  bottom: 6px;
+  width: 45px;
+  height: 45px;
+  background: rgba(237, 114, 91, 0.28);
+  transform: rotate(12deg);
+}
+
+.methodMark {
+  width: 48px;
+  height: 48px;
+  color: #123f33;
+}
+.filterMark {
+  border: 6px solid #123f33;
+  border-radius: 50%;
+}
+.espressoMark {
+  border: 4px solid #123f33;
+  border-radius: 50%;
+  background: linear-gradient(to top, #123f33 50%, transparent 50%);
+}
+.mokaMark {
+  background: repeating-linear-gradient(
+    to top,
+    #123f33 0 6px,
+    transparent 6px 12px
+  );
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
+}
+.pressMark {
+  border: 4px double #123f33;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 8px #f2eee4;
+}
+.versatileMark::before {
+  content: "✦  ◦  ✦";
+  font-size: 22px;
+  letter-spacing: 4px;
+  white-space: nowrap;
+}
+
+.momentMark {
+  width: 72px;
+  height: 72px;
+}
+.dailyMark {
+  border-radius: 50%;
+  background: repeating-radial-gradient(
+    circle,
+    #e9bb00 0 7px,
+    transparent 8px 16px
+  );
+}
+.pauseMark {
+  border: 13px solid #5c7d5f;
+  border-radius: 50%;
+  box-shadow: 0 0 0 8px rgba(92, 125, 95, 0.18);
+}
+.shareMark::before,
+.shareMark::after {
+  content: "";
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(18, 63, 51, 0.66);
+}
+.shareMark::before {
+  left: 0;
+  top: 4px;
+}
+.shareMark::after {
+  right: 0;
+  bottom: 4px;
+  background: rgba(233, 187, 0, 0.55);
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 700px) {
+  .moodSymbol {
+    width: 80px;
+    height: 74px;
+  }
+  .sweetSymbol .moodSymbol span:nth-child(1) {
+    inset: 2px 23px 26px 2px;
+    border-width: 8px;
+  }
+  .sweetSymbol .moodSymbol span:nth-child(2) {
+    inset: 18px 5px 11px 27px;
+    border-width: 8px;
+  }
+  .sweetSymbol .moodSymbol span:nth-child(3) {
+    inset: 44px 25px 1px 9px;
+    border-width: 6px;
+  }
+  .intenseSymbol .moodSymbol span {
+    height: 19px;
+  }
+  .intenseSymbol .moodSymbol span:nth-child(1) {
+    width: 74px;
+  }
+  .intenseSymbol .moodSymbol span:nth-child(2) {
+    bottom: 23px;
+    left: 9px;
+    width: 63px;
+  }
+  .intenseSymbol .moodSymbol span:nth-child(3) {
+    bottom: 44px;
+    left: 20px;
+    width: 47px;
+  }
+  .freshSymbol .moodSymbol span {
+    width: 25px;
+    height: 43px;
+  }
+  .freshSymbol .moodSymbol span:nth-child(2) {
+    left: 26px;
+    bottom: 16px;
+  }
+  .freshSymbol .moodSymbol span:nth-child(3) {
+    left: 47px;
+    bottom: 30px;
+  }
+  .freshSymbol .moodSymbol span:nth-child(4) {
+    left: 65px;
+    bottom: 49px;
+    width: 11px;
+    height: 19px;
+  }
+  .complexSymbol .moodSymbol span {
+    width: 49px;
+    height: 47px;
+  }
+  .complexSymbol .moodSymbol span:nth-child(3) {
+    left: 15px;
+  }
+  .complexSymbol .moodSymbol span:nth-child(4) {
+    right: 8px;
+    width: 28px;
+    height: 28px;
+  }
+  .methodMark {
+    width: 35px;
+    height: 35px;
+  }
+  .versatileMark::before {
+    font-size: 17px;
+  }
+  .momentMark {
+    width: 54px;
+    height: 54px;
+  }
+  .pauseMark {
+    border-width: 10px;
+    box-shadow: 0 0 0 6px rgba(92, 125, 95, 0.18);
+  }
+  .shareMark::before,
+  .shareMark::after {
+    width: 36px;
+    height: 36px;
+  }
+}

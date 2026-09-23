@@ -1,2 +1,346 @@
-.simpleJourney{max-width:1040px;margin:auto;padding:42px 5vw 70px}.progress{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:18px}.progress span{font-size:9px;font-weight:850;letter-spacing:.15em}.progress i{height:3px;background:#e5e0d8;border-radius:999px;overflow:hidden}.progress b{display:block;height:100%;background:#173c2e;transition:.3s}.simpleIntro{max-width:780px;margin:55px 0 30px}.simpleIntro small,.resultCopy>small{font-size:9px;font-weight:850;letter-spacing:.16em}.simpleIntro h1,.resultCopy h1{font-size:clamp(46px,6vw,76px);line-height:.95;letter-spacing:-.055em;margin:10px 0 15px}.simpleIntro p,.resultCopy>p{font-size:16px;line-height:1.6;opacity:.62;max-width:680px}.moodGrid,.choiceGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.moodGrid button,.choiceGrid button,.momentGrid button{border:1px solid #e4ded5;background:#fff;border-radius:22px;cursor:pointer;text-align:left;transition:.2s}.moodGrid button:hover,.choiceGrid button:hover,.momentGrid button:hover{transform:translateY(-4px);box-shadow:0 18px 42px #2d1c1214;border-color:#cfc5b8}.moodGrid button{min-height:175px;padding:14px;display:grid;grid-template-columns:145px 1fr;gap:20px;align-items:center;background:color-mix(in srgb,var(--tone) 8%,#fff)}.moodGrid img{width:145px;height:145px;border-radius:16px;object-fit:cover}.moodGrid span,.choiceGrid span{display:grid;gap:6px}.moodGrid b,.choiceGrid b{font-size:20px}.moodGrid small,.choiceGrid small,.momentGrid small{font-size:11px;line-height:1.45;opacity:.58}.choiceGrid button{min-height:145px;padding:25px;display:grid;grid-template-columns:64px 1fr;gap:18px;align-items:center}.choiceGrid i{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:#f2ebe1;font-size:27px;font-style:normal}.momentGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.momentGrid button{min-height:210px;padding:26px;display:flex;flex-direction:column}.momentGrid b{font-size:24px}.momentGrid span{margin-top:auto;font-size:10px;text-transform:uppercase;font-weight:850;letter-spacing:.08em}.simpleFooter{display:flex;justify-content:space-between;align-items:center;margin-top:24px}.simpleFooter button{border:0;background:transparent;text-decoration:underline;cursor:pointer;opacity:.6}.simpleFooter b{font-size:10px;letter-spacing:.08em;opacity:.5}.simpleResult{max-width:1120px;margin:auto;min-height:calc(100svh - 68px);padding:46px 5vw;display:grid;grid-template-columns:.8fr 1.2fr;gap:48px;align-items:center}.resultCopy>p{font-size:15px}.bishopNote{margin-top:25px;padding:16px;border-radius:16px;background:#eef4ec;display:flex;gap:12px}.bishopNote b{font-size:10px}.bishopNote span{font-size:11px;line-height:1.5;opacity:.68}.simpleProduct{border:1px solid #e4ded5;border-radius:28px;background:linear-gradient(145deg,#f4eadc,#fff);padding:28px;display:grid;grid-template-columns:.82fr 1.18fr;gap:25px;align-items:center;box-shadow:0 22px 60px #2d1c1212}.simpleProduct>img{width:100%;height:410px;object-fit:contain;filter:drop-shadow(0 20px 18px #14231b27)}.simpleProduct h2{font-size:52px;letter-spacing:-.05em;margin:5px 0}.simpleProduct strong{font-size:13px}.simpleProduct p{line-height:1.55;opacity:.65}.simpleProduct>div>b{display:block;font-size:22px;margin-top:18px}.simpleProduct>div>b small{font-size:11px;opacity:.55}.resultActions{display:grid;gap:8px;margin-top:18px}.resultActions a,.resultActions button{border-radius:999px;padding:13px 16px;text-align:center;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.06em}.resultActions a{background:#101a1d;color:#fff;text-decoration:none}.resultActions button{border:1px solid #d7d0c6;background:#fff;cursor:pointer}
-@media(max-width:700px){.simpleJourney{padding:25px 16px 40px}.simpleIntro{margin:34px 0 22px}.simpleIntro h1,.resultCopy h1{font-size:40px}.simpleIntro p{font-size:13px}.moodGrid,.choiceGrid,.momentGrid{grid-template-columns:1fr}.moodGrid button{min-height:120px;grid-template-columns:96px 1fr;gap:14px}.moodGrid img{width:96px;height:96px}.moodGrid b,.choiceGrid b{font-size:17px}.choiceGrid button{min-height:105px;padding:17px}.momentGrid button{min-height:135px;padding:20px}.simpleFooter b{display:none}.simpleResult{min-height:0;padding:28px 16px 44px;grid-template-columns:1fr;gap:22px}.resultCopy h1{margin-bottom:10px}.simpleProduct{grid-template-columns:110px 1fr;padding:16px;gap:14px}.simpleProduct>img{height:180px}.simpleProduct h2{font-size:35px}.simpleProduct p{font-size:11px}.simpleProduct>div>b{font-size:18px}.resultActions{grid-column:1/-1}.bishopNote{margin-top:16px}}
+.simpleJourney {
+  max-width: 1040px;
+  margin: auto;
+  padding: 26px 5vw 48px;
+}
+.simpleIntro {
+  max-width: 780px;
+  margin: 18px 0 22px;
+}
+.simpleIntro small,
+.resultCopy > small {
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+}
+.simpleIntro h1,
+.resultCopy h1 {
+  font-size: clamp(42px, 5.4vw, 68px);
+  line-height: 0.97;
+  letter-spacing: -0.05em;
+  margin: 8px 0 10px;
+}
+.simpleIntro p,
+.resultCopy > p {
+  font-size: 14px;
+  line-height: 1.5;
+  opacity: 0.62;
+  max-width: 680px;
+}
+.moodGrid,
+.choiceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.moodGrid button,
+.choiceGrid button,
+.momentGrid button {
+  border: 1px solid #dce2de;
+  background: #fff;
+  border-radius: 20px;
+  cursor: pointer;
+  text-align: left;
+  transition: 0.2s;
+  color: #10201d;
+}
+.moodGrid button:hover,
+.choiceGrid button:hover,
+.momentGrid button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px #10201d12;
+  border-color: #bdc8c2;
+}
+.moodGrid button {
+  min-height: 158px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+.moodGrid span,
+.choiceGrid span {
+  display: grid;
+  gap: 5px;
+}
+.moodGrid b,
+.choiceGrid b {
+  font-size: 19px;
+}
+.moodGrid small,
+.choiceGrid small,
+.momentGrid small {
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.6;
+}
+.choiceGrid button {
+  min-height: 130px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+.choiceGrid i {
+  font-style: normal;
+}
+.momentGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.momentGrid button {
+  min-height: 170px;
+  padding: 22px;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.momentGrid button > span {
+  display: grid;
+  gap: 6px;
+}
+.momentGrid b {
+  font-size: 20px;
+}
+.simpleFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+}
+.simpleFooter button {
+  border: 0;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.simpleFooter b {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  opacity: 0.5;
+}
+.simpleResult {
+  max-width: 1120px;
+  margin: auto;
+  min-height: calc(100svh - 68px);
+  padding: 32px 5vw;
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 36px;
+  align-items: center;
+}
+.resultCopy > p {
+  font-size: 14px;
+}
+.bishopNote {
+  margin-top: 16px;
+  padding: 13px;
+  border-radius: 14px;
+  background: #eef4ec;
+  display: flex;
+  gap: 10px;
+}
+.bishopNote b {
+  font-size: 10px;
+}
+.bishopNote span {
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0.68;
+}
+.simpleProduct {
+  border: 1px solid #e0e5e1;
+  border-radius: 26px;
+  background: linear-gradient(145deg, #fbf4e9, #fff);
+  padding: 22px;
+  display: grid;
+  grid-template-columns: 0.72fr 1.28fr;
+  gap: 20px;
+  align-items: center;
+  box-shadow: 0 18px 48px #10201d0d;
+}
+.simpleProduct > img {
+  width: 100%;
+  height: 340px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 16px #14231b22);
+}
+.simpleProduct h2 {
+  font-size: 46px;
+  letter-spacing: -0.05em;
+  margin: 4px 0;
+}
+.simpleProduct strong {
+  font-size: 12px;
+}
+.simpleProduct p {
+  line-height: 1.45;
+  opacity: 0.65;
+  font-size: 12px;
+}
+.simpleProduct > div > b {
+  display: block;
+  font-size: 21px;
+  margin-top: 14px;
+}
+.simpleProduct > div > b small {
+  font-size: 10px;
+  opacity: 0.55;
+}
+.resultActions {
+  display: grid;
+  gap: 7px;
+  margin-top: 13px;
+}
+.resultActions a,
+.resultActions button {
+  border-radius: 999px;
+  padding: 12px 15px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.resultActions a {
+  color: #fff;
+  text-decoration: none;
+}
+.resultActions button {
+  border: 1px solid #d7d0c6;
+  background: #fff;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .simpleJourney {
+    min-height: calc(100svh - 56px);
+    padding: 12px 14px 18px;
+    box-sizing: border-box;
+  }
+  .simpleIntro {
+    margin: 10px 0 12px;
+  }
+  .simpleIntro small {
+    font-size: 7px;
+  }
+  .simpleIntro h1,
+  .resultCopy h1 {
+    font-size: 29px;
+  }
+  .simpleIntro p {
+    font-size: 11px;
+    margin: 0;
+  }
+  .moodGrid,
+  .choiceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .moodGrid button {
+    min-height: 164px;
+    padding: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .moodGrid b,
+  .choiceGrid b {
+    font-size: 14px;
+    line-height: 1.12;
+  }
+  .moodGrid small,
+  .choiceGrid small,
+  .momentGrid small {
+    font-size: 9px;
+    line-height: 1.25;
+  }
+  .choiceGrid button {
+    min-height: 105px;
+    padding: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 7px;
+  }
+  .choiceGrid .versatileChoice {
+    min-height: 74px !important;
+    grid-column: 1/-1;
+    display: grid;
+    grid-template-columns: 45px 1fr;
+    align-items: center;
+  }
+  .momentGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .momentGrid button {
+    min-height: 96px;
+    padding: 13px 16px;
+    grid-template-columns: 58px 1fr;
+    gap: 15px;
+  }
+  .momentGrid b {
+    font-size: 15px;
+  }
+  .simpleFooter {
+    margin-top: 12px;
+  }
+  .simpleFooter button {
+    font-size: 10px;
+  }
+  .simpleFooter b {
+    display: none;
+  }
+  .simpleResult {
+    min-height: 0;
+    padding: 14px 14px 24px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .resultCopy h1 {
+    margin: 5px 0 7px;
+  }
+  .resultCopy > p {
+    font-size: 10px;
+    line-height: 1.35;
+    margin: 0 0 8px;
+  }
+  .simpleProduct {
+    grid-template-columns: 92px 1fr;
+    padding: 12px;
+    gap: 11px;
+    border-radius: 19px;
+  }
+  .simpleProduct > img {
+    height: 155px;
+  }
+  .simpleProduct h2 {
+    font-size: 28px;
+  }
+  .simpleProduct p {
+    font-size: 9px;
+    margin: 4px 0 6px;
+  }
+  .simpleProduct strong {
+    font-size: 10px;
+  }
+  .simpleProduct > div > b {
+    font-size: 18px;
+    margin-top: 8px;
+  }
+  .resultActions {
+    grid-column: 1/-1;
+    margin-top: 4px;
+  }
+  .bishopNote {
+    display: none;
+  }
+}
