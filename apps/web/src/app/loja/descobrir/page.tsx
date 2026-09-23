@@ -5,9 +5,10 @@ import { useMemo, useState } from "react";
 import baseStyles from "./page.module.css";
 import guideStyles from "./simple-guide.module.css";
 import trailStyles from "./journey-trail.module.css";
+import mobileResultStyles from "./mobile-result.module.css";
 import brand from "./brand.module.css";
 
-const styles = { ...baseStyles, ...guideStyles, ...trailStyles };
+const styles = { ...baseStyles, ...guideStyles, ...trailStyles, ...mobileResultStyles };
 
 type Mood = "comfort" | "intense" | "fresh" | "discover";
 type Brew = "filter" | "espresso" | "moka" | "press" | "any";
