@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { BlingService } from "./bling.service";
 import { StorefrontLifecycleService } from "../../storefront-lifecycle.service";
 import { MelhorEnvioShipmentService } from "../../melhor-envio-shipment.service";
+import { SalesOrderCustomerLifecycleService } from "../../sales-order-customer-lifecycle.service";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -23,6 +24,7 @@ export class BlingOutboxService {
     private readonly bling: BlingService,
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly shipment: MelhorEnvioShipmentService,
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
 
   private async mapResource(
@@ -686,6 +688,15 @@ export class BlingOutboxService {
               SET status='INVOICED',"invoicedAt"=COALESCE("invoicedAt",NOW()),"updatedAt"=NOW()
             WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
           row.salesOrderId,
+        );
+        await this.customerLifecycle.record(
+          row.salesOrderId,
+          "INVOICE_AUTHORIZED",
+          "Nota fiscal emitida",
+          "A nota fiscal do seu pedido foi autorizada e a expedição será preparada.",
+          "BLING",
+          `sales-order:invoice-authorized:${row.salesOrderId}`,
+          { fiscalId: row.id, externalId: row.externalId, accessKey, number, series },
         );
         const shippingRows = await this.database.$queryRawUnsafe<any[]>(
           `SELECT "shippingProvider","shippingQuoteId" FROM "SalesOrder" WHERE id=$1 LIMIT 1`,

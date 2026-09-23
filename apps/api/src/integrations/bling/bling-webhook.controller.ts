@@ -13,6 +13,7 @@ import { Public } from "../../auth.guard";
 import type { BlingWebhookEnvelope } from "./bling.contract";
 import { BlingService } from "./bling.service";
 import { MelhorEnvioShipmentService } from "../../melhor-envio-shipment.service";
+import { SalesOrderCustomerLifecycleService } from "../../sales-order-customer-lifecycle.service";
 
 @Controller("integrations/bling/webhooks")
 export class BlingWebhookController {
@@ -21,6 +22,7 @@ export class BlingWebhookController {
   constructor(
     private readonly bling: BlingService,
     private readonly shipment: MelhorEnvioShipmentService,
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
 
   private validSignature(rawBody: Buffer, supplied?: string) {
@@ -213,6 +215,15 @@ export class BlingWebhookController {
               SET status='INVOICED',"invoicedAt"=COALESCE("invoicedAt",NOW()),"updatedAt"=NOW()
             WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
           salesOrderId,
+        );
+        await this.customerLifecycle.record(
+          salesOrderId,
+          "INVOICE_AUTHORIZED",
+          "Nota fiscal emitida",
+          "A nota fiscal do seu pedido foi autorizada e a expedição será preparada.",
+          "BLING",
+          `sales-order:invoice-authorized:${salesOrderId}`,
+          { fiscalId, externalId, accessKey, number, series },
         );
         const shippingRows = await this.database.$queryRawUnsafe<any[]>(
           `SELECT "shippingProvider","shippingQuoteId" FROM "SalesOrder" WHERE id=$1 LIMIT 1`,

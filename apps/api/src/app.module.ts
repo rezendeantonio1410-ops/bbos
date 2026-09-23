@@ -54,6 +54,7 @@ import { StorefrontShippingController } from "./storefront-shipping.controller";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { CustomerNotificationService } from "./customer-notification.service";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { IntegrationWorkerService } from "./integration-worker.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
@@ -124,6 +125,7 @@ import { StorefrontCatalogController } from "./storefront-catalog.controller";
     StorefrontShippingService,
     StorefrontLifecycleService,
     CustomerNotificationService,
+    SalesOrderCustomerLifecycleService,
     IntegrationWorkerService,
     MelhorEnvioShipmentService,
     MelhorEnvioAuthService,

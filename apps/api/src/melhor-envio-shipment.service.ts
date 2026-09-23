@@ -3,6 +3,7 @@ import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -13,6 +14,7 @@ export class MelhorEnvioShipmentService {
   constructor(
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly melhorEnvioAuth: MelhorEnvioAuthService,
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
 
   private base() {
@@ -506,6 +508,16 @@ export class MelhorEnvioShipmentService {
       JSON.stringify(details || {}),
     );
 
+    await this.customerLifecycle.record(
+      order.id,
+      "SHIPMENT_CREATED",
+      "Envio preparado",
+      "A etiqueta de transporte foi emitida e o pedido está pronto para postagem.",
+      "MELHOR_ENVIO",
+      `sales-order:shipment-created:${order.id}`,
+      { shipmentId, externalId, trackingCode, trackingUrl },
+    );
+
     return {
       id: shipmentId,
       externalId,
@@ -553,12 +565,25 @@ export class MelhorEnvioShipmentService {
         `storefront:${mapping.event.toLowerCase()}:${shipment.storefrontOrderId}`,
         { externalId, status: statusValue },
       );
-    } else if (shipment.salesOrderId && mapping.status === "DELIVERED") {
+    } else if (shipment.salesOrderId) {
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrder"
-            SET status='DELIVERED',"deliveredAt"=COALESCE("deliveredAt",NOW()),"updatedAt"=NOW()
-          WHERE id=$1 AND status='SHIPPED'`,
+            SET status=$2,
+                "shippedAt"=CASE WHEN $2='SHIPPED' THEN COALESCE("shippedAt",NOW()) ELSE "shippedAt" END,
+                "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,
+                "updatedAt"=NOW()
+          WHERE id=$1 AND status IN ('INVOICED','SHIPPED','DELIVERED')`,
         shipment.salesOrderId,
+        mapping.order,
+      );
+      await this.customerLifecycle.record(
+        shipment.salesOrderId,
+        mapping.event,
+        mapping.title,
+        mapping.detail,
+        "CARRIER",
+        `sales-order:${mapping.event.toLowerCase()}:${shipment.salesOrderId}`,
+        { externalId, status: statusValue },
       );
     }
     return {
