@@ -10,7 +10,7 @@ import brand from "./brand.module.css";
 const styles = { ...baseStyles, ...guideStyles, ...trailStyles };
 
 type Mood = "comfort" | "intense" | "fresh" | "discover";
-type Brew = "filter" | "espresso" | "press" | "any";
+type Brew = "filter" | "espresso" | "moka" | "press" | "any";
 type Moment = "daily" | "pause" | "share";
 
 const moods = [
@@ -21,10 +21,11 @@ const moods = [
 ];
 
 const brews = [
-  { id: "filter" as const, name: "Coado", hint: "clareza e delicadeza", icon: "◯" },
-  { id: "espresso" as const, name: "Espresso ou moka", hint: "concentração e corpo", icon: "◒" },
-  { id: "press" as const, name: "Prensa francesa", hint: "textura e presença", icon: "◉" },
-  { id: "any" as const, name: "Quero versatilidade", hint: "um café que funciona de vários jeitos", icon: "✦" },
+  { id: "filter" as const, name: "Coado", hint: "clareza e delicadeza", icon: "◯", grind: "Média", particle: "600–900 µm", texture: "aparência próxima à areia média", note: "Comece no centro da faixa e ajuste: mais fino para acelerar a extração; mais grosso para desacelerar." },
+  { id: "espresso" as const, name: "Espresso", hint: "concentração e corpo", icon: "◒", grind: "Fina", particle: "200–400 µm", texture: "aparência próxima ao açúcar refinado", note: "A regulagem depende da máquina e do tempo de extração. Faça pequenos ajustes no moinho." },
+  { id: "moka" as const, name: "Moka italiana", hint: "intensidade sem compactar", icon: "◓", grind: "Média-fina", particle: "400–600 µm", texture: "mais grossa que o espresso e mais fina que o coado", note: "Preencha o cesto sem prensar. A moagem fina demais pode restringir a passagem da água." },
+  { id: "press" as const, name: "Prensa francesa", hint: "textura e presença", icon: "◉", grind: "Grossa", particle: "900–1.200 µm", texture: "aparência próxima ao sal grosso", note: "A moagem grossa reduz sedimentos e favorece uma extração limpa durante a infusão." },
+  { id: "any" as const, name: "Quero versatilidade", hint: "um café que funciona de vários jeitos", icon: "✦", grind: "Ajustável ao método", particle: "moer somente a dose do preparo", texture: "em grãos até o momento de usar", note: "Mantenha o café em grãos e ajuste o moinho sempre que mudar o método." },
 ];
 
 const moments = [
@@ -82,7 +83,7 @@ export default function Page() {
       </div>
       <article className={styles.simpleProduct}>
         <img src={recommendation.image} alt={`Embalagem do café ${recommendation.name}`} />
-        <div><small>INDICAMOS · {recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>{recommendation.copy}</p><div className={styles.matchReason}><small>POR QUE ELE COMBINA</small><span>{selectedMood?.name}</span><i>+</i><span>{selectedBrew?.name}</span><i>+</i><span>{selectedMoment?.name}</span></div><b>{recommendation.price} <small>· 500 g</small></b>
+        <div><small>INDICAMOS · {recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>{recommendation.copy}</p><div className={styles.matchReason}><small>POR QUE ELE COMBINA</small><span>{selectedMood?.name}</span><i>+</i><span>{selectedBrew?.name}</span><i>+</i><span>{selectedMoment?.name}</span></div>{selectedBrew && <div className={styles.grindGuide}><div><small>MOAGEM PARA {selectedBrew.name.toUpperCase()}</small><strong>{selectedBrew.grind}</strong><b>{selectedBrew.particle}</b></div><p><em>Referência visual:</em> {selectedBrew.texture}. {selectedBrew.note}</p><footer><span>CAFÉ EM GRÃOS</span> Para preservar aromas e sabor, moa apenas a quantidade que será preparada.</footer></div>}<b>{recommendation.price} <small>· 500 g</small></b>
           <div className={styles.resultActions}><Link href={`/loja#${recommendation.id}`}>Ver e comprar →</Link><button type="button" onClick={restart}>Descobrir outro perfil</button></div>
         </div>
       </article>
@@ -100,7 +101,7 @@ export default function Page() {
     {trail}
 
     {step === 1 && <div className={styles.moodGrid}>{moods.map((item) => <button key={item.id} type="button" style={{ "--tone": item.tone } as React.CSSProperties} onClick={() => { setMood(item.id); setStep(2); }}><img src={item.image} alt="" /><span><b>{item.name}</b><small>{item.hint}</small></span></button>)}</div>}
-    {step === 2 && <div className={styles.choiceGrid}>{brews.map((item) => <button key={item.id} type="button" onClick={() => { setBrew(item.id); setStep(3); }}><i>{item.icon}</i><span><b>{item.name}</b><small>{item.hint}</small></span></button>)}</div>}
+    {step === 2 && <div className={styles.choiceGrid}>{brews.map((item) => <button className={item.id === "any" ? styles.versatileChoice : undefined} key={item.id} type="button" onClick={() => { setBrew(item.id); setStep(3); }}><i>{item.icon}</i><span><b>{item.name}</b><small>{item.hint}</small></span></button>)}</div>}
     {step === 3 && <div className={styles.momentGrid}>{moments.map((item) => <button key={item.id} type="button" onClick={() => { setMoment(item.id); setStep(4); }}><b>{item.name}</b><small>{item.hint}</small><span>escolher →</span></button>)}</div>}
 
     <div className={styles.simpleFooter}>{step > 1 ? <button type="button" onClick={() => setStep(step - 1)}>← voltar uma pergunta</button> : <span />}<b>Leva menos de um minuto.</b></div>
