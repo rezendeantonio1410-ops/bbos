@@ -15,7 +15,8 @@ export class AdminCoffeeReferenceController {
     if (actor.role !== "ADMIN" && actor.role !== "EXECUTIVE") {
       throw new ForbiddenException("Apenas usuários administrativos podem inicializar dados mestres.");
     }
-    await seedCoffeeReferences(this.db, true, actor.companyId);
+    // Production master-data initialization must never create staging suppliers.
+    await seedCoffeeReferences(this.db, false, actor.companyId);
     const [suppliers, species, cultivars, regions, screens] = await Promise.all([
       this.db.supplier.count({ where: { companyId: actor.companyId, active: true } }),
       this.db.coffeeSpecies.count({ where: { companyId: actor.companyId, active: true } }),

@@ -20,3 +20,7 @@ test("reference initialization requires a session and an administrative role", (
   assert.match(source, /actor\.role !== "EXECUTIVE"/);
   assert.match(source, /ForbiddenException/);
 });
+
+test("production initialization does not create the staging supplier", () => {
+  assert.match(source, /seedCoffeeReferences\(this\.db, false, actor\.companyId\)/);
+});
