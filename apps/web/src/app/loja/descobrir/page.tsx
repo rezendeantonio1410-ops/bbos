@@ -19,31 +19,31 @@ const styles = {
 
 type Mood = "comfort" | "intense" | "fresh" | "discover";
 type Brew = "filter" | "espresso" | "moka" | "press" | "any";
-type Moment = "daily" | "pause" | "share";
+type Moment = "morning" | "focus" | "active" | "pause" | "pleasure" | "share";
 
 const moods = [
   {
     id: "comfort" as const,
     name: "Doce e confortável",
-    hint: "macio · acolhedor · redondo",
+    hint: "caramelo · bolo · chocolate · aconchego",
     visual: "sweetSymbol",
   },
   {
     id: "intense" as const,
     name: "Intenso e encorpado",
-    hint: "corpo · presença · final longo",
+    hint: "aroma da cozinha · corpo · presença",
     visual: "intenseSymbol",
   },
   {
     id: "fresh" as const,
     name: "Frutado e fresco",
-    hint: "vivo · luminoso · refrescante",
+    hint: "frutas · manhã luminosa · leveza",
     visual: "freshSymbol",
   },
   {
     id: "discover" as const,
     name: "Complexo e surpreendente",
-    hint: "camadas · descoberta · evolução",
+    hint: "camadas · curiosidade · evolução",
     visual: "complexSymbol",
   },
 ];
@@ -103,22 +103,46 @@ const brews = [
 
 const moments = [
   {
-    id: "daily" as const,
-    name: "Todo dia",
-    hint: "fácil de acertar e de repetir",
-    visual: "dailyMark",
+    id: "morning" as const,
+    name: "Começar bem o dia",
+    hint: "uma xícara para despertar o ritmo",
+    visual: "morningMark",
+    resultPhrase: "começar bem o dia",
+  },
+  {
+    id: "focus" as const,
+    name: "Focar e criar",
+    hint: "estudar, programar, escrever ou trabalhar",
+    visual: "focusMark",
+    resultPhrase: "focar e criar",
+  },
+  {
+    id: "active" as const,
+    name: "Antes ou depois do treino",
+    hint: "correr, pedalar ou treinar faz parte do ritual",
+    visual: "activeMark",
+    resultPhrase: "acompanhar o seu ritual de treino",
   },
   {
     id: "pause" as const,
-    name: "Uma pausa especial",
+    name: "Uma pausa só minha",
     hint: "quero prestar atenção na xícara",
     visual: "pauseMark",
+    resultPhrase: "uma pausa só sua",
+  },
+  {
+    id: "pleasure" as const,
+    name: "Só para curtir",
+    hint: "sem pressa, tarefa ou ocasião",
+    visual: "pleasureMark",
+    resultPhrase: "o puro prazer de tomar café",
   },
   {
     id: "share" as const,
-    name: "Receber ou presentear",
-    hint: "quero uma escolha marcante",
+    name: "Compartilhar com alguém",
+    hint: "conversa, encontro ou presente",
     visual: "shareMark",
+    resultPhrase: "compartilhar com alguém",
   },
 ];
 
@@ -193,7 +217,7 @@ export default function Page() {
   const [moment, setMoment] = useState<Moment>();
 
   const recommendation = useMemo(() => {
-    if (mood === "discover" || (mood === "fresh" && moment !== "daily"))
+    if (mood === "discover" || (mood === "fresh" && moment !== "morning"))
       return products.singular;
     if (mood === "intense")
       return brew === "filter" ? products.sublime : products.intenso;
@@ -238,7 +262,7 @@ export default function Page() {
             <p>
               Você pediu uma experiência {selectedMood?.name.toLowerCase()},
               preparada em {selectedBrew?.name.toLowerCase()} e pensada para{" "}
-              {selectedMoment?.name.toLowerCase()}.
+              {selectedMoment?.resultPhrase}.
             </p>
             {trail}
             <div className={styles.bishopNote}>
@@ -315,21 +339,21 @@ export default function Page() {
         <div className={styles.simpleIntro}>
           <small>
             {step === 1
-              ? "O BISPO AJUDA VOCÊ A ESCOLHER"
+              ? "O BISPO AJUDA VOCÊ A ESCOLHER SEU CAFÉ"
               : step === 2
                 ? "AGORA, O SEU RITUAL"
                 : "A ÚLTIMA ESCOLHA"}
           </small>
           <h1>
             {step === 1
-              ? "Que sensação você procura?"
+              ? "Qual lembrança de café chama você agora?"
               : step === 2
                 ? "Como você prepara seu café?"
                 : "Para qual momento é essa xícara?"}
           </h1>
           <p>
             {step === 1
-              ? "Escolha pelo que dá vontade agora."
+              ? "Pense menos em notas técnicas. Escolha pela sensação que dá vontade de beber."
               : step === 2
                 ? "O método muda textura, clareza e intensidade."
                 : "O contexto também faz parte do sabor."}
@@ -520,7 +544,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           />
         </Link>
         <div className={styles.headerCopy}>
-          <span>DESCUBRA O SEU CAFÉ</span>
+          <b aria-hidden="true">B</b>
+          <span>
+            <strong>O Bispo ajuda você a escolher seu café</strong>
+            <small>3 escolhas · menos de um minuto</small>
+          </span>
         </div>
         <Link href="/loja" className={styles.close} aria-label="Fechar">
           ×

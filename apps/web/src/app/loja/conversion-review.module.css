@@ -291,10 +291,14 @@
 .floatingGuide > span i { color: #0a0a0a; font: 800 18px/1 Arial, sans-serif; font-style: normal; }
 
 .floatingGuide b {
+  display: grid;
+  gap: 2px;
   font-size: 11px;
   letter-spacing: 0.015em;
   white-space: nowrap;
 }
+.floatingGuide b strong { font: inherit; }
+.floatingGuide b small { font-size: 8px; font-weight: 600; opacity: .64; }
 
 @media (max-width: 600px) {
   .header {
@@ -353,10 +357,11 @@
   .floatingGuide {
     right: 14px;
     bottom: 14px;
-    width: 54px;
+    width: auto;
+    max-width: calc(100vw - 28px);
     min-height: 54px;
-    padding: 8px;
-    justify-content: center;
+    padding: 7px 14px 7px 8px;
+    justify-content: flex-start;
   }
 
   .floatingGuide > span {
@@ -364,9 +369,8 @@
     height: 38px;
   }
 
-  .floatingGuide b {
-    display: none;
-  }
+  .floatingGuide b { display: grid; font-size: 10px; }
+  .floatingGuide b small { font-size: 7px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -17,12 +17,15 @@
 }
 
 .choiceTrail > div {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
+  gap: 8px;
 }
 
 .trailStep {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
   flex: 1;
   align-items: center;
@@ -34,10 +37,11 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #ece7df;
+  border-radius: 12px;
+  background: #fff;
   color: inherit;
   text-align: left;
 }
@@ -60,7 +64,7 @@
 .trailStep span { min-width: 0; display: grid; gap: 2px; }
 .trailStep span small { font-size: 7px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; opacity: .45; }
 .trailStep strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 750; }
-.trailStep > i { margin: 0 9px; color: #b7afa5; font-size: 12px; font-style: normal; }
+.trailStep > i { align-self: center; margin: 0 -3px 0 1px; color: #b7afa5; font-size: 11px; font-style: normal; }
 .trailDone b { border-color: #173c2e; background: #173c2e; color: #fff; }
 .trailCurrent b { box-shadow: 0 0 0 5px #173c2e14; }
 .trailCurrent strong { color: #173c2e; }
@@ -139,21 +143,18 @@
 .grindGuide footer span { margin-right: 5px; font-weight: 900; letter-spacing: .08em; color: #173c2e; }
 
 @media (max-width: 700px) {
-  .choiceTrail { padding: 12px; margin-bottom: 16px; overflow: hidden; }
-  .choiceTrail > div { align-items: center; }
-  .trailStep { flex: 0 1 auto; }
-  .trailStep span { display: none; }
+  .choiceTrail { padding: 10px; margin-bottom: 13px; overflow: hidden; }
+  .choiceTrail > small { margin-bottom: 7px; }
+  .choiceTrail > div { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .trailStep { display: block; }
   .trailStep > div,
-  .trailStep > button { flex: 0 0 auto; }
-  .trailStep > i { margin: 0 7px; }
-  .trailStep b { width: 27px; height: 27px; flex-basis: 27px; }
-  .trailDone,
-  .trailCurrent { flex: 1; }
-  .trailDone span,
-  .trailCurrent span { display: grid; }
-  .trailDone strong,
-  .trailCurrent strong { max-width: 112px; }
-  .trailCoffee { flex: 1; }
+  .trailStep > button { min-height: 54px; gap: 6px; padding: 6px; }
+  .trailStep > i { display: none; }
+  .trailStep b { width: 23px; height: 23px; flex-basis: 23px; }
+  .trailStep span { display: grid; }
+  .trailStep span small { font-size: 6px; }
+  .trailStep strong { max-width: none; font-size: 8px; line-height: 1.15; white-space: normal; }
+  .trailCoffee { display: none; }
   .resultHeading { font-size: 36px !important; }
   .resultTrail > div { grid-template-columns: 1fr; }
   .resultTrail .trailStep { display: flex; padding: 7px 9px; }

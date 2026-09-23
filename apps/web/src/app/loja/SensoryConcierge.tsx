@@ -8,19 +8,8 @@ export default function SensoryConcierge() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const updateVisibility = () => {
-      const threshold = Math.max(320, window.innerHeight * 0.55);
-      setVisible(window.scrollY > threshold);
-    };
-
-    updateVisibility();
-    window.addEventListener("scroll", updateVisibility, { passive: true });
-    window.addEventListener("resize", updateVisibility);
-
-    return () => {
-      window.removeEventListener("scroll", updateVisibility);
-      window.removeEventListener("resize", updateVisibility);
-    };
+    const timer = window.setTimeout(() => setVisible(true), 500);
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
@@ -32,7 +21,10 @@ export default function SensoryConcierge() {
       tabIndex={visible ? 0 : -1}
     >
       <span aria-hidden="true"><i>B</i></span>
-      <b>O Bispo ajuda você a escolher →</b>
+      <b>
+        <strong>Posso ajudar a escolher seu café →</strong>
+        <small>3 escolhas · menos de um minuto</small>
+      </b>
     </Link>
   );
 }
