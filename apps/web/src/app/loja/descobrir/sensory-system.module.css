@@ -175,7 +175,7 @@
   width: 72px;
   height: 72px;
 }
-.dailyMark {
+.morningMark {
   border-radius: 50%;
   background: repeating-radial-gradient(
     circle,
@@ -183,10 +183,26 @@
     transparent 8px 16px
   );
 }
+.focusMark {
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% 50%, #e9bb00 0 7px, transparent 8px),
+    repeating-linear-gradient(to bottom, #123f33 0 4px, transparent 4px 12px);
+}
+.activeMark {
+  background: repeating-linear-gradient(135deg, #123f33 0 9px, transparent 9px 17px);
+  clip-path: polygon(0 70%, 24% 48%, 43% 61%, 66% 26%, 100% 0, 78% 46%, 55% 81%, 31% 68%, 8% 100%);
+}
 .pauseMark {
   border: 13px solid #5c7d5f;
   border-radius: 50%;
   box-shadow: 0 0 0 8px rgba(92, 125, 95, 0.18);
+}
+.pleasureMark {
+  border: 4px solid #e9bb00;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #f6d96a 0 10%, #5c7d5f 11% 26%, #f8f4e7 27% 52%, #123f33 53% 100%);
+  box-shadow: 9px -7px 0 rgba(92, 125, 95, 0.2);
 }
 .shareMark::before,
 .shareMark::after {
