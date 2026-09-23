@@ -67,6 +67,7 @@ export default function Page() {
     mood={selectedMood?.name}
     brew={selectedBrew?.name}
     moment={selectedMoment?.name}
+    coffee={step === 4 ? recommendation.name : undefined}
     onGoTo={(target) => setStep(target)}
   />;
 
@@ -74,7 +75,7 @@ export default function Page() {
     return <Shell><section className={styles.simpleResult}>
       <div className={styles.resultCopy}>
         <small>LEITURA DO BISPO · SUA ESCOLHA</small>
-        <h1>Seu caminho chegou ao {recommendation.name}.</h1>
+        <h1 className={styles.resultHeading}>Seu caminho indica {recommendation.name}.</h1>
         <p>Você pediu uma experiência {selectedMood?.name.toLowerCase()}, preparada em {selectedBrew?.name.toLowerCase()} e pensada para {selectedMoment?.name.toLowerCase()}.</p>
         {trail}
         <div className={styles.bishopNote}><b>Bispo</b><span>Não existe resposta certa. Existe o café que faz mais sentido para a xícara que você quer agora.</span></div>
@@ -106,11 +107,12 @@ export default function Page() {
   </section></Shell>;
 }
 
-function ChoiceTrail({ step, mood, brew, moment, onGoTo }: {
+function ChoiceTrail({ step, mood, brew, moment, coffee, onGoTo }: {
   step: number;
   mood?: string;
   brew?: string;
   moment?: string;
+  coffee?: string;
   onGoTo: (step: number) => void;
 }) {
   const choices = [
@@ -119,7 +121,7 @@ function ChoiceTrail({ step, mood, brew, moment, onGoTo }: {
     { number: 3, label: "Momento", value: moment },
   ];
 
-  return <nav className={styles.choiceTrail} aria-label="O caminho das suas escolhas">
+  return <nav className={`${styles.choiceTrail} ${step === 4 ? styles.resultTrail : ""}`} aria-label="O caminho das suas escolhas">
     <small>SEU CAMINHO</small>
     <div>
       {choices.map((choice, index) => {
@@ -131,7 +133,7 @@ function ChoiceTrail({ step, mood, brew, moment, onGoTo }: {
           {index < choices.length - 1 && <i>→</i>}
         </div>;
       })}
-      {step === 4 && <div className={`${styles.trailStep} ${styles.trailCoffee}`}><i>→</i><div><b>4</b><span><small>Seu café</small><strong>Indicação Bispo</strong></span></div></div>}
+      {step === 4 && <div className={`${styles.trailStep} ${styles.trailCoffee}`}><i>→</i><div><b>4</b><span><small>Seu café</small><strong>{coffee}</strong></span></div></div>}
     </div>
   </nav>;
 }
