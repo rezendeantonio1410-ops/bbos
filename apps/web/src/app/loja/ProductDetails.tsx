@@ -10,6 +10,19 @@ import fixStyles from "./product-details-fix.module.css";
 export type ProductStory = StoreProductStory & {
   description: string;
   sensory: { label: string; value: number }[];
+  sensoryDescription?: string;
+  rareDetails?: {
+    producer: string;
+    farm: string;
+    place: string;
+    altitude: string;
+    area: string;
+    score: string;
+    relationship: string;
+    history: string[];
+    varieties: string;
+    gallery: { src: string; alt: string; caption: string }[];
+  };
 };
 
 type Props = {
@@ -52,7 +65,7 @@ export default function ProductDetails({ product, story }: Props) {
 
             <div className={styles.hero} style={{ "--tone": product.tone } as React.CSSProperties}>
               <div className={styles.productImage}>
-                {product.image ? <img src={product.image} alt={`Embalagem do café ${product.name}`} /> : <div className={styles.fallback}>BISPO<br />{product.name}</div>}
+                {product.image ? <img src={product.image} alt={`Embalagem do café ${product.name}`} /> : <div className={styles.fallback}><small>EDIÇÃO LIMITADA</small><b>BISPO</b><span>{product.name}</span><em>{product.weightLabel}</em></div>}
               </div>
               <div className={styles.heroCopy}>
                 <small>{product.tag}</small>
@@ -67,6 +80,25 @@ export default function ProductDetails({ product, story }: Props) {
             </div>
 
             <div className={styles.content}>
+              {story.rareDetails && (
+                <section className={styles.rareIntro}>
+                  <div className={styles.rareLead}>
+                    <small>RARO · SAFRA ATUAL</small>
+                    <h3>Uma raridade escolhida ao longo do tempo.</h3>
+                    <p>{story.rareDetails.relationship}</p>
+                    <span>Poucas unidades disponíveis nesta edição.</span>
+                  </div>
+                  <dl className={styles.traceability}>
+                    <div><dt>Produtor</dt><dd>{story.rareDetails.producer}</dd></div>
+                    <div><dt>Propriedade</dt><dd>{story.rareDetails.farm}</dd></div>
+                    <div><dt>Origem</dt><dd>{story.rareDetails.place}</dd></div>
+                    <div><dt>Altitude</dt><dd>{story.rareDetails.altitude}</dd></div>
+                    <div><dt>Área</dt><dd>{story.rareDetails.area}</dd></div>
+                    <div className={styles.score}><dt>Pontuação</dt><dd>{story.rareDetails.score}</dd></div>
+                  </dl>
+                </section>
+              )}
+
               <article className={styles.reading}>
                 <small>COMO É NA XÍCARA</small>
                 <h3>Sem complicar o café.</h3>
@@ -87,6 +119,45 @@ export default function ProductDetails({ product, story }: Props) {
                 ))}
                 <p>As barras são um guia de sensação — não uma nota de qualidade.</p>
               </aside>
+
+              {story.sensoryDescription && (
+                <article className={styles.sensoryReading}>
+                  <small>LEITURA SENSORIAL COMPLETA</small>
+                  <h3>A xícara em detalhes.</h3>
+                  <p>{story.sensoryDescription}</p>
+                </article>
+              )}
+
+              {story.rareDetails && (
+                <article className={styles.producerStory}>
+                  <div>
+                    <small>A HISTÓRIA DE QUEM PRODUZ</small>
+                    <h3>Alexandre transformou herança em futuro.</h3>
+                    {story.rareDetails.history.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                    <dl>
+                      <div><dt>Variedades cultivadas</dt><dd>{story.rareDetails.varieties}</dd></div>
+                      <div><dt>O que move esta safra</dt><dd>Qualidade de xícara, renda mais estável e um legado para a próxima geração.</dd></div>
+                    </dl>
+                  </div>
+                  {story.rareDetails.gallery[0] && (
+                    <div className={styles.producerPortrait}>
+                      <img src={story.rareDetails.gallery[0].src} alt={story.rareDetails.gallery[0].alt} />
+                      <span>{story.rareDetails.gallery[0].caption}</span>
+                    </div>
+                  )}
+                </article>
+              )}
+
+              {story.rareDetails && (
+                <div className={styles.rareGallery}>
+                  {story.rareDetails.gallery.slice(1).map((photo) => (
+                    <figure key={photo.src}>
+                      <img src={photo.src} alt={photo.alt} />
+                      <figcaption>{photo.caption}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
 
               <blockquote className={styles.founders}>
                 <img src="/brand/founders/jose-rezende.jpg" alt="José Rezende" />

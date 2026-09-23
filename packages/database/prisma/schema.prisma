@@ -607,6 +607,7 @@ model SupplierOriginUnit {
   supplierId          String
   supplier            Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   name                String
+  originType          String                     @default("FARM")
   taxId               String?
   stateRegistration   String?
   country             String                     @default("Brasil")

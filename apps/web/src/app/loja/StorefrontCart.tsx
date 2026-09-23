@@ -97,6 +97,12 @@ const cartProductStories: Record<string, StoreProductStory> = {
     bestFor: "Rituais sem pressa, presentes e quem busca profundidade.",
     brew: "Prensa francesa, espresso ou coado mais concentrado.",
   },
+  raros: {
+    promise: "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
+    founderNote: "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, José e Suzi escolheram este pequeno lote como uma raridade Bispo.",
+    bestFor: "Degustar com atenção, presentear e conhecer a expressão do Norte do Paraná.",
+    brew: "Coado, com água filtrada e preparo cuidadoso.",
+  },
 };
 
 function CartItemStory({ item }: { item: CartItem }) {
