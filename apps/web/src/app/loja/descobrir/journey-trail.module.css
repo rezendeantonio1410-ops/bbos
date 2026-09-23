@@ -65,8 +65,8 @@
 .trailCurrent b { box-shadow: 0 0 0 5px #173c2e14; }
 .trailCurrent strong { color: #173c2e; }
 .trailCoffee { flex: .75; }
-.trailCoffee b { border-color: #8e2721; background: #8e2721; color: #fff; }
-.trailCoffee strong { color: #8e2721; }
+.trailCoffee b { border-color: #173c2e; background: #173c2e; color: #fff; }
+.trailCoffee strong { color: #173c2e; }
 
 .resultHeading {
   max-width: 620px;
@@ -132,7 +132,7 @@
 }
 
 .grindGuide > div strong { font-size: 16px; }
-.grindGuide > div b { font-size: 11px; color: #8e2721; }
+.grindGuide > div b { font-size: 11px; color: #173c2e; }
 .grindGuide > p { margin: 8px 0 0; font-size: 9px; line-height: 1.45; opacity: .7; }
 .grindGuide em { font-style: normal; font-weight: 800; }
 .grindGuide footer { margin-top: 9px; padding-top: 8px; border-top: 1px solid #ece7df; font-size: 8px; line-height: 1.4; }
