@@ -156,8 +156,22 @@
   .trailStep strong { max-width: none; font-size: 8px; line-height: 1.15; white-space: normal; }
   .trailCoffee { display: none; }
   .resultHeading { font-size: 36px !important; }
-  .resultTrail > div { grid-template-columns: 1fr; }
-  .resultTrail .trailStep { display: flex; padding: 7px 9px; }
+  .resultTrail > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .resultTrail .trailStep {
+    display: flex;
+    min-height: 58px;
+    padding: 7px 9px;
+  }
+  .resultTrail .trailStep > div,
+  .resultTrail .trailStep > button {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
   .resultTrail .trailStep span { display: grid; }
   .resultTrail .trailStep strong { max-width: none; }
   .versatileChoice { min-height: 100px !important; }
