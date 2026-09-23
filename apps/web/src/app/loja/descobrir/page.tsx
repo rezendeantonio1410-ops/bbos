@@ -43,6 +43,13 @@ const products = {
   sublime: { name: "Sublime", line: "ÉPICOS", price: "R$ 84", profile: "Rapadura · Caramelo · Doçura profunda", image: "/brand/products/sublime-treated.webp", copy: "Doçura profunda e corpo envolvente para um ritual sem pressa.", id: "sublime" },
 };
 
+const lineColors = {
+  GOURMET: { background: "#E9BB00", foreground: "#102018" },
+  "CLÁSSICOS": { background: "#F96D01", foreground: "#102018" },
+  "ÉPICOS": { background: "#5C7D5F", foreground: "#FFFFFF" },
+  RAROS: { background: "#9D3B35", foreground: "#FFFFFF" },
+} as const;
+
 export default function Page() {
   const [step, setStep] = useState(1);
   const [mood, setMood] = useState<Mood>();
@@ -62,6 +69,7 @@ export default function Page() {
   const selectedMood = moods.find((item) => item.id === mood);
   const selectedBrew = brews.find((item) => item.id === brew);
   const selectedMoment = moments.find((item) => item.id === moment);
+  const lineColor = lineColors[recommendation.line as keyof typeof lineColors];
 
   const trail = <ChoiceTrail
     step={step}
@@ -84,7 +92,7 @@ export default function Page() {
       <article className={styles.simpleProduct}>
         <img src={recommendation.image} alt={`Embalagem do café ${recommendation.name}`} />
         <div><small>INDICAMOS · {recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>{recommendation.copy}</p><div className={styles.matchReason}><small>POR QUE ELE COMBINA</small><span>{selectedMood?.name}</span><i>+</i><span>{selectedBrew?.name}</span><i>+</i><span>{selectedMoment?.name}</span></div>{selectedBrew && <div className={styles.grindGuide}><div><small>MOAGEM PARA {selectedBrew.name.toUpperCase()}</small><strong>{selectedBrew.grind}</strong><b>{selectedBrew.particle}</b></div><p><em>Referência visual:</em> {selectedBrew.texture}. {selectedBrew.note}</p><footer><span>CAFÉ EM GRÃOS</span> Para preservar aromas e sabor, moa apenas a quantidade que será preparada.</footer></div>}<b>{recommendation.price} <small>· 500 g</small></b>
-          <div className={styles.resultActions}><Link href={`/loja#${recommendation.id}`}>Ver e comprar →</Link><button type="button" onClick={restart}>Descobrir outro perfil</button></div>
+          <div className={styles.resultActions}><Link href={`/loja#${recommendation.id}`} style={{ background: lineColor.background, color: lineColor.foreground }}>Ver e comprar →</Link><button type="button" onClick={restart}>Descobrir outro perfil</button></div>
         </div>
       </article>
     </section></Shell>;
