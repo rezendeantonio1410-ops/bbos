@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import baseStyles from "./page.module.css";
 import guideStyles from "./simple-guide.module.css";
+import trailStyles from "./journey-trail.module.css";
 import brand from "./brand.module.css";
 
-const styles = { ...baseStyles, ...guideStyles };
+const styles = { ...baseStyles, ...guideStyles, ...trailStyles };
 
 type Mood = "comfort" | "intense" | "fresh" | "discover";
 type Brew = "filter" | "espresso" | "press" | "any";
@@ -37,7 +38,7 @@ const products = {
   intenso: { name: "Intenso", line: "GOURMET", price: "R$ 52", profile: "Corpo · Presença · Limpeza", image: "/brand/products/intenso-treated.webp", copy: "Mais intensidade, sem esconder a limpeza e o equilíbrio.", id: "intenso" },
   caramelo: { name: "Caramelo", line: "CLÁSSICOS", price: "R$ 68", profile: "Caramelo · Chocolate · Equilíbrio", image: "/brand/products/caramelo-treated.webp", copy: "Doçura reconhecível e conforto desde o primeiro gole.", id: "caramelo" },
   doce: { name: "Doce de Leite", line: "CLÁSSICOS", price: "R$ 68", profile: "Mascavo · Doce de leite · Alfajor", image: "/brand/products/doce-de-leite-treated.webp", copy: "Uma xícara gulosa, macia e cheia de referências afetivas.", id: "doce-de-leite" },
-  singular: { name: "Singular", line: "ÉPICOS", price: "R$ 84", profile: "Frutado · Complexo · Evolutivo", image: "/brand/products/singular-treated.webp", copy: "Mais camadas para descobrir enquanto a xícara muda e esfria.", id: "singular" },
+  singular: { name: "Singular", line: "ÉPICOS", price: "R$ 84", profile: "Frutado · Complexo · Evolutivo", image: "/brand/products/singular-treated.webp", copy: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.", id: "singular" },
   sublime: { name: "Sublime", line: "ÉPICOS", price: "R$ 84", profile: "Rapadura · Caramelo · Doçura profunda", image: "/brand/products/sublime-treated.webp", copy: "Doçura profunda e corpo envolvente para um ritual sem pressa.", id: "sublime" },
 };
 
@@ -57,17 +58,30 @@ export default function Page() {
 
   const restart = () => { setStep(1); setMood(undefined); setBrew(undefined); setMoment(undefined); };
 
+  const selectedMood = moods.find((item) => item.id === mood);
+  const selectedBrew = brews.find((item) => item.id === brew);
+  const selectedMoment = moments.find((item) => item.id === moment);
+
+  const trail = <ChoiceTrail
+    step={step}
+    mood={selectedMood?.name}
+    brew={selectedBrew?.name}
+    moment={selectedMoment?.name}
+    onGoTo={(target) => setStep(target)}
+  />;
+
   if (step === 4) {
     return <Shell><section className={styles.simpleResult}>
       <div className={styles.resultCopy}>
         <small>LEITURA DO BISPO · SUA ESCOLHA</small>
-        <h1>Eu começaria por este.</h1>
-        <p>Você pediu uma experiência {moods.find((x) => x.id === mood)?.name.toLowerCase()}, preparada em {brews.find((x) => x.id === brew)?.name.toLowerCase()} e pensada para {moments.find((x) => x.id === moment)?.name.toLowerCase()}.</p>
+        <h1>Seu caminho chegou ao {recommendation.name}.</h1>
+        <p>Você pediu uma experiência {selectedMood?.name.toLowerCase()}, preparada em {selectedBrew?.name.toLowerCase()} e pensada para {selectedMoment?.name.toLowerCase()}.</p>
+        {trail}
         <div className={styles.bishopNote}><b>Bispo</b><span>Não existe resposta certa. Existe o café que faz mais sentido para a xícara que você quer agora.</span></div>
       </div>
       <article className={styles.simpleProduct}>
         <img src={recommendation.image} alt={`Embalagem do café ${recommendation.name}`} />
-        <div><small>{recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>{recommendation.copy}</p><b>{recommendation.price} <small>· 500 g</small></b>
+        <div><small>INDICAMOS · {recommendation.line}</small><h2>{recommendation.name}</h2><strong>{recommendation.profile}</strong><p>{recommendation.copy}</p><div className={styles.matchReason}><small>POR QUE ELE COMBINA</small><span>{selectedMood?.name}</span><i>+</i><span>{selectedBrew?.name}</span><i>+</i><span>{selectedMoment?.name}</span></div><b>{recommendation.price} <small>· 500 g</small></b>
           <div className={styles.resultActions}><Link href={`/loja#${recommendation.id}`}>Ver e comprar →</Link><button type="button" onClick={restart}>Descobrir outro perfil</button></div>
         </div>
       </article>
@@ -82,12 +96,44 @@ export default function Page() {
       <p>{step === 1 ? "Sem aroma versus sabor. Escolha apenas pelo que dá vontade agora." : step === 2 ? "Isso ajuda o Bispo a encontrar um perfil que funcione melhor na sua rotina." : "Última pergunta — depois eu mostro uma escolha e explico o porquê."}</p>
     </div>
 
+    {trail}
+
     {step === 1 && <div className={styles.moodGrid}>{moods.map((item) => <button key={item.id} type="button" style={{ "--tone": item.tone } as React.CSSProperties} onClick={() => { setMood(item.id); setStep(2); }}><img src={item.image} alt="" /><span><b>{item.name}</b><small>{item.hint}</small></span></button>)}</div>}
     {step === 2 && <div className={styles.choiceGrid}>{brews.map((item) => <button key={item.id} type="button" onClick={() => { setBrew(item.id); setStep(3); }}><i>{item.icon}</i><span><b>{item.name}</b><small>{item.hint}</small></span></button>)}</div>}
     {step === 3 && <div className={styles.momentGrid}>{moments.map((item) => <button key={item.id} type="button" onClick={() => { setMoment(item.id); setStep(4); }}><b>{item.name}</b><small>{item.hint}</small><span>escolher →</span></button>)}</div>}
 
     <div className={styles.simpleFooter}>{step > 1 ? <button type="button" onClick={() => setStep(step - 1)}>← voltar uma pergunta</button> : <span />}<b>Leva menos de um minuto.</b></div>
   </section></Shell>;
+}
+
+function ChoiceTrail({ step, mood, brew, moment, onGoTo }: {
+  step: number;
+  mood?: string;
+  brew?: string;
+  moment?: string;
+  onGoTo: (step: number) => void;
+}) {
+  const choices = [
+    { number: 1, label: "Sensação", value: mood },
+    { number: 2, label: "Preparo", value: brew },
+    { number: 3, label: "Momento", value: moment },
+  ];
+
+  return <nav className={styles.choiceTrail} aria-label="O caminho das suas escolhas">
+    <small>SEU CAMINHO</small>
+    <div>
+      {choices.map((choice, index) => {
+        const completed = Boolean(choice.value);
+        const current = step === choice.number;
+        const canReturn = completed && choice.number < step;
+        return <div key={choice.number} className={`${styles.trailStep} ${completed ? styles.trailDone : ""} ${current ? styles.trailCurrent : ""}`}>
+          {canReturn ? <button type="button" onClick={() => onGoTo(choice.number)} aria-label={`Alterar ${choice.label.toLowerCase()}`}><b>{choice.number}</b><span><small>{choice.label}</small><strong>{choice.value}</strong></span></button> : <div><b>{completed ? "✓" : choice.number}</b><span><small>{choice.label}</small><strong>{choice.value || (current ? "Escolha agora" : "Próxima escolha")}</strong></span></div>}
+          {index < choices.length - 1 && <i>→</i>}
+        </div>;
+      })}
+      {step === 4 && <div className={`${styles.trailStep} ${styles.trailCoffee}`}><i>→</i><div><b>4</b><span><small>Seu café</small><strong>Indicação Bispo</strong></span></div></div>}
+    </div>
+  </nav>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

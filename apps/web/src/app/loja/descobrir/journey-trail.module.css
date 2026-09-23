@@ -1,0 +1,103 @@
+.choiceTrail {
+  margin: 0 0 22px;
+  padding: 14px 16px;
+  border: 1px solid #e3ded6;
+  border-radius: 18px;
+  background: #ffffffa8;
+  box-shadow: 0 10px 30px #2d1c1209;
+}
+
+.choiceTrail > small {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .16em;
+  opacity: .48;
+}
+
+.choiceTrail > div {
+  display: flex;
+  align-items: stretch;
+}
+
+.trailStep {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+}
+
+.trailStep > div,
+.trailStep > button {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.trailStep > button { cursor: pointer; }
+.trailStep > button:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+
+.trailStep b {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 1px solid #d7d0c6;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  font-size: 9px;
+}
+
+.trailStep span { min-width: 0; display: grid; gap: 2px; }
+.trailStep span small { font-size: 7px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; opacity: .45; }
+.trailStep strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 750; }
+.trailStep > i { margin: 0 9px; color: #b7afa5; font-size: 12px; font-style: normal; }
+.trailDone b { border-color: #173c2e; background: #173c2e; color: #fff; }
+.trailCurrent b { box-shadow: 0 0 0 5px #173c2e14; }
+.trailCurrent strong { color: #173c2e; }
+.trailCoffee { flex: .75; }
+.trailCoffee b { border-color: #8e2721; background: #8e2721; color: #fff; }
+.trailCoffee strong { color: #8e2721; }
+
+.matchReason {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f1f5ef;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.matchReason > small { width: 100%; font-size: 7px; font-weight: 850; letter-spacing: .13em; color: #173c2e; }
+.matchReason span { font-size: 9px; font-weight: 750; }
+.matchReason i { font-size: 9px; font-style: normal; opacity: .35; }
+
+@media (max-width: 700px) {
+  .choiceTrail { padding: 12px; margin-bottom: 16px; overflow: hidden; }
+  .choiceTrail > div { align-items: center; }
+  .trailStep { flex: 0 1 auto; }
+  .trailStep span { display: none; }
+  .trailStep > div,
+  .trailStep > button { flex: 0 0 auto; }
+  .trailStep > i { margin: 0 7px; }
+  .trailStep b { width: 27px; height: 27px; flex-basis: 27px; }
+  .trailDone,
+  .trailCurrent { flex: 1; }
+  .trailDone span,
+  .trailCurrent span { display: grid; }
+  .trailDone strong,
+  .trailCurrent strong { max-width: 112px; }
+  .trailCoffee { flex: 1; }
+  .matchReason { padding: 10px; }
+}
