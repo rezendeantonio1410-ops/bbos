@@ -118,6 +118,12 @@ export default function PurchaseFormV2Page() {
   const [cultivarId, setCultivarId] = useState("");
   const [supplierContacts, setSupplierContacts] = useState<Contact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState("");
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactRole, setNewContactRole] = useState("");
+  const [newContactWhatsapp, setNewContactWhatsapp] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
   const [harvest, setHarvest] = useState(currentHarvest());
   const [packagingType, setPackagingType] = useState("BAG_60_KG");
   const [volumes, setVolumes] = useState(1);
@@ -206,6 +212,39 @@ export default function PurchaseFormV2Page() {
       })
       .catch(() => setSupplierContacts([]));
   }, [supplierId, references?.suppliers]);
+
+  const createContact = async () => {
+    if (!supplierId || !newContactName.trim() || savingContact) return;
+    setSavingContact(true);
+    setError("");
+    try {
+      const created = await req<Contact>(`${API}/suppliers/${supplierId}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newContactName.trim(),
+          role: newContactRole.trim() || undefined,
+          whatsapp: newContactWhatsapp.trim() || undefined,
+          email: newContactEmail.trim() || undefined,
+          isPrimary: supplierContacts.length === 0,
+          canConfirmBusiness: true,
+          active: true,
+        }),
+      });
+      setSupplierContacts((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSelectedContactId(created.id);
+      setShowNewContact(false);
+      setNewContactName("");
+      setNewContactRole("");
+      setNewContactWhatsapp("");
+      setNewContactEmail("");
+      setMessage(`Contato ${created.name} cadastrado e selecionado.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o contato.");
+    } finally {
+      setSavingContact(false);
+    }
+  };
 
   useEffect(() => {
     if (paymentTermType === "CASH") setInstallmentCount(1);
@@ -341,8 +380,9 @@ export default function PurchaseFormV2Page() {
           <div className="rounded-xl border bg-stone-50 p-4 sm:col-span-2 lg:col-span-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-xs font-bold uppercase text-stone-500">Contato comercial</p><b className="mt-1 block text-sm">{selectedContact?.name ?? "Nenhum contato autorizado selecionado"}</b><p className="text-xs text-stone-500">{selectedContact?.role ?? ""}{selectedContact?.whatsapp ? ` · ${selectedContact.whatsapp}` : selectedContact?.email ? ` · ${selectedContact.email}` : ""}</p></div>
-              <select className="rounded-lg border bg-white px-3 py-2 text-xs" value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}><option value="">Selecionar contato</option>{supplierContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select>
+              <div className="flex flex-wrap gap-2"><select className="rounded-lg border bg-white px-3 py-2 text-xs" value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}><option value="">Selecionar contato</option>{supplierContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.canConfirmBusiness ? " ✓" : ""}</option>)}</select><button type="button" onClick={() => setShowNewContact((value) => !value)} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-forest-700">+ Cadastrar contato</button></div>
             </div>
+            {showNewContact && <div className="mt-3 grid gap-2 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Nome *"><input className={input} value={newContactName} onChange={(e) => setNewContactName(e.target.value)} /></Field><Field label="Função"><input className={input} value={newContactRole} onChange={(e) => setNewContactRole(e.target.value)} /></Field><Field label="WhatsApp"><input className={input} value={newContactWhatsapp} onChange={(e) => setNewContactWhatsapp(e.target.value)} /></Field><Field label="E-mail"><input type="email" className={input} value={newContactEmail} onChange={(e) => setNewContactEmail(e.target.value)} /></Field><div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2"><button type="button" onClick={() => setShowNewContact(false)} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">Cancelar</button><button type="button" disabled={!newContactName.trim() || savingContact} onClick={() => void createContact()} className="rounded-lg bg-forest-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{savingContact ? "Salvando..." : "Salvar e selecionar"}</button></div></div>}
           </div>
         </Section>
 
