@@ -52,6 +52,14 @@ services:
         value: BBOS Bispo Coffees (jrezende@bispocoffees.com)
       - key: SHIPPING_SENDER_DOCUMENT
         sync: false
+      - key: INTEGRATION_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: MERCADO_LIVRE_CLIENT_ID
+        sync: false
+      - key: MERCADO_LIVRE_CLIENT_SECRET
+        sync: false
+      - key: MERCADO_LIVRE_REDIRECT_URI
+        sync: false
 
   - type: web
     name: bbos-web-staging

@@ -65,6 +65,9 @@ import { StorefrontPartnersController } from "./storefront-partners.controller";
 import { StorefrontCatalogController } from "./storefront-catalog.controller";
 import { FiscalInboundController } from "./fiscal-inbound.controller";
 import { FiscalInboundService } from "./fiscal-inbound.service";
+import { MarketplacesController } from "./marketplaces.controller";
+import { MarketplacesService } from "./marketplaces.service";
+import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
 
 @Module({
   controllers: [
@@ -107,6 +110,7 @@ import { FiscalInboundService } from "./fiscal-inbound.service";
     StorefrontPartnersController,
     StorefrontCatalogController,
     FiscalInboundController,
+    MarketplacesController,
   ],
   providers: [
     DashboardService,
@@ -134,6 +138,8 @@ import { FiscalInboundService } from "./fiscal-inbound.service";
     MelhorEnvioAuthService,
     StorefrontCouponsService,
     FiscalInboundService,
+    MarketplacesService,
+    MercadoLivreService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

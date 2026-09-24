@@ -1,7 +1,13 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 import { CustomerNotificationService } from "./customer-notification.service";
 import { FiscalInboundService } from "./fiscal-inbound.service";
+import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
 
 @Injectable()
 export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -13,6 +19,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly bling: BlingOutboxService,
     private readonly notifications: CustomerNotificationService,
     private readonly fiscalInbound: FiscalInboundService,
+    private readonly mercadoLivre: MercadoLivreService,
   ) {}
 
   onModuleInit() {
@@ -25,7 +32,8 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
-    while (this.running) await new Promise((resolve) => setTimeout(resolve, 50));
+    while (this.running)
+      await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   private async tick() {
@@ -35,6 +43,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
       await this.bling.processNext();
       await this.notifications.processNext();
       await this.fiscalInbound.syncConfiguredCompanies();
+      await this.mercadoLivre.syncConnectedCompanies();
     } catch (error) {
       this.logger.error(error instanceof Error ? error.message : String(error));
     } finally {
