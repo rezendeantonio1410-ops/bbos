@@ -121,8 +121,8 @@ export default function PurchaseFormV2Page() {
   const [harvest, setHarvest] = useState(currentHarvest());
   const [packagingType, setPackagingType] = useState("BAG_60_KG");
   const [volumes, setVolumes] = useState(1);
-  const [unitWeight, setUnitWeight] = useState(30);
-  const [priceKg, setPriceKg] = useState(0);
+  const [unitWeight, setUnitWeight] = useState(60);
+  const [pricePerBag, setPricePerBag] = useState(0);
   const [brokerId, setBrokerId] = useState("");
   const [brokerCommissionPercent, setBrokerCommissionPercent] = useState(0);
   const [paymentTermType, setPaymentTermType] = useState("CASH");
