@@ -23,8 +23,13 @@ export class MelhorEnvioAuthService {
     const clientId = process.env.MELHOR_ENVIO_CLIENT_ID?.trim();
     const clientSecret = process.env.MELHOR_ENVIO_CLIENT_SECRET?.trim();
     const redirectUri = process.env.MELHOR_ENVIO_REDIRECT_URI?.trim();
+    // Preserve credentials encrypted before the shared integration key existed.
+    // A dedicated key can be introduced later without coupling Melhor Envio to
+    // Mercado Livre token rotation.
     const encryptionSecret = (
-      process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY || process.env.BLING_TOKEN_ENCRYPTION_KEY
+      process.env.MELHOR_ENVIO_TOKEN_ENCRYPTION_KEY ||
+      process.env.BLING_TOKEN_ENCRYPTION_KEY ||
+      process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY
     )?.trim();
     if (!clientId || !clientSecret || !redirectUri || !encryptionSecret) {
       throw new Error(
