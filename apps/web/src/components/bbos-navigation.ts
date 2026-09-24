@@ -15,6 +15,7 @@ import {
   PlugZap,
   Settings,
   ShoppingBag,
+  Store,
   UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -65,6 +66,7 @@ export const bbosNavigation: BbosNavGroup[] = [
       { href: "/pedidos", label: "Pedidos", description: "Cotação, promessa, reserva e entrega", icon: ShoppingBag, roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"], keywords: ["pedido", "venda", "estoque"] },
       { href: "/vendas", label: "Vendas", description: "Desempenho e carteira comercial", icon: BarChart3, roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"], keywords: ["faturamento", "receita"] },
       { href: "/commerce", label: "Commerce", description: "Canais, preços e governança", icon: Globe2, roles: ["ADMIN", "EXECUTIVE", "SALES"], keywords: ["preco", "canal", "tabela"] },
+      { href: "/commerce/marketplaces", label: "Marketplaces", description: "Pedidos, anúncios e conciliação", icon: Store, roles: ["ADMIN", "EXECUTIVE", "SALES"], keywords: ["mercado livre", "marketplace", "anuncio", "repasse"] },
     ],
   },
   {
