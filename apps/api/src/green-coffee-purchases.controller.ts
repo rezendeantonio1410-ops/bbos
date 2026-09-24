@@ -31,6 +31,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuthService } from "./auth.service";
+import { publicAppUrl } from "./public-app-url";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
 import {
   calculateBrokerCommission,
@@ -1876,12 +1877,7 @@ export class GreenCoffeePurchasesController {
           },
         },
       });
-      const base =
-        process.env.PUBLIC_APP_URL ??
-        process.env.PUBLIC_WEB_URL ??
-        process.env.WEB_URL?.split(",")[0] ??
-        "http://localhost:3000";
-      const url = `${base.replace(/\/$/, "")}/aceite-compra/${token}`;
+      const url = `${publicAppUrl()}/aceite-compra/${token}`;
       const message = `Olá, ${contact}.\n\nA Bispo Coffees disponibilizou a Ficha de Compra ${purchase.purchaseNumber} para sua conferência.\n\nAcesse o link abaixo para revisar as condições e confirmar seu aceite:\n\n${url}\n\nBispo Coffees`;
       return {
         acceptanceId: acceptance.id,
