@@ -119,7 +119,7 @@ export default function PurchaseFormV2Page() {
   const [supplierContacts, setSupplierContacts] = useState<Contact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState("");
   const [harvest, setHarvest] = useState(currentHarvest());
-  const [packagingType, setPackagingType] = useState("BAG_30_KG");
+  const [packagingType, setPackagingType] = useState("BAG_60_KG");
   const [volumes, setVolumes] = useState(1);
   const [unitWeight, setUnitWeight] = useState(30);
   const [priceKg, setPriceKg] = useState(0);
@@ -221,7 +221,7 @@ export default function PurchaseFormV2Page() {
   const cultivar = availableCultivars.find((item) => item.id === cultivarId);
   const selectedContact = supplierContacts.find((item) => item.id === selectedContactId);
   const totalWeight = volumes * unitWeight;
-  const totalValue = totalWeight * priceKg;
+  const priceKg = unitWeight > 0 ? pricePerBag / unitWeight : 0;\n  const totalValue = volumes * pricePerBag;
   const selectedBroker = brokers.find((item) => item.id === brokerId);
   const brokerCommissionAmount = Math.round(totalValue * brokerCommissionPercent) / 100;
   const totalOperationCost = totalValue + brokerCommissionAmount;
@@ -356,14 +356,14 @@ export default function PurchaseFormV2Page() {
 
         <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
           <Field label="Acondicionamento"><select className={input} value={packagingType} onChange={(e) => { const next = e.target.value; setPackagingType(next); const weight = packagingWeights[next] ?? null; if (weight !== null) setUnitWeight(weight); }}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
-          <Field label="Número de volumes"><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
+          <Field label={packagingType === "BAG_60_KG" ? "Quantidade de sacas" : "Número de volumes"}><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
           <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" className={input} value={unitWeight} readOnly={packagingWeights[packagingType] !== null} onChange={(e) => setUnitWeight(Number(e.target.value))} /></Field>
           <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" min="0" step=".01" defaultValue="0" className={input} /></Field>
           <Metric label="Peso total contratado" value={`${totalWeight.toLocaleString("pt-BR")} kg`} />
         </Section>
 
         <Section title="D · Comercial" tone="commercial" icon={Handshake}>
-          <Field label="Preço/kg"><input required type="number" min=".01" step=".01" className={input} value={priceKg || ""} onChange={(e) => setPriceKg(Number(e.target.value))} /></Field>
+          <Field label={packagingType === "BAG_60_KG" ? "Preço por saca de 60 kg" : "Preço por volume"}><input required type="number" min=".01" step=".01" className={input} value={pricePerBag || ""} onChange={(e) => setPricePerBag(Number(e.target.value))} /></Field>\n          <Metric label="Equivalente fiscal" value={`${brl(priceKg)}/kg`} />
           <Metric label="Valor total da compra" value={brl(totalValue)} />
           <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
           <Field label="Condição de pagamento"><select className={input} value={paymentTermType} onChange={(e) => setPaymentTermType(e.target.value)}><option value="CASH">À vista</option><option value="DAYS_AFTER_PURCHASE">X dias</option><option value="FIXED_DATE">Data definida</option><option value="INSTALLMENTS">Parcelado</option><option value="ADVANCE_AND_BALANCE">Antecipado + saldo</option><option value="AFTER_RECEIPT">Após recebimento</option><option value="CUSTOM">Customizado</option></select></Field>
@@ -390,7 +390,7 @@ export default function PurchaseFormV2Page() {
             <Summary label="Origem" value={`${originUnit?.name ?? "—"} · ${harvest}`} />
             <Summary label="Café" value={`${species?.name ?? "—"} · ${cultivar?.name ?? "—"}`} />
             <Summary label="Quantidade" value={`${volumes} × ${unitWeight} kg = ${totalWeight} kg`} />
-            <Summary label="Comercial" value={`${brl(priceKg)}/kg · ${brl(totalValue)}`} />
+            <Summary label="Comercial" value={`${brl(pricePerBag)}/saca · ${brl(priceKg)}/kg · ${brl(totalValue)}`} />
             <Summary label="Corretagem" value={selectedBroker ? `${selectedBroker.name} · ${brokerCommissionPercent.toFixed(2)}% · ${brl(brokerCommissionAmount)}` : "Sem corretor"} />
             <Summary label="Custo total da operação" value={brl(totalOperationCost)} />
             <Summary label="Valor ao fornecedor" value={brl(totalValue)} />
