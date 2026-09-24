@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { publicAppUrl } from "./public-app-url";
 
 type EventSource = "BBOS" | "BLING" | "MELHOR_ENVIO" | "CARRIER" | "ADMIN";
 
@@ -24,10 +25,6 @@ export class SalesOrderCustomerLifecycleService {
     const a = Buffer.from(expected);
     const b = Buffer.from(supplied || "");
     return a.length === b.length && timingSafeEqual(a, b);
-  }
-
-  private publicBase() {
-    return (process.env.PUBLIC_APP_URL ?? process.env.PUBLIC_WEB_URL ?? process.env.WEB_URL?.split(",")[0] ?? "http://localhost:3000").replace(/\/$/, "");
   }
 
   async record(
@@ -100,7 +97,7 @@ export class SalesOrderCustomerLifecycleService {
             eventType,
             title,
             detail,
-            trackingUrl: token ? `${this.publicBase()}/pedido/acompanhar/${order.id}?token=${encodeURIComponent(token)}` : null,
+            trackingUrl: token ? `${publicAppUrl()}/pedido/acompanhar/${order.id}?token=${encodeURIComponent(token)}` : null,
             customer: { name: order.customerName, phone: order.phone },
             delivery: {
               street: String(addressMatch?.[1] || address),
