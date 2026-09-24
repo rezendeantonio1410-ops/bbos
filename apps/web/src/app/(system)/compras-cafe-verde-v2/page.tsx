@@ -279,7 +279,7 @@ export default function PurchaseFormV2Page() {
     });
   }, [daysAfterPurchase, firstDueDate, installmentCount, paymentTermType, totalValue]);
 
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>, action: "SUBMIT" | "APPROVE" = "SUBMIT") => {
     event.preventDefault();
     if (submitting || submittedNumber) return;
     setError("");
@@ -296,7 +296,7 @@ export default function PurchaseFormV2Page() {
           professionalSampleId: approvedSample?.id,
           originUnitId: originUnit.id,
           idempotencyKey: crypto.randomUUID(),
-          action: "SUBMIT",
+          action,
           department: "COMPRAS",
           approverName: form.get("approverName"),
           purchasedAt: new Date().toISOString(),
@@ -339,8 +339,8 @@ export default function PurchaseFormV2Page() {
       });
       setSubmittedPurchaseId(result.id);
       setSubmittedNumber(result.purchaseNumber);
-      setSubmittedStatus(result.approvalStatus ?? result.status ?? "PENDING_APPROVAL");
-      setMessage(`${result.purchaseNumber} enviada para aprovação.`);
+      setSubmittedStatus(result.approvalStatus ?? result.status ?? (action === "APPROVE" ? "APPROVED" : "PENDING_APPROVAL"));
+      setMessage(action === "APPROVE" ? `${result.purchaseNumber} registrada como compra já realizada. Aprovação comercial dispensada pela alçada do usuário.` : `${result.purchaseNumber} enviada para aprovação.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Falha ao salvar compra.");
     } finally {
@@ -447,7 +447,7 @@ export default function PurchaseFormV2Page() {
 
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Link href="/compras-cafe-verde" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Cancelar</Link>
-          <Button type="submit" disabled={submitting || Boolean(submittedNumber)} aria-disabled={submitting || Boolean(submittedNumber)}>{submitting ? "Enviando..." : submittedNumber ? "✓ Enviada para aprovação" : "Enviar para aprovação"}</Button>
+          <button type="button" disabled={submitting || Boolean(submittedNumber)} onClick={(event) => { const form = event.currentTarget.closest("form"); if (form) void submit({ preventDefault: () => undefined, currentTarget: form } as unknown as React.FormEvent<HTMLFormElement>, "APPROVE"); }} className="min-h-11 rounded-xl border border-forest-800 bg-white px-4 text-sm font-bold text-forest-900 disabled:opacity-50">{submitting ? "Registrando..." : "Compra já realizada · Tenho NF"}</button>\n          <Button type="submit" disabled={submitting || Boolean(submittedNumber)} aria-disabled={submitting || Boolean(submittedNumber)}>{submitting ? "Enviando..." : submittedNumber ? "✓ Registrada" : "Enviar para aprovação"}</Button>
         </div>
       </form>
     </div>
