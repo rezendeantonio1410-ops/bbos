@@ -221,7 +221,8 @@ export default function PurchaseFormV2Page() {
   const cultivar = availableCultivars.find((item) => item.id === cultivarId);
   const selectedContact = supplierContacts.find((item) => item.id === selectedContactId);
   const totalWeight = volumes * unitWeight;
-  const priceKg = unitWeight > 0 ? pricePerBag / unitWeight : 0;\n  const totalValue = volumes * pricePerBag;
+  const priceKg = unitWeight > 0 ? pricePerBag / unitWeight : 0;
+  const totalValue = volumes * pricePerBag;
   const selectedBroker = brokers.find((item) => item.id === brokerId);
   const brokerCommissionAmount = Math.round(totalValue * brokerCommissionPercent) / 100;
   const totalOperationCost = totalValue + brokerCommissionAmount;
@@ -363,7 +364,8 @@ export default function PurchaseFormV2Page() {
         </Section>
 
         <Section title="D · Comercial" tone="commercial" icon={Handshake}>
-          <Field label={packagingType === "BAG_60_KG" ? "Preço por saca de 60 kg" : "Preço por volume"}><input required type="number" min=".01" step=".01" className={input} value={pricePerBag || ""} onChange={(e) => setPricePerBag(Number(e.target.value))} /></Field>\n          <Metric label="Equivalente fiscal" value={`${brl(priceKg)}/kg`} />
+          <Field label={packagingType === "BAG_60_KG" ? "Preço por saca de 60 kg" : "Preço por volume"}><input required type="number" min=".01" step=".01" className={input} value={pricePerBag || ""} onChange={(e) => setPricePerBag(Number(e.target.value))} /></Field>
+          <Metric label="Equivalente fiscal" value={`${brl(priceKg)}/kg`} />
           <Metric label="Valor total da compra" value={brl(totalValue)} />
           <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
           <Field label="Condição de pagamento"><select className={input} value={paymentTermType} onChange={(e) => setPaymentTermType(e.target.value)}><option value="CASH">À vista</option><option value="DAYS_AFTER_PURCHASE">X dias</option><option value="FIXED_DATE">Data definida</option><option value="INSTALLMENTS">Parcelado</option><option value="ADVANCE_AND_BALANCE">Antecipado + saldo</option><option value="AFTER_RECEIPT">Após recebimento</option><option value="CUSTOM">Customizado</option></select></Field>
