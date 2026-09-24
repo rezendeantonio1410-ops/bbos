@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { Printer } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/api-url";
 
 type Customer = {
   id: string;
@@ -51,6 +52,12 @@ type Order = {
   notes?: string | null;
   customer: { id: string; name: string };
   items: OrderItem[];
+};
+
+type CustomerApproval = {
+  status: string;
+  acceptedByName?: string | null;
+  acceptedAt?: string | null;
 };
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -102,6 +109,7 @@ export default function OrderDocumentV2() {
   const id = params?.id;
   const [order, setOrder] = useState<Order | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [approval, setApproval] = useState<CustomerApproval | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -112,9 +120,18 @@ export default function OrderDocumentV2() {
       fetch("/api/customers", { credentials: "include", cache: "no-store", signal: controller.signal }),
     ])
       .then(async ([nextOrder, customerResponse]) => {
-        const customers = customerResponse.ok ? ((await customerResponse.json()) as Customer[]) : [];
+        const [customers, approvalResponse] = await Promise.all([
+          customerResponse.ok ? (customerResponse.json() as Promise<Customer[]>) : Promise.resolve([]),
+          fetch(`${getApiBaseUrl()}/sales-order-approvals/${encodeURIComponent(nextOrder.id)}/history`, {
+            credentials: "include",
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+        ]);
+        const approvals = approvalResponse.ok ? ((await approvalResponse.json()) as CustomerApproval[]) : [];
         setOrder(nextOrder);
         setCustomer(customers.find((item) => item.id === nextOrder.customer.id) ?? null);
+        setApproval(approvals.find((item) => item.status === "APPROVED") ?? null);
         setState("ready");
       })
       .catch((error) => {
@@ -127,6 +144,11 @@ export default function OrderDocumentV2() {
   const businessNumber = order?.orderNumber ?? order?.code ?? "Pedido-Bispo";
   const provisional = order?.status === "DRAFT";
   const fileName = `${businessNumber}${provisional ? "-PROVISORIO" : ""}.pdf`;
+  const acceptanceText = useMemo(() => {
+    if (!approval?.acceptedByName || !approval.acceptedAt) return null;
+    const acceptedAt = new Date(approval.acceptedAt);
+    return `Confirmado por ${approval.acceptedByName} às ${acceptedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} em ${acceptedAt.toLocaleDateString("pt-BR")}`;
+  }, [approval]);
 
   useEffect(() => {
     if (!order) return;
@@ -187,6 +209,7 @@ export default function OrderDocumentV2() {
             <p className="mt-1 text-[26px] font-black tracking-tight text-[#0E191D]">{businessNumber}</p>
             <p className="mt-2 text-[10px] text-stone-500">Emitido em {date.format(new Date(order.orderedAt))}</p>
             <span className={`mt-4 inline-flex rounded-full px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-wide ${provisional ? "bg-amber-100 text-amber-900" : "bg-[#EAF6F2] text-[#087568]"}`}>{provisional ? "Provisório" : (statusLabel[order.status] ?? order.status)}</span>
+            {acceptanceText && <p className="mt-3 text-[10px] font-semibold leading-4 text-[#087568]">{acceptanceText}</p>}
           </div>
         </header>
 
@@ -260,10 +283,14 @@ export default function OrderDocumentV2() {
         <section className="mt-7 rounded-2xl border border-stone-200 p-5">
           <p className="text-[9px] font-extrabold uppercase tracking-[.14em] text-[#087568]">Conferência do cliente</p>
           <p className="mt-2 text-[10px] leading-4 text-stone-500">Ao conferir este documento, o cliente valida produtos, quantidades, valores e condições comerciais apresentadas.</p>
-          <div className="mt-6 grid grid-cols-2 gap-8">
-            <div><div className="border-b border-stone-300"/><p className="mt-2 text-[10px] text-stone-500">Nome / assinatura ou aceite eletrônico</p></div>
-            <div><div className="border-b border-stone-300"/><p className="mt-2 text-[10px] text-stone-500">Data da conferência</p></div>
-          </div>
+          {acceptanceText ? (
+            <div className="mt-4 rounded-xl bg-[#EAF6F2] px-4 py-3 text-[11px] font-bold text-[#087568]">{acceptanceText} · aceite eletrônico registrado pelo BBOS.</div>
+          ) : (
+            <div className="mt-6 grid grid-cols-2 gap-8">
+              <div><div className="border-b border-stone-300"/><p className="mt-2 text-[10px] text-stone-500">Nome / assinatura ou aceite eletrônico</p></div>
+              <div><div className="border-b border-stone-300"/><p className="mt-2 text-[10px] text-stone-500">Data da conferência</p></div>
+            </div>
+          )}
         </section>
 
         <footer className="mt-8 grid grid-cols-[1fr_auto] items-end gap-6 border-t border-stone-100 pt-4 text-[9px] text-stone-400">
