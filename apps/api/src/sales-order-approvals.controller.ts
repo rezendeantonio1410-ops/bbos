@@ -3,6 +3,7 @@ import { Prisma } from "@bbos/database";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 import { Public } from "./auth.guard";
+import { publicAppUrl } from "./public-app-url";
 import { SalesOrdersService } from "./sales-orders.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 
@@ -32,10 +33,6 @@ export class SalesOrderApprovalsController {
     const actor = await this.auth.resolve(this.auth.readToken(request));
     if (!actor) throw new UnauthorizedException("Sessão inválida.");
     return actor;
-  }
-
-  private publicBase() {
-    return (process.env.PUBLIC_APP_URL ?? process.env.PUBLIC_WEB_URL ?? process.env.WEB_URL?.split(",")[0] ?? "http://localhost:3000").replace(/\/$/, "");
   }
 
   private async snapshot(orderId: string, database: any = this.salesOrders.database) {
@@ -121,7 +118,7 @@ export class SalesOrderApprovalsController {
       );
     });
 
-    const url = `${this.publicBase()}/pedido/aprovar/${token}`;
+    const url = `${publicAppUrl()}/pedido/aprovar/${token}`;
     const codeText = confirmationCode ? `\n\nCódigo de confirmação: *${confirmationCode}*` : "";
     const message = `Olá, ${snapshot.customerName}.\n\nA Bispo Coffees preparou o pedido *${snapshot.orderNumber}* no valor total de *${money(snapshot.totalAmount)}*, já com o frete de *${money(snapshot.freight)}*.\n\nConfira e confirme pelo celular:\n${url}${codeText}\n\nBispo Coffees`;
     const phoneDigits = String(snapshot.customerPhone ?? "").replace(/\D/g, "");
