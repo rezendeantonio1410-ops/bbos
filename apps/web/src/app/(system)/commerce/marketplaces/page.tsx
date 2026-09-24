@@ -18,8 +18,8 @@ import {
   UsersRound,
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -98,6 +98,7 @@ const empty: Dashboard = {
 };
 
 export default function MarketplacesPage() {
+  const API = getApiBaseUrl();
   const [dashboard, setDashboard] = React.useState<Dashboard>(empty);
   const [integration, setIntegration] =
     React.useState<IntegrationStatus | null>(null);
@@ -145,7 +146,7 @@ export default function MarketplacesPage() {
       }
     }
     setLoading(false);
-  }, []);
+  }, [API]);
 
   React.useEffect(() => {
     void load();
