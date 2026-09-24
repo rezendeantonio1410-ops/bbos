@@ -137,7 +137,7 @@ export default function GreenCoffeePurchasesV2() {
   const [contacts, setContacts] = useState<SupplierContact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState("");
 
-  const [packagingType, setPackagingType] = useState("BAG_30_KG");
+  const [packagingType, setPackagingType] = useState("BAG_60_KG");
   const [volumes, setVolumes] = useState(1);
   const [unitWeight, setUnitWeight] = useState(30);
   const [priceKg, setPriceKg] = useState(0);
@@ -228,7 +228,7 @@ export default function GreenCoffeePurchasesV2() {
   }, [originUnitId, references]);
 
   const totalWeight = Math.max(0, volumes) * Math.max(0, unitWeight);
-  const totalValue = totalWeight * Math.max(0, priceKg);
+  const priceKg = unitWeight > 0 ? Math.max(0, pricePerBag) / unitWeight : 0;\n  const totalValue = Math.max(0, volumes) * Math.max(0, pricePerBag);
   const selectedContact = contacts.find((item) => item.id === selectedContactId);
   const approvers = options?.users.filter((user) => ["ADMIN", "EXECUTIVE"].includes(user.role)) ?? [];
 
@@ -388,14 +388,14 @@ export default function GreenCoffeePurchasesV2() {
 
             <Section title="C · Quantidade / embalagem">
               <Field label="Acondicionamento"><select name="packagingType" className={input} value={packagingType} onChange={(e) => setPackaging(e.target.value)}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
-              <Field label="Número de volumes"><input required type="number" min="1" value={volumes} onChange={(e) => setVolumes(Number(e.target.value))} className={input} /></Field>
+              <Field label={packagingType === "BAG_60_KG" ? "Quantidade de sacas" : "Número de volumes"}><input required type="number" min="1" value={volumes} onChange={(e) => setVolumes(Number(e.target.value))} className={input} /></Field>
               <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" value={unitWeight} readOnly={packagingType === "BAG_30_KG" || packagingType === "BAG_60_KG"} onChange={(e) => setUnitWeight(Number(e.target.value))} className={input} /></Field>
               <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" step=".01" defaultValue="0" className={input} /></Field>
               <div className="rounded-xl bg-emerald-50 p-4"><span className="text-xs text-stone-500">Peso total contratado</span><b className="mt-1 block text-xl">{totalWeight.toLocaleString("pt-BR")} kg</b></div>
             </Section>
 
             <Section title="D · Comercial">
-              <Field label="Preço/kg"><input required type="number" min=".01" step=".01" value={priceKg || ""} onChange={(e) => setPriceKg(Number(e.target.value))} className={input} /></Field>
+              <Field label={packagingType === "BAG_60_KG" ? "Preço por saca de 60 kg" : "Preço por volume"}><input required type="number" min=".01" step=".01" value={pricePerBag || ""} onChange={(e) => setPricePerBag(Number(e.target.value))} className={input} /></Field>\n              <div className="rounded-xl border bg-stone-50 p-4"><span className="text-xs text-stone-500">Equivalente fiscal</span><b className="mt-1 block text-base">{brl(priceKg)}/kg</b></div>
               <div className="rounded-xl bg-emerald-50 p-4"><span className="text-xs text-stone-500">Valor total da compra</span><b className="mt-1 block text-xl">{brl(totalValue)}</b></div>
               <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
               <Field label="Condição de pagamento"><select className={input} value={paymentTermType} onChange={(e) => setPaymentTermType(e.target.value)}><option value="CASH">À vista</option><option value="DAYS_AFTER_PURCHASE">X dias após a compra</option><option value="FIXED_DATE">Data definida</option><option value="INSTALLMENTS">Parcelado</option><option value="ADVANCE_AND_BALANCE">Antecipado + saldo</option><option value="AFTER_RECEIPT">Após recebimento</option></select></Field>
@@ -416,7 +416,7 @@ export default function GreenCoffeePurchasesV2() {
               <p className="text-xs font-bold uppercase tracking-[.12em] text-forest-700">Resumo da negociação</p>
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <p><b>{originUnit?.name ?? "Origem não selecionada"}</b><br /><span className="text-stone-600">Safra {harvest} · {species?.name ?? "Espécie"}</span></p>
-                <p><b>{volumes} × {unitWeight.toLocaleString("pt-BR")} kg = {totalWeight.toLocaleString("pt-BR")} kg</b><br /><span className="text-stone-600">{brl(priceKg)}/kg · Total {brl(totalValue)}</span></p>
+                <p><b>{volumes} × {unitWeight.toLocaleString("pt-BR")} kg = {totalWeight.toLocaleString("pt-BR")} kg</b><br /><span className="text-stone-600">{brl(pricePerBag)}/saca · {brl(priceKg)}/kg · Total {brl(totalValue)}</span></p>
                 <p><b>Pagamento</b><br /><span className="text-stone-600">{paymentTermType === "CASH" ? "À vista" : paymentTermType === "INSTALLMENTS" ? `${installmentCount} parcelas` : paymentTermType === "DAYS_AFTER_PURCHASE" ? `${daysAfterPurchase} dias após a compra` : paymentTermType.replaceAll("_", " ")}</span></p>
                 <p><b>Contato</b><br /><span className="text-stone-600">{selectedContact?.name ?? "Não selecionado"}</span></p>
               </div>
