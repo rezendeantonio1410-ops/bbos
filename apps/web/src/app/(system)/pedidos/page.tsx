@@ -1183,6 +1183,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [shippingRequote, setShippingRequote] = useState<{ approvedPriceCents: number; packages?: Array<{ weight: number; length: number; width: number; height: number }>; options: Array<{ serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }> } | null>(null);
   const [requoteMode, setRequoteMode] = useState<"SAME" | "EDIT" | null>(null);
   const [requotePackages, setRequotePackages] = useState<Array<{ weight: number; length: number; width: number; height: number }>>([]);
+  const [selectedRequoteServiceId, setSelectedRequoteServiceId] = useState("");
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1378,6 +1379,22 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível refazer a cotação.");
       setShippingRequote(payload);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível refazer a cotação."); }
+    finally { setRequoteBusy(false); }
+  };
+
+  const selectRequote = async () => {
+    const option = shippingRequote?.options.find((item) => item.serviceId === selectedRequoteServiceId);
+    if (!option) return;
+    setRequoteBusy(true); setError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/requote-shipping/select`, {
+        method: "POST", credentials: "include", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...option, packages: shippingRequote?.packages }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível selecionar a nova cotação.");
+      await onChanged(); await loadPostingAgencies();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível selecionar a nova cotação."); }
     finally { setRequoteBusy(false); }
   };
 
@@ -1637,7 +1654,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     <p className="text-[11px] font-bold">Nova cotação · somente consulta</p>
                     <p className="mt-1 text-[10px] text-stone-600">Frete aprovado: <b>{money.format(Number(shippingRequote.approvedPriceCents || 0) / 100)}</b>. Nenhuma opção abaixo foi contratada.</p>
                     <div className="mt-2 space-y-1.5">{(shippingRequote.options || []).slice(0, 6).map((option: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }) => (
-                      <div key={`${option.carrierName}-${option.serviceId}`} className="flex justify-between gap-3 rounded-lg bg-white px-3 py-2 text-[10px]"><span><b>{option.carrierName}</b> · {option.serviceName}{option.deliveryDays ? ` · ${option.deliveryDays} dias` : ""}</span><b>{money.format(option.priceCents / 100)}</b></div>
+                      <label key={`${option.carrierName}-${option.serviceId}`} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-[10px]"><span className="flex items-center gap-2"><input type="radio" name="requote-option" checked={selectedRequoteServiceId === option.serviceId} onChange={() => setSelectedRequoteServiceId(option.serviceId)} /><span><b>{option.carrierName}</b> · {option.serviceName}{option.deliveryDays ? ` · ${option.deliveryDays} dias` : ""}</span></span><b>{money.format(option.priceCents / 100)}</b></label>
                     ))}</div>
                   </div>
                 )}
