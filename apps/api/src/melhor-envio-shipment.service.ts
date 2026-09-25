@@ -518,19 +518,21 @@ export class MelhorEnvioShipmentService {
       const cartPriceCents = Math.round(
         Number(cartResult?.price || cartResult?.custom_price || 0) * 100,
       );
+      if (externalId) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "Shipment" SET "externalId"=$2,metadata=$3::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+          shipmentId,
+          externalId,
+          JSON.stringify({ cartResult, cartPriceCents }),
+        );
+      }
       if (
         cartPriceCents > 0 &&
         cartPriceCents !== Number(order.providerPriceCents)
       ) {
         await this.database.$executeRawUnsafe(
-          `UPDATE "Shipment" SET status='EXCEPTION',metadata=$2::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+          `UPDATE "Shipment" SET status='EXCEPTION',"updatedAt"=NOW() WHERE id=$1`,
           shipmentId,
-          JSON.stringify({
-            reason: "PRICE_CHANGED",
-            quotedCents: Number(order.providerPriceCents),
-            cartPriceCents,
-            cartResult,
-          }),
         );
         throw new BadRequestException(
           "O valor da transportadora mudou após a cotação. Pedido enviado para conferência.",
