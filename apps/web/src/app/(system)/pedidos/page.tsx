@@ -1184,6 +1184,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [requoteMode, setRequoteMode] = useState<"SAME" | "EDIT" | null>(null);
   const [requotePackages, setRequotePackages] = useState<Array<{ weight: number; length: number; width: number; height: number }>>([]);
   const [selectedRequoteServiceId, setSelectedRequoteServiceId] = useState("");
+  const [requoteApplied, setRequoteApplied] = useState(false);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1393,7 +1394,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível selecionar a nova cotação.");
-      await onChanged(); await loadPostingAgencies();
+      setRequoteApplied(true); await onChanged(); await loadPostingAgencies();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível selecionar a nova cotação."); }
     finally { setRequoteBusy(false); }
   };
@@ -1624,7 +1625,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
                       <button
                         type="button"
-                        disabled={fulfillmentBusy}
+                        disabled={fulfillmentBusy || Boolean(shippingRequote && !requoteApplied)}
                         onClick={() => void generateLabel()}
                         className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                       >
@@ -1658,8 +1659,8 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     ))}</div>
                     <div className="mt-3 flex items-center justify-between gap-3 border-t border-amber-200 pt-3">
                       <span className="text-[10px] text-stone-600">O valor aprovado pelo cliente permanece inalterado.</span>
-                      <button type="button" disabled={!selectedRequoteServiceId || requoteBusy} onClick={() => void selectRequote()} className="rounded-lg bg-emerald-950 px-4 py-2 text-[10px] font-bold text-white disabled:opacity-40">
-                        {requoteBusy ? "Aplicando..." : "Usar esta cotação"}
+                      <button type="button" disabled={!selectedRequoteServiceId || requoteBusy} onClick={() => void selectRequote()} className="rounded-lg bg-amber-500 px-4 py-2 text-[10px] font-bold text-stone-950 shadow-sm disabled:opacity-40">
+                        {requoteBusy ? "Aplicando..." : requoteApplied ? "Cotação selecionada ✓" : "Usar esta cotação"}
                       </button>
                     </div>
                   </div>
