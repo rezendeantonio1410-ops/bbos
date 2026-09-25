@@ -1178,7 +1178,9 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [fulfillment, setFulfillment] = useState<ShipmentInfo | null>(null);
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
-  const [postingBusy, setPostingBusy] = useState(false);\n  const [requoteBusy, setRequoteBusy] = useState(false);\n  const [shippingRequote, setShippingRequote] = useState<any>(null);
+  const [postingBusy, setPostingBusy] = useState(false);
+  const [requoteBusy, setRequoteBusy] = useState(false);
+  const [shippingRequote, setShippingRequote] = useState<any>(null);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
