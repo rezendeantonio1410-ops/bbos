@@ -1629,7 +1629,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                         onClick={() => void generateLabel()}
                         className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                       >
-                        {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                        {fulfillmentBusy ? "Gerando…" : requoteApplied && shippingRequote ? (() => { const option = shippingRequote.options.find((item) => item.serviceId === selectedRequoteServiceId); return option ? `Gerar etiqueta · ${option.carrierName} ${option.serviceName} · ${money.format(option.priceCents / 100)}` : "Gerar etiqueta"; })() : "Gerar etiqueta"}
                       </button>
                     ) : null}
                   </div>
@@ -1650,6 +1650,13 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     )}
                   </div>
                 )}
+                {requoteApplied && shippingRequote && (() => {
+                  const option = shippingRequote.options.find((item) => item.serviceId === selectedRequoteServiceId);
+                  if (!option) return null;
+                  const approved = Number(shippingRequote.approvedPriceCents || 0) / 100;
+                  const current = option.priceCents / 100;
+                  return <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[10px]"><p className="font-bold text-emerald-950">Cotação selecionada ✓</p><p className="mt-1"><b>{option.carrierName} · {option.serviceName}</b> · {option.deliveryDays ? `${option.deliveryDays} dias · ` : ""}<b>{money.format(current)}</b></p><p className="mt-1 text-stone-600">Frete aprovado pelo cliente: {money.format(approved)} · Resultado logístico: {money.format(approved - current)}</p></div>;
+                })()}
                 {shippingRequote && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                     <p className="text-[11px] font-bold">Nova cotação · somente consulta</p>
