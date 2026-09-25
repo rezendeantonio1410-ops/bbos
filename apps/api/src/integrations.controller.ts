@@ -437,6 +437,13 @@ export class IntegrationsController {
     }
   }
 
+  @Post("bling/sales-orders/:id/reset-cancelled-invoice")
+  async resetCancelledInvoice(@Req() request: any, @Param("id") id: string) {
+    const actor = await this.actor(request);
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) throw new UnauthorizedException("A regularização fiscal é restrita à gestão.");
+    return this.blingOutbox.resetCancelledSalesOrderInvoice(actor.companyId, id);
+  }
+
   @Post("bling/process-next")
   async processNextBling(@Req() request: any) {
     const actor = await this.actor(request);
