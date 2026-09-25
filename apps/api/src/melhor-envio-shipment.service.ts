@@ -323,7 +323,7 @@ export class MelhorEnvioShipmentService {
       agencies,
     };
   }
-  async requoteForSalesOrder(orderId: string) {
+  async requoteForSalesOrder(orderId: string, packages?: Array<{ weight: number; length: number; width: number; height: number }>) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
               q."serviceId",q."serviceName",q."carrierName",
@@ -336,7 +336,11 @@ export class MelhorEnvioShipmentService {
     );
     const order = rows[0];
     if (!order) throw new BadRequestException("Pedido comercial ou cotação de frete não encontrado.");
-    const packagePayload = Array.isArray(order.package) ? order.package : [order.package];
+    const originalPackages = Array.isArray(order.package) ? order.package : [order.package];
+    const packagePayload = Array.isArray(packages) && packages.length ? packages : originalPackages;
+    for (const volume of packagePayload) {
+      if (![volume.weight, volume.length, volume.width, volume.height].every((value) => Number(value) > 0)) throw new BadRequestException("Peso e dimensões de todas as caixas devem ser maiores que zero.");
+    }
     const response = await this.request(order.companyId, "/me/shipment/calculate", {
       method: "POST",
       body: JSON.stringify({
@@ -361,6 +365,8 @@ export class MelhorEnvioShipmentService {
       originalProviderPriceCents: Number(order.providerPriceCents),
       quoteExpired: true,
       packages: packagePayload,
+      originalPackages,
+      customPackages: Boolean(packages?.length),
       options,
     };
   }
