@@ -286,8 +286,8 @@ export class SalesOrdersController {
   }
 
   @Post(":id/requote-shipping")
-  requoteShipping(@Param("id") id: string) {
-    return this.shipment.requoteForSalesOrder(id);
+  requoteShipping(@Param("id") id: string, @Body() body: { packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+    return this.shipment.requoteForSalesOrder(id, body?.packages);
   }
 
   @Post(":id/label")
