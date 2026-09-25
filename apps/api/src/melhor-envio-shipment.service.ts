@@ -371,6 +371,33 @@ export class MelhorEnvioShipmentService {
     };
   }
 
+  async selectRequoteForSalesOrder(orderId: string, selection: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so."shippingQuoteId",so.freight,q."customerPriceCents",q."providerPriceCents",q.package
+         FROM "SalesOrder" so JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+        WHERE so.id=$1 LIMIT 1`, orderId);
+    const current = rows[0];
+    if (!current) throw new BadRequestException("Pedido ou cotação não encontrado.");
+    if (!selection?.serviceId || !selection?.priceCents) throw new BadRequestException("Selecione uma cotação válida.");
+    const packages = selection.packages?.length ? selection.packages : (Array.isArray(current.package) ? current.package : [current.package]);
+    await this.database.$executeRawUnsafe(
+      `UPDATE "ShippingQuote" SET "serviceId"=$2,"serviceName"=$3,"carrierName"=$4,
+         "providerPriceCents"=$5,package=$6::jsonb,"deliveryDays"=$7,"updatedAt"=NOW()
+       WHERE id=$1`,
+      current.shippingQuoteId, selection.serviceId, selection.serviceName, selection.carrierName,
+      selection.priceCents, JSON.stringify(packages), Number(selection.deliveryDays || 0));
+    await this.database.$executeRawUnsafe(
+      `UPDATE "SalesOrder" SET "shippingServiceId"=$2,"shippingServiceName"=$3,"carrierName"=$4,"updatedAt"=NOW() WHERE id=$1`,
+      orderId, selection.serviceId, selection.serviceName, selection.carrierName);
+    return {
+      selected: true,
+      customerFreightCents: Math.round(Number(current.freight || 0) * 100),
+      providerPriceCents: selection.priceCents,
+      logisticsResultCents: Math.round(Number(current.freight || 0) * 100) - selection.priceCents,
+      serviceId: selection.serviceId, serviceName: selection.serviceName, carrierName: selection.carrierName,
+    };
+  }
+
   async createLabelForSalesOrder(orderId: string) {
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
