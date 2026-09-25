@@ -1178,7 +1178,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [fulfillment, setFulfillment] = useState<ShipmentInfo | null>(null);
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
-  const [postingBusy, setPostingBusy] = useState(false);
+  const [postingBusy, setPostingBusy] = useState(false);\n  const [requoteBusy, setRequoteBusy] = useState(false);\n  const [shippingRequote, setShippingRequote] = useState<any>(null);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1364,6 +1364,17 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       }),
     );
     await operationalAction("picking/confirm", { pickedByItem });
+  };
+
+  const requoteShipping = async () => {
+    setRequoteBusy(true); setError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/requote-shipping`, { method: "POST", credentials: "include" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível refazer a cotação.");
+      setShippingRequote(payload);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível refazer a cotação."); }
+    finally { setRequoteBusy(false); }
   };
 
   const generateLabel = async () => {
@@ -1566,6 +1577,11 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                         Ver NF-e{fulfillment.fiscalNumber ? ` nº ${fulfillment.fiscalNumber}` : ""}
                       </a>
                     )}
+                    {fulfillment?.fiscalStatus === "AUTHORIZED" && !fulfillment?.labelUrl && (
+                      <button type="button" disabled={requoteBusy || fulfillmentBusy} onClick={() => void requoteShipping()} className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950 disabled:opacity-50">
+                        {requoteBusy ? "Recotando…" : "Fazer nova cotação"}
+                      </button>
+                    )}
                     {fulfillment?.labelUrl ? (
                       <a
                         href={fulfillment.labelUrl}
@@ -1596,6 +1612,15 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     ) : null}
                   </div>
                 </div>
+                {shippingRequote && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-[11px] font-bold">Nova cotação · somente consulta</p>
+                    <p className="mt-1 text-[10px] text-stone-600">Frete aprovado: <b>{money.format(Number(shippingRequote.approvedPriceCents || 0) / 100)}</b>. Nenhuma opção abaixo foi contratada.</p>
+                    <div className="mt-2 space-y-1.5">{(shippingRequote.options || []).slice(0, 6).map((option: any) => (
+                      <div key={`${option.carrierName}-${option.serviceId}`} className="flex justify-between gap-3 rounded-lg bg-white px-3 py-2 text-[10px]"><span><b>{option.carrierName}</b> · {option.serviceName}{option.deliveryDays ? ` · ${option.deliveryDays} dias` : ""}</span><b>{money.format(option.priceCents / 100)}</b></div>
+                    ))}</div>
+                  </div>
+                )}
                 {fulfillment?.trackingCode && (
                   <p className="mt-3 text-[11px] text-emerald-900">
                     Rastreio: <b>{fulfillment.trackingCode}</b>
