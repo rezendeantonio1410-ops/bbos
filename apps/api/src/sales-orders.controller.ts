@@ -651,7 +651,7 @@ export class SalesOrdersController {
               f."externalId" AS "fiscalExternalId"
          FROM "SalesOrder" so
          LEFT JOIN LATERAL (
-           SELECT status FROM "FiscalDocument"
+           SELECT status, "externalId" FROM "FiscalDocument"
             WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
             ORDER BY "createdAt" DESC LIMIT 1
          ) f ON TRUE
