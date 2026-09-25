@@ -1180,7 +1180,9 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
   const [postingBusy, setPostingBusy] = useState(false);
   const [requoteBusy, setRequoteBusy] = useState(false);
-  const [shippingRequote, setShippingRequote] = useState<{ approvedPriceCents: number; options: Array<{ serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }> } | null>(null);
+  const [shippingRequote, setShippingRequote] = useState<{ approvedPriceCents: number; packages?: Array<{ weight: number; length: number; width: number; height: number }>; options: Array<{ serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }> } | null>(null);
+  const [requoteMode, setRequoteMode] = useState<"SAME" | "EDIT" | null>(null);
+  const [requotePackages, setRequotePackages] = useState<Array<{ weight: number; length: number; width: number; height: number }>>([]);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1368,10 +1370,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     await operationalAction("picking/confirm", { pickedByItem });
   };
 
-  const requoteShipping = async () => {
+  const requoteShipping = async (packages?: Array<{ weight: number; length: number; width: number; height: number }>) => {
     setRequoteBusy(true); setError("");
     try {
-      const response = await fetch(`${salesOrdersApi()}/${order.id}/requote-shipping`, { method: "POST", credentials: "include" });
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/requote-shipping`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(packages?.length ? { packages } : {}) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível refazer a cotação.");
       setShippingRequote(payload);
@@ -1580,7 +1582,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       </a>
                     )}
                     {fulfillment?.fiscalStatus === "AUTHORIZED" && !fulfillment?.labelUrl && (
-                      <button type="button" disabled={requoteBusy || fulfillmentBusy} onClick={() => void requoteShipping()} className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950 disabled:opacity-50">
+                      <button type="button" disabled={requoteBusy || fulfillmentBusy} onClick={() => setRequoteMode("SAME")} className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950 disabled:opacity-50">
                         {requoteBusy ? "Recotando…" : "Fazer nova cotação"}
                       </button>
                     )}
@@ -1614,6 +1616,22 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     ) : null}
                   </div>
                 </div>
+                {requoteMode && !shippingRequote && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-[11px] font-bold">Como deseja recotar?</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => { setRequoteMode("SAME"); void requoteShipping(); }} className="rounded-lg bg-stone-950 px-3 py-2 text-[10px] font-bold text-white">Recotar com os mesmos dados</button>
+                      <button type="button" onClick={() => { setRequoteMode("EDIT"); if (!requotePackages.length) setRequotePackages([{ weight: 14.5, length: 50, width: 40, height: 35 }]); }} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold">Alterar caixas / volumes</button>
+                    </div>
+                    {requoteMode === "EDIT" && requotePackages.length > 0 && (
+                      <div className="mt-3 space-y-2">{requotePackages.map((volume, index) => (
+                        <div key={index} className="grid grid-cols-4 gap-2 rounded-lg bg-white p-2 text-[9px]">
+                          {(["weight","length","width","height"] as const).map((field) => <label key={field}>{field === "weight" ? "Peso kg" : field === "length" ? "Comp. cm" : field === "width" ? "Larg. cm" : "Alt. cm"}<input type="number" min="0.01" step="0.01" value={volume[field]} onChange={(e) => setRequotePackages((current) => current.map((item, i) => i === index ? { ...item, [field]: Number(e.target.value) } : item))} className="mt-1 w-full rounded border px-2 py-1.5" /></label>)}
+                        </div>
+                      ))}<div className="flex gap-2"><button type="button" onClick={() => setRequotePackages((current) => [...current, { weight: 1, length: 35, width: 22, height: 11 }])} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold">+ Adicionar caixa</button><button type="button" onClick={() => void requoteShipping(requotePackages)} className="rounded-lg bg-stone-950 px-3 py-2 text-[10px] font-bold text-white">Cotar com estes volumes</button></div></div>
+                    )}
+                  </div>
+                )}
                 {shippingRequote && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                     <p className="text-[11px] font-bold">Nova cotação · somente consulta</p>
