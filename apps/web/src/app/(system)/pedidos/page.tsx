@@ -1180,7 +1180,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
   const [postingBusy, setPostingBusy] = useState(false);
   const [requoteBusy, setRequoteBusy] = useState(false);
-  const [shippingRequote, setShippingRequote] = useState<any>(null);
+  const [shippingRequote, setShippingRequote] = useState<{ approvedPriceCents: number; options: Array<{ serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }> } | null>(null);
 
   const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
@@ -1618,7 +1618,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                     <p className="text-[11px] font-bold">Nova cotação · somente consulta</p>
                     <p className="mt-1 text-[10px] text-stone-600">Frete aprovado: <b>{money.format(Number(shippingRequote.approvedPriceCents || 0) / 100)}</b>. Nenhuma opção abaixo foi contratada.</p>
-                    <div className="mt-2 space-y-1.5">{(shippingRequote.options || []).slice(0, 6).map((option: any) => (
+                    <div className="mt-2 space-y-1.5">{(shippingRequote.options || []).slice(0, 6).map((option: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }) => (
                       <div key={`${option.carrierName}-${option.serviceId}`} className="flex justify-between gap-3 rounded-lg bg-white px-3 py-2 text-[10px]"><span><b>{option.carrierName}</b> · {option.serviceName}{option.deliveryDays ? ` · ${option.deliveryDays} dias` : ""}</span><b>{money.format(option.priceCents / 100)}</b></div>
                     ))}</div>
                   </div>
