@@ -1331,7 +1331,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const resetCancelledInvoice = async () => {
     setBusy(true); setError("");
     try {
-      const response = await fetch(`${apiBase()}/integrations/bling/sales-orders/${order.id}/reset-cancelled-invoice`, { method: "POST", credentials: "include" });
+      const response = await fetch(`${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/reset-cancelled-invoice`, { method: "POST", credentials: "include" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof payload.message === "string" ? payload.message : "Não foi possível sincronizar o cancelamento.");
       await onChanged(); await loadFulfillment();
