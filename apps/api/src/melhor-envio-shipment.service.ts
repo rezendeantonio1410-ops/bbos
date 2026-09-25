@@ -323,6 +323,48 @@ export class MelhorEnvioShipmentService {
       agencies,
     };
   }
+  async requoteForSalesOrder(orderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
+              q."serviceId",q."serviceName",q."carrierName",
+              c."postalCode" AS "customerPostalCode"
+         FROM "SalesOrder" so
+         JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 LIMIT 1`,
+      orderId,
+    );
+    const order = rows[0];
+    if (!order) throw new BadRequestException("Pedido comercial ou cotação de frete não encontrado.");
+    const packagePayload = Array.isArray(order.package) ? order.package : [order.package];
+    const response = await this.request(order.companyId, "/me/shipment/calculate", {
+      method: "POST",
+      body: JSON.stringify({
+        from: { postal_code: this.sender().postal_code },
+        to: { postal_code: digits(order.customerPostalCode) },
+        packages: packagePayload,
+      }),
+    });
+    const raw = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+    const options = raw
+      .filter((item: any) => !item?.error && Number(item?.price ?? item?.custom_price ?? 0) > 0)
+      .map((item: any) => ({
+        serviceId: String(item.id ?? ""),
+        serviceName: String(item.name ?? ""),
+        carrierName: String(item.company?.name ?? ""),
+        priceCents: Math.round(Number(item.custom_price ?? item.price ?? 0) * 100),
+        deliveryDays: Number(item.custom_delivery_time ?? item.delivery_time ?? 0),
+      }))
+      .sort((a: any, b: any) => a.priceCents - b.priceCents);
+    return {
+      approvedPriceCents: Number(order.customerPriceCents),
+      originalProviderPriceCents: Number(order.providerPriceCents),
+      quoteExpired: true,
+      packages: packagePayload,
+      options,
+    };
+  }
+
   async createLabelForSalesOrder(orderId: string) {
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
