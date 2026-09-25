@@ -98,13 +98,23 @@ export class BlingOutboxService {
     if (!document) throw new Error("Pedido sem CPF/CNPJ para integração Bling.");
 
     const existing = await this.getMap(companyId, "CONTACT_DOCUMENT", document);
-    if (existing?.externalId) return existing.externalId as string;
+    if (existing?.externalId) {
+      const detail = await this.bling.request(companyId, `/contatos/${encodeURIComponent(existing.externalId)}`, { method: "GET" }).catch(() => null);
+      const remote = detail?.data ?? detail ?? {};
+      const remoteDocument = String(remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "").replace(/\D/g, "");
+      if (remoteDocument === document) return existing.externalId as string;
+      throw new Error(`Emissão fiscal bloqueada: contato Bling ${existing.externalId} não corresponde ao CPF/CNPJ do cliente do pedido.`);
+    }
 
     const remoteId = await this.findContactByDocument(companyId, document);
     if (remoteId) {
+      const detail = await this.bling.request(companyId, `/contatos/${encodeURIComponent(remoteId)}`, { method: "GET" }).catch(() => null);
+      const remote = detail?.data ?? detail ?? {};
+      const remoteDocument = String(remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "").replace(/\D/g, "");
+      if (remoteDocument !== document) throw new Error("Emissão fiscal bloqueada: o contato localizado no Bling possui CPF/CNPJ diferente do cliente do pedido.");
       await this.mapResource(companyId, "CONTACT_DOCUMENT", document, remoteId, {
         email: customer?.email,
-        source: "FOUND_BY_DOCUMENT",
+        source: "FOUND_BY_DOCUMENT_VERIFIED",
       });
       return remoteId;
     }
@@ -366,6 +376,18 @@ export class BlingOutboxService {
         blingNfeId: priorFiscalExternalId,
         idempotent: true,
       };
+    }
+
+    const expectedDocument = String(order.customerTaxId ?? "").replace(/\D/g, "");
+    const salesOrderDetail = await this.bling.request(row.companyId, `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`, { method: "GET" });
+    const remoteOrder = salesOrderDetail?.data ?? salesOrderDetail ?? {};
+    const remoteContactId = String(remoteOrder?.contato?.id ?? "");
+    if (!remoteContactId) throw new Error("Emissão fiscal bloqueada: pedido do Bling sem contato destinatário.");
+    const remoteContactDetail = await this.bling.request(row.companyId, `/contatos/${encodeURIComponent(remoteContactId)}`, { method: "GET" });
+    const remoteContact = remoteContactDetail?.data ?? remoteContactDetail ?? {};
+    const remoteDocument = String(remoteContact?.numeroDocumento ?? remoteContact?.cnpj ?? remoteContact?.cpf ?? "").replace(/\D/g, "");
+    if (!expectedDocument || remoteDocument !== expectedDocument) {
+      throw new Error(`Emissão fiscal bloqueada: CPF/CNPJ do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`);
     }
 
     const remoteSalesOrder = await this.bling
