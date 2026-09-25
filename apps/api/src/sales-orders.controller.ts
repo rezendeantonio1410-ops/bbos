@@ -285,7 +285,12 @@ export class SalesOrdersController {
     return rows[0] ?? null;
   }
 
-  @Post(":id/requote-shipping")\n  requoteShipping(@Param("id") id: string) {\n    return this.shipment.requoteForSalesOrder(id);\n  }\n\n  @Post(":id/label")
+  @Post(":id/requote-shipping")
+  requoteShipping(@Param("id") id: string) {
+    return this.shipment.requoteForSalesOrder(id);
+  }
+
+  @Post(":id/label")
   label(@Param("id") id: string) {
     return this.shipment.createLabelForSalesOrder(id);
   }
