@@ -756,6 +756,24 @@ export class BlingOutboxService {
     }
   }
 
+  async resetCancelledSalesOrderInvoice(companyId: string, orderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,so.status,c."taxId",f.id AS "fiscalId",f."externalId",f.number
+         FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
+         JOIN "FiscalDocument" f ON f."salesOrderId"=so.id AND f.direction='OUTBOUND'
+        WHERE so.id=$1 AND so."companyId"=$2 ORDER BY f."createdAt" DESC LIMIT 1`, orderId, companyId);
+    const row = rows[0];
+    if (!row?.externalId) throw new Error("Pedido sem NF-e do Bling para reconciliar.");
+    const detail = await this.bling.request(companyId, `/nfe/${encodeURIComponent(row.externalId)}`, { method: "GET" });
+    const note = detail?.data ?? detail ?? {};
+    if (this.fiscalStatus(note?.situacao) !== "CANCELLED") throw new Error("A NF-e ainda não consta como cancelada no Bling.");
+    await this.database.$executeRawUnsafe(`UPDATE "FiscalDocument" SET status='CANCELLED',"payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb)||$2::jsonb,"updatedAt"=NOW() WHERE id=$1`, row.fiscalId, JSON.stringify({ cancellationReconciledAt: new Date().toISOString(), blingNfe: note }));
+    await this.database.$executeRawUnsafe(`UPDATE "SalesOrder" SET status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW() WHERE id=$1`, orderId);
+    await this.database.$executeRawUnsafe(`DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`, companyId, orderId);
+    await this.database.$executeRawUnsafe(`UPDATE "IntegrationOutbox" SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE "companyId"=$1 AND "aggregateId"=$2 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`, companyId, orderId);
+    return { reset: true, fiscalStatus: "CANCELLED", orderStatus: "READY_TO_SHIP", customerTaxId: row.taxId };
+  }
+
   async processNext(companyId?: string) {
     await this.reconcileSentInvoice();
     const rows = await this.database.$queryRawUnsafe<any[]>(
