@@ -1328,6 +1328,17 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     order.notes ? `Observações: ${order.notes}` : "",
   ].filter(Boolean).join("\n");
 
+  const resetCancelledInvoice = async () => {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`${apiBase()}/integrations/bling/sales-orders/${order.id}/reset-cancelled-invoice`, { method: "POST", credentials: "include" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.message === "string" ? payload.message : "Não foi possível sincronizar o cancelamento.");
+      await onChanged(); await loadFulfillment();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível sincronizar o cancelamento."); }
+    finally { setBusy(false); }
+  };
+
   const operationalAction = async (
     endpoint: string,
     body: Record<string, unknown> = {},
@@ -1589,6 +1600,11 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {fulfillment?.fiscalStatus === "AUTHORIZED" && (
+                      <button type="button" disabled={busy} onClick={() => void resetCancelledInvoice()} className="rounded-xl border border-amber-500 bg-amber-50 px-4 py-2 text-[11px] font-bold text-amber-900 disabled:opacity-50">
+                        {busy ? "Conferindo no Bling…" : "Sincronizar NF cancelada"}
+                      </button>
+                    )}
                     {(fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl) && (
                       <a
                         href={fulfillment.fiscalPdfUrl || fulfillment.fiscalDanfeUrl || "#"}
