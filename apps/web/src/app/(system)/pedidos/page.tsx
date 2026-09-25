@@ -1656,6 +1656,12 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                     <div className="mt-2 space-y-1.5">{(shippingRequote.options || []).slice(0, 6).map((option: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays: number }) => (
                       <label key={`${option.carrierName}-${option.serviceId}`} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-[10px]"><span className="flex items-center gap-2"><input type="radio" name="requote-option" checked={selectedRequoteServiceId === option.serviceId} onChange={() => setSelectedRequoteServiceId(option.serviceId)} /><span><b>{option.carrierName}</b> · {option.serviceName}{option.deliveryDays ? ` · ${option.deliveryDays} dias` : ""}</span></span><b>{money.format(option.priceCents / 100)}</b></label>
                     ))}</div>
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-amber-200 pt-3">
+                      <span className="text-[10px] text-stone-600">O valor aprovado pelo cliente permanece inalterado.</span>
+                      <button type="button" disabled={!selectedRequoteServiceId || requoteBusy} onClick={() => void selectRequote()} className="rounded-lg bg-emerald-950 px-4 py-2 text-[10px] font-bold text-white disabled:opacity-40">
+                        {requoteBusy ? "Aplicando..." : "Usar esta cotação"}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {fulfillment?.trackingCode && (
