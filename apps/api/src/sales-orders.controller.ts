@@ -290,6 +290,11 @@ export class SalesOrdersController {
     return this.shipment.requoteForSalesOrder(id, body?.packages);
   }
 
+  @Post(":id/requote-shipping/select")
+  selectRequoteShipping(@Param("id") id: string, @Body() body: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+    return this.shipment.selectRequoteForSalesOrder(id, body);
+  }
+
   @Post(":id/label")
   label(@Param("id") id: string) {
     return this.shipment.createLabelForSalesOrder(id);
