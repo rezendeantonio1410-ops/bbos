@@ -103,7 +103,11 @@ export class BlingOutboxService {
       const remote = detail?.data ?? detail ?? {};
       const remoteDocument = String(remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "").replace(/\D/g, "");
       if (remoteDocument === document) return existing.externalId as string;
-      throw new Error(`Emissão fiscal bloqueada: contato Bling ${existing.externalId} não corresponde ao CPF/CNPJ do cliente do pedido.`);
+      await this.database.$executeRawUnsafe(
+        `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
+        companyId,
+        document,
+      );
     }
 
     const remoteId = await this.findContactByDocument(companyId, document);
