@@ -415,32 +415,36 @@ function Wizard({
                     />
                   }
                 />
-                {d.weightEntryMode === "SCALE" && <F
-                  l="Peso bruto real"
-                  c={
-                    <input
-                      type="number"
-                      className={css}
-                      value={d.grossWeightKg || ""}
-                      onChange={(e) =>
-                        set("grossWeightKg", Number(e.target.value))
+                {d.weightEntryMode === "SCALE" && (
+                  <>
+                    <F
+                      l="Peso bruto real"
+                      c={
+                        <input
+                          type="number"
+                          className={css}
+                          value={d.grossWeightKg || ""}
+                          onChange={(e) =>
+                            set("grossWeightKg", Number(e.target.value))
+                          }
+                        />
                       }
                     />
-                  }
-                />
-                <F
-                  l="Tara"
-                  c={
-                    <input
-                      type="number"
-                      className={css}
-                      value={d.tareWeightKg || ""}
-                      onChange={(e) =>
-                        set("tareWeightKg", Number(e.target.value))
+                    <F
+                      l="Tara"
+                      c={
+                        <input
+                          type="number"
+                          className={css}
+                          value={d.tareWeightKg || ""}
+                          onChange={(e) =>
+                            set("tareWeightKg", Number(e.target.value))
+                          }
+                        />
                       }
                     />
-                  }
-                />}
+                  </>
+                )}
                 <Card className="bg-forest-950 p-4 text-white">
                   <small>Peso líquido oficial</small>
                   <b className="block text-xl">{net} kg</b>
