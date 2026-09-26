@@ -1328,6 +1328,17 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     order.notes ? `Observações: ${order.notes}` : "",
   ].filter(Boolean).join("\n");
 
+  const retryInvoiceNow = async () => {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/retry-invoice`, { method: "POST", credentials: "include" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.message === "string" ? payload.message : "Não foi possível reprocessar o faturamento.");
+      await onChanged(); await loadFulfillment();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível reprocessar o faturamento."); }
+    finally { setBusy(false); }
+  };
+
   const resetCancelledInvoice = async () => {
     setBusy(true); setError("");
     try {
@@ -1549,6 +1560,11 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
                     >
                       {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
+                    </button>
+                  )}
+                  {order.status === "INVOICED" && fulfillment?.fiscalStatus !== "AUTHORIZED" && (
+                    <button type="button" disabled={busy} onClick={() => void retryInvoiceNow()} className="rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                      {busy ? "Validando cliente e faturando…" : "Tentar faturamento novamente"}
                     </button>
                   )}
                   {order.status === "INVOICED" && fulfillment?.labelUrl && (
