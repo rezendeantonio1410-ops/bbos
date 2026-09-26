@@ -211,11 +211,12 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const uploadInvoiceXml = async (file: File) => {
     setXmlBusy(true); setError(""); setNotice("");
     try {
-      const xml = await file.text();
+      const form = new FormData();
+      form.append("file", file, file.name);
+      form.append("purchaseId", purchase.id);
       const response = await fetch(`${API_ROOT}/fiscal-inbound/import-xml`, {
         method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xml, purchaseId: purchase.id }),
+        body: form,
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message ?? "Não foi possível importar o XML.");
