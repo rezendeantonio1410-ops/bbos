@@ -170,22 +170,25 @@ export class ReceiptsController {
         select: { id: true, name: true, role: true },
         orderBy: { name: "asc" },
       }),
-      this.database.greenCoffeePurchase.findMany({
-        where: {
-          companyId: company.id,
-          status: { in: ["CONFIRMED", "PARTIALLY_RECEIVED"] },
-          approvalStatus: "APPROVED",
-          externalAcceptanceStatus: "ACCEPTED",
-          operationalStatus: {
-            in: ["AWAITING_DELIVERY", "PARTIALLY_RECEIVED"],
-          },
-        },
+      this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT DISTINCT p.id
+           FROM "GreenCoffeePurchase" p
+           LEFT JOIN "FiscalDocumentAllocation" a ON a."purchaseId"=p.id
+           LEFT JOIN "FiscalDocument" f ON f.id=a."fiscalDocumentId"
+          WHERE p."companyId"=$1
+            AND p.status IN ('CONFIRMED','PARTIALLY_RECEIVED')
+            AND p."approvalStatus"='APPROVED'
+            AND p."operationalStatus" IN ('AWAITING_DELIVERY','PARTIALLY_RECEIVED')
+            AND (p."externalAcceptanceStatus"='ACCEPTED' OR f."matchStatus"='MATCHED')`,
+        company.id,
+      ).then(async (eligible) => this.database.greenCoffeePurchase.findMany({
+        where: { id: { in: eligible.map((row) => row.id) } },
         include: {
           supplier: true,
           receipts: { select: { netWeightKg: true } },
         },
         orderBy: { purchasedAt: "desc" },
-      }),
+      })),
     ]);
     const eligiblePurchases = purchases
       .map((purchase) => {
