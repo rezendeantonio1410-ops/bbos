@@ -637,6 +637,11 @@ export class BlingOutboxService {
       );
       let note = detail?.data ?? detail ?? {};
       let status = this.fiscalStatus(note?.situacao);
+      const protocol = String(note?.protocolo ?? note?.protocoloAutorizacao ?? note?.numeroProtocolo ?? "").trim();
+      const accessKeyFromNote = String(note?.chaveAcesso ?? note?.chave ?? "").replace(/\D/g, "");
+      // Fiscal truth wins over a stale Bling UI/status code: an NF-e with a 44-digit
+      // access key and authorization protocol is authorized and must unlock fulfillment.
+      if (protocol && accessKeyFromNote.length === 44) status = "AUTHORIZED";
       let retrySnapshot: Record<string, unknown> = {};
       const storedSefaz = this.sefazAuthorization(row.payloadSnapshot?.blingSend);
       if (storedSefaz.status !== "SENT") {
