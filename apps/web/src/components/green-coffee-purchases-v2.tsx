@@ -175,7 +175,8 @@ export default function GreenCoffeePurchasesV2() {
   const [options, setOptions] = useState<Options | null>(null);
   const [references, setReferences] = useState<ReferenceData | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
-  const [open, setOpen] = useState(false);\n  const [entryChoiceOpen, setEntryChoiceOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [entryChoiceOpen, setEntryChoiceOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
