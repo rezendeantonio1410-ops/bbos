@@ -637,11 +637,17 @@ export class BlingOutboxService {
       );
       let note = detail?.data ?? detail ?? {};
       let status = this.fiscalStatus(note?.situacao);
-      const protocol = String(note?.protocolo ?? note?.protocoloAutorizacao ?? note?.numeroProtocolo ?? "").trim();
+      const protocol = String(note?.protocolo ?? note?.protocoloAutorizacao ?? note?.numeroProtocolo ?? note?.protocoloUso ?? note?.protocoloNfe ?? "").trim();
       const accessKeyFromNote = String(note?.chaveAcesso ?? note?.chave ?? "").replace(/\D/g, "");
-      // Fiscal truth wins over a stale Bling UI/status code: an NF-e with a 44-digit
-      // access key and authorization protocol is authorized and must unlock fulfillment.
-      if (protocol && accessKeyFromNote.length === 44) status = "AUTHORIZED";
+      const xmlUrl = String(note?.linkXml ?? note?.xml ?? note?.xmlUrl ?? "").trim();
+      const danfeUrl = String(note?.linkDanfe ?? note?.danfe ?? note?.pdf ?? "").trim();
+      const statusText = String(note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "").toLowerCase();
+      // Fiscal truth wins over a stale Bling status code. Bling may expose an authorized
+      // DANFE/protocol while situacao is still "consultar situação".
+      if (
+        accessKeyFromNote.length === 44 &&
+        (protocol || xmlUrl || danfeUrl || statusText.includes("autoriz") || statusText.includes("danfe"))
+      ) status = "AUTHORIZED";
       let retrySnapshot: Record<string, unknown> = {};
       const storedSefaz = this.sefazAuthorization(row.payloadSnapshot?.blingSend);
       if (storedSefaz.status !== "SENT") {
