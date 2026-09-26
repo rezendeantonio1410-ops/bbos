@@ -107,7 +107,9 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const [selectedContactId, setSelectedContactId] = useState("");
   const acceptanceInputRef = useRef<HTMLInputElement>(null);
   const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
-  const [validationMissing, setValidationMissing] = useState<string[]>([]);\n  const [xmlBusy, setXmlBusy] = useState(false);\n  const [xmlResult, setXmlResult] = useState<any>(null);
+  const [validationMissing, setValidationMissing] = useState<string[]>([]);
+  const [xmlBusy, setXmlBusy] = useState(false);
+  const [xmlResult, setXmlResult] = useState<any>(null);
   const load = async (id: string) => {
     const [purchaseResponse, sessionIdentity] = await Promise.all([
       fetch(`${API_ROOT}/green-coffee-purchases/${id}`, { credentials: "include" }),
