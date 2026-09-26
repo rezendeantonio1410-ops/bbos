@@ -129,6 +129,7 @@ function Wizard({
     packagingType: p.packagingType,
     volumeQuantity: p.volumeQuantity,
     nominalWeightKg: Number(p.nominalUnitWeightKg),
+    weightEntryMode: "DOCUMENTAL" as "DOCUMENTAL" | "SCALE",
     grossWeightKg: 0,
     tareWeightKg: 0,
     moisturePercent: "",
