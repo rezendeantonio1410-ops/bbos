@@ -210,7 +210,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     finally { setBusy(false); }
   };
   const uploadInvoiceXml = async (file: File) => {
-    setXmlBusy(true); setError(""); setNotice(""); setXmlResult(null);
+    setXmlBusy(true); setError(""); setNotice("");
     try {
       const xml = await file.text();
       const response = await fetch(`${API_ROOT}/fiscal-inbound/import-xml`, {
