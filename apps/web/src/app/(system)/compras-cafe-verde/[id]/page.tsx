@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ExternalLink, Send } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, FileUp, Send } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
@@ -107,7 +107,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const [selectedContactId, setSelectedContactId] = useState("");
   const acceptanceInputRef = useRef<HTMLInputElement>(null);
   const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
-  const [validationMissing, setValidationMissing] = useState<string[]>([]);
+  const [validationMissing, setValidationMissing] = useState<string[]>([]);\n  const [xmlBusy, setXmlBusy] = useState(false);\n  const [xmlResult, setXmlResult] = useState<any>(null);
   const load = async (id: string) => {
     const [purchaseResponse, sessionIdentity] = await Promise.all([
       fetch(`${API_ROOT}/green-coffee-purchases/${id}`, { credentials: "include" }),
@@ -207,6 +207,23 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível devolver para ajuste."); }
     finally { setBusy(false); }
   };
+  const uploadInvoiceXml = async (file: File) => {
+    setXmlBusy(true); setError(""); setNotice(""); setXmlResult(null);
+    try {
+      const xml = await file.text();
+      const response = await fetch(`${API_ROOT}/fiscal-inbound/import-xml`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xml, purchaseId: purchase.id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message ?? "Não foi possível importar o XML.");
+      setXmlResult(data);
+      setNotice("NF/XML importada. Confira a correspondência fiscal com esta compra.");
+      await load(purchase.id);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível importar o XML."); }
+    finally { setXmlBusy(false); }
+  };
   const copyAcceptanceLink = async () => {
     if (!acceptanceUrl) return;
     const selectLink = () => {
@@ -246,6 +263,8 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     {error && <p className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
     <header className="mt-5 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">Ficha completa da compra</p><h1 className="mt-2 text-3xl font-bold">{purchase.purchaseNumber}</h1><p className="mt-2 text-sm text-stone-500">{purchase.supplier.name} · {purchase.supplier.taxId ?? "Documento não informado"}</p></div>{purchase.externalAcceptanceStatus !== "ACCEPTED" && <div className="flex flex-wrap gap-2"><Badge>{approval[purchase.approvalStatus] ?? purchase.approvalStatus}</Badge><Badge>{operationalLabel}</Badge><Badge>{financial[purchase.financialStatus] ?? purchase.financialStatus}</Badge><Badge>{external[purchase.externalAcceptanceStatus] ?? purchase.externalAcceptanceStatus}</Badge></div>}</header>
     <Card className="mt-6 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-forest-700">Ações da ficha</p><p className="mt-1 text-sm text-stone-500">A aprovação, o aceite e o recebimento são etapas independentes.</p></div><div className="flex flex-wrap gap-2">
+      {purchase.approvalStatus === "APPROVED" && <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-forest-700 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-forest-900"><FileUp size={15}/>{xmlBusy ? "Importando XML…" : "Vincular NF/XML"}<input type="file" accept=".xml,text/xml,application/xml" className="hidden" disabled={xmlBusy} onChange={(event) => { const file=event.target.files?.[0]; if(file) void uploadInvoiceXml(file); event.currentTarget.value=""; }}/></label>}
+
       {purchase.approvalStatus === "DRAFT" && <><span className={`rounded-xl px-4 py-3 text-sm font-semibold ${returnedForAdjustment ? "bg-amber-50 text-amber-900" : "bg-stone-100 text-stone-700"}`}>{returnedForAdjustment ? "Devolvida para ajuste" : "Rascunho"}</span><Link className="inline-flex min-h-11 items-center rounded-xl border px-4 py-2.5 text-sm font-semibold" href={`/compras-cafe-verde/${purchase.id}/editar`}>Editar compra</Link>{approvalMissing().length === 0 && <Button disabled={busy} onClick={() => void submitForApproval()}>{returnedForAdjustment ? "Reenviar para aprovação" : "Enviar para aprovação"}</Button>}</>}
       {purchase.approvalStatus === "PENDING_APPROVAL" && actor && <><Button disabled={busy} onClick={() => void decision("approve")}>Aprovar compra</Button><button disabled={busy} className="min-h-11 rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-semibold text-amber-800" onClick={() => setReturnOpen(true)}>Devolver para ajuste</button></>}
       {purchase.approvalStatus === "PENDING_APPROVAL" && !actor && <span className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Aguardando aprovação da Diretoria</span>}
