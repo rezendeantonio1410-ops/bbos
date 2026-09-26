@@ -175,7 +175,7 @@ export default function GreenCoffeePurchasesV2() {
   const [options, setOptions] = useState<Options | null>(null);
   const [references, setReferences] = useState<ReferenceData | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false);\n  const [entryChoiceOpen, setEntryChoiceOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -393,7 +393,7 @@ export default function GreenCoffeePurchasesV2() {
         </div>
         <div className="flex gap-2">
           <Link href="/fornecedores" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Fornecedores</Link>
-          <Button onClick={() => setOpen(true)}><Plus size={16} /> Nova compra</Button>
+          <Button onClick={() => setEntryChoiceOpen(true)}><Plus size={16} /> Nova compra</Button>
         </div>
       </header>
 
@@ -411,6 +411,29 @@ export default function GreenCoffeePurchasesV2() {
           </Card>
         ))}
       </div>
+
+      {entryChoiceOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[color:var(--bbos-action-primary)]/30 p-3">
+          <div className="w-full max-w-2xl rounded-3xl bg-[var(--bbos-surface-warm)] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">Entrada de café verde</p><h2 className="mt-1 text-2xl font-bold">Como esta compra está entrando?</h2><p className="mt-2 text-sm text-[var(--bbos-text-secondary)]">Escolha o fluxo para manter a rastreabilidade sem criar etapas artificiais.</p></div>
+              <button type="button" className="min-h-11 min-w-11" onClick={() => setEntryChoiceOpen(false)}><X /></button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={() => { setEntryChoiceOpen(false); setOpen(true); }} className="rounded-2xl border border-[var(--bbos-border)] bg-white p-5 text-left hover:border-[var(--bbos-coffee-green)]">
+                <Handshake size={22} className="text-[var(--bbos-coffee-green)]" />
+                <b className="mt-3 block text-lg">Nova negociação</b>
+                <span className="mt-1 block text-sm text-[var(--bbos-text-secondary)]">Compra ainda em negociação. Origem, especificação, comercial, aprovação e aceite do fornecedor.</span>
+              </button>
+              <Link href="/recebimentos?modo=compra-realizada" onClick={() => setEntryChoiceOpen(false)} className="rounded-2xl border-2 border-[var(--bbos-coffee-green)] bg-[var(--bbos-success-soft)] p-5 text-left">
+                <Scale size={22} className="text-[var(--bbos-coffee-green)]" />
+                <b className="mt-3 block text-lg">Compra já realizada · Tenho NF/XML</b>
+                <span className="mt-1 block text-sm text-[var(--bbos-text-secondary)]">Mercadoria já comprada ou recebida. Importar a NF, conferir sacas/kg e registrar o recebimento sem aceite do fornecedor.</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[color:var(--bbos-action-primary)]/30 p-3">
