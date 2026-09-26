@@ -325,9 +325,25 @@ export class ReceiptsController {
           );
         if (purchase.approvalStatus !== "APPROVED")
           throw new BadRequestException("A compra precisa estar aprovada internamente.");
-        if (purchase.externalAcceptanceStatus !== "ACCEPTED")
-          throw new BadRequestException("O aceite externo do fornecedor é necessário antes do recebimento.");
         const fiscalDocument = fiscalDocuments[0];
+        const matchedFiscalPurchase = await transaction.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT f.id
+             FROM "FiscalDocument" f
+             JOIN "FiscalDocumentAllocation" a ON a."fiscalDocumentId"=f.id
+            WHERE a."purchaseId"=$1
+              AND a."allocationType"='GREEN_COFFEE_PURCHASE'
+              AND f."companyId"=$2
+              AND f.direction='INBOUND'
+              AND f."matchStatus"='MATCHED'
+            LIMIT 1`,
+          body.purchaseId,
+          body.companyId,
+        );
+        if (
+          purchase.externalAcceptanceStatus !== "ACCEPTED" &&
+          matchedFiscalPurchase.length === 0
+        )
+          throw new BadRequestException("O aceite externo do fornecedor é necessário antes do recebimento quando não há NF-e fiscalmente vinculada à compra.");
         if (body.fiscalDocumentId && !fiscalDocument)
           throw new BadRequestException("A NF-e selecionada não pertence à empresa ativa.");
         if (fiscalDocument && fiscalDocument.status !== "AUTHORIZED")
