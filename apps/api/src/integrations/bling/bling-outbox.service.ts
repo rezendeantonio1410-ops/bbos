@@ -110,6 +110,7 @@ export class BlingOutboxService {
       );
     }
 
+    // Always resolve the contact fresh by fiscal document after a stale mapping is discarded.
     const remoteId = await this.findContactByDocument(companyId, document);
     if (remoteId) {
       const detail = await this.bling.request(companyId, `/contatos/${encodeURIComponent(remoteId)}`, { method: "GET" }).catch(() => null);
@@ -758,6 +759,26 @@ export class BlingOutboxService {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  async retrySalesOrderInvoice(companyId: string, orderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,so.status,c."taxId" FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId" WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
+      orderId, companyId,
+    );
+    const row = rows[0];
+    if (!row) throw new Error("Pedido não encontrado.");
+    const document = String(row.taxId ?? "").replace(/\D/g, "");
+    if (!document) throw new Error("Reprocessamento fiscal bloqueado: cliente sem CPF/CNPJ.");
+    await this.database.$executeRawUnsafe(
+      `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType" IN ('CONTACT_DOCUMENT','SALES_ORDER') AND ("internalKey"=$2 OR "internalKey"=$3)`,
+      companyId, document, orderId,
+    );
+    await this.database.$executeRawUnsafe(
+      `UPDATE "IntegrationOutbox" SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE "companyId"=$1 AND "aggregateId"=$2 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,
+      companyId, orderId,
+    );
+    return this.processNext(companyId);
   }
 
   async resetCancelledSalesOrderInvoice(companyId: string, orderId: string) {
