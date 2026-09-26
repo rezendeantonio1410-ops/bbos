@@ -434,7 +434,7 @@ export class ReceiptsController {
             unit: body.unit,
             bagQuantity: body.bagQuantity,
             bagWeightKg: body.bagWeightKg,
-            grossWeightKg: body.grossWeightKg,
+            grossWeightKg: body.grossWeightKg ?? body.netWeightKg,
             tareWeightKg: body.tareWeightKg ?? 0,
             netWeightKg: body.netWeightKg,
             moisturePercent: body.moisturePercent,
