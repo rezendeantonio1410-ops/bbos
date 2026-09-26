@@ -527,7 +527,7 @@ export class BlingOutboxService {
     // 6 authorized, 7 DANFE issued, 9 awaiting protocol,
     // 10 denied, 11 status query and 12 blocked.
     if (code === 6 || code === 7) return "AUTHORIZED";
-    if (code === 3) return "CANCELLED";
+    if (code === 2 || code === 3) return "CANCELLED";
     if (code === 5 || code === 10 || code === 12) return "REJECTED";
     return "SENT";
   }
