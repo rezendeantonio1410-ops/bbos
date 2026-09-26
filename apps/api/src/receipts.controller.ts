@@ -162,7 +162,7 @@ export class ReceiptsController {
         orderBy: { name: "asc" },
       }),
       this.database.warehouse.findMany({
-        where: { companyId: company.id },
+        where: { companyId: company.id, type: "GREEN_COFFEE" },
         orderBy: { name: "asc" },
       }),
       this.database.user.findMany({
