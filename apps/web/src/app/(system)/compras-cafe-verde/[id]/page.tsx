@@ -219,7 +219,16 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message ?? "Não foi possível importar o XML.");
-      setNotice("NF/XML importada. Confira a correspondência fiscal com esta compra.");
+      if (!data.id) throw new Error("A NF-e foi importada, mas o BBOS não retornou o identificador fiscal.");
+      const matchResponse = await fetch(`${API_ROOT}/fiscal-inbound/${data.id}/match-purchase`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchaseId: purchase.id }),
+      });
+      const matchData = await matchResponse.json().catch(() => ({}));
+      if (!matchResponse.ok) throw new Error(matchData.message ?? "NF-e importada, mas não foi possível vinculá-la à compra.");
+      if (matchData.matchStatus !== "MATCHED") throw new Error(`NF-e vinculada com divergência de valor: ${Number(matchData.valueDifference ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`);
+      setNotice("NF-e importada e vinculada a esta compra com correspondência fiscal confirmada.");
       await load(purchase.id);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível importar o XML."); }
     finally { setXmlBusy(false); }
