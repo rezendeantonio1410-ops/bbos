@@ -54,7 +54,7 @@ type ConfirmReceiptBody = {
   packagingType?: "BAG_30_KG" | "BAG_60_KG" | "BIG_BAG" | "OTHER";
   volumeQuantity?: number;
   nominalWeightKg?: number;
-  grossWeightKg: number;
+  weightEntryMode?: "DOCUMENTAL" | "SCALE";\n  grossWeightKg?: number;
   tareWeightKg?: number;
   netWeightKg: number;
   qualityStatus?: GreenCoffeeQualityStatus;
@@ -788,22 +788,29 @@ export class ReceiptsController {
     ];
     if (required.some((value) => !value))
       throw new BadRequestException("Preencha todos os campos obrigatórios.");
-    if (
-      !Number.isFinite(body.netWeightKg) ||
-      body.netWeightKg <= 0 ||
-      !Number.isFinite(body.grossWeightKg) ||
-      body.grossWeightKg <= 0
-    )
-      throw new BadRequestException("Os pesos devem ser maiores que zero.");
-    if (
-      (body.tareWeightKg ?? 0) < 0 ||
-      Math.abs(
-        body.grossWeightKg - (body.tareWeightKg ?? 0) - body.netWeightKg,
-      ) > 0.01
-    )
+    if (!Number.isFinite(body.netWeightKg) || body.netWeightKg <= 0)
+      throw new BadRequestException("O peso líquido deve ser maior que zero.");
+    if (body.weightEntryMode !== "DOCUMENTAL") {
+      if (!Number.isFinite(body.grossWeightKg) || Number(body.grossWeightKg) <= 0)
+        throw new BadRequestException("O peso bruto deve ser maior que zero.");
+      if (
+        (body.tareWeightKg ?? 0) < 0 ||
+        Math.abs(
+          Number(body.grossWeightKg) - (body.tareWeightKg ?? 0) - body.netWeightKg,
+        ) > 0.01
+      )
+        throw new BadRequestException(
+          "Peso líquido deve ser igual ao peso bruto menos a tara.",
+        );
+    } else if (
+      !body.volumeQuantity ||
+      !body.nominalWeightKg ||
+      Math.abs(body.volumeQuantity * body.nominalWeightKg - body.netWeightKg) > 0.01
+    ) {
       throw new BadRequestException(
-        "Peso líquido deve ser igual ao peso bruto menos a tara.",
+        "No peso documental, volumes × peso nominal devem corresponder ao peso líquido.",
       );
+    }
     if (
       body.unit === "BAG" &&
       (!body.bagQuantity ||
