@@ -437,6 +437,13 @@ export class IntegrationsController {
     }
   }
 
+  @Post("bling/sales-orders/:id/retry-invoice")
+  async retryInvoice(@Req() request: any, @Param("id") id: string) {
+    const actor = await this.actor(request);
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) throw new UnauthorizedException("O reprocessamento fiscal é restrito à gestão.");
+    return this.blingOutbox.retrySalesOrderInvoice(actor.companyId, id);
+  }
+
   @Post("bling/sales-orders/:id/reset-cancelled-invoice")
   async resetCancelledInvoice(@Req() request: any, @Param("id") id: string) {
     const actor = await this.actor(request);
