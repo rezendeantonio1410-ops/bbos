@@ -145,7 +145,7 @@ function Wizard({
     [s, setS] = useState(0),
     [busy, setBusy] = useState(false),
     [err, setErr] = useState("");
-  const net = Math.max(0, Number(d.grossWeightKg) - Number(d.tareWeightKg));
+  const net = d.weightEntryMode === "DOCUMENTAL" ? Number(d.volumeQuantity) * Number(d.nominalWeightKg) : Math.max(0, Number(d.grossWeightKg) - Number(d.tareWeightKg));
   const set = (k: keyof typeof d, v: (typeof d)[keyof typeof d]) => setD((x) => ({ ...x, [k]: v }));
   const submit = async () => {
     setBusy(true);
@@ -367,6 +367,13 @@ function Wizard({
             )}
             {s === 2 && (
               <>
+                <div className="sm:col-span-2 rounded-xl border border-stone-200 bg-stone-50 p-4">
+                  <p className="text-xs font-semibold">Base do peso de entrada</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <button type="button" onClick={() => set("weightEntryMode", "DOCUMENTAL")} className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold ${d.weightEntryMode === "DOCUMENTAL" ? "border-forest-700 bg-emerald-50 text-forest-900" : "bg-white"}`}>Quantidade fiscal / nominal<span className="mt-1 block text-xs font-normal text-stone-500">Volumes × peso nominal. Use quando a entrada física já ocorreu e o peso está documentado.</span></button>
+                    <button type="button" onClick={() => set("weightEntryMode", "SCALE")} className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold ${d.weightEntryMode === "SCALE" ? "border-forest-700 bg-emerald-50 text-forest-900" : "bg-white"}`}>Pesagem em balança<span className="mt-1 block text-xs font-normal text-stone-500">Peso bruto real − tara.</span></button>
+                  </div>
+                </div>
                 <F
                   l="Acondicionamento"
                   c={
@@ -408,7 +415,7 @@ function Wizard({
                     />
                   }
                 />
-                <F
+                {d.weightEntryMode === "SCALE" && <F
                   l="Peso bruto real"
                   c={
                     <input
@@ -433,7 +440,7 @@ function Wizard({
                       }
                     />
                   }
-                />
+                />}
                 <Card className="bg-forest-950 p-4 text-white">
                   <small>Peso líquido oficial</small>
                   <b className="block text-xl">{net} kg</b>
