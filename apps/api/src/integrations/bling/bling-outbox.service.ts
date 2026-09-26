@@ -85,7 +85,8 @@ export class BlingOutboxService {
               .replace(/\D/g, "") === document,
         );
         if (exact?.id) return String(exact.id);
-        if (list[0]?.id) return String(list[0].id);
+        // Never accept the first fuzzy search result for fiscal identity.
+        // A non-exact result must be treated as not found so ensureContact can create the correct contact.
       } catch {
         // tenta o próximo filtro disponível na API
       }
