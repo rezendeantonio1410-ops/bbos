@@ -55,7 +55,7 @@ export default function GreenCoffeeHome() {
     const stock = stockResult.status === "fulfilled" ? stockResult.value : null;
     setCounts((current) => ({
       purchases: purchases?.length ?? current.purchases,
-      delivery: options?.purchases?.filter((purchase) => purchase.approvalStatus === "APPROVED" && purchase.externalAcceptanceStatus === "ACCEPTED" && purchase.operationalStatus === "AWAITING_DELIVERY" && purchase.balanceKg > 0).length ?? current.delivery,
+      delivery: options?.purchases?.filter((purchase) => purchase.approvalStatus === "APPROVED" && purchase.operationalStatus === "AWAITING_DELIVERY" && purchase.balanceKg > 0).length ?? current.delivery,
       receipts: receipts?.length ?? current.receipts,
       stock: stock?.activeLots ?? current.stock,
       attention: stock?.attentionLots ?? current.attention,
