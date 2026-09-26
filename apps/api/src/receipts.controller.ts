@@ -54,7 +54,8 @@ type ConfirmReceiptBody = {
   packagingType?: "BAG_30_KG" | "BAG_60_KG" | "BIG_BAG" | "OTHER";
   volumeQuantity?: number;
   nominalWeightKg?: number;
-  weightEntryMode?: "DOCUMENTAL" | "SCALE";\n  grossWeightKg?: number;
+  weightEntryMode?: "DOCUMENTAL" | "SCALE";
+  grossWeightKg?: number;
   tareWeightKg?: number;
   netWeightKg: number;
   qualityStatus?: GreenCoffeeQualityStatus;
