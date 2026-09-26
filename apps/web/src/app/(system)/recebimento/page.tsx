@@ -158,6 +158,8 @@ function Wizard({
           ...d,
           idempotencyKey: crypto.randomUUID(),
           netWeightKg: net,
+          grossWeightKg: d.weightEntryMode === "DOCUMENTAL" ? undefined : d.grossWeightKg,
+          tareWeightKg: d.weightEntryMode === "DOCUMENTAL" ? undefined : d.tareWeightKg,
           qualityStatus: "AWAITING_ANALYSIS",
           moisturePercent: d.moisturePercent
             ? Number(d.moisturePercent)
