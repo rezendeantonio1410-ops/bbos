@@ -109,7 +109,6 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
   const [validationMissing, setValidationMissing] = useState<string[]>([]);
   const [xmlBusy, setXmlBusy] = useState(false);
-  const [xmlResult, setXmlResult] = useState<any>(null);
   const load = async (id: string) => {
     const [purchaseResponse, sessionIdentity] = await Promise.all([
       fetch(`${API_ROOT}/green-coffee-purchases/${id}`, { credentials: "include" }),
@@ -220,7 +219,6 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message ?? "Não foi possível importar o XML.");
-      setXmlResult(data);
       setNotice("NF/XML importada. Confira a correspondência fiscal com esta compra.");
       await load(purchase.id);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível importar o XML."); }
