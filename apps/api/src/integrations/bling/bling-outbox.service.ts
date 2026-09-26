@@ -766,7 +766,10 @@ export class BlingOutboxService {
     if (!row?.externalId) throw new Error("Pedido sem NF-e do Bling para reconciliar.");
     const detail = await this.bling.request(companyId, `/nfe/${encodeURIComponent(row.externalId)}`, { method: "GET" });
     const note = detail?.data ?? detail ?? {};
-    if (this.fiscalStatus(note?.situacao) !== "CANCELLED") throw new Error("A NF-e ainda não consta como cancelada no Bling.");
+    const remoteStatus = this.fiscalStatus(note?.situacao);
+    const remoteStatusText = String(note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "").toLowerCase();
+    const cancelled = remoteStatus === "CANCELLED" || remoteStatusText.includes("cancel");
+    if (!cancelled) throw new Error(`A NF-e ainda não consta como cancelada no Bling (situação retornada: ${remoteStatusText || "não informada"}).`);
     await this.database.$executeRawUnsafe(`UPDATE "FiscalDocument" SET status='CANCELLED',"payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb)||$2::jsonb,"updatedAt"=NOW() WHERE id=$1`, row.fiscalId, JSON.stringify({ cancellationReconciledAt: new Date().toISOString(), blingNfe: note }));
     await this.database.$executeRawUnsafe(`UPDATE "SalesOrder" SET status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW() WHERE id=$1`, orderId);
     await this.database.$executeRawUnsafe(`DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`, companyId, orderId);
