@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, Injectable, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
@@ -8,8 +8,10 @@ import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifec
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
 @Injectable()
-export class MelhorEnvioShipmentService implements OnModuleInit {
+export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy {
   private readonly database = new PrismaClient();
+  private trackingTimer?: NodeJS.Timeout;
+  private reconcilingTracking = false;
 
   constructor(
     private readonly lifecycle: StorefrontLifecycleService,
@@ -34,33 +36,138 @@ export class MelhorEnvioShipmentService implements OnModuleInit {
         LIMIT 1`,
     );
     const order = rows[0];
-    if (!order) return;
+    if (order) {
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "Shipment"
+              SET status='IN_TRANSIT',"postedAt"=NOW(),"updatedAt"=NOW()
+            WHERE id=$1 AND status='LABEL_READY' AND "postedAt" IS NULL`,
+          order.shipmentId,
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET status='SHIPPED',"updatedAt"=NOW()
+            WHERE id=$1 AND status='INVOICED'`,
+          order.salesOrderId,
+        );
+      });
 
-    await this.database.$transaction(async (transaction) => {
-      await transaction.$executeRawUnsafe(
-        `UPDATE "Shipment"
-            SET status='IN_TRANSIT',"postedAt"=NOW(),"updatedAt"=NOW()
-          WHERE id=$1 AND status='LABEL_READY' AND "postedAt" IS NULL`,
-        order.shipmentId,
-      );
-      await transaction.$executeRawUnsafe(
-        `UPDATE "SalesOrder"
-            SET status='SHIPPED',"updatedAt"=NOW()
-          WHERE id=$1 AND status='INVOICED'`,
+      await this.customerLifecycle.record(
         order.salesOrderId,
+        "SHIPPED",
+        "Pedido enviado",
+        "A postagem deste pedido foi confirmada manualmente e o BBOS foi reconciliado com a expedição realizada.",
+        "ADMIN",
+        `sales-order:manual-shipped-reconciliation:${order.salesOrderId}`,
+        { shipmentId: order.shipmentId, reason: "POSTAGEM_CONFIRMADA_OPERACIONALMENTE" },
+        false,
       );
-    });
+    }
 
-    await this.customerLifecycle.record(
-      order.salesOrderId,
-      "SHIPPED",
-      "Pedido enviado",
-      "A postagem deste pedido foi confirmada manualmente e o BBOS foi reconciliado com a expedição realizada.",
-      "ADMIN",
-      `sales-order:manual-shipped-reconciliation:${order.salesOrderId}`,
-      { shipmentId: order.shipmentId, reason: "POSTAGEM_CONFIRMADA_OPERACIONALMENTE" },
-      false,
+    void this.reconcileActiveShipments();
+    this.trackingTimer = setInterval(
+      () => void this.reconcileActiveShipments(),
+      300_000,
     );
+    this.trackingTimer.unref?.();
+  }
+
+  async onModuleDestroy() {
+    if (this.trackingTimer) clearInterval(this.trackingTimer);
+  }
+
+  private async reconcileActiveShipments() {
+    if (this.reconcilingTracking) return;
+    this.reconcilingTracking = true;
+    try {
+      const shipments = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT sh.id,sh."companyId",sh."externalId",sh.status,sh."salesOrderId",sh."storefrontOrderId",
+                sh."trackingCode",sh."trackingUrl",sh."postedAt"
+           FROM "Shipment" sh
+          WHERE sh.provider='MELHOR_ENVIO'
+            AND sh."externalId" IS NOT NULL
+            AND sh.status IN ('LABEL_READY','PURCHASED','IN_TRANSIT','OUT_FOR_DELIVERY')
+          ORDER BY sh."updatedAt" ASC
+          LIMIT 100`,
+      );
+
+      for (const shipment of shipments) {
+        try {
+          const details = await this.request(
+            shipment.companyId,
+            `/me/orders/${encodeURIComponent(shipment.externalId)}`,
+            { method: "GET" },
+          );
+
+          const trackingCode =
+            String(details?.tracking || details?.tracking_code || "") || null;
+          const trackingUrl =
+            String(
+              details?.tracking_url ||
+                details?.tracking?.url ||
+                details?.service?.company?.tracking_link ||
+                "",
+            ) || null;
+
+          await this.database.$executeRawUnsafe(
+            `UPDATE "Shipment"
+                SET "trackingCode"=COALESCE($2,"trackingCode"),
+                    "trackingUrl"=COALESCE($3,"trackingUrl"),
+                    metadata=$4::jsonb,
+                    "updatedAt"=NOW()
+              WHERE id=$1`,
+            shipment.id,
+            trackingCode,
+            trackingUrl,
+            JSON.stringify(details || {}),
+          );
+
+          const rawStatus = String(
+            details?.status ||
+              details?.tracking?.status ||
+              details?.self_tracking?.status ||
+              "",
+          ).toLowerCase();
+
+          if (details?.delivered_at || rawStatus.includes("deliver")) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              "delivered",
+              details,
+            );
+          } else if (
+            rawStatus.includes("out_for_delivery") ||
+            rawStatus.includes("saiu")
+          ) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              "out_for_delivery",
+              details,
+            );
+          } else if (
+            details?.posted_at ||
+            trackingCode ||
+            rawStatus.includes("post") ||
+            rawStatus.includes("transit") ||
+            rawStatus.includes("movimenta")
+          ) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              "in_transit",
+              details,
+            );
+          }
+        } catch (error) {
+          console.error("Falha ao reconciliar rastreio do Melhor Envio", {
+            shipmentId: shipment.id,
+            externalId: shipment.externalId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } finally {
+      this.reconcilingTracking = false;
+    }
   }
 
   private base() {
