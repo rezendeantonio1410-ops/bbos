@@ -24,6 +24,19 @@
 .peopleGrid h3{font-size:clamp(28px,3vw,40px);line-height:1.1;letter-spacing:-.04em;margin:15px 0}
 .peopleGrid p{font-size:17px;line-height:1.62;margin:0;max-width:480px}
 .peopleEnd{max-width:950px;margin:48px auto 0;text-align:center;font-size:clamp(21px,2.4vw,32px);line-height:1.35}
+.memory{padding:95px max(5vw,22px);display:grid;grid-template-columns:.9fr 1.1fr;gap:6vw;max-width:1380px;margin:auto}
+.memory h2,.career h2{font-size:clamp(38px,5vw,70px);font-weight:500;line-height:1.06;letter-spacing:-.055em;margin:12px 0 0}
+.memoryBody{padding-top:25px}
+.memoryBody p{font-size:clamp(18px,1.5vw,21px);line-height:1.65;margin:0 0 26px}
+.career{background:#f0f0eb;padding:95px max(5vw,22px)}
+.careerIntro{max-width:1050px;margin:0 auto 46px}
+.careerIntro>p:not(.kicker){font-size:20px;line-height:1.6;max-width:800px;margin:28px 0 0}
+.careerChapters{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:1200px;margin:auto}
+.careerChapters article{background:#fff;padding:38px;border-top:3px solid #33534b}
+.careerChapters span{font-size:12px;letter-spacing:.12em;font-weight:800;color:#44635b}
+.careerChapters h3{font-size:clamp(27px,2.7vw,37px);line-height:1.1;letter-spacing:-.045em;font-weight:550;margin:22px 0}
+.careerChapters p{font-size:17px;line-height:1.62;margin:0}
+.careerSignature{max-width:900px;margin:40px auto 0;text-align:center;font-size:clamp(20px,2.2vw,28px);line-height:1.45}
 .landscape{background:#162b29;color:#fff}
 .landscapeImage{height:clamp(300px,44vw,650px);position:relative;overflow:hidden}
 .landscapeImage img{object-fit:cover}
@@ -39,7 +52,7 @@
 .soilImage{position:relative;height:clamp(230px,32vw,410px);overflow:hidden;margin:36px 0 0;border-radius:7px}
 .soilImage img{object-fit:cover;object-position:center 60%}
 .soilImage figcaption{position:absolute;bottom:16px;left:17px;color:#fff;background:#13201eca;border-radius:3px;padding:8px 10px;font-size:12px}
-.territoryGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:25px;margin:55px 0}
+.territoryGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:25px 45px;margin:55px 0}
 .territoryGrid>div{padding-top:20px;border-top:2px solid #34534b}
 .territoryGrid strong{font-size:25px;letter-spacing:-.03em}
 .territoryGrid p{font-size:17px;line-height:1.6}
@@ -54,4 +67,4 @@
 .close h2{font-size:clamp(32px,4.5vw,60px);line-height:1.15;letter-spacing:-.05em;font-weight:500;max-width:900px;margin:25px auto 40px}
 .close a{display:inline-block;background:#13201e;color:#fff;padding:18px 25px;border-radius:100px;text-decoration:none;font-size:14px;font-weight:700}
 .close a:hover,.close a:focus-visible{background:#315d4e}
-@media(max-width:700px){.headerShop{font-size:12px;padding:10px 12px}.storyTabs{padding:12px}.storyTabs span,.storyTabs a{font-size:12px;padding:11px 13px}.intro{padding:60px 22px 68px}.intro h1{margin:15px 0 38px}.people{padding:60px 18px}.peopleGrid{grid-template-columns:1fr}.portrait{height:300px}.peopleGrid article>div:last-child{padding:25px}.peopleEnd{margin-top:35px}.landscapeImage{height:330px}.landscapeImage img{object-position:center}.dayLabel,.nightLabel{font-size:10px;bottom:12px;padding:7px}.dayLabel{left:12px}.nightLabel{right:12px}.landscapeText{padding:55px 22px}.landscapeText>p:not(.kicker){font-size:17px}.territory{padding:65px 22px}.territoryGrid{grid-template-columns:1fr;gap:15px;margin:35px 0}.close{padding:65px 22px}}
+@media(max-width:700px){.headerShop{font-size:12px;padding:10px 12px}.storyTabs{padding:12px}.storyTabs span,.storyTabs a{font-size:12px;padding:11px 13px}.intro{padding:60px 22px 68px}.intro h1{margin:15px 0 38px}.people{padding:60px 18px}.peopleGrid{grid-template-columns:1fr}.portrait{height:300px}.peopleGrid article>div:last-child{padding:25px}.peopleEnd{margin-top:35px}.memory{display:block;padding:65px 22px}.memoryBody{padding-top:20px}.career{padding:65px 18px}.careerIntro>p:not(.kicker){font-size:17px}.careerChapters{grid-template-columns:1fr}.careerChapters article{padding:27px}.landscapeImage{height:330px}.landscapeImage img{object-position:center}.dayLabel,.nightLabel{font-size:10px;bottom:12px;padding:7px}.dayLabel{left:12px}.nightLabel{right:12px}.landscapeText{padding:55px 22px}.landscapeText>p:not(.kicker){font-size:17px}.territory{padding:65px 22px}.territoryGrid{grid-template-columns:1fr;gap:15px;margin:35px 0}.close{padding:65px 22px}}

@@ -129,9 +129,13 @@ export default function SobrePage() {
               Sua trajetória atravessa o Norte Novo e o Norte Pioneiro do
               Paraná, formação de provadores, iniciativas de indicação
               geográfica, certificação Fairtrade e projetos com organizações de
-              produtores também em São Paulo. Como cofundador da Capricornio
-              Coffees, ajudou a apresentar cafés brasileiros a compradores de
-              diferentes continentes sem perder a proximidade com a origem.
+              produtores também em São Paulo. Em 2015, cofundou a Capricornio
+              Coffees e ajudou a dar visibilidade a cafés próximos ao Trópico
+              de Capricórnio, ampliando a conversa sobre latitude, altitude e
+              qualidade. Em 2024, iniciou a Longitude Coffees para aproximar
+              mais origens brasileiras dos mercados internacionais. Esse
+              percurso chega à Bispo como experiência acumulada e um novo
+              projeto construído junto com Suzi.
             </p>
           </article>
           <article>

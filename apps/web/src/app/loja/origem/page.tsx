@@ -64,6 +64,32 @@ export default function OrigemPage() {
           <p className={origin.peopleEnd}>Juntos, compreendem o caminho do grão antes de escolher o café que leva o nome Bispo.</p>
         </section>
 
+        <section className={origin.memory} aria-labelledby="memory-title">
+          <div className={origin.memoryLead}>
+            <p className={origin.kicker}>LONDRINA · PARANÁ · CAFÉ</p>
+            <h2 id="memory-title">Esta história começou muito antes da Bispo.</h2>
+          </div>
+          <div className={origin.memoryBody}>
+            <p>O café acompanhou a formação de Londrina e transformou o Norte do Paraná ao longo do século XX. A cidade surgiu em 1929; nas décadas seguintes, lavouras, produtores e trabalhadores fizeram da região uma referência cafeeira. Nos anos 1950, a produção de café impulsionou sua expansão.</p>
+            <p>Parte dessa paisagem tem os solos vermelhos que ficaram conhecidos como <strong>terra roxa</strong>, formados pelo intemperismo do basalto. A história da região também inclui diferentes povos, migrações, trabalho e mudanças no campo. É dessa realidade viva — e não apenas de uma cor no mapa — que falamos quando dizemos <strong>origem</strong>.</p>
+          </div>
+        </section>
+
+        <section className={origin.career} aria-labelledby="career-title">
+          <div className={origin.careerIntro}>
+            <p className={origin.kicker}>DO PARANÁ PARA O MUNDO</p>
+            <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
+            <p>Na trajetória de José, o Norte do Paraná foi ponto de partida para trabalhar com produtores, provar cafés e abrir caminhos em outros mercados. Na trajetória de Suzi, o conhecimento agronômico encontrou no campo uma forma de acompanhar cada decisão que constrói qualidade.</p>
+          </div>
+          <div className={origin.careerChapters}>
+            <article><span>2003 → 2010</span><h3>José · do campo à prova</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A formação como provador, a avaliação sensorial e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a levar cafés do Paraná a compradores de outros países.</p></article>
+            <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
+            <article><span>2024 · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José iniciou a Longitude Coffees para aproximar cafés brasileiros de mercados internacionais. O nome trouxe outra coordenada para sua trajetória e reforçou a atenção à diversidade dos territórios produtores do Brasil.</p></article>
+            <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Suzi trabalha com a planta, o solo, o desenvolvimento produtivo e a orientação a produtores. Na Bispo, essa experiência encontra a de José: os dois acompanham, interpretam e selecionam cafés cuja identidade possa ser percebida na xícara.</p></article>
+          </div>
+          <p className={origin.careerSignature}>Capricornio e Longitude fazem parte do caminho de José. <strong>A Bispo Coffees é a assinatura construída por José e Suzi.</strong></p>
+        </section>
+
         <section className={origin.landscape} aria-labelledby="climate-title">
           <div className={origin.landscapeImage}>
             <Image src="/brand/story/parana-dia-amanhecer.webp" alt="Representação conceitual de um cafezal entre a tarde iluminada e o amanhecer com névoa" fill sizes="100vw" />
@@ -86,15 +112,16 @@ export default function OrigemPage() {
             <figcaption>Solo vermelho, planta e fruto · imagem conceitual</figcaption>
           </figure>
           <div className={origin.territoryGrid}>
-            <div><strong>Latitude</strong><p>O Norte do Paraná fica próximo ao Trópico de Capricórnio. A latitude se soma à altitude, ao relevo e ao clima na formação dos ambientes de cultivo.</p></div>
-            <div><strong>Solo</strong><p>Em parte da região, o basalto deu origem a solos vermelhos e argilosos. Não há um único solo para todo o Norte do Paraná: cada área pede leitura e cuidado próprios.</p></div>
+            <div><strong>Latitude</strong><p>Localiza um lugar ao norte ou ao sul do Equador. O Norte do Paraná fica próximo ao Trópico de Capricórnio; sua latitude se soma à altitude, ao relevo e ao clima.</p></div>
+            <div><strong>Longitude</strong><p>Localiza um lugar a leste ou a oeste. Junto da latitude, ajuda a situar no mapa cada origem e a contar de onde vem o café.</p></div>
+            <div><strong>Terra roxa</strong><p>Em parte da região, o basalto deu origem a solos vermelhos e argilosos. Há também áreas com solos de origem arenítica; cada lavoura pede leitura própria.</p></div>
             <div><strong>Tempo</strong><p>O fruto responde ao conjunto de temperatura, água e decisões de quem cultiva. É esse percurso que Suzi e José procuram compreender antes da escolha.</p></div>
           </div>
           <p className={origin.extremes}><strong>Ao norte, o Havaí. Ao sul, o Paraná.</strong> São exemplos distantes que nos convidam a olhar além da altitude. Seus climas e sistemas de cultivo são diferentes; nenhum fator, isoladamente, explica uma grande xícara.</p>
           <details className={origin.science}>
             <summary>Para quem quer ir mais fundo: a base técnica</summary>
             <p>Pesquisas conduzidas em Londrina com diferentes genótipos de arábica estudaram soma térmica e água disponível durante a maturação. Estudos de solos mostram a presença de materiais derivados de basalto em parte do Norte do Paraná, além de áreas de origem arenítica.</p>
-            <p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa · clima e maturação</a> · <a href="https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1133948/1/DOCUMENTO-440-JA2021.pdf" target="_blank" rel="noopener noreferrer">Embrapa · solos do Norte do Paraná</a>.</p>
+            <p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa · clima e maturação</a> · <a href="https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1133948/1/DOCUMENTO-440-JA2021.pdf" target="_blank" rel="noopener noreferrer">Embrapa · solos do Norte do Paraná</a> · <a href="https://portal.londrina.pr.gov.br/index.php/historia-cidade" target="_blank" rel="noopener noreferrer">Prefeitura · história de Londrina</a> · <a href="https://www.capricorniocoffees.com.br/origins?lang=pt" target="_blank" rel="noopener noreferrer">Capricornio · origens</a> · <a href="https://longitudecoffees.com/?lang=pt&amp;page_id=582" target="_blank" rel="noopener noreferrer">Longitude · trajetória</a>.</p>
           </details>
         </section>
 
