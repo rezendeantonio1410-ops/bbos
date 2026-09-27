@@ -20,50 +20,8 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
   ) {}
 
   async onModuleInit() {
-    // Reconciliação pontual do primeiro envio real: B-2026-000001 (Suzi Ninov).
-    // A etiqueta Jadlog foi gerada e o pedido foi efetivamente postado, mas o
-    // BBOS permaneceu em INVOICED/LABEL_READY por ausência do evento da transportadora.
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT so.id AS "salesOrderId",so.status AS "salesOrderStatus",
-              sh.id AS "shipmentId",sh.status AS "shipmentStatus",sh."postedAt"
-         FROM "SalesOrder" so
-         JOIN "Shipment" sh ON sh."salesOrderId"=so.id
-        WHERE so.code='B-2026-000001'
-          AND so.status='INVOICED'
-          AND sh.status='LABEL_READY'
-          AND sh."labelUrl" IS NOT NULL
-          AND sh."postedAt" IS NULL
-        LIMIT 1`,
-    );
-    const order = rows[0];
-    if (order) {
-      await this.database.$transaction(async (transaction) => {
-        await transaction.$executeRawUnsafe(
-          `UPDATE "Shipment"
-              SET status='IN_TRANSIT',"postedAt"=NOW(),"updatedAt"=NOW()
-            WHERE id=$1 AND status='LABEL_READY' AND "postedAt" IS NULL`,
-          order.shipmentId,
-        );
-        await transaction.$executeRawUnsafe(
-          `UPDATE "SalesOrder"
-              SET status='SHIPPED',"updatedAt"=NOW()
-            WHERE id=$1 AND status='INVOICED'`,
-          order.salesOrderId,
-        );
-      });
-
-      await this.customerLifecycle.record(
-        order.salesOrderId,
-        "SHIPPED",
-        "Pedido enviado",
-        "A postagem deste pedido foi confirmada manualmente e o BBOS foi reconciliado com a expedição realizada.",
-        "ADMIN",
-        `sales-order:manual-shipped-reconciliation:${order.salesOrderId}`,
-        { shipmentId: order.shipmentId, reason: "POSTAGEM_CONFIRMADA_OPERACIONALMENTE" },
-        false,
-      );
-    }
-
+    // O status comercial continua protegido pelas regras de estoque.
+    // Aqui sincronizamos apenas o que o Melhor Envio informar sobre remessas ativas.
     void this.reconcileActiveShipments();
     this.trackingTimer = setInterval(
       () => void this.reconcileActiveShipments(),
@@ -800,10 +758,24 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
         `UPDATE "SalesOrder"
             SET status=$2,
                 "updatedAt"=NOW()
-          WHERE id=$1 AND status IN ('INVOICED','SHIPPED','DELIVERED')`,
+          WHERE id=$1
+            AND (
+              (status='INVOICED' AND $2='SHIPPED')
+              OR (status='SHIPPED' AND $2='DELIVERED')
+            )`,
         shipment.salesOrderId,
         mapping.order,
-      );
+      ).catch((error) => {
+        // O banco pode bloquear SHIPPED enquanto não houver baixa física.
+        // A remessa/rastreio continua sendo atualizada; o status comercial só
+        // avança quando as regras de estoque estiverem satisfeitas.
+        console.warn("Status comercial preservado durante sincronização de rastreio", {
+          salesOrderId: shipment.salesOrderId,
+          targetStatus: mapping.order,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return 0;
+      });
       await this.customerLifecycle.record(
         shipment.salesOrderId,
         mapping.event,
