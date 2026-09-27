@@ -108,6 +108,35 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       }
     }
 
+    // Corrige o caso real de 27/09 em que duas tentativas consecutivas da
+    // mesma compra geraram dois rascunhos. Mantemos o primeiro pedido e
+    // encerramos apenas o duplicado mais recente, sem pagamento, fiscal ou envio.
+    const knownDuplicate = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      `UPDATE "StorefrontOrder" so
+          SET status='PAYMENT_DUPLICATE',"updatedAt"=NOW()
+        WHERE so.code='WEB-20260927-732970'
+          AND so.status='AWAITING_PAYMENT'
+          AND so."paidAt" IS NULL
+          AND so."totalCents"=7105
+          AND lower(so.customer->>'email')='jana.maestra10@gmail.com'
+          AND so.customer->>'cpf'='01550018094'
+          AND NOT EXISTS (SELECT 1 FROM "Shipment" sh WHERE sh."storefrontOrderId"=so.id)
+        RETURNING so.id`,
+    );
+    for (const duplicate of knownDuplicate) {
+      await this.lifecycle.record(
+        duplicate.id,
+        "PAYMENT_DUPLICATE",
+        "Tentativa duplicada encerrada",
+        "Esta tentativa foi consolidada no pedido original do mesmo cliente.",
+        "ADMIN",
+        `storefront:duplicate-closed:${duplicate.id}`,
+        {},
+        false,
+      );
+      await this.syncSalesOrder(duplicate.id);
+    }
+
     // Webhook é o caminho principal, mas pagamentos não podem ficar presos caso
     // uma notificação externa atrase ou falhe. Reconciliamos pedidos pendentes
     // em segundo plano e também na consulta pública de status.
