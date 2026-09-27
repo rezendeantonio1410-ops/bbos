@@ -155,6 +155,51 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
           });
         }
       }
+
+      const reminderCandidates = await this.database.$queryRawUnsafe<
+        Array<{ id: string; code: string }>
+      >(
+        `SELECT id,code
+           FROM "StorefrontOrder"
+          WHERE status='AWAITING_PAYMENT'
+            AND "createdAt" <= NOW() - INTERVAL '30 minutes'
+            AND "createdAt" > NOW() - INTERVAL '24 hours'
+          ORDER BY "createdAt" ASC
+          LIMIT 50`,
+      );
+      for (const order of reminderCandidates) {
+        await this.lifecycle.record(
+          order.id,
+          "PAYMENT_REMINDER",
+          "Seu pedido Bispo está reservado",
+          `O pagamento do pedido ${order.code} ainda não foi identificado. Se quiser concluir sua escolha, o pagamento continua disponível por tempo limitado.`,
+          "BBOS",
+          `storefront:payment-reminder:${order.id}`,
+          {},
+          true,
+        );
+      }
+
+      const expired = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `UPDATE "StorefrontOrder"
+            SET status='PAYMENT_EXPIRED',"updatedAt"=NOW()
+          WHERE status='AWAITING_PAYMENT'
+            AND "createdAt" <= NOW() - INTERVAL '24 hours'
+        RETURNING id`,
+      );
+      for (const order of expired) {
+        await this.lifecycle.record(
+          order.id,
+          "PAYMENT_EXPIRED",
+          "Reserva do pedido encerrada",
+          "O prazo desta tentativa de pagamento terminou. Se desejar, você pode voltar à loja e gerar um novo pagamento.",
+          "BBOS",
+          `storefront:payment-expired:${order.id}`,
+          {},
+          false,
+        );
+        await this.syncSalesOrder(order.id);
+      }
     } catch (error) {
       console.error("Falha ao listar pagamentos pendentes", {
         error: error instanceof Error ? error.message : String(error),
