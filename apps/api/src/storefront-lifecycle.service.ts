@@ -71,6 +71,10 @@ export class StorefrontLifecycleService {
             title,
             detail,
             trackingUrl: token ? `${publicBase}/loja/pedido/${order.id}?token=${encodeURIComponent(token)}` : null,
+            paymentUrl:
+              typeof metadata.paymentUrl === "string"
+                ? metadata.paymentUrl
+                : null,
             customer: order.customer,
             delivery: order.delivery,
             items: order.items,
