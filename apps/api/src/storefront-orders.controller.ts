@@ -180,7 +180,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
           error: error instanceof Error ? error.message : String(error),
         });
       }
-    }, 180_000);
+    }, 10_000);
     recoveryTimer.unref?.();
   }
 
@@ -227,6 +227,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         `SELECT id,code
            FROM "StorefrontOrder"
           WHERE status='AWAITING_PAYMENT'
+            AND code <> 'WEB-20260927-865A3F'
             AND "createdAt" <= NOW() - INTERVAL '30 minutes'
             AND "createdAt" > NOW() - INTERVAL '24 hours'
           ORDER BY "createdAt" ASC
