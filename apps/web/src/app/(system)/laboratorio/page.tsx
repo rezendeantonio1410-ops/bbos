@@ -148,7 +148,7 @@ function SampleDrawer({
   );
   const [screen, setScreen] = useState(sample.measured.screen ?? "");
   const [score, setScore] = useState(sample.measured.score?.toString() ?? "");
-  const [notes, setNotes] = useState(sample.receipt.qualityNotes ?? "");
+  const [notes, setNotes] = useState(sample.receipt.qualityNotes ?? "");\n  const [recommendedLine, setRecommendedLine] = useState("");\n  const [recommendedLineNotes, setRecommendedLineNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const submit = async () => {
@@ -166,7 +166,7 @@ function SampleDrawer({
           defects: defects ? Number(defects) : undefined,
           screen: screen || undefined,
           score: score ? Number(score) : undefined,
-          notes: notes || undefined,
+          notes: notes || undefined,\n          recommendedLine: recommendedLine || undefined,\n          recommendedLineNotes: recommendedLineNotes || undefined,
         }),
       });
       reload();
@@ -339,6 +339,20 @@ function SampleDrawer({
               </select>
             </label>
             <label className="text-xs font-semibold sm:col-span-2">
+              Indicação de uso na Bispo · não restritiva
+              <select value={recommendedLine} onChange={(e) => setRecommendedLine(e.target.value)} className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm">
+                <option value="">Sem indicação definida</option>
+                <option value="GOURMET">Gourmet</option>
+                <option value="CLASSICOS">Clássicos</option>
+                <option value="EPICOS">Épicos</option>
+                <option value="RAROS">Raros</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold sm:col-span-2">
+              Justificativa da indicação · opcional
+              <textarea value={recommendedLineNotes} onChange={(e) => setRecommendedLineNotes(e.target.value)} className="mt-1 min-h-16 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm" placeholder="Ex.: perfil doce, chocolate, baixa acidez e boa consistência." />
+            </label>
+            <label className="text-xs font-semibold sm:col-span-2">
               Observações técnicas
               <textarea
                 value={notes}
@@ -361,7 +375,7 @@ function SampleDrawer({
             Cancelar
           </Button>
           <Button disabled={busy} onClick={submit}>
-            {busy ? "Salvando..." : "Concluir análise"}
+            {busy ? "Salvando..." : qualityStatus === "APPROVED" ? "Aprovar e liberar lote" : "Concluir análise"}
           </Button>
         </footer>
       </aside>
