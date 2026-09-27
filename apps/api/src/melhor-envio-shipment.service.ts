@@ -86,6 +86,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
             String(
               trackingDetails?.tracking ||
                 trackingDetails?.tracking_code ||
+                trackingDetails?.melhorenvio_tracking ||
                 orderDetails?.tracking ||
                 orderDetails?.tracking_code ||
                 "",
