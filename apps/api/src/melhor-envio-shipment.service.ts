@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, Injectable, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
@@ -8,7 +8,7 @@ import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifec
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
 @Injectable()
-export class MelhorEnvioShipmentService {
+export class MelhorEnvioShipmentService implements OnModuleInit {
   private readonly database = new PrismaClient();
 
   constructor(
@@ -16,6 +16,52 @@ export class MelhorEnvioShipmentService {
     private readonly melhorEnvioAuth: MelhorEnvioAuthService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
+
+  async onModuleInit() {
+    // Reconciliação pontual do primeiro envio real: B-2026-000001 (Suzi Ninov).
+    // A etiqueta Jadlog foi gerada e o pedido foi efetivamente postado, mas o
+    // BBOS permaneceu em INVOICED/LABEL_READY por ausência do evento da transportadora.
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id AS "salesOrderId",so.status AS "salesOrderStatus",
+              sh.id AS "shipmentId",sh.status AS "shipmentStatus",sh."postedAt"
+         FROM "SalesOrder" so
+         JOIN "Shipment" sh ON sh."salesOrderId"=so.id
+        WHERE so.code='B-2026-000001'
+          AND so.status='INVOICED'
+          AND sh.status='LABEL_READY'
+          AND sh."labelUrl" IS NOT NULL
+          AND sh."postedAt" IS NULL
+        LIMIT 1`,
+    );
+    const order = rows[0];
+    if (!order) return;
+
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "Shipment"
+            SET status='IN_TRANSIT',"postedAt"=NOW(),"updatedAt"=NOW()
+          WHERE id=$1 AND status='LABEL_READY' AND "postedAt" IS NULL`,
+        order.shipmentId,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "SalesOrder"
+            SET status='SHIPPED',"shippedAt"=COALESCE("shippedAt",NOW()),"updatedAt"=NOW()
+          WHERE id=$1 AND status='INVOICED'`,
+        order.salesOrderId,
+      );
+    });
+
+    await this.customerLifecycle.record(
+      order.salesOrderId,
+      "SHIPPED",
+      "Pedido enviado",
+      "A postagem deste pedido foi confirmada manualmente e o BBOS foi reconciliado com a expedição realizada.",
+      "ADMIN",
+      `sales-order:manual-shipped-reconciliation:${order.salesOrderId}`,
+      { shipmentId: order.shipmentId, reason: "POSTAGEM_CONFIRMADA_OPERACIONALMENTE" },
+      false,
+    );
+  }
 
   private base() {
     return (process.env.MELHOR_ENVIO_API_URL?.trim() || "https://melhorenvio.com.br/api/v2").replace(/\/$/, "");
