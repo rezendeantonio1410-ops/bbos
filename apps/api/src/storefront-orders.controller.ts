@@ -126,7 +126,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     for (const duplicate of knownDuplicate) {
       await this.lifecycle.record(
         duplicate.id,
-        "PAYMENT_DUPLICATE",
+        "CANCELLED",
         "Tentativa duplicada encerrada",
         "Esta tentativa foi consolidada no pedido original do mesmo cliente.",
         "ADMIN",
@@ -167,7 +167,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         const paymentUrl = `${publicBase}/loja/pagar/${order.id}?token=${encodeURIComponent(token)}`;
         await this.lifecycle.record(
           order.id,
-          "PAYMENT_RECOVERY",
+          "ORDER_RECEIVED",
           "Seu pedido Bispo está pronto para continuar",
           "Corrigimos a tentativa duplicada de pagamento e preservamos seu pedido original. Se quiser concluir a compra, gere um novo Pix pelo botão abaixo.",
           "BBOS",
@@ -235,7 +235,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       for (const order of reminderCandidates) {
         await this.lifecycle.record(
           order.id,
-          "PAYMENT_REMINDER",
+          "ORDER_RECEIVED",
           "Seu pedido Bispo está reservado",
           `O pagamento do pedido ${order.code} ainda não foi identificado. Se quiser concluir sua escolha, o pagamento continua disponível por tempo limitado.`,
           "BBOS",
@@ -266,7 +266,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       for (const order of expired) {
         await this.lifecycle.record(
           order.id,
-          "PAYMENT_EXPIRED",
+          "CANCELLED",
           "Reserva do pedido encerrada",
           "O prazo desta tentativa de pagamento terminou. Se desejar, você pode voltar à loja e gerar um novo pagamento.",
           "BBOS",
@@ -383,7 +383,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       const status =
         storefront.status === "PAID"
           ? SalesOrderStatus.CONFIRMED
-          : new Set(["PAYMENT_FAILED", "CANCELLED"]).has(storefront.status)
+          : new Set(["EXCEPTION", "CANCELLED"]).has(storefront.status)
             ? SalesOrderStatus.CANCELLED
             : SalesOrderStatus.DRAFT;
       const existing = await transaction.salesOrder.findUnique({
@@ -623,7 +623,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       await this.lifecycle.record(
         order.id,
-        "PAYMENT_FAILED",
+        "EXCEPTION",
         "Pagamento não concluído",
         "A tentativa de pagamento não foi concluída. Você pode iniciar uma nova tentativa com segurança.",
         "MERCADO_PAGO",
@@ -920,7 +920,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       const payment = await this.ensureMercadoPagoCheckout(refreshed, key);
       await this.lifecycle.record(
         equivalent[0].id,
-        "PAYMENT_RETRY",
+        "ORDER_RECEIVED",
         "Nova tentativa de pagamento",
         "Uma nova tentativa de pagamento foi aberta para o mesmo pedido, sem duplicar a compra.",
         "BBOS",
@@ -1060,7 +1060,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     const payment = await this.ensureMercadoPagoCheckout(order, retryKey);
     await this.lifecycle.record(
       order.id,
-      "PAYMENT_RETRY",
+      "ORDER_RECEIVED",
       "Nova tentativa de pagamento",
       "Seu pedido foi preservado e uma nova tentativa de pagamento está disponível.",
       "BBOS",
@@ -1208,6 +1208,6 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       body.externalId,
     );
     if (!updated) throw new BadRequestException("Pedido não encontrado.");
-    return { id: body.orderId, status: "PAYMENT_FAILED" };
+    return { id: body.orderId, status: "EXCEPTION" };
   }
 }
