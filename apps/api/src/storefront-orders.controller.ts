@@ -137,6 +137,27 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       await this.syncSalesOrder(duplicate.id);
     }
 
+    const cancelledDrafts = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT so.id
+         FROM "StorefrontOrder" so
+         JOIN "SalesOrder" s
+           ON s."companyId"=so."companyId" AND s.code=so.code
+        WHERE so.status='CANCELLED'
+          AND s.status='DRAFT'
+        ORDER BY so."updatedAt" ASC
+        LIMIT 100`,
+    );
+    for (const order of cancelledDrafts) {
+      try {
+        await this.syncSalesOrder(order.id);
+      } catch (error) {
+        console.error("Não foi possível sincronizar pedido cancelado da loja", {
+          storefrontOrderId: order.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     // Webhook é o caminho principal, mas pagamentos não podem ficar presos caso
     // uma notificação externa atrase ou falhe. Reconciliamos pedidos pendentes
     // em segundo plano e também na consulta pública de status.
