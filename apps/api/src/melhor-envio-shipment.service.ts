@@ -799,8 +799,6 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrder"
             SET status=$2,
-                "shippedAt"=CASE WHEN $2='SHIPPED' THEN COALESCE("shippedAt",NOW()) ELSE "shippedAt" END,
-                "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,
                 "updatedAt"=NOW()
           WHERE id=$1 AND status IN ('INVOICED','SHIPPED','DELIVERED')`,
         shipment.salesOrderId,
