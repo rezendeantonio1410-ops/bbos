@@ -130,10 +130,17 @@ export class ReceiptsController {
         (body.qualityStatus === GreenCoffeeQualityStatus.APPROVED || body.qualityStatus === GreenCoffeeQualityStatus.APPROVED_WITH_RESTRICTION)
       )
         throw new BadRequestException("A divergência precisa ser aprovada antes da liberação do lote.");
+      const allowedLines = new Set(["GOURMET", "CLASSICOS", "EPICOS", "RAROS"]);
+      if (body.recommendedLine && !allowedLines.has(body.recommendedLine))
+        throw new BadRequestException("Escolha uma indicação de linha válida.");
       const updated = await transaction.greenCoffeeReceipt.update({
         where: { id: sample.receiptId },
         data: { qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent, defects: body.defects, screen: body.screen, qualityNotes: body.notes },
       });
+      await transaction.$executeRawUnsafe(
+        `UPDATE "GreenCoffeeReceipt" SET "recommendedLine"=$2,"recommendedLineNotes"=$3 WHERE id=$1`,
+        sample.receiptId, body.recommendedLine ?? null, body.recommendedLineNotes ?? null,
+      );
       await transaction.greenCoffeeLabSample.update({
         where: { id: sample.id },
         data: { status: body.qualityStatus === GreenCoffeeQualityStatus.REJECTED ? "REJECTED" : "COMPLETED" },
@@ -143,7 +150,7 @@ export class ReceiptsController {
         data: { status: lotStatusFor(body.qualityStatus), qualityScore: body.score },
       });
       await transaction.industrialEvent.create({
-        data: { companyId: actor.companyId, coffeeLotId: sample.receipt.coffeeLotId, warehouseId: sample.receipt.warehouseId, type: EventType.QUALITY_TEST, metadata: { receiptId: sample.receiptId, sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, screen: body.screen ?? null, score: body.score ?? null, notes: body.notes ?? null, userId: actor.id, userName: actor.name } },
+        data: { companyId: actor.companyId, coffeeLotId: sample.receipt.coffeeLotId, warehouseId: sample.receipt.warehouseId, type: EventType.QUALITY_TEST, metadata: { receiptId: sample.receiptId, sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, screen: body.screen ?? null, score: body.score ?? null, notes: body.notes ?? null, recommendedLine: body.recommendedLine ?? null, recommendedLineNotes: body.recommendedLineNotes ?? null, userId: actor.id, userName: actor.name } },
       });
       await transaction.greenCoffeeAuditEvent.create({
         data: { companyId: actor.companyId, purchaseId: sample.receipt.purchaseId, receiptId: sample.receiptId, action: "LAB_ANALYSIS_COMPLETED", actorId: actor.id, actorName: actor.name, metadata: { sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, score: body.score ?? null, screen: body.screen ?? null, notes: body.notes ?? null } },
