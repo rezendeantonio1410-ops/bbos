@@ -51,19 +51,52 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
 
       for (const shipment of shipments) {
         try {
-          const details = await this.request(
-            shipment.companyId,
-            `/me/orders/${encodeURIComponent(shipment.externalId)}`,
-            { method: "GET" },
-          );
+          const [orderDetails, trackingResponse] = await Promise.all([
+            this.request(
+              shipment.companyId,
+              `/me/orders/${encodeURIComponent(shipment.externalId)}`,
+              { method: "GET" },
+            ).catch(() => ({})),
+            this.request(
+              shipment.companyId,
+              "/me/shipment/tracking",
+              {
+                method: "POST",
+                body: JSON.stringify({ orders: [shipment.externalId] }),
+              },
+            ).catch(() => ({})),
+          ]);
+
+          const trackingDetails =
+            (Array.isArray(trackingResponse) ? trackingResponse[0] : null) ||
+            trackingResponse?.[shipment.externalId] ||
+            trackingResponse?.data?.[0] ||
+            trackingResponse?.data?.[shipment.externalId] ||
+            trackingResponse ||
+            {};
+
+          const details = {
+            ...(orderDetails || {}),
+            ...(trackingDetails || {}),
+            tracking_snapshot: trackingDetails || {},
+            order_snapshot: orderDetails || {},
+          };
 
           const trackingCode =
-            String(details?.tracking || details?.tracking_code || "") || null;
+            String(
+              trackingDetails?.tracking ||
+                trackingDetails?.tracking_code ||
+                orderDetails?.tracking ||
+                orderDetails?.tracking_code ||
+                "",
+            ) || null;
           const trackingUrl =
             String(
-              details?.tracking_url ||
-                details?.tracking?.url ||
-                details?.service?.company?.tracking_link ||
+              trackingDetails?.tracking_url ||
+                trackingDetails?.tracking?.url ||
+                orderDetails?.tracking_url ||
+                orderDetails?.tracking?.url ||
+                orderDetails?.service?.company?.tracking_link ||
                 "",
             ) || null;
 
@@ -81,13 +114,18 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
           );
 
           const rawStatus = String(
-            details?.status ||
-              details?.tracking?.status ||
-              details?.self_tracking?.status ||
+            trackingDetails?.status ||
+              trackingDetails?.tracking?.status ||
+              trackingDetails?.self_tracking?.status ||
+              orderDetails?.status ||
               "",
           ).toLowerCase();
+          const postedAt =
+            trackingDetails?.posted_at || orderDetails?.posted_at || null;
+          const deliveredAt =
+            trackingDetails?.delivered_at || orderDetails?.delivered_at || null;
 
-          if (details?.delivered_at || rawStatus.includes("deliver")) {
+          if (deliveredAt || rawStatus.includes("deliver")) {
             await this.applyTrackingUpdate(
               shipment.externalId,
               "delivered",
@@ -103,7 +141,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
               details,
             );
           } else if (
-            details?.posted_at ||
+            postedAt ||
             trackingCode ||
             rawStatus.includes("post") ||
             rawStatus.includes("transit") ||
