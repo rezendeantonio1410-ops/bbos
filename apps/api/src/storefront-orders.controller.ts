@@ -262,7 +262,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       const status =
         storefront.status === "PAID"
           ? SalesOrderStatus.CONFIRMED
-          : SalesOrderStatus.DRAFT;
+          : new Set(["PAYMENT_FAILED", "PAYMENT_EXPIRED", "PAYMENT_DUPLICATE"]).has(storefront.status)
+            ? SalesOrderStatus.CANCELLED
+            : SalesOrderStatus.DRAFT;
       const existing = await transaction.salesOrder.findUnique({
         where: {
           companyId_code: {
@@ -273,12 +275,14 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       });
       if (existing) {
         if (
-          status === SalesOrderStatus.CONFIRMED &&
-          existing.status === SalesOrderStatus.DRAFT
+          status !== existing.status &&
+          (existing.status === SalesOrderStatus.DRAFT ||
+            (existing.status === SalesOrderStatus.CANCELLED &&
+              status === SalesOrderStatus.CONFIRMED))
         ) {
           return transaction.salesOrder.update({
             where: { id: existing.id },
-            data: { status: SalesOrderStatus.CONFIRMED },
+            data: { status },
           });
         }
         return existing;
