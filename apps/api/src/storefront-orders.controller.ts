@@ -498,10 +498,19 @@ export class StorefrontOrdersController implements OnModuleInit {
   }
 
   private async ensureMercadoPagoCheckout(order: any, idempotencyKey: string) {
+    let providerIdempotencyKey = `mp-${idempotencyKey}`;
     if (order.paymentExternalId) {
       const current = await this.mercadoPago.getOrder(order.paymentExternalId);
-      if (current.checkout_url)
+      const terminalFailure = new Set(["failed", "canceled", "expired"]);
+      if (current.checkout_url && !terminalFailure.has(current.status || ""))
         return { externalId: current.id, checkoutUrl: current.checkout_url };
+
+      // Uma tentativa encerrada não pode ser reaproveitada. Mantemos o mesmo
+      // pedido BBOS e abrimos uma nova order no Mercado Pago, sem consumir
+      // novamente a cotação/frete nem duplicar o pedido comercial.
+      if (terminalFailure.has(current.status || "")) {
+        providerIdempotencyKey = `mp-retry-${idempotencyKey}-${current.id}`;
+      }
     }
     const customer = order.customer as CheckoutBody["customer"];
     const delivery = order.delivery as CheckoutBody["delivery"];
@@ -513,7 +522,7 @@ export class StorefrontOrdersController implements OnModuleInit {
       unitPriceCents: number;
     }>;
     const providerOrder = await this.mercadoPago.createCheckout({
-      idempotencyKey: `mp-${idempotencyKey}`.slice(0, 128),
+      idempotencyKey: providerIdempotencyKey.slice(0, 128),
       orderCode: order.code,
       totalCents: order.totalCents,
       shippingCents: order.shippingCents,
@@ -543,7 +552,12 @@ export class StorefrontOrdersController implements OnModuleInit {
       },
     });
     await this.database.$executeRawUnsafe(
-      `UPDATE "StorefrontOrder" SET "paymentProvider"='MERCADO_PAGO',"paymentExternalId"=$2,"updatedAt"=NOW() WHERE id=$1`,
+      `UPDATE "StorefrontOrder"
+          SET status=CASE WHEN status='PAID' THEN status ELSE 'AWAITING_PAYMENT' END,
+              "paymentProvider"='MERCADO_PAGO',
+              "paymentExternalId"=$2,
+              "updatedAt"=NOW()
+        WHERE id=$1`,
       order.id,
       providerOrder.id,
     );
@@ -658,7 +672,7 @@ export class StorefrontOrdersController implements OnModuleInit {
       return {
         id: existing[0].id,
         code: existing[0].code,
-        status: existing[0].status,
+        status: existing[0].status === "PAID" ? "PAID" : "AWAITING_PAYMENT",
         totalCents: existing[0].totalCents,
         confirmationToken,
         checkoutUrl: payment.checkoutUrl,
