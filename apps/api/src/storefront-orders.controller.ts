@@ -104,6 +104,46 @@ export class StorefrontOrdersController implements OnModuleInit {
         });
       }
     }
+
+    // Webhook é o caminho principal, mas pagamentos não podem ficar presos caso
+    // uma notificação externa atrase ou falhe. Reconciliamos pedidos pendentes
+    // em segundo plano e também na consulta pública de status.
+    await this.reconcilePendingMercadoPagoOrders();
+    const reconciliationTimer = setInterval(
+      () => void this.reconcilePendingMercadoPagoOrders(),
+      30_000,
+    );
+    reconciliationTimer.unref?.();
+  }
+
+  private async reconcilePendingMercadoPagoOrders() {
+    const pending = await this.database.$queryRawUnsafe<
+      Array<{
+        id: string;
+        code: string;
+        totalCents: number;
+        paymentExternalId: string;
+      }>
+    >(
+      `SELECT id,code,"totalCents","paymentExternalId"
+         FROM "StorefrontOrder"
+        WHERE status='AWAITING_PAYMENT'
+          AND "paymentExternalId" IS NOT NULL
+          AND "createdAt" >= NOW() - INTERVAL '2 days'
+        ORDER BY "createdAt" ASC
+        LIMIT 50`,
+    );
+    for (const order of pending) {
+      try {
+        await this.reconcileMercadoPago(order);
+      } catch (error) {
+        console.error("Falha ao reconciliar pagamento pendente do Mercado Pago", {
+          storefrontOrderId: order.id,
+          paymentExternalId: order.paymentExternalId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
   private async syncSalesOrder(storefrontOrderId: string) {
@@ -429,6 +469,31 @@ export class StorefrontOrdersController implements OnModuleInit {
       await this.markAsPaid(order.id, providerOrder.id);
       return { paid: true };
     }
+
+    const terminalFailure = new Set(["failed", "canceled", "expired"]);
+    if (providerOrder.status && terminalFailure.has(providerOrder.status)) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder"
+            SET status='PAYMENT_FAILED',"updatedAt"=NOW()
+          WHERE id=$1 AND status='AWAITING_PAYMENT'`,
+        order.id,
+      );
+      await this.lifecycle.record(
+        order.id,
+        "PAYMENT_FAILED",
+        "Pagamento não concluído",
+        "A tentativa de pagamento não foi concluída. Você pode iniciar uma nova tentativa com segurança.",
+        "MERCADO_PAGO",
+        `storefront:payment-failed:${order.id}:${providerOrder.id}`,
+        {
+          externalId: providerOrder.id,
+          providerStatus: providerOrder.status,
+          providerStatusDetail: providerOrder.status_detail,
+        },
+      );
+      return { paid: false };
+    }
+
     return { paid: false };
   }
 
@@ -742,11 +807,52 @@ export class StorefrontOrdersController implements OnModuleInit {
       body?.data?.id || body?.id || queryDataId || queryId || undefined;
     if (!externalId) return { received: true };
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"totalCents","paymentExternalId" FROM "StorefrontOrder" WHERE "paymentExternalId"=$1 LIMIT 1`,
+      `SELECT id,"companyId",code,status,"totalCents","paymentExternalId"
+         FROM "StorefrontOrder"
+        WHERE "paymentExternalId"=$1
+        LIMIT 1`,
       String(externalId),
     );
-    if (!rows[0]) return { received: true };
-    await this.reconcileMercadoPago(rows[0]);
+    if (!rows[0]) {
+      console.warn("Webhook Mercado Pago sem pedido correspondente", {
+        externalId: String(externalId),
+        action: body?.action,
+        liveMode: body?.live_mode,
+      });
+      return { received: true };
+    }
+
+    const providerEventId = String(body?.id || `${externalId}:${body?.action || "update"}`);
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "IntegrationWebhookEvent"
+        (id,"companyId",provider,"providerEventId","eventName",payload,status,"receivedAt")
+       VALUES ($1,$2,'MERCADO_PAGO',$3,$4,$5::jsonb,'RECEIVED',NOW())
+       ON CONFLICT DO NOTHING`,
+      randomUUID(),
+      rows[0].companyId,
+      providerEventId,
+      String(body?.action || "order.updated"),
+      JSON.stringify(body ?? {}),
+    );
+
+    try {
+      await this.reconcileMercadoPago(rows[0]);
+      await this.database.$executeRawUnsafe(
+        `UPDATE "IntegrationWebhookEvent"
+            SET status='PROCESSED',"processedAt"=NOW(),"lastError"=NULL
+          WHERE provider='MERCADO_PAGO' AND "providerEventId"=$1`,
+        providerEventId,
+      );
+    } catch (error) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "IntegrationWebhookEvent"
+            SET status='FAILED',"processedAt"=NOW(),"lastError"=$2
+          WHERE provider='MERCADO_PAGO' AND "providerEventId"=$1`,
+        providerEventId,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
     return { received: true };
   }
 
