@@ -113,7 +113,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     // encerramos apenas o duplicado mais recente, sem pagamento, fiscal ou envio.
     const knownDuplicate = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
       `UPDATE "StorefrontOrder" so
-          SET status='PAYMENT_DUPLICATE',"updatedAt"=NOW()
+          SET status='CANCELLED',"updatedAt"=NOW()
         WHERE so.code='WEB-20260927-732970'
           AND so.status='AWAITING_PAYMENT'
           AND so."paidAt" IS NULL
@@ -258,7 +258,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
       const expired = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
         `UPDATE "StorefrontOrder"
-            SET status='PAYMENT_EXPIRED',"updatedAt"=NOW()
+            SET status='CANCELLED',"updatedAt"=NOW()
           WHERE status='AWAITING_PAYMENT'
             AND "createdAt" <= NOW() - INTERVAL '24 hours'
         RETURNING id`,
@@ -383,7 +383,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       const status =
         storefront.status === "PAID"
           ? SalesOrderStatus.CONFIRMED
-          : new Set(["PAYMENT_FAILED", "PAYMENT_EXPIRED", "PAYMENT_DUPLICATE"]).has(storefront.status)
+          : new Set(["PAYMENT_FAILED", "CANCELLED"]).has(storefront.status)
             ? SalesOrderStatus.CANCELLED
             : SalesOrderStatus.DRAFT;
       const existing = await transaction.salesOrder.findUnique({
@@ -1051,7 +1051,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
     if (order.status === "PAID")
       return { id: order.id, code: order.code, status: "PAID" };
-    if (order.status === "PAYMENT_DUPLICATE")
+    if (order.status === "CANCELLED")
       throw new BadRequestException(
         "Esta tentativa foi consolidada em outro pedido.",
       );
