@@ -556,6 +556,7 @@ export default async function LojaPage() {
             <strong>Explorar</strong>
             <Link href="/loja/descobrir">Descubra o seu café</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
+            <Link href="/loja/origem">A geografia na xícara</Link>
           </div>
           <div className={styles.footerNav}>
             <strong>Comprar</strong>

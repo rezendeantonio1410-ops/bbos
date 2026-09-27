@@ -36,6 +36,11 @@ export default function SobrePage() {
         </div>
       </header>
 
+      <nav className={storyBrand.storyTabs} aria-label="Conheça a Bispo">
+        <span aria-current="page">Suzi e José</span>
+        <Link href="/loja/origem">A geografia na xícara <span aria-hidden="true">↗</span></Link>
+      </nav>
+
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
