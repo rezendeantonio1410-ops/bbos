@@ -146,6 +146,42 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       120_000,
     );
     this.reconciliationTimer.unref();
+
+    const recoveryTimer = setTimeout(async () => {
+      try {
+        const rows = await this.database.$queryRawUnsafe<Array<{ id: string; status: string }>>(
+          `SELECT id,status
+             FROM "StorefrontOrder"
+            WHERE code='WEB-20260927-865A3F'
+              AND lower(customer->>'email')='jana.maestra10@gmail.com'
+            LIMIT 1`,
+        );
+        const order = rows[0];
+        if (!order || order.status === "PAID") return;
+        const publicBase = (
+          process.env.STOREFRONT_WEB_URL?.trim() ||
+          "https://bbos-ecommerce-preview-v2.onrender.com"
+        ).replace(/\/$/, "");
+        const token = this.lifecycle.trackingToken(order.id);
+        if (!token) return;
+        const paymentUrl = `${publicBase}/loja/pagar/${order.id}?token=${encodeURIComponent(token)}`;
+        await this.lifecycle.record(
+          order.id,
+          "PAYMENT_RECOVERY",
+          "Seu pedido Bispo está pronto para continuar",
+          "Corrigimos a tentativa duplicada de pagamento e preservamos seu pedido original. Se quiser concluir a compra, gere um novo Pix pelo botão abaixo.",
+          "BBOS",
+          `storefront:payment-recovery:20260927:${order.id}`,
+          { paymentUrl },
+          true,
+        );
+      } catch (error) {
+        console.error("Falha ao enviar recuperação do pagamento", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }, 180_000);
+    recoveryTimer.unref?.();
   }
 
   async onModuleDestroy() {
@@ -204,7 +240,18 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
           `O pagamento do pedido ${order.code} ainda não foi identificado. Se quiser concluir sua escolha, o pagamento continua disponível por tempo limitado.`,
           "BBOS",
           `storefront:payment-reminder:${order.id}`,
-          {},
+          {
+            paymentUrl: (() => {
+              const publicBase = (
+                process.env.STOREFRONT_WEB_URL?.trim() ||
+                "https://bbos-ecommerce-preview-v2.onrender.com"
+              ).replace(/\/$/, "");
+              const token = this.lifecycle.trackingToken(order.id);
+              return token
+                ? `${publicBase}/loja/pagar/${order.id}?token=${encodeURIComponent(token)}`
+                : null;
+            })(),
+          },
           true,
         );
       }
