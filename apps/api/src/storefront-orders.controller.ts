@@ -981,6 +981,56 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
   }
 
   @Public()
+  @Post(":orderId/retry-payment")
+  async retryPayment(
+    @Param("orderId") orderId: string,
+    @Headers("x-storefront-order-token") suppliedToken: string | undefined,
+  ) {
+    if (!suppliedToken)
+      throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
+
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT *
+         FROM "StorefrontOrder"
+        WHERE id=$1
+          AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE)
+        LIMIT 1`,
+      orderId,
+      tokenHash(suppliedToken),
+      this.lifecycle.validTrackingToken(orderId, suppliedToken),
+    );
+    const order = rows[0];
+    if (!order)
+      throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
+    if (order.status === "PAID")
+      return { id: order.id, code: order.code, status: "PAID" };
+    if (order.status === "PAYMENT_DUPLICATE")
+      throw new BadRequestException(
+        "Esta tentativa foi consolidada em outro pedido.",
+      );
+
+    const retryKey = `retry-${order.id}-${order.paymentExternalId || "new"}`;
+    const payment = await this.ensureMercadoPagoCheckout(order, retryKey);
+    await this.lifecycle.record(
+      order.id,
+      "PAYMENT_RETRY",
+      "Nova tentativa de pagamento",
+      "Seu pedido foi preservado e uma nova tentativa de pagamento está disponível.",
+      "BBOS",
+      `storefront:customer-payment-retry:${order.id}:${payment.externalId}`,
+      { externalId: payment.externalId },
+      false,
+    );
+    await this.syncSalesOrder(order.id);
+    return {
+      id: order.id,
+      code: order.code,
+      status: "AWAITING_PAYMENT",
+      checkoutUrl: payment.checkoutUrl,
+    };
+  }
+
+  @Public()
   @Get(":orderId/status")
   async status(
     @Param("orderId") orderId: string,
