@@ -750,6 +750,120 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       };
     }
 
+    const equivalent = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT *
+         FROM "StorefrontOrder"
+        WHERE "companyId"=$1
+          AND status IN ('AWAITING_PAYMENT','PAYMENT_FAILED')
+          AND lower(customer->>'email')=lower($2)
+          AND customer->>'cpf'=$3
+          AND items=$4::jsonb
+          AND "totalCents"=$5
+          AND "createdAt" >= NOW() - INTERVAL '2 hours'
+        ORDER BY "createdAt" DESC
+        LIMIT 1`,
+      companyId,
+      customer.email!.trim(),
+      digits(customer.cpf),
+      JSON.stringify(items),
+      (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
+    );
+    if (equivalent[0]) {
+      const confirmationToken = randomBytes(32).toString("base64url");
+      const claimed = await this.database.$executeRawUnsafe(
+        `UPDATE "ShippingQuote"
+            SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW()
+          WHERE id=$1 AND status='VALID'`,
+        quote.id,
+      );
+      if (!claimed)
+        throw new BadRequestException(
+          "Esta cotação já foi utilizada. Calcule novamente.",
+        );
+
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder"
+            SET status='AWAITING_PAYMENT',
+                "confirmationTokenHash"=$2,
+                customer=$3::jsonb,
+                delivery=$4::jsonb,
+                recurrence=$5::jsonb,
+                "shippingQuoteId"=$6,
+                "shippingProvider"=$7,
+                "shippingServiceId"=$8,
+                "shippingServiceName"=$9,
+                "carrierName"=$10,
+                "estimatedDeliveryDays"=$11,
+                "shippingCents"=$12,
+                "totalCents"=$13,
+                "requestedPaymentMethod"=$14,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        equivalent[0].id,
+        tokenHash(confirmationToken),
+        JSON.stringify({
+          ...customer,
+          cpf: digits(customer.cpf),
+          phone: digits(customer.phone),
+        }),
+        JSON.stringify({
+          ...delivery,
+          postalCode: digits(delivery.postalCode),
+          state: delivery.state?.toUpperCase(),
+        }),
+        JSON.stringify(body.recurrence ?? { mode: "now" }),
+        quote.id,
+        quote.provider,
+        quote.serviceId,
+        quote.serviceName,
+        quote.carrierName,
+        quote.deliveryDays,
+        shippingCents,
+        (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
+        paymentMethod,
+      );
+
+      const refreshed = {
+        ...equivalent[0],
+        status: "AWAITING_PAYMENT",
+        customer: {
+          ...customer,
+          cpf: digits(customer.cpf),
+          phone: digits(customer.phone),
+        },
+        delivery: {
+          ...delivery,
+          postalCode: digits(delivery.postalCode),
+          state: delivery.state?.toUpperCase(),
+        },
+        items,
+        shippingCents,
+        totalCents: (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
+        requestedPaymentMethod: paymentMethod,
+      };
+      const payment = await this.ensureMercadoPagoCheckout(refreshed, key);
+      await this.lifecycle.record(
+        equivalent[0].id,
+        "PAYMENT_RETRY",
+        "Nova tentativa de pagamento",
+        "Uma nova tentativa de pagamento foi aberta para o mesmo pedido, sem duplicar a compra.",
+        "BBOS",
+        `storefront:payment-retry:${equivalent[0].id}:${payment.externalId}`,
+        { externalId: payment.externalId },
+        false,
+      );
+      await this.syncSalesOrder(equivalent[0].id);
+      return {
+        id: equivalent[0].id,
+        code: equivalent[0].code,
+        status: "AWAITING_PAYMENT",
+        totalCents: refreshed.totalCents,
+        confirmationToken,
+        checkoutUrl: payment.checkoutUrl,
+        reusedPendingOrder: true,
+      };
+    }
+
     const id = randomUUID();
     const confirmationToken = randomBytes(32).toString("base64url");
     const code = `WEB-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${id.slice(0, 6).toUpperCase()}`;
