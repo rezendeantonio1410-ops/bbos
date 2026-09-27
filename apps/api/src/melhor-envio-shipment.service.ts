@@ -45,7 +45,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit {
       );
       await transaction.$executeRawUnsafe(
         `UPDATE "SalesOrder"
-            SET status='SHIPPED',"shippedAt"=COALESCE("shippedAt",NOW()),"updatedAt"=NOW()
+            SET status='SHIPPED',"updatedAt"=NOW()
           WHERE id=$1 AND status='INVOICED'`,
         order.salesOrderId,
       );
