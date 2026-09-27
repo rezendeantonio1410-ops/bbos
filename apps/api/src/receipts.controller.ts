@@ -111,7 +111,7 @@ export class ReceiptsController {
   @Patch("lab-samples/:id/analysis")
   async completeLabAnalysis(
     @Param("id") id: string,
-    @Body() body: { qualityStatus: GreenCoffeeQualityStatus; moisturePercent?: number; defects?: number; screen?: string; score?: number; notes?: string },
+    @Body() body: { qualityStatus: GreenCoffeeQualityStatus; moisturePercent?: number; defects?: number; screen?: string; score?: number; notes?: string; recommendedLine?: string; recommendedLineNotes?: string },
     @Req() req: Request,
   ) {
     const actor = await requireSession(req, this.auth);
