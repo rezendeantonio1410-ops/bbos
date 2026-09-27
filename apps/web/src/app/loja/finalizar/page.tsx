@@ -104,6 +104,7 @@ export default function CheckoutPage() {
     status: string;
     confirmationToken?: string;
     checkoutUrl?: string;
+    paymentMethod?: "PIX" | "CARD";
   } | null>(null);
 
   useEffect(() => {
@@ -115,7 +116,11 @@ export default function CheckoutPage() {
         setData((current) => ({ ...current, postalCode: parsed.cep }));
       }
       const paymentOrder = sessionStorage.getItem("bispo-payment-order");
-      if (paymentOrder) setOrder(JSON.parse(paymentOrder));
+      if (paymentOrder) {
+        const previous = JSON.parse(paymentOrder);
+        setOrder(previous);
+        if (previous.paymentMethod) setPaymentMethod(previous.paymentMethod);
+      }
     } catch {}
   }, []);
 
@@ -181,9 +186,9 @@ export default function CheckoutPage() {
     if (result === "failure")
       setMessage("O pagamento não foi concluído. Você pode tentar novamente.");
     if (result === "pending")
-      setMessage("O Mercado Pago está processando o pagamento.");
+      setMessage("Se escolheu Pix, conclua a transferência no aplicativo do seu banco usando o QR Code ou Pix Copia e Cola exibido pelo Mercado Pago. O pedido será confirmado após a aprovação do pagamento.");
     if (result === "success")
-      setMessage("Pagamento recebido. Estamos confirmando com o Mercado Pago…");
+      setMessage("Estamos consultando a aprovação do pagamento no Mercado Pago…");
   }, []);
 
   const total = useMemo(
@@ -254,6 +259,7 @@ export default function CheckoutPage() {
           code: result.code,
           status: result.status,
           confirmationToken: result.confirmationToken,
+          paymentMethod,
         }),
       );
       if (result.status === "PAID") {

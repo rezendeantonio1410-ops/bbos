@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   OnModuleInit,
+  OnModuleDestroy,
   Param,
   Post,
   Query,
@@ -74,8 +75,10 @@ type CheckoutBody = {
 };
 
 @Controller("storefront/orders")
-export class StorefrontOrdersController implements OnModuleInit {
+export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy {
   private readonly database = new PrismaClient();
+  private reconciliationTimer?: NodeJS.Timeout;
+  private reconcilingPayments = false;
 
   constructor(
     private readonly mercadoPago: MercadoPagoService,
@@ -108,41 +111,56 @@ export class StorefrontOrdersController implements OnModuleInit {
     // Webhook é o caminho principal, mas pagamentos não podem ficar presos caso
     // uma notificação externa atrase ou falhe. Reconciliamos pedidos pendentes
     // em segundo plano e também na consulta pública de status.
-    await this.reconcilePendingMercadoPagoOrders();
-    const reconciliationTimer = setInterval(
+    void this.reconcilePendingMercadoPagoOrders();
+    this.reconciliationTimer = setInterval(
       () => void this.reconcilePendingMercadoPagoOrders(),
-      30_000,
+      120_000,
     );
-    reconciliationTimer.unref?.();
+    this.reconciliationTimer.unref();
+  }
+
+  async onModuleDestroy() {
+    if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+    await this.database.$disconnect();
   }
 
   private async reconcilePendingMercadoPagoOrders() {
-    const pending = await this.database.$queryRawUnsafe<
-      Array<{
-        id: string;
-        code: string;
-        totalCents: number;
-        paymentExternalId: string;
-      }>
-    >(
-      `SELECT id,code,"totalCents","paymentExternalId"
-         FROM "StorefrontOrder"
-        WHERE status='AWAITING_PAYMENT'
-          AND "paymentExternalId" IS NOT NULL
-          AND "createdAt" >= NOW() - INTERVAL '2 days'
-        ORDER BY "createdAt" ASC
-        LIMIT 50`,
-    );
-    for (const order of pending) {
-      try {
-        await this.reconcileMercadoPago(order);
-      } catch (error) {
-        console.error("Falha ao reconciliar pagamento pendente do Mercado Pago", {
-          storefrontOrderId: order.id,
-          paymentExternalId: order.paymentExternalId,
-          error: error instanceof Error ? error.message : String(error),
-        });
+    if (this.reconcilingPayments) return;
+    this.reconcilingPayments = true;
+    try {
+      const pending = await this.database.$queryRawUnsafe<
+        Array<{
+          id: string;
+          code: string;
+          totalCents: number;
+          paymentExternalId: string;
+        }>
+      >(
+        `SELECT id,code,"totalCents","paymentExternalId"
+           FROM "StorefrontOrder"
+          WHERE status='AWAITING_PAYMENT'
+            AND "paymentExternalId" IS NOT NULL
+            AND "createdAt" >= NOW() - INTERVAL '2 days'
+          ORDER BY "createdAt" ASC
+          LIMIT 50`,
+      );
+      for (const order of pending) {
+        try {
+          await this.reconcileMercadoPago(order);
+        } catch (error) {
+          console.error("Falha ao reconciliar pagamento pendente do Mercado Pago", {
+            storefrontOrderId: order.id,
+            paymentExternalId: order.paymentExternalId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
+    } catch (error) {
+      console.error("Falha ao listar pagamentos pendentes", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.reconcilingPayments = false;
     }
   }
 
@@ -522,6 +540,7 @@ export class StorefrontOrdersController implements OnModuleInit {
       unitPriceCents: number;
     }>;
     const providerOrder = await this.mercadoPago.createCheckout({
+      paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
       idempotencyKey: providerIdempotencyKey.slice(0, 128),
       orderCode: order.code,
       totalCents: order.totalCents,
@@ -661,6 +680,8 @@ export class StorefrontOrdersController implements OnModuleInit {
       key,
     );
     if (existing[0]) {
+      if (existing[0].requestedPaymentMethod !== paymentMethod)
+        throw new BadRequestException("Este pedido já foi iniciado com outra forma de pagamento. Volte à sacola e calcule a entrega novamente para criar outro pedido.");
       const confirmationToken = randomBytes(32).toString("base64url");
       await this.database.$executeRawUnsafe(
         `UPDATE "StorefrontOrder" SET "confirmationTokenHash"=$2,"updatedAt"=NOW() WHERE id=$1`,
@@ -746,6 +767,7 @@ export class StorefrontOrdersController implements OnModuleInit {
     await this.syncSalesOrder(id);
     const completeOrder = {
       ...rows[0],
+      requestedPaymentMethod: paymentMethod,
       customer: {
         ...customer,
         cpf: digits(customer.cpf),

@@ -9,6 +9,7 @@ type MercadoPagoItem = {
 };
 
 type MercadoPagoCheckoutInput = {
+  paymentMethod: "PIX" | "CARD";
   idempotencyKey: string;
   orderCode: string;
   totalCents: number;
@@ -66,13 +67,6 @@ export class MercadoPagoService {
     return (
       process.env.STOREFRONT_WEB_URL?.trim() ||
       "https://bbos-ecommerce-preview-v2.onrender.com"
-    ).replace(/\/$/, "");
-  }
-
-  private apiUrl() {
-    return (
-      process.env.STOREFRONT_API_PUBLIC_URL?.trim() ||
-      "https://bbos-api-rc1.onrender.com"
     ).replace(/\/$/, "");
   }
 
@@ -179,8 +173,12 @@ export class MercadoPagoService {
         },
         config: {
           statement_descriptor: "BISPO COFFEES",
+          payment_method: {
+            not_allowed_types: input.paymentMethod === "PIX"
+              ? ["credit_card", "debit_card", "ticket", "account_money", "digital_currency"]
+              : ["bank_transfer", "ticket", "account_money", "digital_currency"],
+          },
           online: {
-            callback_url: `${this.apiUrl()}/api/storefront/orders/mercado-pago/webhook`,
             success_url: `${returnBase}?payment=success`,
             failure_url: `${returnBase}?payment=failure`,
             pending_url: `${returnBase}?payment=pending`,
