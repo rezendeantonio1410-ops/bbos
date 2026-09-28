@@ -40,10 +40,6 @@ export default function SobrePage() {
         <div className={authority.peopleLead}>
           <p>SOBRE A BISPO COFFEES</p>
           <h2>José e Suzi. Duas histórias, uma Bispo Coffees.</h2>
-          <span>
-            Duas histórias próprias no café, uma parceria de vida e uma marca
-            construída pelos dois — com conhecimento, sensibilidade e presença.
-          </span>
         </div>
         <div className={authority.peopleMarks}>
           <article className={authority.personPrimary}>
@@ -98,18 +94,9 @@ export default function SobrePage() {
           </figure>
         </div>
 
-        <blockquote className={authority.storyManifesto}>
-          <small>UMA HISTÓRIA COMPARTILHADA</small>
-          <p>
-            José conhece o café pela origem, pela prova e pelo mercado. Suzi o
-            conhece pela planta, pelo solo e pelas pessoas. A Bispo nasce do
-            encontro entre essas duas autoridades — diferentes, inteiras e
-            complementares — e de uma convicção comum: qualidade só existe
-            quando conhecimento, confiança e presença percorrem todo o caminho.
-          </p>
-        </blockquote>
-
-        <div className={authority.storyChapters}>
+        <details className={authority.storyDetails}>
+          <summary>Conhecer as trajetórias de José e Suzi <span>+</span></summary>
+          <div className={authority.storyChapters}>
           <article>
             <small>01 · JOSÉ REZENDE</small>
             <h3>Da origem brasileira aos mercados do mundo</h3>
@@ -167,18 +154,9 @@ export default function SobrePage() {
               reencontrar.
             </p>
           </article>
-        </div>
+          </div>
+        </details>
 
-        <div className={authority.documentaryNote}>
-          <p>
-            A experiência construída por José e Suzi entre lavouras, prova,
-            sustentabilidade e mercados internacionais chega agora à xícara.
-            Cafés brasileiros escolhidos com o mesmo rigor aplicado às origens
-            apresentadas ao mundo — torrados para revelar identidade, não para
-            escondê-la.
-          </p>
-          <b>DO CAFÉ VERDE À SUA XÍCARA</b>
-        </div>
         <Link className={authority.peopleLink} href="/loja#cafes">
           Conhecer os cafés escolhidos por nós →
         </Link>

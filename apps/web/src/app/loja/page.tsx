@@ -336,19 +336,23 @@ export default function LojaPage() {
                             <strong>
                               {p.price} <small>· {p.weight}</small>
                             </strong>
-                            <AddToCartButton
-                              product={{
-                                id: p.name.toLowerCase().replaceAll(" ", "-"),
-                                name: p.name,
-                                line: p.line,
-                                notes: p.notes,
-                                priceCents: p.priceCents,
-                                weightGrams: 500,
-                                image: p.image,
-                              }}
-                            >
-                              Quero esse →
-                            </AddToCartButton>
+                            {p.image ? (
+                              <AddToCartButton
+                                product={{
+                                  id: p.name.toLowerCase().replaceAll(" ", "-"),
+                                  name: p.name,
+                                  line: p.line,
+                                  notes: p.notes,
+                                  priceCents: p.priceCents,
+                                  weightGrams: 500,
+                                  image: p.image,
+                                }}
+                              >
+                                Quero esse →
+                              </AddToCartButton>
+                            ) : (
+                              <Link href="/loja/descobrir">Avise-me quando chegar →</Link>
+                            )}
                           </div>
                         </div>
                       </article>
@@ -399,15 +403,7 @@ export default function LojaPage() {
             className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
           >
             <small>QUEM ESCOLHE O SEU CAFÉ</small>
-            <h2>
-              Antes da sua xícara,
-              <br />
-              <em>cada café passa por nós.</em>
-            </h2>
-            <p className={founder.intro}>
-              José e Suzi trazem duas histórias próprias no café, unidas para
-              escolher, provar e preservar a identidade de cada xícara.
-            </p>
+            <h2>José e Suzi. Duas histórias, uma Bispo Coffees.</h2>
             <div className={founder.proofs}>
               <p>
                 <b>José Rezende</b>
@@ -422,10 +418,6 @@ export default function LojaPage() {
                 sustentabilidade e o cuidado que preserva cada escolha.
               </p>
             </div>
-            <p className={founder.sharedStory}>
-              Parceiros de vida e de projeto, constroem juntos a Bispo — do
-              campo brasileiro aos mercados do mundo, e de volta à sua xícara.
-            </p>
             <div className={founder.trust} aria-label="Critérios Bispo">
               <span>Provado por nós</span>
               <span>Torra própria</span>
@@ -473,7 +465,9 @@ export default function LojaPage() {
           </div>
           <div className={styles.footerBottom}>
             <span>Bispo Coffees · Brasil</span>
-            <Link href="/bbos">Área interna</Link>
+            <nav aria-label="Informações legais">
+              <Link href="/aviso-privacidade">Privacidade</Link>
+            </nav>
           </div>
         </footer>
       </main>

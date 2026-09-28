@@ -374,3 +374,43 @@
     transition: none;
   }
 }
+
+/* Concierge: premium assistance, not a generic chat widget. */
+.floatingGuide {
+  min-height: 50px;
+  padding: 6px 14px 6px 7px;
+  gap: 10px;
+  border-color: rgba(255,255,255,.14);
+  box-shadow: 0 10px 26px rgba(13,29,23,.16);
+}
+.floatingGuide > span {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+}
+.guideCopy {
+  display: grid;
+  gap: 2px;
+}
+.guideCopy b {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.guideCopy small {
+  color: rgba(255,255,255,.58);
+  font-size: 8px;
+  letter-spacing: .025em;
+}
+@media (max-width:600px) {
+  .floatingGuide {
+    width: 48px;
+    min-height: 48px;
+    padding: 6px;
+  }
+  .floatingGuide > span {
+    width: 34px;
+    height: 34px;
+  }
+  .guideCopy { display:none; }
+}
