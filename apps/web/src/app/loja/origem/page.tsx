@@ -68,7 +68,7 @@ export default function OrigemPage() {
             </article>
             <article>
               <div className={origin.portrait}><Image src="/brand/story/jose-origem.jpeg" alt="José Rezende observando um cafeeiro" fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
-              <div><span>JOSÉ REZENDE · ORIGEM E PROVA</span><h3>Da origem para o mundo.</h3><p>José cresceu no café do Norte do Paraná. Entre produtores, avaliação sensorial e mercados internacionais, aprendeu a ler o ambiente e reconhecer sua expressão na xícara.</p></div>
+              <div><span>JOSÉ REZENDE · ORIGEM, PROVA E TORRA</span><h3>Da origem para o mundo.</h3><p>José cresceu no café do Norte do Paraná. Desde 2006, estuda e desenvolve perfis de torra para cafés da região, combinando a leitura do grão com a prova da xícara. Essa experiência acompanha seu trabalho com produtores e profissionais do café em outros mercados.</p></div>
             </article>
           </div>
           <p className={origin.peopleEnd}>Juntos, compreendem o caminho do grão antes de escolher o café que leva o nome Bispo.</p>
@@ -96,7 +96,7 @@ export default function OrigemPage() {
             <p>José cresceu entre lavouras do Norte do Paraná e levou a experiência de origem e prova a outros mercados. Suzi construiu, ao longo de cerca de duas décadas no estado, uma trajetória própria de orientação a produtores e desenvolvimento da cafeicultura.</p>
           </div>
           <div className={origin.careerChapters}>
-            <article><span>2003 → 2010</span><h3>José · do campo à prova</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A formação como provador, a avaliação sensorial e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a levar cafés do Paraná a compradores de outros países.</p></article>
+            <article><span>2003 → 2010</span><h3>José · do campo à prova e à torra</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A partir de 2006, passou também a estudar e desenvolver perfis de torra para os cafés do Paraná. A formação como provador e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a apresentar esses cafés em outros mercados.</p></article>
             <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
             <article><span>2024 · JOSÉ E SUZI · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José e Suzi participaram da fundação do conceito da Longitude Coffees. A experiência reuniu a leitura das origens, a orientação a produtores e o desejo de aproximar cafés brasileiros de mercados internacionais.</p></article>
             <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Desde meados dos anos 2000 no Paraná, Suzi construiu uma trajetória junto a produtores, do cuidado com a nutrição da planta ao uso responsável do solo. A experiência em desenvolvimento da lavoura e a visão que construiu com José na Longitude ganharam uma expressão própria na Bispo Coffees, fundada pelos dois.</p></article>
@@ -164,6 +164,7 @@ export default function OrigemPage() {
             <div>
               <p className={origin.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p>
               <h2>Na torra, o grão pede uma curva própria.</h2>
+              <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>Estudar o café do Paraná também é descobrir como torrá-lo. José desenvolve e prova perfis para diferentes lotes da região e compartilha essa leitura em seu trabalho pelo mundo: observar o grão, ajustar o calor e deixar que a xícara mostre o resultado. É assim que apresenta o potencial dos cafés cultivados em altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
               <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta a curva para preservar as qualidades daquele café.</p>
               <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A comparação certa é entre perfis testados no mesmo lote, com controle de cor e prova sensorial.</p>
             </div>

@@ -88,6 +88,9 @@
 .layerGrid p{font-size:16px;line-height:1.62;margin:0}
 .roastStory{max-width:1200px;margin:auto;padding:50px 0;border-top:1px solid #b5c8b9;display:grid;grid-template-columns:1.18fr .82fr;gap:8%;align-items:center}
 .roastStory p:not(.kicker),.acidityStory p:not(.kicker){font-size:18px;line-height:1.66}
+.roastSignature{border-left:3px solid #31594b;padding:8px 0 8px 23px;margin:27px 0 29px;background:linear-gradient(90deg,#f4f8f2 0,transparent 93%)}
+.roastSignature span{display:block;font-size:12px;letter-spacing:.14em;font-weight:800;color:#31594b}
+.roastSignature p{margin:10px 0 0!important;font-size:19px!important;line-height:1.57!important;font-weight:500}
 .roastSteps{display:grid;gap:9px}
 .roastSteps>div{background:#17352e;color:#fff;border-radius:6px;padding:22px 25px}
 .roastSteps span{color:#bbdbc7}
