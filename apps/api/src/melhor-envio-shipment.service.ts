@@ -143,7 +143,6 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
             );
           } else if (
             postedAt ||
-            trackingCode ||
             rawStatus.includes("post") ||
             rawStatus.includes("transit") ||
             rawStatus.includes("movimenta")
