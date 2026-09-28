@@ -82,6 +82,24 @@
 .soilImage{position:relative;height:clamp(230px,32vw,410px);overflow:hidden;margin:36px 0 0;border-radius:7px}
 .soilImage img{object-fit:cover;object-position:center 60%}
 .soilImage figcaption{position:absolute;bottom:16px;left:17px;color:#fff;background:#0e191dca;border-radius:3px;padding:8px 10px;font-size:12px}
+.clayStory{scroll-margin-top:115px;margin:56px 0 46px;padding:38px clamp(18px,3vw,42px) 34px;background:#f5f6f5;border:1px solid #bdcacc;border-radius:13px}
+.clayHeading{max-width:900px}
+.clayHeading h3{font-size:clamp(30px,3.2vw,43px);font-weight:550;line-height:1.14;letter-spacing:-.045em;margin:10px 0 17px}
+.clayHeading>p:last-child{font-size:18px;line-height:1.62;margin:0 0 28px}
+.clayFigure{margin:0;background:#fff;border:1px solid #bdcacc;border-radius:11px;overflow:hidden}
+.clayFigure img{width:100%;height:auto;display:block}
+.clayFigure figcaption{padding:17px 22px;font-size:14px;line-height:1.5;color:#43585f}
+.clayRead{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:25px;margin:30px 0 24px}
+.clayRead>div{border-top:3px solid #9e715e;padding-top:16px}
+.clayRead>div:nth-child(2){border-color:#658c80}.clayRead>div:nth-child(3){border-color:#d5bc91}
+.clayRead span{display:block;font-size:11px;letter-spacing:.12em;font-weight:800;color:#36515b}
+.clayRead strong{display:block;font-size:21px;font-weight:600;line-height:1.2;margin:8px 0}
+.clayRead p{font-size:15px;line-height:1.54;margin:0}
+.clayScience{border-top:1px solid #b8c8ca;padding-top:19px}
+.clayScience summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:15px;font-size:16px;font-weight:700}
+.clayScience summary::-webkit-details-marker{display:none}.clayScience summary:focus-visible{outline:3px solid #294650;outline-offset:5px}
+.clayScience summary span{font-size:22px}.clayScience[open] summary span{transform:rotate(90deg)}
+.clayScience>div{max-width:850px;font-size:15px;line-height:1.62}.clayScience p{margin:17px 0}.clayScience a{color:#294650;text-underline-offset:3px}
 .territoryGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:25px 45px;margin:55px 0}
 .territoryGrid>div{padding-top:20px;border-top:2px solid #294650}
 .territoryGrid strong{font-size:25px;letter-spacing:-.03em}
@@ -185,3 +203,4 @@
 @media(max-width:700px){.mapLegend{grid-template-columns:1fr 1fr}.mapLegend span{font-size:12px;gap:7px;padding:11px 9px}.mapLegend span:nth-child(3){grid-column:1/-1;border-left:0;border-top:1px solid #bdcacc}.mapLegend b{width:22px;height:22px;font-size:14px}}
 @media(max-width:700px){.mapZoom>span{font-size:10px;padding:13px 13px 2px}.mapRegions{display:grid;gap:9px;padding:4px 16px 19px}.mapRegions>span{display:grid;grid-template-columns:14px 1fr;column-gap:10px;font-size:16px;font-weight:750;line-height:1.3}.mapRegions i{grid-row:span 2;width:14px;height:14px;border-radius:50%;background:#b77d59;margin-top:3px}.mapRegions>span+span i{background:#d4b77c}.mapRegions small{grid-column:2;font-size:12px;font-weight:400}}
 @media(max-width:700px){.lotScene{height:95px}.thinkingBranches>div{padding:15px 10px}.thinkingBranches strong{font-size:16px}}
+@media(max-width:700px){.clayStory{margin:36px -7px 32px;padding:26px 16px}.clayHeading>p:last-child{font-size:16px}.clayFigure img{min-height:190px;object-fit:cover;object-position:40% center}.clayFigure figcaption{padding:13px 14px;font-size:12px}.clayRead{grid-template-columns:1fr;gap:17px;margin:25px 0 23px}.clayRead>div{padding-top:11px}.clayRead strong{font-size:19px}.clayRead p{font-size:14px}.clayScience summary{font-size:15px}.clayScience>div{font-size:14px}}

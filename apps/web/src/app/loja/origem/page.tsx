@@ -79,7 +79,7 @@ export default function OrigemPage() {
               </svg>
               <a className={`${origin.synapseNode} ${origin.nodeLatitude}`} href="#territorio"><OriginIcon kind="place"/><span>01 · LUGAR</span><strong>Latitude + longitude</strong><small>Situam cada origem no mapa.</small></a>
               <a className={`${origin.synapseNode} ${origin.nodeClimate}`} href="#clima"><OriginIcon kind="weather"/><span>02 · TEMPO</span><strong>Amplitude + água</strong><small>Acompanham o fruto ao longo dos dias.</small></a>
-              <a className={`${origin.synapseNode} ${origin.nodeSoil}`} href="#territorio"><OriginIcon kind="soil"/><span>03 · TERRA</span><strong>Basalto + solo</strong><small>Compõem o ambiente da raiz.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeSoil}`} href="#solo-argila"><OriginIcon kind="soil"/><span>03 · TERRA</span><strong>Basalto + solo</strong><small>Compõem o ambiente da raiz.</small></a>
               <div className={origin.synapseCenter}><svg viewBox="0 0 120 110" aria-hidden="true"><path d="M40 18c-8 8 8 10 0 18M62 14c-8 8 8 10 0 18M82 18c-8 8 8 10 0 18" fill="none" stroke="#fff6df" strokeWidth="3" strokeLinecap="round"/><path d="M14 42h78l-8 44c-17 12-47 12-62 0Z" fill="#d9b87d" stroke="#f6e9d0" strokeWidth="3"/><path d="M91 50c31-5 31 31-4 32" fill="none" stroke="#f6e9d0" strokeWidth="5"/><ellipse cx="53" cy="43" rx="39" ry="8" fill="#f4e6c7"/><ellipse cx="53" cy="43" rx="31" ry="5" fill="#6d4938"/><path d="M19 98h81" stroke="#f6e9d0" strokeWidth="3" strokeLinecap="round"/></svg><strong>A xícara</strong><small>O encontro de muitas escolhas.</small></div>
               <a className={`${origin.synapseNode} ${origin.nodeCare}`} href="#fundadores"><OriginIcon kind="care"/><span>04 · CUIDADO</span><strong>Suzi + produtores</strong><small>Leem a planta e orientam o manejo.</small></a>
               <a className={`${origin.synapseNode} ${origin.nodeRoast}`} href="#torra"><OriginIcon kind="roast"/><span>05 · TRANSFORMAÇÃO</span><strong>José + torra</strong><small>Ajustam o calor a cada lote.</small></a>
@@ -154,6 +154,26 @@ export default function OrigemPage() {
             <Image src="/brand/story/parana-solo-basalto.webp" alt="Representação conceitual de solo vermelho e argiloso junto a um cafezal" fill sizes="(max-width: 700px) 100vw, 1200px" />
             <figcaption>Solo vermelho, planta e fruto · imagem conceitual</figcaption>
           </figure>
+          <section id="solo-argila" className={origin.clayStory} aria-labelledby="clay-title">
+            <div className={origin.clayHeading}>
+              <p className={origin.kicker}>UM OLHAR POR DENTRO DA TERRA</p>
+              <h3 id="clay-title">Não basta saber que o solo tem argila. Que argila é essa?</h3>
+              <p>O basalto é a rocha de origem de parte dos solos vermelhos do Norte do Paraná. Ao longo do tempo, a rocha se transforma e o solo ganha partículas muito pequenas. <strong>O teor de argila</strong> indica quanto há dessa fração; <strong>a tipologia</strong> investiga quais minerais a compõem.</p>
+            </div>
+            <figure className={origin.clayFigure}>
+              <Image src="/brand/story/argila-solo-cafe.svg" alt="Corte ilustrado: rocha basáltica, solo, raízes do cafeeiro, água e uma lupa sobre os minerais da fração argila; o fruto aparece na planta" width={1000} height={470} unoptimized />
+              <figcaption>A lupa amplia uma ideia, não uma amostra real de solo: <strong>caulinita, óxidos de ferro como hematita e goethita, e gibbsita</strong> são exemplos estudados em solos tropicais. A composição varia entre áreas e precisa ser medida na lavoura.</figcaption>
+            </figure>
+            <div className={origin.clayRead}>
+              <div><span>01 · O QUE EXISTE</span><strong>Minerais diferentes</strong><p>A cor vermelha pode dar pistas sobre óxidos de ferro, mas não revela sozinha a quantidade ou todos os tipos de argila.</p></div>
+              <div><span>02 · COMO A PLANTA VIVE</span><strong>Água e nutrientes</strong><p>Textura, minerais, estrutura e manejo participam da disponibilidade de água e nutrientes para as raízes.</p></div>
+              <div><span>03 · O QUE PROVAMOS</span><strong>Fruto e xícara</strong><p>É preciso observar o lote, a cultivar, o clima e o processamento, depois provar. Nenhum mineral determina um sabor por si só.</p></div>
+            </div>
+            <details className={origin.clayScience}>
+              <summary>Como a pesquisa chega a essa leitura? <span aria-hidden="true">↗</span></summary>
+              <div><p><strong>Já existem trabalhos publicados.</strong> Diego Silva Siqueira e pesquisadores da UNESP estudaram atributos do solo, relevo, produção e qualidade do café em áreas de Minas Gerais e São Paulo. Em 31,7 ha, teor de argila e ferro disponível ajudaram a distinguir ambientes de produção; outro estudo avaliou cor do solo e qualidade do grão em 39 ha.</p><p>Uma revisão científica de 2024, assinada também por Siqueira, apresenta a interação entre <strong>tipologia da argila, altitude e avaliação sensorial</strong> em amostras da Mantiqueira de Minas. Em determinada faixa do índice de tipologia, amostras de altitudes diferentes mostraram potencial sensorial semelhante. É uma evidência concreta de que a altitude precisa ser lida junto com o solo, sem transferir aqueles valores automaticamente para lavouras do Paraná.</p><p>O <strong>Terrus Café</strong> é uma aplicação dessa linha de pesquisa: Cooxupé, Quanticum e IFSuldeMinas trabalham no diagnóstico da tipologia da argila e no mapeamento de zonas de manejo do cafeeiro. As pesquisas avançaram; segue em estudo quanto cada mineral contribui para descritores específicos da xícara, em interação com cultivar, clima e processamento.</p><p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/1170171/1/Efeitos-das-caracteristicas-ambientais.pdf" target="_blank" rel="noopener noreferrer">Alves, Siqueira e coautores · Informe Agropecuário, 2024</a> · <a href="https://repositorio.unesp.br/entities/publication/26c95586-169b-4b88-8383-73ea435e74ef/full" target="_blank" rel="noopener noreferrer">Sanchez, Siqueira e coautores · UNESP, 2013</a> · <a href="https://www.scielo.br/j/pab/a/vvf9gsrK3gZrQRSXjWRNyph/?lang=pt" target="_blank" rel="noopener noreferrer">Carmo, Siqueira e coautores · Pesquisa Agropecuária Brasileira, 2016</a> · <a href="https://hubdocafe.cooxupe.com.br/tipologia-da-argila" target="_blank" rel="noopener noreferrer">Cooxupé · projeto Terrus Café</a>.</p></div>
+            </details>
+          </section>
           <div className={origin.territoryGrid}>
             <div><strong>Latitude · norte ↕ sul</strong><p>Medimos a partir do Equador. O Norte do Paraná está próximo da linha do Trópico de Capricórnio. A latitude situa a região; o clima vivido pelo cafeeiro depende também de altitude, relevo e estação.</p></div>
             <div><strong>Longitude · oeste ↔ leste</strong><p>Medimos a partir de Greenwich. Com a latitude, ela localiza a origem e permite contar onde o café foi cultivado. Sozinha, a coordenada não determina seu sabor.</p></div>

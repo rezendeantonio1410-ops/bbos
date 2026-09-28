@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" role="img" aria-labelledby="title desc">
+<title id="title">Da rocha ao fruto: uma leitura do solo</title>
+<desc id="desc">Corte ilustrativo de um cafeeiro enraizado no solo, com água e nutrientes próximos às raízes, rocha basáltica abaixo e uma lupa ampliando os minerais da fração argila. Frutos estão na planta; a ilustração não prevê o sabor do café.</desc>
+<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e7eff0"/><stop offset="1" stop-color="#faf8f2"/></linearGradient><linearGradient id="earth" x2="0" y2="1"><stop stop-color="#aa785e"/><stop offset="1" stop-color="#804d43"/></linearGradient><clipPath id="ground"><path d="M0 178Q250 155 500 178T1000 170V470H0Z"/></clipPath><clipPath id="glass"><circle cx="748" cy="297" r="130"/></clipPath></defs>
+<rect width="1000" height="470" fill="url(#sky)"/>
+<circle cx="120" cy="75" r="25" fill="#d9bb82" opacity=".8"/>
+<path d="M0 178Q250 155 500 178T1000 170V470H0Z" fill="url(#earth)"/>
+<g clip-path="url(#ground)" stroke="#d9a489" stroke-width="2" fill="none" opacity=".48"><path d="M0 270Q170 249 310 272T650 266"/><path d="M0 355Q190 340 355 353T670 347"/><path d="M18 400Q205 383 370 400T650 395"/></g>
+<g fill="#34494b" stroke="#c3ada0" stroke-width="2"><path d="M60 405l25-34 47 1 19 38-24 32-57-3Z"/><path d="M181 386l30-24 45 8 22 33-18 35-60-7Z"/><path d="M313 409l26-26 48 1 23 37-31 27-54-7Z"/><path d="M460 392l38-17 39 10 16 36-28 30-53-14Z"/></g>
+<text x="38" y="453" fill="#f7eee4" font-family="Montserrat,Arial,sans-serif" font-size="20" font-weight="700">BASALTO · ROCHA DE ORIGEM</text>
+<g fill="none" stroke="#e9d3b1" stroke-width="5" stroke-linecap="round"><path d="M332 171v74q-6 45-35 95M332 205q14 49 56 75t55 74M328 239q-43 33-92 42M340 260q-5 49 8 92"/><path d="M297 339l-19 21M384 279l18 4M348 351l22 13"/></g>
+<path d="M332 176V66" stroke="#3c665b" stroke-width="9" stroke-linecap="round"/>
+<g fill="#668c7c" stroke="#365d54" stroke-width="4"><path d="M331 127Q266 96 250 108Q278 156 330 149Z"/><path d="M331 117Q369 70 424 85Q413 134 333 138Z"/><path d="M331 86Q299 53 282 44Q305 91 333 107Z"/><path d="M339 95Q354 44 382 39Q385 76 340 115Z"/></g>
+<g fill="#b36a53" stroke="#f5d1aa" stroke-width="3"><circle cx="300" cy="145" r="15"/><circle cx="365" cy="140" r="15"/><circle cx="396" cy="116" r="12"/></g>
+<g fill="#bcd8dc"><path d="M107 213q-14 26 0 26t0-26Z"/><path d="M163 250q-14 26 0 26t0-26Z"/><path d="M441 208q-14 26 0 26t0-26Z"/></g>
+<g font-family="Montserrat,Arial,sans-serif" font-weight="700"><text x="53" y="139" fill="#36515b" font-size="20">CAFEEIRO + FRUTO</text><text x="62" y="309" fill="#fff2df" font-size="17">ÁGUA</text><text x="85" y="332" fill="#fff2df" font-size="17">+ NUTRIENTES</text></g>
+<path d="M448 305Q535 293 625 294" fill="none" stroke="#e9d3b1" stroke-width="3" stroke-dasharray="8 8"/>
+<circle cx="748" cy="297" r="138" fill="#f2ede2" stroke="#e3c895" stroke-width="10"/>
+<g clip-path="url(#glass)"><rect x="610" y="159" width="276" height="277" fill="#ddd4c2"/><g fill="#af735a"><path d="M639 214l28-20 32 16-12 30-40 8Z"/><path d="M730 187l37-6 15 28-25 29-31-12Z"/><path d="M683 293l42-11 23 30-24 29-45-16Z"/><path d="M789 303l41-17 25 27-21 32-38-5Z"/></g><g fill="#758e7c"><path d="M645 303l24-14 15 18-24 15Z"/><path d="M779 238l31-12 17 19-13 22-28-5Z"/><path d="M720 365l32-13 14 24-18 14-29-7Z"/></g><g fill="#bd986c"><circle cx="692" cy="205" r="7"/><circle cx="814" cy="375" r="11"/><circle cx="778" cy="340" r="6"/><circle cx="660" cy="362" r="8"/><circle cx="837" cy="215" r="8"/></g></g>
+<path d="M843 395l82 62" stroke="#e3c895" stroke-width="25" stroke-linecap="round"/>
+<text x="610" y="140" fill="#294650" font-family="Montserrat,Arial,sans-serif" font-weight="700" font-size="22">DENTRO DA FRAÇÃO ARGILA</text>
+<rect x="532" y="418" width="423" height="34" rx="17" fill="#f5f1e8" opacity=".95"/>
+<text x="552" y="441" fill="#294650" font-family="Montserrat,Arial,sans-serif" font-size="16" font-weight="700">CAULINITA · ÓXIDOS DE FERRO · GIBBSITA</text>
+</svg>
