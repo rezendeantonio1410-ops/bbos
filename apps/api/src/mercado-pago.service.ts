@@ -181,7 +181,7 @@ export class MercadoPagoService {
           statement_descriptor: "BISPO COFFEES",
           payment_method: {
             not_allowed_types: input.paymentMethod === "PIX"
-              ? ["credit_card", "debit_card", "ticket", "account_money", "digital_currency"]
+              ? ["credit_card", "debit_card", "prepaid_card", "ticket", "account_money", "digital_currency"]
               : ["bank_transfer", "ticket", "account_money", "digital_currency"],
           },
           online: {
