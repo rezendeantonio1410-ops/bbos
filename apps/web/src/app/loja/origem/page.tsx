@@ -37,6 +37,19 @@ export default function OrigemPage() {
           <p className={origin.kicker}>NOSSA ORIGEM · NORTE DO PARANÁ</p>
           <h1>A geografia também está na xícara.</h1>
           <h2>Antes de escolher cafés, aprendemos a entender de onde eles vêm.</h2>
+          <figure className={origin.originDiagram}>
+            <Image src="/brand/story/geografia-origem.svg" alt="Ilustração conceitual: a linha do Trópico de Capricórnio situa o Paraná; relevo, cafeeiro, solo e xícara compõem a paisagem" width={1200} height={520} unoptimized />
+            <figcaption>
+              <strong>O mapa localiza. A origem ganha forma no campo.</strong>
+              <div className={origin.originKeys}>
+                <span><b>01 · Coordenadas</b> Latitude e longitude situam o lugar.</span>
+                <span><b>02 · Ambiente</b> Relevo, temperatura e água mudam as condições da lavoura.</span>
+                <span><b>03 · Terra e planta</b> Solo e variedade fazem parte dessa resposta.</span>
+                <span><b>04 · Pessoas</b> Manejo e processamento completam o caminho até a xícara.</span>
+              </div>
+              <small>Esquema conceitual: o traçado não representa uma medição ou um mapa de lavoura.</small>
+            </figcaption>
+          </figure>
           <p>A Bispo Coffees nasce do encontro das trajetórias de <strong>Suzi Ninov e José Rezende</strong> — duas experiências construídas entre produtores, lavouras, desenvolvimento de qualidade, prova e mercados internacionais.</p>
           <p>No Paraná, próximo ao Trópico de Capricórnio, essa relação com o café ganhou uma perspectiva particular: aqui, a geografia nos ensinou cedo que qualidade não pode ser explicada por uma única variável.</p>
           <p className={origin.variables}>Latitude. Altitude. Temperatura. Solo. Variedade. Manejo. Maturação. Processamento. Pessoas.</p>
@@ -96,7 +109,12 @@ export default function OrigemPage() {
             <p className={origin.kicker}>UM LUGAR · DOIS MOMENTOS</p>
             <h2 id="climate-title">A temperatura muda. A planta responde.</h2>
             <p><strong>Amplitude térmica</strong> é a diferença entre a temperatura mais alta e a mais baixa de um período. O contraste entre dias quentes e noites frescas compõe o ambiente em que o fruto se desenvolve.</p>
+            <figure className={origin.thermalDiagram}>
+              <Image src="/brand/story/amplitude-termica.svg" alt="Curva conceitual de temperatura subindo durante o dia e caindo à noite, entre uma máxima e uma mínima" width={1000} height={360} unoptimized />
+              <figcaption><strong>Amplitude do dia = temperatura máxima − temperatura mínima.</strong><span>A curva mostra o conceito; os valores reais variam entre regiões, estações e lavouras.</span></figcaption>
+            </figure>
             <p>Temperatura e disponibilidade de água influenciam o tempo entre a florada e a maturação. Sozinhas, não determinam a qualidade: cultivar, solo, manejo e processamento também participam da história.</p>
+            <p>Na prática, observamos a sequência de dias e noites durante o desenvolvimento do fruto. Uma diferença maior entre máxima e mínima não garante, por si só, um café melhor: calor excessivo, frio e falta de água também podem limitar a planta.</p>
             <small>Imagem conceitual; não representa uma medição ou uma lavoura específica.</small>
           </div>
         </section>
@@ -117,8 +135,8 @@ export default function OrigemPage() {
           <p className={origin.extremes}><strong>Ao norte, o Havaí. Ao sul, o Paraná.</strong> São exemplos distantes que nos convidam a olhar além da altitude. Seus climas e sistemas de cultivo são diferentes; nenhum fator, isoladamente, explica uma grande xícara.</p>
           <details className={origin.science}>
             <summary>Para quem quer ir mais fundo: a base técnica</summary>
-            <p>Pesquisas conduzidas em Londrina com diferentes genótipos de arábica estudaram soma térmica e água disponível durante a maturação. Estudos de solos mostram a presença de materiais derivados de basalto em parte do Norte do Paraná, além de áreas de origem arenítica.</p>
-            <p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa · clima e maturação</a> · <a href="https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1133948/1/DOCUMENTO-440-JA2021.pdf" target="_blank" rel="noopener noreferrer">Embrapa · solos do Norte do Paraná</a> · <a href="https://portal.londrina.pr.gov.br/index.php/historia-cidade" target="_blank" rel="noopener noreferrer">Prefeitura · história de Londrina</a> · <a href="https://www.capricorniocoffees.com.br/origins?lang=pt" target="_blank" rel="noopener noreferrer">Capricornio · origens</a> · <a href="https://longitudecoffees.com/?lang=pt&amp;page_id=582" target="_blank" rel="noopener noreferrer">Longitude · trajetória</a>.</p>
+            <p>Estudos de Londrina acompanharam soma térmica e água disponível na maturação de diferentes genótipos de arábica. Pesquisas em outras origens mostram que condições climáticas, sobretudo a temperatura no desenvolvimento da semente, podem modificar atributos químicos e sensoriais. Latitude e longitude situam a origem; não funcionam como nota automática de qualidade.</p>
+            <p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa · clima e maturação</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/22980845/" target="_blank" rel="noopener noreferrer">Food Chemistry · clima e perfil sensorial</a> · <a href="https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1133948/1/DOCUMENTO-440-JA2021.pdf" target="_blank" rel="noopener noreferrer">Embrapa · solos do Norte do Paraná</a> · <a href="https://portal.londrina.pr.gov.br/index.php/historia-cidade" target="_blank" rel="noopener noreferrer">Prefeitura · história de Londrina</a> · <a href="https://www.capricorniocoffees.com.br/origins?lang=pt" target="_blank" rel="noopener noreferrer">Capricornio · origens</a> · <a href="https://longitudecoffees.com/?lang=pt&amp;page_id=582" target="_blank" rel="noopener noreferrer">Longitude · trajetória</a>.</p>
           </details>
         </section>
 
