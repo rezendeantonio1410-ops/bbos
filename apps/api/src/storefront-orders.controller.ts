@@ -232,6 +232,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
                FROM "StorefrontPaymentAttempt" p
                JOIN "StorefrontOrder" o ON o.id=p."storefrontOrderId"
               WHERE p."externalId" IS NOT NULL
+                AND p."externalId"=o."paymentExternalId"
                 AND o.status='AWAITING_PAYMENT'
                 AND (
                   (p.status='AWAITING_PAYMENT' AND (p."nextAttemptAt" IS NULL OR p."nextAttemptAt" <= NOW()))
@@ -570,7 +571,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       const order = found[0];
       if (!order) throw new BadRequestException("Pedido não encontrado.");
-      if (order.status === "PAID") {
+      if (["PAID", "PREPARING", "INVOICED", "SHIPPED", "DELIVERED"].includes(order.status)) {
         const duplicatePayment =
           Boolean(order.paymentExternalId) &&
           String(order.paymentExternalId) !== String(externalId);
@@ -592,7 +593,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         return {
           id: order.id,
           code: order.code,
-          status: "PAID",
+          status: order.status,
           idempotent: !duplicatePayment,
           duplicatePayment,
           alreadyPaidExternalId: order.paymentExternalId,
@@ -1451,7 +1452,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     await this.syncSalesOrder(orderId);
-    if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
+    if (rows[0].status === "AWAITING_PAYMENT" && rows[0].paymentExternalId) {
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
         `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
