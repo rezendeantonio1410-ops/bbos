@@ -792,6 +792,25 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       },
     );
     const shippingCents = Number(quote.customerPriceCents);
+    if (
+      quote.refreshed &&
+      Number.isFinite(Number(quote.previousCustomerPriceCents)) &&
+      shippingCents > Number(quote.previousCustomerPriceCents)
+    ) {
+      return {
+        shippingRefreshRequired: true,
+        message: "O valor do frete foi atualizado pela transportadora. Confira o novo total e confirme o pagamento.",
+        quote: {
+          id: quote.id,
+          name: quote.serviceName,
+          serviceName: quote.serviceName,
+          carrierName: quote.carrierName,
+          priceCents: shippingCents,
+          deliveryDays: Number(quote.deliveryDays),
+          expiresAt: new Date(quote.expiresAt).toISOString(),
+        },
+      };
+    }
 
     const equivalent = await this.database.$queryRawUnsafe<any[]>(
       `SELECT *
