@@ -128,18 +128,19 @@ export default function SobrePage() {
               produtores também em São Paulo. Em 2015, cofundou a Capricornio
               Coffees e ajudou a dar visibilidade a cafés próximos ao Trópico
               de Capricórnio, ampliando a conversa sobre latitude, altitude e
-              qualidade. Em 2024, iniciou a Longitude Coffees para aproximar
-              mais origens brasileiras dos mercados internacionais. Esse
-              percurso chega à Bispo como experiência acumulada e um novo
-              projeto construído junto com Suzi.
+              qualidade. Em 2024, participou com Suzi da fundação do conceito
+              da Longitude Coffees, aproximando origens brasileiras dos
+              mercados internacionais. A Bispo dá uma expressão própria à
+              experiência construída pelos dois.
             </p>
           </article>
           <article>
             <small>02 · SUZI NINOV</small>
             <h3>A ciência do cultivo com atenção às pessoas</h3>
             <p>
-              Criada no campo, no Rio Grande do Sul, Suzi encontrou no Paraná
-              sua vocação para a cafeicultura. Sua experiência agronômica une
+              Criada no campo, no Rio Grande do Sul, Suzi trabalha há cerca de
+              20 anos no Paraná, onde encontrou sua vocação para a cafeicultura.
+              Sua experiência agronômica une
               nutrição, produtividade e sustentabilidade a uma compreensão
               profunda da planta e dos recursos finitos do solo. Para ela, um
               café de alta qualidade começa no respeito ao organismo vivo e a
@@ -149,9 +150,10 @@ export default function SobrePage() {
               Ao longo da carreira no agronegócio, tornou-se referência para
               produtores e organizações, levando conhecimento técnico até a
               prática. Em 2017, um dos cafeicultores acompanhados por ela
-              conquistou o prêmio de melhor café do Brasil. Na Bispo, Suzi é
-              fundadora e protagonista: sua leitura da produção sustenta cada
-              escolha que chega à xícara.
+              conquistou o prêmio de melhor café do Brasil. Ela também
+              participou da fundação do conceito da Longitude Coffees ao lado
+              de José. Na Bispo, Suzi é sócia fundadora e protagonista: sua
+              leitura da produção sustenta cada escolha que chega à xícara.
             </p>
           </article>
           <article>

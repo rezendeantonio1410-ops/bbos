@@ -51,7 +51,7 @@ export default function OrigemPage() {
           <div className={origin.peopleGrid}>
             <article>
               <div className={origin.portrait}><Image src="/brand/story/suzi-fragrancia.jpeg" alt="Suzi Ninov avaliando o café" fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
-              <div><span>SUZI NINOV · CAMPO E DESENVOLVIMENTO</span><h3>O cuidado começa na planta.</h3><p>Suzi trabalha junto aos produtores, acompanha o cultivo e ajuda a transformar decisões de manejo em qualidade que se pode reconhecer na xícara.</p></div>
+              <div><span>SUZI NINOV · CAMPO E DESENVOLVIMENTO</span><h3>O cuidado começa na planta.</h3><p>Há cerca de 20 anos no Paraná, Suzi orienta produtores em nutrição, manejo e desenvolvimento da lavoura. Seu trabalho une produtividade, sustentabilidade e qualidade que se pode reconhecer na xícara.</p></div>
             </article>
             <article>
               <div className={origin.portrait}><Image src="/brand/story/jose-origem.jpeg" alt="José Rezende observando um cafeeiro" fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
@@ -76,15 +76,15 @@ export default function OrigemPage() {
           <div className={origin.careerIntro}>
             <p className={origin.kicker}>DO PARANÁ PARA O MUNDO</p>
             <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
-            <p>Na trajetória de José, o Norte do Paraná foi ponto de partida para trabalhar com produtores, provar cafés e abrir caminhos em outros mercados. Na trajetória de Suzi, o conhecimento agronômico encontrou no campo uma forma de acompanhar cada decisão que constrói qualidade.</p>
+            <p>José cresceu entre lavouras do Norte do Paraná e levou a experiência de origem e prova a outros mercados. Suzi construiu, ao longo de cerca de duas décadas no estado, uma trajetória própria de orientação a produtores e desenvolvimento da cafeicultura.</p>
           </div>
           <div className={origin.careerChapters}>
             <article><span>2003 → 2010</span><h3>José · do campo à prova</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A formação como provador, a avaliação sensorial e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a levar cafés do Paraná a compradores de outros países.</p></article>
             <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
-            <article><span>2024 · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José iniciou a Longitude Coffees para aproximar cafés brasileiros de mercados internacionais. O nome trouxe outra coordenada para sua trajetória e reforçou a atenção à diversidade dos territórios produtores do Brasil.</p></article>
-            <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Suzi trabalha com a planta, o solo, o desenvolvimento produtivo e a orientação a produtores. Na Bispo, essa experiência encontra a de José: os dois acompanham, interpretam e selecionam cafés cuja identidade possa ser percebida na xícara.</p></article>
+            <article><span>2024 · JOSÉ E SUZI · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José e Suzi participaram da fundação do conceito da Longitude Coffees. A experiência reuniu a leitura das origens, a orientação a produtores e o desejo de aproximar cafés brasileiros de mercados internacionais.</p></article>
+            <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Suzi trabalha com a planta, o solo e as pessoas que cultivam o café. Sua atuação no Paraná e o conceito construído com José na Longitude ganharam uma expressão própria na Bispo Coffees, fundada pelos dois.</p></article>
           </div>
-          <p className={origin.careerSignature}>Capricornio e Longitude fazem parte do caminho de José. <strong>A Bispo Coffees é a assinatura construída por José e Suzi.</strong></p>
+          <p className={origin.careerSignature}>Capricornio faz parte do caminho de José. A Longitude reuniu José e Suzi em um conceito compartilhado. <strong>A Bispo Coffees é a assinatura que os dois construíram a partir dessa experiência.</strong></p>
         </section>
 
         <section className={origin.landscape} aria-labelledby="climate-title">
