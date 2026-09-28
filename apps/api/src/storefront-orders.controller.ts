@@ -135,7 +135,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     void this.reconcilePendingMercadoPagoOrders();
     this.reconciliationTimer = setInterval(
       () => void this.reconcilePendingMercadoPagoOrders(),
-      120_000,
+      15_000,
     );
     this.reconciliationTimer.unref();
 
@@ -146,35 +146,149 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     await this.database.$disconnect();
   }
 
+  private async processPendingMercadoPagoWebhookEvents() {
+    for (let index = 0; index < 20; index += 1) {
+      const rows = await this.database.$queryRawUnsafe<any[]>(
+        `WITH candidate AS (
+           SELECT id
+             FROM "IntegrationWebhookEvent"
+            WHERE provider='MERCADO_PAGO' AND status='RECEIVED'
+            ORDER BY "receivedAt" ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+         )
+         UPDATE "IntegrationWebhookEvent" w
+            SET status='PROCESSED',"processedAt"=NOW(),"lastError"=NULL
+           FROM candidate
+          WHERE w.id=candidate.id
+         RETURNING w.*`,
+      );
+      const event = rows[0];
+      if (!event) break;
+
+      try {
+        const payload = event.payload ?? {};
+        const externalId = String(
+          payload?.data?.id ?? payload?.id ?? event.providerEventId ?? "",
+        ).trim();
+        if (!externalId) {
+          await this.database.$executeRawUnsafe(
+            `UPDATE "IntegrationWebhookEvent"
+                SET status='IGNORED',"processedAt"=NOW(),"lastError"='Evento sem identificador da order'
+              WHERE id=$1`,
+            event.id,
+          );
+          continue;
+        }
+
+        const attempts = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT p.*,o.code,o."totalCents"
+             FROM "StorefrontPaymentAttempt" p
+             JOIN "StorefrontOrder" o ON o.id=p."storefrontOrderId"
+            WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
+            LIMIT 1`,
+          externalId,
+        );
+        const attempt = attempts[0];
+        if (!attempt) {
+          await this.database.$executeRawUnsafe(
+            `UPDATE "IntegrationWebhookEvent"
+                SET status='IGNORED',"processedAt"=NOW(),"lastError"='Order do Mercado Pago sem tentativa correspondente no BBOS'
+              WHERE id=$1`,
+            event.id,
+          );
+          continue;
+        }
+
+        await this.reconcileMercadoPago({
+          id: attempt.storefrontOrderId,
+          code: attempt.code,
+          totalCents: attempt.totalCents,
+          paymentExternalId: externalId,
+        });
+      } catch (error) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "IntegrationWebhookEvent"
+              SET status='ERROR',"processedAt"=NOW(),"lastError"=$2
+            WHERE id=$1`,
+          event.id,
+          (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+        );
+      }
+    }
+  }
+
   private async reconcilePendingMercadoPagoOrders() {
     if (this.reconcilingPayments) return;
     this.reconcilingPayments = true;
     try {
-      const pending = await this.database.$queryRawUnsafe<
-        Array<{
-          id: string;
-          code: string;
-          totalCents: number;
-          paymentExternalId: string;
-        }>
-      >(
-        `SELECT id,code,"totalCents","paymentExternalId"
-           FROM "StorefrontOrder"
-          WHERE status='AWAITING_PAYMENT'
-            AND "paymentExternalId" IS NOT NULL
-            AND "createdAt" >= NOW() - INTERVAL '2 days'
-          ORDER BY "createdAt" ASC
-          LIMIT 50`,
-      );
-      for (const order of pending) {
+      await this.processPendingMercadoPagoWebhookEvents();
+
+      for (let index = 0; index < 20; index += 1) {
+        const rows = await this.database.$queryRawUnsafe<any[]>(
+          `WITH candidate AS (
+             SELECT id
+               FROM "StorefrontPaymentAttempt"
+              WHERE "externalId" IS NOT NULL
+                AND (
+                  (status='AWAITING_PAYMENT' AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW()))
+                  OR (status='PROCESSING' AND "processingStartedAt" < NOW() - INTERVAL '2 minutes')
+                  OR (status='ERROR' AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW()))
+                )
+              ORDER BY "updatedAt" ASC
+              FOR UPDATE SKIP LOCKED
+              LIMIT 1
+           )
+           UPDATE "StorefrontPaymentAttempt" p
+              SET status='PROCESSING',
+                  attempts=p.attempts+1,
+                  "processingStartedAt"=NOW(),
+                  "updatedAt"=NOW()
+             FROM candidate
+            WHERE p.id=candidate.id
+           RETURNING p.*`,
+        );
+        const attempt = rows[0];
+        if (!attempt) break;
+
+        const orders = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT id,code,"totalCents","paymentExternalId"
+             FROM "StorefrontOrder"
+            WHERE id=$1
+            LIMIT 1`,
+          attempt.storefrontOrderId,
+        );
+        const order = orders[0];
+        if (!order) {
+          await this.database.$executeRawUnsafe(
+            `UPDATE "StorefrontPaymentAttempt"
+                SET status='ERROR',"lastError"='Pedido não encontrado',
+                    "nextAttemptAt"=NULL,"updatedAt"=NOW()
+              WHERE id=$1`,
+            attempt.id,
+          );
+          continue;
+        }
+
         try {
-          await this.reconcileMercadoPago(order);
-        } catch (error) {
-          console.error("Falha ao reconciliar pagamento pendente do Mercado Pago", {
-            storefrontOrderId: order.id,
-            paymentExternalId: order.paymentExternalId,
-            error: error instanceof Error ? error.message : String(error),
+          await this.reconcileMercadoPago({
+            ...order,
+            paymentExternalId: attempt.externalId,
           });
+        } catch (error) {
+          const attempts = Number(attempt.attempts ?? 0) + 1;
+          const delaySeconds = Math.min(300, Math.max(15, 2 ** Math.min(attempts, 8)));
+          await this.database.$executeRawUnsafe(
+            `UPDATE "StorefrontPaymentAttempt"
+                SET status='ERROR',
+                    "lastError"=$2,
+                    "nextAttemptAt"=NOW() + ($3 || ' seconds')::interval,
+                    "updatedAt"=NOW()
+              WHERE id=$1`,
+            attempt.id,
+            (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+            String(delaySeconds),
+          );
         }
       }
 
@@ -221,6 +335,13 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         RETURNING id`,
       );
       for (const order of expired) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "StorefrontPaymentAttempt"
+              SET status='EXPIRED',"updatedAt"=NOW()
+            WHERE "storefrontOrderId"=$1
+              AND status IN ('CREATING','AWAITING_PAYMENT','PROCESSING','ERROR')`,
+          order.id,
+        );
         await this.lifecycle.record(
           order.id,
           "CANCELLED",
@@ -234,7 +355,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         await this.syncSalesOrder(order.id);
       }
     } catch (error) {
-      console.error("Falha ao listar pagamentos pendentes", {
+      console.error("Falha no worker de pagamentos da loja", {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
