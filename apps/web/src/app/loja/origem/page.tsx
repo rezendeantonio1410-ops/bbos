@@ -11,6 +11,20 @@ export const metadata: Metadata = {
   description: "Suzi Ninov e José Rezende contam como a origem, os solos e o clima do Paraná ajudam a compreender cada café.",
 };
 
+type OriginSymbol = "place" | "weather" | "soil" | "care" | "roast" | "taste";
+
+function OriginIcon({ kind }: { kind: OriginSymbol }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return <svg viewBox="0 0 52 52" aria-hidden="true" focusable="false" {...common}>
+    {kind === "place" && <><circle cx="26" cy="26" r="20"/><path d="M6 26h40M26 6c-12 11-12 29 0 40M26 6c12 11 12 29 0 40"/><circle cx="31" cy="24" r="4" fill="currentColor" stroke="none"/></>}
+    {kind === "weather" && <><circle cx="19" cy="17" r="8"/><path d="M19 4v3M19 27v3M6 17h3M29 17h3M9 7l2 2M29 7l-2 2M9 27l2-2M28 30c2-8 18-6 18 4 0 4-3 7-7 7H21c-5 0-7-3-7-6 0-4 4-7 8-6"/><path d="M27 45l-2 4M36 45l-2 4"/></>}
+    {kind === "soil" && <><path d="M5 34h42M5 42h42M24 34V18M24 22c-11 1-15-6-14-12 8 0 13 5 14 12ZM24 21c1-10 8-14 16-13-1 8-6 14-16 13Z"/><circle cx="13" cy="39" r="1" fill="currentColor"/><circle cx="34" cy="38" r="1" fill="currentColor"/></>}
+    {kind === "care" && <><path d="M8 31c7 0 10 3 16 7h12c5 0 7-4 4-6H28M8 31v15h-3M11 34l7-9 8 2 6 7M23 22v-9M23 17c-8 0-11-5-10-9 6 0 10 3 10 9ZM23 16c1-8 6-11 12-10 0 6-5 10-12 10Z"/></>}
+    {kind === "roast" && <><path d="M25 45C10 45 7 33 13 25c1 5 4 7 6 7-4-10 4-17 10-25-1 8 2 11 5 14 9 9 7 24-9 24Z"/><path d="M26 44c-8-1-9-9-3-13 0 4 2 5 3 5-1-4 2-8 5-11 0 5 4 9 3 13-1 4-4 6-8 6Z"/></>}
+    {kind === "taste" && <><path d="M6 19h31l-3 18c-7 5-18 5-25 0L6 19ZM37 22c12-2 12 12-2 12M8 44h28"/><path d="M16 8c-3 3-1 5 0 7M27 8c-3 3-1 5 0 7"/></>}
+  </svg>;
+}
+
 export default function OrigemPage() {
   return (
     <main className={`${styles.page} ${brand.storefront} ${origin.page}`}>
@@ -63,13 +77,13 @@ export default function OrigemPage() {
                 <g fill="none" stroke="#9cabb0" strokeWidth="2"><path d="M405 66C500 66 500 178 600 210"/><path d="M405 210H600"/><path d="M405 355C505 355 505 240 600 210"/><path d="M795 66C700 66 700 178 600 210"/><path d="M795 210H600"/><path d="M795 355C695 355 695 240 600 210"/></g>
                 <g fill="#334b51"><circle cx="405" cy="66" r="5"/><circle cx="405" cy="210" r="5"/><circle cx="405" cy="355" r="5"/><circle cx="795" cy="66" r="5"/><circle cx="795" cy="210" r="5"/><circle cx="795" cy="355" r="5"/></g>
               </svg>
-              <a className={`${origin.synapseNode} ${origin.nodeLatitude}`} href="#territorio"><span>01 · LUGAR</span><strong>Latitude + longitude</strong><small>Situam cada origem no mapa.</small></a>
-              <a className={`${origin.synapseNode} ${origin.nodeClimate}`} href="#clima"><span>02 · TEMPO</span><strong>Amplitude + água</strong><small>Acompanham o fruto ao longo dos dias.</small></a>
-              <a className={`${origin.synapseNode} ${origin.nodeSoil}`} href="#territorio"><span>03 · TERRA</span><strong>Basalto + solo</strong><small>Compõem o ambiente da raiz.</small></a>
-              <div className={origin.synapseCenter}><svg viewBox="0 0 120 92" aria-hidden="true"><path d="M18 24h71l-8 43c-13 11-43 11-56 0Z" fill="#ebebeb" stroke="#0e191d" strokeWidth="4"/><path d="M87 31c35-6 33 35-3 36" fill="none" stroke="#0e191d" strokeWidth="5"/><path d="M23 25c22-7 41-7 61 0" fill="none" stroke="#8c776e" strokeWidth="6"/></svg><strong>A xícara</strong><small>Expressa um encontro, não uma variável isolada.</small></div>
-              <a className={`${origin.synapseNode} ${origin.nodeCare}`} href="#fundadores"><span>04 · CUIDADO</span><strong>Suzi + produtores</strong><small>Leem a planta e orientam o manejo.</small></a>
-              <a className={`${origin.synapseNode} ${origin.nodeRoast}`} href="#torra"><span>05 · TRANSFORMAÇÃO</span><strong>José + torra</strong><small>Ajustam o calor a cada lote.</small></a>
-              <a className={`${origin.synapseNode} ${origin.nodeTaste}`} href="#acidez"><span>06 · LEITURA</span><strong>Prova + perfil</strong><small>Revelam como o café se apresenta.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeLatitude}`} href="#territorio"><OriginIcon kind="place"/><span>01 · LUGAR</span><strong>Latitude + longitude</strong><small>Situam cada origem no mapa.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeClimate}`} href="#clima"><OriginIcon kind="weather"/><span>02 · TEMPO</span><strong>Amplitude + água</strong><small>Acompanham o fruto ao longo dos dias.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeSoil}`} href="#territorio"><OriginIcon kind="soil"/><span>03 · TERRA</span><strong>Basalto + solo</strong><small>Compõem o ambiente da raiz.</small></a>
+              <div className={origin.synapseCenter}><svg viewBox="0 0 120 110" aria-hidden="true"><path d="M40 18c-8 8 8 10 0 18M62 14c-8 8 8 10 0 18M82 18c-8 8 8 10 0 18" fill="none" stroke="#fff6df" strokeWidth="3" strokeLinecap="round"/><path d="M14 42h78l-8 44c-17 12-47 12-62 0Z" fill="#d9b87d" stroke="#f6e9d0" strokeWidth="3"/><path d="M91 50c31-5 31 31-4 32" fill="none" stroke="#f6e9d0" strokeWidth="5"/><ellipse cx="53" cy="43" rx="39" ry="8" fill="#f4e6c7"/><ellipse cx="53" cy="43" rx="31" ry="5" fill="#6d4938"/><path d="M19 98h81" stroke="#f6e9d0" strokeWidth="3" strokeLinecap="round"/></svg><strong>A xícara</strong><small>O encontro de muitas escolhas.</small></div>
+              <a className={`${origin.synapseNode} ${origin.nodeCare}`} href="#fundadores"><OriginIcon kind="care"/><span>04 · CUIDADO</span><strong>Suzi + produtores</strong><small>Leem a planta e orientam o manejo.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeRoast}`} href="#torra"><OriginIcon kind="roast"/><span>05 · TRANSFORMAÇÃO</span><strong>José + torra</strong><small>Ajustam o calor a cada lote.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeTaste}`} href="#acidez"><OriginIcon kind="taste"/><span>06 · LEITURA</span><strong>Prova + perfil</strong><small>Revelam como o café se apresenta.</small></a>
             </div>
           </figure>
         </section>
@@ -83,8 +97,8 @@ export default function OrigemPage() {
           <div className={origin.thinkingPaths} aria-label="Comparação conceitual de dois lotes de café">
             <div className={origin.thinkingCommon}>MESMA FAIXA DE LATITUDE</div>
             <div className={origin.thinkingBranches}>
-              <div><span>LOTE A · HIPÓTESE</span><strong>Água disponível</strong><small>Maturação acompanhada no campo</small></div>
-              <div><span>LOTE B · HIPÓTESE</span><strong>Restrição de água</strong><small>Maturação sob outra condição</small></div>
+              <div><span>LOTE A · HIPÓTESE</span><svg className={origin.lotScene} viewBox="0 0 270 115" role="img" aria-label="Cafeeiro e gotas de água no solo"><path d="M0 85Q65 70 135 85T270 83V115H0Z" fill="#9b7765"/><path d="M0 96Q70 85 135 97T270 95" fill="none" stroke="#c6a28a" strokeWidth="3"/><path d="M132 87V38M132 69Q103 39 80 54Q101 78 132 69ZM132 56Q160 27 181 43Q161 67 132 56Z" fill="#83a08e" stroke="#d3e3d2" strokeWidth="3"/><circle cx="112" cy="77" r="8" fill="#bb7b62"/><circle cx="149" cy="71" r="8" fill="#bb7b62"/><path d="M38 15q-10 19 0 19t0-19ZM211 10q-10 19 0 19t0-19ZM228 38q-10 19 0 19t0-19Z" fill="#bed9e0"/></svg><strong>Água disponível</strong><small>Maturação acompanhada no campo</small></div>
+              <div><span>LOTE B · HIPÓTESE</span><svg className={origin.lotScene} viewBox="0 0 270 115" role="img" aria-label="Cafeeiro sob sol intenso e solo com pouca água"><path d="M0 85Q65 70 135 85T270 83V115H0Z" fill="#b89975"/><path d="M0 98l35 2 12-5 25 3 14 5 20-2M146 102l17-5 17 5 22-3 18 5" fill="none" stroke="#6e5d52" strokeWidth="2"/><path d="M132 87V38M132 69Q103 39 80 54Q101 78 132 69ZM132 56Q160 27 181 43Q161 67 132 56Z" fill="#86a08a" stroke="#d3e3d2" strokeWidth="3"/><circle cx="112" cy="77" r="8" fill="#bb7b62"/><circle cx="149" cy="71" r="8" fill="#bb7b62"/><circle cx="218" cy="28" r="16" fill="#dfc48a"/><path d="M218 2v-9M218 63v-9M193 28h-9M252 28h-9M200 10l-7-7M239 47l7 7M238 10l7-7" fill="none" stroke="#dfc48a" strokeWidth="3"/></svg><strong>Restrição de água</strong><small>Maturação sob outra condição</small></div>
             </div>
             <p className={origin.thinkingOutcome}>A posição no mapa se parece. <strong>As condições vividas pelo fruto podem ser diferentes.</strong></p>
           </div>
@@ -132,8 +146,9 @@ export default function OrigemPage() {
           <h2>Entre a linha do trópico e os solos do Paraná.</h2>
           <figure className={origin.coordinatesFigure}>
             <Image className={origin.worldDiagram} src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Brasil destacado, o Norte do Paraná marcado e as linhas do Equador, de Greenwich e do Trópico de Capricórnio" width={960} height={500} unoptimized />
+            <div className={origin.mapZoom}><span>DO MUNDO PARA O PARANÁ ↓</span><Image src="/brand/story/parana-nortes.svg" alt="Mapa ampliado do Paraná com o Norte Novo, na área de Londrina e Maringá, e o Norte Pioneiro, na área de Cornélio Procópio e Jacarezinho; manchas regionais ilustrativas" width={960} height={420} unoptimized /><div className={origin.mapRegions}><span><i/>Norte Novo <small>Londrina · Maringá</small></span><span><i/>Norte Pioneiro <small>Cornélio Procópio · Jacarezinho</small></span></div></div>
             <div className={origin.mapLegend} aria-label="Como ler as linhas do mapa"><span><b>↕</b> Latitude · norte e sul</span><span><b>↔</b> Longitude · oeste e leste</span><span><b>—</b> Trópico · 23°26′ S</span></div>
-            <figcaption><strong>Primeiro, encontramos o lugar.</strong> A latitude vai de norte a sul; a longitude, de oeste a leste. No encontro das duas, localizamos o Norte do Paraná, próximo ao Trópico de Capricórnio. <small>Mapa simplificado a partir de Natural Earth. O ponto é aproximado; a linha do Trópico não é uma fronteira de qualidade.</small></figcaption>
+            <figcaption><strong>Primeiro, encontramos o lugar.</strong> A latitude vai de norte a sul; a longitude, de oeste a leste. No encontro das duas, localizamos o Norte do Paraná, próximo ao Trópico de Capricórnio. <small>Mapa do mundo simplificado a partir de Natural Earth; contorno do Paraná adaptado de <a href="https://github.com/giuliano-macedo/geodata-br-states" target="_blank" rel="noopener noreferrer">dados de Giuliano Macedo / LAGEAMB UFPR</a>. As manchas do Norte Novo e do Norte Pioneiro indicam áreas de referência, não limites oficiais. O ponto é aproximado; o Trópico não é uma fronteira de qualidade.</small></figcaption>
           </figure>
           <figure className={origin.soilImage}>
             <Image src="/brand/story/parana-solo-basalto.webp" alt="Representação conceitual de solo vermelho e argiloso junto a um cafezal" fill sizes="(max-width: 700px) 100vw, 1200px" />
