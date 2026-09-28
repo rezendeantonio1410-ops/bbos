@@ -667,17 +667,32 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     const amountCents = Math.round(
       Number(providerOrder.total_amount || 0) * 100,
     );
+
     if (
       providerOrder.id !== order.paymentExternalId ||
       providerOrder.external_reference !== order.code ||
       amountCents !== order.totalCents
     ) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='ERROR',
+                "providerStatus"=$2,
+                "providerStatusDetail"=$3,
+                "lastError"='Divergência entre a tentativa BBOS e a order do Mercado Pago',
+                "nextAttemptAt"=NOW() + INTERVAL '5 minutes',
+                "updatedAt"=NOW()
+          WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+        order.paymentExternalId,
+        providerOrder.status ?? null,
+        providerOrder.status_detail ?? null,
+      );
       console.error("Mercado Pago retornou dados divergentes para o pedido", {
         orderId: order.id,
         providerOrderId: providerOrder.id,
       });
       return { paid: false };
     }
+
     const payment = providerOrder.transactions?.payments?.find(
       (candidate) =>
         candidate.status === "processed" &&
@@ -686,18 +701,57 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     const paid =
       providerOrder.status === "processed" &&
       providerOrder.status_detail === "accredited";
+
     if (paid || payment) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='PAID',
+                "providerStatus"=$2,
+                "providerStatusDetail"=$3,
+                "paidAt"=COALESCE("paidAt",NOW()),
+                "lastError"=NULL,
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                "updatedAt"=NOW()
+          WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+        providerOrder.id,
+        providerOrder.status ?? null,
+        providerOrder.status_detail ?? null,
+      );
       await this.markAsPaid(order.id, providerOrder.id);
       return { paid: true };
     }
 
     const terminalFailure = new Set(["failed", "canceled", "expired"]);
     if (providerOrder.status && terminalFailure.has(providerOrder.status)) {
+      const attemptStatus =
+        providerOrder.status === "canceled"
+          ? "CANCELLED"
+          : providerOrder.status === "expired"
+            ? "EXPIRED"
+            : "FAILED";
+
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status=$2,
+                "providerStatus"=$3,
+                "providerStatusDetail"=$4,
+                "lastError"=NULL,
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                "updatedAt"=NOW()
+          WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+        providerOrder.id,
+        attemptStatus,
+        providerOrder.status,
+        providerOrder.status_detail ?? null,
+      );
       await this.database.$executeRawUnsafe(
         `UPDATE "StorefrontOrder"
             SET status='PAYMENT_FAILED',"updatedAt"=NOW()
-          WHERE id=$1 AND status='AWAITING_PAYMENT'`,
+          WHERE id=$1 AND status='AWAITING_PAYMENT' AND "paymentExternalId"=$2`,
         order.id,
+        providerOrder.id,
       );
       await this.lifecycle.record(
         order.id,
@@ -714,6 +768,21 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       return { paid: false };
     }
+
+    await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontPaymentAttempt"
+          SET status='AWAITING_PAYMENT',
+              "providerStatus"=$2,
+              "providerStatusDetail"=$3,
+              "lastError"=NULL,
+              "nextAttemptAt"=NOW() + INTERVAL '20 seconds',
+              "processingStartedAt"=NULL,
+              "updatedAt"=NOW()
+        WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+      providerOrder.id,
+      providerOrder.status ?? null,
+      providerOrder.status_detail ?? null,
+    );
 
     return { paid: false };
   }
