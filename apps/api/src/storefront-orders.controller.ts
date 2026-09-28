@@ -278,17 +278,23 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
           });
         } catch (error) {
           const attempts = Number(attempt.attempts ?? 0) + 1;
+          const deadLetter = attempts >= 12;
           const delaySeconds = Math.min(300, Math.max(15, 2 ** Math.min(attempts, 8)));
           await this.database.$executeRawUnsafe(
             `UPDATE "StorefrontPaymentAttempt"
-                SET status='ERROR',
+                SET status=CASE WHEN $4::boolean THEN 'FAILED' ELSE 'ERROR' END,
                     "lastError"=$2,
-                    "nextAttemptAt"=NOW() + ($3 || ' seconds')::interval,
+                    "nextAttemptAt"=CASE
+                      WHEN $4::boolean THEN NULL
+                      ELSE NOW() + ($3 || ' seconds')::interval
+                    END,
+                    "processingStartedAt"=NULL,
                     "updatedAt"=NOW()
               WHERE id=$1`,
             attempt.id,
             (error instanceof Error ? error.message : String(error)).slice(0, 2000),
             String(delaySeconds),
+            deadLetter,
           );
         }
       }
