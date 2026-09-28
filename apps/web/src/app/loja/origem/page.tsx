@@ -157,17 +157,17 @@ export default function OrigemPage() {
           <section id="solo-argila" className={origin.clayStory} aria-labelledby="clay-title">
             <div className={origin.clayHeading}>
               <p className={origin.kicker}>UM OLHAR POR DENTRO DA TERRA</p>
-              <h3 id="clay-title">Não basta saber que o solo tem argila. Que argila é essa?</h3>
-              <p>O basalto é a rocha de origem de parte dos solos vermelhos do Norte do Paraná. Ao longo do tempo, a rocha se transforma e o solo ganha partículas muito pequenas. <strong>O teor de argila</strong> indica quanto há dessa fração; <strong>a tipologia</strong> investiga quais minerais a compõem.</p>
+              <h3 id="clay-title">No solo, muita coisa acontece ao mesmo tempo.</h3>
+              <p>Terra roxa, argila, água, raízes e o cuidado com a lavoura fazem parte da história. A rocha de origem ajuda a formar o solo; sua composição e o manejo mudam as condições vividas pela planta. <strong>Não há um único ingrediente que determine a xícara.</strong></p>
             </div>
             <figure className={origin.clayFigure}>
               <Image src="/brand/story/argila-solo-cafe.svg" alt="Corte ilustrado: rocha basáltica, solo, raízes do cafeeiro, água e uma lupa sobre os minerais da fração argila; o fruto aparece na planta" width={1000} height={470} unoptimized />
-              <figcaption>A lupa amplia uma ideia, não uma amostra real de solo: <strong>caulinita, óxidos de ferro como hematita e goethita, e gibbsita</strong> são exemplos estudados em solos tropicais. A composição varia entre áreas e precisa ser medida na lavoura.</figcaption>
+              <figcaption>Um olhar ampliado para o que não vemos a olho nu. O desenho mostra relações possíveis entre rocha, minerais, água e raízes; cada lavoura precisa ser observada de perto.</figcaption>
             </figure>
             <div className={origin.clayRead}>
-              <div><span>01 · O QUE EXISTE</span><strong>Minerais diferentes</strong><p>A cor vermelha pode dar pistas sobre óxidos de ferro, mas não revela sozinha a quantidade ou todos os tipos de argila.</p></div>
-              <div><span>02 · COMO A PLANTA VIVE</span><strong>Água e nutrientes</strong><p>Textura, minerais, estrutura e manejo participam da disponibilidade de água e nutrientes para as raízes.</p></div>
-              <div><span>03 · O QUE PROVAMOS</span><strong>Fruto e xícara</strong><p>É preciso observar o lote, a cultivar, o clima e o processamento, depois provar. Nenhum mineral determina um sabor por si só.</p></div>
+              <div><span>01 · A TERRA</span><strong>Rocha e solo</strong><p>O basalto formou parte dos solos vermelhos da região. A terra roxa conta uma história, mas cada área tem características próprias.</p></div>
+              <div><span>02 · A VIDA</span><strong>Água e raízes</strong><p>Argila, estrutura do solo, chuva e manejo influenciam como a planta encontra água e nutrientes.</p></div>
+              <div><span>03 · A XÍCARA</span><strong>Fruto e escolhas</strong><p>Clima, cultivar, cultivo, processamento e torra se somam. O resultado precisa ser provado, não adivinhado pela cor da terra.</p></div>
             </div>
             <details className={origin.clayScience}>
               <summary>Como a pesquisa chega a essa leitura? <span aria-hidden="true">↗</span></summary>
