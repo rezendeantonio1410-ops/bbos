@@ -167,14 +167,18 @@ export default function OrigemPage() {
               <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta o perfil para preservar as qualidades daquele café.</p>
               <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A escolha é guiada por testes e prova sensorial de cada lote.</p>
             </div>
-            <div className={origin.roastSteps} aria-label="Decisões técnicas para definir a torra">
-
-
-              <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Antes do torrador: umidade no medidor, densidade no densímetro, tamanho nas peneiras e processamento na ficha do lote.</small></div>
-              <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Acompanhar o desenvolvimento e provar o resultado.</small></div>
-              <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher o perfil pela xícara, não só pela altitude.</small></div>
-            </div>
-
+            <figure className={origin.roastPortrait}>
+              <Image src="/brand/story/torrador-silhueta.svg" alt="Silhueta ilustrativa de uma pessoa observando um torrador de café, conectada visualmente ao grão e à xícara" width={600} height={650} unoptimized />
+              <figcaption><strong>Observar · interpretar · provar.</strong><span>Ilustração conceitual da leitura de cada lote, sem representar um perfil de torra.</span></figcaption>
+              <details>
+                <summary>Como se lê o lote? <span aria-hidden="true">↗</span></summary>
+                <div className={origin.roastSteps} aria-label="Etapas de leitura do lote">
+                  <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Antes do torrador: umidade no medidor, densidade no densímetro, tamanho nas peneiras e processamento na ficha do lote.</small></div>
+                  <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Acompanhar o desenvolvimento e provar o resultado.</small></div>
+                  <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher o perfil pela xícara, não só pela altitude.</small></div>
+                </div>
+              </details>
+            </figure>
           </div>
           <div id="acidez" className={origin.acidityStory}>
             <div><p className={origin.kicker}>COMPLEXIDADE NA XÍCARA</p><h2>E a acidez fosfórica?</h2><p>Alguns lotes da região podem apresentar uma acidez viva, limpa ou brilhante, às vezes descrita na prova como fosfórica. O ácido fosfórico é um dos compostos que pode ser medido na bebida, mas a sensação de acidez resulta do conjunto de ácidos, aromas, torra e preparo. Atribuir essa sensação a uma molécula específica em um café da Bispo exige análise do lote e avaliação sensorial compatível.</p></div>
