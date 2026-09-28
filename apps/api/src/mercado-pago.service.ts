@@ -55,10 +55,16 @@ const money = (cents: number) => (cents / 100).toFixed(2);
 @Injectable()
 export class MercadoPagoService {
   private accessToken() {
-    const token = process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();
+    const token =
+      process.env.MERCADO_PAGO_PRODUCTION_ACCESS_TOKEN?.trim() ||
+      process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();
     if (!token)
       throw new ServiceUnavailableException(
         "O pagamento pelo Mercado Pago ainda não está configurado.",
+      );
+    if (/^TEST[-_]/i.test(token))
+      throw new ServiceUnavailableException(
+        "O Mercado Pago está configurado com credencial de teste. Configure a Access Token de produção antes de receber pagamentos reais.",
       );
     return token;
   }
@@ -193,6 +199,15 @@ export class MercadoPagoService {
       throw new ServiceUnavailableException(
         "O Mercado Pago não devolveu o endereço de pagamento.",
       );
+    if (/^ORDTST/i.test(order.id)) {
+      console.error("Mercado Pago devolveu uma order de teste para a loja", {
+        orderId: order.id,
+        externalReference: order.external_reference,
+      });
+      throw new ServiceUnavailableException(
+        "O Mercado Pago respondeu em modo de teste. O pagamento real foi bloqueado para proteger o cliente.",
+      );
+    }
     return order;
   }
 
