@@ -41,6 +41,12 @@ export type MercadoPagoOrder = {
   total_amount?: string;
   status?: string;
   status_detail?: string;
+  pix?: {
+    ticketUrl?: string | null;
+    qrCode?: string | null;
+    qrCodeBase64?: string | null;
+    expiresInSeconds?: number;
+  } | null;
   transactions?: {
     payments?: Array<{
       id?: string;
