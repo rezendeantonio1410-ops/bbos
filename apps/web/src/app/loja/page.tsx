@@ -336,19 +336,23 @@ export default function LojaPage() {
                             <strong>
                               {p.price} <small>· {p.weight}</small>
                             </strong>
-                            <AddToCartButton
-                              product={{
-                                id: p.name.toLowerCase().replaceAll(" ", "-"),
-                                name: p.name,
-                                line: p.line,
-                                notes: p.notes,
-                                priceCents: p.priceCents,
-                                weightGrams: 500,
-                                image: p.image,
-                              }}
-                            >
-                              Quero esse →
-                            </AddToCartButton>
+                            {p.image ? (
+                              <AddToCartButton
+                                product={{
+                                  id: p.name.toLowerCase().replaceAll(" ", "-"),
+                                  name: p.name,
+                                  line: p.line,
+                                  notes: p.notes,
+                                  priceCents: p.priceCents,
+                                  weightGrams: 500,
+                                  image: p.image,
+                                }}
+                              >
+                                Quero esse →
+                              </AddToCartButton>
+                            ) : (
+                              <Link href="/loja/descobrir">Avise-me quando chegar →</Link>
+                            )}
                           </div>
                         </div>
                       </article>
