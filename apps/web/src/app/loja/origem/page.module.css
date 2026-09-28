@@ -413,3 +413,41 @@
 .fieldSources .science[open] summary::after{transform:rotate(90deg)}
 
 @media(max-width:700px){.atlasPlaces b{font-weight:650}.atlasPlaces small{display:block;font-size:10px;font-weight:400;margin-top:2px}}
+
+/* Zooms remain visible as one cartographic reading, with the accurate state map below. */
+.atlasZooms{display:grid;grid-template-columns:1.08fr .92fr;gap:1px;background:#bdcacc;border-top:1px solid #bdcacc}
+.atlasZoom{min-width:0;background:#e9efee;display:flex;flex-direction:column}
+.atlasZoom:first-child{background:#183039;color:#f8f4e8}
+.atlasZoomLabel{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:12px 17px 6px}
+.atlasZoomLabel span,.atlasParanaLabel span{font-size:11px;font-weight:800;letter-spacing:.12em}
+.atlasZoomLabel strong{font-size:14px;font-weight:600}
+.atlasZoom img{display:block;width:100%;height:clamp(180px,21vw,265px);object-fit:contain}
+.atlasZoom p{font-size:12px;line-height:1.4;margin:auto 17px 0;padding:0 0 13px;max-width:48ch;color:inherit}
+.atlasParanaLabel{display:flex;align-items:baseline;gap:15px;flex-wrap:wrap;padding:15px 21px 4px;border-top:1px solid #bdcacc;color:#243c43}
+.atlasParanaLabel strong{font-size:17px;font-weight:650}
+.atlasParanaLabel small{font-size:12px;margin-left:auto}
+.atlasRelations{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#bdcacc;border-top:1px solid #bdcacc}
+.atlasRelations>div{display:flex;gap:16px;align-items:center;min-width:0;padding:12px 21px;background:#f2f5f2}
+.atlasRelations>div>svg{flex:none;width:70px;height:65px;color:#607e88}
+.atlasRelations>div.atlasRelationSoil>svg{width:120px;height:65px}
+.atlasRelations p{margin:0;font-size:13px;line-height:1.4}
+.atlasRelations b{display:block;font-size:14px;margin-bottom:3px}
+.atlasRelations span{display:block}
+@media(max-width:700px){
+  .atlasZooms{grid-template-columns:1fr 1fr}
+  .atlasZoomLabel{display:block;padding:9px 8px 4px}
+  .atlasZoomLabel span{display:block;font-size:9px}
+  .atlasZoomLabel strong{display:block;font-size:11px;line-height:1.2;margin-top:3px}
+  .atlasZoom img{height:128px}
+  .atlasZoom p{font-size:10px;padding-bottom:9px;margin-left:8px;margin-right:8px}
+  .atlasParanaLabel{display:block;padding:10px 12px 3px}
+  .atlasParanaLabel span{display:block;font-size:9px}
+  .atlasParanaLabel strong{display:block;font-size:13px;margin-top:3px}
+  .atlasParanaLabel small{display:block;font-size:10px;margin-top:3px}
+  .atlasRelations{grid-template-columns:1fr}
+  .atlasRelations>div{padding:10px 12px;gap:10px}
+  .atlasRelations>div>svg{width:42px;height:44px}
+  .atlasRelations>div.atlasRelationSoil>svg{width:70px;height:44px}
+  .atlasRelations p{font-size:11px}
+  .atlasRelations b{font-size:12px}
+}

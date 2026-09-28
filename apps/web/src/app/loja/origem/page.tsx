@@ -52,17 +52,33 @@ export default function OrigemPage() {
           <h1>A geografia também está na xícara.</h1>
           <h2>Antes de escolher cafés, aprendemos a entender de onde eles vêm.</h2>
           <figure className={origin.integratedAtlas}>
-            <div className={origin.atlasHeading}><p className={origin.kicker}>UM MAPA · MUITAS RELAÇÕES</p><strong>Do lugar à xícara.</strong><span>O Paraná situa a origem. O clima, o solo e as pessoas ajudam a contar o resto.</span></div>
-            <Image className={origin.atlasMap} src="/brand/story/parana-nortes.svg" alt="Mapa cartográfico do Paraná: limites do Norte Central e do Norte Pioneiro, cidades e Trópico de Capricórnio; no mesmo quadro, uma curva ilustrativa da amplitude térmica entre dia e noite" width={960} height={520} unoptimized />
+            <div className={origin.atlasHeading}><p className={origin.kicker}>UM MAPA · TRÊS ESCALAS</p><strong>Do mundo à xícara.</strong><span>Encontre a origem; depois observe o que acontece no campo.</span></div>
+            <div className={origin.atlasZooms} aria-label="Localização progressiva do Norte do Paraná">
+              <div className={origin.atlasZoom}>
+                <div className={origin.atlasZoomLabel}><span>01 · MUNDO</span><strong>Latitude e longitude</strong></div>
+                <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com Equador, meridiano de Greenwich, Trópico de Capricórnio e localização do Paraná" width={960} height={500} unoptimized />
+                <p>Paralelos situam norte e sul; meridianos, leste e oeste. O Trópico atravessa o sul do Brasil.</p>
+              </div>
+              <div className={origin.atlasZoom}>
+                <div className={origin.atlasZoomLabel}><span>02 · BRASIL</span><strong>Chegamos ao Sul</strong></div>
+                <Image src="/brand/story/brasil-parana.svg" alt="Contorno oficial do Brasil e do Paraná, com o Trópico de Capricórnio na mesma projeção" width={500} height={385} unoptimized />
+                <p>Dentro do Brasil, o Paraná é o recorte ampliado a seguir.</p>
+              </div>
+            </div>
+            <div className={origin.atlasParanaLabel}><span>03 · PARANÁ EM DETALHE</span><strong>O Norte Central, o Norte Pioneiro e o Trópico</strong><small>Maringá · Londrina · Cornélio Procópio · Jacarezinho</small></div>
+            <Image className={origin.atlasMap} src="/brand/story/parana-nortes.svg" alt="Mapa cartográfico do Paraná: limites do Norte Central e do Norte Pioneiro, quatro cidades e Trópico de Capricórnio; uma curva conceitual mostra a amplitude térmica entre dia e noite" width={960} height={520} unoptimized />
             <div className={origin.atlasPlaces}><span><i/><b>Norte Central · Maringá e Londrina<small>Norte Novo histórico</small></b></span><span><i/><b>Norte Pioneiro · Cornélio Procópio e Jacarezinho</b></span><span>Trópico · 23°26′ S</span><span>Amplitude térmica · máxima − mínima</span></div>
-            <div className={origin.atlasJourney} aria-label="Relações entre terra, cuidado, torra e xícara">
-              <a href="#solo-argila"><OriginIcon kind="soil"/><span><b>SOLO + ÁGUA</b> Basalto, argila e raízes</span></a>
-              <a href="#fundadores"><OriginIcon kind="care"/><span><b>CAMPO</b> Suzi, produtores e manejo</span></a>
+            <div className={origin.atlasRelations}>
+              <div className={origin.atlasRelationClimate}><OriginIcon kind="weather"/><p><b>Sol ↔ noite</b><span>Amplitude térmica = máxima − mínima. Ela participa da maturação junto com água e manejo.</span></p></div>
+              <div className={origin.atlasRelationSoil}><svg viewBox="0 0 160 80" role="img" aria-label="Planta com raízes entre camadas de argila, água e rocha de basalto"><path d="M0 45h160v35H0Z" fill="#b98770"/><path d="M0 56q38-10 80 0t80 0" fill="none" stroke="#ebd4bb" strokeWidth="7"/><path d="M0 68q35-5 80 2t80-2" fill="none" stroke="#654d48" strokeWidth="8"/><path d="M80 45V21m0 10Q54 7 42 21q13 16 38 10Zm0-2q24-26 42-16-4 20-42 16Z" fill="#80a58c" stroke="#314d43" strokeWidth="2"/><path d="M80 45l-7 13m7-13 9 20m-9-20 0 28" stroke="#e6d3b7" strokeWidth="2" fill="none"/><path d="M18 12q-7 13 0 13t0-13Zm124 7q-7 13 0 13t0-13Z" fill="#739eac"/></svg><p><b>Rocha → solo → planta</b><span>Basalto, argila, água e raízes interagem. O solo vermelho não define sozinho o sabor.</span></p></div>
+            </div>
+            <div className={origin.atlasJourney} aria-label="Do campo à xícara">
+              <a href="#solo-argila"><OriginIcon kind="soil"/><span><b>SOLO + ÁGUA</b> Ler a lavoura</span></a>
+              <a href="#fundadores"><OriginIcon kind="care"/><span><b>CAMPO</b> Suzi e produtores</span></a>
               <a href="#torra"><OriginIcon kind="roast"/><span><b>TORRA + PROVA</b> José lê cada lote</span></a>
               <a href="#acidez"><OriginIcon kind="taste"/><span><b>XÍCARA</b> O resultado se revela</span></a>
             </div>
-            <figcaption>Contorno, regiões e cidades: <a href="https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/UFs/PR/" target="_blank" rel="noopener noreferrer">malhas IBGE</a>. A curva térmica é conceitual; a linha do Trópico não determina qualidade.</figcaption>
-            <details className={origin.worldAside}><summary>Onde fica o Paraná no mundo? <span aria-hidden="true">↗</span></summary><Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa mundial simplificado, com Equador, meridiano de Greenwich, Trópico de Capricórnio e ponto no Norte do Paraná" width={960} height={500} unoptimized /></details>
+            <figcaption>Contornos do Brasil, Paraná, regiões e cidades: <a href="https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/" target="_blank" rel="noopener noreferrer">malhas IBGE, 2022</a>. Norte Central é uma referência cartográfica para o Norte Novo histórico, sem coincidir necessariamente com seus limites. O mapa-múndi e a curva térmica são esquemáticos; o Trópico não determina a qualidade do café.</figcaption>
           </figure>
           <p>A Bispo Coffees nasce do encontro das trajetórias de <strong>Suzi Ninov e José Rezende</strong> — duas experiências construídas entre produtores, lavouras, desenvolvimento de qualidade, prova e mercados internacionais.</p>
           <p>No Paraná, próximo ao Trópico de Capricórnio, essa relação com o café ganhou uma perspectiva particular: aqui, a geografia nos ensinou cedo que qualidade não pode ser explicada por uma única variável.</p>
