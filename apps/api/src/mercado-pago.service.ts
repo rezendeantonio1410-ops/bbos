@@ -142,16 +142,9 @@ export class MercadoPagoService implements OnModuleInit {
   }
 
   async createCheckout(input: MercadoPagoCheckoutInput) {
-    const names = input.payer.name.trim().split(/\s+/);
-    const firstName = names.shift() || input.payer.name.trim();
-    const lastName = names.join(" ") || firstName;
-    const phone = input.payer.phone.replace(/\D/g, "");
     const returnBase = `${this.storefrontUrl()}/loja/finalizar`;
     let checkoutItems = input.items.map((item) => ({
-      external_code: item.externalCode,
       title: item.title,
-      description: item.description || `Café Bispo ${item.title}`,
-      category_id: "food",
       quantity: item.quantity,
       unit_measure: "unit",
       unit_price: money(item.unitPriceCents),
@@ -159,10 +152,7 @@ export class MercadoPagoService implements OnModuleInit {
     }));
     if ((input.discountCents || 0) > 0) {
       checkoutItems = [{
-        external_code: "CAFE_BISPO",
         title: "Cafés Bispo",
-        description: `Seleção de cafés · cupom ${input.couponCode || "aplicado"}`,
-        category_id: "food",
         quantity: 1,
         unit_measure: "unit",
         unit_price: money(input.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0) - (input.discountCents || 0)),
@@ -171,10 +161,7 @@ export class MercadoPagoService implements OnModuleInit {
     }
     if (input.shippingCents > 0) {
       checkoutItems.push({
-        external_code: "FRETE",
         title: "Entrega Bispo Coffees",
-        description: "Entrega do pedido",
-        category_id: "services",
         quantity: 1,
         unit_measure: "unit",
         unit_price: money(input.shippingCents),
@@ -195,26 +182,8 @@ export class MercadoPagoService implements OnModuleInit {
         description: `Pedido ${input.orderCode} · Bispo Coffees`,
         payer: {
           email: input.payer.email.trim().toLowerCase(),
-          first_name: firstName,
-          last_name: lastName,
-          phone: {
-            area_code: phone.slice(0, 2),
-            number: phone.slice(2),
-          },
-          identification: {
-            type: "CPF",
-            number: input.payer.cpf.replace(/\D/g, ""),
-          },
-          address: {
-            zip_code: input.delivery.postalCode.replace(/\D/g, ""),
-            street_name: input.delivery.street,
-            street_number: input.delivery.number,
-            neighborhood: input.delivery.district,
-            city: input.delivery.city,
-          },
         },
         config: {
-          statement_descriptor: "BISPO COFFEES",
           payment_method: {
             not_allowed_types: input.paymentMethod === "PIX"
               ? ["credit_card", "debit_card", "prepaid_card", "ticket", "account_money", "digital_currency"]
