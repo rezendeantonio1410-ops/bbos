@@ -406,3 +406,8 @@
   .atlasPlaces i{width:16px;height:5px;flex:none;background:#b87e61}
   .atlasPlaces span:nth-child(2) i{background:#cfb97f}
 }
+
+.fieldSources .science summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fieldSources .science summary::-webkit-details-marker{display:none}
+.fieldSources .science summary::after{content:"↗";font-size:20px;font-weight:400;line-height:1}
+.fieldSources .science[open] summary::after{transform:rotate(90deg)}

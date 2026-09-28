@@ -61,7 +61,7 @@ export default function OrigemPage() {
               <a href="#torra"><OriginIcon kind="roast"/><span><b>TORRA + PROVA</b> José lê cada lote</span></a>
               <a href="#acidez"><OriginIcon kind="taste"/><span><b>XÍCARA</b> O resultado se revela</span></a>
             </div>
-            <figcaption>Contorno, limites regionais e cidades: <a href="https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/UFs/PR/" target="_blank" rel="noopener noreferrer">malhas IBGE</a>. Norte Central é referência cartográfica para o Norte Novo histórico, sem equivaler a seus limites. A curva térmica é conceitual; o Trópico não determina qualidade.</figcaption>
+            <figcaption>Contorno, regiões e cidades: <a href="https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/UFs/PR/" target="_blank" rel="noopener noreferrer">malhas IBGE</a>. A curva térmica é conceitual; a linha do Trópico não determina qualidade.</figcaption>
             <details className={origin.worldAside}><summary>Onde fica o Paraná no mundo? <span aria-hidden="true">↗</span></summary><Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa mundial simplificado, com Equador, meridiano de Greenwich, Trópico de Capricórnio e ponto no Norte do Paraná" width={960} height={500} unoptimized /></details>
           </figure>
           <p>A Bispo Coffees nasce do encontro das trajetórias de <strong>Suzi Ninov e José Rezende</strong> — duas experiências construídas entre produtores, lavouras, desenvolvimento de qualidade, prova e mercados internacionais.</p>
@@ -146,7 +146,7 @@ export default function OrigemPage() {
             <div>
               <p className={origin.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p>
               <h2>Na torra, o grão pede uma curva própria.</h2>
-              <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>Desde 2006, José desenvolve e prova perfis para cada lote do Paraná. Em seu trabalho pelo mundo, mostra como ler o grão, ajustar o calor e revelar o potencial de cafés de altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
+              <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>José desenvolve e prova perfis para cada lote do Paraná. Em seu trabalho pelo mundo, mostra como ler o grão, ajustar o calor e revelar o potencial de cafés de altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
               <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta a curva para preservar as qualidades daquele café.</p>
               <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A comparação certa é entre perfis testados no mesmo lote, com controle de cor e prova sensorial.</p>
             </div>
