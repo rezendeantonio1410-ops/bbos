@@ -199,15 +199,6 @@ export class MercadoPagoService {
       throw new ServiceUnavailableException(
         "O Mercado Pago não devolveu o endereço de pagamento.",
       );
-    if (/^ORDTST/i.test(order.id)) {
-      console.error("Mercado Pago devolveu uma order de teste para a loja", {
-        orderId: order.id,
-        externalReference: order.external_reference,
-      });
-      throw new ServiceUnavailableException(
-        "O Mercado Pago respondeu em modo de teste. O pagamento real foi bloqueado para proteger o cliente.",
-      );
-    }
     return order;
   }
 
