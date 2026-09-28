@@ -864,6 +864,20 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         `SELECT id FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
         order.id,
       );
+
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='CANCELLED',
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+                "updatedAt"=NOW()
+          WHERE "storefrontOrderId"=$1
+            AND status IN ('CREATING','AWAITING_PAYMENT','PROCESSING')`,
+        order.id,
+        JSON.stringify({ supersededByNewAttempt: true }),
+      );
+
       const numbers = await transaction.$queryRawUnsafe<Array<{ next: number }>>(
         `SELECT COALESCE(MAX("attemptNumber"),0)::int + 1 AS next
            FROM "StorefrontPaymentAttempt"
