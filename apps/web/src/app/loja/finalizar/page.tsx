@@ -251,6 +251,22 @@ export default function CheckoutPage() {
         throw new Error(
           result.message || "Não foi possível preparar o pedido.",
         );
+      if (result.shippingRefreshRequired && result.quote) {
+        const nextCheckout = {
+          ...checkout,
+          quote: {
+            ...checkout.quote,
+            ...result.quote,
+          },
+        };
+        setCheckout(nextCheckout);
+        localStorage.setItem("bispo-checkout-v1", JSON.stringify(nextCheckout));
+        setMessage(
+          result.message ||
+            "O frete foi atualizado. Confira o novo total e confirme novamente.",
+        );
+        return;
+      }
       setOrder(result);
       sessionStorage.setItem(
         "bispo-payment-order",
