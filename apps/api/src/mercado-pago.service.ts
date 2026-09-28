@@ -46,6 +46,13 @@ export type MercadoPagoOrder = {
       id?: string;
       status?: string;
       status_detail?: string;
+      payment_method?: {
+        id?: string;
+        type?: string;
+        ticket_url?: string;
+        qr_code?: string;
+        qr_code_base64?: string;
+      };
     }>;
   };
 };
@@ -182,6 +189,51 @@ export class MercadoPagoService implements OnModuleInit {
       throw error;
     }
     return body as MercadoPagoOrder;
+  }
+
+  async createPix(input: MercadoPagoCheckoutInput) {
+    const order = await this.request("/v1/orders", {
+      method: "POST",
+      headers: { "X-Idempotency-Key": input.idempotencyKey },
+      body: JSON.stringify({
+        type: "online",
+        total_amount: money(input.totalCents),
+        external_reference: input.orderCode,
+        processing_mode: "automatic",
+        transactions: {
+          payments: [
+            {
+              amount: money(input.totalCents),
+              payment_method: {
+                id: "pix",
+                type: "bank_transfer",
+              },
+              expiration_time: "P1D",
+            },
+          ],
+        },
+        payer: {
+          email: input.payer.email.trim().toLowerCase(),
+        },
+      }),
+    });
+
+    const payment = order.transactions?.payments?.[0];
+    const paymentMethod = payment?.payment_method;
+    if (!order.id || !paymentMethod?.qr_code)
+      throw new ServiceUnavailableException(
+        "O Mercado Pago não devolveu os dados do Pix.",
+      );
+
+    return {
+      ...order,
+      pix: {
+        ticketUrl: paymentMethod.ticket_url || null,
+        qrCode: paymentMethod.qr_code || null,
+        qrCodeBase64: paymentMethod.qr_code_base64 || null,
+        expiresInSeconds: 86400,
+      },
+    };
   }
 
   async createCheckout(input: MercadoPagoCheckoutInput) {
