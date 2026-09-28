@@ -111,27 +111,7 @@ export class MercadoPagoService {
     return body as MercadoPagoOrder;
   }
 
-  private async supportsPix() {
-    const response = await fetch("https://api.mercadopago.com/v1/payment_methods", {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${this.accessToken()}`,
-      },
-    });
-    const body = await response.json().catch(() => []);
-    if (!response.ok || !Array.isArray(body)) return false;
-    return body.some((method: any) =>
-      String(method?.id || "").toLowerCase() === "pix" &&
-      String(method?.status || "active").toLowerCase() !== "inactive"
-    );
-  }
-
   async createCheckout(input: MercadoPagoCheckoutInput) {
-    if (input.paymentMethod === "PIX" && !(await this.supportsPix())) {
-      throw new ServiceUnavailableException(
-        "O Pix ainda não está habilitado na conta Mercado Pago da Bispo Coffees. Cadastre uma chave Pix no Mercado Pago e tente novamente.",
-      );
-    }
     const names = input.payer.name.trim().split(/\s+/);
     const firstName = names.shift() || input.payer.name.trim();
     const lastName = names.join(" ") || firstName;
