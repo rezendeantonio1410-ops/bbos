@@ -134,9 +134,15 @@ export class MercadoPagoService implements OnModuleInit {
             : null,
         requestId: response.headers.get("x-request-id"),
       });
-      throw new ServiceUnavailableException(
+      const error = new ServiceUnavailableException(
         "Não foi possível iniciar o pagamento agora. Tente novamente em instantes.",
-      );
+      ) as ServiceUnavailableException & {
+        mercadoPagoCode?: string;
+        mercadoPagoStatus?: number;
+      };
+      error.mercadoPagoCode = String(code);
+      error.mercadoPagoStatus = response.status;
+      throw error;
     }
     return body as MercadoPagoOrder;
   }
@@ -169,36 +175,69 @@ export class MercadoPagoService implements OnModuleInit {
       });
     }
 
-    const order = await this.request("/v1/orders", {
-      method: "POST",
-      headers: { "X-Idempotency-Key": input.idempotencyKey },
-      body: JSON.stringify({
-        type: "online",
-        processing_mode: "manual",
-        capture_mode: "automatic_async",
-        total_amount: money(input.totalCents),
-        external_reference: input.orderCode,
-        expiration_time: "P1D",
-        description: `Pedido ${input.orderCode} · Bispo Coffees`,
-        payer: {
-          email: input.payer.email.trim().toLowerCase(),
-        },
-        config: {
-          payment_method: {
-            not_allowed_types: input.paymentMethod === "PIX"
-              ? ["credit_card", "debit_card", "prepaid_card", "ticket", "account_money", "digital_currency"]
-              : ["bank_transfer", "ticket", "account_money", "digital_currency"],
+    let order: MercadoPagoOrder;
+    try {
+      order = await this.request("/v1/orders", {
+        method: "POST",
+        headers: { "X-Idempotency-Key": input.idempotencyKey },
+        body: JSON.stringify({
+          type: "online",
+          processing_mode: "manual",
+          capture_mode: "automatic_async",
+          total_amount: money(input.totalCents),
+          external_reference: input.orderCode,
+          expiration_time: "P1D",
+          payer: {
+            email: input.payer.email.trim().toLowerCase(),
           },
-          online: {
-            success_url: `${returnBase}?payment=success`,
-            failure_url: `${returnBase}?payment=failure`,
-            pending_url: `${returnBase}?payment=pending`,
-            auto_return: "approved",
+          config: {
+            payment_method: {
+              not_allowed_types: input.paymentMethod === "PIX"
+                ? ["credit_card", "debit_card", "prepaid_card", "ticket", "account_money", "digital_currency"]
+                : ["bank_transfer", "ticket", "account_money", "digital_currency"],
+            },
+            online: {
+              success_url: `${returnBase}?payment=success`,
+              failure_url: `${returnBase}?payment=failure`,
+              pending_url: `${returnBase}?payment=pending`,
+              auto_return: "approved",
+            },
           },
-        },
-        items: checkoutItems,
-      }),
-    });
+          items: checkoutItems,
+        }),
+      });
+    } catch (error) {
+      const providerCode = String(
+        (error as { mercadoPagoCode?: string })?.mercadoPagoCode || "",
+      );
+      if (providerCode !== "unsupported_properties") throw error;
+
+      // Compatibility fallback: exact minimal contract from Mercado Pago's
+      // Checkout Pro Orders documentation. This keeps checkout available even
+      // if optional properties vary by account/application rollout.
+      const fallbackKey = `${input.idempotencyKey}-minimal`.slice(0, 128);
+      order = await this.request("/v1/orders", {
+        method: "POST",
+        headers: { "X-Idempotency-Key": fallbackKey },
+        body: JSON.stringify({
+          type: "online",
+          processing_mode: "manual",
+          total_amount: money(input.totalCents),
+          external_reference: input.orderCode,
+          payer: {
+            email: input.payer.email.trim().toLowerCase(),
+          },
+          items: checkoutItems.map((item: any) => ({
+            title: item.title,
+            unit_price: item.unit_price,
+            quantity: item.quantity,
+          })),
+        }),
+      });
+      console.warn("Mercado Pago order created with documented minimal fallback", {
+        orderCode: input.orderCode,
+      });
+    }
 
     if (!order.id || !order.checkout_url)
       throw new ServiceUnavailableException(
