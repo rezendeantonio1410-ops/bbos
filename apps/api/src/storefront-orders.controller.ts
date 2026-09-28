@@ -108,35 +108,6 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       }
     }
 
-    // Corrige o caso real de 27/09 em que duas tentativas consecutivas da
-    // mesma compra geraram dois rascunhos. Mantemos o primeiro pedido e
-    // encerramos apenas o duplicado mais recente, sem pagamento, fiscal ou envio.
-    const knownDuplicate = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
-      `UPDATE "StorefrontOrder" so
-          SET status='CANCELLED',"updatedAt"=NOW()
-        WHERE so.code='WEB-20260927-732970'
-          AND so.status='AWAITING_PAYMENT'
-          AND so."paidAt" IS NULL
-          AND so."totalCents"=7105
-          AND lower(so.customer->>'email')='jana.maestra10@gmail.com'
-          AND so.customer->>'cpf'='01550018094'
-          AND NOT EXISTS (SELECT 1 FROM "Shipment" sh WHERE sh."storefrontOrderId"=so.id)
-        RETURNING so.id`,
-    );
-    for (const duplicate of knownDuplicate) {
-      await this.lifecycle.record(
-        duplicate.id,
-        "CANCELLED",
-        "Tentativa duplicada encerrada",
-        "Esta tentativa foi consolidada no pedido original do mesmo cliente.",
-        "ADMIN",
-        `storefront:duplicate-closed:${duplicate.id}`,
-        {},
-        false,
-      );
-      await this.syncSalesOrder(duplicate.id);
-    }
-
     const cancelledDrafts = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT so.id
          FROM "StorefrontOrder" so
@@ -168,41 +139,6 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     );
     this.reconciliationTimer.unref();
 
-    const recoveryTimer = setTimeout(async () => {
-      try {
-        const rows = await this.database.$queryRawUnsafe<Array<{ id: string; status: string }>>(
-          `SELECT id,status
-             FROM "StorefrontOrder"
-            WHERE code='WEB-20260927-865A3F'
-              AND lower(customer->>'email')='jana.maestra10@gmail.com'
-            LIMIT 1`,
-        );
-        const order = rows[0];
-        if (!order || order.status === "PAID") return;
-        const publicBase = (
-          process.env.STOREFRONT_WEB_URL?.trim() ||
-          "https://bbos-ecommerce-preview-v2.onrender.com"
-        ).replace(/\/$/, "");
-        const token = this.lifecycle.trackingToken(order.id);
-        if (!token) return;
-        const paymentUrl = `${publicBase}/loja/pagar/${order.id}?token=${encodeURIComponent(token)}`;
-        await this.lifecycle.record(
-          order.id,
-          "ORDER_RECEIVED",
-          "Seu pedido Bispo está pronto para continuar",
-          "Corrigimos a tentativa duplicada de pagamento e preservamos seu pedido original. Se quiser concluir a compra, gere um novo Pix pelo botão abaixo.",
-          "BBOS",
-          `storefront:payment-recovery:20260927:${order.id}`,
-          { paymentUrl },
-          true,
-        );
-      } catch (error) {
-        console.error("Falha ao enviar recuperação do pagamento", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }, 10_000);
-    recoveryTimer.unref?.();
   }
 
   async onModuleDestroy() {
@@ -248,7 +184,6 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         `SELECT id,code
            FROM "StorefrontOrder"
           WHERE status='AWAITING_PAYMENT'
-            AND code <> 'WEB-20260927-865A3F'
             AND "createdAt" <= NOW() - INTERVAL '30 minutes'
             AND "createdAt" > NOW() - INTERVAL '24 hours'
           ORDER BY "createdAt" ASC
