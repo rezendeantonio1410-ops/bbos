@@ -161,22 +161,19 @@ export default function OrigemPage() {
           <div id="torra" className={origin.roastStory}>
             <div>
               <p className={origin.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p>
-              <h2>Na torra, o grão pede uma curva própria.</h2>
+              <h2>Na torra, cada lote pede uma leitura própria.</h2>
               <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>José desenvolve e prova perfis para cada lote do Paraná. Em seu trabalho pelo mundo, mostra como ler o grão, ajustar o calor e revelar o potencial de cafés de altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
-              <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta a curva para preservar as qualidades daquele café.</p>
-              <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A comparação certa é entre perfis testados no mesmo lote, com controle de cor e prova sensorial.</p>
+              <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta o perfil para preservar as qualidades daquele café.</p>
+              <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A escolha é guiada por testes e prova sensorial de cada lote.</p>
             </div>
             <div className={origin.roastSteps} aria-label="Decisões técnicas para definir a torra">
-              <Image src="/brand/story/torra-leitura-lote.svg" alt="Grão verde, curva de calor ilustrativa e xícara: observar, ajustar e provar cada lote" width={850} height={280} unoptimized />
+
 
               <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Antes do torrador: umidade no medidor, densidade no densímetro, tamanho nas peneiras e processamento na ficha do lote.</small></div>
-              <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Registrar curvas e manter o resultado comparável.</small></div>
-              <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher a curva pela xícara, não só pela altitude.</small></div>
+              <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Acompanhar o desenvolvimento e provar o resultado.</small></div>
+              <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher o perfil pela xícara, não só pela altitude.</small></div>
             </div>
-              <figure className={origin.roastCurve}>
-                <div className={origin.curveArtwork}><Image src="/brand/story/curva-torra-exemplo.svg" alt="Curva ilustrativa: sonda a 140 °C na carga, queda da leitura até 85 °C no ponto de retorno perto de 50 segundos neste exemplo, seguida de subida até 202 °C; RoR de 18 °C por minuto em um instante, primeiro estalo e desenvolvimento" width={960} height={460} unoptimized /><Image className={origin.curveSeal} src="/brand/story/bispo-selo-marca-dagua.png" alt="" aria-hidden="true" width={410} height={366} unoptimized /></div>
-                <figcaption><strong>Exemplo ilustrativo · não é uma curva registrada.</strong><span>O café entra em temperatura ambiente. A sonda marca <b>140 °C na carga → 85 °C no ponto de retorno → 202 °C na saída</b>. Aqui, o retorno aparece por volta de 0:50.</span><span><abbr title="Taxa de elevação da temperatura">RoR</abbr> de 18 °C/min indica <em>um instante da subida</em>. O primeiro estalo marca o início do desenvolvimento.</span><details className={origin.curveNotes}><summary>Como ler os números e o sensor?</summary><p>A queda inicial é da leitura da sonda: os grãos não entram a 140 °C. O RoR não é constante. Temperaturas, duração das etapas e posição do primeiro estalo variam conforme lote, torrador e posição do sensor. Esta curva não é uma receita para o Paraná.</p></details></figcaption>
-              </figure>
+
           </div>
           <div id="acidez" className={origin.acidityStory}>
             <div><p className={origin.kicker}>COMPLEXIDADE NA XÍCARA</p><h2>E a acidez fosfórica?</h2><p>Alguns lotes da região podem apresentar uma acidez viva, limpa ou brilhante, às vezes descrita na prova como fosfórica. O ácido fosfórico é um dos compostos que pode ser medido na bebida, mas a sensação de acidez resulta do conjunto de ácidos, aromas, torra e preparo. Atribuir essa sensação a uma molécula específica em um café da Bispo exige análise do lote e avaliação sensorial compatível.</p></div>
@@ -189,7 +186,7 @@ export default function OrigemPage() {
           </div>
           <details className={origin.science}>
             <summary>Estudos para explorar essa leitura</summary>
-            <p><a href="https://www.scielo.br/j/eagri/a/QPFYN8QGWFC85gc85SDkR5p/?format=html&amp;lang=pt" target="_blank" rel="noopener noreferrer">Londrina: altitude e solo</a> · <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa: maturação e clima</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/30361029/" target="_blank" rel="noopener noreferrer">Tipicidade e múltiplos fatores da origem</a> · <a href="https://coffeescience.ufla.br/index.php/Coffeescience/article/view/1878" target="_blank" rel="noopener noreferrer">Altitude e perfis de torra</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/36984852/" target="_blank" rel="noopener noreferrer">Torra e preparo no Havaí</a> · <a href="https://www.mdpi.com/2306-5710/11/6/162" target="_blank" rel="noopener noreferrer">Queda inicial e ponto de retorno na sonda</a> · <a href="https://sbicafe.ufv.br/bitstreams/bb14b91c-ebe4-41a1-92d9-5f7d1c3939a8/download" target="_blank" rel="noopener noreferrer">Curvas registradas em estudo experimental</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/37033739/" target="_blank" rel="noopener noreferrer">Ácidos e percepção na bebida</a>.</p>
+            <p><a href="https://www.scielo.br/j/eagri/a/QPFYN8QGWFC85gc85SDkR5p/?format=html&amp;lang=pt" target="_blank" rel="noopener noreferrer">Londrina: altitude e solo</a> · <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa: maturação e clima</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/30361029/" target="_blank" rel="noopener noreferrer">Tipicidade e múltiplos fatores da origem</a> · <a href="https://coffeescience.ufla.br/index.php/Coffeescience/article/view/1878" target="_blank" rel="noopener noreferrer">Altitude e perfis de torra</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/36984852/" target="_blank" rel="noopener noreferrer">Torra e preparo no Havaí</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/37033739/" target="_blank" rel="noopener noreferrer">Ácidos e percepção na bebida</a>.</p>
           </details>
         </section>
 
