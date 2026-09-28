@@ -60,18 +60,38 @@ export default function OrigemPage() {
             <figcaption><strong>Uma xícara, muitas relações.</strong><span>Escolha uma ligação para explorar: cada uma participa da origem, mas nenhuma explica o café sozinha.</span></figcaption>
             <div className={origin.synapseMap}>
               <svg className={origin.synapseWires} viewBox="0 0 1200 420" aria-hidden="true" preserveAspectRatio="none">
-                <g fill="none" stroke="#94b5a2" strokeWidth="2"><path d="M405 66C500 66 500 178 600 210"/><path d="M405 210H600"/><path d="M405 355C505 355 505 240 600 210"/><path d="M795 66C700 66 700 178 600 210"/><path d="M795 210H600"/><path d="M795 355C695 355 695 240 600 210"/></g>
-                <g fill="#386a50"><circle cx="405" cy="66" r="5"/><circle cx="405" cy="210" r="5"/><circle cx="405" cy="355" r="5"/><circle cx="795" cy="66" r="5"/><circle cx="795" cy="210" r="5"/><circle cx="795" cy="355" r="5"/></g>
+                <g fill="none" stroke="#9cabb0" strokeWidth="2"><path d="M405 66C500 66 500 178 600 210"/><path d="M405 210H600"/><path d="M405 355C505 355 505 240 600 210"/><path d="M795 66C700 66 700 178 600 210"/><path d="M795 210H600"/><path d="M795 355C695 355 695 240 600 210"/></g>
+                <g fill="#334b51"><circle cx="405" cy="66" r="5"/><circle cx="405" cy="210" r="5"/><circle cx="405" cy="355" r="5"/><circle cx="795" cy="66" r="5"/><circle cx="795" cy="210" r="5"/><circle cx="795" cy="355" r="5"/></g>
               </svg>
               <a className={`${origin.synapseNode} ${origin.nodeLatitude}`} href="#territorio"><span>01 · LUGAR</span><strong>Latitude + longitude</strong><small>Situam cada origem no mapa.</small></a>
               <a className={`${origin.synapseNode} ${origin.nodeClimate}`} href="#clima"><span>02 · TEMPO</span><strong>Amplitude + água</strong><small>Acompanham o fruto ao longo dos dias.</small></a>
               <a className={`${origin.synapseNode} ${origin.nodeSoil}`} href="#territorio"><span>03 · TERRA</span><strong>Basalto + solo</strong><small>Compõem o ambiente da raiz.</small></a>
-              <div className={origin.synapseCenter}><svg viewBox="0 0 120 92" aria-hidden="true"><path d="M18 24h71l-8 43c-13 11-43 11-56 0Z" fill="#f9f7eb" stroke="#36634e" strokeWidth="4"/><path d="M87 31c35-6 33 35-3 36" fill="none" stroke="#36634e" strokeWidth="5"/><path d="M23 25c22-7 41-7 61 0" fill="none" stroke="#ac795d" strokeWidth="6"/></svg><strong>A xícara</strong><small>Expressa um encontro, não uma variável isolada.</small></div>
+              <div className={origin.synapseCenter}><svg viewBox="0 0 120 92" aria-hidden="true"><path d="M18 24h71l-8 43c-13 11-43 11-56 0Z" fill="#ebebeb" stroke="#0e191d" strokeWidth="4"/><path d="M87 31c35-6 33 35-3 36" fill="none" stroke="#0e191d" strokeWidth="5"/><path d="M23 25c22-7 41-7 61 0" fill="none" stroke="#8c776e" strokeWidth="6"/></svg><strong>A xícara</strong><small>Expressa um encontro, não uma variável isolada.</small></div>
               <a className={`${origin.synapseNode} ${origin.nodeCare}`} href="#fundadores"><span>04 · CUIDADO</span><strong>Suzi + produtores</strong><small>Leem a planta e orientam o manejo.</small></a>
               <a className={`${origin.synapseNode} ${origin.nodeRoast}`} href="#torra"><span>05 · TRANSFORMAÇÃO</span><strong>José + torra</strong><small>Ajustam o calor a cada lote.</small></a>
               <a className={`${origin.synapseNode} ${origin.nodeTaste}`} href="#acidez"><span>06 · LEITURA</span><strong>Prova + perfil</strong><small>Revelam como o café se apresenta.</small></a>
             </div>
           </figure>
+        </section>
+
+        <section className={origin.thinking} aria-labelledby="thinking-title">
+          <div className={origin.thinkingHeading}>
+            <p className={origin.kicker}>OLHE · RELACIONE · DESCUBRA</p>
+            <h2 id="thinking-title">Duas lavouras próximas podem contar histórias diferentes.</h2>
+            <p>Imagine dois lotes na mesma faixa de latitude. A coordenada é parecida. O que ainda precisaria ser observado antes de dizer como será a xícara?</p>
+          </div>
+          <div className={origin.thinkingPaths} aria-label="Comparação conceitual de dois lotes de café">
+            <div className={origin.thinkingCommon}>MESMA FAIXA DE LATITUDE</div>
+            <div className={origin.thinkingBranches}>
+              <div><span>LOTE A · HIPÓTESE</span><strong>Água disponível</strong><small>Maturação acompanhada no campo</small></div>
+              <div><span>LOTE B · HIPÓTESE</span><strong>Restrição de água</strong><small>Maturação sob outra condição</small></div>
+            </div>
+            <p className={origin.thinkingOutcome}>A posição no mapa se parece. <strong>As condições vividas pelo fruto podem ser diferentes.</strong></p>
+          </div>
+          <details className={origin.thinkingReveal}>
+            <summary>O que mais comparar? Abra a leitura da Bispo <span aria-hidden="true">↗</span></summary>
+            <div><p>Observe também <strong>altitude e relevo, solo, cultivar, temperatura, manejo, processamento e torra</strong>. Suzi acompanha como a planta se desenvolve com os produtores. José prova o lote e ajusta a torra. Só a combinação dessas leituras permite discutir o perfil do café.</p><p><strong>Este é um exercício de comparação, não o resultado de dois lotes reais.</strong> A falta de água pode limitar a planta; não há previsão sensorial válida apenas a partir deste desenho.</p></div>
+          </details>
         </section>
 
         <section id="fundadores" className={origin.people} aria-label="Os fundadores">
