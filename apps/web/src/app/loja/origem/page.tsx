@@ -132,6 +132,7 @@ export default function OrigemPage() {
           <h2>Entre a linha do trópico e os solos do Paraná.</h2>
           <figure className={origin.coordinatesFigure}>
             <Image className={origin.worldDiagram} src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Brasil destacado, o Norte do Paraná marcado e as linhas do Equador, de Greenwich e do Trópico de Capricórnio" width={960} height={500} unoptimized />
+            <div className={origin.mapLegend} aria-label="Como ler as linhas do mapa"><span><b>↕</b> Latitude · norte e sul</span><span><b>↔</b> Longitude · oeste e leste</span><span><b>—</b> Trópico · 23°26′ S</span></div>
             <figcaption><strong>Primeiro, encontramos o lugar.</strong> A latitude vai de norte a sul; a longitude, de oeste a leste. No encontro das duas, localizamos o Norte do Paraná, próximo ao Trópico de Capricórnio. <small>Mapa simplificado a partir de Natural Earth. O ponto é aproximado; a linha do Trópico não é uma fronteira de qualidade.</small></figcaption>
           </figure>
           <figure className={origin.soilImage}>
