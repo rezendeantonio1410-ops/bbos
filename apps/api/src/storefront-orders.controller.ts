@@ -919,10 +919,11 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     const providerIdempotencyKey = `mp-${idempotencyKey}`.slice(0, 128);
     const attempt = await this.beginPaymentAttempt(order, providerIdempotencyKey);
 
-    if (attempt.externalId && attempt.checkoutUrl) {
+    if (attempt.externalId && (attempt.checkoutUrl || attempt.metadata?.pix)) {
       return {
         externalId: attempt.externalId,
-        checkoutUrl: attempt.checkoutUrl,
+        checkoutUrl: attempt.checkoutUrl || null,
+        pix: attempt.metadata?.pix || null,
       };
     }
 
@@ -937,8 +938,8 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     }>;
 
     try {
-      const providerOrder = await this.mercadoPago.createCheckout({
-        paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
+      const paymentInput = {
+        paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" as const : "PIX" as const,
         idempotencyKey: providerIdempotencyKey,
         orderCode: order.code,
         totalCents: order.totalCents,
@@ -967,7 +968,11 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
           city: delivery?.city || "",
           state: delivery?.state || "",
         },
-      });
+      };
+      const providerOrder =
+        order.requestedPaymentMethod === "PIX"
+          ? await this.mercadoPago.createPix(paymentInput)
+          : await this.mercadoPago.createCheckout(paymentInput);
 
       await this.database.$transaction(async (transaction) => {
         await transaction.$executeRawUnsafe(
@@ -977,15 +982,17 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
                   "checkoutUrl"=$3,
                   "providerStatus"=$4,
                   "providerStatusDetail"=$5,
+                  metadata=COALESCE(metadata,'{}'::jsonb) || $6::jsonb,
                   "lastError"=NULL,
                   "nextAttemptAt"=NOW() + INTERVAL '20 seconds',
                   "updatedAt"=NOW()
             WHERE id=$1`,
           attempt.id,
           providerOrder.id,
-          providerOrder.checkout_url!,
+          providerOrder.checkout_url ?? providerOrder.pix?.ticketUrl ?? null,
           providerOrder.status ?? null,
           providerOrder.status_detail ?? null,
+          JSON.stringify({ pix: providerOrder.pix ?? null }),
         );
         await transaction.$executeRawUnsafe(
           `UPDATE "StorefrontOrder"
@@ -1001,7 +1008,8 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
       return {
         externalId: providerOrder.id,
-        checkoutUrl: providerOrder.checkout_url!,
+        checkoutUrl: providerOrder.checkout_url ?? providerOrder.pix?.ticketUrl ?? null,
+        pix: providerOrder.pix ?? null,
       };
     } catch (error) {
       await this.database.$executeRawUnsafe(
@@ -1125,6 +1133,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         totalCents: existing[0].totalCents,
         confirmationToken,
         checkoutUrl: payment.checkoutUrl,
+        pix: payment.pix ?? null,
         idempotent: true,
       };
     }
@@ -1273,6 +1282,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         totalCents: refreshed.totalCents,
         confirmationToken,
         checkoutUrl: payment.checkoutUrl,
+        pix: payment.pix ?? null,
         reusedPendingOrder: true,
       };
     }
@@ -1361,6 +1371,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       ...rows[0],
       confirmationToken,
       checkoutUrl: payment.checkoutUrl,
+      pix: payment.pix ?? null,
     };
   }
 
@@ -1411,6 +1422,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       code: order.code,
       status: "AWAITING_PAYMENT",
       checkoutUrl: payment.checkoutUrl,
+      pix: payment.pix ?? null,
     };
   }
 
