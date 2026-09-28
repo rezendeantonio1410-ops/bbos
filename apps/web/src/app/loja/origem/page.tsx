@@ -53,6 +53,7 @@ export default function OrigemPage() {
           <h2>Antes de escolher cafés, aprendemos a entender de onde eles vêm.</h2>
           <figure className={origin.integratedAtlas}>
             <div className={origin.atlasHeading}><p className={origin.kicker}>UM MAPA · TRÊS ESCALAS</p><strong>Do mundo à xícara.</strong><span>Encontre a origem; depois observe o que acontece no campo.</span></div>
+            <div className={origin.atlasCanvas}>
             <div className={origin.atlasZooms} aria-label="Localização progressiva do Norte do Paraná">
               <div className={origin.atlasZoom}>
                 <div className={origin.atlasZoomLabel}><span>01 · MUNDO</span><strong>Latitude e longitude</strong></div>
@@ -65,8 +66,12 @@ export default function OrigemPage() {
                 <p>Dentro do Brasil, o Paraná é o recorte ampliado a seguir.</p>
               </div>
             </div>
+              <div className={origin.atlasDetail}>
             <div className={origin.atlasParanaLabel}><span>03 · PARANÁ EM DETALHE</span><strong>O Norte Central, o Norte Pioneiro e o Trópico</strong><small>Maringá · Londrina · Cornélio Procópio · Jacarezinho</small></div>
             <Image className={origin.atlasMap} src="/brand/story/parana-nortes.svg" alt="Mapa cartográfico do Paraná: limites do Norte Central e do Norte Pioneiro, quatro cidades e Trópico de Capricórnio; uma curva conceitual mostra a amplitude térmica entre dia e noite" width={960} height={520} unoptimized />
+                <a className={origin.atlasExpand} href="/brand/story/parana-nortes.svg" target="_blank" rel="noopener noreferrer">Ampliar mapa e ler os nomes ↗</a>
+              </div>
+            </div>
             <div className={origin.atlasMind} aria-label="Mapa mental do território e do café">
               <div className={origin.atlasMindHub}><span>O QUE O MAPA NOS ENSINA</span><strong>Uma origem, muitas relações</strong><small>Não há uma única variável que explique a xícara.</small></div>
               <div className={origin.atlasMindBranches}>
