@@ -172,6 +172,25 @@ type Order = {
   customer: Customer;
   items: OrderItem[];
   reservations: Array<{ id: string; status: string; quantity: number }>;
+  shipment?: {
+    status: string;
+    carrierName?: string | null;
+    serviceName?: string | null;
+    trackingCode?: string | null;
+    authorizationCode?: string | null;
+    updatedAt: string;
+  } | null;
+};
+
+const shipmentStatusLabel: Record<string, string> = {
+  PENDING: "Frete em preparação",
+  LABEL_READY: "Etiqueta pronta",
+  PURCHASED: "Etiqueta comprada",
+  IN_TRANSIT: "Em trânsito",
+  OUT_FOR_DELIVERY: "Saiu para entrega",
+  DELIVERED: "Entregue",
+  EXCEPTION: "Atenção ao frete",
+  CANCELLED: "Frete cancelado",
 };
 
 type ShipmentInfo = {
@@ -289,6 +308,12 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void refresh();
+    const timer = window.setInterval(() => {
+      void fetch(salesOrdersApi(), { credentials: "include", cache: "no-store" })
+        .then(async (response) => { if (response.ok) setOrders(await response.json()); })
+        .catch(() => undefined);
+    }, 60000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const visible = useMemo(
@@ -375,12 +400,30 @@ export default function OrdersPage() {
           {visible.map((order) => (
             <Card key={order.id} className="p-4">
               <button onClick={() => setSelected(order)} className="w-full text-left">
-                <div className="flex justify-between">
-                  <div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-[12rem]">
                     <strong>{order.orderNumber ?? order.code}</strong>
                     <p className="text-xs text-stone-500">{order.customer.name}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  {order.shipment && (
+                    <div className="min-w-0 flex-1 text-xs sm:text-center">
+                      <span className="font-semibold text-forest-900">
+                        {shipmentStatusLabel[order.shipment.status] ?? "Frete em acompanhamento"}
+                      </span>
+                      <span className="text-stone-500"> · {order.shipment.carrierName ?? "Melhor Envio"}</span>
+                      {(order.shipment.authorizationCode || order.shipment.trackingCode) && (
+                        <p className="mt-1 text-[11px] text-stone-600">
+                          Rastreio {order.shipment.authorizationCode ?? order.shipment.trackingCode}
+                          {order.shipment.authorizationCode && order.shipment.trackingCode && order.shipment.authorizationCode !== order.shipment.trackingCode
+                            ? ` · ${order.shipment.trackingCode}` : ""}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-stone-400">
+                        Sincronizado {new Date(order.shipment.updatedAt).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
                     <Status status={order.status} />
                     <strong>{money.format(Number(order.totalAmount))}</strong>
                     <ChevronRight size={16} />
