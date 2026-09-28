@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
 
 type MercadoPagoItem = {
   externalCode: string;
@@ -53,7 +53,15 @@ export type MercadoPagoOrder = {
 const money = (cents: number) => (cents / 100).toFixed(2);
 
 @Injectable()
-export class MercadoPagoService {
+export class MercadoPagoService implements OnModuleInit {
+  private readonly logger = new Logger(MercadoPagoService.name);
+
+  onModuleInit() {
+    this.logger.log(
+      `Mercado Pago production readiness: ${this.configured() ? "configured" : "missing"}`,
+    );
+  }
+
   configured() {
     return Boolean(
       process.env.MERCADO_PAGO_PRODUCTION_ACCESS_TOKEN?.trim() ||
