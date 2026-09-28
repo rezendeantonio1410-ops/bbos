@@ -442,6 +442,10 @@ export default function CheckoutPage() {
                 Cartão
               </label>
             </div>
+            <p className={styles.privacyNote}>
+              Seus dados são utilizados para processar e entregar seu pedido.{" "}
+              <Link href="/aviso-privacidade">Privacidade</Link>
+            </p>
             <button
               disabled={submitting || order?.status === "PAID"}
               type="submit"
