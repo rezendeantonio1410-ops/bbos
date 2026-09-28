@@ -1,9 +1,12 @@
 import { Controller, Get, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
+import { MercadoPagoService } from "./mercado-pago.service";
 
 @Controller("storefront/operations")
 export class StorefrontOperationsController implements OnModuleDestroy {
   private readonly database = new PrismaClient();
+
+  constructor(private readonly mercadoPago: MercadoPagoService) {}
 
   async onModuleDestroy() {
     await this.database.$disconnect();
@@ -81,6 +84,9 @@ export class StorefrontOperationsController implements OnModuleDestroy {
     return {
       status,
       generatedAt: new Date().toISOString(),
+      providers: {
+        mercadoPago: { configured: this.mercadoPago.configured() },
+      },
       summary: {
         paymentFailures,
         webhookErrors,
