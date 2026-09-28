@@ -314,3 +314,13 @@
   .mapRegions>span+span i{background:#cfb97f}
   .mapRegions>span{grid-template-columns:18px 1fr}
 }
+
+.thinkingHeading{margin-bottom:18px}
+.thinkingFold{max-width:1200px;margin:0 auto;border-top:1px solid #bdcacc}
+.thinkingFold>summary{list-style:none;cursor:pointer;padding:17px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;background:#f5f6f5;border:1px solid #bdcacc;border-radius:8px;color:#294650;font-size:17px;font-weight:700}
+.thinkingFold>summary::-webkit-details-marker{display:none}
+.thinkingFold>summary:focus-visible{outline:3px solid #294650;outline-offset:3px}
+.thinkingFold>summary span{font-size:23px;line-height:1}
+.thinkingFold[open]>summary{margin-bottom:16px}
+.thinkingFold[open]>summary span{transform:rotate(90deg)}
+@media(max-width:700px){.thinkingHeading{padding-top:30px;margin-bottom:15px}.thinkingHeading h2{font-size:30px}.thinkingFold>summary{font-size:15px;padding:14px 16px}}

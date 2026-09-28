@@ -194,6 +194,8 @@ export default function OrigemPage() {
             <h2 id="thinking-title">Duas lavouras próximas podem contar histórias diferentes.</h2>
             <p>Imagine dois lotes na mesma faixa de latitude. A coordenada é parecida. O que ainda precisaria ser observado antes de dizer como será a xícara?</p>
           </div>
+          <details className={origin.thinkingFold}>
+            <summary>Comparar os dois lotes <span aria-hidden="true">↗</span></summary>
           <div className={origin.thinkingPaths} aria-label="Comparação conceitual de dois lotes de café">
             <div className={origin.thinkingCommon}>MESMA FAIXA DE LATITUDE</div>
             <div className={origin.thinkingBranches}>
@@ -205,6 +207,7 @@ export default function OrigemPage() {
           <details className={origin.thinkingReveal}>
             <summary>O que mais comparar? Abra a leitura da Bispo <span aria-hidden="true">↗</span></summary>
             <div><p>Observe também <strong>altitude e relevo, solo, cultivar, temperatura, manejo, processamento e torra</strong>. Suzi acompanha como a planta se desenvolve com os produtores. José prova o lote e ajusta a torra. Só a combinação dessas leituras permite discutir o perfil do café.</p><p><strong>Este é um exercício de comparação, não o resultado de dois lotes reais.</strong> A falta de água pode limitar a planta; não há previsão sensorial válida apenas a partir deste desenho.</p></div>
+          </details>
           </details>
         </section>
 
