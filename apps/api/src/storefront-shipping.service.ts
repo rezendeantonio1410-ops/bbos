@@ -313,10 +313,55 @@ export class StorefrontShippingService {
       companyId,
     );
     const quote = rows[0];
-    if (!quote || quote.status !== "VALID" || new Date(quote.expiresAt).getTime() <= Date.now())
-      throw new BadRequestException("A cotação do frete expirou. Calcule novamente antes de pagar.");
-    if (quote.cartFingerprint !== this.fingerprint(input) || quote.destinationPostalCode !== digits(input.postalCode))
+    if (!quote)
+      throw new BadRequestException("A cotação de frete não foi encontrada.");
+
+    if (
+      quote.cartFingerprint !== this.fingerprint(input) ||
+      quote.destinationPostalCode !== digits(input.postalCode)
+    )
       throw new BadRequestException("A cotação não corresponde aos itens e ao endereço deste pedido.");
-    return quote;
+
+    const expired = new Date(quote.expiresAt).getTime() <= Date.now();
+    if (quote.status === "VALID" && !expired) return quote;
+
+    // Requote automaticamente preservando a mesma modalidade escolhida.
+    // Isso evita abandono de checkout por uma cotação antiga/consumida.
+    const refreshed = await this.quote(companyId, input, {
+      includeAllServices: true,
+      allowFreeShipping: true,
+    });
+    const sameService =
+      refreshed.options.find(
+        (option: any) =>
+          String(option.serviceId) === String(quote.serviceId) &&
+          String(option.carrierName) === String(quote.carrierName),
+      ) ??
+      refreshed.options.find(
+        (option: any) =>
+          String(option.serviceName) === String(quote.serviceName) &&
+          String(option.carrierName) === String(quote.carrierName),
+      );
+
+    if (!sameService)
+      throw new BadRequestException(
+        "A modalidade de entrega escolhida não está mais disponível. Escolha outra opção de frete.",
+      );
+
+    const refreshedRows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "ShippingQuote" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+      sameService.id,
+      companyId,
+    );
+    const fresh = refreshedRows[0];
+    if (!fresh)
+      throw new ServiceUnavailableException("Não foi possível renovar a cotação de frete.");
+
+    return {
+      ...fresh,
+      refreshedFromQuoteId: quote.id,
+      previousCustomerPriceCents: Number(quote.customerPriceCents),
+      refreshed: true,
+    };
   }
 }
