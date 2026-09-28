@@ -627,7 +627,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
          VALUES ($1,$2,'BLING','STOREFRONT_ORDER_PAID','STOREFRONT_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
          ON CONFLICT ("idempotencyKey") DO NOTHING`,
         randomUUID(),
-        lockedOrder.companyId,
+        order.companyId,
         order.id,
         JSON.stringify({
           storefrontOrderId: order.id,
