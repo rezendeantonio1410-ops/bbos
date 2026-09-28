@@ -15,7 +15,7 @@
 <text x="135" y="159" fill="#294650" font-size="14" font-weight="800" letter-spacing="1">CARGA</text>
 <text x="135" y="184" fill="#0e191d" font-size="25" font-weight="750">140 °C</text>
 <text x="232" y="334" fill="#0e191d" font-size="23" font-weight="750">85 °C</text>
-<text x="289" y="334" fill="#294650" font-size="17" font-weight="650">≈ 0:50*</text>
+<text x="326" y="334" fill="#294650" font-size="17" font-weight="650">≈ 0:50</text>
 <path d="M218 309L240 282" fill="none" stroke="#967746" stroke-width="2"/>
 <text x="244" y="280" fill="#6b5638" font-size="15" font-weight="800">PONTO DE RETORNO</text>
 <text x="750" y="73" fill="#0e191d" font-size="25" font-weight="750">202 °C</text>
