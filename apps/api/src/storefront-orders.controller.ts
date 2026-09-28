@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   OnModuleInit,
   OnModuleDestroy,
   Param,
@@ -1383,62 +1384,60 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
   @Public()
   @Post("mercado-pago/webhook")
+  @HttpCode(202)
   async mercadoPagoWebhook(
     @Query("data.id") queryDataId: string | undefined,
     @Query("id") queryId: string | undefined,
     @Body() body: any,
   ) {
-    const externalId =
-      body?.data?.id || body?.id || queryDataId || queryId || undefined;
-    if (!externalId) return { received: true };
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,"companyId",code,status,"totalCents","paymentExternalId"
-         FROM "StorefrontOrder"
-        WHERE "paymentExternalId"=$1
-        LIMIT 1`,
-      String(externalId),
-    );
-    if (!rows[0]) {
-      console.warn("Webhook Mercado Pago sem pedido correspondente", {
-        externalId: String(externalId),
-        action: body?.action,
-        liveMode: body?.live_mode,
-      });
-      return { received: true };
-    }
+    const externalId = String(
+      body?.data?.id || body?.id || queryDataId || queryId || "",
+    ).trim();
 
-    const providerEventId = String(body?.id || `${externalId}:${body?.action || "update"}`);
-    await this.database.$executeRawUnsafe(
+    const attempts = externalId
+      ? await this.database.$queryRawUnsafe<any[]>(
+          `SELECT p."companyId"
+             FROM "StorefrontPaymentAttempt" p
+            WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
+            LIMIT 1`,
+          externalId,
+        )
+      : [];
+
+    const eventName = String(body?.action || body?.type || "order.updated");
+    const providerEventId = createHash("sha256")
+      .update(
+        JSON.stringify({
+          externalId,
+          eventName,
+          payload: body ?? {},
+        }),
+      )
+      .digest("hex");
+
+    const inserted = await this.database.$executeRawUnsafe(
       `INSERT INTO "IntegrationWebhookEvent"
         (id,"companyId",provider,"providerEventId","eventName",payload,status,"receivedAt")
        VALUES ($1,$2,'MERCADO_PAGO',$3,$4,$5::jsonb,'RECEIVED',NOW())
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (provider,"providerEventId") DO NOTHING`,
       randomUUID(),
-      rows[0].companyId,
+      attempts[0]?.companyId ?? null,
       providerEventId,
-      String(body?.action || "order.updated"),
-      JSON.stringify(body ?? {}),
+      eventName,
+      JSON.stringify({
+        ...(body ?? {}),
+        _bbosExternalId: externalId || null,
+      }),
     );
 
-    try {
-      await this.reconcileMercadoPago(rows[0]);
-      await this.database.$executeRawUnsafe(
-        `UPDATE "IntegrationWebhookEvent"
-            SET status='PROCESSED',"processedAt"=NOW(),"lastError"=NULL
-          WHERE provider='MERCADO_PAGO' AND "providerEventId"=$1`,
-        providerEventId,
-      );
-    } catch (error) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "IntegrationWebhookEvent"
-            SET status='FAILED',"processedAt"=NOW(),"lastError"=$2
-          WHERE provider='MERCADO_PAGO' AND "providerEventId"=$1`,
-        providerEventId,
-        error instanceof Error ? error.message : String(error),
-      );
-      throw error;
-    }
-    return { received: true };
+    // Não bloqueamos o webhook esperando Mercado Pago/Banco/Bling.
+    // O worker persistente processa o evento com retry e deduplicação.
+    void this.reconcilePendingMercadoPagoOrders();
+
+    return {
+      accepted: true,
+      duplicate: inserted === 0,
+    };
   }
 
   @Public()
