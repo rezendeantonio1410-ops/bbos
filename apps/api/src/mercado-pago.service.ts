@@ -118,6 +118,21 @@ export class MercadoPagoService implements OnModuleInit {
       console.error("Mercado Pago recusou a operação", {
         status: response.status,
         code,
+        message: body?.message || body?.error_description || null,
+        details: Array.isArray(body?.details)
+          ? body.details.map((detail: any) => ({
+              code: detail?.code,
+              field: detail?.field || detail?.path || null,
+              message: detail?.message || detail?.description || null,
+            }))
+          : Array.isArray(body?.errors)
+            ? body.errors.map((detail: any) => ({
+                code: detail?.code,
+                field: detail?.field || detail?.path || null,
+                message: detail?.message || detail?.description || null,
+              }))
+            : null,
+        requestId: response.headers.get("x-request-id"),
       });
       throw new ServiceUnavailableException(
         "Não foi possível iniciar o pagamento agora. Tente novamente em instantes.",
@@ -138,7 +153,9 @@ export class MercadoPagoService implements OnModuleInit {
       description: item.description || `Café Bispo ${item.title}`,
       category_id: "food",
       quantity: item.quantity,
+      unit_measure: "unit",
       unit_price: money(item.unitPriceCents),
+      total_amount: money(item.unitPriceCents * item.quantity),
     }));
     if ((input.discountCents || 0) > 0) {
       checkoutItems = [{
@@ -147,7 +164,9 @@ export class MercadoPagoService implements OnModuleInit {
         description: `Seleção de cafés · cupom ${input.couponCode || "aplicado"}`,
         category_id: "food",
         quantity: 1,
+        unit_measure: "unit",
         unit_price: money(input.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0) - (input.discountCents || 0)),
+        total_amount: money(input.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0) - (input.discountCents || 0)),
       }];
     }
     if (input.shippingCents > 0) {
@@ -157,7 +176,9 @@ export class MercadoPagoService implements OnModuleInit {
         description: "Entrega do pedido",
         category_id: "services",
         quantity: 1,
+        unit_measure: "unit",
         unit_price: money(input.shippingCents),
+        total_amount: money(input.shippingCents),
       });
     }
 
