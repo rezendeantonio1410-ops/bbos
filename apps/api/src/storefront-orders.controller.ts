@@ -597,21 +597,68 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     return { paid: false };
   }
 
-  private async ensureMercadoPagoCheckout(order: any, idempotencyKey: string, forceNew = false) {
-    let providerIdempotencyKey = `mp-${idempotencyKey}`;
-    if (order.paymentExternalId && !forceNew) {
+  private async beginPaymentAttempt(order: any, idempotencyKey: string) {
+    return this.database.$transaction(async (transaction) => {
+      const existing = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "StorefrontPaymentAttempt"
+          WHERE "idempotencyKey"=$1
+          LIMIT 1`,
+        idempotencyKey,
+      );
+      if (existing[0]) return existing[0];
+
+      await transaction.$queryRawUnsafe(
+        `SELECT id FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
+        order.id,
+      );
+      const numbers = await transaction.$queryRawUnsafe<Array<{ next: number }>>(
+        `SELECT COALESCE(MAX("attemptNumber"),0)::int + 1 AS next
+           FROM "StorefrontPaymentAttempt"
+          WHERE "storefrontOrderId"=$1`,
+        order.id,
+      );
+      const id = randomUUID();
+      const rows = await transaction.$queryRawUnsafe<any[]>(
+        `INSERT INTO "StorefrontPaymentAttempt"
+          (id,"companyId","storefrontOrderId",provider,method,status,"attemptNumber",
+           "amountCents","idempotencyKey",attempts,"nextAttemptAt",metadata,"createdAt","updatedAt")
+         VALUES ($1,$2,$3,'MERCADO_PAGO',$4,'CREATING',$5,$6,$7,0,NOW(),$8::jsonb,NOW(),NOW())
+         RETURNING *`,
+        id,
+        order.companyId,
+        order.id,
+        order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
+        Number(numbers[0]?.next ?? 1),
+        Number(order.totalCents),
+        idempotencyKey,
+        JSON.stringify({ orderCode: order.code }),
+      );
+      return rows[0];
+    });
+  }
+
+  private async ensureMercadoPagoCheckout(
+    order: any,
+    idempotencyKey: string,
+    forceNew = false,
+  ) {
+    if (!forceNew && order.paymentExternalId) {
       const current = await this.mercadoPago.getOrder(order.paymentExternalId);
       const terminalFailure = new Set(["failed", "canceled", "expired"]);
       if (current.checkout_url && !terminalFailure.has(current.status || ""))
         return { externalId: current.id, checkoutUrl: current.checkout_url };
-
-      // Uma tentativa encerrada não pode ser reaproveitada. Mantemos o mesmo
-      // pedido BBOS e abrimos uma nova order no Mercado Pago, sem consumir
-      // novamente a cotação/frete nem duplicar o pedido comercial.
-      if (terminalFailure.has(current.status || "")) {
-        providerIdempotencyKey = `mp-retry-${idempotencyKey}-${current.id}`;
-      }
     }
+
+    const providerIdempotencyKey = `mp-${idempotencyKey}`.slice(0, 128);
+    const attempt = await this.beginPaymentAttempt(order, providerIdempotencyKey);
+
+    if (attempt.externalId && attempt.checkoutUrl) {
+      return {
+        externalId: attempt.externalId,
+        checkoutUrl: attempt.checkoutUrl,
+      };
+    }
+
     const customer = order.customer as CheckoutBody["customer"];
     const delivery = order.delivery as CheckoutBody["delivery"];
     const orderItems = order.items as Array<{
@@ -621,51 +668,88 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       grind: string;
       unitPriceCents: number;
     }>;
-    const providerOrder = await this.mercadoPago.createCheckout({
-      paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
-      idempotencyKey: providerIdempotencyKey.slice(0, 128),
-      orderCode: order.code,
-      totalCents: order.totalCents,
-      shippingCents: order.shippingCents,
-      discountCents: order.discountCents || 0,
-      couponCode: order.couponCode || undefined,
-      items: orderItems.map((item) => ({
-        externalCode: item.id,
-        title: item.name,
-        quantity: item.quantity,
-        unitPriceCents: item.unitPriceCents,
-        description: `${item.grind} · Café Bispo`,
-      })),
-      payer: {
-        name: customer?.name || "",
-        email: customer?.email || "",
-        phone: customer?.phone || "",
-        cpf: customer?.cpf || "",
-      },
-      delivery: {
-        postalCode: delivery?.postalCode || "",
-        street: delivery?.street || "",
-        number: delivery?.number || "",
-        complement: delivery?.complement,
-        district: delivery?.district || "",
-        city: delivery?.city || "",
-        state: delivery?.state || "",
-      },
-    });
-    await this.database.$executeRawUnsafe(
-      `UPDATE "StorefrontOrder"
-          SET status=CASE WHEN status='PAID' THEN status ELSE 'AWAITING_PAYMENT' END,
-              "paymentProvider"='MERCADO_PAGO',
-              "paymentExternalId"=$2,
-              "updatedAt"=NOW()
-        WHERE id=$1`,
-      order.id,
-      providerOrder.id,
-    );
-    return {
-      externalId: providerOrder.id,
-      checkoutUrl: providerOrder.checkout_url!,
-    };
+
+    try {
+      const providerOrder = await this.mercadoPago.createCheckout({
+        paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
+        idempotencyKey: providerIdempotencyKey,
+        orderCode: order.code,
+        totalCents: order.totalCents,
+        shippingCents: order.shippingCents,
+        discountCents: order.discountCents || 0,
+        couponCode: order.couponCode || undefined,
+        items: orderItems.map((item) => ({
+          externalCode: item.id,
+          title: item.name,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          description: `${item.grind} · Café Bispo`,
+        })),
+        payer: {
+          name: customer?.name || "",
+          email: customer?.email || "",
+          phone: customer?.phone || "",
+          cpf: customer?.cpf || "",
+        },
+        delivery: {
+          postalCode: delivery?.postalCode || "",
+          street: delivery?.street || "",
+          number: delivery?.number || "",
+          complement: delivery?.complement,
+          district: delivery?.district || "",
+          city: delivery?.city || "",
+          state: delivery?.state || "",
+        },
+      });
+
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "StorefrontPaymentAttempt"
+              SET status='AWAITING_PAYMENT',
+                  "externalId"=$2,
+                  "checkoutUrl"=$3,
+                  "providerStatus"=$4,
+                  "providerStatusDetail"=$5,
+                  "lastError"=NULL,
+                  "nextAttemptAt"=NOW() + INTERVAL '20 seconds',
+                  "updatedAt"=NOW()
+            WHERE id=$1`,
+          attempt.id,
+          providerOrder.id,
+          providerOrder.checkout_url!,
+          providerOrder.status ?? null,
+          providerOrder.status_detail ?? null,
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "StorefrontOrder"
+              SET status=CASE WHEN status='PAID' THEN status ELSE 'AWAITING_PAYMENT' END,
+                  "paymentProvider"='MERCADO_PAGO',
+                  "paymentExternalId"=$2,
+                  "updatedAt"=NOW()
+            WHERE id=$1`,
+          order.id,
+          providerOrder.id,
+        );
+      });
+
+      return {
+        externalId: providerOrder.id,
+        checkoutUrl: providerOrder.checkout_url!,
+      };
+    } catch (error) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='ERROR',
+                attempts=attempts+1,
+                "lastError"=$2,
+                "nextAttemptAt"=NOW() + INTERVAL '30 seconds',
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        attempt.id,
+        (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+      );
+      throw error;
+    }
   }
 
   private async companyId() {
