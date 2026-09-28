@@ -411,3 +411,5 @@
 .fieldSources .science summary::-webkit-details-marker{display:none}
 .fieldSources .science summary::after{content:"↗";font-size:20px;font-weight:400;line-height:1}
 .fieldSources .science[open] summary::after{transform:rotate(90deg)}
+
+@media(max-width:700px){.atlasPlaces b{font-weight:650}.atlasPlaces small{display:block;font-size:10px;font-weight:400;margin-top:2px}}

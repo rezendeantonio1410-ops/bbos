@@ -54,7 +54,7 @@ export default function OrigemPage() {
           <figure className={origin.integratedAtlas}>
             <div className={origin.atlasHeading}><p className={origin.kicker}>UM MAPA · MUITAS RELAÇÕES</p><strong>Do lugar à xícara.</strong><span>O Paraná situa a origem. O clima, o solo e as pessoas ajudam a contar o resto.</span></div>
             <Image className={origin.atlasMap} src="/brand/story/parana-nortes.svg" alt="Mapa cartográfico do Paraná: limites do Norte Central e do Norte Pioneiro, cidades e Trópico de Capricórnio; no mesmo quadro, uma curva ilustrativa da amplitude térmica entre dia e noite" width={960} height={520} unoptimized />
-            <div className={origin.atlasPlaces}><span><i/>Norte Central · referência ao Norte Novo</span><span><i/>Norte Pioneiro</span><span>Trópico · 23°26′ S</span><span>Amplitude térmica · máxima − mínima</span></div>
+            <div className={origin.atlasPlaces}><span><i/><b>Norte Central · Maringá e Londrina<small>Norte Novo histórico</small></b></span><span><i/><b>Norte Pioneiro · Cornélio Procópio e Jacarezinho</b></span><span>Trópico · 23°26′ S</span><span>Amplitude térmica · máxima − mínima</span></div>
             <div className={origin.atlasJourney} aria-label="Relações entre terra, cuidado, torra e xícara">
               <a href="#solo-argila"><OriginIcon kind="soil"/><span><b>SOLO + ÁGUA</b> Basalto, argila e raízes</span></a>
               <a href="#fundadores"><OriginIcon kind="care"/><span><b>CAMPO</b> Suzi, produtores e manejo</span></a>
