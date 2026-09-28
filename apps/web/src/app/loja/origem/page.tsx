@@ -131,15 +131,8 @@ export default function OrigemPage() {
           <p className={origin.kicker}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</p>
           <h2>Entre a linha do trópico e os solos do Paraná.</h2>
           <figure className={origin.coordinatesFigure}>
-            <div className={origin.coordinatesPlane} role="img" aria-label="Esquema de coordenadas: a latitude indica norte e sul em relação ao Equador; a longitude indica oeste e leste em relação a Greenwich. O Norte do Paraná fica a oeste de Greenwich e próximo ao Trópico de Capricórnio, na latitude 23 graus e 26 minutos sul.">
-              <span className={origin.latitudeAxis}>LATITUDE <b>NORTE ↕ SUL</b></span>
-              <span className={origin.longitudeAxis}>LONGITUDE <b>OESTE ↔ LESTE</b></span>
-              <span className={origin.equatorLine}>0° · EQUADOR</span>
-              <span className={origin.greenwichLine}>0° · GREENWICH</span>
-              <span className={origin.tropicLine}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</span>
-              <span className={origin.paranaPoint}><i aria-hidden="true" />NORTE DO PARANÁ</span>
-            </div>
-            <figcaption><strong>Primeiro, encontramos o lugar.</strong> Uma linha horizontal indica a latitude; uma vertical indica a longitude. O cruzamento situa a região no planeta. <small>Posições esquemáticas, sem escala cartográfica. O Trópico é uma linha de latitude, não uma fronteira de qualidade.</small></figcaption>
+            <Image className={origin.worldDiagram} src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Brasil destacado, o Norte do Paraná marcado e as linhas do Equador, de Greenwich e do Trópico de Capricórnio" width={960} height={500} unoptimized />
+            <figcaption><strong>Primeiro, encontramos o lugar.</strong> A latitude vai de norte a sul; a longitude, de oeste a leste. No encontro das duas, localizamos o Norte do Paraná, próximo ao Trópico de Capricórnio. <small>Mapa simplificado a partir de Natural Earth. O ponto é aproximado; a linha do Trópico não é uma fronteira de qualidade.</small></figcaption>
           </figure>
           <figure className={origin.soilImage}>
             <Image src="/brand/story/parana-solo-basalto.webp" alt="Representação conceitual de solo vermelho e argiloso junto a um cafezal" fill sizes="(max-width: 700px) 100vw, 1200px" />
