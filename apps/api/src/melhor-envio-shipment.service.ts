@@ -795,12 +795,12 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     } else if (shipment.salesOrderId) {
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrder"
-            SET status=$2,
+            SET status=$2::"SalesOrderStatus",
                 "updatedAt"=NOW()
           WHERE id=$1
             AND (
-              (status='INVOICED' AND $2='SHIPPED')
-              OR (status='SHIPPED' AND $2='DELIVERED')
+              (status='INVOICED' AND $2::"SalesOrderStatus"='SHIPPED')
+              OR (status='SHIPPED' AND $2::"SalesOrderStatus"='DELIVERED')
             )`,
         shipment.salesOrderId,
         mapping.order,
