@@ -168,8 +168,8 @@ export default function OrigemPage() {
               <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A escolha é guiada por testes e prova sensorial de cada lote.</p>
             </div>
             <figure className={origin.roastPortrait}>
-              <Image src="/brand/story/torrador-silhueta.svg" alt="Silhueta ilustrativa de uma pessoa observando um torrador de café, conectada visualmente ao grão e à xícara" width={600} height={650} unoptimized />
-              <figcaption><strong>Observar · interpretar · provar.</strong><span>Ilustração conceitual da leitura de cada lote, sem representar um perfil de torra.</span></figcaption>
+              <Image src="/brand/story/torrador-linhas.webp" alt="Ilustração editorial: uma pessoa observa grãos no amostrador de um torrador de café de pequeno porte, com bandeja de resfriamento à frente" width={900} height={1125} unoptimized />
+              <figcaption><strong>Observar · interpretar · provar.</strong><span>Cena ilustrativa de uma torrefação de pequeno porte; não retrata José nem representa um perfil específico.</span></figcaption>
               <details>
                 <summary>Como se lê o lote? <span aria-hidden="true">↗</span></summary>
                 <div className={origin.roastSteps} aria-label="Etapas de leitura do lote">
