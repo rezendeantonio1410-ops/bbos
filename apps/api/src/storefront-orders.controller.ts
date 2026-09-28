@@ -564,15 +564,53 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       const order = found[0];
       if (!order) throw new BadRequestException("Pedido não encontrado.");
-      if (order.status === "PAID")
+      if (order.status === "PAID") {
+        const duplicatePayment =
+          Boolean(order.paymentExternalId) &&
+          String(order.paymentExternalId) !== String(externalId);
+        if (duplicatePayment) {
+          await transaction.$executeRawUnsafe(
+            `UPDATE "StorefrontPaymentAttempt"
+                SET status='PAID',"paidAt"=COALESCE("paidAt",NOW()),
+                    metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+                    "updatedAt"=NOW()
+              WHERE provider=$3 AND "externalId"=$1`,
+            externalId,
+            JSON.stringify({
+              duplicatePaymentDetected: true,
+              alreadyPaidExternalId: order.paymentExternalId,
+            }),
+            provider,
+          );
+        }
         return {
           id: order.id,
           code: order.code,
           status: "PAID",
-          idempotent: true,
+          idempotent: !duplicatePayment,
+          duplicatePayment,
+          alreadyPaidExternalId: order.paymentExternalId,
         };
+      }
       await transaction.$executeRawUnsafe(
         `UPDATE "StorefrontOrder" SET status='PAID',"paymentProvider"=$3,"paymentExternalId"=$2,"paidAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`,
+        order.id,
+        externalId,
+        provider,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status=CASE WHEN provider=$3 AND "externalId"=$2 THEN 'PAID' ELSE 'CANCELLED' END,
+                "paidAt"=CASE WHEN provider=$3 AND "externalId"=$2 THEN COALESCE("paidAt",NOW()) ELSE "paidAt" END,
+                metadata=CASE
+                  WHEN provider=$3 AND "externalId"=$2 THEN COALESCE(metadata,'{}'::jsonb)
+                  ELSE COALESCE(metadata,'{}'::jsonb) || '{"supersededByPaidAttempt":true}'::jsonb
+                END,
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                "updatedAt"=NOW()
+          WHERE "storefrontOrderId"=$1
+            AND status IN ('CREATING','AWAITING_PAYMENT','PROCESSING','ERROR','PAID')`,
         order.id,
         externalId,
         provider,
@@ -643,6 +681,24 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       }
       return { id: order.id, code: order.code, status: "PAID" };
     });
+    if ((result as any).duplicatePayment) {
+      await this.lifecycle.record(
+        orderId,
+        "EXCEPTION",
+        "Pagamento duplicado detectado",
+        "O BBOS identificou uma segunda aprovação de pagamento para o mesmo pedido. A venda não foi duplicada e requer conferência financeira.",
+        provider === "MERCADO_PAGO" ? "MERCADO_PAGO" : "BBOS",
+        `storefront:duplicate-payment:${orderId}:${externalId}`,
+        {
+          externalId,
+          provider,
+          alreadyPaidExternalId: (result as any).alreadyPaidExternalId,
+        },
+        false,
+      );
+      return result;
+    }
+
     await this.lifecycle.record(
       orderId,
       "PAYMENT_CONFIRMED",
