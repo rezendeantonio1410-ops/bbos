@@ -52,11 +52,29 @@ export default function OrigemPage() {
           </figure>
           <p>A Bispo Coffees nasce do encontro das trajetórias de <strong>Suzi Ninov e José Rezende</strong> — duas experiências construídas entre produtores, lavouras, desenvolvimento de qualidade, prova e mercados internacionais.</p>
           <p>No Paraná, próximo ao Trópico de Capricórnio, essa relação com o café ganhou uma perspectiva particular: aqui, a geografia nos ensinou cedo que qualidade não pode ser explicada por uma única variável.</p>
-          <p className={origin.variables}>Latitude. Altitude. Temperatura. Solo. Variedade. Manejo. Maturação. Processamento. Pessoas.</p>
           <p>Cada uma deixa sua marca. <strong>É a combinação entre elas que constrói uma origem.</strong></p>
         </section>
 
-        <section className={origin.people} aria-label="Os fundadores">
+        <section className={origin.synapseStage} aria-label="Mapa das relações que formam a origem">
+          <figure className={origin.synapse}>
+            <figcaption><strong>Uma xícara, muitas relações.</strong><span>Escolha uma ligação para explorar: cada uma participa da origem, mas nenhuma explica o café sozinha.</span></figcaption>
+            <div className={origin.synapseMap}>
+              <svg className={origin.synapseWires} viewBox="0 0 1200 420" aria-hidden="true" preserveAspectRatio="none">
+                <g fill="none" stroke="#94b5a2" strokeWidth="2"><path d="M405 66C500 66 500 178 600 210"/><path d="M405 210H600"/><path d="M405 355C505 355 505 240 600 210"/><path d="M795 66C700 66 700 178 600 210"/><path d="M795 210H600"/><path d="M795 355C695 355 695 240 600 210"/></g>
+                <g fill="#386a50"><circle cx="405" cy="66" r="5"/><circle cx="405" cy="210" r="5"/><circle cx="405" cy="355" r="5"/><circle cx="795" cy="66" r="5"/><circle cx="795" cy="210" r="5"/><circle cx="795" cy="355" r="5"/></g>
+              </svg>
+              <a className={`${origin.synapseNode} ${origin.nodeLatitude}`} href="#territorio"><span>01 · LUGAR</span><strong>Latitude + longitude</strong><small>Situam cada origem no mapa.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeClimate}`} href="#clima"><span>02 · TEMPO</span><strong>Amplitude + água</strong><small>Acompanham o fruto ao longo dos dias.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeSoil}`} href="#territorio"><span>03 · TERRA</span><strong>Basalto + solo</strong><small>Compõem o ambiente da raiz.</small></a>
+              <div className={origin.synapseCenter}><svg viewBox="0 0 120 92" aria-hidden="true"><path d="M18 24h71l-8 43c-13 11-43 11-56 0Z" fill="#f9f7eb" stroke="#36634e" strokeWidth="4"/><path d="M87 31c35-6 33 35-3 36" fill="none" stroke="#36634e" strokeWidth="5"/><path d="M23 25c22-7 41-7 61 0" fill="none" stroke="#ac795d" strokeWidth="6"/></svg><strong>A xícara</strong><small>Expressa um encontro, não uma variável isolada.</small></div>
+              <a className={`${origin.synapseNode} ${origin.nodeCare}`} href="#fundadores"><span>04 · CUIDADO</span><strong>Suzi + produtores</strong><small>Leem a planta e orientam o manejo.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeRoast}`} href="#torra"><span>05 · TRANSFORMAÇÃO</span><strong>José + torra</strong><small>Ajustam o calor a cada lote.</small></a>
+              <a className={`${origin.synapseNode} ${origin.nodeTaste}`} href="#acidez"><span>06 · LEITURA</span><strong>Prova + perfil</strong><small>Revelam como o café se apresenta.</small></a>
+            </div>
+          </figure>
+        </section>
+
+        <section id="fundadores" className={origin.people} aria-label="Os fundadores">
           <div className={origin.peopleIntro}>
             <p className={origin.kicker}>DOIS OLHARES, UMA ESCOLHA</p>
             <h2>O lugar importa. Quem o interpreta também.</h2>
@@ -89,41 +107,7 @@ export default function OrigemPage() {
           </figure>
         </section>
 
-        <section className={origin.career} aria-labelledby="career-title">
-          <div className={origin.careerIntro}>
-            <p className={origin.kicker}>DO PARANÁ PARA O MUNDO</p>
-            <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
-            <p>José cresceu entre lavouras do Norte do Paraná e levou a experiência de origem e prova a outros mercados. Suzi construiu, ao longo de cerca de duas décadas no estado, uma trajetória própria de orientação a produtores e desenvolvimento da cafeicultura.</p>
-          </div>
-          <div className={origin.careerChapters}>
-            <article><span>2003 → 2010</span><h3>José · do campo à prova e à torra</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A partir de 2006, passou também a estudar e desenvolver perfis de torra para os cafés do Paraná. A formação como provador e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a apresentar esses cafés em outros mercados.</p></article>
-            <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
-            <article><span>2024 · JOSÉ E SUZI · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José e Suzi participaram da fundação do conceito da Longitude Coffees. A experiência reuniu a leitura das origens, a orientação a produtores e o desejo de aproximar cafés brasileiros de mercados internacionais.</p></article>
-            <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Desde meados dos anos 2000 no Paraná, Suzi construiu uma trajetória junto a produtores, do cuidado com a nutrição da planta ao uso responsável do solo. A experiência em desenvolvimento da lavoura e a visão que construiu com José na Longitude ganharam uma expressão própria na Bispo Coffees, fundada pelos dois.</p></article>
-          </div>
-          <p className={origin.careerSignature}>Capricornio faz parte do caminho de José. A Longitude reuniu José e Suzi em um conceito compartilhado. <strong>A Bispo Coffees é a assinatura que os dois construíram a partir dessa experiência.</strong></p>
-        </section>
-
-        <section className={origin.landscape} aria-labelledby="climate-title">
-          <div className={origin.landscapeImage}>
-            <Image src="/brand/story/parana-dia-amanhecer.webp" alt="Representação conceitual de um cafezal entre a tarde iluminada e o amanhecer com névoa" fill sizes="100vw" />
-            <span className={origin.dayLabel}>CALOR DO DIA</span><span className={origin.nightLabel}>FRESCOR DA MANHÃ</span>
-          </div>
-          <div className={origin.landscapeText}>
-            <p className={origin.kicker}>UM LUGAR · DOIS MOMENTOS</p>
-            <h2 id="climate-title">A temperatura muda. A planta responde.</h2>
-            <p><strong>Amplitude térmica</strong> é a diferença entre a temperatura mais alta e a mais baixa de um período. O contraste entre dias quentes e noites frescas compõe o ambiente em que o fruto se desenvolve.</p>
-            <figure className={origin.thermalDiagram}>
-              <Image src="/brand/story/amplitude-termica.svg" alt="Curva conceitual de temperatura subindo durante o dia e caindo à noite, entre uma máxima e uma mínima" width={1000} height={360} unoptimized />
-              <figcaption><strong>Amplitude do dia = temperatura máxima − temperatura mínima.</strong><span>A curva mostra o conceito; os valores reais variam entre regiões, estações e lavouras.</span></figcaption>
-            </figure>
-            <p>Temperatura e disponibilidade de água influenciam o tempo entre a florada e a maturação. Sozinhas, não determinam a qualidade: cultivar, solo, manejo e processamento também participam da história.</p>
-            <p>Na prática, observamos a sequência de dias e noites durante o desenvolvimento do fruto. Uma diferença maior entre máxima e mínima não garante, por si só, um café melhor: calor excessivo, frio e falta de água também podem limitar a planta.</p>
-            <small>Imagem conceitual; não representa uma medição ou uma lavoura específica.</small>
-          </div>
-        </section>
-
-        <section className={origin.territory}>
+        <section id="territorio" className={origin.territory}>
           <p className={origin.kicker}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</p>
           <h2>Entre a linha do trópico e os solos do Paraná.</h2>
           <figure className={origin.soilImage}>
@@ -144,6 +128,25 @@ export default function OrigemPage() {
           </details>
         </section>
 
+        <section id="clima" className={origin.landscape} aria-labelledby="climate-title">
+          <div className={origin.landscapeImage}>
+            <Image src="/brand/story/parana-dia-amanhecer.webp" alt="Representação conceitual de um cafezal entre a tarde iluminada e o amanhecer com névoa" fill sizes="100vw" />
+            <span className={origin.dayLabel}>CALOR DO DIA</span><span className={origin.nightLabel}>FRESCOR DA MANHÃ</span>
+          </div>
+          <div className={origin.landscapeText}>
+            <p className={origin.kicker}>UM LUGAR · DOIS MOMENTOS</p>
+            <h2 id="climate-title">A temperatura muda. A planta responde.</h2>
+            <p><strong>Amplitude térmica</strong> é a diferença entre a temperatura mais alta e a mais baixa de um período. O contraste entre dias quentes e noites frescas compõe o ambiente em que o fruto se desenvolve.</p>
+            <figure className={origin.thermalDiagram}>
+              <Image src="/brand/story/amplitude-termica.svg" alt="Curva conceitual de temperatura subindo durante o dia e caindo à noite, entre uma máxima e uma mínima" width={1000} height={360} unoptimized />
+              <figcaption><strong>Amplitude do dia = temperatura máxima − temperatura mínima.</strong><span>A curva mostra o conceito; os valores reais variam entre regiões, estações e lavouras.</span></figcaption>
+            </figure>
+            <p>Temperatura e disponibilidade de água influenciam o tempo entre a florada e a maturação. Sozinhas, não determinam a qualidade: cultivar, solo, manejo e processamento também participam da história.</p>
+            <p>Na prática, observamos a sequência de dias e noites durante o desenvolvimento do fruto. Uma diferença maior entre máxima e mínima não garante, por si só, um café melhor: calor excessivo, frio e falta de água também podem limitar a planta.</p>
+            <small>Imagem conceitual; não representa uma medição ou uma lavoura específica.</small>
+          </div>
+        </section>
+
         <section className={origin.deepDive} aria-labelledby="layers-title">
           <div className={origin.deepIntro}>
             <p className={origin.kicker}>DO TERRITÓRIO À XÍCARA</p>
@@ -152,15 +155,9 @@ export default function OrigemPage() {
           </div>
           <figure className={origin.layersFigure}>
             <Image src="/brand/story/camadas-origem-torra.svg" alt="Corte conceitual de uma encosta cafeeira: Trópico de Capricórnio, clima, cafeeiros, manejo, terra roxa e basalto" width={1200} height={430} unoptimized />
-            <figcaption>Um corte ilustrado da paisagem. O solo de origem basáltica aparece em parte da região; a figura não descreve uma propriedade específica.</figcaption>
+            <figcaption><strong>Debaixo da paisagem, outras relações.</strong> A terra roxa de origem basáltica aparece em parte do Norte do Paraná. Em um levantamento de Londrina, 41% dos cafezais mapeados estavam entre 640 e 740 m de altitude. Os dois dados descrevem a região estudada, não toda lavoura paranaense.</figcaption>
           </figure>
-          <div className={origin.layerGrid}>
-            <article><span>01 · POSIÇÃO</span><h3>Coordenadas e relevo</h3><p>O Trópico de Capricórnio é uma referência geográfica. Latitude e longitude situam cada lavoura; a altitude e a posição no relevo ajudam a explicar as condições que ela encontra. Em um levantamento de Londrina, 41% dos cafezais mapeados estavam na faixa de 640 a 740 m. Isso descreve aquelas lavouras, não todas as origens do Paraná.</p></article>
-            <article><span>02 · TEMPO</span><h3>Calor, frio e água</h3><p>A amplitude térmica compara máximas e mínimas de um período, mas o fruto responde à sequência de dias, noites e disponibilidade de água ao longo da maturação. A mesma diferença de temperatura pode acontecer sob condições muito distintas para a planta.</p></article>
-            <article><span>03 · TERRA</span><h3>Basalto e solo vivo</h3><p>Em parte do Norte do Paraná, o intemperismo do basalto formou solos vermelhos associados à terra roxa. Profundidade, estrutura, acidez, água e disponibilidade de nutrientes precisam ser avaliadas na lavoura. A rocha de origem, por si, não transfere uma nota de sabor para o grão.</p></article>
-            <article><span>04 · ESCOLHA</span><h3>O trabalho de Suzi e do produtor</h3><p>Variedade adequada, nutrição equilibrada, manejo, ponto de colheita e processamento são escolhas técnicas. É nesse trabalho contínuo com produtores que Suzi lê a resposta da planta e ajuda a construir qualidade, safra após safra.</p></article>
-          </div>
-          <div className={origin.roastStory}>
+          <div id="torra" className={origin.roastStory}>
             <div>
               <p className={origin.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p>
               <h2>Na torra, o grão pede uma curva própria.</h2>
@@ -169,19 +166,39 @@ export default function OrigemPage() {
               <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A comparação certa é entre perfis testados no mesmo lote, com controle de cor e prova sensorial.</p>
             </div>
             <div className={origin.roastSteps} aria-label="Decisões técnicas para definir a torra">
+              <Image src="/brand/story/torra-leitura-lote.svg" alt="Grão verde, curva de calor ilustrativa e xícara: observar, ajustar e provar cada lote" width={850} height={280} unoptimized />
               <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Medir o lote antes de aplicar calor.</small></div>
               <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Registrar curvas e manter o resultado comparável.</small></div>
               <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher a curva pela xícara, não só pela altitude.</small></div>
             </div>
           </div>
-          <div className={origin.acidityStory}>
+          <div id="acidez" className={origin.acidityStory}>
             <div><p className={origin.kicker}>COMPLEXIDADE NA XÍCARA</p><h2>E a acidez fosfórica?</h2><p>Alguns lotes da região podem apresentar uma acidez viva, limpa ou brilhante, às vezes descrita na prova como fosfórica. O ácido fosfórico é um dos compostos que pode ser medido na bebida, mas a sensação de acidez resulta do conjunto de ácidos, aromas, torra e preparo. Atribuir essa sensação a uma molécula específica em um café da Bispo exige análise do lote e avaliação sensorial compatível.</p></div>
-            <div className={origin.acidityEquation}><span>NA LAVOURA</span><strong>Ambiente + variedade + manejo</strong><span>NO GRÃO E NA TORRA</span><strong>Compostos + transformação</strong><span>NA XÍCARA</span><strong>Percepção sensorial</strong><small>O sabor percebido não identifica sozinho uma molécula.</small></div>
+            <div className={origin.acidityVisual} role="img" aria-label="Dois campos relacionados: a prova descreve a percepção da acidez; uma análise mede compostos como o ácido fosfórico. A xícara é o encontro desses dados, mas a prova sozinha não identifica uma molécula.">
+              <div className={origin.acidityCircleTaste}><span>PROVA</span><strong>O que percebemos</strong><small>Acidez · aroma · doçura</small></div>
+              <div className={origin.acidityCircleLab}><span>ANÁLISE</span><strong>O que medimos</strong><small>Ácidos · concentrações</small></div>
+              <p>Uma descrição sensorial orienta a prova. Identificar um composto pede análise do lote.</p>
+            </div>
           </div>
           <details className={origin.science}>
             <summary>Estudos para explorar essa leitura</summary>
-            <p><a href="https://www.scielo.br/j/eagri/a/QPFYN8QGWFC85gc85SDkR5p/?format=html&amp;lang=pt" target="_blank" rel="noopener noreferrer">Levantamento de altitude e solo dos cafezais de Londrina</a> · <a href="https://coffeescience.ufla.br/index.php/Coffeescience/article/view/1878" target="_blank" rel="noopener noreferrer">Altitude e diferentes perfis de torra, Coffee Science</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/36984852/" target="_blank" rel="noopener noreferrer">Torra e preparo de cafés do Havaí</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/37033739/" target="_blank" rel="noopener noreferrer">Ácidos e limiares sensoriais na bebida</a>.</p>
+            <p><a href="https://www.scielo.br/j/eagri/a/QPFYN8QGWFC85gc85SDkR5p/?format=html&amp;lang=pt" target="_blank" rel="noopener noreferrer">Londrina: altitude e solo</a> · <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa: maturação e clima</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/30361029/" target="_blank" rel="noopener noreferrer">Tipicidade e múltiplos fatores da origem</a> · <a href="https://coffeescience.ufla.br/index.php/Coffeescience/article/view/1878" target="_blank" rel="noopener noreferrer">Altitude e perfis de torra</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/36984852/" target="_blank" rel="noopener noreferrer">Torra e preparo no Havaí</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/37033739/" target="_blank" rel="noopener noreferrer">Ácidos e percepção na bebida</a>.</p>
           </details>
+        </section>
+
+        <section className={origin.career} aria-labelledby="career-title">
+          <div className={origin.careerIntro}>
+            <p className={origin.kicker}>DO PARANÁ PARA O MUNDO</p>
+            <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
+            <p>José cresceu entre lavouras do Norte do Paraná e levou a experiência de origem e prova a outros mercados. Suzi construiu, ao longo de cerca de duas décadas no estado, uma trajetória própria de orientação a produtores e desenvolvimento da cafeicultura.</p>
+          </div>
+          <div className={origin.careerChapters}>
+            <article><span>2003 → 2010</span><h3>José · do campo à prova e à torra</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A partir de 2006, passou também a estudar e desenvolver perfis de torra para os cafés do Paraná. A formação como provador e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a apresentar esses cafés em outros mercados.</p></article>
+            <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
+            <article><span>2024 · JOSÉ E SUZI · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José e Suzi participaram da fundação do conceito da Longitude Coffees. A experiência reuniu a leitura das origens, a orientação a produtores e o desejo de aproximar cafés brasileiros de mercados internacionais.</p></article>
+            <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Desde meados dos anos 2000 no Paraná, Suzi construiu uma trajetória junto a produtores, do cuidado com a nutrição da planta ao uso responsável do solo. A experiência em desenvolvimento da lavoura e a visão que construiu com José na Longitude ganharam uma expressão própria na Bispo Coffees, fundada pelos dois.</p></article>
+          </div>
+          <p className={origin.careerSignature}>Capricornio faz parte do caminho de José. A Longitude reuniu José e Suzi em um conceito compartilhado. <strong>A Bispo Coffees é a assinatura que os dois construíram a partir dessa experiência.</strong></p>
         </section>
 
         <section className={origin.close}>

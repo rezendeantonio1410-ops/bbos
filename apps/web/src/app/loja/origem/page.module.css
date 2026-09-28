@@ -78,6 +78,24 @@
 .deepIntro{max-width:1100px;margin:0 auto 35px}
 .deepIntro h2,.roastStory h2,.acidityStory h2{font-size:clamp(34px,4vw,56px);font-weight:500;line-height:1.12;letter-spacing:-.045em;margin:12px 0 23px}
 .deepIntro>p:last-child{font-size:20px;line-height:1.6;max-width:840px}
+.synapseStage{background:#f7f7f4;padding:0 max(5vw,22px) 68px}
+.synapse{max-width:1200px;margin:0 auto 28px;padding:34px 42px 38px;background:#f8faf7;border:1px solid #d5e1d6;border-radius:14px;overflow:hidden}
+.synapse figcaption{display:grid;gap:8px;margin:0 0 28px;text-align:center}
+.synapse figcaption strong{font-size:clamp(26px,2.7vw,36px);font-weight:550;line-height:1.2;letter-spacing:-.04em}
+.synapse figcaption span{font-size:16px;line-height:1.5;color:#466055}
+.synapseMap{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 250px minmax(0,1fr);grid-template-rows:repeat(3,minmax(112px,auto));gap:13px 64px;align-items:stretch}
+.synapseWires{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.synapseNode{position:relative;z-index:1;background:#fff;border:1px solid #dce6de;border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;min-width:0;text-decoration:none;color:inherit;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
+.synapseNode:hover{border-color:#648f72;transform:translateY(-2px);box-shadow:0 9px 22px #1c493914}
+.synapseNode:focus-visible{outline:3px solid #245c41;outline-offset:3px}
+.synapseNode span{font-size:11px;letter-spacing:.13em;font-weight:800;color:#426b55}
+.synapseNode strong{font-size:clamp(17px,1.75vw,22px);line-height:1.2;font-weight:600;margin:8px 0 5px;letter-spacing:-.025em}
+.synapseNode small{font-size:13px;line-height:1.4;color:#50675a}
+.nodeLatitude{grid-area:1/1}.nodeClimate{grid-area:2/1}.nodeSoil{grid-area:3/1}.nodeCare{grid-area:1/3}.nodeRoast{grid-area:2/3}.nodeTaste{grid-area:3/3}
+.synapseCenter{position:relative;z-index:1;grid-area:1/2/4/3;align-self:center;width:238px;height:238px;margin:auto;padding:32px 23px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;background:#1c4939;border:7px solid #d2e3d3;border-radius:50%;box-shadow:0 0 0 1px #366d50;color:#fff}
+.synapseCenter svg{width:76px;height:59px;margin-bottom:9px}
+.synapseCenter strong{font-size:25px;font-weight:550;letter-spacing:-.04em}
+.synapseCenter small{font-size:12px;line-height:1.38;color:#e3efe5;margin-top:5px}
 .layersFigure{max-width:1200px;margin:0 auto 40px;background:#fff;border-radius:13px;overflow:hidden}
 .layersFigure img{display:block;width:100%;height:auto}
 .layersFigure figcaption{padding:14px 24px 17px;color:#445a50;font-size:13px;line-height:1.45}
@@ -92,6 +110,7 @@
 .roastSignature span{display:block;font-size:12px;letter-spacing:.14em;font-weight:800;color:#31594b}
 .roastSignature p{margin:10px 0 0!important;font-size:19px!important;line-height:1.57!important;font-weight:500}
 .roastSteps{display:grid;gap:9px}
+.roastSteps img{display:block;width:100%;height:auto;border-radius:9px;margin-bottom:8px}
 .roastSteps>div{background:#17352e;color:#fff;border-radius:6px;padding:22px 25px}
 .roastSteps span{color:#bbdbc7}
 .roastSteps strong{display:block;font-size:21px;font-weight:550;margin:9px 0;line-height:1.25}
@@ -101,6 +120,14 @@
 .acidityEquation span:not(:first-child){margin-top:13px}
 .acidityEquation strong{font-size:21px;line-height:1.3;font-weight:550}
 .acidityEquation small{border-top:1px solid #bccdc1;padding-top:14px;margin-top:9px;font-size:13px;line-height:1.4;color:#3c574b}
+.acidityVisual{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;padding:28px 15px 20px;background:#f7f9f5;border:1px solid #c9dacd;border-radius:13px}
+.acidityCircleTaste,.acidityCircleLab{width:205px;height:205px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px 18px;position:relative}
+.acidityCircleTaste{background:#204c3c;color:#fff;z-index:1}
+.acidityCircleLab{background:#dfeddf;border:2px solid #91b09a;color:#193c2d;margin-left:-36px}
+.acidityCircleTaste span,.acidityCircleLab span{font-size:11px;letter-spacing:.12em;font-weight:800;margin-bottom:11px}
+.acidityCircleTaste strong,.acidityCircleLab strong{font-size:20px;line-height:1.15;font-weight:600}
+.acidityCircleTaste small,.acidityCircleLab small{font-size:12px;line-height:1.35;margin-top:10px}
+.acidityVisual p{flex-basis:100%;max-width:380px;font-size:14px!important;line-height:1.5!important;text-align:center;margin:19px 0 0}
 .deepDive>.science{max-width:1200px;margin:auto}
 .close{background:#e5ebe8;padding:70px max(5vw,22px);text-align:center}
 .close p{font-size:16px}
@@ -108,3 +135,4 @@
 .close a{display:inline-block;background:#13201e;color:#fff;padding:18px 25px;border-radius:100px;text-decoration:none;font-size:14px;font-weight:700}
 .close a:hover,.close a:focus-visible{background:#315d4e}
 @media(max-width:700px){.headerShop{font-size:12px;padding:10px 12px}.intro{padding:50px 22px 54px}.intro h1{margin:15px 0 24px}.originDiagram{margin:26px -8px 32px}.originDiagram figcaption{padding:20px}.originKeys{grid-template-columns:1fr;gap:8px;margin:18px 0 14px}.originKeys span{font-size:13px}.people{padding:52px 18px}.peopleGrid{grid-template-columns:1fr}.portrait{height:300px}.peopleGrid article>div:last-child{padding:25px}.peopleEnd{margin-top:35px}.memory{display:block;padding:52px 22px}.memoryBody{padding-top:20px}.historyPhoto{display:block;margin-top:6px;padding-top:24px}.historyPhoto img{height:auto;max-height:350px}.historyPhoto figcaption{padding:18px 0 0;font-size:14px}.career{padding:52px 18px}.careerIntro>p:not(.kicker){font-size:17px}.careerChapters{grid-template-columns:1fr}.careerChapters article{padding:27px}.landscapeImage{height:330px}.landscapeImage img{object-position:center}.dayLabel,.nightLabel{font-size:10px;bottom:12px;padding:7px}.dayLabel{left:12px}.nightLabel{right:12px}.landscapeText{padding:55px 22px}.landscapeText>p:not(.kicker){font-size:17px}.thermalDiagram{margin:24px 0}.thermalDiagram img{min-height:200px;object-fit:cover}.territory{padding:52px 22px}.territoryGrid{grid-template-columns:1fr;gap:15px;margin:35px 0}.deepDive{padding:55px 18px 60px}.deepIntro>p:last-child{font-size:17px}.layersFigure{margin:0 -7px 30px}.layersFigure img{min-height:210px;object-fit:cover;object-position:center}.layersFigure figcaption{padding:15px 18px}.layerGrid{grid-template-columns:1fr;gap:10px;margin-bottom:48px}.layerGrid article{padding:23px}.roastStory,.acidityStory{display:block;padding-top:40px}.roastStory p:not(.kicker),.acidityStory p:not(.kicker){font-size:17px}.roastSteps,.acidityEquation{margin-top:27px}.acidityStory{margin-top:25px}.close{padding:52px 22px}}
+@media(max-width:700px){.synapseStage{padding:0 18px 45px}.synapse{padding:24px 14px 26px;margin:0 -7px 0}.synapse figcaption{margin-bottom:22px}.synapse figcaption span{font-size:14px}.synapseMap{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto;gap:8px}.synapseWires{display:none}.synapseCenter{grid-area:1/1/2/3;width:174px;height:174px;margin:0 auto 14px;padding:24px 18px;border-width:5px}.synapseCenter svg{width:58px;height:44px}.synapseCenter strong{font-size:20px}.synapseCenter small{font-size:11px}.synapseNode{padding:16px 13px;min-height:124px}.synapseNode span{font-size:10px}.synapseNode strong{font-size:16px;margin:7px 0 5px}.synapseNode small{font-size:12px}.nodeLatitude{grid-area:2/1}.nodeClimate{grid-area:2/2}.nodeSoil{grid-area:3/1}.nodeCare{grid-area:3/2}.nodeRoast{grid-area:4/1}.nodeTaste{grid-area:4/2}.acidityVisual{padding:20px 10px}.acidityCircleTaste,.acidityCircleLab{width:145px;height:145px;padding:22px 13px}.acidityCircleLab{margin-left:-28px}.acidityCircleTaste strong,.acidityCircleLab strong{font-size:15px}.acidityCircleTaste small,.acidityCircleLab small{font-size:10px;margin-top:6px}.acidityCircleTaste span,.acidityCircleLab span{font-size:10px;margin-bottom:6px}.acidityVisual p{font-size:13px!important}}
