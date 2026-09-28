@@ -130,13 +130,24 @@ export default function OrigemPage() {
         <section id="territorio" className={origin.territory}>
           <p className={origin.kicker}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</p>
           <h2>Entre a linha do trópico e os solos do Paraná.</h2>
+          <figure className={origin.coordinatesFigure}>
+            <div className={origin.coordinatesPlane} role="img" aria-label="Esquema de coordenadas: a latitude indica norte e sul em relação ao Equador; a longitude indica oeste e leste em relação a Greenwich. O Norte do Paraná fica a oeste de Greenwich e próximo ao Trópico de Capricórnio, na latitude 23 graus e 26 minutos sul.">
+              <span className={origin.latitudeAxis}>LATITUDE <b>NORTE ↕ SUL</b></span>
+              <span className={origin.longitudeAxis}>LONGITUDE <b>OESTE ↔ LESTE</b></span>
+              <span className={origin.equatorLine}>0° · EQUADOR</span>
+              <span className={origin.greenwichLine}>0° · GREENWICH</span>
+              <span className={origin.tropicLine}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</span>
+              <span className={origin.paranaPoint}><i aria-hidden="true" />NORTE DO PARANÁ</span>
+            </div>
+            <figcaption><strong>Primeiro, encontramos o lugar.</strong> Uma linha horizontal indica a latitude; uma vertical indica a longitude. O cruzamento situa a região no planeta. <small>Posições esquemáticas, sem escala cartográfica. O Trópico é uma linha de latitude, não uma fronteira de qualidade.</small></figcaption>
+          </figure>
           <figure className={origin.soilImage}>
             <Image src="/brand/story/parana-solo-basalto.webp" alt="Representação conceitual de solo vermelho e argiloso junto a um cafezal" fill sizes="(max-width: 700px) 100vw, 1200px" />
             <figcaption>Solo vermelho, planta e fruto · imagem conceitual</figcaption>
           </figure>
           <div className={origin.territoryGrid}>
-            <div><strong>Latitude</strong><p>Localiza um lugar ao norte ou ao sul do Equador. O Norte do Paraná fica próximo ao Trópico de Capricórnio; sua latitude se soma à altitude, ao relevo e ao clima.</p></div>
-            <div><strong>Longitude</strong><p>Localiza um lugar a leste ou a oeste. Junto da latitude, ajuda a situar no mapa cada origem e a contar de onde vem o café.</p></div>
+            <div><strong>Latitude · norte ↕ sul</strong><p>Medimos a partir do Equador. O Norte do Paraná está próximo da linha do Trópico de Capricórnio. A latitude situa a região; o clima vivido pelo cafeeiro depende também de altitude, relevo e estação.</p></div>
+            <div><strong>Longitude · oeste ↔ leste</strong><p>Medimos a partir de Greenwich. Com a latitude, ela localiza a origem e permite contar onde o café foi cultivado. Sozinha, a coordenada não determina seu sabor.</p></div>
             <div><strong>Terra roxa</strong><p>Em parte da região, o basalto deu origem a solos vermelhos e argilosos. Há também áreas com solos de origem arenítica; cada lavoura pede leitura própria.</p></div>
             <div><strong>Tempo</strong><p>O fruto responde ao conjunto de temperatura, água e decisões de quem cultiva. É esse percurso que Suzi e José procuram compreender antes da escolha.</p></div>
           </div>
@@ -212,6 +223,10 @@ export default function OrigemPage() {
             <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
             <p>José cresceu entre lavouras do Norte do Paraná e levou a experiência de origem e prova a outros mercados. Suzi construiu, ao longo de cerca de duas décadas no estado, uma trajetória própria de orientação a produtores e desenvolvimento da cafeicultura.</p>
           </div>
+          <figure className={origin.worldPhoto}>
+            <Image src="/brand/story/bispo-parana-mundo.jpeg" alt="Mapa iluminado da Bispo Coffees, fotografado no espaço da marca: linhas partem do Paraná em direção a Barcelona e Londres" width={1536} height={1152} sizes="(max-width: 700px) 100vw, 1000px" />
+            <figcaption><strong>Do Paraná para o mundo.</strong> O mapa no espaço da Bispo reúne visualmente a origem paranaense, Barcelona e a conexão com Londres. A fotografia mostra a forma como a marca conta seu percurso; as linhas não representam rotas de cada lote.</figcaption>
+          </figure>
           <div className={origin.careerChapters}>
             <article><span>2003 → 2010</span><h3>José · do campo à prova e à torra</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A partir de 2006, passou também a estudar e desenvolver perfis de torra para os cafés do Paraná. A formação como provador e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a apresentar esses cafés em outros mercados.</p></article>
             <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
