@@ -899,7 +899,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
          VALUES ($1,$2,$3,'MERCADO_PAGO',$4,'CREATING',$5,$6,$7,0,NOW(),$8::jsonb,NOW(),NOW())
          RETURNING *`,
         id,
-        order.companyId,
+        lockedOrder.companyId,
         order.id,
         order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
         Number(numbers[0]?.next ?? 1),
