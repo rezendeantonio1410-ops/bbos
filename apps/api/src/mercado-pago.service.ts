@@ -54,6 +54,13 @@ const money = (cents: number) => (cents / 100).toFixed(2);
 
 @Injectable()
 export class MercadoPagoService {
+  configured() {
+    return Boolean(
+      process.env.MERCADO_PAGO_PRODUCTION_ACCESS_TOKEN?.trim() ||
+      process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim(),
+    );
+  }
+
   private accessToken() {
     const token =
       process.env.MERCADO_PAGO_PRODUCTION_ACCESS_TOKEN?.trim() ||
