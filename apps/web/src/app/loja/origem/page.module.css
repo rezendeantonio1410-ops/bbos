@@ -277,3 +277,40 @@
 .curveNotes summary{cursor:pointer;font-size:14px;font-weight:700;color:#294650}
 .curveNotes summary:focus-visible{outline:3px solid #294650;outline-offset:3px}
 .curveNotes p{font-size:14px!important;line-height:1.55!important;margin:9px 0 0!important}
+
+/* Shorter reading path: retain the diagrams while reducing repeated vertical gaps. */
+.intro{padding-top:54px;padding-bottom:54px}
+.synapseStage{padding-bottom:46px}
+.synapseMap{grid-template-rows:repeat(3,minmax(126px,auto))}
+.people,.career{padding-top:54px;padding-bottom:54px}
+.memory{padding-top:54px;padding-bottom:54px}
+.territory{padding-top:55px;padding-bottom:55px}
+.landscapeImage{height:clamp(290px,39vw,480px)}
+.landscapeText{padding-top:48px;padding-bottom:48px}
+.thinking{padding-bottom:58px}
+.deepDive{padding-top:58px;padding-bottom:62px}
+.clayStory{margin-top:42px;margin-bottom:34px}
+.historyPhoto img{height:290px}
+.worldPhoto img{height:clamp(260px,48vw,480px);object-fit:cover;object-position:center 48%}
+.careerChapters article{min-height:190px}
+.careerChapters article:first-child{border-left-color:#c39d65}
+.careerChapters article:nth-child(2){border-left-color:#c39d65;background:#faf8f0}
+.careerChapters article:first-child .careerMark svg,.careerChapters article:nth-child(2) .careerMark svg{color:#9c7546}
+@media(max-width:700px){
+  .intro{padding:42px 22px 43px}
+  .synapseStage{padding-bottom:34px}
+  .synapseCenter{width:142px;height:142px;margin-bottom:8px}
+  .synapseCenter svg{width:62px;height:58px}
+  .synapseNode{min-height:139px}
+  .people,.career{padding-top:42px;padding-bottom:42px}
+  .memory{padding:42px 22px}
+  .territory{padding:44px 22px}
+  .landscapeImage{height:280px}
+  .landscapeText{padding:43px 22px}
+  .thinking{padding-bottom:45px}
+  .deepDive{padding:45px 18px 50px}
+  .historyPhoto img{max-height:260px}
+  .mapRegions i{width:18px;height:5px;border-radius:1px;margin-top:8px;background:#b87e61}
+  .mapRegions>span+span i{background:#cfb97f}
+  .mapRegions>span{grid-template-columns:18px 1fr}
+}

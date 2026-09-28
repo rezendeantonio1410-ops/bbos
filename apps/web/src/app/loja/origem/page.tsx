@@ -96,26 +96,6 @@ export default function OrigemPage() {
           </figure>
         </section>
 
-        <section className={origin.thinking} aria-labelledby="thinking-title">
-          <div className={origin.thinkingHeading}>
-            <p className={origin.kicker}>OLHE · RELACIONE · DESCUBRA</p>
-            <h2 id="thinking-title">Duas lavouras próximas podem contar histórias diferentes.</h2>
-            <p>Imagine dois lotes na mesma faixa de latitude. A coordenada é parecida. O que ainda precisaria ser observado antes de dizer como será a xícara?</p>
-          </div>
-          <div className={origin.thinkingPaths} aria-label="Comparação conceitual de dois lotes de café">
-            <div className={origin.thinkingCommon}>MESMA FAIXA DE LATITUDE</div>
-            <div className={origin.thinkingBranches}>
-              <div><span>LOTE A · HIPÓTESE</span><svg className={origin.lotScene} viewBox="0 0 270 115" role="img" aria-label="Cafeeiro e gotas de água no solo"><path d="M0 85Q65 70 135 85T270 83V115H0Z" fill="#9b7765"/><path d="M0 96Q70 85 135 97T270 95" fill="none" stroke="#c6a28a" strokeWidth="3"/><path d="M132 87V38M132 69Q103 39 80 54Q101 78 132 69ZM132 56Q160 27 181 43Q161 67 132 56Z" fill="#83a08e" stroke="#d3e3d2" strokeWidth="3"/><circle cx="112" cy="77" r="8" fill="#bb7b62"/><circle cx="149" cy="71" r="8" fill="#bb7b62"/><path d="M38 15q-10 19 0 19t0-19ZM211 10q-10 19 0 19t0-19ZM228 38q-10 19 0 19t0-19Z" fill="#bed9e0"/></svg><strong>Água disponível</strong><small>Maturação acompanhada no campo</small></div>
-              <div><span>LOTE B · HIPÓTESE</span><svg className={origin.lotScene} viewBox="0 0 270 115" role="img" aria-label="Cafeeiro sob sol intenso e solo com pouca água"><path d="M0 85Q65 70 135 85T270 83V115H0Z" fill="#b89975"/><path d="M0 98l35 2 12-5 25 3 14 5 20-2M146 102l17-5 17 5 22-3 18 5" fill="none" stroke="#6e5d52" strokeWidth="2"/><path d="M132 87V38M132 69Q103 39 80 54Q101 78 132 69ZM132 56Q160 27 181 43Q161 67 132 56Z" fill="#86a08a" stroke="#d3e3d2" strokeWidth="3"/><circle cx="112" cy="77" r="8" fill="#bb7b62"/><circle cx="149" cy="71" r="8" fill="#bb7b62"/><circle cx="218" cy="28" r="16" fill="#dfc48a"/><path d="M218 2v-9M218 63v-9M193 28h-9M252 28h-9M200 10l-7-7M239 47l7 7M238 10l7-7" fill="none" stroke="#dfc48a" strokeWidth="3"/></svg><strong>Restrição de água</strong><small>Maturação sob outra condição</small></div>
-            </div>
-            <p className={origin.thinkingOutcome}>A posição no mapa se parece. <strong>As condições vividas pelo fruto podem ser diferentes.</strong></p>
-          </div>
-          <details className={origin.thinkingReveal}>
-            <summary>O que mais comparar? Abra a leitura da Bispo <span aria-hidden="true">↗</span></summary>
-            <div><p>Observe também <strong>altitude e relevo, solo, cultivar, temperatura, manejo, processamento e torra</strong>. Suzi acompanha como a planta se desenvolve com os produtores. José prova o lote e ajusta a torra. Só a combinação dessas leituras permite discutir o perfil do café.</p><p><strong>Este é um exercício de comparação, não o resultado de dois lotes reais.</strong> A falta de água pode limitar a planta; não há previsão sensorial válida apenas a partir deste desenho.</p></div>
-          </details>
-        </section>
-
         <section id="fundadores" className={origin.people} aria-label="Os fundadores">
           <div className={origin.peopleIntro}>
             <p className={origin.kicker}>DOIS OLHARES, UMA ESCOLHA</p>
@@ -140,7 +120,7 @@ export default function OrigemPage() {
             <h2 id="memory-title">Esta história começou muito antes da Bispo.</h2>
           </div>
           <div className={origin.memoryBody}>
-            <p>O café acompanhou a formação de Londrina e transformou o Norte do Paraná ao longo do século XX. A cidade surgiu em 1929; nas décadas seguintes, lavouras, produtores e trabalhadores fizeram da região uma referência cafeeira. Nos anos 1950, a produção de café impulsionou sua expansão.</p>
+            <p>Lavouras, produtores e trabalhadores fizeram do Norte do Paraná uma referência cafeeira no século XX. O café impulsionou a expansão de Londrina e marcou a paisagem da região.</p>
             <p>Parte dessa paisagem tem os solos vermelhos que ficaram conhecidos como <strong>terra roxa</strong>, formados pelo intemperismo do basalto. A história da região também inclui diferentes povos, migrações, trabalho e mudanças no campo. É dessa realidade viva — e não apenas de uma cor no mapa — que falamos quando dizemos <strong>origem</strong>.</p>
           </div>
           <div className={origin.historyPath} aria-label="Três momentos da história cafeeira no Norte do Paraná">
@@ -159,7 +139,7 @@ export default function OrigemPage() {
           <h2>Entre a linha do trópico e os solos do Paraná.</h2>
           <figure className={origin.coordinatesFigure}>
             <Image className={origin.worldDiagram} src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Brasil destacado, o Norte do Paraná marcado e as linhas do Equador, de Greenwich e do Trópico de Capricórnio" width={960} height={500} unoptimized />
-            <div className={origin.mapZoom}><span>DO MUNDO PARA O PARANÁ ↓</span><Image src="/brand/story/parana-nortes.svg" alt="Mapa do Paraná com contorno e limites das antigas mesorregiões Norte Central e Norte Pioneiro do IBGE, sedes de Maringá, Londrina, Cornélio Procópio e Jacarezinho nas suas coordenadas e paralelo do Trópico de Capricórnio" width={960} height={520} unoptimized /><div className={origin.mapRegions}><span><i/>Norte Novo <small>Londrina · Maringá</small></span><span><i/>Norte Pioneiro <small>Cornélio Procópio · Jacarezinho</small></span></div></div>
+            <div className={origin.mapZoom}><span>DO MUNDO PARA O PARANÁ ↓</span><Image src="/brand/story/parana-nortes.svg" alt="Mapa do Paraná com contorno e limites das antigas mesorregiões Norte Central e Norte Pioneiro do IBGE, sedes de Maringá, Londrina, Cornélio Procópio e Jacarezinho nas suas coordenadas e paralelo do Trópico de Capricórnio" width={960} height={520} unoptimized /><div className={origin.mapRegions}><span><i/>Norte Central <small>Norte Novo histórico · Londrina e Maringá</small></span><span><i/>Norte Pioneiro <small>Cornélio Procópio e Jacarezinho</small></span></div></div>
             <div className={origin.mapLegend} aria-label="Como ler as linhas do mapa"><span><CoordinateMark kind="latitude"/> Latitude · norte e sul</span><span><CoordinateMark kind="longitude"/> Longitude · oeste e leste</span><span><CoordinateMark kind="tropic"/> Trópico · 23°26′ S</span></div>
             <figcaption><strong>Primeiro, encontramos o lugar.</strong> A latitude vai de norte a sul; a longitude, de oeste a leste. No encontro das duas, localizamos o Norte do Paraná, próximo ao Trópico de Capricórnio. <small>Mapa do mundo simplificado a partir de Natural Earth; contorno estadual e limites das antigas mesorregiões <a href="https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/UFs/PR/" target="_blank" rel="noopener noreferrer">Norte Central e Norte Pioneiro: malhas IBGE, edição 2022</a>. Norte Central é uma referência cartográfica para o Norte Novo histórico, que não possui uma delimitação oficial única. Pontos das sedes municipais posicionados por coordenadas; paralelo do Trópico em cerca de 23°26′ S. A linha não é uma fronteira de qualidade.</small></figcaption>
           </figure>
@@ -208,11 +188,31 @@ export default function OrigemPage() {
           </div>
         </section>
 
+        <section className={origin.thinking} aria-labelledby="thinking-title">
+          <div className={origin.thinkingHeading}>
+            <p className={origin.kicker}>OLHE · RELACIONE · DESCUBRA</p>
+            <h2 id="thinking-title">Duas lavouras próximas podem contar histórias diferentes.</h2>
+            <p>Imagine dois lotes na mesma faixa de latitude. A coordenada é parecida. O que ainda precisaria ser observado antes de dizer como será a xícara?</p>
+          </div>
+          <div className={origin.thinkingPaths} aria-label="Comparação conceitual de dois lotes de café">
+            <div className={origin.thinkingCommon}>MESMA FAIXA DE LATITUDE</div>
+            <div className={origin.thinkingBranches}>
+              <div><span>LOTE A · HIPÓTESE</span><svg className={origin.lotScene} viewBox="0 0 270 115" role="img" aria-label="Cafeeiro e gotas de água no solo"><path d="M0 85Q65 70 135 85T270 83V115H0Z" fill="#9b7765"/><path d="M0 96Q70 85 135 97T270 95" fill="none" stroke="#c6a28a" strokeWidth="3"/><path d="M132 87V38M132 69Q103 39 80 54Q101 78 132 69ZM132 56Q160 27 181 43Q161 67 132 56Z" fill="#83a08e" stroke="#d3e3d2" strokeWidth="3"/><circle cx="112" cy="77" r="8" fill="#bb7b62"/><circle cx="149" cy="71" r="8" fill="#bb7b62"/><path d="M38 15q-10 19 0 19t0-19ZM211 10q-10 19 0 19t0-19ZM228 38q-10 19 0 19t0-19Z" fill="#bed9e0"/></svg><strong>Água disponível</strong><small>Maturação acompanhada no campo</small></div>
+              <div><span>LOTE B · HIPÓTESE</span><svg className={origin.lotScene} viewBox="0 0 270 115" role="img" aria-label="Cafeeiro sob sol intenso e solo com pouca água"><path d="M0 85Q65 70 135 85T270 83V115H0Z" fill="#b89975"/><path d="M0 98l35 2 12-5 25 3 14 5 20-2M146 102l17-5 17 5 22-3 18 5" fill="none" stroke="#6e5d52" strokeWidth="2"/><path d="M132 87V38M132 69Q103 39 80 54Q101 78 132 69ZM132 56Q160 27 181 43Q161 67 132 56Z" fill="#86a08a" stroke="#d3e3d2" strokeWidth="3"/><circle cx="112" cy="77" r="8" fill="#bb7b62"/><circle cx="149" cy="71" r="8" fill="#bb7b62"/><circle cx="218" cy="28" r="16" fill="#dfc48a"/><path d="M218 2v-9M218 63v-9M193 28h-9M252 28h-9M200 10l-7-7M239 47l7 7M238 10l7-7" fill="none" stroke="#dfc48a" strokeWidth="3"/></svg><strong>Restrição de água</strong><small>Maturação sob outra condição</small></div>
+            </div>
+            <p className={origin.thinkingOutcome}>A posição no mapa se parece. <strong>As condições vividas pelo fruto podem ser diferentes.</strong></p>
+          </div>
+          <details className={origin.thinkingReveal}>
+            <summary>O que mais comparar? Abra a leitura da Bispo <span aria-hidden="true">↗</span></summary>
+            <div><p>Observe também <strong>altitude e relevo, solo, cultivar, temperatura, manejo, processamento e torra</strong>. Suzi acompanha como a planta se desenvolve com os produtores. José prova o lote e ajusta a torra. Só a combinação dessas leituras permite discutir o perfil do café.</p><p><strong>Este é um exercício de comparação, não o resultado de dois lotes reais.</strong> A falta de água pode limitar a planta; não há previsão sensorial válida apenas a partir deste desenho.</p></div>
+          </details>
+        </section>
+
         <section className={origin.deepDive} aria-labelledby="layers-title">
           <div className={origin.deepIntro}>
             <p className={origin.kicker}>DO TERRITÓRIO À XÍCARA</p>
             <h2 id="layers-title">O café não nasce pronto no mapa.</h2>
-            <p>A latitude e a longitude dizem <em>onde</em> estamos. Para compreender <em>o que</em> aquele lugar pode expressar, precisamos seguir o fruto, a semente e as decisões feitas no campo e na torra.</p>
+            <p>O mapa situa o café. O caminho do fruto, as decisões no campo e a torra ajudam a compreender o que chega à xícara.</p>
           </div>
           <figure className={origin.layersFigure}>
             <Image src="/brand/story/camadas-origem-torra.svg" alt="Corte conceitual de uma encosta cafeeira: Trópico de Capricórnio, clima, cafeeiros, manejo, terra roxa e basalto" width={1200} height={430} unoptimized />
@@ -222,7 +222,7 @@ export default function OrigemPage() {
             <div>
               <p className={origin.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p>
               <h2>Na torra, o grão pede uma curva própria.</h2>
-              <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>Estudar o café do Paraná também é descobrir como torrá-lo. José desenvolve e prova perfis para diferentes lotes da região e compartilha essa leitura em seu trabalho pelo mundo: observar o grão, ajustar o calor e deixar que a xícara mostre o resultado. É assim que apresenta o potencial dos cafés cultivados em altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
+              <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>Desde 2006, José desenvolve e prova perfis para cada lote do Paraná. Em seu trabalho pelo mundo, mostra como ler o grão, ajustar o calor e revelar o potencial de cafés de altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
               <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta a curva para preservar as qualidades daquele café.</p>
               <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A comparação certa é entre perfis testados no mesmo lote, com controle de cor e prova sensorial.</p>
             </div>
@@ -257,19 +257,15 @@ export default function OrigemPage() {
           <div className={origin.careerIntro}>
             <p className={origin.kicker}>DO PARANÁ PARA O MUNDO</p>
             <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
-            <p>José cresceu entre lavouras do Norte do Paraná e levou a experiência de origem e prova a outros mercados. Suzi construiu, ao longo de cerca de duas décadas no estado, uma trajetória própria de orientação a produtores e desenvolvimento da cafeicultura.</p>
           </div>
           <figure className={origin.worldPhoto}>
             <Image src="/brand/story/bispo-parana-mundo.jpeg" alt="Mapa iluminado da Bispo Coffees, fotografado no espaço da marca: linhas partem do Paraná em direção a Barcelona e Londres" width={1536} height={1152} sizes="(max-width: 700px) 100vw, 1000px" />
             <figcaption><strong>Do Paraná para o mundo.</strong> O mapa no espaço da Bispo reúne visualmente a origem paranaense, Barcelona e a conexão com Londres. A fotografia mostra a forma como a marca conta seu percurso; as linhas não representam rotas de cada lote.</figcaption>
           </figure>
-          <div className={origin.careerChapters} aria-label="Caminhos de José e Suzi até a Bispo">
-            <article><div className={origin.careerMark}><OriginIcon kind="roast"/><span>JOSÉ · DESDE 2003</span></div><h3>Campo, prova e torra</h3><p>José iniciou o trabalho técnico com produtores em 2003 e, desde 2006, desenvolve perfis de torra para os cafés do Paraná. A prova e a experiência internacional ampliaram sua leitura das origens brasileiras.</p></article>
-            <article><div className={origin.careerMark}><OriginIcon kind="care"/><span>SUZI · HÁ CERCA DE DUAS DÉCADAS</span></div><h3>Cuidado desde a planta</h3><p>No Paraná, Suzi orienta produtores em nutrição, manejo e desenvolvimento da lavoura. Essa trajetória própria ajuda a construir qualidade desde o campo.</p></article>
+          <div className={origin.careerChapters} aria-label="Da Capricornio e da Longitude à Bispo">
             <article><div className={origin.careerMark}><OriginIcon kind="place"/><span>2015 · CAPRICORNIO COFFEES</span></div><h3>Uma latitude ganha voz</h3><p>Como cofundador da Capricornio Coffees, José ajudou a dar visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio.</p></article>
             <article><div className={origin.careerMark}><OriginIcon kind="taste"/><span>LONGITUDE → BISPO</span></div><h3>Dois caminhos, uma escolha</h3><p>José e Suzi fundaram o conceito da Longitude Coffees, reunindo origem, orientação a produtores e conexão com mercados internacionais. A visão compartilhada evoluiu para a Bispo Coffees, fundada pelos dois.</p></article>
           </div>
-          <p className={origin.careerSignature}>Capricornio faz parte do caminho de José. A Longitude reuniu José e Suzi em um conceito compartilhado. <strong>A Bispo Coffees é a assinatura que os dois construíram a partir dessa experiência.</strong></p>
         </section>
 
         <section className={origin.close}>
