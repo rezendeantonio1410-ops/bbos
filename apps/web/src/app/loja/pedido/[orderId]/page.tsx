@@ -51,6 +51,10 @@ export default function StorefrontOrderTrackingPage() {
   const token = search.get("token") || "";
   const [order, setOrder] = useState<OrderStatus | null>(null);
   const [error, setError] = useState("");
+  const paymentConfirmed = order?.events.some((event) => event.eventType === "PAYMENT_CONFIRMED") ?? false;
+  const visibleEvents = order?.events.filter((event) =>
+    !paymentConfirmed || event.title !== "Seu pedido Bispo está reservado"
+  ) ?? [];
 
   useEffect(() => {
     if (!params.orderId || !token) {
@@ -69,10 +73,11 @@ export default function StorefrontOrderTrackingPage() {
       if (!response.ok)
         throw new Error(body.message || "Não foi possível consultar o pedido.");
       setOrder(body);
+      setError("");
     };
     void load().catch((reason) => setError(reason.message));
     const timer = window.setInterval(
-      () => void load().catch(() => undefined),
+      () => void load().catch(() => setError("Não foi possível atualizar o pedido agora. Tentaremos novamente em instantes.")),
       30000,
     );
     return () => window.clearInterval(timer);
@@ -124,10 +129,10 @@ export default function StorefrontOrderTrackingPage() {
             </article>
           </section>
           <section className={styles.timeline}>
-            {order.events.map((event, index) => (
+            {visibleEvents.map((event, index) => (
               <article key={`${event.eventType}-${event.occurredAt}`}>
                 <span>
-                  {index === order.events.length - 1 ? (
+                  {index === visibleEvents.length - 1 ? (
                     <PackageCheck />
                   ) : (
                     <Check />
