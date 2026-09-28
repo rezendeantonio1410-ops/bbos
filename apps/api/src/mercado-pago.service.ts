@@ -183,6 +183,7 @@ export class MercadoPagoService {
             not_allowed_types: input.paymentMethod === "PIX"
               ? ["credit_card", "debit_card", "prepaid_card", "ticket", "account_money", "digital_currency"]
               : ["bank_transfer", "ticket", "account_money", "digital_currency"],
+            default_type: input.paymentMethod === "PIX" ? "bank_transfer" : "credit_card",
           },
           online: {
             success_url: `${returnBase}?payment=success`,
