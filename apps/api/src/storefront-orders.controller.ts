@@ -627,7 +627,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
          VALUES ($1,$2,'BLING','STOREFRONT_ORDER_PAID','STOREFRONT_ORDER',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
          ON CONFLICT ("idempotencyKey") DO NOTHING`,
         randomUUID(),
-        order.companyId,
+        lockedOrder.companyId,
         order.id,
         JSON.stringify({
           storefrontOrderId: order.id,
@@ -860,10 +860,17 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       if (existing[0]) return existing[0];
 
-      await transaction.$queryRawUnsafe(
-        `SELECT id FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
+      const lockedOrders = await transaction.$queryRawUnsafe<
+        Array<{ id: string; companyId: string }>
+      >(
+        `SELECT id,"companyId" FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
         order.id,
       );
+      const lockedOrder = lockedOrders[0];
+      if (!lockedOrder?.companyId)
+        throw new ServiceUnavailableException(
+          "O pedido não possui empresa vinculada para iniciar o pagamento.",
+        );
 
       await transaction.$executeRawUnsafe(
         `UPDATE "StorefrontPaymentAttempt"
