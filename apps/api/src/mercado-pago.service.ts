@@ -60,6 +60,19 @@ export class MercadoPagoService implements OnModuleInit {
     this.logger.log(
       `Mercado Pago production readiness: ${this.configured() ? "configured" : "missing"}`,
     );
+    if (this.configured()) {
+      void this.paymentMethodsSummary()
+        .then((summary) => {
+          this.logger.log(
+            `Mercado Pago payment methods: ${JSON.stringify(summary)}`,
+          );
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Mercado Pago payment methods diagnostic failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    }
   }
 
   configured() {
@@ -82,6 +95,30 @@ export class MercadoPagoService implements OnModuleInit {
         "O Mercado Pago está configurado com credencial de teste. Configure a Access Token de produção antes de receber pagamentos reais.",
       );
     return token;
+  }
+
+  async paymentMethodsSummary() {
+    const response = await fetch("https://api.mercadopago.com/v1/payment_methods", {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${this.accessToken()}`,
+      },
+    });
+    const body = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(body)) {
+      return { ok: false, status: response.status, methods: [] as any[] };
+    }
+    const methods = body.map((method: any) => ({
+      id: String(method?.id || ""),
+      type: String(method?.payment_type_id || method?.type || ""),
+      status: String(method?.status || "active"),
+    }));
+    return {
+      ok: true,
+      status: response.status,
+      pix: methods.find((method: any) => method.id === "pix") || null,
+      methods,
+    };
   }
 
   private storefrontUrl() {
