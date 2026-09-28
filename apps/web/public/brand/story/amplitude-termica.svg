@@ -15,5 +15,6 @@
   <text x="605" y="52" font-family="Arial, sans-serif" font-size="19" font-weight="bold" letter-spacing="2" fill="#f3f5ec">NOITE</text>
   <text x="337" y="93" font-family="Arial, sans-serif" font-size="17" fill="#344a40">máxima</text>
   <text x="792" y="284" font-family="Arial, sans-serif" font-size="17" fill="#f3f5ec">mínima</text>
+  <text x="735" y="185" font-family="Arial, sans-serif" font-size="20" font-weight="bold" letter-spacing="1.1" fill="#f3f5ec">AMPLITUDE</text>
   <text x="79" y="320" font-family="Arial, sans-serif" font-size="18" fill="#344a40">variação ilustrativa · sem dados de uma lavoura</text>
 </svg>

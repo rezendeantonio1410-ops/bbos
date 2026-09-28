@@ -25,6 +25,15 @@ function OriginIcon({ kind }: { kind: OriginSymbol }) {
   </svg>;
 }
 
+function CoordinateMark({ kind }: { kind: "latitude" | "longitude" | "tropic" }) {
+  return <svg viewBox="0 0 46 32" aria-hidden="true" focusable="false">
+    <ellipse cx="23" cy="16" rx="19" ry="13" fill="none" stroke="currentColor" strokeWidth="1.7"/>
+    {kind === "latitude" && <><path d="M5 11h36M4 16h38M5 21h36" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M4 16h38" stroke="#b18c57" strokeWidth="3"/></>}
+    {kind === "longitude" && <><path d="M23 3c-10 6-10 20 0 26M23 3c10 6 10 20 0 26" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M23 3v26" stroke="#b18c57" strokeWidth="3"/></>}
+    {kind === "tropic" && <><path d="M6 14h34" stroke="currentColor" strokeWidth="1.4"/><path d="M5 22h36" stroke="#b18c57" strokeWidth="3" strokeDasharray="5 3"/></>}
+  </svg>;
+}
+
 export default function OrigemPage() {
   return (
     <main className={`${styles.page} ${brand.storefront} ${origin.page}`}>
@@ -66,7 +75,6 @@ export default function OrigemPage() {
           </figure>
           <p>A Bispo Coffees nasce do encontro das trajetórias de <strong>Suzi Ninov e José Rezende</strong> — duas experiências construídas entre produtores, lavouras, desenvolvimento de qualidade, prova e mercados internacionais.</p>
           <p>No Paraná, próximo ao Trópico de Capricórnio, essa relação com o café ganhou uma perspectiva particular: aqui, a geografia nos ensinou cedo que qualidade não pode ser explicada por uma única variável.</p>
-          <p>Cada uma deixa sua marca. <strong>É a combinação entre elas que constrói uma origem.</strong></p>
         </section>
 
         <section className={origin.synapseStage} aria-label="Mapa das relações que formam a origem">
@@ -135,6 +143,11 @@ export default function OrigemPage() {
             <p>O café acompanhou a formação de Londrina e transformou o Norte do Paraná ao longo do século XX. A cidade surgiu em 1929; nas décadas seguintes, lavouras, produtores e trabalhadores fizeram da região uma referência cafeeira. Nos anos 1950, a produção de café impulsionou sua expansão.</p>
             <p>Parte dessa paisagem tem os solos vermelhos que ficaram conhecidos como <strong>terra roxa</strong>, formados pelo intemperismo do basalto. A história da região também inclui diferentes povos, migrações, trabalho e mudanças no campo. É dessa realidade viva — e não apenas de uma cor no mapa — que falamos quando dizemos <strong>origem</strong>.</p>
           </div>
+          <div className={origin.historyPath} aria-label="Três momentos da história cafeeira no Norte do Paraná">
+            <div><OriginIcon kind="place"/><span>1929</span><strong>Londrina surge</strong></div>
+            <div><OriginIcon kind="soil"/><span>ANOS 1950</span><strong>O café impulsiona a região</strong></div>
+            <div><OriginIcon kind="taste"/><span>HOJE</span><strong>Uma origem em movimento</strong></div>
+          </div>
           <figure className={origin.historyPhoto}>
             <img src="https://upload.wikimedia.org/wikipedia/commons/f/f8/Planta%C3%A7%C3%A3o_de_caf%C3%A9_1955.jpg" alt="Fotografia histórica em preto e branco de uma plantação de café no Paraná" loading="lazy" />
             <figcaption>Um registro histórico da cafeicultura paranaense, identificado no acervo como “Plantação de café 1955”. <a href="https://commons.wikimedia.org/wiki/File:Planta%C3%A7%C3%A3o_de_caf%C3%A9_1955.jpg" target="_blank" rel="noopener noreferrer">Imagem: Lincolnbs / Wikimedia Commons, domínio público</a>. O acervo a associa a Nova Londrina, não à cidade de Londrina.</figcaption>
@@ -147,12 +160,8 @@ export default function OrigemPage() {
           <figure className={origin.coordinatesFigure}>
             <Image className={origin.worldDiagram} src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Brasil destacado, o Norte do Paraná marcado e as linhas do Equador, de Greenwich e do Trópico de Capricórnio" width={960} height={500} unoptimized />
             <div className={origin.mapZoom}><span>DO MUNDO PARA O PARANÁ ↓</span><Image src="/brand/story/parana-nortes.svg" alt="Mapa ampliado do Paraná com o Norte Novo, na área de Londrina e Maringá, e o Norte Pioneiro, na área de Cornélio Procópio e Jacarezinho; manchas regionais ilustrativas" width={960} height={420} unoptimized /><div className={origin.mapRegions}><span><i/>Norte Novo <small>Londrina · Maringá</small></span><span><i/>Norte Pioneiro <small>Cornélio Procópio · Jacarezinho</small></span></div></div>
-            <div className={origin.mapLegend} aria-label="Como ler as linhas do mapa"><span><b>↕</b> Latitude · norte e sul</span><span><b>↔</b> Longitude · oeste e leste</span><span><b>—</b> Trópico · 23°26′ S</span></div>
+            <div className={origin.mapLegend} aria-label="Como ler as linhas do mapa"><span><CoordinateMark kind="latitude"/> Latitude · norte e sul</span><span><CoordinateMark kind="longitude"/> Longitude · oeste e leste</span><span><CoordinateMark kind="tropic"/> Trópico · 23°26′ S</span></div>
             <figcaption><strong>Primeiro, encontramos o lugar.</strong> A latitude vai de norte a sul; a longitude, de oeste a leste. No encontro das duas, localizamos o Norte do Paraná, próximo ao Trópico de Capricórnio. <small>Mapa do mundo simplificado a partir de Natural Earth; contorno do Paraná adaptado de <a href="https://github.com/giuliano-macedo/geodata-br-states" target="_blank" rel="noopener noreferrer">dados de Giuliano Macedo / LAGEAMB UFPR</a>. As manchas do Norte Novo e do Norte Pioneiro indicam áreas de referência, não limites oficiais. O ponto é aproximado; o Trópico não é uma fronteira de qualidade.</small></figcaption>
-          </figure>
-          <figure className={origin.soilImage}>
-            <Image src="/brand/story/parana-solo-basalto.webp" alt="Representação conceitual de solo vermelho e argiloso junto a um cafezal" fill sizes="(max-width: 700px) 100vw, 1200px" />
-            <figcaption>Solo vermelho, planta e fruto · imagem conceitual</figcaption>
           </figure>
           <section id="solo-argila" className={origin.clayStory} aria-labelledby="clay-title">
             <div className={origin.clayHeading}>
@@ -174,13 +183,6 @@ export default function OrigemPage() {
               <div><p><strong>Já existem trabalhos publicados.</strong> Diego Silva Siqueira e pesquisadores da UNESP estudaram atributos do solo, relevo, produção e qualidade do café em áreas de Minas Gerais e São Paulo. Em 31,7 ha, teor de argila e ferro disponível ajudaram a distinguir ambientes de produção; outro estudo avaliou cor do solo e qualidade do grão em 39 ha.</p><p>Uma revisão científica de 2024, assinada também por Siqueira, apresenta a interação entre <strong>tipologia da argila, altitude e avaliação sensorial</strong> em amostras da Mantiqueira de Minas. Em determinada faixa do índice de tipologia, amostras de altitudes diferentes mostraram potencial sensorial semelhante. É uma evidência concreta de que a altitude precisa ser lida junto com o solo, sem transferir aqueles valores automaticamente para lavouras do Paraná.</p><p>O <strong>Terrus Café</strong> é uma aplicação dessa linha de pesquisa: Cooxupé, Quanticum e IFSuldeMinas trabalham no diagnóstico da tipologia da argila e no mapeamento de zonas de manejo do cafeeiro. As pesquisas avançaram; segue em estudo quanto cada mineral contribui para descritores específicos da xícara, em interação com cultivar, clima e processamento.</p><p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/1170171/1/Efeitos-das-caracteristicas-ambientais.pdf" target="_blank" rel="noopener noreferrer">Alves, Siqueira e coautores · Informe Agropecuário, 2024</a> · <a href="https://repositorio.unesp.br/entities/publication/26c95586-169b-4b88-8383-73ea435e74ef/full" target="_blank" rel="noopener noreferrer">Sanchez, Siqueira e coautores · UNESP, 2013</a> · <a href="https://www.scielo.br/j/pab/a/vvf9gsrK3gZrQRSXjWRNyph/?lang=pt" target="_blank" rel="noopener noreferrer">Carmo, Siqueira e coautores · Pesquisa Agropecuária Brasileira, 2016</a> · <a href="https://hubdocafe.cooxupe.com.br/tipologia-da-argila" target="_blank" rel="noopener noreferrer">Cooxupé · projeto Terrus Café</a>.</p></div>
             </details>
           </section>
-          <div className={origin.territoryGrid}>
-            <div><strong>Latitude · norte ↕ sul</strong><p>Medimos a partir do Equador. O Norte do Paraná está próximo da linha do Trópico de Capricórnio. A latitude situa a região; o clima vivido pelo cafeeiro depende também de altitude, relevo e estação.</p></div>
-            <div><strong>Longitude · oeste ↔ leste</strong><p>Medimos a partir de Greenwich. Com a latitude, ela localiza a origem e permite contar onde o café foi cultivado. Sozinha, a coordenada não determina seu sabor.</p></div>
-            <div><strong>Terra roxa</strong><p>Em parte da região, o basalto deu origem a solos vermelhos e argilosos. Há também áreas com solos de origem arenítica; cada lavoura pede leitura própria.</p></div>
-            <div><strong>Tempo</strong><p>O fruto responde ao conjunto de temperatura, água e decisões de quem cultiva. É esse percurso que Suzi e José procuram compreender antes da escolha.</p></div>
-          </div>
-          <p className={origin.extremes}><strong>Ao norte, o Havaí. Ao sul, o Paraná.</strong> São exemplos distantes que nos convidam a olhar além da altitude. Seus climas e sistemas de cultivo são diferentes; nenhum fator, isoladamente, explica uma grande xícara.</p>
           <details className={origin.science}>
             <summary>Para quem quer ir mais fundo: a base técnica</summary>
             <p>Estudos de Londrina acompanharam soma térmica e água disponível na maturação de diferentes genótipos de arábica. Pesquisas em outras origens mostram que condições climáticas, sobretudo a temperatura no desenvolvimento da semente, podem modificar atributos químicos e sensoriais. Latitude e longitude situam a origem; não funcionam como nota automática de qualidade.</p>
@@ -201,8 +203,7 @@ export default function OrigemPage() {
               <Image src="/brand/story/amplitude-termica.svg" alt="Curva conceitual de temperatura subindo durante o dia e caindo à noite, entre uma máxima e uma mínima" width={1000} height={360} unoptimized />
               <figcaption><strong>Amplitude do dia = temperatura máxima − temperatura mínima.</strong><span>A curva mostra o conceito; os valores reais variam entre regiões, estações e lavouras.</span></figcaption>
             </figure>
-            <p>Temperatura e disponibilidade de água influenciam o tempo entre a florada e a maturação. Sozinhas, não determinam a qualidade: cultivar, solo, manejo e processamento também participam da história.</p>
-            <p>Na prática, observamos a sequência de dias e noites durante o desenvolvimento do fruto. Uma diferença maior entre máxima e mínima não garante, por si só, um café melhor: calor excessivo, frio e falta de água também podem limitar a planta.</p>
+            <p>Temperatura e água influenciam o tempo entre a florada e a maturação. Observamos a sequência de dias e noites: uma amplitude maior não garante qualidade, pois calor excessivo, frio e falta de água podem limitar a planta. Cultivar, solo, manejo e processamento também participam dessa história.</p>
             <small>Imagem conceitual; não representa uma medição ou uma lavoura específica.</small>
           </div>
         </section>
@@ -227,21 +228,23 @@ export default function OrigemPage() {
             </div>
             <div className={origin.roastSteps} aria-label="Decisões técnicas para definir a torra">
               <Image src="/brand/story/torra-leitura-lote.svg" alt="Grão verde, curva de calor ilustrativa e xícara: observar, ajustar e provar cada lote" width={850} height={280} unoptimized />
-              <figure className={origin.roastCurve}>
-                <div className={origin.curveArtwork}><Image src="/brand/story/curva-torra-exemplo.svg" alt="Curva ilustrativa: sonda a 140 °C na carga, queda da leitura até 85 °C no ponto de retorno perto de 50 segundos neste exemplo, seguida de subida até 202 °C; RoR de 18 °C por minuto em um instante, primeiro estalo e desenvolvimento" width={960} height={460} unoptimized /><Image className={origin.curveSeal} src="/brand/story/bispo-selo-marca-dagua.png" alt="" aria-hidden="true" width={410} height={366} unoptimized /></div>
-                <figcaption><strong>Exemplo ilustrativo · não é uma curva registrada.</strong> Antes da carga, a sonda marca 140 °C. Ao receber o café à temperatura ambiente, a leitura cai até 85 °C neste desenho: é o <em>ponto de retorno</em>, situado aqui por volta de 0:50. A curva então sobe até 202 °C. Os valores e o tempo são ilustrativos; a sonda lê o ambiente de torra em contato com os grãos, e o café não entra a 140 °C. <abbr title="Taxa de elevação da temperatura">RoR</abbr> de 18 °C/min indica a velocidade <em>em um momento da subida</em>, não durante a torra inteira. O <em>first crack</em> (primeiro estalo) marca o início do desenvolvimento, que vai até a saída. A posição do estalo, a duração das etapas e a leitura do sensor variam conforme lote, torrador e equipamento.</figcaption>
-              </figure>
+
               <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Antes do torrador: umidade no medidor, densidade no densímetro, tamanho nas peneiras e processamento na ficha do lote.</small></div>
               <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Registrar curvas e manter o resultado comparável.</small></div>
               <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher a curva pela xícara, não só pela altitude.</small></div>
             </div>
+              <figure className={origin.roastCurve}>
+                <div className={origin.curveArtwork}><Image src="/brand/story/curva-torra-exemplo.svg" alt="Curva ilustrativa: sonda a 140 °C na carga, queda da leitura até 85 °C no ponto de retorno perto de 50 segundos neste exemplo, seguida de subida até 202 °C; RoR de 18 °C por minuto em um instante, primeiro estalo e desenvolvimento" width={960} height={460} unoptimized /><Image className={origin.curveSeal} src="/brand/story/bispo-selo-marca-dagua.png" alt="" aria-hidden="true" width={410} height={366} unoptimized /></div>
+                <figcaption><strong>Exemplo ilustrativo · não é uma curva registrada.</strong> Antes da carga, a sonda marca 140 °C. Ao receber o café à temperatura ambiente, a leitura cai até 85 °C neste desenho: é o <em>ponto de retorno</em>, situado aqui por volta de 0:50. A curva então sobe até 202 °C. Os valores e o tempo são ilustrativos; a sonda lê o ambiente de torra em contato com os grãos, e o café não entra a 140 °C. <abbr title="Taxa de elevação da temperatura">RoR</abbr> de 18 °C/min indica a velocidade <em>em um momento da subida</em>, não durante a torra inteira. O <em>first crack</em> (primeiro estalo) marca o início do desenvolvimento, que vai até a saída. A posição do estalo, a duração das etapas e a leitura do sensor variam conforme lote, torrador e equipamento.</figcaption>
+              </figure>
           </div>
           <div id="acidez" className={origin.acidityStory}>
             <div><p className={origin.kicker}>COMPLEXIDADE NA XÍCARA</p><h2>E a acidez fosfórica?</h2><p>Alguns lotes da região podem apresentar uma acidez viva, limpa ou brilhante, às vezes descrita na prova como fosfórica. O ácido fosfórico é um dos compostos que pode ser medido na bebida, mas a sensação de acidez resulta do conjunto de ácidos, aromas, torra e preparo. Atribuir essa sensação a uma molécula específica em um café da Bispo exige análise do lote e avaliação sensorial compatível.</p></div>
-            <div className={origin.acidityVisual} role="img" aria-label="Dois campos relacionados: a prova descreve a percepção da acidez; uma análise mede compostos como o ácido fosfórico. A xícara é o encontro desses dados, mas a prova sozinha não identifica uma molécula.">
-              <div className={origin.acidityCircleTaste}><span>PROVA</span><strong>O que percebemos</strong><small>Acidez · aroma · doçura</small></div>
-              <div className={origin.acidityCircleLab}><span>ANÁLISE</span><strong>O que medimos</strong><small>Ácidos · concentrações</small></div>
-              <p>Uma descrição sensorial orienta a prova. Identificar um composto pede análise do lote.</p>
+            <div className={origin.acidityVisual} role="img" aria-label="Na prova, uma xícara representa a sensação de acidez. Na análise, um frasco representa os compostos medidos. As duas leituras ajudam a descrever o mesmo lote, mas a prova não identifica sozinha uma molécula.">
+              <div className={origin.acidityCircleTaste}><OriginIcon kind="taste"/><span>PROVA</span><strong>A sensação na xícara</strong><small>Acidez · aroma · doçura</small></div>
+              <div className={origin.acidityBridge} aria-hidden="true"><span>↔</span><small>MESMO LOTE</small></div>
+              <div className={origin.acidityCircleLab}><svg viewBox="0 0 52 52" aria-hidden="true" focusable="false"><path d="M20 5h12M23 5v17L10 42c-2 3 0 5 4 5h24c4 0 6-2 4-5L29 22V5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 36h20" fill="none" stroke="currentColor" strokeWidth="2.5"/><circle cx="26" cy="39" r="2" fill="currentColor"/></svg><span>ANÁLISE</span><strong>Os compostos medidos</strong><small>Ácidos · concentrações</small></div>
+              <p>Sentir e medir oferecem informações diferentes sobre o mesmo café. Nomear um ácido específico pede análise do lote.</p>
             </div>
           </div>
           <details className={origin.science}>
@@ -260,11 +263,11 @@ export default function OrigemPage() {
             <Image src="/brand/story/bispo-parana-mundo.jpeg" alt="Mapa iluminado da Bispo Coffees, fotografado no espaço da marca: linhas partem do Paraná em direção a Barcelona e Londres" width={1536} height={1152} sizes="(max-width: 700px) 100vw, 1000px" />
             <figcaption><strong>Do Paraná para o mundo.</strong> O mapa no espaço da Bispo reúne visualmente a origem paranaense, Barcelona e a conexão com Londres. A fotografia mostra a forma como a marca conta seu percurso; as linhas não representam rotas de cada lote.</figcaption>
           </figure>
-          <div className={origin.careerChapters}>
-            <article><span>2003 → 2010</span><h3>José · do campo à prova e à torra</h3><p>José iniciou seu trabalho técnico com produtores em 2003. A partir de 2006, passou também a estudar e desenvolver perfis de torra para os cafés do Paraná. A formação como provador e a atuação internacional ampliaram sua leitura das origens brasileiras e ajudaram a apresentar esses cafés em outros mercados.</p></article>
-            <article><span>2015 · CAPRICORNIO COFFEES</span><h3>Latitude entra na conversa</h3><p>Como cofundador da Capricornio Coffees, José participou de um projeto que deu visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio. A discussão sobre <strong>latitude e altitude</strong> ajudou a ampliar o olhar para regiões produtoras antes pouco reconhecidas.</p></article>
-            <article><span>2024 · JOSÉ E SUZI · LONGITUDE COFFEES</span><h3>Mais origens no mapa</h3><p>José e Suzi participaram da fundação do conceito da Longitude Coffees. A experiência reuniu a leitura das origens, a orientação a produtores e o desejo de aproximar cafés brasileiros de mercados internacionais.</p></article>
-            <article><span>SUZI NINOV · BISPO COFFEES</span><h3>A origem também se constrói</h3><p>Desde meados dos anos 2000 no Paraná, Suzi construiu uma trajetória junto a produtores, do cuidado com a nutrição da planta ao uso responsável do solo. A experiência em desenvolvimento da lavoura e a visão que construiu com José na Longitude ganharam uma expressão própria na Bispo Coffees, fundada pelos dois.</p></article>
+          <div className={origin.careerChapters} aria-label="Caminhos de José e Suzi até a Bispo">
+            <article><div className={origin.careerMark}><OriginIcon kind="roast"/><span>JOSÉ · DESDE 2003</span></div><h3>Campo, prova e torra</h3><p>José iniciou o trabalho técnico com produtores em 2003 e, desde 2006, desenvolve perfis de torra para os cafés do Paraná. A prova e a experiência internacional ampliaram sua leitura das origens brasileiras.</p></article>
+            <article><div className={origin.careerMark}><OriginIcon kind="care"/><span>SUZI · HÁ CERCA DE DUAS DÉCADAS</span></div><h3>Cuidado desde a planta</h3><p>No Paraná, Suzi orienta produtores em nutrição, manejo e desenvolvimento da lavoura. Essa trajetória própria ajuda a construir qualidade desde o campo.</p></article>
+            <article><div className={origin.careerMark}><OriginIcon kind="place"/><span>2015 · CAPRICORNIO COFFEES</span></div><h3>Uma latitude ganha voz</h3><p>Como cofundador da Capricornio Coffees, José ajudou a dar visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio.</p></article>
+            <article><div className={origin.careerMark}><OriginIcon kind="taste"/><span>LONGITUDE → BISPO</span></div><h3>Dois caminhos, uma escolha</h3><p>José e Suzi fundaram o conceito da Longitude Coffees, reunindo origem, orientação a produtores e conexão com mercados internacionais. A visão compartilhada evoluiu para a Bispo Coffees, fundada pelos dois.</p></article>
           </div>
           <p className={origin.careerSignature}>Capricornio faz parte do caminho de José. A Longitude reuniu José e Suzi em um conceito compartilhado. <strong>A Bispo Coffees é a assinatura que os dois construíram a partir dessa experiência.</strong></p>
         </section>

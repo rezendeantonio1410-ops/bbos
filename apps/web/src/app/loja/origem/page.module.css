@@ -215,3 +215,59 @@
 @media(max-width:700px){.clayStory{margin:36px -7px 32px;padding:26px 16px}.clayHeading>p:last-child{font-size:16px}.clayFigure img{min-height:190px;object-fit:cover;object-position:40% center}.clayFigure figcaption{padding:13px 14px;font-size:12px}.clayRead{grid-template-columns:1fr;gap:17px;margin:25px 0 23px}.clayRead>div{padding-top:11px}.clayRead strong{font-size:19px}.clayRead p{font-size:14px}.clayScience summary{font-size:15px}.clayScience>div{font-size:14px}}
 
 @media(max-width:700px){.roastCurve figcaption{font-size:12px;padding:13px 15px}.roastCurve figcaption strong{font-size:14px}}
+
+/* Editorial diagrams: adjacent labels make the sequence readable before the paragraphs. */
+.historyPath{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:6px 0 3px}
+.historyPath>div{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-height:144px;padding:18px 20px;background:#f6f7f5;border:1px solid #bdcacc;border-radius:10px}
+.historyPath>div+div::before{content:"";position:absolute;left:-13px;top:50%;width:12px;border-top:2px solid #607f85}
+.historyPath svg{width:36px;height:36px;color:#365d5a}
+.historyPath span{font-size:11px;letter-spacing:.13em;font-weight:800;color:#36515b}
+.historyPath strong{font-size:17px;line-height:1.24;font-weight:600;letter-spacing:-.02em}
+.careerChapters article{min-height:235px;border-top:0;border-left:3px solid #294650}
+.careerChapters article:nth-child(2){border-left-color:#658c80}
+.careerChapters article:nth-child(3){border-left-color:#c39d65}
+.careerChapters article:nth-child(4){border-left-color:#c39d65;background:#faf8f0}
+.careerMark{display:flex;align-items:center;gap:13px}
+.careerMark svg{width:46px;height:46px;flex:none;color:#294650}
+.careerChapters article:nth-child(2) .careerMark svg{color:#658c80}
+.careerChapters article:nth-child(3) .careerMark svg,.careerChapters article:nth-child(4) .careerMark svg{color:#9c7546}
+.careerMark span{line-height:1.35}
+.roastStory{gap:32px 6%;align-items:start}
+.roastCurve{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(290px,.8fr);align-items:center;margin:3px 0 0}
+.roastCurve figcaption{padding:24px 26px;color:#294650;font-size:15px;line-height:1.56}
+.roastCurve figcaption strong{font-size:19px;line-height:1.25;margin-bottom:11px}
+.roastCurve .curveSeal{width:clamp(120px,16vw,215px)}
+.roastSteps>div{padding:17px 22px}
+.acidityVisual{display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);gap:8px;padding:28px 18px 21px}
+.acidityCircleTaste,.acidityCircleLab{width:min(100%,170px);height:170px;margin:0 auto;padding:20px 14px}
+.acidityCircleLab{margin-left:auto}
+.acidityCircleTaste>svg,.acidityCircleLab>svg{width:36px;height:36px;flex:none;margin-bottom:7px}
+.acidityCircleTaste span,.acidityCircleLab span{font-size:10px;margin-bottom:5px}
+.acidityCircleTaste strong,.acidityCircleLab strong{font-size:17px}
+.acidityCircleTaste small,.acidityCircleLab small{font-size:11px;margin-top:6px}
+.acidityBridge{display:flex;align-items:center;justify-content:center;color:#294650;font-size:26px}
+.acidityVisual p{grid-column:1/-1;max-width:390px;margin:17px auto 0}
+@media(max-width:700px){
+  .historyPath{gap:5px;margin:5px 0 4px}
+  .historyPath>div{min-height:132px;padding:12px 9px;gap:6px}
+  .historyPath>div+div::before{left:-6px;width:5px}
+  .historyPath svg{width:30px;height:30px}
+  .historyPath span{font-size:9px}
+  .historyPath strong{font-size:13px}
+  .careerChapters article{min-height:0}
+  .careerMark svg{width:38px;height:38px}
+  .roastCurve{display:block;margin-top:24px}
+  .roastCurve figcaption{font-size:13px;padding:16px 17px 19px;line-height:1.55}
+  .roastCurve figcaption strong{font-size:16px}
+  .roastCurve .curveSeal{width:clamp(105px,27vw,160px)}
+  .acidityVisual{display:grid;grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr);gap:3px;padding:20px 8px}
+  .acidityCircleTaste,.acidityCircleLab{width:min(100%,145px);height:145px;padding:16px 8px}
+  .acidityCircleTaste>svg,.acidityCircleLab>svg{width:27px;height:27px;margin-bottom:5px}
+  .acidityCircleTaste strong,.acidityCircleLab strong{font-size:14px}
+  .acidityCircleTaste small,.acidityCircleLab small{font-size:10px}
+  .acidityBridge{font-size:20px}
+  .acidityVisual p{font-size:13px!important}
+}
+
+.mapLegend svg{width:46px;height:32px;flex:none;color:#294650}
+@media(max-width:700px){.mapLegend svg{width:35px;height:26px}}
