@@ -836,7 +836,14 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         tokenHash(confirmationToken),
       );
       await this.syncSalesOrder(existing[0].id);
-      const payment = await this.ensureMercadoPagoCheckout(existing[0], key);
+      const payment =
+        existing[0].status === "PAID"
+          ? await this.ensureMercadoPagoCheckout(existing[0], key)
+          : await this.ensureMercadoPagoCheckout(
+              existing[0],
+              `retry-${existing[0].id}-${existing[0].paymentExternalId || Date.now()}`,
+              true,
+            );
       return {
         id: existing[0].id,
         code: existing[0].code,
