@@ -324,3 +324,85 @@
 .thinkingFold[open]>summary{margin-bottom:16px}
 .thinkingFold[open]>summary span{transform:rotate(90deg)}
 @media(max-width:700px){.thinkingHeading{padding-top:30px;margin-bottom:15px}.thinkingHeading h2{font-size:30px}.thinkingFold>summary{font-size:15px;padding:14px 16px}}
+
+/* A single atlas holds the cartographic position and the conceptual reading. */
+.integratedAtlas{margin:28px 0 34px;overflow:hidden;border:1px solid #bdcacc;border-radius:14px;background:#e9efee}
+.atlasHeading{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:18px;row-gap:6px;padding:20px 25px 13px;background:#f6f7f5}
+.atlasHeading .kicker{width:100%;margin:0 0 2px}
+.atlasHeading strong{font-size:clamp(24px,2.4vw,32px);font-weight:600;letter-spacing:-.035em}
+.atlasHeading span{font-size:15px;line-height:1.45;color:#43585f}
+.atlasMap{display:block;width:100%;height:auto}
+.atlasJourney{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:#f7f8f6;border-top:1px solid #bdcacc;border-bottom:1px solid #bdcacc}
+.atlasJourney a{display:flex;gap:10px;align-items:center;min-width:0;padding:16px 14px;color:#17272c;text-decoration:none;font-size:13px;line-height:1.36}
+.atlasJourney a+a{border-left:1px solid #bdcacc}
+.atlasJourney a:hover,.atlasJourney a:focus-visible{background:#e0eae9}
+.atlasJourney a:focus-visible{outline:3px solid #36515b;outline-offset:-4px}
+.atlasJourney svg{width:34px;height:34px;flex:none;color:#517384}
+.atlasJourney b{display:block;font-size:11px;letter-spacing:.07em;color:#36515b;margin-bottom:3px}
+.integratedAtlas figcaption{padding:15px 24px;font-size:12px;line-height:1.5;color:#43585f}
+.integratedAtlas figcaption a{color:#294650}
+.worldAside{border-top:1px solid #bdcacc}
+.worldAside summary{padding:13px 24px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#294650}
+.worldAside summary::-webkit-details-marker{display:none}
+.worldAside summary:focus-visible{outline:3px solid #294650;outline-offset:-3px}
+.worldAside img{display:block;width:100%;height:auto}
+.worldAside[open] summary span{transform:rotate(90deg)}
+.fieldReading{max-width:1300px;margin:0 auto;padding:62px max(5vw,22px) 65px;scroll-margin-top:85px}
+.fieldLead{max-width:900px}
+.fieldLead h2{font-size:clamp(34px,4vw,54px);font-weight:500;line-height:1.12;letter-spacing:-.045em;margin:10px 0 15px}
+.fieldLead>p:last-child{font-size:19px;line-height:1.55;margin:0}
+.fieldPair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:28px 0 19px}
+.fieldPair article{display:flex;gap:16px;align-items:flex-start;padding:24px;background:#f7f8f6;border:1px solid #bdcacc;border-radius:9px;scroll-margin-top:90px}
+.fieldIcon{width:49px;height:49px;flex:none;color:#517384}
+.fieldIcon svg{width:100%;height:100%}
+.fieldPair article:nth-child(2) .fieldIcon{color:#986c55}
+.fieldPair span{font-size:11px;letter-spacing:.13em;font-weight:800;color:#36515b}
+.fieldPair h3{font-size:clamp(22px,2.2vw,28px);line-height:1.2;letter-spacing:-.035em;margin:7px 0 11px}
+.fieldPair p{font-size:16px;line-height:1.58;margin:0}
+.fieldCase{border:1px solid #bdcacc;border-radius:8px;overflow:hidden}
+.fieldCase>summary{padding:16px 20px;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#e0eae9;color:#294650;font-size:16px;font-weight:700}
+.fieldCase>summary::-webkit-details-marker{display:none}
+.fieldCase>summary:focus-visible{outline:3px solid #294650;outline-offset:-3px}
+.fieldCase>summary span{font-size:21px}
+.fieldCase[open]>summary span{transform:rotate(90deg)}
+.fieldCase .thinkingPaths{margin:18px auto 0;border-radius:0}
+.fieldCase .thinkingReveal{margin-bottom:0}
+.fieldSources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:22px}
+.fieldSources .clayScience,.fieldSources .science{border:1px solid #bdcacc;border-radius:7px;padding:17px 19px;background:#f7f8f6;margin:0;align-self:start}
+.fieldSources .science{border-top:1px solid #bdcacc}
+.deepDive>.roastStory:first-child{border-top:0;padding-top:0}
+@media(max-width:700px){
+  .intro{padding:36px 18px 36px}
+  .intro h1{font-size:clamp(35px,10vw,48px);margin:12px 0 17px}
+  .intro h2{font-size:23px;margin-bottom:18px}
+  .integratedAtlas{margin:22px -7px 26px}
+  .atlasHeading{padding:16px 17px 12px}
+  .atlasHeading strong{font-size:23px}
+  .atlasHeading span{font-size:13px}
+  .atlasJourney{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .atlasJourney a{padding:12px 10px;font-size:11px;min-height:66px;gap:8px}
+  .atlasJourney a:nth-child(3){border-left:0;border-top:1px solid #bdcacc}
+  .atlasJourney a:nth-child(4){border-top:1px solid #bdcacc}
+  .atlasJourney svg{width:26px;height:26px}
+  .atlasJourney b{font-size:10px}
+  .integratedAtlas figcaption{padding:12px 16px;font-size:11px}
+  .worldAside summary{padding:13px 16px}
+  .fieldReading{padding:44px 18px 45px}
+  .fieldLead>p:last-child{font-size:16px}
+  .fieldPair{grid-template-columns:1fr;gap:9px;margin:21px 0 15px}
+  .fieldPair article{padding:18px;gap:12px}
+  .fieldIcon{width:35px;height:35px}
+  .fieldPair h3{font-size:22px}
+  .fieldPair p{font-size:15px}
+  .fieldCase>summary{padding:15px;font-size:14px}
+  .fieldSources{grid-template-columns:1fr;gap:9px;margin-top:15px}
+  .fieldSources .clayScience,.fieldSources .science{padding:15px}
+}
+
+.atlasPlaces{display:none}
+@media(max-width:700px){
+  .atlasPlaces{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 12px 13px;font-size:11px;line-height:1.3;color:#294650}
+  .atlasPlaces span{display:flex;align-items:center;gap:5px}
+  .atlasPlaces i{width:16px;height:5px;flex:none;background:#b87e61}
+  .atlasPlaces span:nth-child(2) i{background:#cfb97f}
+}
