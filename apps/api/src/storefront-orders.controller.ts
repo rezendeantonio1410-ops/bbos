@@ -743,6 +743,41 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     const coupon = body.couponCode?.trim()
       ? await this.coupons.calculate(companyId, body.couponCode, subtotalCents)
       : null;
+    const existing = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
+      key,
+    );
+    if (existing[0]) {
+      if (existing[0].requestedPaymentMethod !== paymentMethod)
+        throw new BadRequestException(
+          "Este pedido já foi iniciado com outra forma de pagamento. Escolha a forma original ou inicie uma nova compra.",
+        );
+      const confirmationToken = randomBytes(32).toString("base64url");
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET "confirmationTokenHash"=$2,"updatedAt"=NOW() WHERE id=$1`,
+        existing[0].id,
+        tokenHash(confirmationToken),
+      );
+      await this.syncSalesOrder(existing[0].id);
+      const payment =
+        existing[0].status === "PAID"
+          ? await this.ensureMercadoPagoCheckout(existing[0], key)
+          : await this.ensureMercadoPagoCheckout(
+              existing[0],
+              `retry-${existing[0].id}-${Date.now()}`,
+              true,
+            );
+      return {
+        id: existing[0].id,
+        code: existing[0].code,
+        status: existing[0].status === "PAID" ? "PAID" : "AWAITING_PAYMENT",
+        totalCents: existing[0].totalCents,
+        confirmationToken,
+        checkoutUrl: payment.checkoutUrl,
+        idempotent: true,
+      };
+    }
+
     if (!body.shippingQuoteId?.trim())
       throw new BadRequestException(
         "Calcule e escolha uma modalidade de frete antes de pagar.",
@@ -757,38 +792,6 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       },
     );
     const shippingCents = Number(quote.customerPriceCents);
-    const existing = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
-      key,
-    );
-    if (existing[0]) {
-      if (existing[0].requestedPaymentMethod !== paymentMethod)
-        throw new BadRequestException("Este pedido já foi iniciado com outra forma de pagamento. Volte à sacola e calcule a entrega novamente para criar outro pedido.");
-      const confirmationToken = randomBytes(32).toString("base64url");
-      await this.database.$executeRawUnsafe(
-        `UPDATE "StorefrontOrder" SET "confirmationTokenHash"=$2,"updatedAt"=NOW() WHERE id=$1`,
-        existing[0].id,
-        tokenHash(confirmationToken),
-      );
-      await this.syncSalesOrder(existing[0].id);
-      const payment =
-        existing[0].status === "PAID"
-          ? await this.ensureMercadoPagoCheckout(existing[0], key)
-          : await this.ensureMercadoPagoCheckout(
-              existing[0],
-              `retry-${existing[0].id}-${existing[0].paymentExternalId || Date.now()}`,
-              true,
-            );
-      return {
-        id: existing[0].id,
-        code: existing[0].code,
-        status: existing[0].status === "PAID" ? "PAID" : "AWAITING_PAYMENT",
-        totalCents: existing[0].totalCents,
-        confirmationToken,
-        checkoutUrl: payment.checkoutUrl,
-        idempotent: true,
-      };
-    }
 
     const equivalent = await this.database.$queryRawUnsafe<any[]>(
       `SELECT *
