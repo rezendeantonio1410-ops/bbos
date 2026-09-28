@@ -170,7 +170,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       try {
         const payload = event.payload ?? {};
         const externalId = String(
-          payload?.data?.id ?? payload?.id ?? event.providerEventId ?? "",
+          payload?._bbosExternalId ?? payload?.data?.id ?? payload?.id ?? "",
         ).trim();
         if (!externalId) {
           await this.database.$executeRawUnsafe(
