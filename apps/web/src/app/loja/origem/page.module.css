@@ -172,6 +172,12 @@
 .roastSignature span{display:block;font-size:12px;letter-spacing:.14em;font-weight:800;color:#294650}
 .roastSignature p{margin:10px 0 0!important;font-size:19px!important;line-height:1.57!important;font-weight:500}
 .roastSteps{display:grid;gap:9px}
+.roastCurve{margin:2px 0 12px;background:#f5f3eb;border:1px solid #b8c8ca;border-radius:10px;overflow:hidden}
+.roastCurve img{display:block;width:100%;height:auto;margin:0;border-radius:0}
+.roastCurve figcaption{padding:15px 19px 19px;color:#294650;font-size:13px;line-height:1.48}
+.roastCurve figcaption strong{display:block;font-size:15px;margin:0 0 4px;color:#0e191d}
+.roastCurve abbr{text-decoration:none;border-bottom:1px dotted currentColor}
+
 .roastSteps img{display:block;width:100%;height:auto;border-radius:9px;margin-bottom:8px}
 .roastSteps>div{background:#0e191d;color:#fff;border-radius:6px;padding:22px 25px}
 .roastSteps span{color:#d2dcdd}
@@ -204,3 +210,5 @@
 @media(max-width:700px){.mapZoom>span{font-size:10px;padding:13px 13px 2px}.mapRegions{display:grid;gap:9px;padding:4px 16px 19px}.mapRegions>span{display:grid;grid-template-columns:14px 1fr;column-gap:10px;font-size:16px;font-weight:750;line-height:1.3}.mapRegions i{grid-row:span 2;width:14px;height:14px;border-radius:50%;background:#b77d59;margin-top:3px}.mapRegions>span+span i{background:#d4b77c}.mapRegions small{grid-column:2;font-size:12px;font-weight:400}}
 @media(max-width:700px){.lotScene{height:95px}.thinkingBranches>div{padding:15px 10px}.thinkingBranches strong{font-size:16px}}
 @media(max-width:700px){.clayStory{margin:36px -7px 32px;padding:26px 16px}.clayHeading>p:last-child{font-size:16px}.clayFigure img{min-height:190px;object-fit:cover;object-position:40% center}.clayFigure figcaption{padding:13px 14px;font-size:12px}.clayRead{grid-template-columns:1fr;gap:17px;margin:25px 0 23px}.clayRead>div{padding-top:11px}.clayRead strong{font-size:19px}.clayRead p{font-size:14px}.clayScience summary{font-size:15px}.clayScience>div{font-size:14px}}
+
+@media(max-width:700px){.roastCurve figcaption{font-size:12px;padding:13px 15px}.roastCurve figcaption strong{font-size:14px}}

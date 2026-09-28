@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 460" role="img" aria-labelledby="title desc">
+<title id="title">Exemplo conceitual de uma curva de torra</title>
+<desc id="desc">Temperatura ilustrativa que sobe ao longo da torra, partindo de 140 graus Celsius no trecho desenhado e terminando em 202 graus Celsius. Uma marca mostra RoR de 18 graus Celsius por minuto em um momento da subida, sem representar taxa constante. Secagem, reações de Maillard, primeiro estalo e desenvolvimento aparecem em sequência. Sem escala temporal e sem medições de um lote real.</desc>
+<defs><linearGradient id="paper" x2="0" y2="1"><stop stop-color="#f7f6f0"/><stop offset="1" stop-color="#edeae0"/></linearGradient><linearGradient id="under" x2="0" y2="1"><stop stop-color="#d9b87d" stop-opacity=".26"/><stop offset="1" stop-color="#d9b87d" stop-opacity="0"/></linearGradient></defs>
+<rect width="960" height="460" fill="url(#paper)"/>
+<g font-family="Montserrat,Inter,Arial,sans-serif">
+<text x="40" y="38" fill="#294650" font-size="16" letter-spacing="2" font-weight="800">EXEMPLO VISUAL · NÃO É UMA MEDIÇÃO</text>
+<g stroke="#aebcb8" stroke-width="1.5" stroke-dasharray="5 8" opacity=".8"><path d="M122 142H865"/><path d="M122 212H865"/><path d="M122 282H865"/></g>
+<path d="M122 68V350H865" fill="none" stroke="#294650" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M855 344l10 6-10 6M116 78l6-10 6 10" fill="none" stroke="#294650" stroke-width="3" stroke-linecap="round"/>
+<path d="M135 285C208 278 245 255 305 226C374 192 428 156 512 143C578 130 601 120 650 115C719 108 782 96 830 88L830 350H135Z" fill="url(#under)"/>
+<path d="M135 285C208 278 245 255 305 226C374 192 428 156 512 143C578 130 601 120 650 115C719 108 782 96 830 88" fill="none" stroke="#0e191d" stroke-width="7" stroke-linecap="round"/>
+<g fill="#0e191d" stroke="#f7f6f0" stroke-width="4"><circle cx="135" cy="285" r="9"/><circle cx="830" cy="88" r="9"/></g>
+<text x="130" y="265" fill="#0e191d" font-size="25" font-weight="750">140 °C</text>
+<text x="750" y="73" fill="#0e191d" font-size="25" font-weight="750">202 °C</text>
+<path d="M650 117V348" stroke="#967746" stroke-width="2" stroke-dasharray="7 7"/>
+<circle cx="650" cy="115" r="7" fill="#d9b87d" stroke="#0e191d" stroke-width="2"/>
+<rect x="335" y="82" width="251" height="47" rx="23" fill="#294650"/>
+<text x="357" y="113" fill="#fff" font-size="21" font-weight="750">RoR 18 °C/min</text>
+<path d="M463 129L463 154" fill="none" stroke="#294650" stroke-width="2" stroke-dasharray="4 4"/>
+<text x="671" y="164" fill="#6b5638" font-size="15" font-weight="800">1º ESTALO · FIRST CRACK</text>
+<text x="26" y="229" fill="#294650" font-size="14" font-weight="700" transform="rotate(-90 26 229)">LEITURA DE TEMPERATURA</text>
+<text x="406" y="437" fill="#294650" font-size="15" font-weight="700" letter-spacing="1.2">SEQUÊNCIA DA TORRA →</text>
+<g font-size="15" font-weight="800" text-anchor="middle"><rect x="122" y="367" width="240" height="40" rx="4" fill="#dde8e4"/><text x="242" y="393" fill="#294650">SECAGEM</text><rect x="368" y="367" width="280" height="40" rx="4" fill="#e6d9bb"/><text x="508" y="393" fill="#294650">REAÇÕES DE MAILLARD</text><rect x="654" y="367" width="212" height="40" rx="4" fill="#d9b87d"/><text x="760" y="393" fill="#0e191d">DESENVOLVIMENTO</text></g>
+</g>
+</svg>

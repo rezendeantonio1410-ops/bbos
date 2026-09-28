@@ -227,7 +227,11 @@ export default function OrigemPage() {
             </div>
             <div className={origin.roastSteps} aria-label="Decisões técnicas para definir a torra">
               <Image src="/brand/story/torra-leitura-lote.svg" alt="Grão verde, curva de calor ilustrativa e xícara: observar, ajustar e provar cada lote" width={850} height={280} unoptimized />
-              <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Medir o lote antes de aplicar calor.</small></div>
+              <figure className={origin.roastCurve}>
+                <Image src="/brand/story/curva-torra-exemplo.svg" alt="Curva conceitual de temperatura ao longo da torra: 140 °C no início do trecho ilustrado, 202 °C no final, uma indicação de RoR de 18 °C por minuto em um trecho; secagem, reações de Maillard, primeiro estalo e desenvolvimento" width={960} height={460} unoptimized />
+                <figcaption><strong>Exemplo ilustrativo · não é uma curva registrada.</strong> O desenho parte de 140 °C no trecho mostrado e chega a 202 °C. <abbr title="Taxa de elevação da temperatura">RoR</abbr> de 18 °C/min indica a velocidade <em>em um momento</em>, não durante a torra inteira. O <em>first crack</em> (primeiro estalo) marca o início do desenvolvimento, que vai até a saída. A posição do estalo, a duração das etapas e a leitura do sensor variam conforme lote, torrador e equipamento.</figcaption>
+              </figure>
+              <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Antes da torra: medir umidade e densidade do grão verde; registrar tamanho e processamento na ficha do lote.</small></div>
               <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Registrar curvas e manter o resultado comparável.</small></div>
               <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher a curva pela xícara, não só pela altitude.</small></div>
             </div>
