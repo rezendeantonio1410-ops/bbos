@@ -105,6 +105,12 @@ export default function CheckoutPage() {
     confirmationToken?: string;
     checkoutUrl?: string;
     paymentMethod?: "PIX" | "CARD";
+    pix?: {
+      ticketUrl?: string | null;
+      qrCode?: string | null;
+      qrCodeBase64?: string | null;
+      expiresInSeconds?: number;
+    } | null;
   } | null>(null);
 
   useEffect(() => {
@@ -200,6 +206,13 @@ export default function CheckoutPage() {
   const change = (field: keyof FormData, value: string) =>
     setData((current) => ({ ...current, [field]: value }));
 
+  async function copyPix() {
+    const code = order?.pix?.qrCode;
+    if (!code) return;
+    await navigator.clipboard.writeText(code);
+    setMessage("Pix Copia e Cola copiado.");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
@@ -276,6 +289,7 @@ export default function CheckoutPage() {
           status: result.status,
           confirmationToken: result.confirmationToken,
           paymentMethod,
+          pix: result.pix ?? null,
         }),
       );
       if (result.status === "PAID") {
@@ -284,13 +298,22 @@ export default function CheckoutPage() {
         sessionStorage.removeItem("bispo-checkout-idempotency");
         sessionStorage.removeItem("bispo-payment-order");
         setMessage(`Pagamento do pedido ${result.code} já está confirmado.`);
+      } else if (paymentMethod === "PIX" && result.pix?.qrCode) {
+        setOrder({ ...result, paymentMethod, pix: result.pix });
+        setMessage(
+          "Pix gerado. Escaneie o QR Code ou use o Pix Copia e Cola. A confirmação será automática.",
+        );
       } else if (result.checkoutUrl) {
         setMessage(
           "Pedido preparado. Abrindo o ambiente seguro do Mercado Pago…",
         );
         window.location.assign(result.checkoutUrl);
       } else {
-        throw new Error("O endereço seguro de pagamento não foi recebido.");
+        throw new Error(
+          paymentMethod === "PIX"
+            ? "O Mercado Pago não devolveu os dados do Pix."
+            : "O endereço seguro de pagamento não foi recebido.",
+        );
       }
     } catch (reason) {
       setMessage(
@@ -474,8 +497,76 @@ export default function CheckoutPage() {
                 ? "Conectando ao Mercado Pago…"
                 : order?.status === "PAID"
                   ? "Pagamento confirmado"
-                  : "Pagar com Mercado Pago →"}
+                  : paymentMethod === "PIX"
+                    ? "Gerar Pix →"
+                    : "Pagar com Mercado Pago →"}
             </button>
+            {order?.status !== "PAID" && order?.pix?.qrCode && (
+              <div
+                style={{
+                  marginTop: 22,
+                  padding: 22,
+                  border: "1px solid #d9ddd9",
+                  borderRadius: 16,
+                  background: "#fff",
+                  maxWidth: 520,
+                }}
+              >
+                <strong style={{ display: "block", fontSize: 18, marginBottom: 8 }}>
+                  Pague com Pix
+                </strong>
+                <p style={{ margin: "0 0 16px", lineHeight: 1.5 }}>
+                  Escaneie o QR Code no aplicativo do seu banco ou use o Pix Copia e Cola.
+                </p>
+                {order.pix.qrCodeBase64 && (
+                  <img
+                    alt="QR Code Pix"
+                    src={`data:image/png;base64,${order.pix.qrCodeBase64}`}
+                    style={{
+                      width: 220,
+                      height: 220,
+                      display: "block",
+                      margin: "0 auto 16px",
+                    }}
+                  />
+                )}
+                <textarea
+                  readOnly
+                  value={order.pix.qrCode || ""}
+                  aria-label="Pix Copia e Cola"
+                  style={{
+                    width: "100%",
+                    minHeight: 90,
+                    resize: "none",
+                    padding: 12,
+                    borderRadius: 10,
+                    border: "1px solid #d9ddd9",
+                    fontSize: 13,
+                    wordBreak: "break-all",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={copyPix}
+                  style={{
+                    width: "100%",
+                    marginTop: 10,
+                    padding: "12px 16px",
+                    borderRadius: 10,
+                    border: "1px solid #0b2024",
+                    background: "#fff",
+                    color: "#0b2024",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Copiar código Pix
+                </button>
+                <small style={{ display: "block", marginTop: 12, opacity: 0.72 }}>
+                  O BBOS confirma o pagamento automaticamente.
+                </small>
+              </div>
+            )}
             {message && (
               <p className={styles.message} role="status">
                 {message}
