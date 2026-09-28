@@ -63,6 +63,7 @@ import { StorefrontCouponsController } from "./storefront-coupons.controller";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontPartnersController } from "./storefront-partners.controller";
 import { StorefrontCatalogController } from "./storefront-catalog.controller";
+import { StorefrontOperationsController } from "./storefront-operations.controller";
 import { FiscalInboundController } from "./fiscal-inbound.controller";
 import { FiscalInboundService } from "./fiscal-inbound.service";
 import { MarketplacesController } from "./marketplaces.controller";
@@ -109,6 +110,7 @@ import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.
     StorefrontCouponsController,
     StorefrontPartnersController,
     StorefrontCatalogController,
+    StorefrontOperationsController,
     FiscalInboundController,
     MarketplacesController,
   ],
