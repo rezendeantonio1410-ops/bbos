@@ -399,11 +399,7 @@ export default function LojaPage() {
             className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
           >
             <small>QUEM ESCOLHE O SEU CAFÉ</small>
-            <h2>
-              Antes da sua xícara,
-              <br />
-              <em>cada café passa por nós.</em>
-            </h2>
+            <h2>José e Suzi. Duas histórias, uma Bispo Coffees.</h2>
             <div className={founder.proofs}>
               <p>
                 <b>José Rezende</b>
