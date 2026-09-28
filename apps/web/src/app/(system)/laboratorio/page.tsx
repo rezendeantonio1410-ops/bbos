@@ -148,7 +148,9 @@ function SampleDrawer({
   );
   const [screen, setScreen] = useState(sample.measured.screen ?? "");
   const [score, setScore] = useState(sample.measured.score?.toString() ?? "");
-  const [notes, setNotes] = useState(sample.receipt.qualityNotes ?? "");\n  const [recommendedLine, setRecommendedLine] = useState("");\n  const [recommendedLineNotes, setRecommendedLineNotes] = useState("");
+  const [notes, setNotes] = useState(sample.receipt.qualityNotes ?? "");
+  const [recommendedLine, setRecommendedLine] = useState("");
+  const [recommendedLineNotes, setRecommendedLineNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const submit = async () => {
@@ -166,7 +168,9 @@ function SampleDrawer({
           defects: defects ? Number(defects) : undefined,
           screen: screen || undefined,
           score: score ? Number(score) : undefined,
-          notes: notes || undefined,\n          recommendedLine: recommendedLine || undefined,\n          recommendedLineNotes: recommendedLineNotes || undefined,
+          notes: notes || undefined,
+          recommendedLine: recommendedLine || undefined,
+          recommendedLineNotes: recommendedLineNotes || undefined,
         }),
       });
       reload();
