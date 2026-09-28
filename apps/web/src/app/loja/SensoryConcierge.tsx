@@ -32,7 +32,7 @@ export default function SensoryConcierge() {
       tabIndex={visible ? 0 : -1}
     >
       <span aria-hidden="true"><i>B</i></span>
-      <b>O Bispo ajuda você a escolher →</b>
+      <span className={styles.guideCopy}><b>Posso ajudar a escolher seu café →</b><small>3 escolhas · menos de um minuto</small></span>
     </Link>
   );
 }
