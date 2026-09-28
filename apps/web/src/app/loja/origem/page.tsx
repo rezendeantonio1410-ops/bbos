@@ -4,6 +4,7 @@ import Link from "next/link";
 import styles from "../page.module.css";
 import brand from "../brand-review.module.css";
 import origin from "./page.module.css";
+import storyNav from "../story-navigation.module.css";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara | Bispo Coffees",
@@ -17,23 +18,19 @@ export default function OrigemPage() {
         <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
         <Link href="/loja#cafes">Escolher cafés →</Link>
       </div>
-      <header className={styles.header}>
+      <header className={`${styles.header} ${storyNav.header}`}>
         <Link href="/loja" className={styles.brand} aria-label="Bispo Coffees — loja">
           <Image src="/brand/logo/bispo-logo-official-transparent.png" width={176} height={58} alt="Bispo Coffees" priority />
         </Link>
-        <nav className={styles.nav} aria-label="Navegação principal">
+        <nav className={`${styles.nav} ${storyNav.nav}`} aria-label="Navegação principal">
           <Link href="/loja#cafes">Cafés</Link>
           <Link href="/loja#camadas">Escolher</Link>
           <Link href="/loja/descobrir">Descobrir o meu</Link>
           <Link href="/loja/sobre">Sobre a Bispo</Link>
+          <Link href="/loja/origem" aria-current="page">A geografia na xícara</Link>
         </nav>
         <Link className={origin.headerShop} href="/loja#cafes">Ver cafés ↗</Link>
       </header>
-
-      <nav className={origin.storyTabs} aria-label="Conheça a Bispo">
-        <Link href="/loja/sobre">Suzi e José</Link>
-        <span aria-current="page">A geografia na xícara</span>
-      </nav>
 
       <article>
         <section className={origin.intro}>

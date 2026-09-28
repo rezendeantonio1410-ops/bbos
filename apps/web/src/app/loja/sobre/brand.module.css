@@ -8,9 +8,3 @@
 .page :global([class*="storyManifesto"]) { background: #0e191d !important; border-left-color: #e0eae9 !important; border-radius: 0 8px 8px 0 !important; }
 .page :global([class*="storyChapters"]) { border-radius: 8px !important; }
 .page :global([class*="storyChapters"]) article { background: #fff !important; }
-.storyTabs{display:flex;justify-content:center;gap:6px;padding:18px 5vw;background:#ebebeb;border-bottom:1px solid #d5d9d8}
-.storyTabs span,.storyTabs a{display:inline-flex;align-items:center;gap:8px;padding:13px 21px;border-radius:999px;font-size:14px;font-weight:700;text-decoration:none;color:#0e191d}
-.storyTabs span[aria-current="page"]{background:#0e191d;color:#fff}
-.storyTabs a{background:#fff;border:1px solid #cbd5d2}
-.storyTabs a:hover,.storyTabs a:focus-visible{background:#dfeae7}
-@media(max-width:600px){.storyTabs{padding:12px 14px}.storyTabs span,.storyTabs a{padding:11px 13px;font-size:12px;text-align:center}}

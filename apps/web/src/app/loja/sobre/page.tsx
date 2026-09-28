@@ -4,6 +4,7 @@ import styles from "../page.module.css";
 import authority from "../authority.module.css";
 import brand from "../brand-review.module.css";
 import storyBrand from "./brand.module.css";
+import storyNav from "../story-navigation.module.css";
 
 export default function SobrePage() {
   return (
@@ -12,7 +13,7 @@ export default function SobrePage() {
         <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
         <Link href="/loja#cafes">Escolher cafés →</Link>
       </div>
-      <header className={styles.header}>
+      <header className={`${styles.header} ${storyNav.header}`}>
         <Link href="/loja" className={styles.brand}>
           <Image
             src="/brand/logo/bispo-logo-official-transparent.png"
@@ -22,12 +23,12 @@ export default function SobrePage() {
             priority
           />
         </Link>
-        <nav className={styles.nav}>
+        <nav className={`${styles.nav} ${storyNav.nav}`} aria-label="Navegação principal">
           <Link href="/loja#cafes">Cafés</Link>
-          <Link href="/loja#linhas">Linhas</Link>
+          <Link href="/loja#camadas">Escolher</Link>
           <Link href="/loja/descobrir">Descobrir o meu</Link>
-          <Link href="/loja/aprender">Aprender</Link>
-          <Link href="/loja/sobre">Sobre a empresa</Link>
+          <Link href="/loja/sobre" aria-current="page">Sobre a Bispo</Link>
+          <Link href="/loja/origem">A geografia na xícara</Link>
         </nav>
         <div className={styles.actions}>
           <button aria-label="Buscar">⌕</button>
@@ -35,11 +36,6 @@ export default function SobrePage() {
           <button aria-label="Sacola">□</button>
         </div>
       </header>
-
-      <nav className={storyBrand.storyTabs} aria-label="Conheça a Bispo">
-        <span aria-current="page">Suzi e José</span>
-        <Link href="/loja/origem">A geografia na xícara <span aria-hidden="true">↗</span></Link>
-      </nav>
 
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>

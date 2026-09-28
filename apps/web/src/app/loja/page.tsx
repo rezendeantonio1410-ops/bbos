@@ -8,6 +8,7 @@ import journey from "./conversion-review.module.css";
 import founder from "./founder-trust.module.css";
 import layers from "./layers.module.css";
 import brand from "./brand-review.module.css";
+import storyNav from "./story-navigation.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
@@ -205,7 +206,7 @@ export default async function LojaPage() {
           <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
           <a href="#cafes">Comprar cafés →</a>
         </div>
-        <header className={`${styles.header} ${journey.header}`}>
+        <header className={`${styles.header} ${journey.header} ${storyNav.header}`}>
           <a
             href="#top"
             className={styles.brand}
@@ -219,11 +220,12 @@ export default async function LojaPage() {
               priority
             />
           </a>
-          <nav className={styles.nav} aria-label="Navegação principal">
+          <nav className={`${styles.nav} ${storyNav.nav}`} aria-label="Navegação principal">
             <a href="#cafes">Cafés</a>
             <a href="#camadas">Escolher</a>
             <Link href="/loja/descobrir">Descobrir o meu</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
+            <Link href="/loja/origem">A geografia na xícara</Link>
           </nav>
           <div className={`${styles.actions} ${journey.actions}`}>
             <a
