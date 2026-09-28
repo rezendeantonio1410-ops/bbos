@@ -228,16 +228,19 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       for (let index = 0; index < 20; index += 1) {
         const rows = await this.database.$queryRawUnsafe<any[]>(
           `WITH candidate AS (
-             SELECT id
-               FROM "StorefrontPaymentAttempt"
-              WHERE "externalId" IS NOT NULL
+             SELECT p.id
+               FROM "StorefrontPaymentAttempt" p
+               JOIN "StorefrontOrder" o ON o.id=p."storefrontOrderId"
+              WHERE p."externalId" IS NOT NULL
+                AND o.status='AWAITING_PAYMENT'
                 AND (
-                  (status='AWAITING_PAYMENT' AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW()))
-                  OR (status='PROCESSING' AND "processingStartedAt" < NOW() - INTERVAL '2 minutes')
-                  OR (status='ERROR' AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW()))
+                  (p.status='AWAITING_PAYMENT' AND (p."nextAttemptAt" IS NULL OR p."nextAttemptAt" <= NOW()))
+                  OR (p.status='PROCESSING' AND p."processingStartedAt" < NOW() - INTERVAL '2 minutes')
+                  OR (p.status='ERROR' AND (p."nextAttemptAt" IS NULL OR p."nextAttemptAt" <= NOW()))
+                  OR (p.status='FAILED' AND p."nextAttemptAt" IS NULL)
                 )
-              ORDER BY "updatedAt" ASC
-              FOR UPDATE SKIP LOCKED
+              ORDER BY p."updatedAt" ASC
+              FOR UPDATE OF p SKIP LOCKED
               LIMIT 1
            )
            UPDATE "StorefrontPaymentAttempt" p
@@ -277,24 +280,21 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
             paymentExternalId: attempt.externalId,
           });
         } catch (error) {
-          const attempts = Number(attempt.attempts ?? 0) + 1;
-          const deadLetter = attempts >= 12;
+          // A falha de consulta é transitória: o pedido pendente deve continuar
+          // sendo reconciliado até ser pago, recusado ou expirar.
+          const attempts = Number(attempt.attempts ?? 0);
           const delaySeconds = Math.min(300, Math.max(15, 2 ** Math.min(attempts, 8)));
           await this.database.$executeRawUnsafe(
             `UPDATE "StorefrontPaymentAttempt"
-                SET status=CASE WHEN $4::boolean THEN 'FAILED' ELSE 'ERROR' END,
+                SET status='ERROR',
                     "lastError"=$2,
-                    "nextAttemptAt"=CASE
-                      WHEN $4::boolean THEN NULL
-                      ELSE NOW() + ($3 || ' seconds')::interval
-                    END,
+                    "nextAttemptAt"=NOW() + ($3 || ' seconds')::interval,
                     "processingStartedAt"=NULL,
                     "updatedAt"=NOW()
               WHERE id=$1`,
             attempt.id,
             (error instanceof Error ? error.message : String(error)).slice(0, 2000),
             String(delaySeconds),
-            deadLetter,
           );
         }
       }
