@@ -662,9 +662,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     return { paid: false };
   }
 
-  private async ensureMercadoPagoCheckout(order: any, idempotencyKey: string) {
+  private async ensureMercadoPagoCheckout(order: any, idempotencyKey: string, forceNew = false) {
     let providerIdempotencyKey = `mp-${idempotencyKey}`;
-    if (order.paymentExternalId) {
+    if (order.paymentExternalId && !forceNew) {
       const current = await this.mercadoPago.getOrder(order.paymentExternalId);
       const terminalFailure = new Set(["failed", "canceled", "expired"]);
       if (current.checkout_url && !terminalFailure.has(current.status || ""))
@@ -1078,8 +1078,8 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         "Esta tentativa foi consolidada em outro pedido.",
       );
 
-    const retryKey = `retry-${order.id}-${order.paymentExternalId || "new"}`;
-    const payment = await this.ensureMercadoPagoCheckout(order, retryKey);
+    const retryKey = `retry-${order.id}-${Date.now()}`;
+    const payment = await this.ensureMercadoPagoCheckout(order, retryKey, true);
     await this.lifecycle.record(
       order.id,
       "ORDER_RECEIVED",
