@@ -451,3 +451,48 @@
   .atlasRelations p{font-size:11px}
   .atlasRelations b{font-size:12px}
 }
+
+/* The mental map grows from the state map and keeps each scientific relation legible. */
+.atlasMind{position:relative;padding:27px 24px 19px;background:#f6f6f1;border-top:1px solid #bfc9c8;color:#182d32}
+.atlasMind:before{content:"";position:absolute;top:0;left:50%;height:20px;border-left:1px solid #7d9499}
+.atlasMindHub{text-align:center;margin:0 auto 21px}
+.atlasMindHub span{display:block;color:#54717a;font-size:10px;letter-spacing:.13em;font-weight:800}
+.atlasMindHub strong{display:block;font-size:clamp(20px,2vw,26px);font-weight:600;letter-spacing:-.035em;margin:4px 0}
+.atlasMindHub small{display:block;font-size:12px;color:#4e6367}
+.atlasMindBranches{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border-top:1px solid #bdcacc;padding-top:17px}
+.atlasMindNode{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;padding:13px 17px 12px;color:inherit;text-decoration:none;transition:background .2s}
+.atlasMindNode+ .atlasMindNode{border-left:1px solid #d1d9d5}
+.atlasMindNode:before{content:"";position:absolute;top:-18px;left:50%;height:18px;border-left:1px solid #bdcacc}
+.atlasMindNode:hover,.atlasMindNode:focus-visible{background:#e6eeeb}
+.atlasMindNode:focus-visible{outline:2px solid #345660;outline-offset:-2px}
+.atlasMindNode>svg{width:48px;height:48px;color:#67838b;margin-bottom:5px}
+.atlasMindNode:nth-child(2)>svg{color:#9a8760}
+.atlasMindNode:nth-child(3)>svg{color:#648392}
+.atlasMindNode:nth-child(4)>svg{color:#9a745d}
+.atlasMindNode:nth-child(5)>svg{color:#596f79}
+.atlasMindNode span{font-size:9px;letter-spacing:.11em;font-weight:800;color:#54717a}
+.atlasMindNode strong{font-size:15px;line-height:1.2;letter-spacing:-.02em}
+.atlasMindNode small{font-size:11px;line-height:1.42;color:#4a5e61}
+.atlasMindClose{display:flex;align-items:center;justify-content:center;gap:10px;margin:15px 0 0;padding:12px 10px;border-top:1px solid #bdcacc;font-size:12px;line-height:1.45;text-align:center}
+.atlasMindClose svg{width:28px;height:28px;flex:none;color:#617f86}
+.atlasMindClose strong{font-weight:700}
+@media(max-width:900px){
+ .atlasMindBranches{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:12px}
+ .atlasMindNode:nth-child(4){border-left:0}
+}
+@media(max-width:700px){
+ .atlasMind{padding:18px 11px 11px}
+ .atlasMindHub{margin-bottom:15px}
+ .atlasMindHub strong{font-size:20px}
+ .atlasMindHub small{font-size:11px}
+ .atlasMindBranches{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:2px;padding-top:12px}
+ .atlasMindNode{padding:10px 8px;gap:3px}
+ .atlasMindNode:nth-child(odd){border-left:0}
+ .atlasMindNode:nth-child(even){border-left:1px solid #d1d9d5}
+ .atlasMindNode>svg{width:38px;height:38px;margin-bottom:2px}
+ .atlasMindNode span{font-size:8px}
+ .atlasMindNode strong{font-size:13px}
+ .atlasMindNode small{font-size:10px;line-height:1.34}
+ .atlasMindNode:before{display:none}
+ .atlasMindClose{font-size:11px;text-align:left;margin-top:8px}
+}
