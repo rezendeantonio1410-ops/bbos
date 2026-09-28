@@ -31,6 +31,10 @@
 .memory h2,.career h2{font-size:clamp(34px,4vw,56px);font-weight:500;line-height:1.12;letter-spacing:-.045em;margin:12px 0 0}
 .memoryBody{padding-top:25px}
 .memoryBody p{font-size:clamp(18px,1.5vw,21px);line-height:1.65;margin:0 0 26px}
+.historyPhoto{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:30px;align-items:end;margin:16px 0 0;border-top:1px solid #c9d2cb;padding-top:28px}
+.historyPhoto img{width:100%;height:360px;object-fit:cover;display:block;filter:grayscale(1)}
+.historyPhoto figcaption{font-size:16px;line-height:1.55;max-width:400px;color:#3f5149;padding-bottom:8px}
+.historyPhoto a{display:block;color:#315b49;text-underline-offset:3px;margin-top:12px;font-size:13px}
 .career{background:#f0f0eb;padding:70px max(5vw,22px)}
 .careerIntro{max-width:1050px;margin:0 auto 46px}
 .careerIntro>p:not(.kicker){font-size:20px;line-height:1.6;max-width:800px;margin:28px 0 0}
@@ -70,9 +74,34 @@
 .science summary{font-size:16px;font-weight:750;cursor:pointer}
 .science p{max-width:900px}
 .science a{color:#18473c;text-underline-offset:3px}
+.deepDive{padding:80px max(5vw,22px) 86px;background:#e9eeea}
+.deepIntro{max-width:1100px;margin:0 auto 35px}
+.deepIntro h2,.roastStory h2,.acidityStory h2{font-size:clamp(34px,4vw,56px);font-weight:500;line-height:1.12;letter-spacing:-.045em;margin:12px 0 23px}
+.deepIntro>p:last-child{font-size:20px;line-height:1.6;max-width:840px}
+.layersFigure{max-width:1200px;margin:0 auto 40px;background:#fff;border-radius:13px;overflow:hidden}
+.layersFigure img{display:block;width:100%;height:auto}
+.layersFigure figcaption{padding:14px 24px 17px;color:#445a50;font-size:13px;line-height:1.45}
+.layerGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1200px;margin:0 auto 72px}
+.layerGrid article{padding:26px 29px 30px;background:#fff;border-top:3px solid #3d6553}
+.layerGrid span,.roastSteps span,.acidityEquation span{display:block;color:#42615a;font-size:12px;font-weight:800;letter-spacing:.13em}
+.layerGrid h3{font-size:clamp(24px,2.3vw,31px);letter-spacing:-.04em;line-height:1.15;margin:15px 0 11px;font-weight:550}
+.layerGrid p{font-size:16px;line-height:1.62;margin:0}
+.roastStory{max-width:1200px;margin:auto;padding:50px 0;border-top:1px solid #b5c8b9;display:grid;grid-template-columns:1.18fr .82fr;gap:8%;align-items:center}
+.roastStory p:not(.kicker),.acidityStory p:not(.kicker){font-size:18px;line-height:1.66}
+.roastSteps{display:grid;gap:9px}
+.roastSteps>div{background:#17352e;color:#fff;border-radius:6px;padding:22px 25px}
+.roastSteps span{color:#bbdbc7}
+.roastSteps strong{display:block;font-size:21px;font-weight:550;margin:9px 0;line-height:1.25}
+.roastSteps small{display:block;font-size:14px;line-height:1.4;color:#dae9df}
+.acidityStory{max-width:1200px;margin:0 auto 38px;border-top:1px solid #b5c8b9;padding-top:48px;display:grid;grid-template-columns:1.18fr .82fr;gap:8%;align-items:center}
+.acidityEquation{border:1px solid #bccdc1;background:#f7f9f5;border-radius:12px;padding:28px 30px;display:grid;gap:9px}
+.acidityEquation span:not(:first-child){margin-top:13px}
+.acidityEquation strong{font-size:21px;line-height:1.3;font-weight:550}
+.acidityEquation small{border-top:1px solid #bccdc1;padding-top:14px;margin-top:9px;font-size:13px;line-height:1.4;color:#3c574b}
+.deepDive>.science{max-width:1200px;margin:auto}
 .close{background:#e5ebe8;padding:70px max(5vw,22px);text-align:center}
 .close p{font-size:16px}
 .close h2{font-size:clamp(32px,4.5vw,60px);line-height:1.15;letter-spacing:-.05em;font-weight:500;max-width:900px;margin:25px auto 40px}
 .close a{display:inline-block;background:#13201e;color:#fff;padding:18px 25px;border-radius:100px;text-decoration:none;font-size:14px;font-weight:700}
 .close a:hover,.close a:focus-visible{background:#315d4e}
-@media(max-width:700px){.headerShop{font-size:12px;padding:10px 12px}.intro{padding:50px 22px 54px}.intro h1{margin:15px 0 24px}.originDiagram{margin:26px -8px 32px}.originDiagram figcaption{padding:20px}.originKeys{grid-template-columns:1fr;gap:8px;margin:18px 0 14px}.originKeys span{font-size:13px}.people{padding:52px 18px}.peopleGrid{grid-template-columns:1fr}.portrait{height:300px}.peopleGrid article>div:last-child{padding:25px}.peopleEnd{margin-top:35px}.memory{display:block;padding:52px 22px}.memoryBody{padding-top:20px}.career{padding:52px 18px}.careerIntro>p:not(.kicker){font-size:17px}.careerChapters{grid-template-columns:1fr}.careerChapters article{padding:27px}.landscapeImage{height:330px}.landscapeImage img{object-position:center}.dayLabel,.nightLabel{font-size:10px;bottom:12px;padding:7px}.dayLabel{left:12px}.nightLabel{right:12px}.landscapeText{padding:55px 22px}.landscapeText>p:not(.kicker){font-size:17px}.thermalDiagram{margin:24px 0}.thermalDiagram img{min-height:200px;object-fit:cover}.territory{padding:52px 22px}.territoryGrid{grid-template-columns:1fr;gap:15px;margin:35px 0}.close{padding:52px 22px}}
+@media(max-width:700px){.headerShop{font-size:12px;padding:10px 12px}.intro{padding:50px 22px 54px}.intro h1{margin:15px 0 24px}.originDiagram{margin:26px -8px 32px}.originDiagram figcaption{padding:20px}.originKeys{grid-template-columns:1fr;gap:8px;margin:18px 0 14px}.originKeys span{font-size:13px}.people{padding:52px 18px}.peopleGrid{grid-template-columns:1fr}.portrait{height:300px}.peopleGrid article>div:last-child{padding:25px}.peopleEnd{margin-top:35px}.memory{display:block;padding:52px 22px}.memoryBody{padding-top:20px}.historyPhoto{display:block;margin-top:6px;padding-top:24px}.historyPhoto img{height:auto;max-height:350px}.historyPhoto figcaption{padding:18px 0 0;font-size:14px}.career{padding:52px 18px}.careerIntro>p:not(.kicker){font-size:17px}.careerChapters{grid-template-columns:1fr}.careerChapters article{padding:27px}.landscapeImage{height:330px}.landscapeImage img{object-position:center}.dayLabel,.nightLabel{font-size:10px;bottom:12px;padding:7px}.dayLabel{left:12px}.nightLabel{right:12px}.landscapeText{padding:55px 22px}.landscapeText>p:not(.kicker){font-size:17px}.thermalDiagram{margin:24px 0}.thermalDiagram img{min-height:200px;object-fit:cover}.territory{padding:52px 22px}.territoryGrid{grid-template-columns:1fr;gap:15px;margin:35px 0}.deepDive{padding:55px 18px 60px}.deepIntro>p:last-child{font-size:17px}.layersFigure{margin:0 -7px 30px}.layersFigure img{min-height:210px;object-fit:cover;object-position:center}.layersFigure figcaption{padding:15px 18px}.layerGrid{grid-template-columns:1fr;gap:10px;margin-bottom:48px}.layerGrid article{padding:23px}.roastStory,.acidityStory{display:block;padding-top:40px}.roastStory p:not(.kicker),.acidityStory p:not(.kicker){font-size:17px}.roastSteps,.acidityEquation{margin-top:27px}.acidityStory{margin-top:25px}.close{padding:52px 22px}}
