@@ -378,3 +378,7 @@
     transition: none;
   }
 }
+
+.floatingGuide{min-height:50px;padding:6px 14px 6px 7px;gap:10px;border-color:rgba(255,255,255,.14);box-shadow:0 10px 26px rgba(13,29,23,.16)}
+.floatingGuide>span{width:34px;height:34px;flex-basis:34px}
+@media(max-width:600px){.floatingGuide{width:48px;min-height:48px;padding:6px}.floatingGuide>span{width:34px;height:34px}}
