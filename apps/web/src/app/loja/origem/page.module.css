@@ -801,3 +801,8 @@
 @keyframes careRain{0%{transform:translateY(-5px);opacity:0}20%{opacity:1}100%{transform:translateY(32px);opacity:0}}
 @media(max-width:760px){.careTrail{grid-template-columns:repeat(5,96px)!important;overflow-x:auto!important}.careTrail button{min-height:100px!important}.careGlyph{transform:scale(.86)}}
 @media(prefers-reduced-motion:reduce){.care_agua .careGlyph i{animation:none!important}}
+
+/* Map label collision QA: region names are background geography, cities are foreground facts. */
+.regionLabels{z-index:4!important}.regionLabels .regionFocus{font-size:6.5px!important;padding:4px 7px!important;background:rgba(14,25,29,.66)!important;box-shadow:none!important}.geoStageParana .cityPin{z-index:11!important}.geoStageParana .cityPin>b{font-size:6px!important;padding:3px 4px!important}.geoStageParana .cityPin:nth-of-type(even)>b{transform:translateY(7px)}.geoStageParana .cityPin:nth-of-type(odd)>b{transform:translateY(-7px)}
+.geoStageParana .terrainTropic{border-top-width:1px!important}.realTerrain:after{display:none!important}
+@media(max-width:1100px){.regionLabels span:not(.regionFocus){opacity:.34}.geoStageParana .cityPin>b{font-size:5.5px!important}}
