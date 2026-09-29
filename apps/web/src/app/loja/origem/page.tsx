@@ -6,6 +6,7 @@ import brand from "../brand-review.module.css";
 import origin from "./page.module.css";
 import storyNav from "../story-navigation.module.css";
 import GeoAtlasInteractive from "./GeoAtlasInteractive";
+import RoastMindMap from "./RoastMindMap";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara | Bispo Coffees",
@@ -127,27 +128,7 @@ export default function OrigemPage() {
         </section>
 
         <section className={origin.deepDive} aria-labelledby="layers-title">
-          <div id="torra" className={origin.roastStory}>
-            <div>
-              <p className={origin.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p>
-              <h2>Na torra, cada lote pede uma leitura própria.</h2>
-              <div className={origin.roastSignature}><span>JOSÉ REZENDE · O BISPO · DESDE 2006</span><p>José desenvolve e prova perfis para cada lote do Paraná. Em seu trabalho pelo mundo, mostra como ler o grão, ajustar o calor e revelar o potencial de cafés de altitudes mais baixas, inclusive nos arredores do Trópico de Capricórnio.</p></div>
-              <p>Em lavouras entre aproximadamente 600 e 800 m, não basta importar uma receita desenvolvida para cafés acima de 1.600 m. Umidade, tamanho, densidade, processamento e composição do lote mudam a transferência de calor. O torrador acompanha tempo e energia, prova amostras e ajusta o perfil para preservar as qualidades daquele café.</p>
-              <p>Há pesquisas em que um perfil mais quente e curto recebeu melhor avaliação para os cafés de menor altitude estudados; outras mostram que a torra altera compostos da bebida. <strong>Isso não estabelece uma temperatura universal para o Paraná.</strong> A escolha é guiada por testes e prova sensorial de cada lote.</p>
-            </div>
-            <figure className={origin.roastPortrait}>
-              <Image src="/brand/story/torrador-linhas-sem-barba.webp" alt="Ilustração editorial: uma pessoa observa grãos no amostrador de um torrador de café de pequeno porte, com bandeja de resfriamento à frente" width={900} height={1125} unoptimized />
-              <figcaption><strong>Observar · interpretar · provar.</strong><span>Cena ilustrativa de uma torrefação de pequeno porte; não retrata José nem representa um perfil específico.</span></figcaption>
-              <details>
-                <summary>Como se lê o lote? <span aria-hidden="true">↗</span></summary>
-                <div className={origin.roastSteps} aria-label="Etapas de leitura do lote">
-                  <div><span>GRÃO VERDE</span><strong>Densidade · umidade · processo</strong><small>Antes do torrador: umidade no medidor, densidade no densímetro, tamanho nas peneiras e processamento na ficha do lote.</small></div>
-                  <div><span>TORRA</span><strong>Energia · tempo · desenvolvimento</strong><small>Acompanhar o desenvolvimento e provar o resultado.</small></div>
-                  <div><span>PROVA</span><strong>Doçura · corpo · acidez · aroma</strong><small>Escolher o perfil pela xícara, não só pela altitude.</small></div>
-                </div>
-              </details>
-            </figure>
-          </div>
+          <div id="torra"><RoastMindMap /></div>
           <div id="acidez" className={origin.acidityStory}>
             <div><p className={origin.kicker}>COMPLEXIDADE NA XÍCARA</p><h2>E a acidez fosfórica?</h2><p>Alguns lotes da região podem apresentar uma acidez viva, limpa ou brilhante, às vezes descrita na prova como fosfórica. O ácido fosfórico é um dos compostos que pode ser medido na bebida, mas a sensação de acidez resulta do conjunto de ácidos, aromas, torra e preparo. Atribuir essa sensação a uma molécula específica em um café da Bispo exige análise do lote e avaliação sensorial compatível.</p></div>
             <div className={origin.acidityVisual} role="img" aria-label="Na prova, uma xícara representa a sensação de acidez. Na análise, um frasco representa os compostos medidos. As duas leituras ajudam a descrever o mesmo lote, mas a prova não identifica sozinha uma molécula.">
