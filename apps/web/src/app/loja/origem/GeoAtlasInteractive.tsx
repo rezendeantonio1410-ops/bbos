@@ -18,17 +18,17 @@ const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 {id:"torra",label:"TORRA",title:"Observar · interpretar · provar",copy:"A torra é uma leitura do lote. Umidade, tamanho, densidade, processamento e composição mudam a transferência de calor; tempo e energia são ajustados e a decisão volta à prova sensorial."}
 ];
 export default function GeoAtlasInteractive(){
- const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [hour,setHour]=useState(8); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">("inverno");
+ const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"parana">("world"); const [hour,setHour]=useState(8); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">("inverno");
  useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);return()=>window.clearTimeout(t)},[]);
  const item=layers.find(x=>x.id===active)!;
  const light=Math.max(.18,Math.sin(((hour-6)/12)*Math.PI));
  return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
-  <div className={styles.geoStage} style={{"--daylight":light} as CSSProperties}>
+  <div className={`${styles.geoStage} ${focus==="parana"?styles.geoStageParana:""}`} style={{"--daylight":light} as CSSProperties}>
    <div className={started ? styles.geoWorldLive : styles.geoWorld}>
     <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Trópico de Capricórnio e a localização do Paraná" fill sizes="(max-width:900px) 100vw, 58vw" unoptimized/>
     <i className={styles.tropicLine}/><b className={styles.tropicLabel}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</b>
    </div>
-   <div className={styles.geoParana}><Image src="/brand/story/parana-nortes.svg" alt="Paraná com Norte Central, Norte Pioneiro e cidades de referência" fill sizes="(max-width:900px) 100vw, 42vw" unoptimized/></div>
+   <button type="button" className={styles.geoParana} onClick={()=>setFocus(focus==="parana"?"world":"parana")} aria-label={focus==="parana"?"Voltar ao mapa-múndi":"Aproximar o Paraná"}><Image src="/brand/story/parana-nortes.svg" alt="Paraná com Norte Central, Norte Pioneiro e cidades de referência" fill sizes="(max-width:900px) 100vw, 42vw" unoptimized/><span>{focus==="parana"?"← voltar ao mundo":"aproximar o Paraná +"}</span></button>
   </div>
   <nav className={styles.geoLayers} aria-label="Camadas do território">{layers.map(x=><button key={x.id} type="button" aria-pressed={active===x.id} onClick={()=>setActive(x.id)}><span aria-hidden="true">{x.id==="localizar"?"◎":x.id==="latitude"?"23°":x.id==="clima"?"☀↔☾":x.id==="relevo"?"△":x.id==="solo"?"⌁":x.id==="cultivo"?"♧":x.id==="pesquisa"?"⌕":x.id==="xicara"?"◡":"◌"}</span><b>{x.label}</b></button>)}</nav>
   <div className={styles.geoReveal} key={active}><small>{item.label} · BISPO LÊ O TERRITÓRIO</small><h3>{item.title}</h3><p>{item.copy}</p>
