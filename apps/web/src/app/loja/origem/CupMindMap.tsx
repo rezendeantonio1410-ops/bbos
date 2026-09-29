@@ -4,7 +4,7 @@ import type {CSSProperties} from "react";
 import styles from "./page.module.css";
 
 const senses=[
-["docura","DOÇURA","conforto e equilíbrio","A doçura percebida participa do equilíbrio da xícara e conversa com aroma, acidez, corpo, torra e preparo."],
+["docura","DOÇURA","percepção doce e equilíbrio","A doçura percebida participa do equilíbrio da xícara e conversa com aroma, acidez, corpo, torra e preparo."],
 ["acidez","ACIDEZ","viva · limpa · brilhante","Acidez é uma sensação construída por diferentes compostos e pelo contexto da bebida. A prova, sozinha, não identifica uma molécula."],
 ["aroma","AROMA","antes e durante o gole","Fragrância e aroma ajudam a construir a identidade percebida do café e mudam com matéria-prima, torra e preparo."],
 ["corpo","CORPO","peso e textura","Corpo descreve sensações táteis da bebida. Não é sinônimo de força ou qualidade."],
