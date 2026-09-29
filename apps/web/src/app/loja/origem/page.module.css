@@ -938,7 +938,7 @@
  .cupHub{min-height:0!important;padding:180px 0 12px!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.cupCenter{position:absolute!important;top:15px!important;left:50%!important;transform:translateX(-50%)!important;width:145px!important;height:145px!important}.cupNode{position:relative!important;left:auto!important;top:auto!important;transform:none!important;width:auto!important;min-height:112px!important}.cupGlyph{width:70px!important;height:50px!important}.cupFlow{display:none!important}
  .historyInteractive{gap:10px!important;margin-left:-2px!important;margin-right:-2px!important}.historyMoment{min-width:78vw!important;min-height:250px!important}.historyMoment>strong{font-size:19px!important}.historyStory{font-size:13px!important}.historyScene{height:105px!important}
  .page .header{position:sticky!important;top:0!important;z-index:50!important}.page .header .brand img{width:136px!important}.page .header nav{font-size:11px!important;gap:22px!important;scrollbar-width:none!important}.page .header nav::-webkit-scrollbar{display:none}.headerShop{font-size:11px!important;padding:0 14px!important;min-height:42px!important}
- button,a{touch-action:manipulation}.geoLayers button,.soilCut button,.careTrail button,.roastNode,.cupNode,.historyMoment{touch-action:manipulation}
+ .page button,.page a{touch-action:manipulation}.geoLayers button,.soilCut button,.careTrail button,.roastNode,.cupNode,.historyMoment{touch-action:manipulation}
 }
 
 /* Sensory life pass — senses, basic tastes, acidity, texture and complexity become experiential. */
