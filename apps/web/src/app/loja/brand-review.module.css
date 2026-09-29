@@ -103,3 +103,18 @@
 @media (max-width: 600px) {
   .storefront :global([class*="productCard"]) { border-radius: 3px !important; }
 }
+
+/* Final premium rhythm: BISPO typography stays sovereign; scale and whitespace are harmonized. */
+.storefront{--store-copy:680px;--store-h2:clamp(34px,3.8vw,56px);--store-body:clamp(13px,1.05vw,15px)}
+.storefront :global(h1),.storefront :global(h2),.storefront :global(h3){text-wrap:balance}
+.storefront :global(p){text-wrap:pretty}
+.storefront :global([class*="commerceBar"]){min-height:30px!important;font-size:9px!important;letter-spacing:.075em!important}
+.storefront :global([class*="header"]){height:66px!important;grid-template-columns:190px minmax(0,1fr) auto!important;padding-inline:clamp(22px,4vw,64px)!important;gap:20px!important}
+.storefront :global([class*="brand"]) img{width:132px!important}
+.storefront :global([class*="nav"]){gap:clamp(16px,2vw,30px)!important;font-size:10px!important;letter-spacing:.07em!important}
+.storefront :global([class*="sectionHeader"]) h2,.storefront :global([class*="founder-trust_copy"]) h2{font-size:var(--store-h2)!important;line-height:1.02!important;letter-spacing:-.035em!important}
+.storefront :global([class*="sectionHeader"]) p,.storefront :global([class*="catalogHeader"]) p,.storefront :global([class*="founder-trust_copy"]) p{max-width:var(--store-copy);font-size:var(--store-body);line-height:1.58}
+.storefront :global([class*="founder-trust_section"]){min-height:520px!important}.storefront :global([class*="founder-trust_photos"]){min-height:520px!important}.storefront :global([class*="founder-trust_copy"]){padding:clamp(34px,4vw,58px)!important}
+.storefront :global([class*="footerLogo"]){filter:none!important;opacity:1!important}
+@media(max-width:960px){.storefront :global([class*="header"]){grid-template-columns:1fr auto!important}}
+@media(max-width:600px){.storefront :global([class*="header"]){height:58px!important;padding-inline:16px!important}.storefront :global([class*="brand"]) img{width:108px!important}.storefront :global([class*="founder-trust_photos"]){min-height:330px!important}.storefront :global([class*="founder-trust_copy"]){padding:34px 20px!important}}
