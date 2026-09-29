@@ -29,7 +29,7 @@ export default function GeoAtlasInteractive(){
   ["São Jerônimo da Serra",-23.6871,-50.7899],["Cornélio Procópio",-23.1811,-50.6467],["Congonhinhas",-23.5511,-50.5536],["Pinhalão",-23.7982,-50.0536]
  ] as const;
  const regions=[
-  ["Noroeste",25,22,false],["Norte Central",47,22,true],["Norte Pioneiro",66,24,true],["Centro-Ocidental",31,45,false],["Centro-Oriental",61,47,false],
+  ["Noroeste",25,22,false],["Norte Central",42,18,true],["Norte Pioneiro",66,18,true],["Centro-Ocidental",31,45,false],["Centro-Oriental",61,47,false],
   ["Oeste",16,58,false],["Centro-Sul",48,64,false],["Sudoeste",29,78,false],["Sudeste",60,72,false],["Metropolitana",78,67,false]
  ] as const;
  const item=layers.find(x=>x.id===active)!;
