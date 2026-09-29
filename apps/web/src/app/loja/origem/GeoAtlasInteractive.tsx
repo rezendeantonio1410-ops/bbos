@@ -21,9 +21,9 @@ export default function GeoAtlasInteractive(){
  const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"parana">("world"); const [hour,setHour]=useState(8); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">("inverno");
  useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);return()=>window.clearTimeout(t)},[]);
  const item=layers.find(x=>x.id===active)!;
- const light=Math.max(.18,Math.sin(((hour-6)/12)*Math.PI));
+ const daylight=Math.max(0,Math.sin(((hour-6)/12)*Math.PI)); const night=1-daylight;
  return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
-  <div className={`${styles.geoStage} ${focus==="parana"?styles.geoStageParana:""}`} style={{"--daylight":light} as CSSProperties}>
+  <div className={`${styles.geoStage} ${focus==="parana"?styles.geoStageParana:""}`} style={{"--daylight":daylight,"--night":night} as CSSProperties}>
    <div className={started ? styles.geoWorldLive : styles.geoWorld}>
     <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Trópico de Capricórnio e a localização do Paraná" fill sizes="(max-width:900px) 100vw, 58vw" unoptimized/>
     <i className={styles.tropicLine}/><b className={styles.tropicLabel}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</b>
