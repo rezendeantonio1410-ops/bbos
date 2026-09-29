@@ -15,11 +15,11 @@ const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 {id:"pesquisa",label:"PESQUISA",title:"Olhar dentro da argila",copy:"O trabalho de Diego Siqueira e outros pesquisadores ajuda a formular perguntas sobre solo, relevo e zonas de manejo. Pesquisa orienta relações; não oferece atalhos sensoriais."}
 ];
 export default function GeoAtlasInteractive(){
- const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false);
+ const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [hour,setHour]=useState(8); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">("inverno");
  useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);return()=>window.clearTimeout(t)},[]);
  const item=layers.find(x=>x.id===active)!;
- return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
-  <div className={styles.geoStage}>
+ const light=Math.max(.18,Math.sin(((hour-6)/12)*Math.PI));\n return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
+  <div className={styles.geoStage} style={{"--daylight":light} as React.CSSProperties}>
    <div className={started ? styles.geoWorldLive : styles.geoWorld}>
     <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Trópico de Capricórnio e a localização do Paraná" fill sizes="(max-width:900px) 100vw, 58vw" unoptimized/>
     <i className={styles.tropicLine}/><b className={styles.tropicLabel}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</b>
@@ -28,7 +28,7 @@ export default function GeoAtlasInteractive(){
   </div>
   <nav className={styles.geoLayers} aria-label="Camadas do território">{layers.map(x=><button key={x.id} type="button" aria-pressed={active===x.id} onClick={()=>setActive(x.id)}>{x.label}</button>)}</nav>
   <div className={styles.geoReveal} key={active}><small>{item.label} · BISPO LÊ O TERRITÓRIO</small><h3>{item.title}</h3><p>{item.copy}</p>
-   {active==="clima"&&<div className={styles.dayNight}><span>☀ DIA</span><i/><strong>AMPLITUDE TÉRMICA</strong><i/><span>NOITE ☾</span></div>}
+   {active==="clima"&&<><div className={styles.climateControls}><label><span>{String(hour).padStart(2,"0")}:00 · deslize o dia</span><input aria-label="Horário do dia" type="range" min="0" max="23" value={hour} onChange={e=>setHour(Number(e.target.value))}/></label><div>{(["verao","outono","inverno","primavera"] as const).map(s=><button type="button" key={s} aria-pressed={season===s} onClick={()=>setSeason(s)}>{s}</button>)}</div></div><div className={styles.dayNight}><span>☀ DIA</span><i/><strong>AMPLITUDE TÉRMICA</strong><i/><span>NOITE ☾</span></div><p className={styles.climateWhisper}>{season==="inverno"&&hour>=5&&hour<=8?"Manhã fria: em condições favoráveis, o orvalho pode aparecer sobre folhas e solo.":hour>=18||hour<=5?"A luz cai e a temperatura tende a recuar. A noite faz parte do ambiente térmico vivido pela planta.":"A luz e a temperatura mudam ao longo do dia. O efeito real depende também de água, relevo, manejo e estágio da planta."}</p></>}
    {active==="solo"&&<div className={styles.soilCut}><span>BASALTO</span><span>TERRA ROXA</span><span>ARGILAS</span><span>ÁGUA + RAÍZES</span></div>}
    {active==="cultivo"&&<div className={styles.careTrail}><span>NUTRIÇÃO</span><span>MANEJO</span><span>ÁGUA</span><span>SANIDADE</span><span>COLHEITA</span></div>}
   </div>
