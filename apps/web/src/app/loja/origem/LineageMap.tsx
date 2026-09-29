@@ -2,10 +2,10 @@
 import {useState} from "react";
 import styles from "./page.module.css";
 const steps=[
-["acenpp","ACENPP","Norte Pioneiro","Antes da marca, o território","José Rezende já trabalhava a leitura e a valorização dos cafés do Norte do Paraná desde o período da ACENPP. A experiência com produtores antecede as marcas."],
-["capricornio","CAPRICORNIO","2015 · Trópico","Uma latitude ganha voz","Como cofundador da Capricornio Coffees, José ajudou a dar visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio."],
-["longitude","LONGITUDE","origem → mercados","Do território para fora","José e Suzi reuniram origem, orientação a produtores e conexão com mercados internacionais no conceito Longitude Coffees."],
-["bispo","BISPO","Brasil → Europa → mundo","Conhecimento vira escolha","Na Bispo, a trajetória converge em curadoria, torra, prova e uma forma própria de traduzir a origem para quem bebe."]
+["acenpp","ACENPP","Norte Pioneiro · 2009–2013","Produtor · qualidade · origem","Registros públicos do período mostram José como superintendente da ACENPP no projeto de cafés especiais do Norte Pioneiro, trabalhando com produtores, qualidade, Fairtrade, Indicação Geográfica e acesso a mercados. Em 2012, também aparece ministrando capacitação de controle de qualidade como Q-Grader."],
+["capricornio","CAPRICORNIO","2015 · Trópico","Território ganha linguagem","A trajetória pública posterior conecta José à Capricornio Coffees e à valorização comercial de cafés próximos ao Trópico de Capricórnio. Aqui interessa a continuidade da leitura de origem — não um currículo."],
+["longitude","LONGITUDE","2024 · origem → mercados","José + Suzi · campo + mercado","A própria Longitude registra José vindo da assistência técnica e dos negócios de café e Suzi com trabalho de nutrição, sustentabilidade e orientação a cafeicultores. Cafés do projeto aparecem hoje em torrefações europeias ligados ao Paraná."],
+["bispo","BISPO","origem → torra → xícara","Conhecimento vira escolha","Na Bispo, esses elementos se reencontram: território, produtor, cultivo, prova, mercado e torra. A página não precisa contar cargos; ela deixa o visitante perceber a continuidade do conhecimento."]
 ] as const;
 export default function LineageMap(){
  const [open,setOpen]=useState<string|null>(null);
