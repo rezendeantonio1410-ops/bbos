@@ -19,7 +19,7 @@ export default function RoastMindMap(){
  const [open,setOpen]=useState<string|null>(null);
  return <section className={styles.roastMind} aria-label="Mapa cognitivo da torra">
   <header><p className={styles.kicker}>A ÚLTIMA LEITURA DA ORIGEM</p><h2>Na torra, cada lote pede uma leitura própria.</h2><p>A curva orienta. Os olhos observam. A prova decide.</p></header>
-  <div className={styles.roastOrbit}>
+  <div className={styles.roastOrbit}><div className={styles.roastFlow} aria-hidden="true"><span>LER O GRÃO</span><i>→</i><span>CONDUZIR</span><i>→</i><span>OBSERVAR</span><i>→</i><span>PROVAR</span><i>↺</i></div>
    <figure className={styles.roastCenter}><Image src="/brand/story/torrador-linhas-sem-barba.webp" alt="Ilustração editorial de uma pessoa observando grãos no amostrador de um torrador" fill sizes="(max-width:700px) 78vw, 390px" unoptimized/><figcaption>TORRA <small>observar · interpretar · provar</small></figcaption></figure>
    {nodes.map(([id,label,short,copy],i)=><button key={id} type="button" className={styles.roastNode} style={{"--i":i} as CSSProperties} aria-expanded={open===id} onClick={()=>setOpen(open===id?null:id)}><i className={styles.roastNumber}>{String(i+1).padStart(2,"0")}</i><span className={`${styles.roastGlyph} ${styles["roastGlyph_"+id]}`} aria-hidden="true"><u/><u/><u/><em/></span><strong>{label}</strong><small className={styles.roastHint}>{short}</small>{open===id&&<span><b>{label}</b>{copy}<em>fechar ×</em></span>}</button>)}
   </div>
