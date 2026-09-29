@@ -8,6 +8,7 @@ import storyNav from "../story-navigation.module.css";
 import GeoAtlasInteractive from "./GeoAtlasInteractive";
 import RoastMindMap from "./RoastMindMap";
 import CupMindMap from "./CupMindMap";
+import LineageMap from "./LineageMap";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara | Bispo Coffees",
@@ -137,20 +138,7 @@ export default function OrigemPage() {
           </details>
         </section>
 
-        <section className={origin.career} aria-labelledby="career-title">
-          <div className={origin.careerIntro}>
-            <p className={origin.kicker}>DO PARANÁ PARA O MUNDO</p>
-            <h2 id="career-title">As coordenadas mudaram. O compromisso com a origem permaneceu.</h2>
-          </div>
-          <figure className={origin.worldPhoto}>
-            <Image src="/brand/story/bispo-parana-mundo.jpeg" alt="Mapa iluminado da Bispo Coffees, fotografado no espaço da marca: linhas partem do Paraná em direção a Barcelona e Londres" width={1536} height={1152} sizes="(max-width: 700px) 100vw, 1000px" />
-            <figcaption><strong>Do Paraná para o mundo.</strong> O mapa no espaço da Bispo reúne visualmente a origem paranaense, Barcelona e a conexão com Londres. A fotografia mostra a forma como a marca conta seu percurso; as linhas não representam rotas de cada lote.</figcaption>
-          </figure>
-          <div className={origin.careerChapters} aria-label="Da ACENPP, Capricornio e Longitude à Bispo">
-            <article><div className={origin.careerMark}><OriginIcon kind="soil"/><span>ACENPP · NORTE PIONEIRO</span></div><h3>Antes da marca, o território</h3><p>José Rezende já trabalhava a leitura e a valorização dos cafés do Norte do Paraná desde o período da ACENPP. Essa experiência antecede as marcas e ajuda a explicar por que território, produtor e xícara continuam no centro da Bispo.</p></article><article><div className={origin.careerMark}><OriginIcon kind="place"/><span>2015 · CAPRICORNIO COFFEES</span></div><h3>Uma latitude ganha voz</h3><p>Como cofundador da Capricornio Coffees, José ajudou a dar visibilidade a cafés de São Paulo e do Paraná próximos ao Trópico de Capricórnio.</p></article>
-            <article><div className={origin.careerMark}><OriginIcon kind="taste"/><span>LONGITUDE → BISPO</span></div><h3>Dois caminhos, uma escolha</h3><p>José e Suzi fundaram o conceito da Longitude Coffees, reunindo origem, orientação a produtores e conexão com mercados internacionais. A visão compartilhada evoluiu para a Bispo Coffees, fundada pelos dois.</p></article>
-          </div>
-        </section>
+        <LineageMap />
 
         <section className={origin.close}>
           <p>Na Bispo, origem é o que aprendemos a compreender antes de escolher.</p>
