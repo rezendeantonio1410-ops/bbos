@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
@@ -18,12 +19,12 @@ const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 {id:"torra",label:"TORRA",title:"Observar · interpretar · provar",copy:"A torra é uma leitura do lote. Umidade, tamanho, densidade, processamento e composição mudam a transferência de calor; tempo e energia são ajustados e a decisão volta à prova sensorial."}
 ];
 export default function GeoAtlasInteractive(){
- const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"parana">("world"); const [hour,setHour]=useState(8); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">("inverno");
+ const now=useMemo(()=>new Date(),[]); const initialHour=now.getHours(); const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"parana">("world"); const [hour,setHour]=useState(initialHour); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">(()=>{const m=now.getMonth()+1;return m>=9&&m<=11?"primavera":m===12||m<=2?"verao":m<=5?"outono":"inverno"});
  useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);return()=>window.clearTimeout(t)},[]);
  const item=layers.find(x=>x.id===active)!;
- const daylight=Math.max(0,Math.sin(((hour-6)/12)*Math.PI)); const night=1-daylight;
+ const daylight=Math.max(0,Math.sin(((hour-6)/12)*Math.PI)); const night=1-daylight; const lunarAge=((now.getTime()-Date.UTC(2000,0,6,18,14))/(86400000))%29.530588; const moon=Math.round((1-Math.cos(2*Math.PI*lunarAge/29.530588))*50);
  return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
-  <div className={`${styles.geoStage} ${focus==="parana"?styles.geoStageParana:""}`} style={{"--daylight":daylight,"--night":night} as CSSProperties}>
+  <div className={`${styles.geoStage} ${focus==="parana"?styles.geoStageParana:""}`} style={{"--daylight":daylight,"--night":night} as CSSProperties}>{night>.55&&<div className={styles.moon} style={{"--moon":moon} as CSSProperties}><i/><span>Lua · {moon}% iluminada</span></div>}
    <div className={started ? styles.geoWorldLive : styles.geoWorld}>
     <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Trópico de Capricórnio e a localização do Paraná" fill sizes="(max-width:900px) 100vw, 58vw" unoptimized/>
     <i className={styles.tropicLine}/><b className={styles.tropicLabel}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</b>
