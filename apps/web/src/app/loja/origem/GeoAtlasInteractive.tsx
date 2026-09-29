@@ -21,7 +21,7 @@ const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 ];
 export default function GeoAtlasInteractive(){
  const now=useMemo(()=>new Date(),[]); const initialHour=now.getHours(); const [active,setActive]=useState<Layer>("localizar"); const [detail,setDetail]=useState<Detail>(null); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"brazil"|"parana">("world"); const [city,setCity]=useState<string|null>(null); const [hour,setHour]=useState(initialHour); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">(()=>{const m=now.getMonth()+1;return m>=9&&m<=11?"primavera":m===12||m<=2?"verao":m<=5?"outono":"inverno"});
- useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);return()=>window.clearTimeout(t)},[]);
+ useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);const a=window.setTimeout(()=>setFocus("brazil"),1200);const b=window.setTimeout(()=>setFocus("parana"),2600);return()=>{window.clearTimeout(t);window.clearTimeout(a);window.clearTimeout(b)}},[]);
  const item=layers.find(x=>x.id===active)!;
  const daylight=Math.max(0,Math.sin(((hour-6)/12)*Math.PI)); const night=1-daylight; const lunarAge=((now.getTime()-Date.UTC(2000,0,6,18,14))/(86400000))%29.530588; const moon=Math.round((1-Math.cos(2*Math.PI*lunarAge/29.530588))*50);
  return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
