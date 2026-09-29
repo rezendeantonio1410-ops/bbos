@@ -7,6 +7,7 @@ import origin from "./page.module.css";
 import storyNav from "../story-navigation.module.css";
 import GeoAtlasInteractive from "./GeoAtlasInteractive";
 import RoastMindMap from "./RoastMindMap";
+import CupMindMap from "./CupMindMap";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara | Bispo Coffees",
@@ -129,15 +130,7 @@ export default function OrigemPage() {
 
         <section className={origin.deepDive} aria-labelledby="layers-title">
           <div id="torra"><RoastMindMap /></div>
-          <div id="acidez" className={origin.acidityStory}>
-            <div><p className={origin.kicker}>COMPLEXIDADE NA XÍCARA</p><h2>E a acidez fosfórica?</h2><p>Alguns lotes da região podem apresentar uma acidez viva, limpa ou brilhante, às vezes descrita na prova como fosfórica. O ácido fosfórico é um dos compostos que pode ser medido na bebida, mas a sensação de acidez resulta do conjunto de ácidos, aromas, torra e preparo. Atribuir essa sensação a uma molécula específica em um café da Bispo exige análise do lote e avaliação sensorial compatível.</p></div>
-            <div className={origin.acidityVisual} role="img" aria-label="Na prova, uma xícara representa a sensação de acidez. Na análise, um frasco representa os compostos medidos. As duas leituras ajudam a descrever o mesmo lote, mas a prova não identifica sozinha uma molécula.">
-              <div className={origin.acidityCircleTaste}><OriginIcon kind="taste"/><span>PROVA</span><strong>A sensação na xícara</strong><small>Acidez · aroma · doçura</small></div>
-              <div className={origin.acidityBridge} aria-hidden="true">↔</div>
-              <div className={origin.acidityCircleLab}><svg viewBox="0 0 52 52" aria-hidden="true" focusable="false"><path d="M20 5h12M23 5v17L10 42c-2 3 0 5 4 5h24c4 0 6-2 4-5L29 22V5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 36h20" fill="none" stroke="currentColor" strokeWidth="2.5"/><circle cx="26" cy="39" r="2" fill="currentColor"/></svg><span>ANÁLISE</span><strong>Os compostos medidos</strong><small>Ácidos · concentrações</small></div>
-              <p>Sentir e medir oferecem informações diferentes sobre o mesmo café. Nomear um ácido específico pede análise do lote.</p>
-            </div>
-          </div>
+          <div id="acidez"><CupMindMap /></div>
           <details className={origin.science}>
             <summary>Estudos para explorar essa leitura</summary>
             <p><a href="https://www.scielo.br/j/eagri/a/QPFYN8QGWFC85gc85SDkR5p/?format=html&amp;lang=pt" target="_blank" rel="noopener noreferrer">Londrina: altitude e solo</a> · <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa: maturação e clima</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/30361029/" target="_blank" rel="noopener noreferrer">Tipicidade e múltiplos fatores da origem</a> · <a href="https://coffeescience.ufla.br/index.php/Coffeescience/article/view/1878" target="_blank" rel="noopener noreferrer">Altitude e perfis de torra</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/36984852/" target="_blank" rel="noopener noreferrer">Torra e preparo no Havaí</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/37033739/" target="_blank" rel="noopener noreferrer">Ácidos e percepção na bebida</a>.</p>
