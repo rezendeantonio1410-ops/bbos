@@ -9,6 +9,7 @@ import GeoAtlasInteractive from "./GeoAtlasInteractive";
 import RoastMindMap from "./RoastMindMap";
 import CupMindMap from "./CupMindMap";
 import LineageMap from "./LineageMap";
+import HistoryPath from "./HistoryPath";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara | Bispo Coffees",
@@ -87,11 +88,7 @@ export default function OrigemPage() {
             <p>Lavouras, produtores e trabalhadores fizeram do Norte do Paraná uma referência cafeeira no século XX. O café impulsionou a expansão de Londrina e marcou a paisagem da região.</p>
             <p>Parte dessa paisagem tem os solos vermelhos que ficaram conhecidos como <strong>terra roxa</strong>, formados pelo intemperismo do basalto. A história da região também inclui diferentes povos, migrações, trabalho e mudanças no campo. É dessa realidade viva — e não apenas de uma cor no mapa — que falamos quando dizemos <strong>origem</strong>.</p>
           </div>
-          <div className={origin.historyPath} aria-label="Três momentos da história cafeeira no Norte do Paraná">
-            <div><OriginIcon kind="place"/><span>1929</span><strong>Londrina surge</strong></div>
-            <div><OriginIcon kind="soil"/><span>ANOS 1950</span><strong>O café impulsiona a região</strong></div>
-            <div><OriginIcon kind="taste"/><span>HOJE</span><strong>Uma origem em movimento</strong></div>
-          </div>
+          <HistoryPath />
           <figure className={origin.historyPhoto}>
             <img src="https://upload.wikimedia.org/wikipedia/commons/f/f8/Planta%C3%A7%C3%A3o_de_caf%C3%A9_1955.jpg" alt="Fotografia histórica em preto e branco de uma plantação de café no Paraná" loading="lazy" />
             <figcaption>Um registro histórico da cafeicultura paranaense, identificado no acervo como “Plantação de café 1955”. <a href="https://commons.wikimedia.org/wiki/File:Planta%C3%A7%C3%A3o_de_caf%C3%A9_1955.jpg" target="_blank" rel="noopener noreferrer">Imagem: Lincolnbs / Wikimedia Commons, domínio público</a>. O acervo a associa a Nova Londrina, não à cidade de Londrina.</figcaption>
