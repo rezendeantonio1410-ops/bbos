@@ -14,9 +14,9 @@ const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 {id:"relevo",label:"RELEVO",title:"Altitude · face de exposição · luz",copy:"Altitude não trabalha sozinha. Inclinação e orientação da encosta mudam exposição solar, vento e microambiente da lavoura."},
 {id:"solo",label:"SOLO",title:"Basalto → terra roxa → argilas → raízes",copy:"Textura, estrutura e tipologia da argila interferem na dinâmica de água, aeração e raízes. A cor do solo, isoladamente, não prevê a xícara."},
 {id:"cultivo",label:"CULTIVO",title:"O lugar não trabalha sozinho",copy:"Nutrição, água, sanidade, manejo, colheita e cuidado com o solo influenciam o desenvolvimento da planta e o potencial do fruto."},
-{id:"pesquisa",label:"PESQUISA",title:"Olhar dentro da argila",copy:"O trabalho de Diego Siqueira e outros pesquisadores ajuda a formular perguntas sobre solo, relevo e zonas de manejo. Pesquisa orienta relações; não oferece atalhos sensoriais."},
+{id:"pesquisa",label:"PESQUISA",title:"Do Havaí ao Paraná: perguntas sobre a argila",copy:"O Havaí, próximo ao limite norte do cinturão cafeeiro, entra como referência externa para estudos de solo e tipologia da argila. No Paraná, usamos essas pesquisas para formular perguntas — nunca para transferir automaticamente conclusões entre territórios."},
 {id:"xicara",label:"XÍCARA",title:"Sentir e medir contam histórias diferentes",copy:"Acidez, doçura, aroma, sabor e corpo são percebidos como conjunto. Nomear um composto específico exige análise do lote; uma sensação sensorial não deve ser atribuída automaticamente a uma única molécula."},
-{id:"torra",label:"TORRA",title:"Observar · interpretar · provar",copy:"A torra é uma leitura do lote. Umidade, tamanho, densidade, processamento e composição mudam a transferência de calor; tempo e energia são ajustados e a decisão volta à prova sensorial."}
+{id:"torra",label:"TORRA",title:"A curva orienta. Os olhos observam. A prova decide.",copy:"Densidade, umidade, tamanho e processamento ajudam a ler o grão. Energia, temperatura e tempo orientam a transformação. Conhecimento e atenção acompanham a torra; a prova fecha o ciclo e orienta o ajuste."}
 ];
 export default function GeoAtlasInteractive(){
  const now=useMemo(()=>new Date(),[]); const initialHour=now.getHours(); const [active,setActive]=useState<Layer>("localizar"); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"parana">("world"); const [hour,setHour]=useState(initialHour); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">(()=>{const m=now.getMonth()+1;return m>=9&&m<=11?"primavera":m===12||m<=2?"verao":m<=5?"outono":"inverno"});
@@ -37,7 +37,7 @@ export default function GeoAtlasInteractive(){
    {active==="solo"&&<div className={styles.soilCut}><span>BASALTO</span><span>TERRA ROXA</span><span>ARGILAS</span><span>ÁGUA + RAÍZES</span></div>}
    {active==="cultivo"&&<div className={styles.careTrail}><span>NUTRIÇÃO</span><span>MANEJO</span><span>ÁGUA</span><span>SANIDADE</span><span>COLHEITA</span></div>}
    {active==="xicara"&&<div className={styles.cupScience}><span>PROVA<br/><b>acidez · aroma · doçura · sabor · corpo</b></span><i>↔</i><span>ANÁLISE<br/><b>ácidos · compostos · concentrações</b></span></div>}
-   {active==="torra"&&<div className={styles.roastTrail}><span>GRÃO</span><i>→</i><span>CALOR + TEMPO</span><i>→</i><span>PROVA</span><i>→</i><span>AJUSTE</span></div>}
+   {active==="torra"&&<div className={styles.roastTrail}><span>GRÃO</span><i>→</i><span>DENSIDADE + UMIDADE</span><i>→</i><span>ENERGIA + TEMPERATURA + TEMPO</span><i>→</i><span>OLHOS ATENTOS</span><i>→</i><span>PROVA + AJUSTE</span></div>}
   </div>
   <p className={styles.geoConclusion}><strong>Uma origem. Muitas relações.</strong> Não há uma única variável que explique a xícara.</p>
  </section>
