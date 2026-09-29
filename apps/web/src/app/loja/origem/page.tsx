@@ -5,6 +5,7 @@ import styles from "../page.module.css";
 import brand from "../brand-review.module.css";
 import origin from "./page.module.css";
 import storyNav from "../story-navigation.module.css";
+import GeoAtlasInteractive from "./GeoAtlasInteractive";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara | Bispo Coffees",
@@ -51,40 +52,7 @@ export default function OrigemPage() {
           <p className={origin.kicker}>NOSSA ORIGEM · NORTE DO PARANÁ</p>
           <h1>A geografia também está na xícara.</h1>
           <h2>Antes de escolher cafés, aprendemos a entender de onde eles vêm.</h2>
-          <figure className={origin.integratedAtlas}>
-            <div className={origin.atlasHeading}><p className={origin.kicker}>UM MAPA · TRÊS ESCALAS</p><strong>Do mundo à xícara.</strong><span>Encontre a origem; depois observe o que acontece no campo.</span></div>
-            <div className={origin.atlasCanvas}>
-            <div className={origin.atlasZooms} aria-label="Localização progressiva do Norte do Paraná">
-              <div className={origin.atlasZoom}>
-                <div className={origin.atlasZoomLabel}><span>01 · MUNDO</span><strong>Latitude e longitude</strong></div>
-                <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com Equador, meridiano de Greenwich, Trópico de Capricórnio e localização do Paraná" width={960} height={500} unoptimized />
-                <p>Paralelos situam norte e sul; meridianos, leste e oeste. O Trópico atravessa o sul do Brasil.</p>
-              </div>
-              <div className={origin.atlasZoom}>
-                <div className={origin.atlasZoomLabel}><span>02 · BRASIL</span><strong>Chegamos ao Sul</strong></div>
-                <Image src="/brand/story/brasil-parana.svg" alt="Contorno oficial do Brasil e do Paraná, com o Trópico de Capricórnio na mesma projeção" width={500} height={385} unoptimized />
-                <p>Dentro do Brasil, o Paraná é o recorte ampliado a seguir.</p>
-              </div>
-            </div>
-              <div className={origin.atlasDetail}>
-            <div className={origin.atlasParanaLabel}><span>03 · PARANÁ EM DETALHE</span><strong>O Norte Central, o Norte Pioneiro e o Trópico</strong><small>Maringá · Londrina · Cornélio Procópio · Jacarezinho</small></div>
-            <Image className={origin.atlasMap} src="/brand/story/parana-nortes.svg" alt="Mapa cartográfico do Paraná: limites do Norte Central e do Norte Pioneiro, quatro cidades e Trópico de Capricórnio; uma curva conceitual mostra a amplitude térmica entre dia e noite" width={960} height={520} unoptimized />
-                <a className={origin.atlasExpand} href="/brand/story/parana-nortes.svg" target="_blank" rel="noopener noreferrer">Ampliar mapa e ler os nomes ↗</a>
-              </div>
-            </div>
-            <div className={origin.atlasMind} aria-label="Mapa mental do território e do café">
-              <div className={origin.atlasMindHub}><span>O QUE O MAPA NOS ENSINA</span><strong>Uma origem, muitas relações</strong><small>Não há uma única variável que explique a xícara.</small></div>
-              <div className={origin.atlasMindBranches}>
-                <a href="#territorio" className={origin.atlasMindNode}><OriginIcon kind="place"/><span>LOCALIZAR</span><strong>Latitude · longitude</strong><small>O Trópico situa a região. Coordenadas não são nota de qualidade.</small></a>
-                <a href="#territorio" className={origin.atlasMindNode}><svg viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 40h44M6 40 21 14l10 15 5-8 12 19"/><path d="M20 14l-5 9 5-3 3 2M36 21l-3 8 4-2"/><path d="M8 47h28M8 44v6M36 44v6"/></svg><span>RELEVO</span><strong>Altitude · paisagem</strong><small>Entre cerca de 600 e 800 m em parte das lavouras; posição e exposição variam.</small></a>
-                <a href="#clima" className={origin.atlasMindNode}><svg viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="14" cy="17" r="7"/><path d="M14 3v3M14 28v3M1 17h3M25 17h3M4 7l3 3M23 7l-3 3M32 8a16 16 0 1 0 16 27 14 14 0 0 1-16-27Z"/><path d="M6 42c10 4 21 4 40 0M6 47c10 4 21 4 40 0"/></svg><span>CLIMA</span><strong>Dia · noite · água</strong><small>Amplitude térmica = máxima − mínima; água e manejo também importam.</small></a>
-                <a href="#solo-argila" className={origin.atlasMindNode}><svg viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 28h48M2 36h48M2 44h48M26 29V10m0 9Q15 4 8 11q7 13 18 8Zm0-2q11-15 20-11-2 13-20 11Z"/><path d="M26 29 17 42m9-13 11 17m-11-17v19"/><circle cx="9" cy="32" r="1.5"/><circle cx="41" cy="40" r="1.5"/></svg><span>SOLO</span><strong>Basalto → terra roxa</strong><small>Argila, estrutura, água e raízes interagem; a cor não prevê sabor.</small></a>
-                <a href="#pesquisa-solo" className={origin.atlasMindNode}><svg viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 32h31M4 39h31M4 46h31M10 36l4 1m10-1 5 1M13 43l3 1m13-1 3 1"/><circle cx="33" cy="19" r="12"/><path d="m42 28 8 8M26 20h14M30 16h6M29 24h8"/></svg><span>PESQUISA · DIEGO SIQUEIRA</span><strong>Olhar dentro da argila</strong><small>Tipo de argila, relevo e zonas de manejo: pesquisas em outras origens orientam perguntas, não respostas prontas.</small></a>
-              </div>
-              <p className={origin.atlasMindClose}><OriginIcon kind="care"/><span><strong>Suzi observa a lavoura. José interpreta o lote e a xícara.</strong> Pessoas conectam as camadas que o mapa sozinho não revela.</span></p>
-            </div>
-            <figcaption>Contornos do Brasil, Paraná, regiões e cidades: <a href="https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/" target="_blank" rel="noopener noreferrer">malhas IBGE, 2022</a>. Norte Central é uma referência cartográfica para o Norte Novo histórico, sem coincidir necessariamente com seus limites. O mapa-múndi e a curva térmica são esquemáticos. Os estudos de solo citados foram conduzidos fora do Paraná e não preveem o sabor de um lote.</figcaption>
-          </figure>
+          <GeoAtlasInteractive />
           <p>A Bispo Coffees nasce do encontro das trajetórias de <strong>Suzi Ninov e José Rezende</strong> — duas experiências construídas entre produtores, lavouras, desenvolvimento de qualidade, prova e mercados internacionais.</p>
           <p>No Paraná, próximo ao Trópico de Capricórnio, essa relação com o café ganhou uma perspectiva particular: aqui, a geografia nos ensinou cedo que qualidade não pode ser explicada por uma única variável.</p>
         </section>
