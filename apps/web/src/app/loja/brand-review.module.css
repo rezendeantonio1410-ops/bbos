@@ -139,3 +139,10 @@
  .storefront :global([class*="nav"]) a{padding:24px 0 22px!important}
  .storefront :global([class*="actions"]) button,.storefront :global([class*="actions"]) a{width:37px!important;height:37px!important}
 }
+
+/* Shared premium scale across storefront pages. */
+.storefront{--premium-display:clamp(38px,3.9vw,62px);--premium-title:clamp(30px,3.15vw,50px);--premium-copy:clamp(13px,1vw,16px)}
+.storefront :global([class*="peopleIntro"]) h2,.storefront :global([class*="memory"]) h2,.storefront :global([class*="career"]) h2,.storefront :global([class*="deepIntro"]) h2,.storefront :global([class*="roastStory"]) h2,.storefront :global([class*="acidityStory"]) h2{font-size:var(--premium-title)!important;line-height:1.06!important;letter-spacing:-.04em!important}
+.storefront :global([class*="intro"])>h1{font-size:var(--premium-display)!important;line-height:1.01!important;letter-spacing:-.045em!important}
+.storefront :global([class*="intro"])>h2{font-size:clamp(24px,2.1vw,32px)!important;line-height:1.18!important}
+.storefront :global([class*="peopleGrid"]) p,.storefront :global([class*="memoryBody"]) p,.storefront :global([class*="careerChapters"]) p,.storefront :global([class*="landscapeText"])>p,.storefront :global([class*="roastStory"]) p,.storefront :global([class*="acidityStory"]) p{font-size:var(--premium-copy)!important;line-height:1.6!important}
