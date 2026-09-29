@@ -619,3 +619,8 @@
 .geoLayers button:after{content:"";width:18px;height:1px;background:#f96d01;position:absolute;bottom:7px;opacity:0;transform:scaleX(.3);transition:.2s ease}
 .geoLayers button{position:relative}.geoLayers button[aria-pressed="true"]:after{opacity:1;transform:scaleX(1)}
 @media(max-width:760px){.geoLayers button{min-width:84px!important}.geoGlyph em{font-size:9px}}
+
+/* Climate light is environmental: bright day, directional sun, deeper night. */
+.geoStage:after{background:radial-gradient(circle at calc(18% + var(--daylight,.5)*62%) 16%,rgba(255,244,194,calc(var(--daylight,.5)*.30)),transparent 24%),linear-gradient(180deg,rgba(3,11,22,calc(var(--night,.5)*.70)),rgba(7,17,28,calc(var(--night,.5)*.52)))!important;mix-blend-mode:multiply;transition:background .45s ease!important}
+.geoStage:before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(110deg,rgba(255,255,255,calc(var(--daylight,.5)*.20)),transparent 35%,rgba(14,25,29,calc(var(--daylight,.5)*.10)) 68%,transparent);transition:background .45s ease}
+.geoStageParana:before{opacity:.75}
