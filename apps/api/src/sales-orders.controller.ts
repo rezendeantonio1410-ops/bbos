@@ -64,20 +64,27 @@ export class SalesOrdersController {
     return actor;
   }
 
-  private async nextOrderNumber() {
+  private async actorForOrder(request: any, id: string) {
+    const actor = await this.actor(request);
+    await this.salesOrders.get(actor.companyId, id);
+    return actor;
+  }
+
+  private async nextOrderNumber(companyId: string) {
     const year = new Date().getFullYear();
     const prefix = `B-${year}-`;
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(MAX(RIGHT(COALESCE("orderNumber", code), 6)::int), 0) + 1 AS next
          FROM "SalesOrder"
-        WHERE COALESCE("orderNumber", code) LIKE $1`,
+        WHERE "companyId"=$1 AND COALESCE("orderNumber", code) LIKE $2`,
+      companyId,
       `${prefix}%`,
     );
     const next = Math.max(1, Number(rows[0]?.next ?? 1));
     return `${prefix}${String(next).padStart(6, "0")}`;
   }
 
-  private async resolveInternalPrice(customerId: string, productVariantId: string) {
+  private async resolveInternalPrice(companyId: string, customerId: string, productVariantId: string) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT pp.id AS "productPriceId", pp.price, pp.currency,
               pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
@@ -91,6 +98,7 @@ export class SalesOrdersController {
          JOIN "SalesChannel" sc ON sc.id = pp."salesChannelId" AND sc.active = true
          JOIN "ProductVariant" pv ON pv.id = pp."productVariantId"
         WHERE c.id = $1
+          AND c."companyId" = $3
           AND pp.active = true
           AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
           AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
@@ -108,6 +116,7 @@ export class SalesOrdersController {
         LIMIT 1`,
       customerId,
       productVariantId,
+      companyId,
     );
     const row = rows[0];
     if (!row) {
@@ -133,7 +142,9 @@ export class SalesOrdersController {
   }
 
   @Get()
-  list() { return this.salesOrders.list(); }
+  async list(@Req() request: any) {
+    return this.salesOrders.list((await this.actor(request)).companyId);
+  }
 
   @Get("options")
   async options(@Req() request: any) {
@@ -142,10 +153,13 @@ export class SalesOrdersController {
   }
 
   @Get("next-number")
-  async nextNumber() { return { number: await this.nextOrderNumber() }; }
+  async nextNumber(@Req() request: any) {
+    return { number: await this.nextOrderNumber((await this.actor(request)).companyId) };
+  }
 
   @Get("quote")
   async quote(
+    @Req() request: any,
     @Query("customerId") customerId: string,
     @Query("productVariantId") productVariantId: string,
     @Query("quantity") rawQuantity = "1",
@@ -153,7 +167,8 @@ export class SalesOrdersController {
     if (!customerId || !productVariantId) throw new BadRequestException("Cliente e produto são obrigatórios para cotar.");
     const quantity = Number(rawQuantity);
     if (!Number.isSafeInteger(quantity) || quantity <= 0) throw new BadRequestException("Quantidade inválida.");
-    const price = await this.resolveInternalPrice(customerId, productVariantId);
+    const actor = await this.actor(request);
+    const price = await this.resolveInternalPrice(actor.companyId, customerId, productVariantId);
     return {
       ...price,
       quantity,
@@ -225,7 +240,7 @@ export class SalesOrdersController {
     let weightGrams = 0;
     let salesChannelId = "";
     for (const item of requestedItems) {
-      const price = await this.resolveInternalPrice(customerId, item.productVariantId);
+      const price = await this.resolveInternalPrice(actor.companyId, customerId, item.productVariantId);
       if (salesChannelId && salesChannelId !== price.salesChannelId) {
         throw new BadRequestException("Os produtos precisam usar a mesma tabela comercial.");
       }
@@ -256,12 +271,14 @@ export class SalesOrdersController {
   }
 
   @Get(":id/posting-agencies")
-  postingAgencies(@Param("id") id: string) {
+  async postingAgencies(@Param("id") id: string, @Req() request: any) {
+    await this.actorForOrder(request, id);
     return this.shipment.postingAgenciesForSalesOrder(id);
   }
 
   @Get(":id/fulfillment")
-  async fulfillment(@Param("id") id: string) {
+  async fulfillment(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT s.*,
               f.status::text AS "fiscalStatus",
@@ -279,29 +296,35 @@ export class SalesOrdersController {
             ORDER BY "createdAt" DESC LIMIT 1
          ) f ON TRUE
          LEFT JOIN "Shipment" s ON s."salesOrderId"=so.id
-        WHERE so.id=$1 LIMIT 1`,
+        WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
       id,
+      actor.companyId,
     );
     return rows[0] ?? null;
   }
 
   @Post(":id/requote-shipping")
-  requoteShipping(@Param("id") id: string, @Body() body: { packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+  async requoteShipping(@Param("id") id: string, @Body() body: { packages?: Array<{ weight: number; length: number; width: number; height: number }> }, @Req() request: any) {
+    await this.actorForOrder(request, id);
     return this.shipment.requoteForSalesOrder(id, body?.packages);
   }
 
   @Post(":id/requote-shipping/select")
-  selectRequoteShipping(@Param("id") id: string, @Body() body: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+  async selectRequoteShipping(@Param("id") id: string, @Body() body: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }, @Req() request: any) {
+    await this.actorForOrder(request, id);
     return this.shipment.selectRequoteForSalesOrder(id, body);
   }
 
   @Post(":id/label")
-  label(@Param("id") id: string) {
+  async label(@Param("id") id: string, @Req() request: any) {
+    await this.actorForOrder(request, id);
     return this.shipment.createLabelForSalesOrder(id);
   }
 
   @Get(":id")
-  get(@Param("id") id: string) { return this.salesOrders.get(id); }
+  async get(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.get((await this.actor(request)).companyId, id);
+  }
 
   @Post()
   async create(@Req() request: any, @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
@@ -324,7 +347,7 @@ export class SalesOrdersController {
     let resolvedChannelId: string | undefined;
     let resolvedChannelType: string | undefined;
     for (const item of body.items) {
-      const price = await this.resolveInternalPrice(body.customerId, item.productVariantId);
+      const price = await this.resolveInternalPrice(actor.companyId, body.customerId, item.productVariantId);
       if (resolvedChannelId && resolvedChannelId !== price.salesChannelId) {
         throw new BadRequestException("Os itens do pedido precisam pertencer ao mesmo canal/tabela comercial.");
       }
@@ -387,8 +410,8 @@ export class SalesOrdersController {
       body.freight = Number(shippingQuote.customerPriceCents) / 100;
     }
 
-    const orderNumber = await this.nextOrderNumber();
-    const order = await this.salesOrders.create({
+    const orderNumber = await this.nextOrderNumber(actor.companyId);
+    const order = await this.salesOrders.create(actor.companyId, {
       ...body,
       code: orderNumber,
       orderNumber,
@@ -472,10 +495,12 @@ export class SalesOrdersController {
   }
 
   @Get(":id/discount-requests")
-  async discountRequests(@Param("id") id: string) {
+  async discountRequests(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
     return this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 ORDER BY "createdAt" DESC`,
+      `SELECT * FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND "companyId"=$2 ORDER BY "createdAt" DESC`,
       id,
+      actor.companyId,
     );
   }
 
@@ -503,7 +528,7 @@ export class SalesOrdersController {
     const rationale = String(body.rationale ?? "").trim();
     if (!Number.isFinite(discountPercent) || discountPercent <= 0) throw new BadRequestException("Informe um desconto maior que zero.");
     if (!rationale) throw new BadRequestException("Justifique a solicitação de desconto.");
-    const price = await this.resolveInternalPrice(item.customerId, item.productVariantId);
+    const price = await this.resolveInternalPrice(actor.companyId, item.customerId, item.productVariantId);
     if (discountPercent > price.maxRequestDiscountPercent) {
       throw new BadRequestException(`Desconto máximo solicitável nesta tabela: ${price.maxRequestDiscountPercent.toFixed(2)}%.`);
     }
@@ -610,10 +635,12 @@ export class SalesOrdersController {
   }
 
   @Post(":id/confirm")
-  async confirm(@Param("id") id: string) {
+  async confirm(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
     const pendingDiscounts = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(*)::int AS count FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND status='PENDING'`,
+      `SELECT COUNT(*)::int AS count FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='PENDING'`,
       id,
+      actor.companyId,
     );
     if (Number(pendingDiscounts[0]?.count ?? 0) > 0) {
       throw new BadRequestException("O pedido possui solicitação de desconto pendente de aprovação.");
@@ -621,10 +648,10 @@ export class SalesOrdersController {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.id, so."totalAmount", so."paymentType", so."paymentTermsSnapshot",
               c.id AS "customerId", c.active, c."paymentTerms", c."creditStatus", c."creditLimit"
-         FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId" WHERE so.id=$1`, id,
+         FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId" WHERE so.id=$1 AND so."companyId"=$2`, id, actor.companyId,
     );
     const context = rows[0];
-    if (!context) return this.salesOrders.confirm(id);
+    if (!context) return this.salesOrders.confirm(actor.companyId, id);
     const saleIsTerm = context.paymentType === "TERM" || (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
     if (saleIsTerm) {
       if (!context.active) throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
@@ -638,24 +665,25 @@ export class SalesOrdersController {
       const orderTotal = Number(context.totalAmount ?? 0);
       if (orderTotal > availableCredit) throw new BadRequestException(`Venda a prazo bloqueada: pedido de ${orderTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} excede o crédito disponível de ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`);
     }
-    return this.salesOrders.confirm(id);
+    return this.salesOrders.confirm(actor.companyId, id);
   }
 
   @Post(":id/reserve")
-  reserve(@Param("id") id: string, @Body() body: { warehouseByVariant?: Record<string, string> }) { return this.salesOrders.reserve(id, body.warehouseByVariant); }
+  async reserve(@Param("id") id: string, @Body() body: { warehouseByVariant?: Record<string, string> }, @Req() request: any) { return this.salesOrders.reserve((await this.actorForOrder(request, id)).companyId, id, body.warehouseByVariant); }
   @Post(":id/cancel")
-  cancel(@Param("id") id: string) { return this.salesOrders.cancel(id); }
+  async cancel(@Param("id") id: string, @Req() request: any) { return this.salesOrders.cancel((await this.actorForOrder(request, id)).companyId, id); }
   @Post(":id/ship")
-  ship(@Param("id") id: string) { return this.salesOrders.ship(id); }
+  async ship(@Param("id") id: string, @Req() request: any) { return this.salesOrders.ship((await this.actorForOrder(request, id)).companyId, id); }
   @Post(":id/picking")
-  picking(@Param("id") id: string) { return this.salesOrders.transition(id, "PICKING"); }
+  async picking(@Param("id") id: string, @Req() request: any) { return this.salesOrders.transition((await this.actorForOrder(request, id)).companyId, id, "PICKING"); }
   @Post(":id/ready-to-ship")
-  readyToShip(@Param("id") id: string) { return this.salesOrders.transition(id, "READY_TO_SHIP"); }
+  async readyToShip(@Param("id") id: string, @Req() request: any) { return this.salesOrders.transition((await this.actorForOrder(request, id)).companyId, id, "READY_TO_SHIP"); }
   @Post(":id/picking/confirm")
-  confirmPicking(@Param("id") id: string, @Body() body: { pickedByItem: Record<string, number> }) { return this.salesOrders.confirmPicking(id, body.pickedByItem); }
+  async confirmPicking(@Param("id") id: string, @Body() body: { pickedByItem: Record<string, number> }, @Req() request: any) { return this.salesOrders.confirmPicking((await this.actorForOrder(request, id)).companyId, id, body.pickedByItem); }
 
   @Post(":id/invoice")
-  async invoice(@Param("id") id: string) {
+  async invoice(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
     const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId"
@@ -665,8 +693,9 @@ export class SalesOrdersController {
             WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
             ORDER BY "createdAt" DESC LIMIT 1
          ) f ON TRUE
-        WHERE so.id=$1 LIMIT 1`,
+        WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
       id,
+      actor.companyId,
     );
     const rejectedRetry =
       fiscalRows[0]?.orderStatus === "INVOICED" &&
@@ -679,10 +708,11 @@ export class SalesOrdersController {
     const fiscalRetry = rejectedRetry || invalidSentRetry;
     const result = fiscalRetry
       ? { orderId: id, idempotent: true, status: "INVOICED", fiscalRetry: true }
-      : await this.salesOrders.transition(id, "INVOICED");
+      : await this.salesOrders.transition(actor.companyId, id, "INVOICED");
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT "companyId","paymentType","paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1`,
+      `SELECT "companyId","paymentType","paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1 AND "companyId"=$2`,
       id,
+      actor.companyId,
     );
     const payment = rows[0];
     if (payment && payment.paymentType !== "LEGACY") {

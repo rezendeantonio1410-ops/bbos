@@ -51,8 +51,9 @@ export class SalesOrdersService implements OnModuleDestroy {
     return this.database.$disconnect();
   }
 
-  async list() {
+  async list(companyId: string) {
     const orders = await this.database.salesOrder.findMany({
+      where: { companyId },
       include: this.orderInclude,
       orderBy: { orderedAt: "desc" },
     });
@@ -77,22 +78,22 @@ export class SalesOrdersService implements OnModuleDestroy {
     return orders.map((order) => ({ ...order, shipment: byOrder.get(order.id) ?? null }));
   }
 
-  async get(id: string) {
-    const order = await this.database.salesOrder.findUnique({
-      where: { id },
+  async get(companyId: string, id: string) {
+    const order = await this.database.salesOrder.findFirst({
+      where: { id, companyId },
       include: this.orderInclude,
     });
     if (!order) throw new NotFoundException("Pedido não encontrado.");
     return order;
   }
 
-  async options(companyId?: string) {
+  async options(companyId: string) {
     const [customers, balances, brokers] = await Promise.all([
-      this.database.customer.findMany({ where: companyId ? { companyId } : undefined, orderBy: { name: "asc" } }),
+      this.database.customer.findMany({ where: { companyId }, orderBy: { name: "asc" } }),
       this.database.finishedProduct.findMany({
         where: {
           productVariantId: { not: null },
-          ...(companyId ? { productVariant: { product: { productLine: { companyId } } } } : {}),
+          productVariant: { product: { productLine: { companyId } } },
         },
         include: {
           warehouse: true,
@@ -101,7 +102,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           },
         },
       }),
-      this.database.broker.findMany({ where: { active: true, ...(companyId ? { companyId } : {}) }, orderBy: { name: "asc" } }),
+      this.database.broker.findMany({ where: { companyId, active: true }, orderBy: { name: "asc" } }),
     ]);
     return {
       customers,
@@ -121,7 +122,7 @@ export class SalesOrdersService implements OnModuleDestroy {
     };
   }
 
-  async create(input: CreateSalesOrderInput) {
+  async create(companyId: string, input: CreateSalesOrderInput) {
     if (!input.items.length)
       throw new BadRequestException("O pedido deve possuir ao menos um item.");
     if (
@@ -143,8 +144,8 @@ export class SalesOrdersService implements OnModuleDestroy {
     }
     return this.database.$transaction(
       async (transaction) => {
-        const customer = await transaction.customer.findUnique({
-          where: { id: input.customerId },
+        const customer = await transaction.customer.findFirst({
+          where: { id: input.customerId, companyId },
         });
         if (!customer) throw new BadRequestException("Cliente não encontrado.");
         if (input.brokerId) {
@@ -240,10 +241,10 @@ export class SalesOrdersService implements OnModuleDestroy {
     );
   }
 
-  async confirm(id: string) {
+  async confirm(companyId: string, id: string) {
     return this.database.$transaction(async (transaction) => {
-      const order = await transaction.salesOrder.findUnique({
-        where: { id },
+      const order = await transaction.salesOrder.findFirst({
+        where: { id, companyId },
         include: { items: true },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
@@ -269,11 +270,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     });
   }
 
-  async reserve(id: string, warehouseByVariant?: Record<string, string>) {
+  async reserve(companyId: string, id: string, warehouseByVariant?: Record<string, string>) {
     return this.database.$transaction(
       async (transaction) => {
-        const order = await transaction.salesOrder.findUnique({
-          where: { id },
+        const order = await transaction.salesOrder.findFirst({
+          where: { id, companyId },
           include: {
             items: {
               include: {
@@ -312,6 +313,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           const warehouseId = warehouseByVariant?.[item.productVariantId];
           const balance = await transaction.finishedProduct.findFirst({
             where: {
+              companyId,
               productVariantId: item.productVariantId,
               ...(warehouseId ? { warehouseId } : {}),
             },
@@ -370,11 +372,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     );
   }
 
-  async cancel(id: string) {
+  async cancel(companyId: string, id: string) {
     return this.database.$transaction(
       async (transaction) => {
-        const order = await transaction.salesOrder.findUnique({
-          where: { id },
+        const order = await transaction.salesOrder.findFirst({
+          where: { id, companyId },
           include: { reservations: true },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
@@ -425,11 +427,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     );
   }
 
-  async ship(id: string) {
+  async ship(companyId: string, id: string) {
     const result = await this.database.$transaction(
       async (transaction) => {
-        const order = await transaction.salesOrder.findUnique({
-          where: { id },
+        const order = await transaction.salesOrder.findFirst({
+          where: { id, companyId },
           include: {
             reservations: {
               include: { productVariant: true, salesOrderItem: true },
@@ -553,6 +555,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async transition(
+    companyId: string,
     id: string,
     target: "PICKING" | "READY_TO_SHIP" | "INVOICED",
   ) {
@@ -563,8 +566,8 @@ export class SalesOrdersService implements OnModuleDestroy {
     };
     const status = SalesOrderStatus[target];
     const result = await this.database.$transaction(async (transaction) => {
-      const order = await transaction.salesOrder.findUnique({
-        where: { id },
+      const order = await transaction.salesOrder.findFirst({
+        where: { id, companyId },
         select: {
           id: true,
           status: true,
@@ -658,10 +661,10 @@ export class SalesOrdersService implements OnModuleDestroy {
     return result;
   }
 
-  async confirmPicking(id: string, pickedByItem: Record<string, number>) {
+  async confirmPicking(companyId: string, id: string, pickedByItem: Record<string, number>) {
     return this.database.$transaction(async (transaction) => {
-      const order = await transaction.salesOrder.findUnique({
-        where: { id },
+      const order = await transaction.salesOrder.findFirst({
+        where: { id, companyId },
         include: { items: { include: { reservations: true } } },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
