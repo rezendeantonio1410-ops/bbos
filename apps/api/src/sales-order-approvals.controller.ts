@@ -6,6 +6,8 @@ import { Public } from "./auth.guard";
 import { publicAppUrl } from "./public-app-url";
 import { SalesOrdersService } from "./sales-orders.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
+import { SalesOrderPaymentsService } from "./sales-order-payments.service";
+import { resolveSalesOrderPaymentPolicy } from "./sales-order-payment-policy";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -27,6 +29,7 @@ export class SalesOrderApprovalsController {
     private readonly salesOrders: SalesOrdersService,
     private readonly auth: AuthService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+    private readonly payments: SalesOrderPaymentsService,
   ) {}
 
   private async actor(request: any) {
@@ -145,8 +148,18 @@ export class SalesOrderApprovalsController {
   @Get("public/:token")
   async publicView(@Param("token") token: string) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT a.id,a.status,a.snapshot,a."expiresAt",a."acceptedByName",a."acceptedAt",a."viewedAt",
-              a."verificationRequired",a."termsText",(NULLIF(TRIM(c.email),'') IS NOT NULL) AS "emailConfigured"
+      `SELECT a.id,a."salesOrderId",a.status,a.snapshot,a."expiresAt",a."acceptedByName",a."acceptedAt",a."viewedAt",
+              a."verificationRequired",a."termsText",(NULLIF(TRIM(c.email),'') IS NOT NULL) AS "emailConfigured",
+              so."paymentType",so."totalAmount",c.active,c."creditStatus",c."creditLimit",
+              (
+                COALESCE((SELECT SUM(ar."openAmount") FROM "AccountsReceivable" ar
+                           WHERE ar."customerId"=c.id AND ar.status NOT IN ('PAID','CANCELLED')),0)
+                + COALESCE((SELECT SUM(pending."totalAmount") FROM "SalesOrder" pending
+                             WHERE pending."customerId"=c.id
+                               AND pending."paymentType"='TERM'
+                               AND pending.status IN ('CONFIRMED','RESERVED','PICKING','READY_TO_SHIP','INVOICED','IN_PRODUCTION','SHIPPED')
+                               AND NOT EXISTS (SELECT 1 FROM "AccountsReceivable" ar2 WHERE ar2."salesOrderId"=pending.id)),0)
+              )::numeric AS "openReceivables"
          FROM "SalesOrderCustomerApproval" a
          JOIN "SalesOrder" so ON so.id=a."salesOrderId"
          JOIN "Customer" c ON c.id=so."customerId"
@@ -168,7 +181,24 @@ export class SalesOrderApprovalsController {
       approval.status = "VIEWED";
       approval.viewedAt = new Date();
     }
-    return approval;
+    const payment = approval.status === "APPROVED"
+      ? await this.payments.forOrder(approval.salesOrderId, true)
+      : null;
+    const paymentPreview = resolveSalesOrderPaymentPolicy({
+      paymentType: approval.paymentType,
+      customerActive: Boolean(approval.active),
+      creditStatus: approval.creditStatus,
+      creditLimit: approval.creditLimit,
+      openReceivables: approval.openReceivables,
+      orderTotal: approval.totalAmount,
+    });
+    delete approval.paymentType;
+    delete approval.totalAmount;
+    delete approval.active;
+    delete approval.creditStatus;
+    delete approval.creditLimit;
+    delete approval.openReceivables;
+    return { ...approval, payment, paymentPreview };
   }
 
   @Public()
@@ -185,10 +215,10 @@ export class SalesOrderApprovalsController {
       );
       const approval = approvals[0];
       if (!approval) throw new BadRequestException("Link de confirmação inválido.");
-      if (approval.status === "APPROVED") return { ok: true, status: "APPROVED", idempotent: true, salesOrderId: approval.salesOrderId };
-      if (!["PENDING", "VIEWED"].includes(approval.status)) throw new BadRequestException("Este link não está mais disponível para confirmação.");
-      if (new Date(approval.expiresAt).getTime() < Date.now()) throw new BadRequestException("Este link de confirmação expirou.");
-      if (approval.verificationRequired && (!body.code || sha256(String(body.code).trim()) !== approval.verificationCodeHash)) {
+      const alreadyApproved = approval.status === "APPROVED";
+      if (!alreadyApproved && !["PENDING", "VIEWED"].includes(approval.status)) throw new BadRequestException("Este link não está mais disponível para confirmação.");
+      if (!alreadyApproved && new Date(approval.expiresAt).getTime() < Date.now()) throw new BadRequestException("Este link de confirmação expirou.");
+      if (!alreadyApproved && approval.verificationRequired && (!body.code || sha256(String(body.code).trim()) !== approval.verificationCodeHash)) {
         throw new BadRequestException("Código de confirmação inválido.");
       }
 
@@ -199,7 +229,24 @@ export class SalesOrderApprovalsController {
           WHERE so.id=$1 FOR UPDATE OF so`, approval.salesOrderId,
       );
       const order = locked[0];
-      if (!order || order.status !== "DRAFT") throw new BadRequestException("Este pedido não está mais provisório e não pode ser confirmado por este link.");
+      if (!order) throw new BadRequestException("Pedido não encontrado.");
+      if (alreadyApproved) {
+        const previous = await tx.$queryRawUnsafe<any[]>(
+          `SELECT "paymentReason",status FROM "SalesOrderPaymentAttempt"
+            WHERE "salesOrderId"=$1 ORDER BY "attemptNumber" DESC LIMIT 1`,
+          approval.salesOrderId,
+        );
+        return {
+          ok: true,
+          status: "APPROVED",
+          idempotent: true,
+          orderStatus: order.status,
+          salesOrderId: approval.salesOrderId,
+          requiresPix: order.status === "DRAFT" && previous[0]?.status !== "PAID",
+          paymentReason: previous[0]?.paymentReason ?? "CASH_ORDER",
+        };
+      }
+      if (order.status !== "DRAFT") throw new BadRequestException("Este pedido não está mais provisório e não pode ser confirmado por este link.");
       const suppliedEmail = String(body.email ?? "").trim().toLowerCase();
       if (!String(order.email ?? "").trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(suppliedEmail)) {
         throw new BadRequestException("Informe um e-mail válido para receber a confirmação e acompanhar o pedido.");
@@ -224,16 +271,33 @@ export class SalesOrderApprovalsController {
       );
       if (Number(pending[0]?.count ?? 0) > 0) throw new BadRequestException("O pedido possui uma condição comercial pendente de aprovação.");
 
-      const saleIsTerm = order.paymentType === "TERM" || (order.paymentType === "LEGACY" && !isCashTerm(order.paymentTerms));
-      if (saleIsTerm) {
-        if (!order.active) throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
-        if (order.creditStatus !== "APPROVED") throw new BadRequestException("Venda a prazo bloqueada: o cliente não possui crédito vigente aprovado.");
-        const exposure = await tx.$queryRawUnsafe<any[]>(
-          `SELECT COALESCE(SUM("openAmount"),0)::numeric AS total FROM "AccountsReceivable" WHERE "customerId"=$1 AND status NOT IN ('PAID','CANCELLED')`, order.customerId,
-        );
-        const available = Math.max(0, Number(order.creditLimit ?? 0) - Number(exposure[0]?.total ?? 0));
-        if (Number(order.totalAmount) > available) throw new BadRequestException(`Venda a prazo bloqueada: o pedido excede o crédito disponível de ${money(available)}.`);
+      const exposure = await tx.$queryRawUnsafe<any[]>(
+        `SELECT (
+                  COALESCE((SELECT SUM(ar."openAmount") FROM "AccountsReceivable" ar
+                             WHERE ar."customerId"=$1 AND ar.status NOT IN ('PAID','CANCELLED')),0)
+                  + COALESCE((SELECT SUM(pending."totalAmount") FROM "SalesOrder" pending
+                               WHERE pending."customerId"=$1
+                                 AND pending."paymentType"='TERM'
+                                 AND pending.status IN ('CONFIRMED','RESERVED','PICKING','READY_TO_SHIP','INVOICED','IN_PRODUCTION','SHIPPED')
+                                 AND NOT EXISTS (SELECT 1 FROM "AccountsReceivable" ar2 WHERE ar2."salesOrderId"=pending.id)),0)
+                )::numeric AS total`,
+        order.customerId,
+      );
+      const normalizedPaymentType = order.paymentType === "LEGACY"
+        ? (isCashTerm(order.paymentTerms) ? "CASH" : "TERM")
+        : order.paymentType;
+      const paymentPolicy = resolveSalesOrderPaymentPolicy({
+        paymentType: normalizedPaymentType,
+        customerActive: Boolean(order.active),
+        creditStatus: order.creditStatus,
+        creditLimit: order.creditLimit,
+        openReceivables: exposure[0]?.total,
+        orderTotal: order.totalAmount,
+      });
+      if (paymentPolicy.mode === "BLOCKED") {
+        throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
       }
+      const requiresPix = paymentPolicy.mode === "PIX";
 
       const acceptedAt = new Date();
       const updated = await tx.$executeRawUnsafe(
@@ -247,10 +311,45 @@ export class SalesOrderApprovalsController {
       );
       if (!updated) throw new BadRequestException("O pedido já foi respondido em outra sessão.");
       await tx.$executeRawUnsafe(
-        `UPDATE "SalesOrder" SET status='CONFIRMED', "updatedAt"=NOW() WHERE id=$1 AND status='DRAFT'`, approval.salesOrderId,
+        `UPDATE "SalesOrder"
+            SET status=CASE WHEN $2::boolean THEN status ELSE 'CONFIRMED'::"SalesOrderStatus" END,
+                "paymentType"=CASE WHEN $2::boolean THEN 'CASH' ELSE "paymentType" END,
+                "paymentTermsSnapshot"=CASE WHEN $2::boolean THEN 'Pix' ELSE "paymentTermsSnapshot" END,
+                "updatedAt"=NOW()
+          WHERE id=$1 AND status='DRAFT'`,
+        approval.salesOrderId,
+        requiresPix,
       );
-      return { ok: true, status: "APPROVED", orderStatus: "CONFIRMED", acceptedAt, salesOrderId: approval.salesOrderId };
+      return {
+        ok: true,
+        status: "APPROVED",
+        orderStatus: requiresPix ? "DRAFT" : "CONFIRMED",
+        acceptedAt,
+        salesOrderId: approval.salesOrderId,
+        requiresPix,
+        paymentReason: requiresPix ? paymentPolicy.reason : null,
+      };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    if (result.requiresPix) {
+      const paymentUrl = `${publicAppUrl()}/pedido/aprovar/${token}#pagamento`;
+      try {
+        const payment = await this.payments.ensurePix(
+          result.salesOrderId,
+          result.paymentReason,
+          paymentUrl,
+        );
+        return { ...result, payment };
+      } catch (error) {
+        return {
+          ...result,
+          payment: null,
+          paymentWarning: error instanceof Error
+            ? error.message
+            : "O Pix ainda não pôde ser preparado.",
+        };
+      }
+    }
 
     await this.customerLifecycle.record(
       result.salesOrderId,
@@ -262,6 +361,36 @@ export class SalesOrderApprovalsController {
       { acceptedByName: name },
     );
     return result;
+  }
+
+  @Public()
+  @Post("public/:token/pix")
+  async retryPix(@Param("token") token: string) {
+    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT a."salesOrderId",a.status,so.status AS "orderStatus"
+         FROM "SalesOrderCustomerApproval" a
+         JOIN "SalesOrder" so ON so.id=a."salesOrderId"
+        WHERE a."tokenHash"=$1 LIMIT 1`,
+      sha256(token),
+    );
+    const approval = rows[0];
+    if (!approval || approval.status !== "APPROVED") {
+      throw new BadRequestException("Confirme o pedido antes de gerar o Pix.");
+    }
+    if (approval.orderStatus !== "DRAFT") {
+      return { payment: await this.payments.forOrder(approval.salesOrderId, true) };
+    }
+    const previous = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT "paymentReason" FROM "SalesOrderPaymentAttempt"
+        WHERE "salesOrderId"=$1 ORDER BY "attemptNumber" DESC LIMIT 1`,
+      approval.salesOrderId,
+    );
+    const payment = await this.payments.ensurePix(
+      approval.salesOrderId,
+      previous[0]?.paymentReason ?? "CASH_ORDER",
+      `${publicAppUrl()}/pedido/aprovar/${token}#pagamento`,
+    );
+    return { payment };
   }
 
   @Public()

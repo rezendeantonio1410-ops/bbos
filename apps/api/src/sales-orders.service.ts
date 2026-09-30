@@ -58,7 +58,8 @@ export class SalesOrdersService implements OnModuleDestroy {
       orderBy: { orderedAt: "desc" },
     });
     if (!orders.length) return orders;
-    const shipments = await this.database.$queryRawUnsafe<Array<{
+    const [shipments, payments] = await Promise.all([
+      this.database.$queryRawUnsafe<Array<{
       salesOrderId: string;
       status: string;
       carrierName: string | null;
@@ -66,16 +67,36 @@ export class SalesOrdersService implements OnModuleDestroy {
       trackingCode: string | null;
       authorizationCode: string | null;
       updatedAt: Date;
-    }>>(
+      }>>(
       `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,"carrierName","serviceName",
               "trackingCode",metadata->>'authorization_code' AS "authorizationCode","updatedAt"
          FROM "Shipment"
         WHERE provider='MELHOR_ENVIO' AND "salesOrderId"=ANY($1::text[])
         ORDER BY "salesOrderId","updatedAt" DESC`,
       orders.map((order) => order.id),
-    );
+      ),
+      this.database.$queryRawUnsafe<Array<{
+        salesOrderId: string;
+        status: string;
+        method: string;
+        amountCents: number;
+        expiresAt: Date | null;
+        paidAt: Date | null;
+      }>>(
+        `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,method,"amountCents","expiresAt","paidAt"
+           FROM "SalesOrderPaymentAttempt"
+          WHERE "salesOrderId"=ANY($1::text[])
+          ORDER BY "salesOrderId","attemptNumber" DESC`,
+        orders.map((order) => order.id),
+      ),
+    ]);
     const byOrder = new Map(shipments.map((shipment) => [shipment.salesOrderId, shipment]));
-    return orders.map((order) => ({ ...order, shipment: byOrder.get(order.id) ?? null }));
+    const paymentByOrder = new Map(payments.map((payment) => [payment.salesOrderId, payment]));
+    return orders.map((order) => ({
+      ...order,
+      shipment: byOrder.get(order.id) ?? null,
+      payment: paymentByOrder.get(order.id) ?? null,
+    }));
   }
 
   async get(companyId: string, id: string) {
@@ -84,7 +105,16 @@ export class SalesOrdersService implements OnModuleDestroy {
       include: this.orderInclude,
     });
     if (!order) throw new NotFoundException("Pedido não encontrado.");
-    return order;
+    if (typeof (this.database as any).$queryRawUnsafe !== "function") {
+      return { ...order, payment: null };
+    }
+    const payments = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT status,method,"amountCents","expiresAt","paidAt"
+         FROM "SalesOrderPaymentAttempt"
+        WHERE "salesOrderId"=$1 ORDER BY "attemptNumber" DESC LIMIT 1`,
+      order.id,
+    );
+    return { ...order, payment: payments[0] ?? null };
   }
 
   async exportOverview(companyId: string) {

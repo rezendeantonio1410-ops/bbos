@@ -180,6 +180,13 @@ type Order = {
     authorizationCode?: string | null;
     updatedAt: string;
   } | null;
+  payment?: {
+    status: string;
+    method: string;
+    amountCents: number;
+    expiresAt?: string | null;
+    paidAt?: string | null;
+  } | null;
 };
 
 const shipmentStatusLabel: Record<string, string> = {
@@ -245,6 +252,7 @@ type DiscountRequest = {
 
 const statusLabel: Record<string, string> = {
   DRAFT: "Rascunho",
+  AWAITING_PAYMENT: "Aguardando Pix",
   CONFIRMED: "Confirmado",
   RESERVED: "Reservado",
   PICKING: "Separação",
@@ -257,6 +265,7 @@ const statusLabel: Record<string, string> = {
 
 const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> = {
   DRAFT: "neutral",
+  AWAITING_PAYMENT: "warning",
   CONFIRMED: "warning",
   RESERVED: "warning",
   PICKING: "warning",
@@ -270,6 +279,7 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
 const filters: Array<[string, string]> = [
   ["ALL", "Todos"],
   ["DRAFT", "Rascunho"],
+  ["AWAITING_PAYMENT", "Aguardando Pix"],
   ["CONFIRMED", "Confirmados"],
   ["RESERVED", "Reservados"],
   ["PICKING", "Separação"],
@@ -278,6 +288,11 @@ const filters: Array<[string, string]> = [
   ["SHIPPED", "Expedidos"],
   ["DELIVERED", "Concluídos"],
 ];
+
+const displayStatus = (order: Order) =>
+  order.status === "DRAFT" && ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(order.payment?.status ?? "")
+    ? "AWAITING_PAYMENT"
+    : order.status;
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -317,7 +332,7 @@ export default function OrdersPage() {
   }, []);
 
   const visible = useMemo(
-    () => (filter === "ALL" ? orders : orders.filter((item) => item.status === filter)),
+    () => (filter === "ALL" ? orders : orders.filter((item) => displayStatus(item) === filter)),
     [orders, filter],
   );
   const open = orders.filter((item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status));
@@ -370,9 +385,10 @@ export default function OrdersPage() {
 
       {message && <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">{message}</div>}
 
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         <Kpi label="Pedidos em aberto" value={String(open.length)} />
         <Kpi label="Valor em carteira" value={money.format(open.reduce((sum, item) => sum + Number(item.totalAmount), 0))} />
+        <Kpi label="Aguardando Pix" value={String(orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT").length)} />
         <Kpi label="Pedidos reservados" value={String(orders.filter((item) => ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
         <Kpi label="Aguardando estoque" value={String(orders.filter((item) => item.status === "CONFIRMED").length)} />
         <Kpi label="Prontos para expedição" value={String(orders.filter((item) => ["READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
@@ -424,7 +440,7 @@ export default function OrdersPage() {
                     </div>
                   )}
                   <div className="ml-auto flex items-center gap-2">
-                    <Status status={order.status} />
+                    <Status status={displayStatus(order)} />
                     <strong>{money.format(Number(order.totalAmount))}</strong>
                     <ChevronRight size={16} />
                   </div>
@@ -538,6 +554,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const utilization = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   const after = Math.max(0, available - orderTotal);
   const exceeds = isTerm && orderTotal > available;
+  const usesPixFallback = isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, { credentials: "include", cache: "no-store" })
@@ -1112,8 +1129,10 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
           </section>
 
           {isTerm && health && (
-            <p className={`rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-50 text-red-700" : "bg-stone-50 text-stone-500"}`}>
-              {exceeds ? `Excede o crédito disponível em ${money.format(orderTotal - available)}.` : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
+            <p className={`rounded-xl px-3 py-2 text-xs ${usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}>
+              {usesPixFallback
+                ? `Sem crédito suficiente para esta compra. Ao confirmar, o cliente receberá o Pix automaticamente; o pedido só avançará depois do pagamento.`
+                : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
             </p>
           )}
 
@@ -1474,11 +1493,19 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
         ) : (
           <>
             <div className="mt-6">
-              <Status status={order.status} />
+              <Status status={displayStatus(order)} />
               <div className="mt-4 flex items-center gap-2 text-xs text-stone-500">
                 <Clock3 size={14} /> Pedido registrado no fluxo operacional.
               </div>
             </div>
+
+            {displayStatus(order) === "AWAITING_PAYMENT" && (
+              <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-bold text-amber-950">Pix enviado com a confirmação</p>
+                <p className="mt-1 text-[11px] leading-5 text-amber-800">O pedido permanece protegido em rascunho e só avança para estoque e faturamento depois que o Mercado Pago confirmar o crédito.</p>
+                {order.payment?.expiresAt && <p className="mt-2 text-[10px] text-amber-700">Expira em {new Date(order.payment.expiresAt).toLocaleString("pt-BR")}</p>}
+              </section>
+            )}
 
             <div className="mt-6 space-y-2">
               {order.items.map((item) => (

@@ -97,6 +97,7 @@ export class SalesOrderCustomerLifecycleService {
             eventType,
             title,
             detail,
+            paymentUrl: typeof metadata.paymentUrl === "string" ? metadata.paymentUrl : null,
             trackingUrl: token ? `${publicAppUrl()}/pedido/acompanhar/${order.id}?token=${encodeURIComponent(token)}` : null,
             customer: { name: order.customerName, phone: order.phone },
             delivery: {

@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
-import { CheckCircle2, ShieldCheck, Truck } from "lucide-react";
+import { CheckCircle2, Copy, RefreshCw, ShieldCheck, Truck } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -43,6 +43,20 @@ type Approval = {
   emailConfigured: boolean;
   termsText: string;
   snapshot: Snapshot;
+  payment?: {
+    status: string;
+    method: "PIX";
+    amountCents: number;
+    ticketUrl?: string | null;
+    qrCode?: string | null;
+    qrCodeBase64?: string | null;
+    expiresAt?: string | null;
+    paidAt?: string | null;
+  } | null;
+  paymentPreview?: {
+    mode: "CREDIT" | "PIX" | "BLOCKED";
+    reason: string;
+  };
 };
 
 export default function PublicOrderApprovalPage() {
@@ -54,6 +68,8 @@ export default function PublicOrderApprovalPage() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(true);
   const [sending, setSending] = useState(false);
+  const [retryingPix, setRetryingPix] = useState(false);
+  const [copiedPix, setCopiedPix] = useState(false);
   const [error, setError] = useState("");
   const api = `${getApiBaseUrl()}/sales-order-approvals/public/${token}`;
 
@@ -75,7 +91,8 @@ export default function PublicOrderApprovalPage() {
 
   const paymentLabel = useMemo(() => {
     if (!approval) return "—";
-    return approval.snapshot.paymentType === "TERM" ? (approval.snapshot.paymentTerms || "A prazo") : "À vista";
+    if (approval.paymentPreview?.mode === "PIX") return "Pix após a confirmação";
+    return approval.snapshot.paymentType === "TERM" ? (approval.snapshot.paymentTerms || "A prazo") : "Pix";
   }, [approval]);
 
   const approve = async () => {
@@ -93,6 +110,23 @@ export default function PublicOrderApprovalPage() {
     if (!response.ok) setError(payload.message ?? "Não foi possível confirmar o pedido.");
     else await load();
     setSending(false);
+  };
+
+  const retryPix = async () => {
+    setRetryingPix(true);
+    setError("");
+    const response = await fetch(`${api}/pix`, { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) setError(payload.message ?? "Não foi possível preparar o Pix agora.");
+    await load();
+    setRetryingPix(false);
+  };
+
+  const copyPix = async () => {
+    if (!approval?.payment?.qrCode) return;
+    await navigator.clipboard.writeText(approval.payment.qrCode);
+    setCopiedPix(true);
+    window.setTimeout(() => setCopiedPix(false), 1800);
   };
 
   if (busy) return <Shell><div className="rounded-3xl bg-white p-8 text-sm text-stone-500">Carregando seu pedido…</div></Shell>;
@@ -137,8 +171,47 @@ export default function PublicOrderApprovalPage() {
 
       {order.notes && <section className="mt-3 rounded-2xl bg-white p-4"><p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">Observações</p><p className="mt-1 text-sm leading-6 text-stone-700">{order.notes}</p></section>}
 
+      {!approved && approval.paymentPreview?.mode === "PIX" && (
+        <section className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-bold text-amber-950">Pix preparado após a confirmação</p>
+          <p className="mt-1 text-xs leading-5 text-amber-800">Esta compra não utiliza limite de crédito. Ao confirmar, você receberá o QR Code e o código copia-e-cola nesta mesma página e por e-mail.</p>
+        </section>
+      )}
+
       {approved ? (
-        <section className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center"><CheckCircle2 className="mx-auto text-emerald-700" size={34}/><h2 className="mt-3 text-lg font-bold text-emerald-950">Pedido confirmado</h2><p className="mt-1 text-sm text-emerald-800">Confirmado por {approval.acceptedByName}{approval.acceptedAt ? ` em ${new Date(approval.acceptedAt).toLocaleString("pt-BR")}` : ""}.</p><p className="mt-2 text-xs text-emerald-700">A Bispo Coffees já recebeu sua confirmação.</p></section>
+        <>
+          <section className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center"><CheckCircle2 className="mx-auto text-emerald-700" size={34}/><h2 className="mt-3 text-lg font-bold text-emerald-950">Pedido confirmado</h2><p className="mt-1 text-sm text-emerald-800">Confirmado por {approval.acceptedByName}{approval.acceptedAt ? ` em ${new Date(approval.acceptedAt).toLocaleString("pt-BR")}` : ""}.</p><p className="mt-2 text-xs text-emerald-700">A Bispo Coffees já recebeu sua confirmação.</p></section>
+          {approval.payment?.status === "PAID" ? (
+            <section id="pagamento" className="mt-4 rounded-3xl bg-stone-950 p-6 text-center text-white">
+              <CheckCircle2 className="mx-auto text-emerald-300" size={34}/>
+              <p className="mt-3 text-[10px] font-bold uppercase tracking-[.18em] text-emerald-200">Pix confirmado</p>
+              <h2 className="mt-2 text-xl font-bold">Pagamento recebido</h2>
+              <p className="mt-2 text-sm text-stone-300">O pedido seguirá para separação e preparação.</p>
+            </section>
+          ) : approval.payment?.qrCode && ["CREATING", "AWAITING_PAYMENT", "PROCESSING"].includes(approval.payment.status) ? (
+            <section id="pagamento" className="mt-4 rounded-3xl border border-stone-200 bg-white p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#76604e]">Pagamento seguro</p>
+              <h2 className="mt-2 text-xl font-bold text-stone-950">Conclua com Pix</h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">Como esta compra não utiliza limite de crédito, o Pix foi preparado automaticamente.</p>
+              {approval.payment.qrCodeBase64 && (
+                <div className="mx-auto mt-5 w-fit rounded-2xl border bg-white p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={approval.payment.qrCodeBase64.startsWith("data:") ? approval.payment.qrCodeBase64 : `data:image/png;base64,${approval.payment.qrCodeBase64}`} alt="QR Code Pix" className="h-52 w-52" />
+                </div>
+              )}
+              <button onClick={() => void copyPix()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-stone-950 py-4 text-sm font-bold text-white"><Copy size={16}/>{copiedPix ? "Código copiado" : "Copiar código Pix"}</button>
+              {approval.payment.ticketUrl && <a href={approval.payment.ticketUrl} target="_blank" rel="noreferrer" className="mt-3 block text-center text-xs font-semibold text-emerald-800 underline underline-offset-4">Abrir ambiente do pagamento</a>}
+              {approval.payment.expiresAt && <p className="mt-4 text-center text-[10px] text-stone-400">Válido até {new Date(approval.payment.expiresAt).toLocaleString("pt-BR")}</p>}
+            </section>
+          ) : (
+            <section id="pagamento" className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
+              <h2 className="text-lg font-bold text-amber-950">Preparar pagamento Pix</h2>
+              <p className="mt-2 text-xs leading-5 text-amber-800">O pedido está confirmado, mas o Pix ainda não foi gerado. Você pode tentar novamente com segurança; não criaremos cobrança duplicada.</p>
+              <button disabled={retryingPix} onClick={() => void retryPix()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-stone-950 px-5 py-3 text-xs font-bold text-white disabled:opacity-50"><RefreshCw size={14}/>{retryingPix ? "Preparando…" : "Gerar Pix"}</button>
+              {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
+            </section>
+          )}
+        </>
       ) : (
         <section className="mt-4 rounded-3xl border bg-white p-5">
           <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 text-violet-700" size={19}/><div><h2 className="text-base font-bold">Tudo certo com o pedido?</h2><p className="mt-1 text-xs leading-5 text-stone-500">Confira os itens, o frete e o total. A confirmação vale para esta versão exata.</p></div></div>
