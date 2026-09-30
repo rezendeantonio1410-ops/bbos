@@ -12,6 +12,7 @@
     "test:production-planning": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/production-planning.test.ts",
     "test:admin-reference-route": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/admin-coffee-reference.controller.test.ts",
     "test:auth-security": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/auth-security.test.ts",
+    "test:costing-company-scope": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/costing-company-scope.test.ts",
     "test:storefront-shipping-selection": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/storefront-shipping-selection.test.ts",
     "test:broker-commission": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/broker-commission.test.ts",
     "test:purchase-confirmation-pdf": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-confirmation-pdf.test.ts",
