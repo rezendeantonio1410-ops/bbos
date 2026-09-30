@@ -77,11 +77,14 @@ import {
 } from "./storefront-media.controller";
 import { StorefrontMediaService } from "./storefront-media.service";
 import { NotificationsController } from "./notifications.controller";
+import { IntelligenceController } from "./intelligence.controller";
+import { IntelligenceService } from "./intelligence.service";
 
 @Module({
   controllers: [
     HealthController,
     NotificationsController,
+    IntelligenceController,
     DashboardController,
     BlendsController,
     ReceiptsController,
@@ -128,6 +131,7 @@ import { NotificationsController } from "./notifications.controller";
   ],
   providers: [
     DashboardService,
+    IntelligenceService,
     ProductsService,
     ProductsRepository,
     ProductionService,

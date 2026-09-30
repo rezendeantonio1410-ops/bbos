@@ -65,9 +65,17 @@ aside nav a[href="/bi"][class*="shadow"]{background:var(--bbos-ai-soft)!importan
 .bbos-ai-message+.bbos-ai-message{margin-top:9px}
 .bbos-ai-message-assistant{border:1px solid #E9E3F4;background:#FAF8FF;color:#333A38}
 .bbos-ai-message-user{margin-left:auto;background:#13211E;color:#fff}
+.bbos-ai-message p{margin:0}
+.bbos-ai-facts{display:grid;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid #E9E3F4}
+.bbos-ai-facts a{display:flex;align-items:center;justify-content:space-between;gap:12px;color:inherit;text-decoration:none}
+.bbos-ai-facts a:hover strong{text-decoration:underline}
+.bbos-ai-facts span{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:#77717F}
+.bbos-ai-facts strong{font-size:11px;text-align:right;color:#39285D}
+.bbos-ai-thinking{color:#77717F}
 .bbos-ai-prompts{display:flex;flex-wrap:wrap;gap:7px;padding:0 18px 12px}
 .bbos-ai-prompts button{display:inline-flex;align-items:center;gap:5px;border:1px solid #E6E0F2;border-radius:999px;background:#fff;padding:8px 10px;font-size:10px;font-weight:700;color:#675681;transition:160ms ease}
 .bbos-ai-prompts button:hover{border-color:#D4C7EF;background:var(--bbos-ai-soft)}
+.bbos-ai-prompts button:disabled,.bbos-ai-input :disabled{cursor:wait;opacity:.55}
 .bbos-ai-input{display:flex;gap:8px;margin:0 18px;border:1px solid #DDD6EA;border-radius:14px;background:#fff;padding:7px 8px 7px 12px;box-shadow:0 8px 22px rgba(57,40,93,.06)}
 .bbos-ai-input:focus-within{border-color:#BBA8E8;box-shadow:0 0 0 3px rgba(118,84,199,.08)}
 .bbos-ai-input input{min-width:0;flex:1;background:transparent;font-size:12px;outline:none}
