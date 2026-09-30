@@ -7,7 +7,7 @@ import guideStyles from "./simple-guide.module.css";
 import trailStyles from "./journey-trail.module.css";
 import sensoryStyles from "./sensory-system.module.css";
 import brand from "./brand.module.css";
-import { AddToCartButton, StorefrontCartProvider, type Grind } from "../StorefrontCart";
+import { AddToCartButton, StorefrontCartProvider } from "../StorefrontCart";
 
 const styles = {
   ...baseStyles,
@@ -243,8 +243,6 @@ export default function Page() {
   const selectedBrew = brews.find((item) => item.id === brew);
   const selectedMoment = moments.find((item) => item.id === moment);
   const lineColor = lineColors[recommendation.line as keyof typeof lineColors];
-  const preferredGrind: Grind = brew === "espresso" ? "Espresso" : brew === "press" ? "Prensa francesa" : brew === "filter" || brew === "moka" ? "Coado" : "Grãos";
-
   const trail = (
     <ChoiceTrail
       step={step}
@@ -327,7 +325,6 @@ export default function Page() {
                     priceCents: recommendation.priceCents,
                     weightGrams: 500,
                     image: recommendation.image,
-                    preferredGrind,
                   }}
                   style={{
                     background: lineColor.background,

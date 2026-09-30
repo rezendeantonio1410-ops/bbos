@@ -41,7 +41,9 @@ const catalog: Record<
   sublime: { name: "Sublime", unitPriceCents: 8400, weightGrams: 500 },
   raros: { name: "Raro", unitPriceCents: 5200, weightGrams: 250 },
 };
-const grinds = new Set(["Grãos", "Espresso", "Coado", "Prensa francesa"]);
+const groundProductIds = new Set(["essencial", "intenso"]);
+const preparationFor = (id: string) =>
+  groundProductIds.has(id) ? "Moído" : "Grãos";
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 const tokenHash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -83,7 +85,9 @@ type CheckoutBody = {
 };
 
 @Controller("storefront/orders")
-export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy {
+export class StorefrontOrdersController
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly database = prisma;
   private reconciliationTimer?: NodeJS.Timeout;
   private reconcilingPayments = false;
@@ -118,7 +122,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       }
     }
 
-    const cancelledDrafts = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+    const cancelledDrafts = await this.database.$queryRawUnsafe<
+      Array<{ id: string }>
+    >(
       `SELECT so.id
          FROM "StorefrontOrder" so
          JOIN "SalesOrder" s
@@ -148,7 +154,6 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       15_000,
     );
     this.reconciliationTimer.unref();
-
   }
 
   async onModuleDestroy() {
@@ -231,7 +236,10 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
               SET status='ERROR',"processedAt"=NOW(),"lastError"=$2
             WHERE id=$1`,
           event.id,
-          (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+          (error instanceof Error ? error.message : String(error)).slice(
+            0,
+            2000,
+          ),
         );
       }
     }
@@ -302,7 +310,10 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
           // A falha de consulta é transitória: o pedido pendente deve continuar
           // sendo reconciliado até ser pago, recusado ou expirar.
           const attempts = Number(attempt.attempts ?? 0);
-          const delaySeconds = Math.min(300, Math.max(15, 2 ** Math.min(attempts, 8)));
+          const delaySeconds = Math.min(
+            300,
+            Math.max(15, 2 ** Math.min(attempts, 8)),
+          );
           await this.database.$executeRawUnsafe(
             `UPDATE "StorefrontPaymentAttempt"
                 SET status='ERROR',
@@ -312,7 +323,10 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
                     "updatedAt"=NOW()
               WHERE id=$1`,
             attempt.id,
-            (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+            (error instanceof Error ? error.message : String(error)).slice(
+              0,
+              2000,
+            ),
             String(delaySeconds),
           );
         }
@@ -331,7 +345,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       for (const payment of commercialPending) {
         try {
-          await this.salesOrderPayments.reconcileByExternalId(payment.externalId);
+          await this.salesOrderPayments.reconcileByExternalId(
+            payment.externalId,
+          );
         } catch (error) {
           console.error("Falha ao reconciliar Pix de pedido comercial", {
             externalId: payment.externalId,
@@ -375,7 +391,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         );
       }
 
-      const expired = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      const expired = await this.database.$queryRawUnsafe<
+        Array<{ id: string }>
+      >(
         `UPDATE "StorefrontOrder"
             SET status='CANCELLED',"updatedAt"=NOW()
           WHERE status='AWAITING_PAYMENT'
@@ -611,7 +629,11 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       );
       const order = found[0];
       if (!order) throw new BadRequestException("Pedido não encontrado.");
-      if (["PAID", "PREPARING", "INVOICED", "SHIPPED", "DELIVERED"].includes(order.status)) {
+      if (
+        ["PAID", "PREPARING", "INVOICED", "SHIPPED", "DELIVERED"].includes(
+          order.status,
+        )
+      ) {
         const duplicatePayment =
           Boolean(order.paymentExternalId) &&
           String(order.paymentExternalId) !== String(externalId);
@@ -926,7 +948,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         JSON.stringify({ supersededByNewAttempt: true }),
       );
 
-      const numbers = await transaction.$queryRawUnsafe<Array<{ next: number }>>(
+      const numbers = await transaction.$queryRawUnsafe<
+        Array<{ next: number }>
+      >(
         `SELECT COALESCE(MAX("attemptNumber"),0)::int + 1 AS next
            FROM "StorefrontPaymentAttempt"
           WHERE "storefrontOrderId"=$1`,
@@ -965,7 +989,10 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     }
 
     const providerIdempotencyKey = `mp-${idempotencyKey}`.slice(0, 128);
-    const attempt = await this.beginPaymentAttempt(order, providerIdempotencyKey);
+    const attempt = await this.beginPaymentAttempt(
+      order,
+      providerIdempotencyKey,
+    );
 
     if (attempt.externalId && (attempt.checkoutUrl || attempt.metadata?.pix)) {
       return {
@@ -987,7 +1014,10 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
     try {
       const paymentInput = {
-        paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" as const : "PIX" as const,
+        paymentMethod:
+          order.requestedPaymentMethod === "CARD"
+            ? ("CARD" as const)
+            : ("PIX" as const),
         idempotencyKey: providerIdempotencyKey,
         orderCode: order.code,
         totalCents: order.totalCents,
@@ -1056,7 +1086,8 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
       return {
         externalId: providerOrder.id,
-        checkoutUrl: providerOrder.checkout_url ?? providerOrder.pix?.ticketUrl ?? null,
+        checkoutUrl:
+          providerOrder.checkout_url ?? providerOrder.pix?.ticketUrl ?? null,
         pix: providerOrder.pix ?? null,
       };
     } catch (error) {
@@ -1132,13 +1163,11 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         quantity > 20
       )
         throw new BadRequestException("Produto ou quantidade inválidos.");
-      if (!grinds.has(item.grind || "Grãos"))
-        throw new BadRequestException("Escolha de moagem inválida.");
       return {
         id: item.id,
         name: product.name,
         quantity,
-        grind: item.grind || "Grãos",
+        grind: preparationFor(String(item.id)),
         unitPriceCents: product.unitPriceCents,
         totalCents: product.unitPriceCents * quantity,
         weightGrams: product.weightGrams * quantity,
@@ -1207,7 +1236,8 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     ) {
       return {
         shippingRefreshRequired: true,
-        message: "O valor do frete foi atualizado pela transportadora. Confira o novo total e confirme o pagamento.",
+        message:
+          "O valor do frete foi atualizado pela transportadora. Confira o novo total e confirme o pagamento.",
         quote: {
           id: quote.id,
           name: quote.serviceName,
@@ -1380,11 +1410,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     const signedInCustomer = await this.customers.resolve(
       this.customers.readToken(request),
     );
-    await this.customers.linkOrder(
-      signedInCustomer,
-      id,
-      customer.email,
-    );
+    await this.customers.linkOrder(signedInCustomer, id, customer.email);
     const claimed = await this.database.$executeRawUnsafe(
       `UPDATE "ShippingQuote" SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
       quote.id,
@@ -1433,10 +1459,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
   @Public()
   @Post(":orderId/reorder")
-  async reorder(
-    @Param("orderId") orderId: string,
-    @Req() request: any,
-  ) {
+  async reorder(@Param("orderId") orderId: string, @Req() request: any) {
     const account = await this.customers.resolve(
       this.customers.readToken(request),
     );
@@ -1455,23 +1478,25 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       const product = catalog[id];
       if (!product) return [];
       const quantity = Math.min(20, Math.max(1, Number(item.quantity) || 1));
-      const grind = grinds.has(String(item.grind)) ? String(item.grind) : "Grãos";
+      const grind = preparationFor(id);
       const line = new Set(["essencial", "intenso"]).has(id)
         ? "Cotidiano"
         : id === "raros"
           ? "Raros"
           : "Memórias";
-      return [{
-        id,
-        name: product.name,
-        line,
-        notes: "Sua escolha anterior, pronta para ser confirmada novamente.",
-        priceCents: product.unitPriceCents,
-        weightGrams: product.weightGrams,
-        quantity,
-        grind,
-        image: null,
-      }];
+      return [
+        {
+          id,
+          name: product.name,
+          line,
+          notes: "Sua escolha anterior, pronta para ser confirmada novamente.",
+          priceCents: product.unitPriceCents,
+          weightGrams: product.weightGrams,
+          quantity,
+          grind,
+          image: null,
+        },
+      ];
     });
     if (!items.length)
       throw new BadRequestException(
@@ -1487,12 +1512,16 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     @Headers("x-storefront-order-token") suppliedToken: string | undefined,
     @Req() request: any,
   ) {
-    const account = await this.customers.resolve(this.customers.readToken(request));
+    const account = await this.customers.resolve(
+      this.customers.readToken(request),
+    );
     const accountOwnsOrder = account
       ? await this.customers.ownsOrder(account, orderId)
       : false;
     if (!suppliedToken && !accountOwnsOrder)
-      throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
+      throw new UnauthorizedException(
+        "Nova tentativa de pagamento não autorizada.",
+      );
 
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT *
@@ -1507,7 +1536,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     );
     const order = rows[0];
     if (!order)
-      throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
+      throw new UnauthorizedException(
+        "Nova tentativa de pagamento não autorizada.",
+      );
     if (order.status === "PAID")
       return { id: order.id, code: order.code, status: "PAID" };
     if (order.status === "CANCELLED")
@@ -1544,7 +1575,9 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     @Headers("x-storefront-order-token") suppliedToken: string | undefined,
     @Req() request: any,
   ) {
-    const account = await this.customers.resolve(this.customers.readToken(request));
+    const account = await this.customers.resolve(
+      this.customers.readToken(request),
+    );
     const accountOwnsOrder = account
       ? await this.customers.ownsOrder(account, orderId)
       : false;

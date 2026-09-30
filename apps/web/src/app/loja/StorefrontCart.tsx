@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
 import styles from "./storefront-cart.module.css";
+import SensorySignature from "./SensorySignature";
 
 export type StoreProductStory = {
   promise: string;
@@ -31,11 +32,10 @@ export type StoreProduct = {
   weightGrams: number;
   image?: string | null;
   story?: StoreProductStory;
-  preferredGrind?: Grind;
 };
 type Item = StoreProduct & { quantity: number };
-export type Grind = "Grãos" | "Espresso" | "Coado" | "Prensa francesa";
-type CartItem = Item & { grind?: Grind };
+type Preparation = "Grãos" | "Moído";
+type CartItem = Item & { grind: Preparation };
 type Quote = {
   id: string;
   name: string;
@@ -55,54 +55,74 @@ const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     v / 100,
   );
+const groundProductIds = new Set(["essencial", "intenso"]);
+const preparationFor = (product: Pick<StoreProduct, "id">): Preparation =>
+  groundProductIds.has(product.id) ? "Moído" : "Grãos";
 
 const cartProductStories: Record<string, StoreProductStory> = {
   essencial: {
-    promise: "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
-    founderNote: "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
+    promise:
+      "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
+    founderNote:
+      "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
     bestFor: "Rotina, café da manhã e quem prefere uma xícara macia.",
     brew: "Coado, cafeteira elétrica ou prensa francesa.",
   },
   intenso: {
-    promise: "Mais presença no primeiro gole, com corpo marcante e uma finalização limpa.",
-    founderNote: "Aqui buscamos presença com limpeza. Ele entrega intensidade sem esconder a qualidade da xícara.",
+    promise:
+      "Mais presença no primeiro gole, com corpo marcante e uma finalização limpa.",
+    founderNote:
+      "Aqui buscamos presença com limpeza. Ele entrega intensidade sem esconder a qualidade da xícara.",
     bestFor: "Quem gosta de café forte, leite e manhãs de mais energia.",
     brew: "Espresso, moka italiana ou prensa francesa.",
   },
   caramelo: {
-    promise: "Doçura reconhecível, chocolate e equilíbrio: uma xícara acolhedora que convida ao próximo gole.",
-    founderNote: "O Caramelo traduz muito do que acreditamos: sabor fácil de reconhecer, equilíbrio e vontade de repetir a xícara.",
+    promise:
+      "Doçura reconhecível, chocolate e equilíbrio: uma xícara acolhedora que convida ao próximo gole.",
+    founderNote:
+      "O Caramelo traduz muito do que acreditamos: sabor fácil de reconhecer, equilíbrio e vontade de repetir a xícara.",
     bestFor: "Pausas confortáveis, receber pessoas e acompanhar doces.",
     brew: "Coado, espresso ou prensa francesa.",
   },
   "doce-de-leite": {
-    promise: "Uma xícara gulosa e macia, com lembranças de açúcar mascavo, doce de leite e alfajor.",
-    founderNote: "Este é o nosso convite para perceber que o café pode ser naturalmente doce e cheio de referências afetivas.",
+    promise:
+      "Uma xícara gulosa e macia, com lembranças de açúcar mascavo, doce de leite e alfajor.",
+    founderNote:
+      "Este é o nosso convite para perceber que o café pode ser naturalmente doce e cheio de referências afetivas.",
     bestFor: "Uma pausa especial, sobremesas e quem valoriza doçura.",
     brew: "Coado ou prensa francesa, valorizando textura e doçura.",
   },
   tangerina: {
-    promise: "Cítrico, doce e fresco: um perfil luminoso para quem gosta de uma xícara viva.",
-    founderNote: "Queríamos um frutado claro e alegre, capaz de apresentar frescor sem transformar a xícara em algo difícil.",
+    promise:
+      "Cítrico, doce e fresco: um perfil luminoso para quem gosta de uma xícara viva.",
+    founderNote:
+      "Queríamos um frutado claro e alegre, capaz de apresentar frescor sem transformar a xícara em algo difícil.",
     bestFor: "Dias quentes, coados e quem quer explorar perfis frutados.",
     brew: "Coado ou preparo gelado.",
   },
   singular: {
-    promise: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
-    founderNote: "O Singular fica na memória porque não entrega tudo de uma vez. É um café para provar com curiosidade.",
+    promise:
+      "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
+    founderNote:
+      "O Singular fica na memória porque não entrega tudo de uma vez. É um café para provar com curiosidade.",
     bestFor: "Degustação, presentes e momentos de descoberta.",
     brew: "Coado, com água e proporção controladas.",
   },
   sublime: {
-    promise: "Rapadura, caramelo e doçura profunda em uma xícara longa, densa e contemplativa.",
-    founderNote: "O Sublime representa profundidade: uma doçura que ocupa a boca, permanece e ainda preserva elegância.",
+    promise:
+      "Rapadura, caramelo e doçura profunda em uma xícara longa, densa e contemplativa.",
+    founderNote:
+      "O Sublime representa profundidade: uma doçura que ocupa a boca, permanece e ainda preserva elegância.",
     bestFor: "Rituais sem pressa, presentes e quem busca profundidade.",
     brew: "Prensa francesa, espresso ou coado mais concentrado.",
   },
   raros: {
-    promise: "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
-    founderNote: "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, José e Suzi escolheram este pequeno lote como uma raridade Bispo.",
-    bestFor: "Degustar com atenção, presentear e conhecer a expressão do Norte do Paraná.",
+    promise:
+      "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
+    founderNote:
+      "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, José e Suzi escolheram este pequeno lote como uma raridade Bispo.",
+    bestFor:
+      "Degustar com atenção, presentear e conhecer a expressão do Norte do Paraná.",
     brew: "Coado, com água filtrada e preparo cuidadoso.",
   },
 };
@@ -167,14 +187,31 @@ function CartItemStory({ item }: { item: CartItem }) {
 
   return (
     <details className={styles.itemStory}>
-      <summary>Conhecer este café <span>+</span></summary>
+      <summary>
+        Conhecer este café <span>+</span>
+      </summary>
       <div>
         <p className={styles.storyPromise}>{story.promise}</p>
+        <div className={styles.storySensory}>
+          <SensorySignature
+            name={item.name}
+            notes={item.notes}
+            sensory={story.sensory}
+          />
+        </div>
         <dl>
-          <div><dt>Combina com</dt><dd>{story.bestFor}</dd></div>
-          <div><dt>Para preparar</dt><dd>{story.brew}</dd></div>
+          <div>
+            <dt>Combina com</dt>
+            <dd>{story.bestFor}</dd>
+          </div>
+          <div>
+            <dt>Para preparar</dt>
+            <dd>{story.brew}</dd>
+          </div>
         </dl>
-        <blockquote>“{story.founderNote}”<cite>José e Suzi · curadoria Bispo</cite></blockquote>
+        <blockquote>
+          “{story.founderNote}”<cite>José e Suzi · curadoria Bispo</cite>
+        </blockquote>
       </div>
     </details>
   );
@@ -191,13 +228,21 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<"now" | "reminder">("now");
   const [rhythm, setRhythm] = useState(30);
   const [couponInput, setCouponInput] = useState("");
-  const [coupon, setCoupon] = useState<{ code: string; discountCents: number } | null>(null);
+  const [coupon, setCoupon] = useState<{
+    code: string;
+    discountCents: number;
+  } | null>(null);
   const [couponMessage, setCouponMessage] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
 
   useEffect(() => {
     try {
-      setItems(JSON.parse(localStorage.getItem("bispo-cart-v2") || "[]"));
+      const stored = JSON.parse(localStorage.getItem("bispo-cart-v2") || "[]");
+      setItems(
+        Array.isArray(stored)
+          ? stored.map((item) => ({ ...item, grind: preparationFor(item) }))
+          : [],
+      );
       if (localStorage.getItem("bispo-open-cart") === "1") {
         localStorage.removeItem("bispo-open-cart");
         setVisible(true);
@@ -246,7 +291,10 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
               ? { ...item, quantity: item.quantity + 1 }
               : item,
           )
-        : [...current, { ...product, grind: product.preferredGrind, quantity: 1 }];
+        : [
+            ...current,
+            { ...product, grind: preparationFor(product), quantity: 1 },
+          ];
     });
     setQuote(null);
     setQuotes([]);
@@ -264,11 +312,6 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     setQuote(null);
     setQuotes([]);
     setCoupon(null);
-  };
-  const chooseGrind = (id: string, grind: Grind) => {
-    setItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, grind } : item)),
-    );
   };
   async function calculate(event: FormEvent) {
     event.preventDefault();
@@ -318,13 +361,18 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ code: couponInput, subtotalCents: subtotal }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Não foi possível aplicar o cupom.");
+      if (!response.ok)
+        throw new Error(data.message || "Não foi possível aplicar o cupom.");
       setCoupon({ code: data.code, discountCents: data.discountCents });
       setCouponInput(data.code);
       setCouponMessage(`Cupom ${data.code} aplicado.`);
     } catch (reason) {
       setCoupon(null);
-      setCouponMessage(reason instanceof Error ? reason.message : "Não foi possível aplicar o cupom.");
+      setCouponMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível aplicar o cupom.",
+      );
     } finally {
       setCouponLoading(false);
     }
@@ -334,7 +382,16 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     if (!quote) return;
     localStorage.setItem(
       "bispo-checkout-v1",
-      JSON.stringify({ items, cep, quote, mode, rhythm, subtotal, couponCode: coupon?.code, discountCents: coupon?.discountCents || 0 }),
+      JSON.stringify({
+        items,
+        cep,
+        quote,
+        mode,
+        rhythm,
+        subtotal,
+        couponCode: coupon?.code,
+        discountCents: coupon?.discountCents || 0,
+      }),
     );
     window.location.assign("/loja/finalizar");
   }
@@ -403,24 +460,18 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                         <p>{item.notes}</p>
                         <p className={styles.productFacts}>
                           {item.weightGrams} g <span aria-hidden="true">·</span>{" "}
-                          Torra média <span aria-hidden="true">·</span> Café torrado
+                          {item.grind === "Moído" ? "Moído" : "Em grãos"}{" "}
+                          <span aria-hidden="true">·</span> Torra média
                         </p>
-                        <label className={styles.grind}>
-                          <span>Moagem</span>
-                          <select
-                            value={item.grind || "Grãos"}
-                            onChange={(event) =>
-                              chooseGrind(item.id, event.target.value as Grind)
-                            }
-                            aria-label={`Moagem do café ${item.name}`}
-                          >
-                            <option>Grãos</option>
-                            <option>Espresso</option>
-                            <option>Coado</option>
-                            <option>Prensa francesa</option>
-                          </select>
-                        </label>
                         <b>{money(item.priceCents)}</b>
+                      </div>
+                      <div className={styles.sensorySlot}>
+                        <SensorySignature
+                          compact
+                          name={item.name}
+                          notes={item.notes}
+                          sensory={item.story?.sensory}
+                        />
                       </div>
                       <div className={styles.qty}>
                         <button
@@ -476,9 +527,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                               <b>{product.name}</b>
                               <em>{product.notes}</em>
                             </span>
-                            <strong>
-                              + {money(product.priceCents)}
-                            </strong>
+                            <strong>+ {money(product.priceCents)}</strong>
                           </button>
                         ))}
                       </div>
@@ -600,14 +649,41 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                   <section className={styles.coupon}>
                     <label htmlFor="cart-coupon">Cupom de benefício</label>
                     <div>
-                      <input id="cart-coupon" value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCoupon(null); setCouponMessage(""); }} placeholder="Digite seu cupom" />
-                      <button type="button" onClick={applyCoupon} disabled={couponLoading || !couponInput.trim()}>{couponLoading ? "Aplicando…" : "Aplicar"}</button>
+                      <input
+                        id="cart-coupon"
+                        value={couponInput}
+                        onChange={(event) => {
+                          setCouponInput(event.target.value.toUpperCase());
+                          setCoupon(null);
+                          setCouponMessage("");
+                        }}
+                        placeholder="Digite seu cupom"
+                      />
+                      <button
+                        type="button"
+                        onClick={applyCoupon}
+                        disabled={couponLoading || !couponInput.trim()}
+                      >
+                        {couponLoading ? "Aplicando…" : "Aplicar"}
+                      </button>
                     </div>
-                    {couponMessage && <small className={coupon ? styles.couponOk : styles.error}>{couponMessage}</small>}
+                    {couponMessage && (
+                      <small
+                        className={coupon ? styles.couponOk : styles.error}
+                      >
+                        {couponMessage}
+                      </small>
+                    )}
                   </section>
                   <div className={styles.total}>
                     <span>Total</span>
-                    <b>{money(subtotal - (coupon?.discountCents || 0) + (quote?.priceCents || 0))}</b>
+                    <b>
+                      {money(
+                        subtotal -
+                          (coupon?.discountCents || 0) +
+                          (quote?.priceCents || 0),
+                      )}
+                    </b>
                   </div>
                   <button disabled={!quote} onClick={continueToCheckout}>
                     Finalizar minha escolha →
@@ -646,7 +722,12 @@ export function AddToCartButton({
 }) {
   const cart = useCart();
   return (
-    <button className={className} style={style} disabled={disabled} onClick={() => cart.add(product)}>
+    <button
+      className={className}
+      style={style}
+      disabled={disabled}
+      onClick={() => cart.add(product)}
+    >
       {children}
     </button>
   );

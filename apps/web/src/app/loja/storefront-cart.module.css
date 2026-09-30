@@ -102,7 +102,7 @@
 }
 .drawer article {
   display: grid;
-  grid-template-columns: 78px 1fr auto;
+  grid-template-columns: 78px minmax(0, 1fr) 116px auto;
   gap: 16px;
   align-items: center;
   padding: 14px 0 16px;
@@ -137,23 +137,9 @@
   font-size: 17px;
   font-weight: 650;
 }
-.grind {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 3px 0;
-  font-size: 8px;
-  color: #0d1d1799;
-}
-.grind select {
-  max-width: 128px;
-  height: 25px;
-  padding: 0 5px;
-  border: 1px solid #0d1d1725;
-  border-radius: 2px;
-  background: transparent;
-  color: #0d1d17;
-  font: inherit;
+.sensorySlot {
+  min-width: 0;
+  align-self: center;
 }
 .photo {
   height: 82px;
@@ -227,6 +213,18 @@
   line-height: 1.55;
   opacity: 0.82;
 }
+.storySensory {
+  margin: 11px 0 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 12% 18%,
+      rgba(216, 160, 47, 0.12),
+      transparent 34%
+    ),
+    linear-gradient(135deg, #fffaf2, #f6eee4);
+}
 .itemStory dl {
   margin: 0;
 }
@@ -277,7 +275,7 @@
   color: #7b6147;
   font-size: 8px;
   font-weight: 800;
-  letter-spacing: .16em;
+  letter-spacing: 0.16em;
 }
 .recommendationIntro h3 {
   margin: 5px 0 3px;
@@ -308,7 +306,9 @@
   color: #0d1d17;
   text-align: left;
   cursor: pointer;
-  transition: border-color .2s ease, background .2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 .recommendation:hover {
   border-color: #0d1d1750;
@@ -329,7 +329,7 @@
 }
 .recommendationPhoto > span {
   font-size: 7px;
-  letter-spacing: .12em;
+  letter-spacing: 0.12em;
 }
 .recommendationCopy {
   display: grid;
@@ -340,7 +340,7 @@
   color: #7b6147;
   font-size: 7px;
   font-weight: 800;
-  letter-spacing: .12em;
+  letter-spacing: 0.12em;
 }
 .recommendationCopy b {
   font-size: 13px;
@@ -538,12 +538,44 @@
 .total b {
   font-size: 20px;
 }
-.coupon { margin: 7px 0; }
-.coupon label { display: block; margin-bottom: 4px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.coupon > div { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
-.coupon input { min-width: 0; border: 1px solid #0d1d1725; background: #fff; padding: 9px 10px; font-size: 11px; text-transform: uppercase; }
-.coupon button { border: 1px solid #0d1d17; background: transparent; padding: 0 13px; color: #0d1d17; font-size: 10px; font-weight: 700; }
-.couponOk { display: block; margin-top: 4px; color: #17634e; font-size: 10px; }
+.coupon {
+  margin: 7px 0;
+}
+.coupon label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.coupon > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+.coupon input {
+  min-width: 0;
+  border: 1px solid #0d1d1725;
+  background: #fff;
+  padding: 9px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.coupon button {
+  border: 1px solid #0d1d17;
+  background: transparent;
+  padding: 0 13px;
+  color: #0d1d17;
+  font-size: 10px;
+  font-weight: 700;
+}
+.couponOk {
+  display: block;
+  margin-top: 4px;
+  color: #17634e;
+  font-size: 10px;
+}
 .drawer footer .shipping {
   margin: 0 0 7px;
   padding: 10px 12px;
@@ -603,6 +635,10 @@
   }
   .drawer article {
     grid-template-columns: 68px 1fr;
+  }
+  .sensorySlot {
+    grid-column: 1 / -1;
+    padding: 3px 0 2px 68px;
   }
   .qty {
     grid-column: 2;

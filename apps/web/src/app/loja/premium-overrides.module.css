@@ -1,5 +1,5 @@
 .footer {
-  grid-template-columns: 1.4fr .7fr .7fr .9fr;
+  grid-template-columns: 1.4fr 0.7fr 0.7fr 0.9fr;
   border-top: 1px solid rgb(13 29 23 / 8%);
 }
 
@@ -17,7 +17,7 @@
 
 .conversionIntro {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(250px, .7fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.7fr);
   gap: 48px;
   align-items: end;
   margin-bottom: 32px;
@@ -29,14 +29,14 @@
   color: #735e49;
   font-size: 9px;
   font-weight: 750;
-  letter-spacing: .18em;
+  letter-spacing: 0.18em;
 }
 
 .conversionIntro h2 {
   max-width: 760px;
   margin: 9px 0 0;
-  font: 440 clamp(30px, 4.2vw, 58px)/.98 var(--font-manrope);
-  letter-spacing: -.045em;
+  font: 440 clamp(30px, 4.2vw, 58px)/0.98 var(--font-manrope);
+  letter-spacing: -0.045em;
 }
 
 .conversionIntro p {
@@ -57,7 +57,7 @@
 .featuredCard {
   --featured-tone: #7b6147;
   display: grid;
-  grid-template-columns: minmax(92px, .7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr);
   min-height: 270px;
   overflow: hidden;
   border-top: 3px solid var(--featured-tone);
@@ -81,7 +81,7 @@
   height: 210px;
   object-fit: contain;
   filter: drop-shadow(0 14px 14px rgb(13 29 23 / 14%));
-  transition: transform .35s ease;
+  transition: transform 0.35s ease;
 }
 
 .featuredCard:hover .featuredVisual img {
@@ -90,7 +90,7 @@
 
 .featuredVisual > span {
   font-size: 12px;
-  letter-spacing: .24em;
+  letter-spacing: 0.24em;
 }
 
 .featuredCopy {
@@ -104,7 +104,7 @@
 .featuredCopy h3 {
   margin: 7px 0 4px;
   font: 470 clamp(24px, 2.2vw, 34px)/1 var(--font-manrope);
-  letter-spacing: -.035em;
+  letter-spacing: -0.035em;
 }
 
 .featuredCopy p {
@@ -118,7 +118,7 @@
 .featuredCopy > span {
   color: rgb(13 29 23 / 55%);
   font-size: 9px;
-  letter-spacing: .035em;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
@@ -148,9 +148,11 @@
   color: #fff;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .02em;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background .2s ease, color .2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .featuredCopy button:hover {
@@ -160,11 +162,45 @@
 
 .purchaseAssurances {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   align-items: center;
   border: solid rgb(13 29 23 / 11%);
   border-width: 0 1px 1px;
   background: #f4f1eb;
+}
+
+.catalogCard {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.catalogMeta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.catalogMeta > span {
+  min-height: 32px;
+}
+
+.catalogMeta > button,
+.catalogMeta > a {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.catalogBuyRow {
+  margin-top: auto !important;
+  padding-top: 18px;
+}
+
+.catalogEnd {
+  justify-content: flex-end !important;
 }
 
 .purchaseAssurances > span {
@@ -216,7 +252,7 @@
   }
 
   .purchaseAssurances {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .purchaseAssurances > a {
@@ -227,7 +263,9 @@
 }
 
 @media (max-width: 600px) {
-  .footer { grid-template-columns: 1fr; }
+  .footer {
+    grid-template-columns: 1fr;
+  }
 
   .conversionShelf {
     padding: 46px 18px 0;

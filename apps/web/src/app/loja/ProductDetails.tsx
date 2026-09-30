@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import Link from "next/link";
 import { AddToCartButton, type StoreProduct, type StoreProductStory } from "./StorefrontCart";
+import SensorySignature from "./SensorySignature";
 import styles from "./product-details.module.css";
 import fixStyles from "./product-details-fix.module.css";
 
@@ -116,18 +117,16 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
                 <dl>
                   <div><dt>Combina com</dt><dd>{story.bestFor}</dd></div>
                   <div><dt>Para preparar</dt><dd>{story.brew}</dd></div>
-                  <div><dt>O que você recebe</dt><dd>1 pacote de {product.weightLabel}, torrado pela Bispo.</dd></div>
+                  <div><dt>O que você recebe</dt><dd>1 pacote de {product.weightLabel}, {product.line === "GOURMET" ? "torrado e moído" : "torrado e embalado em grãos"} pela Bispo.</dd></div>
                 </dl>
               </article>
 
               <aside className={styles.sensory}>
-                <small>PERFIL SENSORIAL</small>
-                {story.sensory.map((item) => (
-                  <div className={styles.meter} key={item.label}>
-                    <span>{item.label}</span><i><b style={{ width: `${item.value}%` }} /></i>
-                  </div>
-                ))}
-                <p>As barras são um guia de sensação — não uma nota de qualidade.</p>
+                <SensorySignature
+                  name={product.name}
+                  notes={product.notes}
+                  sensory={story.sensory}
+                />
               </aside>
 
               {story.sensoryDescription && (

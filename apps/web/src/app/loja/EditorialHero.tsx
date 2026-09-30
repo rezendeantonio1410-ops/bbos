@@ -60,7 +60,7 @@ const scenes = [
     name: "Sublime",
     title: "Escolhido por quem",
     italic: "vive o café.",
-    copy: "José conhece a origem e a prova. Suzi acompanha a planta e a produção. Juntos, escolhem o que chega à sua xícara.",
+    copy: "A Bispo acompanha a origem, a produção e a prova para escolher o que chega à sua xícara.",
     image: "/brand/story/suzi-fragrancia.jpeg",
     product: "/brand/products/sublime-treated.webp",
     notes: "Rapadura · Caramelo · Doçura profunda",
@@ -101,7 +101,9 @@ export default function EditorialHero({
 
   const move = (direction: number) => {
     setPaused(true);
-    setActive((current) => (current + direction + scenes.length) % scenes.length);
+    setActive(
+      (current) => (current + direction + scenes.length) % scenes.length,
+    );
   };
 
   return (
@@ -120,7 +122,12 @@ export default function EditorialHero({
             key={item.name}
             className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
             src={mediaSlots[item.mediaSlot]?.url ?? item.image}
-            alt={index === active ? mediaSlots[item.mediaSlot]?.altText ?? `${item.name}: uma cena da experiência Bispo Coffees` : ""}
+            alt={
+              index === active
+                ? (mediaSlots[item.mediaSlot]?.altText ??
+                  `${item.name}: uma cena da experiência Bispo Coffees`)
+                : ""
+            }
             fill
             priority={index === 0}
             sizes="(max-width: 960px) 100vw, 54vw"
@@ -130,25 +137,36 @@ export default function EditorialHero({
         <div className={styles.mediaShade} />
         <div className={styles.mediaSignature}>
           <span>ESCOLHIDO NA ORIGEM</span>
-          <b>José &amp; Suzi · Bispo Coffees</b>
         </div>
         <div className={styles.controls}>
-          <button onClick={() => move(-1)} aria-label="Cena anterior"><ArrowLeft /></button>
-          <span>{String(active + 1).padStart(2, "0")} / {String(scenes.length).padStart(2, "0")}</span>
-          <button onClick={() => move(1)} aria-label="Próxima cena"><ArrowRight /></button>
+          <button onClick={() => move(-1)} aria-label="Cena anterior">
+            <ArrowLeft />
+          </button>
+          <span>
+            {String(active + 1).padStart(2, "0")} /{" "}
+            {String(scenes.length).padStart(2, "0")}
+          </span>
+          <button onClick={() => move(1)} aria-label="Próxima cena">
+            <ArrowRight />
+          </button>
         </div>
       </div>
 
       <div className={styles.copy} aria-live="polite">
-        <div className={styles.topline}><span>{scene.line}</span><i /><b>{scene.name}</b></div>
-        <h1>{scene.title}<br /><em>{scene.italic}</em></h1>
+        <div className={styles.topline}>
+          <span>{scene.line}</span>
+          <i />
+          <b>{scene.name}</b>
+        </div>
+        <h1>
+          {scene.title}
+          <br />
+          <em>{scene.italic}</em>
+        </h1>
         <p className={styles.intro}>{scene.copy}</p>
         <div className={styles.productStage}>
           <div className={styles.productImage}>
-            <img
-              src={scene.product}
-              alt={`Café ${scene.name}`}
-            />
+            <img src={scene.product} alt={`Café ${scene.name}`} />
           </div>
           <div className={styles.productReading}>
             <small>LEITURA SENSORIAL</small>
@@ -157,14 +175,23 @@ export default function EditorialHero({
           </div>
         </div>
         <div className={styles.buyRow}>
-          <div><small>a partir de</small><strong>{scene.price}</strong></div>
+          <div>
+            <small>a partir de</small>
+            <strong>{scene.price}</strong>
+          </div>
           <AddToCartButton
             product={{
-              id: scene.name.toLowerCase(), name: scene.name, line: scene.line,
-              notes: scene.notes, priceCents: scene.priceCents, weightGrams: 500,
+              id: scene.name.toLowerCase(),
+              name: scene.name,
+              line: scene.line,
+              notes: scene.notes,
+              priceCents: scene.priceCents,
+              weightGrams: 500,
               image: scene.product,
             }}
-          >Quero este café <span>→</span></AddToCartButton>
+          >
+            Quero este café <span>→</span>
+          </AddToCartButton>
         </div>
         <Link className={styles.assist} href="/loja/descobrir">
           Prefere outra sensação? Descubra o café que combina com você →
@@ -174,7 +201,10 @@ export default function EditorialHero({
             <button
               key={item.name}
               className={index === active ? styles.activeDot : ""}
-              onClick={() => { setPaused(true); setActive(index); }}
+              onClick={() => {
+                setPaused(true);
+                setActive(index);
+              }}
               aria-label={`Mostrar ${item.name}`}
               aria-current={index === active ? "true" : undefined}
             />

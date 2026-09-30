@@ -36,12 +36,20 @@ const products = [
     image: "/brand/products/essencial-treated.webp",
     tag: "para todo dia",
     story: {
-      promise: "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
-      description: "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. É uma escolha segura para quem está começando no café especial ou quer simplicidade bem-feita todos os dias.",
-      founderNote: "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
+      promise:
+        "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
+      description:
+        "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. É uma escolha segura para quem está começando no café especial ou quer simplicidade bem-feita todos os dias.",
+      founderNote:
+        "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
       bestFor: "rotina, café da manhã e quem prefere uma xícara macia",
       brew: "coado, cafeteira elétrica ou prensa francesa",
-      sensory: [{ label: "Doçura", value: 72 }, { label: "Corpo", value: 48 }, { label: "Frescor", value: 38 }, { label: "Intensidade", value: 44 }],
+      sensory: [
+        { label: "Doçura", value: 72 },
+        { label: "Corpo", value: 48 },
+        { label: "Frescor", value: 38 },
+        { label: "Intensidade", value: 44 },
+      ],
     } satisfies ProductStory,
   },
   {
@@ -55,12 +63,20 @@ const products = [
     image: "/brand/products/intenso-treated.webp",
     tag: "mais corpo",
     story: {
-      promise: "Mais presença no primeiro gole, com corpo marcante e uma finalização limpa.",
-      description: "É a escolha para quem associa uma boa xícara à intensidade. A sensação é mais encorpada e direta, mas sem deixar o sabor pesado ou confuso.",
-      founderNote: "Aqui buscamos presença com limpeza. Ele entrega intensidade sem esconder a qualidade da xícara.",
+      promise:
+        "Mais presença no primeiro gole, com corpo marcante e uma finalização limpa.",
+      description:
+        "É a escolha para quem associa uma boa xícara à intensidade. A sensação é mais encorpada e direta, mas sem deixar o sabor pesado ou confuso.",
+      founderNote:
+        "Aqui buscamos presença com limpeza. Ele entrega intensidade sem esconder a qualidade da xícara.",
       bestFor: "quem gosta de café forte, leite e manhãs de mais energia",
       brew: "espresso, moka italiana ou prensa francesa",
-      sensory: [{ label: "Doçura", value: 55 }, { label: "Corpo", value: 86 }, { label: "Frescor", value: 34 }, { label: "Intensidade", value: 88 }],
+      sensory: [
+        { label: "Doçura", value: 55 },
+        { label: "Corpo", value: 86 },
+        { label: "Frescor", value: 34 },
+        { label: "Intensidade", value: 88 },
+      ],
     } satisfies ProductStory,
   },
   {
@@ -74,12 +90,20 @@ const products = [
     image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
     story: {
-      promise: "Doçura reconhecível, chocolate e equilíbrio: uma xícara acolhedora que convida ao próximo gole.",
-      description: "O perfil lembra caramelo e chocolate sem precisar procurar demais. O corpo é redondo, a doçura permanece e o conjunto funciona tanto puro quanto acompanhado.",
-      founderNote: "O Caramelo traduz muito do que acreditamos: sabor fácil de reconhecer, equilíbrio e vontade de repetir a xícara.",
+      promise:
+        "Doçura reconhecível, chocolate e equilíbrio: uma xícara acolhedora que convida ao próximo gole.",
+      description:
+        "O perfil lembra caramelo e chocolate sem precisar procurar demais. O corpo é redondo, a doçura permanece e o conjunto funciona tanto puro quanto acompanhado.",
+      founderNote:
+        "O Caramelo traduz muito do que acreditamos: sabor fácil de reconhecer, equilíbrio e vontade de repetir a xícara.",
       bestFor: "pausas confortáveis, receber pessoas e acompanhar doces",
       brew: "coado, espresso ou prensa francesa",
-      sensory: [{ label: "Doçura", value: 88 }, { label: "Corpo", value: 70 }, { label: "Frescor", value: 42 }, { label: "Intensidade", value: 66 }],
+      sensory: [
+        { label: "Doçura", value: 88 },
+        { label: "Corpo", value: 70 },
+        { label: "Frescor", value: 42 },
+        { label: "Intensidade", value: 66 },
+      ],
     } satisfies ProductStory,
   },
   {
@@ -93,12 +117,20 @@ const products = [
     image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
     story: {
-      promise: "Uma xícara gulosa e macia, com lembranças de açúcar mascavo, doce de leite e alfajor.",
-      description: "A experiência começa na doçura e termina com sensação cremosa e prolongada. É um café para quem procura conforto, mas quer um perfil com personalidade própria.",
-      founderNote: "Este é o nosso convite para perceber que o café pode ser naturalmente doce e cheio de referências afetivas.",
+      promise:
+        "Uma xícara gulosa e macia, com lembranças de açúcar mascavo, doce de leite e alfajor.",
+      description:
+        "A experiência começa na doçura e termina com sensação cremosa e prolongada. É um café para quem procura conforto, mas quer um perfil com personalidade própria.",
+      founderNote:
+        "Este é o nosso convite para perceber que o café pode ser naturalmente doce e cheio de referências afetivas.",
       bestFor: "uma pausa especial, sobremesas e quem valoriza doçura",
       brew: "coado ou prensa francesa, valorizando textura e doçura",
-      sensory: [{ label: "Doçura", value: 94 }, { label: "Corpo", value: 76 }, { label: "Frescor", value: 36 }, { label: "Intensidade", value: 64 }],
+      sensory: [
+        { label: "Doçura", value: 94 },
+        { label: "Corpo", value: 76 },
+        { label: "Frescor", value: 36 },
+        { label: "Intensidade", value: 64 },
+      ],
     } satisfies ProductStory,
   },
   {
@@ -112,12 +144,20 @@ const products = [
     image: null,
     tag: "frescor",
     story: {
-      promise: "Cítrico, doce e fresco: um perfil luminoso para quem gosta de uma xícara viva.",
-      description: "A lembrança de tangerina traz brilho sem perder a doçura. É uma porta de entrada acessível para sabores frutados e uma escolha especialmente agradável em preparos filtrados.",
-      founderNote: "Queríamos um frutado claro e alegre, capaz de apresentar frescor sem transformar a xícara em algo difícil.",
+      promise:
+        "Cítrico, doce e fresco: um perfil luminoso para quem gosta de uma xícara viva.",
+      description:
+        "A lembrança de tangerina traz brilho sem perder a doçura. É uma porta de entrada acessível para sabores frutados e uma escolha especialmente agradável em preparos filtrados.",
+      founderNote:
+        "Queríamos um frutado claro e alegre, capaz de apresentar frescor sem transformar a xícara em algo difícil.",
       bestFor: "dias quentes, coados e quem quer explorar perfis frutados",
       brew: "coado ou preparo gelado",
-      sensory: [{ label: "Doçura", value: 72 }, { label: "Corpo", value: 45 }, { label: "Frescor", value: 90 }, { label: "Intensidade", value: 58 }],
+      sensory: [
+        { label: "Doçura", value: 72 },
+        { label: "Corpo", value: 45 },
+        { label: "Frescor", value: 90 },
+        { label: "Intensidade", value: 58 },
+      ],
     } satisfies ProductStory,
   },
   {
@@ -131,12 +171,20 @@ const products = [
     image: "/brand/products/singular-treated.webp",
     tag: "descoberta",
     story: {
-      promise: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
-      description: "Há mais camadas para perceber e novas sensações aparecem ao longo da xícara. É indicado para quem já gosta de café especial ou quer descobrir até onde uma origem bem trabalhada pode chegar.",
-      founderNote: "O Singular fica na memória porque não entrega tudo de uma vez. É um café para provar com curiosidade.",
+      promise:
+        "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
+      description:
+        "Há mais camadas para perceber e novas sensações aparecem ao longo da xícara. É indicado para quem já gosta de café especial ou quer descobrir até onde uma origem bem trabalhada pode chegar.",
+      founderNote:
+        "O Singular fica na memória porque não entrega tudo de uma vez. É um café para provar com curiosidade.",
       bestFor: "degustação, presentes e momentos de descoberta",
       brew: "coado, com água e proporção controladas",
-      sensory: [{ label: "Doçura", value: 78 }, { label: "Corpo", value: 58 }, { label: "Frescor", value: 84 }, { label: "Intensidade", value: 72 }],
+      sensory: [
+        { label: "Doçura", value: 78 },
+        { label: "Corpo", value: 58 },
+        { label: "Frescor", value: 84 },
+        { label: "Intensidade", value: 72 },
+      ],
     } satisfies ProductStory,
   },
   {
@@ -150,12 +198,20 @@ const products = [
     image: "/brand/products/sublime-treated.webp",
     tag: "experiência",
     story: {
-      promise: "Rapadura, caramelo e doçura profunda em uma xícara longa, densa e contemplativa.",
-      description: "O perfil combina doçura intensa e corpo envolvente, com final persistente. É uma experiência mais profunda para quem procura concentração de sabor sem abrir mão do equilíbrio.",
-      founderNote: "O Sublime representa profundidade: uma doçura que ocupa a boca, permanece e ainda preserva elegância.",
+      promise:
+        "Rapadura, caramelo e doçura profunda em uma xícara longa, densa e contemplativa.",
+      description:
+        "O perfil combina doçura intensa e corpo envolvente, com final persistente. É uma experiência mais profunda para quem procura concentração de sabor sem abrir mão do equilíbrio.",
+      founderNote:
+        "O Sublime representa profundidade: uma doçura que ocupa a boca, permanece e ainda preserva elegância.",
       bestFor: "rituais sem pressa, presentes e quem busca profundidade",
       brew: "prensa francesa, espresso ou coado mais concentrado",
-      sensory: [{ label: "Doçura", value: 92 }, { label: "Corpo", value: 88 }, { label: "Frescor", value: 40 }, { label: "Intensidade", value: 82 }],
+      sensory: [
+        { label: "Doçura", value: 92 },
+        { label: "Corpo", value: 88 },
+        { label: "Frescor", value: 40 },
+        { label: "Intensidade", value: 82 },
+      ],
     } satisfies ProductStory,
   },
   alexandreMicrolot.product,
@@ -197,9 +253,13 @@ export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Cafés especiais brasileiros",
-  description: "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e curadoria de José e Suzi.",
+  description:
+    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e curadoria de José e Suzi.",
   alternates: { canonical: "/loja" },
-  openGraph: { title: "Bispo Coffees — cafés escolhidos, não apenas vendidos", url: "/loja" },
+  openGraph: {
+    title: "Bispo Coffees — cafés escolhidos, não apenas vendidos",
+    url: "/loja",
+  },
 };
 
 export default async function LojaPage() {
@@ -211,28 +271,25 @@ export default async function LojaPage() {
     ...product,
     image: storefrontImages[product.name]?.primary ?? product.image,
   }));
-  const featuredGuidance: Record<
-    string,
-    { eyebrow: string; reason: string }
-  > = {
-    Essencial: {
-      eyebrow: "PARA TODO DIA",
-      reason: "Macio e equilibrado para começar pelo conforto.",
-    },
-    Caramelo: {
-      eyebrow: "DOÇURA RECONHECÍVEL",
-      reason: "Caramelo e chocolate em uma xícara acolhedora.",
-    },
-    Sublime: {
-      eyebrow: "MAIS PROFUNDIDADE",
-      reason: "Uma experiência longa, densa e contemplativa.",
-    },
-  };
+  const featuredGuidance: Record<string, { eyebrow: string; reason: string }> =
+    {
+      Essencial: {
+        eyebrow: "PARA TODO DIA",
+        reason: "Macio e equilibrado para começar pelo conforto.",
+      },
+      Caramelo: {
+        eyebrow: "DOÇURA RECONHECÍVEL",
+        reason: "Caramelo e chocolate em uma xícara acolhedora.",
+      },
+      Sublime: {
+        eyebrow: "MAIS PROFUNDIDADE",
+        reason: "Uma experiência longa, densa e contemplativa.",
+      },
+    };
   const featuredProducts = ["Essencial", "Caramelo", "Sublime"]
     .map((name) => catalogProducts.find((product) => product.name === name))
-    .filter(
-      (product): product is (typeof catalogProducts)[number] =>
-        Boolean(product),
+    .filter((product): product is (typeof catalogProducts)[number] =>
+      Boolean(product),
     );
   return (
     <StorefrontCartProvider>
@@ -242,7 +299,9 @@ export default async function LojaPage() {
           <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
           <a href="#cafes">Comprar cafés →</a>
         </div>
-        <header className={`${styles.header} ${journey.header} ${storyNav.header}`}>
+        <header
+          className={`${styles.header} ${journey.header} ${storyNav.header}`}
+        >
           <a
             href="#top"
             className={styles.brand}
@@ -256,7 +315,10 @@ export default async function LojaPage() {
               priority
             />
           </a>
-          <nav className={`${styles.nav} ${storyNav.nav}`} aria-label="Navegação principal">
+          <nav
+            className={`${styles.nav} ${storyNav.nav}`}
+            aria-label="Navegação principal"
+          >
             <a href="#cafes">Cafés</a>
             <a href="#camadas">Escolher</a>
             <Link href="/loja/descobrir">Descobrir o meu</Link>
@@ -271,14 +333,21 @@ export default async function LojaPage() {
             >
               <Search aria-hidden="true" />
             </a>
-            <Link className={journey.actionLink} href="/loja/conta" aria-label="Minha Bispo">
+            <Link
+              className={journey.actionLink}
+              href="/loja/conta"
+              aria-label="Minha Bispo"
+            >
               <UserRound aria-hidden="true" />
             </Link>
             <CartButton />
           </div>
         </header>
 
-        <EditorialHero productImages={storefrontImages} mediaSlots={mediaLibrary.slots} />
+        <EditorialHero
+          productImages={storefrontImages}
+          mediaSlots={mediaLibrary.slots}
+        />
 
         <section
           className={premium.conversionShelf}
@@ -292,8 +361,8 @@ export default async function LojaPage() {
               </h2>
             </div>
             <p>
-              Escolha pelo momento. A moagem é definida na sacola e José e
-              Suzi acompanham a curadoria de cada perfil.
+              Escolha pelo momento. A linha Gourmet chega moída; as demais
+              linhas são enviadas em grãos.
             </p>
           </header>
           <div className={premium.featuredGrid}>
@@ -306,7 +375,9 @@ export default async function LojaPage() {
                 <article
                   key={product.name}
                   className={premium.featuredCard}
-                  style={{ "--featured-tone": product.tone } as React.CSSProperties}
+                  style={
+                    { "--featured-tone": product.tone } as React.CSSProperties
+                  }
                 >
                   <div className={premium.featuredVisual}>
                     {product.image ? (
@@ -352,85 +423,17 @@ export default async function LojaPage() {
           </div>
           <div className={premium.purchaseAssurances}>
             <span>
-              <b>Pix simples</b>
-              <small>Confirmação automática</small>
-            </span>
-            <span>
-              <b>Moagem à sua escolha</b>
-              <small>Definida antes do pagamento</small>
+              <b>Formato definido por linha</b>
+              <small>Gourmet moído · demais em grãos</small>
             </span>
             <span>
               <b>Receber regularmente</b>
               <small>Sem cobrança automática</small>
             </span>
-            <Link href="/loja/descobrir">Ainda em dúvida? Descubra o seu →</Link>
+            <Link href="/loja/descobrir">
+              Ainda em dúvida? Descubra o seu →
+            </Link>
           </div>
-        </section>
-
-        <section id="camadas" className={layers.section}>
-          <div className={layers.intro}>
-            <div>
-              <small>OS CAMINHOS DO BISPO</small>
-              <h2>Quatro camadas. Escolha o seu momento.</h2>
-            </div>
-            <p>
-              Do cotidiano aos microlotes, compare os perfis e escolha com
-              clareza.
-            </p>
-          </div>
-          <div className={layers.grid}>
-            {collections.map((collection, index) => (
-              <a
-                key={collection.name}
-                href={`#${collectionId(collection.name)}`}
-                className={layers.card}
-                style={
-                  { "--layer-tone": collection.tone } as React.CSSProperties
-                }
-              >
-                <span className={layers.number}>0{index + 1}</span>
-                <i />
-                <strong>{collection.name}</strong>
-                <p>{collection.copy}</p>
-              </a>
-            ))}
-          </div>
-        </section>
-
-        <section
-          className={brand.editorialBridge}
-          aria-label="A experiência Bispo"
-        >
-          <article
-            className={brand.editorialLead}
-            data-photo-slot="sectional-origin-new-photo"
-          >
-            <Image
-              src={mediaLibrary.slots["home.origin"]?.url ?? "/brand/story/jose-origem.jpeg"}
-              alt={mediaLibrary.slots["home.origin"]?.altText ?? "A leitura da origem pela Bispo Coffees"}
-              fill
-              sizes="(max-width: 800px) 100vw, 58vw"
-            />
-            <div>
-              <small>DA ORIGEM À XÍCARA</small>
-              <h2>O café começa muito antes do primeiro gole.</h2>
-              <p>
-                Relação, prova e escolha. Cada lote chega com uma história que
-                José e Suzi fazem questão de preservar.
-              </p>
-            </div>
-          </article>
-          <aside
-            className={brand.photoManifest}
-            data-photo-slot="sectional-ritual-new-photo"
-          >
-            <span>SELEÇÃO BISPO</span>
-            <strong>Da origem, à torra, à xícara.</strong>
-            <p>
-              Cada lote é escolhido por José e Suzi, torrado pela Bispo e
-              apresentado pelo seu perfil sensorial.
-            </p>
-          </aside>
         </section>
 
         <section
@@ -443,11 +446,15 @@ export default async function LojaPage() {
               <h2>Escolha pelo perfil.</h2>
             </div>
             <p>
-              Compare os perfis, escolha a moagem e compre. Se preferir, José e
-              Suzi ajudam você a encontrar a xícara certa.
+              Compare os perfis e escolha sua próxima xícara. Se ainda estiver
+              em dúvida, use o guia sensorial.
             </p>
           </div>
-          <nav className={layers.filter} aria-label="Camadas dos cafés">
+          <nav
+            id="camadas"
+            className={layers.filter}
+            aria-label="Linhas de cafés"
+          >
             {collections.map((collection) => (
               <a
                 key={collection.name}
@@ -492,7 +499,7 @@ export default async function LojaPage() {
                       <article
                         key={p.name}
                         id={p.name.toLowerCase().replaceAll(" ", "-")}
-                        className={`${styles.productCard} ${journey.productCard}`}
+                        className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard}`}
                         style={{ "--tone": p.tone } as React.CSSProperties}
                       >
                         <div
@@ -502,15 +509,21 @@ export default async function LojaPage() {
                           {p.image ? (
                             <img
                               src={p.image}
-                              alt={`Embalagem Bispo ${p.name}`}
+                              alt={
+                                p.name === "Raro"
+                                  ? "Cerejas maduras do microlote Raro"
+                                  : `Embalagem Bispo ${p.name}`
+                              }
                               className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
                             />
                           ) : p.name === "Raro" ? (
-                            <div className={layers.rarePackagePlaceholder} aria-label="Espaço reservado para a embalagem do café Raro">
-                              <small>EDIÇÃO LIMITADA</small>
-                              <span>BISPO</span>
+                            <div
+                              className={tight.catalogFallback}
+                              aria-label="Foto do microlote Raro em atualização"
+                            >
+                              <span>MICROLOTE</span>
                               <b>Raro</b>
-                              <em>250 g</em>
+                              <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
                             </div>
                           ) : (
                             <div className={tight.catalogFallback}>
@@ -521,13 +534,18 @@ export default async function LojaPage() {
                           )}
                           <small>{p.tag}</small>
                         </div>
-                        <div className={styles.productMeta}>
+                        <div
+                          className={`${styles.productMeta} ${premium.catalogMeta}`}
+                        >
                           <p>{p.line}</p>
                           <h3>{p.name}</h3>
                           <span>{p.notes}</span>
                           <ProductDetails
                             product={{
-                              id: p.name === "Raro" ? "raros" : p.name.toLowerCase().replaceAll(" ", "-"),
+                              id:
+                                p.name === "Raro"
+                                  ? "raros"
+                                  : p.name.toLowerCase().replaceAll(" ", "-"),
                               name: p.name,
                               line: p.line,
                               notes: p.notes,
@@ -543,7 +561,9 @@ export default async function LojaPage() {
                               ...p.story,
                               proofImages: (
                                 mediaLibrary.productProofs[
-                                  p.name === "Raro" ? "raros" : p.name.toLowerCase().replaceAll(" ", "-")
+                                  p.name === "Raro"
+                                    ? "raros"
+                                    : p.name.toLowerCase().replaceAll(" ", "-")
                                 ] ?? []
                               ).map((photo) => ({
                                 src: photo.url,
@@ -551,16 +571,29 @@ export default async function LojaPage() {
                                 caption: photo.caption ?? photo.title,
                               })),
                             }}
-                            detailHref={p.name === "Raro" ? `/loja/cafes/${alexandreMicrolot.slug}` : undefined}
-                            detailLabel={p.name === "Raro" ? "Conhecer este lote →" : undefined}
+                            detailHref={
+                              p.name === "Raro"
+                                ? `/loja/cafes/${alexandreMicrolot.slug}`
+                                : undefined
+                            }
+                            detailLabel={
+                              p.name === "Raro"
+                                ? "Conhecer este lote →"
+                                : undefined
+                            }
                           />
-                          <div className={`${styles.buyRow} ${premium.buyRow}`}>
+                          <div
+                            className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
+                          >
                             <strong>
                               {p.price} <small>· {p.weight}</small>
                             </strong>
                             <AddToCartButton
                               product={{
-                                id: p.name === "Raro" ? "raros" : p.name.toLowerCase().replaceAll(" ", "-"),
+                                id:
+                                  p.name === "Raro"
+                                    ? "raros"
+                                    : p.name.toLowerCase().replaceAll(" ", "-"),
                                 name: p.name,
                                 line: p.line,
                                 notes: p.notes,
@@ -590,8 +623,7 @@ export default async function LojaPage() {
               </div>
             );
           })}
-          <div className={styles.allProducts}>
-            <a href="#camadas">Voltar às quatro camadas ↑</a>
+          <div className={`${styles.allProducts} ${premium.catalogEnd}`}>
             <Link href="/loja/descobrir">
               Não sabe qual escolher? Descubra o seu →
             </Link>
@@ -605,15 +637,27 @@ export default async function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src={mediaLibrary.slots["founder.jose.portrait"]?.url ?? "/brand/founders/jose-rezende.jpg"}
-                alt={mediaLibrary.slots["founder.jose.portrait"]?.altText ?? "José Rezende avaliando um café"}
+                src={
+                  mediaLibrary.slots["founder.jose.portrait"]?.url ??
+                  "/brand/founders/jose-rezende.jpg"
+                }
+                alt={
+                  mediaLibrary.slots["founder.jose.portrait"]?.altText ??
+                  "José Rezende avaliando um café"
+                }
               />
               <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
             <figure className={founder.portrait}>
               <img
-                src={mediaLibrary.slots["founder.suzi.portrait"]?.url ?? "/brand/founders/suzi-ninov.jpg"}
-                alt={mediaLibrary.slots["founder.suzi.portrait"]?.altText ?? "Suzi Ninov avaliando um café"}
+                src={
+                  mediaLibrary.slots["founder.suzi.portrait"]?.url ??
+                  "/brand/founders/suzi-ninov.jpg"
+                }
+                alt={
+                  mediaLibrary.slots["founder.suzi.portrait"]?.altText ??
+                  "Suzi Ninov avaliando um café"
+                }
               />
               <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
             </figure>
@@ -621,38 +665,15 @@ export default async function LojaPage() {
           <div
             className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
           >
-            <small>O BISPO · A BISPO</small>
-            <h2>O Bispo é José. A Bispo é José e Suzi.</h2>
+            <small>NOSSA HISTÓRIA</small>
+            <h2>Escolha construída na origem.</h2>
             <p className={founder.sharedStory}>
-              A marca reúne dois percursos reais: José, do produtor ao mercado
-              internacional; Suzi, da planta e do solo à qualidade. A escolha
-              final é construída pelos dois.
+              A Bispo reúne experiência de campo, produção, prova, torra e
+              mercado para selecionar cafés com identidade e constância.
             </p>
-            <div className={founder.proofs}>
-              <p>
-                <b>José Rezende</b>
-                <br />
-                No campo desde 2003. Q-Grader e, em 2015, cofundador da
-                Capricornio Coffees.
-              </p>
-              <p>
-                <b>Suzi Ninov</b>
-                <br />
-                No Paraná desde 2006, une nutrição, manejo, produtividade e
-                qualidade na relação com produtores.
-              </p>
-            </div>
-            <div className={founder.trust} aria-label="Critérios Bispo">
-              <span>Campo · desde 2003</span>
-              <span>Suzi · Paraná desde 2006</span>
-              <span>Mercado internacional · desde 2015</span>
-            </div>
             <div className={founder.actions}>
-              <a className={founder.primary} href="#cafes">
-                Ver os cafés escolhidos →
-              </a>
-              <Link className={founder.secondary} href="/loja/sobre">
-                Conhecer nossa história
+              <Link className={founder.primary} href="/loja/sobre">
+                Conhecer nossa história →
               </Link>
             </div>
           </div>
@@ -692,11 +713,18 @@ export default async function LojaPage() {
             <strong>Atendimento</strong>
             <Link href="/loja/entrega-e-devolucoes">Entrega e devoluções</Link>
             <Link href="/loja/termos-de-compra">Termos de compra</Link>
-            <a href="mailto:pedidos@bispocoffees.com.br">pedidos@bispocoffees.com.br</a>
+            <a href="mailto:pedidos@bispocoffees.com.br">
+              pedidos@bispocoffees.com.br
+            </a>
           </div>
           <div className={styles.footerBottom}>
-            <span>Bispo Coffees Ltda · CNPJ 13.008.726/0001-12 · Londrina, PR</span>
-            <span><Link href="/aviso-privacidade">Privacidade</Link> · © {new Date().getFullYear()}</span>
+            <span>
+              Bispo Coffees Ltda · CNPJ 13.008.726/0001-12 · Londrina, PR
+            </span>
+            <span>
+              <Link href="/aviso-privacidade">Privacidade</Link> · ©{" "}
+              {new Date().getFullYear()}
+            </span>
           </div>
         </footer>
       </main>

@@ -48,6 +48,8 @@ const money = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     value / 100,
   );
+const preparationFor = (id: string) =>
+  new Set(["essencial", "intenso"]).has(id) ? "Moído" : "Grãos";
 const digits = (value: string) => value.replace(/\D/g, "");
 const phoneMask = (value: string) => {
   const raw = digits(value).slice(0, 11);
@@ -140,8 +142,9 @@ export default function CheckoutPage() {
       .then((customer) => {
         if (!active || !customer?.account) return;
         const primary =
-          customer.addresses?.find((item: { isDefault?: boolean }) => item.isDefault) ||
-          customer.addresses?.[0];
+          customer.addresses?.find(
+            (item: { isDefault?: boolean }) => item.isDefault,
+          ) || customer.addresses?.[0];
         setData((current) => {
           const useSavedAddress =
             Boolean(primary) &&
@@ -154,14 +157,24 @@ export default function CheckoutPage() {
             phone: current.phone || customer.account.phone || "",
             cpf: current.cpf || customer.account.taxId || "",
             postalCode:
-              current.postalCode || (useSavedAddress ? primary.postalCode : "") || "",
-            street: current.street || (useSavedAddress ? primary.street : "") || "",
-            number: current.number || (useSavedAddress ? primary.number : "") || "",
+              current.postalCode ||
+              (useSavedAddress ? primary.postalCode : "") ||
+              "",
+            street:
+              current.street || (useSavedAddress ? primary.street : "") || "",
+            number:
+              current.number || (useSavedAddress ? primary.number : "") || "",
             complement:
-              current.complement || (useSavedAddress ? primary.complement : "") || "",
-            district: current.district || (useSavedAddress ? primary.district : "") || "",
+              current.complement ||
+              (useSavedAddress ? primary.complement : "") ||
+              "",
+            district:
+              current.district ||
+              (useSavedAddress ? primary.district : "") ||
+              "",
             city: current.city || (useSavedAddress ? primary.city : "") || "",
-            state: current.state || (useSavedAddress ? primary.state : "") || "",
+            state:
+              current.state || (useSavedAddress ? primary.state : "") || "",
           };
         });
       })
@@ -233,13 +246,20 @@ export default function CheckoutPage() {
     if (result === "failure")
       setMessage("O pagamento não foi concluído. Você pode tentar novamente.");
     if (result === "pending")
-      setMessage("Se escolheu Pix, conclua a transferência no aplicativo do seu banco usando o QR Code ou Pix Copia e Cola exibido pelo Mercado Pago. O pedido será confirmado após a aprovação do pagamento.");
+      setMessage(
+        "Se escolheu Pix, conclua a transferência no aplicativo do seu banco usando o QR Code ou Pix Copia e Cola exibido pelo Mercado Pago. O pedido será confirmado após a aprovação do pagamento.",
+      );
     if (result === "success")
-      setMessage("Estamos consultando a aprovação do pagamento no Mercado Pago…");
+      setMessage(
+        "Estamos consultando a aprovação do pagamento no Mercado Pago…",
+      );
   }, []);
 
   const total = useMemo(
-    () => (checkout?.subtotal || 0) - (checkout?.discountCents || 0) + (checkout?.quote.priceCents || 0),
+    () =>
+      (checkout?.subtotal || 0) -
+      (checkout?.discountCents || 0) +
+      (checkout?.quote.priceCents || 0),
     [checkout],
   );
   const discountCents = checkout?.discountCents || 0;
@@ -291,12 +311,11 @@ export default function CheckoutPage() {
           items: checkout.items.map((item) => ({
             id: item.id,
             quantity: item.quantity,
-            grind: item.grind || "Grãos",
+            grind: preparationFor(item.id),
           })),
           recurrence: {
             mode: checkout.mode === "now" ? "now" : "reminder",
-            reminderDays:
-              checkout.mode === "now" ? undefined : checkout.rhythm,
+            reminderDays: checkout.mode === "now" ? undefined : checkout.rhythm,
           },
         }),
       });
@@ -530,7 +549,10 @@ export default function CheckoutPage() {
                 Cartão
               </label>
             </div>
-            <p className={styles.privacyNote}>Seus dados são utilizados para processar e entregar seu pedido. <Link href="/aviso-privacidade">Privacidade</Link></p>
+            <p className={styles.privacyNote}>
+              Seus dados são utilizados para processar e entregar seu pedido.{" "}
+              <Link href="/aviso-privacidade">Privacidade</Link>
+            </p>
             <button
               disabled={submitting || order?.status === "PAID"}
               type="submit"
@@ -554,11 +576,14 @@ export default function CheckoutPage() {
                   maxWidth: 520,
                 }}
               >
-                <strong style={{ display: "block", fontSize: 18, marginBottom: 8 }}>
+                <strong
+                  style={{ display: "block", fontSize: 18, marginBottom: 8 }}
+                >
                   Pague com Pix
                 </strong>
                 <p style={{ margin: "0 0 16px", lineHeight: 1.5 }}>
-                  Escaneie o QR Code no aplicativo do seu banco ou use o Pix Copia e Cola.
+                  Escaneie o QR Code no aplicativo do seu banco ou use o Pix
+                  Copia e Cola.
                 </p>
                 {order.pix.qrCodeBase64 && (
                   <img
@@ -604,7 +629,9 @@ export default function CheckoutPage() {
                 >
                   Copiar código Pix
                 </button>
-                <small style={{ display: "block", marginTop: 12, opacity: 0.72 }}>
+                <small
+                  style={{ display: "block", marginTop: 12, opacity: 0.72 }}
+                >
                   O BBOS confirma o pagamento automaticamente.
                 </small>
               </div>
@@ -625,7 +652,8 @@ export default function CheckoutPage() {
               <div>
                 <b>{item.name}</b>
                 <span>
-                  {item.quantity} × {item.grind || "Grãos"}
+                  {item.quantity} ×{" "}
+                  {preparationFor(item.id) === "Moído" ? "Moído" : "Em grãos"}
                 </span>
               </div>
               <strong>{money(item.priceCents * item.quantity)}</strong>
