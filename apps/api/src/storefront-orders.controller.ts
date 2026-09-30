@@ -22,6 +22,7 @@ import { StorefrontShippingService } from "./storefront-shipping.service";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontCustomerService } from "./storefront-customer.service";
+import { SalesOrderPaymentsService } from "./sales-order-payments.service";
 
 const catalog: Record<
   string,
@@ -93,6 +94,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly coupons: StorefrontCouponsService,
     private readonly customers: StorefrontCustomerService,
+    private readonly salesOrderPayments: SalesOrderPaymentsService,
   ) {}
 
   async onModuleInit() {
@@ -199,6 +201,15 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         );
         const attempt = attempts[0];
         if (!attempt) {
+          const commercialAttempts = await this.database.$queryRawUnsafe<any[]>(
+            `SELECT id FROM "SalesOrderPaymentAttempt"
+              WHERE provider='MERCADO_PAGO' AND "externalId"=$1 LIMIT 1`,
+            externalId,
+          );
+          if (commercialAttempts[0]) {
+            await this.salesOrderPayments.reconcileByExternalId(externalId);
+            continue;
+          }
           await this.database.$executeRawUnsafe(
             `UPDATE "IntegrationWebhookEvent"
                 SET status='IGNORED',"processedAt"=NOW(),"lastError"='Order do Mercado Pago sem tentativa correspondente no BBOS'
@@ -304,6 +315,28 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
             (error instanceof Error ? error.message : String(error)).slice(0, 2000),
             String(delaySeconds),
           );
+        }
+      }
+
+      const commercialPending = await this.database.$queryRawUnsafe<
+        Array<{ externalId: string }>
+      >(
+        `SELECT "externalId"
+           FROM "SalesOrderPaymentAttempt"
+          WHERE status IN ('AWAITING_PAYMENT','PROCESSING','ERROR')
+            AND "externalId" IS NOT NULL
+            AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
+          ORDER BY "updatedAt" ASC
+          LIMIT 20`,
+      );
+      for (const payment of commercialPending) {
+        try {
+          await this.salesOrderPayments.reconcileByExternalId(payment.externalId);
+        } catch (error) {
+          console.error("Falha ao reconciliar Pix de pedido comercial", {
+            externalId: payment.externalId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
@@ -1568,15 +1601,24 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       body?.data?.id || body?.id || queryDataId || queryId || "",
     ).trim();
 
-    const attempts = externalId
-      ? await this.database.$queryRawUnsafe<any[]>(
-          `SELECT p."companyId"
-             FROM "StorefrontPaymentAttempt" p
-            WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
-            LIMIT 1`,
-          externalId,
-        )
-      : [];
+    const [attempts, commercialAttempts] = externalId
+      ? await Promise.all([
+          this.database.$queryRawUnsafe<any[]>(
+            `SELECT p."companyId"
+               FROM "StorefrontPaymentAttempt" p
+              WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
+              LIMIT 1`,
+            externalId,
+          ),
+          this.database.$queryRawUnsafe<any[]>(
+            `SELECT p."companyId"
+               FROM "SalesOrderPaymentAttempt" p
+              WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
+              LIMIT 1`,
+            externalId,
+          ),
+        ])
+      : [[], []];
 
     const eventName = String(body?.action || body?.type || "order.updated");
     const providerEventId = createHash("sha256")
@@ -1595,7 +1637,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
        VALUES ($1,$2,'MERCADO_PAGO',$3,$4,$5::jsonb,'RECEIVED',NOW())
        ON CONFLICT (provider,"providerEventId") DO NOTHING`,
       randomUUID(),
-      attempts[0]?.companyId ?? null,
+      attempts[0]?.companyId ?? commercialAttempts[0]?.companyId ?? null,
       providerEventId,
       eventName,
       JSON.stringify({
@@ -1606,7 +1648,17 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
     // Não bloqueamos o webhook esperando Mercado Pago/Banco/Bling.
     // O worker persistente processa o evento com retry e deduplicação.
-    void this.reconcilePendingMercadoPagoOrders();
+    void Promise.all([
+      this.reconcilePendingMercadoPagoOrders(),
+      externalId
+        ? this.salesOrderPayments.reconcileByExternalId(externalId)
+        : Promise.resolve({ found: false }),
+    ]).catch((error) => {
+      console.error("Não foi possível reconciliar o webhook do Mercado Pago", {
+        externalId: externalId || null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     return {
       accepted: true,

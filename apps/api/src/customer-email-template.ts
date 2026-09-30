@@ -53,6 +53,7 @@ const postalCode = (value: unknown) => {
 const statusIndex: Record<string, number> = {
   ORDER_RECEIVED: 0,
   ORDER_CONFIRMED: 0,
+  PAYMENT_AWAITING: 0,
   PAYMENT_CONFIRMED: 0,
   PREPARING: 1,
   INVOICE_AUTHORIZED: 2,
@@ -111,7 +112,7 @@ export function renderCustomerEmail(
   const address = [delivery.street, delivery.number, delivery.complement].filter(Boolean).join(", ");
   const place = [delivery.district, delivery.city && delivery.state ? `${delivery.city}/${delivery.state}` : delivery.city].filter(Boolean).join(" · ");
   const paymentAction = payload.paymentUrl
-    ? `<tr><td style="padding:0 42px 18px"><a href="${escapeHtml(payload.paymentUrl)}" style="display:block;background:#087568;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Gerar novo Pix&nbsp;&nbsp;→</a></td></tr>`
+    ? `<tr><td style="padding:0 42px 18px"><a href="${escapeHtml(payload.paymentUrl)}" style="display:block;background:#087568;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Abrir pagamento Pix&nbsp;&nbsp;→</a></td></tr>`
     : "";
   const tracking = payload.trackingUrl
     ? `<tr><td style="padding:0 42px 42px"><a href="${escapeHtml(payload.trackingUrl)}" style="display:block;background:#0A0A0A;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Acompanhar meu pedido&nbsp;&nbsp;→</a></td></tr>`
