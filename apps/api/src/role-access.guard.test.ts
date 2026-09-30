@@ -73,6 +73,79 @@ test("dashboard endpoints honor their narrower executive and industrial scopes",
   );
 });
 
+test("internal cupping sessions are available only to operational roles", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "CuppingPublicController",
+        handler: "list",
+        role: "INDUSTRIAL",
+      }),
+    ),
+    true,
+  );
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({
+          controller: "CuppingPublicController",
+          handler: "list",
+          role: "FINANCE",
+        }),
+      ),
+    ForbiddenException,
+  );
+});
+
+test("operations flow keeps broad visibility but restricts stock changes", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "OperationsFlowController",
+        handler: "summary",
+        role: "SALES",
+      }),
+    ),
+    true,
+  );
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({
+          controller: "OperationsFlowController",
+          handler: "stockIn",
+          role: "SALES",
+        }),
+      ),
+    ForbiddenException,
+  );
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "OperationsFlowController",
+        handler: "stockPolicy",
+        role: "INDUSTRIAL",
+      }),
+    ),
+    true,
+  );
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({
+          controller: "OperationsFlowActionsController",
+          handler: "expiry",
+          role: "FINANCE",
+        }),
+      ),
+    ForbiddenException,
+  );
+});
+
 test("unmapped private controllers fail closed", () => {
   const guard = new RoleAccessGuard(privateReflector);
   assert.throws(
@@ -97,7 +170,6 @@ test("every registered non-public controller has an explicit access policy", () 
   const publicOnly = new Set([
     "HealthController",
     "PurchaseAcceptanceController",
-    "CuppingPublicController",
     "BlingWebhookController",
     "StorefrontShippingController",
     "StorefrontCatalogController",

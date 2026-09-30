@@ -63,6 +63,7 @@ const MARKETPLACE: BbosRole[] = [
   "SALES",
   "MARKETPLACE_OPERATOR",
 ];
+const KNOWN_ROLES = new Set<BbosRole>([...ALL, "MARKETPLACE_OPERATOR"]);
 
 export const bbosNavigation: BbosNavGroup[] = [
   {
@@ -277,7 +278,8 @@ export const bbosNavigation: BbosNavGroup[] = [
 ];
 
 export function navigationForRole(role?: string | null) {
-  const resolved = (role ?? "INDUSTRIAL") as BbosRole;
+  if (!role || !KNOWN_ROLES.has(role as BbosRole)) return [];
+  const resolved = role as BbosRole;
   return bbosNavigation
     .map((group) => ({
       ...group,

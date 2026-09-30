@@ -38,6 +38,15 @@ type ShellNotification = {
   createdAt: string;
 };
 
+const corporateTitleByRole: Record<string, string> = {
+  ADMIN: "Sócio Administrador",
+  EXECUTIVE: "Diretor",
+  SALES: "Comercial",
+  FINANCE: "Financeiro",
+  INDUSTRIAL: "Industrial",
+  MARKETPLACE_OPERATOR: "Operador de marketplace",
+};
+
 export function AppShellV2({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -62,7 +71,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
         setSessionUser({
           ...identity,
           initials: identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-          corporateTitle: identity.role === "ADMIN" ? "Sócio Administrador" : identity.role === "EXECUTIVE" ? "Diretor" : identity.role === "SALES" ? "Comercial" : identity.role === "FINANCE" ? "Financeiro" : "Industrial",
+          corporateTitle: corporateTitleByRole[identity.role] ?? "Acesso restrito",
         });
         setSessionState("authenticated");
       })

@@ -7,7 +7,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { IS_PUBLIC } from "./auth.guard";
 
-type BbosRole =
+export type BbosRole =
   | "ADMIN"
   | "EXECUTIVE"
   | "INDUSTRIAL"
@@ -72,13 +72,14 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   AdminUsersController: ["ADMIN"],
   IntegrationsController: LEADERSHIP,
   OperationsFlowController: CORE,
-  OperationsFlowActionsController: CORE,
+  OperationsFlowActionsController: OPERATIONS,
   ProductionRequirementsController: OPERATIONS,
   BrokersController: COMMERCIAL,
   CustomersController: COMMERCIAL,
   CuppingController: OPERATIONS,
   CuppingTrainingController: OPERATIONS,
   ProfessionalSamplesController: OPERATIONS,
+  CuppingPublicController: OPERATIONS,
   StorefrontOrdersController: MARKETPLACE,
   StorefrontFulfillmentController: MARKETPLACE,
   StorefrontCouponsController: MARKETPLACE,
@@ -95,6 +96,10 @@ const HANDLER_ROLE_POLICY: Readonly<
   DashboardController: {
     executive: LEADERSHIP,
     industrial: OPERATIONS,
+  },
+  OperationsFlowController: {
+    stockIn: OPERATIONS,
+    stockPolicy: OPERATIONS,
   },
 };
 

@@ -1,10 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { CostingService } from "./costing.service";
 import { DashboardService } from "./dashboard.service";
 import { SalesOrdersService } from "./sales-orders.service";
 
 type IntelligenceInput = { question?: string; path?: string };
 type IntelligenceFact = { label: string; value: string; href: string };
+
+const COST_INTELLIGENCE_ROLES = new Set([
+  "ADMIN",
+  "EXECUTIVE",
+  "INDUSTRIAL",
+  "FINANCE",
+]);
 
 const money = (value: number, currency = "BRL") => {
   try {
@@ -26,7 +33,7 @@ export class IntelligenceService {
     private readonly costing: CostingService,
   ) {}
 
-  async ask(companyId: string, input: IntelligenceInput) {
+  async ask(companyId: string, role: string, input: IntelligenceInput) {
     const path = String(input.path ?? "/home");
     const question = String(input.question ?? "")
       .trim()
@@ -35,6 +42,11 @@ export class IntelligenceService {
       return this.exportsAnswer(companyId);
     }
     if (path.startsWith("/custos")) {
+      if (!COST_INTELLIGENCE_ROLES.has(role)) {
+        throw new ForbiddenException(
+          "Seu perfil não possui acesso à inteligência de custos.",
+        );
+      }
       return this.costsAnswer(companyId);
     }
     const snapshot = await this.dashboard.home(companyId);

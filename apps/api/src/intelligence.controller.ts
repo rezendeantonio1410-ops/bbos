@@ -7,9 +7,13 @@ export class IntelligenceController {
 
   @Post("ask")
   ask(
-    @Req() request: { user?: { companyId: string } },
+    @Req() request: { user?: { companyId: string; role: string } },
     @Body() body: { question?: string; path?: string },
   ) {
-    return this.intelligence.ask(request.user!.companyId, body);
+    return this.intelligence.ask(
+      request.user!.companyId,
+      request.user!.role,
+      body,
+    );
   }
 }

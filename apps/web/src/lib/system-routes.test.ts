@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { navigationForRole } from "../components/bbos-navigation";
 import { isProtectedSystemPath } from "./system-routes";
 
 test("all internal management roots require a session", () => {
@@ -17,7 +18,11 @@ test("all internal management roots require a session", () => {
     "/exportacoes",
     "/commerce/midia",
   ]) {
-    assert.equal(isProtectedSystemPath(path), true, `${path} must be protected`);
+    assert.equal(
+      isProtectedSystemPath(path),
+      true,
+      `${path} must be protected`,
+    );
   }
 });
 
@@ -30,6 +35,22 @@ test("storefront and tokenized public experiences remain public", () => {
     "/cupping/sessao/token",
     "/aviso-privacidade",
   ]) {
-    assert.equal(isProtectedSystemPath(path), false, `${path} must remain public`);
+    assert.equal(
+      isProtectedSystemPath(path),
+      false,
+      `${path} must remain public`,
+    );
   }
+});
+
+test("unknown or missing roles do not inherit an operational navigation", () => {
+  assert.deepEqual(navigationForRole(undefined), []);
+  assert.deepEqual(navigationForRole("FUTURE_ROLE"), []);
+});
+
+test("marketplace operators only see their dedicated marketplace area", () => {
+  const routes = navigationForRole("MARKETPLACE_OPERATOR").flatMap((group) =>
+    group.items.map((item) => item.href),
+  );
+  assert.deepEqual(routes, ["/commerce/marketplaces"]);
 });

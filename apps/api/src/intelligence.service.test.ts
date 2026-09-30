@@ -63,7 +63,7 @@ test("answers an overdue-order question with grounded company data", async () =>
     home: { ...emptyHome, salesMonth: 14800, openOrders: 7, overdueOrders: 2 },
   });
 
-  const result = await service.ask("company-a", {
+  const result = await service.ask("company-a", "ADMIN", {
     path: "/pedidos",
     question: "Há pedidos atrasados?",
   });
@@ -78,7 +78,7 @@ test("answers an overdue-order question with grounded company data", async () =>
 });
 
 test("does not interpret an empty operational base as a healthy operation", async () => {
-  const result = await createService().ask("company-a", {
+  const result = await createService().ask("company-a", "ADMIN", {
     path: "/home",
     question: "Onde existe uma oportunidade?",
   });
@@ -101,7 +101,7 @@ test("surfaces incomplete export readiness from the export command center", asyn
     },
   });
 
-  const result = await service.ask("company-a", {
+  const result = await service.ask("company-a", "ADMIN", {
     path: "/exportacoes",
     question: "O que exige atenção?",
   });
@@ -114,11 +114,22 @@ test("surfaces incomplete export readiness from the export command center", asyn
 });
 
 test("refuses to assert margins before a cost period exists", async () => {
-  const result = await createService().ask("company-a", {
+  const result = await createService().ask("company-a", "ADMIN", {
     path: "/custos",
     question: "Qual produto tem a melhor margem?",
   });
 
   assert.match(result.answer, /não há período de custos calculado/i);
   assert.match(result.answer, /não afirma margem/i);
+});
+
+test("blocks sales from forging a costs context in intelligence", async () => {
+  await assert.rejects(
+    () =>
+      createService().ask("company-a", "SALES", {
+        path: "/custos",
+        question: "Qual produto tem a melhor margem?",
+      }),
+    /não possui acesso à inteligência de custos/i,
+  );
 });
