@@ -458,6 +458,7 @@ model Company {
   cuppingTrainingSessions   CuppingTrainingSession[]
   professionalCoffeeSamples ProfessionalCoffeeSample[]
   cuppingPublicSessions     CuppingPublicSession[]
+  storefrontMediaAssets     StorefrontMediaAsset[]
 }
 
 model User {
@@ -1622,6 +1623,7 @@ model Product {
   active           Boolean                  @default(true)
   variants         ProductVariant[]
   storefrontImages StorefrontProductImage[]
+  mediaAssets      StorefrontMediaAsset[]
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
@@ -1645,6 +1647,33 @@ model StorefrontProductImage {
   @@index([productId, sortOrder])
   @@index([productId, isPrimary])
   @@index([productId, useInHero])
+}
+
+model StorefrontMediaAsset {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productId  String?
+  product    Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  category   String
+  entityKey  String?
+  placement  String?
+  title      String
+  altText    String
+  caption    String?
+  credit     String?
+  fileName   String
+  mimeType   String
+  data       Bytes
+  sortOrder  Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId, category, active, sortOrder])
+  @@index([companyId, placement, active])
+  @@index([productId, active, sortOrder])
 }
 
 model ProductVariant {

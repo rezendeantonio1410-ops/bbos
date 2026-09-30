@@ -1,24 +1,42 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaClient } from "@bbos/database";
-import { renderCustomerEmail } from "./customer-email-template";
+import {
+  renderCustomerAccessEmail,
+  renderCustomerEmail,
+} from "./customer-email-template";
+
+type TransactionalEmail = {
+  destination: string;
+  subject: string;
+  html: string;
+};
 
 @Injectable()
 export class CustomerNotificationService {
   private readonly database = new PrismaClient();
 
-  private async sendEmail(row: any) {
+  private emailAssets() {
+    return {
+      logoUrl:
+        process.env.STOREFRONT_EMAIL_LOGO_URL?.trim() ||
+        "https://app.bispocoffees.com.br/brand/logo/bispo-logo-official-transparent.png",
+      sealUrl:
+        process.env.STOREFRONT_EMAIL_SEAL_URL?.trim() ||
+        "https://app.bispocoffees.com.br/brand/logo/bispo-seal-black.jpg",
+    };
+  }
+
+  private async sendTransactionalEmail(
+    message: TransactionalEmail,
+    options: { allowUnconfigured?: boolean } = {},
+  ) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     const from = process.env.STOREFRONT_FROM_EMAIL?.trim();
     const replyTo = process.env.STOREFRONT_REPLY_TO?.trim();
-    if (!apiKey || !from)
+    if (!apiKey || !from) {
+      if (options.allowUnconfigured) return "";
       throw new Error("RESEND_API_KEY/STOREFRONT_FROM_EMAIL não configurados.");
-    const payload = row.payload || {};
-    const logoUrl =
-      process.env.STOREFRONT_EMAIL_LOGO_URL?.trim() ||
-      "https://app.bispocoffees.com.br/brand/logo/bispo-logo-official-transparent.png";
-    const sealUrl =
-      process.env.STOREFRONT_EMAIL_SEAL_URL?.trim() ||
-      "https://app.bispocoffees.com.br/brand/logo/bispo-seal-black.jpg";
+    }
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -27,16 +45,43 @@ export class CustomerNotificationService {
       },
       body: JSON.stringify({
         from,
-        to: [row.destination],
+        to: [message.destination],
         ...(replyTo ? { reply_to: replyTo } : {}),
-        subject: `${payload.title} · pedido ${payload.orderCode}`,
-        html: renderCustomerEmail(payload, { logoUrl, sealUrl }),
+        subject: message.subject,
+        html: message.html,
       }),
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok)
       throw new Error(`Resend recusou a notificação (${response.status}).`);
     return String(body?.id || "");
+  }
+
+  private async sendEmail(row: any) {
+    const payload = row.payload || {};
+    return this.sendTransactionalEmail({
+      destination: row.destination,
+      subject: `${payload.title} · pedido ${payload.orderCode}`,
+      html: renderCustomerEmail(payload, this.emailAssets()),
+    });
+  }
+
+  async sendCustomerAccessCode(
+    destination: string,
+    code: string,
+    expiresInMinutes: number,
+  ) {
+    return this.sendTransactionalEmail(
+      {
+        destination,
+        subject: "Seu código de acesso · Bispo Coffees",
+        html: renderCustomerAccessEmail(
+          { code, expiresInMinutes },
+          this.emailAssets(),
+        ),
+      },
+      { allowUnconfigured: process.env.NODE_ENV !== "production" },
+    );
   }
 
   async processNext() {

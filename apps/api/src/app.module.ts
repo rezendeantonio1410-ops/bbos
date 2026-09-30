@@ -69,6 +69,13 @@ import { FiscalInboundService } from "./fiscal-inbound.service";
 import { MarketplacesController } from "./marketplaces.controller";
 import { MarketplacesService } from "./marketplaces.service";
 import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
+import { StorefrontCustomerController } from "./storefront-customer.controller";
+import { StorefrontCustomerService } from "./storefront-customer.service";
+import {
+  AdminStorefrontMediaController,
+  PublicStorefrontMediaController,
+} from "./storefront-media.controller";
+import { StorefrontMediaService } from "./storefront-media.service";
 
 @Module({
   controllers: [
@@ -113,6 +120,9 @@ import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.
     StorefrontOperationsController,
     FiscalInboundController,
     MarketplacesController,
+    StorefrontCustomerController,
+    AdminStorefrontMediaController,
+    PublicStorefrontMediaController,
   ],
   providers: [
     DashboardService,
@@ -142,6 +152,8 @@ import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.
     FiscalInboundService,
     MarketplacesService,
     MercadoLivreService,
+    StorefrontCustomerService,
+    StorefrontMediaService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

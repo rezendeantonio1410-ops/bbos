@@ -48,6 +48,14 @@ services:
         generateValue: true
       - key: ORDER_TRACKING_SECRET
         generateValue: true
+      - key: STOREFRONT_CUSTOMER_AUTH_SECRET
+        generateValue: true
+      - key: RESEND_API_KEY
+        sync: false
+      - key: STOREFRONT_FROM_EMAIL
+        sync: false
+      - key: STOREFRONT_REPLY_TO
+        sync: false
       - key: MELHOR_ENVIO_API_URL
         sync: false
       - key: MELHOR_ENVIO_ACCESS_TOKEN

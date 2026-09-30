@@ -10,10 +10,12 @@ import RoastMindMap from "./RoastMindMap";
 import CupMindMap from "./CupMindMap";
 import LineageMap from "./LineageMap";
 import HistoryPath from "./HistoryPath";
+import { loadStorefrontMedia } from "@/lib/storefront-media";
 
 export const metadata: Metadata = {
-  title: "A geografia também está na xícara | Bispo Coffees",
+  title: "A geografia também está na xícara",
   description: "Suzi Ninov e José Rezende contam como a origem, os solos e o clima do Paraná ajudam a compreender cada café.",
+  alternates: { canonical: "/loja/origem" },
 };
 
 type OriginSymbol = "place" | "weather" | "soil" | "care" | "roast" | "taste";
@@ -30,7 +32,10 @@ function OriginIcon({ kind }: { kind: OriginSymbol }) {
   </svg>;
 }
 
-export default function OrigemPage() {
+export const revalidate = 300;
+
+export default async function OrigemPage() {
+  const media = await loadStorefrontMedia();
   return (
     <main className={`${styles.page} ${brand.storefront} ${origin.page}`}>
       <div className={styles.commerceBar}>
@@ -68,12 +73,12 @@ export default function OrigemPage() {
           </div>
           <div className={origin.peopleGrid}>
             <article>
-              <div className={origin.portrait}><Image src="/brand/story/suzi-fragrancia.jpeg" alt="Suzi Ninov avaliando o café" fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
-              <div><span>SUZI NINOV · CAMPO E DESENVOLVIMENTO</span><h3>O cuidado começa na planta.</h3><p>Criada em uma fazenda no interior do Rio Grande do Sul, Suzi encontrou no Paraná, há cerca de duas décadas, o café que passou a orientar seu trabalho. Ao lado de produtores, acompanha a nutrição, o manejo e o desenvolvimento da lavoura: tratar o cafeeiro como um ser vivo, cuidar do solo e buscar produtividade com qualidade. Essa experiência de campo também ajudou a fundar com José o conceito da Longitude Coffees, que evoluiu para a Bispo.</p></div>
+              <div className={origin.portrait}><Image src={media.slots["origin.suzi"]?.url ?? "/brand/story/suzi-fragrancia.jpeg"} alt={media.slots["origin.suzi"]?.altText ?? "Suzi Ninov avaliando o café"} fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
+              <div><span>SUZI NINOV · CAMPO E DESENVOLVIMENTO</span><h3>O cuidado começa na planta.</h3><p>Criada em uma fazenda no interior do Rio Grande do Sul, Suzi trabalha no Paraná desde 2006. Ao lado de produtores, acompanha nutrição, fertilidade, manejo e desenvolvimento da lavoura: tratar o cafeeiro como um organismo vivo, cuidar dos recursos do solo e buscar produtividade com qualidade. Essa leitura de campo passou pelo projeto Longitude e hoje participa de cada escolha da Bispo.</p></div>
             </article>
             <article>
-              <div className={origin.portrait}><Image src="/brand/story/jose-origem.jpeg" alt="José Rezende observando um cafeeiro" fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
-              <div><span>JOSÉ REZENDE · ORIGEM, PROVA E TORRA</span><h3>Da origem para o mundo.</h3><p>José cresceu no café do Norte do Paraná. Desde 2006, estuda e desenvolve perfis de torra para cafés da região, combinando a leitura do grão com a prova da xícara. Essa experiência acompanha seu trabalho com produtores e profissionais do café em outros mercados.</p></div>
+              <div className={origin.portrait}><Image src={media.slots["origin.jose"]?.url ?? "/brand/story/jose-origem.jpeg"} alt={media.slots["origin.jose"]?.altText ?? "José Rezende observando um cafeeiro"} fill sizes="(max-width: 700px) 100vw, 50vw" /></div>
+              <div><span>JOSÉ REZENDE · ORIGEM, PROVA E TORRA</span><h3>Da origem para o mundo.</h3><p>Filho de produtores do Norte do Paraná, José trabalha com cafeicultores desde 2003 e tornou-se Q-Grader em 2010. Em 2015, cofundou a Capricornio Coffees e ampliou a conexão entre cafés do Trópico de Capricórnio e compradores internacionais. Na Bispo, prova os lotes e desenvolve perfis de torra a partir da identidade de cada café.</p></div>
             </article>
           </div>
           <p className={origin.peopleEnd}>Juntos, compreendem o caminho do grão antes de escolher o café que leva o nome Bispo.</p>
@@ -121,7 +126,7 @@ export default function OrigemPage() {
           <details className={origin.science}>
             <summary>Para quem quer ir mais fundo: a base técnica</summary>
             <p>Estudos de Londrina acompanharam soma térmica e água disponível na maturação de diferentes genótipos de arábica. Pesquisas em outras origens mostram que condições climáticas, sobretudo a temperatura no desenvolvimento da semente, podem modificar atributos químicos e sensoriais. Latitude e longitude situam a origem; não funcionam como nota automática de qualidade.</p>
-            <p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa · clima e maturação</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/22980845/" target="_blank" rel="noopener noreferrer">Food Chemistry · clima e perfil sensorial</a> · <a href="https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1133948/1/DOCUMENTO-440-JA2021.pdf" target="_blank" rel="noopener noreferrer">Embrapa · solos do Norte do Paraná</a> · <a href="https://portal.londrina.pr.gov.br/index.php/historia-cidade" target="_blank" rel="noopener noreferrer">Prefeitura · história de Londrina</a> · <a href="https://www.capricorniocoffees.com.br/origins?lang=pt" target="_blank" rel="noopener noreferrer">Capricornio · origens</a> · <a href="https://longitudecoffees.com/?lang=pt&amp;page_id=582" target="_blank" rel="noopener noreferrer">Longitude · trajetória</a>.</p>
+            <p>Fontes: <a href="https://www.alice.cnptia.embrapa.br/alice/handle/doc/656690" target="_blank" rel="noopener noreferrer">IAPAR/Embrapa · clima e maturação</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/22980845/" target="_blank" rel="noopener noreferrer">Food Chemistry · clima e perfil sensorial</a> · <a href="https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1133948/1/DOCUMENTO-440-JA2021.pdf" target="_blank" rel="noopener noreferrer">Embrapa · solos do Norte do Paraná</a> · <a href="https://revistacafeicultura.com.br/do-tropico-de-capricornio-para-as-xicaras-mais-nobres/" target="_blank" rel="noopener noreferrer">Capricornio · fundação e mercado</a> · <a href="https://www.laminita.com/farms-mills/juarez-colatino-barros" target="_blank" rel="noopener noreferrer">Hacienda La Minita · assistência e mercado</a> · <a href="https://kolibricoffee.com/product/parana/" target="_blank" rel="noopener noreferrer">Kolibri · José e Suzi no Paraná</a>.</p>
           </details>
           </div>
         </section>

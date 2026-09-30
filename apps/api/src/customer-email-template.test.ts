@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderCustomerEmail } from "./customer-email-template";
+import {
+  renderCustomerAccessEmail,
+  renderCustomerEmail,
+} from "./customer-email-template";
 
 test("renders the approved Bispo transactional email with escaped order data", () => {
   const html = renderCustomerEmail(
@@ -48,4 +51,16 @@ test("escapes customer-controlled content", () => {
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /&lt;b&gt;José&lt;\/b&gt;/);
+});
+
+test("renders the access code with the approved transactional identity", () => {
+  const html = renderCustomerAccessEmail(
+    { code: "123456", expiresInMinutes: 10 },
+    { logoUrl: "https://cdn.example/logo.png", sealUrl: "https://cdn.example/seal.jpg" },
+  );
+  assert.match(html, /Selo Bispo True Coffee/);
+  assert.match(html, /Sua relação com o café/);
+  assert.match(html, /123456/);
+  assert.match(html, /José &amp; Suzi/);
+  assert.doesNotMatch(html, /undefined/);
 });

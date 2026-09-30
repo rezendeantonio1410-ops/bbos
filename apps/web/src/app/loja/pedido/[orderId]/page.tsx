@@ -57,7 +57,7 @@ export default function StorefrontOrderTrackingPage() {
   ) ?? [];
 
   useEffect(() => {
-    if (!params.orderId || !token) {
+    if (!params.orderId) {
       setError("O link de acompanhamento está incompleto.");
       return;
     }
@@ -65,13 +65,17 @@ export default function StorefrontOrderTrackingPage() {
       const response = await fetch(
         `/api/storefront/orders/${encodeURIComponent(params.orderId)}/status`,
         {
-          headers: { "x-storefront-order-token": token },
+          headers: token ? { "x-storefront-order-token": token } : undefined,
           cache: "no-store",
         },
       );
       const body = await response.json().catch(() => ({}));
       if (!response.ok)
-        throw new Error(body.message || "Não foi possível consultar o pedido.");
+        throw new Error(
+          response.status === 401
+            ? "Entre na Minha Bispo para acompanhar este pedido."
+            : body.message || "Não foi possível consultar o pedido.",
+        );
       setOrder(body);
       setError("");
     };

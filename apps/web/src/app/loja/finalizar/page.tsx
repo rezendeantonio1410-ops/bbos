@@ -16,7 +16,7 @@ type CheckoutState = {
   items: CheckoutItem[];
   cep: string;
   subtotal: number;
-  mode: "now" | "return";
+  mode: "now" | "return" | "reminder";
   rhythm: number;
   couponCode?: string;
   discountCents?: number;
@@ -128,6 +128,47 @@ export default function CheckoutPage() {
         if (previous.paymentMethod) setPaymentMethod(previous.paymentMethod);
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/storefront/customer/me", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((customer) => {
+        if (!active || !customer?.account) return;
+        const primary =
+          customer.addresses?.find((item: { isDefault?: boolean }) => item.isDefault) ||
+          customer.addresses?.[0];
+        setData((current) => {
+          const useSavedAddress =
+            Boolean(primary) &&
+            (!current.postalCode ||
+              digits(current.postalCode) === digits(primary.postalCode || ""));
+          return {
+            ...current,
+            name: current.name || customer.account.name || "",
+            email: current.email || customer.account.email || "",
+            phone: current.phone || customer.account.phone || "",
+            cpf: current.cpf || customer.account.taxId || "",
+            postalCode:
+              current.postalCode || (useSavedAddress ? primary.postalCode : "") || "",
+            street: current.street || (useSavedAddress ? primary.street : "") || "",
+            number: current.number || (useSavedAddress ? primary.number : "") || "",
+            complement:
+              current.complement || (useSavedAddress ? primary.complement : "") || "",
+            district: current.district || (useSavedAddress ? primary.district : "") || "",
+            city: current.city || (useSavedAddress ? primary.city : "") || "",
+            state: current.state || (useSavedAddress ? primary.state : "") || "",
+          };
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -253,9 +294,9 @@ export default function CheckoutPage() {
             grind: item.grind || "Grãos",
           })),
           recurrence: {
-            mode: checkout.mode,
-            rhythmDays:
-              checkout.mode === "return" ? checkout.rhythm : undefined,
+            mode: checkout.mode === "now" ? "now" : "reminder",
+            reminderDays:
+              checkout.mode === "now" ? undefined : checkout.rhythm,
           },
         }),
       });
@@ -621,9 +662,10 @@ export default function CheckoutPage() {
                 : "Grátis"}
             </b>
           </div>
-          {checkout.mode === "return" && (
+          {checkout.mode !== "now" && (
             <p className={styles.return}>
-              <Check /> Reencontro escolhido a cada {checkout.rhythm} dias.
+              <Check /> Preferência de recompra: {checkout.rhythm} dias. Este
+              pedido é único e não será renovado automaticamente.
             </p>
           )}
           <div className={styles.total}>

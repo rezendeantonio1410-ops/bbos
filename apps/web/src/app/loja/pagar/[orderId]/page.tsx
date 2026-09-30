@@ -17,7 +17,7 @@ export default function StorefrontRetryPaymentPage() {
   } | null>(null);
 
   useEffect(() => {
-    if (!params.orderId || !token) {
+    if (!params.orderId) {
       setMessage("Este link de pagamento está incompleto.");
       setFailed(true);
       return;
@@ -27,7 +27,7 @@ export default function StorefrontRetryPaymentPage() {
         `/api/storefront/orders/${encodeURIComponent(params.orderId)}/retry-payment`,
         {
           method: "POST",
-          headers: { "x-storefront-order-token": token },
+          headers: token ? { "x-storefront-order-token": token } : undefined,
           cache: "no-store",
         },
       );
@@ -36,7 +36,9 @@ export default function StorefrontRetryPaymentPage() {
         throw new Error(body.message || "Não foi possível preparar o novo Pix.");
       if (body.status === "PAID") {
         window.location.assign(
-          `/loja/pedido/${encodeURIComponent(params.orderId)}?token=${encodeURIComponent(token)}`,
+          token
+            ? `/loja/pedido/${encodeURIComponent(params.orderId)}?token=${encodeURIComponent(token)}`
+            : `/loja/pedido/${encodeURIComponent(params.orderId)}`,
         );
         return;
       }

@@ -267,6 +267,98 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.recommendations {
+  margin: 12px 0;
+  padding: 15px 16px 16px;
+  border: 1px solid #0d1d1717;
+  background: #fff;
+}
+.recommendationIntro > small {
+  color: #7b6147;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+.recommendationIntro h3 {
+  margin: 5px 0 3px;
+  font: 450 18px/1.12 var(--font-manrope);
+}
+.recommendationIntro p {
+  max-width: 410px;
+  margin: 0 0 11px;
+  color: #0d1d1799;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.recommendationGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.recommendation {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #0d1d1717;
+  border-radius: 2px;
+  background: #f7f5f1;
+  color: #0d1d17;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease;
+}
+.recommendation:hover {
+  border-color: #0d1d1750;
+  background: #fff;
+}
+.recommendationPhoto {
+  display: grid;
+  width: 48px;
+  height: 58px;
+  place-items: center;
+  overflow: hidden;
+  background: #ece9e3;
+}
+.recommendationPhoto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.recommendationPhoto > span {
+  font-size: 7px;
+  letter-spacing: .12em;
+}
+.recommendationCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.recommendationCopy small {
+  color: #7b6147;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.recommendationCopy b {
+  font-size: 13px;
+}
+.recommendationCopy em {
+  overflow: hidden;
+  color: #0d1d1780;
+  font-size: 8px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recommendation > strong {
+  grid-column: 2;
+  color: #0d1d17;
+  font-size: 9px;
+  font-weight: 800;
+}
 .bispo,
 .choice,
 .shipping {
@@ -509,6 +601,9 @@
     width: max-content;
   }
   .choice > div {
+    grid-template-columns: 1fr;
+  }
+  .recommendationGrid {
     grid-template-columns: 1fr;
   }
   .bispo,

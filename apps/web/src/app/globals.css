@@ -4,7 +4,7 @@
 
 /* The mobile preview shell already receives the single institutional mark from
    the cupping layout; avoid rendering a second copy in its compact toolbar. */
-main header img[src*="bispo-logo-official-transparent"] {
+[data-cupping-mobile-session] header img[src*="bispo-logo-official-transparent"] {
   display: none;
 }
 

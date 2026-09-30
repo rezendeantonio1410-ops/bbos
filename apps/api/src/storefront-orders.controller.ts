@@ -10,6 +10,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -20,6 +21,7 @@ import { MercadoPagoService } from "./mercado-pago.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
+import { StorefrontCustomerService } from "./storefront-customer.service";
 
 const catalog: Record<
   string,
@@ -71,7 +73,11 @@ type CheckoutBody = {
     state?: string;
   };
   items?: Array<{ id?: string; quantity?: number; grind?: string }>;
-  recurrence?: { mode?: string; rhythmDays?: number };
+  recurrence?: {
+    mode?: string;
+    reminderDays?: number;
+    rhythmDays?: number;
+  };
   couponCode?: string;
 };
 
@@ -86,6 +92,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
     private readonly shipping: StorefrontShippingService,
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly coupons: StorefrontCouponsService,
+    private readonly customers: StorefrontCustomerService,
   ) {}
 
   async onModuleInit() {
@@ -1051,7 +1058,7 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
 
   @Public()
   @Post()
-  async create(@Body() body: CheckoutBody) {
+  async create(@Body() body: CheckoutBody, @Req() request: any) {
     const key = body.idempotencyKey?.trim();
     if (!key || key.length < 16 || key.length > 100)
       throw new BadRequestException(
@@ -1337,6 +1344,14 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       coupon?.discountCents ?? 0,
       coupon?.commissionCents ?? 0,
     );
+    const signedInCustomer = await this.customers.resolve(
+      this.customers.readToken(request),
+    );
+    await this.customers.linkOrder(
+      signedInCustomer,
+      id,
+      customer.email,
+    );
     const claimed = await this.database.$executeRawUnsafe(
       `UPDATE "ShippingQuote" SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
       quote.id,
@@ -1384,23 +1399,78 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
   }
 
   @Public()
+  @Post(":orderId/reorder")
+  async reorder(
+    @Param("orderId") orderId: string,
+    @Req() request: any,
+  ) {
+    const account = await this.customers.resolve(
+      this.customers.readToken(request),
+    );
+    if (!account || !(await this.customers.ownsOrder(account, orderId)))
+      throw new UnauthorizedException("Recompra não autorizada.");
+
+    const rows = await this.database.$queryRawUnsafe<Array<{ items: any }>>(
+      `SELECT items FROM "StorefrontOrder"
+        WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+      orderId,
+      account.companyId,
+    );
+    const previousItems = Array.isArray(rows[0]?.items) ? rows[0].items : [];
+    const items = previousItems.flatMap((item: any) => {
+      const id = String(item?.id || "");
+      const product = catalog[id];
+      if (!product) return [];
+      const quantity = Math.min(20, Math.max(1, Number(item.quantity) || 1));
+      const grind = grinds.has(String(item.grind)) ? String(item.grind) : "Grãos";
+      const line = new Set(["essencial", "intenso"]).has(id)
+        ? "Cotidiano"
+        : id === "raros"
+          ? "Raros"
+          : "Memórias";
+      return [{
+        id,
+        name: product.name,
+        line,
+        notes: "Sua escolha anterior, pronta para ser confirmada novamente.",
+        priceCents: product.unitPriceCents,
+        weightGrams: product.weightGrams,
+        quantity,
+        grind,
+        image: null,
+      }];
+    });
+    if (!items.length)
+      throw new BadRequestException(
+        "Os cafés deste pedido não estão disponíveis para recompra agora.",
+      );
+    return { items };
+  }
+
+  @Public()
   @Post(":orderId/retry-payment")
   async retryPayment(
     @Param("orderId") orderId: string,
     @Headers("x-storefront-order-token") suppliedToken: string | undefined,
+    @Req() request: any,
   ) {
-    if (!suppliedToken)
+    const account = await this.customers.resolve(this.customers.readToken(request));
+    const accountOwnsOrder = account
+      ? await this.customers.ownsOrder(account, orderId)
+      : false;
+    if (!suppliedToken && !accountOwnsOrder)
       throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
 
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT *
          FROM "StorefrontOrder"
         WHERE id=$1
-          AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE)
+          AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE OR $4::boolean=TRUE)
         LIMIT 1`,
       orderId,
-      tokenHash(suppliedToken),
-      this.lifecycle.validTrackingToken(orderId, suppliedToken),
+      tokenHash(suppliedToken || ""),
+      this.lifecycle.validTrackingToken(orderId, suppliedToken || ""),
+      accountOwnsOrder,
     );
     const order = rows[0];
     if (!order)
@@ -1439,15 +1509,21 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
   async status(
     @Param("orderId") orderId: string,
     @Headers("x-storefront-order-token") suppliedToken: string | undefined,
+    @Req() request: any,
   ) {
-    if (!suppliedToken)
+    const account = await this.customers.resolve(this.customers.readToken(request));
+    const accountOwnsOrder = account
+      ? await this.customers.ownsOrder(account, orderId)
+      : false;
+    if (!suppliedToken && !accountOwnsOrder)
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     let rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
-         FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE) LIMIT 1`,
+         FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE OR $4::boolean=TRUE) LIMIT 1`,
       orderId,
-      tokenHash(suppliedToken),
-      this.lifecycle.validTrackingToken(orderId, suppliedToken),
+      tokenHash(suppliedToken || ""),
+      this.lifecycle.validTrackingToken(orderId, suppliedToken || ""),
+      accountOwnsOrder,
     );
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
@@ -1456,10 +1532,11 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
         `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
-           FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE) LIMIT 1`,
+           FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE OR $4::boolean=TRUE) LIMIT 1`,
         orderId,
-        tokenHash(suppliedToken),
-        this.lifecycle.validTrackingToken(orderId, suppliedToken),
+        tokenHash(suppliedToken || ""),
+        this.lifecycle.validTrackingToken(orderId, suppliedToken || ""),
+        accountOwnsOrder,
       );
     }
     const [events, shipments] = await Promise.all([
@@ -1474,7 +1551,8 @@ export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy
         orderId,
       ),
     ]);
-    const { paymentExternalId: _privatePaymentId, ...publicOrder } = rows[0];
+    const publicOrder = { ...rows[0] };
+    delete publicOrder.paymentExternalId;
     return { ...publicOrder, events, shipment: shipments[0] ?? null };
   }
 
