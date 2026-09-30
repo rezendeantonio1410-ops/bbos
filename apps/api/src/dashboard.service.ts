@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import type { ExecutiveDashboard, IndustrialDashboard, Period } from "@bbos/shared";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
@@ -23,14 +23,14 @@ const periodStart = (period: Period) => {
 
 @Injectable()
 export class DashboardService implements OnModuleDestroy {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   async onModuleDestroy() { await this.db.$disconnect(); }
 
   async home(companyId: string) {
     const now = new Date();
     const day = periodStart("day");
     const month = periodStart("month");
-    const [orders, salesDay, salesMonth, production, pendingLab, lots, products, openPurchases] = await Promise.all([
+    const [orders, salesDay, salesMonth, production, pendingLab, lots, products, openPurchases, overdueReceivables] = await Promise.all([
       this.db.salesOrder.findMany({ where: { companyId }, select: { id: true, status: true, totalAmount: true, expectedDeliveryDate: true } }),
       this.db.salesOrder.aggregate({ where: { companyId, orderedAt: { gte: day }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true } }),
       this.db.salesOrder.aggregate({ where: { companyId, orderedAt: { gte: month }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true } }),
@@ -39,6 +39,16 @@ export class DashboardService implements OnModuleDestroy {
       this.db.coffeeLot.findMany({ where: { companyId }, select: { id: true, code: true, origin: true, variety: true, currentWeightKg: true, reservedWeightKg: true, status: true } }),
       this.db.finishedProduct.aggregate({ where: { companyId }, _sum: { quantityOnHand: true, reservedQuantity: true } }),
       this.db.greenCoffeePurchase.count({ where: { companyId, approvalStatus: "APPROVED", externalAcceptanceStatus: "ACCEPTED", operationalStatus: "AWAITING_DELIVERY" } }),
+      this.db.accountsReceivable.aggregate({
+        where: {
+          companyId,
+          status: { notIn: ["PAID", "CANCELLED"] },
+          dueDate: { lt: now },
+          openAmount: { gt: 0 },
+        },
+        _sum: { openAmount: true },
+        _count: { _all: true },
+      }),
     ]);
     const open = orders.filter((o) => !["DELIVERED", "CANCELLED"].includes(o.status)).length;
     const overdue = orders.filter((o) => o.expectedDeliveryDate && o.expectedDeliveryDate < now && !["DELIVERED", "CANCELLED"].includes(o.status)).length;
@@ -52,6 +62,13 @@ export class DashboardService implements OnModuleDestroy {
     const alerts = [
       ...(productionBlocked ? [{ tone: "CRÍTICO", title: "Produção bloqueada por falta de matéria-prima", impact: "Há pedido confirmado sem produto acabado disponível e sem café verde livre para suportar a produção.", href: "/recebimento", action: "Resolver abastecimento" }] : []),
       ...(overdue ? [{ tone: "CRÍTICO", title: `${overdue} pedido(s) atrasado(s)`, impact: "Existem pedidos com prazo vencido.", href: "/pedidos", action: "Ver pedidos" }] : []),
+      ...(overdueReceivables._count._all ? [{
+        tone: "CRÍTICO",
+        title: `${overdueReceivables._count._all} recebimento(s) vencido(s)`,
+        impact: `${money(toNumber(overdueReceivables._sum.openAmount))} aguardam regularização financeira.`,
+        href: "/financeiro/receber",
+        action: "Revisar recebimentos",
+      }] : []),
       ...(pendingLab ? [{ tone: "ATENÇÃO", title: `${pendingLab} lote(s) aguardam análise`, impact: "O laboratório precisa concluir a análise.", href: "/recebimento", action: "Ver recebimento" }] : []),
     ];
     return {
@@ -71,7 +88,13 @@ export class DashboardService implements OnModuleDestroy {
       this.db.greenCoffeeLabSample.count({ where: { receipt: { companyId }, status: "PENDING" } }),
       this.db.finishedProduct.aggregate({ where: { companyId }, _sum: { quantityOnHand: true } }),
     ]);
-    void lots;
+    const availableLots = lots.filter((lot) => ["RECEIVED", "QUALITY_REVIEW", "APPROVED"].includes(lot.status));
+    const greenAvailableKg = availableLots.reduce(
+      (sum, lot) => sum + Math.max(0, toNumber(lot.currentWeightKg) - toNumber(lot.reservedWeightKg)),
+      0,
+    );
+    const greenReservedKg = availableLots.reduce((sum, lot) => sum + toNumber(lot.reservedWeightKg), 0);
+    const greenStockValue = availableLots.reduce((sum, lot) => sum + toNumber(lot.landedCost), 0);
     const planned = orders.reduce((sum, o) => sum + toNumber(o.plannedWeightKg), 0);
     const actual = orders.reduce((sum, o) => sum + toNumber(o.actualOutputKg), 0);
     const installedCapacity = periodCapacityKg(period);
@@ -83,6 +106,12 @@ export class DashboardService implements OnModuleDestroy {
     const status = (value: number, target: number): "on-track" | "attention" | "off-track" => target === 0 ? "attention" : value >= target ? "on-track" : value >= target * 0.8 ? "attention" : "off-track";
     return {
       updatedAt: new Date().toISOString(),
+      inventory: {
+        greenAvailableKg,
+        greenReservedKg,
+        greenStockValue,
+        finishedGoodsUnits: toNumber(products._sum.quantityOnHand),
+      },
       metrics: [
         { id: "efficiency", label: "Eficiência da produção", value: planned ? `${((actual / planned) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "Sem dados", supportingText: planned ? "realizado / planejado" : "sem produção planejada", status: status(actual, planned), change: undefined },
         { id: "yield", label: "Rendimento industrial", value: green ? `${((roasted / green) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "Sem dados", supportingText: green ? "saída torrada / entrada verde" : "sem lotes processados", status: green ? "on-track" : "attention" },
@@ -103,18 +132,37 @@ export class DashboardService implements OnModuleDestroy {
 
   async executive(companyId: string, period: Period): Promise<ExecutiveDashboard> {
     const start = periodStart(period);
-    const [orders, transactions, green, finished, purchases] = await Promise.all([
+    const now = new Date();
+    const [orders, green, finished, purchases, receivables, overdueReceivables, payables] = await Promise.all([
       this.db.salesOrder.aggregate({ where: { companyId, orderedAt: { gte: start }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true }, _count: { _all: true } }),
-      this.db.financialTransaction.aggregate({ where: { companyId, occurredAt: { gte: start } }, _sum: { amount: true } }),
       this.db.coffeeLot.aggregate({ where: { companyId, status: { in: ["RECEIVED", "APPROVED", "QUALITY_REVIEW"] } }, _sum: { currentWeightKg: true, landedCost: true } }),
       this.db.finishedProduct.aggregate({ where: { companyId }, _sum: { quantityOnHand: true } }),
       this.db.greenCoffeePurchase.aggregate({ where: { companyId, approvalStatus: "APPROVED" }, _sum: { totalValue: true } }),
+      this.db.accountsReceivable.aggregate({
+        where: { companyId, status: { notIn: ["PAID", "CANCELLED"] }, openAmount: { gt: 0 } },
+        _sum: { openAmount: true },
+      }),
+      this.db.accountsReceivable.aggregate({
+        where: { companyId, status: { notIn: ["PAID", "CANCELLED"] }, dueDate: { lt: now }, openAmount: { gt: 0 } },
+        _sum: { openAmount: true },
+        _count: { _all: true },
+      }),
+      this.db.accountsPayable.aggregate({
+        where: { companyId, status: { notIn: ["PAID", "CANCELLED"] }, openAmount: { gt: 0 } },
+        _sum: { openAmount: true },
+      }),
     ]);
     void finished;
     const revenue = toNumber(orders._sum.totalAmount);
-    const finance = toNumber(transactions._sum.amount);
-    const metrics = [{ label: "Receita", value: money(revenue), change: 0, supportingText: "dados reais do período" }, { label: "Lucro operacional", value: "Sem dados", change: 0, supportingText: "custos/margem não disponíveis" }, { label: "Margem", value: "Sem dados", change: 0, supportingText: "custos/margem não disponíveis" }, { label: "Caixa", value: money(finance), change: 0, supportingText: "movimentações financeiras do período" }, { label: "Produção", value: "Sem dados", change: 0, supportingText: "consulte o dashboard industrial" }, { label: "Café verde", value: `${toNumber(green._sum.currentWeightKg).toLocaleString("pt-BR")} kg`, change: 0, supportingText: "saldo atual" }, { label: "Pedidos", value: String(orders._count._all), change: 0, supportingText: "pedidos no período" }, { label: "Compras aprovadas", value: money(toNumber(purchases._sum.totalValue)), change: 0, supportingText: "compras aprovadas" }];
+    const openReceivables = toNumber(receivables._sum.openAmount);
+    const openPayables = toNumber(payables._sum.openAmount);
+    const overdueAmount = toNumber(overdueReceivables._sum.openAmount);
+    const metrics = [{ label: "Receita", value: money(revenue), change: 0, supportingText: "dados reais do período" }, { label: "Lucro operacional", value: "Sem dados", change: 0, supportingText: "custos/margem não disponíveis" }, { label: "Margem", value: "Sem dados", change: 0, supportingText: "custos/margem não disponíveis" }, { label: "Contas a receber", value: money(openReceivables), change: 0, supportingText: overdueAmount > 0 ? `${money(overdueAmount)} vencidos` : "nenhum valor vencido" }, { label: "Produção", value: "Sem dados", change: 0, supportingText: "consulte o dashboard industrial" }, { label: "Café verde", value: `${toNumber(green._sum.currentWeightKg).toLocaleString("pt-BR")} kg`, change: 0, supportingText: "saldo atual" }, { label: "Pedidos", value: String(orders._count._all), change: 0, supportingText: "pedidos no período" }, { label: "Compras aprovadas", value: money(toNumber(purchases._sum.totalValue)), change: 0, supportingText: "compras aprovadas" }];
     const byPeriod = { day: period === "day" ? metrics : [], week: period === "week" ? metrics : [], month: period === "month" ? metrics : [], year: period === "year" ? metrics : [] };
-    return { updatedAt: new Date().toISOString(), metricsByPeriod: byPeriod, roi: { current: 0, target: 0, difference: 0, trend: 0, status: "attention" }, goals: [], projections: [], diagnostics: [], salesMap: { id: "company", level: "country", name: "Empresa", revenue, volumeKg: 0, marginPercent: 0, growthPercent: 0, target: 0, attainment: 0, salesShare: 100, status: "attention" }, alerts: [] };
+    const alerts = [
+      ...(overdueReceivables._count._all ? [{ id: "finance-overdue", severity: "critical" as const, title: `${overdueReceivables._count._all} recebimento(s) vencido(s)`, description: `${money(overdueAmount)} aguardam regularização.`, area: "Financeiro" }] : []),
+      ...(openPayables > 0 ? [{ id: "finance-payables", severity: "warning" as const, title: "Contas a pagar em aberto", description: `${money(openPayables)} em compromissos pendentes.`, area: "Financeiro" }] : []),
+    ];
+    return { updatedAt: new Date().toISOString(), metricsByPeriod: byPeriod, roi: { current: 0, target: 0, difference: 0, trend: 0, status: "attention" }, goals: [], projections: [], diagnostics: [], salesMap: { id: "company", level: "country", name: "Empresa", revenue, volumeKg: 0, marginPercent: 0, growthPercent: 0, target: 0, attainment: 0, salesShare: 100, status: "attention" }, alerts };
   }
 }

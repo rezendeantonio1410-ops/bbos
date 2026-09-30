@@ -1,13 +1,13 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { CuppingTrainingLevel, CuppingTrainingStatus, Prisma, PrismaClient } from "@bbos/database";
+import { CuppingTrainingLevel, CuppingTrainingStatus, Prisma, prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { CUPPING_ATTRIBUTES, scoreCuppingAttributes } from "./cupping-score";
 
 @Controller("cupping-training")
 export class CuppingTrainingController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   constructor(private readonly auth: AuthService) {}
 
   @Get("sessions")

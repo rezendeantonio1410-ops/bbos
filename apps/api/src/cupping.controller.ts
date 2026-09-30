@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { CoffeeLotStatus, CuppingDecision, CuppingSessionStatus, Prisma, PrismaClient } from "@bbos/database";
+import { CoffeeLotStatus, CuppingDecision, CuppingSessionStatus, Prisma, prisma } from "@bbos/database";
 import { createHash, randomBytes } from "node:crypto";
 import * as QRCode from "qrcode";
 import { AuthService } from "./auth.service";
@@ -11,7 +11,7 @@ const hashParticipantInvite = (token: string) => createHash("sha256").update(tok
 
 @Controller("cupping")
 export class CuppingController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   constructor(private readonly auth: AuthService) {}
 
   /** Issue a participant-scoped invite for the authenticated V1 flow. */

@@ -18,7 +18,7 @@ import {
   ProfessionalSampleSource,
   ProfessionalSampleStatus,
   Prisma,
-  PrismaClient,
+  prisma,
 } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { assertCompany, requireSession } from "./auth-context";
@@ -83,7 +83,7 @@ const lotStatusFor = (quality: GreenCoffeeQualityStatus): CoffeeLotStatus => {
 
 @Controller("receipts")
 export class ReceiptsController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   constructor(private readonly auth: AuthService) {}
 
   @Get("lab-samples")

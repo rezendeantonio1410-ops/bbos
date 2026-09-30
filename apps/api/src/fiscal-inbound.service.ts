@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { request as httpsRequest } from "node:https";
@@ -22,7 +22,7 @@ const nsu = (value: string | number | null | undefined) => String(value ?? "0").
 
 @Injectable()
 export class FiscalInboundService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   private readonly logger = new Logger(FiscalInboundService.name);
 
   readiness() {

@@ -3,7 +3,7 @@ import {
   Injectable,
   type OnModuleDestroy,
 } from "@nestjs/common";
-import { PrismaClient, type Prisma } from "@bbos/database";
+import { prisma, type Prisma } from "@bbos/database";
 import {
   validateProductionVariantEligibility,
   // @ts-expect-error Nest uses legacy Node resolution; runtime resolves the package export.
@@ -11,7 +11,7 @@ import {
 
 @Injectable()
 export class ProductionService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
 
   onModuleDestroy() {
     return this.database.$disconnect();

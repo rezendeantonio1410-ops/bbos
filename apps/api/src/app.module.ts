@@ -29,6 +29,7 @@ import { CommerceService } from "./commerce.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
+import { RoleAccessGuard } from "./role-access.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
@@ -76,10 +77,15 @@ import {
   PublicStorefrontMediaController,
 } from "./storefront-media.controller";
 import { StorefrontMediaService } from "./storefront-media.service";
+import { NotificationsController } from "./notifications.controller";
+import { IntelligenceController } from "./intelligence.controller";
+import { IntelligenceService } from "./intelligence.service";
 
 @Module({
   controllers: [
     HealthController,
+    NotificationsController,
+    IntelligenceController,
     DashboardController,
     BlendsController,
     ReceiptsController,
@@ -126,6 +132,7 @@ import { StorefrontMediaService } from "./storefront-media.service";
   ],
   providers: [
     DashboardService,
+    IntelligenceService,
     ProductsService,
     ProductsRepository,
     ProductionService,
@@ -155,6 +162,7 @@ import { StorefrontMediaService } from "./storefront-media.service";
     StorefrontCustomerService,
     StorefrontMediaService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RoleAccessGuard },
   ],
 })
 export class AppModule {}

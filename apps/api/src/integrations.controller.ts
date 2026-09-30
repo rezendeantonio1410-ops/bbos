@@ -12,7 +12,7 @@ import {
   Res,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { AuthService } from "./auth.service";
 import { Public } from "./auth.guard";
@@ -29,7 +29,7 @@ function sha256(value: string) {
 
 @Controller("integrations")
 export class IntegrationsController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(
     private readonly auth: AuthService,

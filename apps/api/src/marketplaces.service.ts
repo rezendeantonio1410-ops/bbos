@@ -3,12 +3,12 @@ import {
   Injectable,
   type OnModuleDestroy,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 
 @Injectable()
 export class MarketplacesService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
 
   onModuleDestroy() {
     return this.database.$disconnect();

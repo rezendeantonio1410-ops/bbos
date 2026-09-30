@@ -17,6 +17,7 @@ import {
   FileInput,
   PlugZap,
   Settings,
+  Ship,
   ShoppingBag,
   UsersRound,
 } from "lucide-react";
@@ -62,6 +63,7 @@ const MARKETPLACE: BbosRole[] = [
   "SALES",
   "MARKETPLACE_OPERATOR",
 ];
+const KNOWN_ROLES = new Set<BbosRole>([...ALL, "MARKETPLACE_OPERATOR"]);
 
 export const bbosNavigation: BbosNavGroup[] = [
   {
@@ -126,6 +128,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: BarChart3,
         roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
         keywords: ["faturamento", "receita"],
+      },
+      {
+        href: "/exportacoes",
+        label: "Exportações",
+        description: "Carteira internacional e prontidão",
+        icon: Ship,
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        keywords: ["exportacao", "internacional", "incoterm", "proforma"],
       },
       {
         href: "/commerce",
@@ -268,7 +278,8 @@ export const bbosNavigation: BbosNavGroup[] = [
 ];
 
 export function navigationForRole(role?: string | null) {
-  const resolved = (role ?? "INDUSTRIAL") as BbosRole;
+  if (!role || !KNOWN_ROLES.has(role as BbosRole)) return [];
+  const resolved = role as BbosRole;
   return bbosNavigation
     .map((group) => ({
       ...group,

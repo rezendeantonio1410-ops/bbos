@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import {
   createCipheriv,
   createDecipheriv,
@@ -26,7 +26,7 @@ type MercadoLivreToken = {
 
 @Injectable()
 export class MercadoLivreService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   private readonly refreshes = new Map<string, Promise<string>>();
 
   readiness() {

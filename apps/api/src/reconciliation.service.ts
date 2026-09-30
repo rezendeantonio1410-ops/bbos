@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, type OnModuleDestroy } from "@nestjs/common";
-import { PrismaClient, ReconciliationDirection, ReconciliationStatus } from "@bbos/database";
+import { prisma, ReconciliationDirection, ReconciliationStatus } from "@bbos/database";
 import { bankTransactionDirection, evaluateReconciliationMatch, financialTransactionDirection } from "@bbos/shared";
 import { createHash } from "node:crypto";
 
@@ -10,7 +10,7 @@ type StatementImportInput = { companyId: string; financialAccountId: string; for
 
 @Injectable()
 export class ReconciliationService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
   onModuleDestroy() { return this.database.$disconnect(); }
 
   async list(query: ReconciliationQuery = {}) {

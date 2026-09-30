@@ -1,9 +1,9 @@
 import { Controller, Get, Req, type OnModuleDestroy } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 
 @Controller("sales-orders")
 export class SalesOrderCatalogOptionsController implements OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   onModuleDestroy() {
     return this.database.$disconnect();

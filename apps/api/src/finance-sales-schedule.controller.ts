@@ -6,12 +6,12 @@ import {
   UnauthorizedException,
   type OnModuleDestroy,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
 
 @Controller("finance/sales-schedule")
 export class FinanceSalesScheduleController implements OnModuleDestroy {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 

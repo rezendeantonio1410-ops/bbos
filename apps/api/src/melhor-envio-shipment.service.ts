@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
@@ -9,7 +9,7 @@ const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
 @Injectable()
 export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   private trackingTimer?: NodeJS.Timeout;
   private reconcilingTracking = false;
 

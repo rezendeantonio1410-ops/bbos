@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -17,7 +17,7 @@ const DEFAULT_SCOPES = [
 
 @Injectable()
 export class MelhorEnvioAuthService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   private config() {
     const clientId = process.env.MELHOR_ENVIO_CLIENT_ID?.trim();

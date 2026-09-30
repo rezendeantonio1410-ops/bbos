@@ -14,7 +14,7 @@ import {
   Body,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
@@ -82,7 +82,7 @@ export class AdminStorefrontMediaController {
 
 @Controller("storefront/media")
 export class PublicStorefrontMediaController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly media: StorefrontMediaService) {}
 
