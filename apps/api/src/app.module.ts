@@ -29,6 +29,7 @@ import { CommerceService } from "./commerce.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
+import { RoleAccessGuard } from "./role-access.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
@@ -63,10 +64,28 @@ import { StorefrontCouponsController } from "./storefront-coupons.controller";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontPartnersController } from "./storefront-partners.controller";
 import { StorefrontCatalogController } from "./storefront-catalog.controller";
+import { StorefrontOperationsController } from "./storefront-operations.controller";
+import { FiscalInboundController } from "./fiscal-inbound.controller";
+import { FiscalInboundService } from "./fiscal-inbound.service";
+import { MarketplacesController } from "./marketplaces.controller";
+import { MarketplacesService } from "./marketplaces.service";
+import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
+import { StorefrontCustomerController } from "./storefront-customer.controller";
+import { StorefrontCustomerService } from "./storefront-customer.service";
+import {
+  AdminStorefrontMediaController,
+  PublicStorefrontMediaController,
+} from "./storefront-media.controller";
+import { StorefrontMediaService } from "./storefront-media.service";
+import { NotificationsController } from "./notifications.controller";
+import { IntelligenceController } from "./intelligence.controller";
+import { IntelligenceService } from "./intelligence.service";
 
 @Module({
   controllers: [
     HealthController,
+    NotificationsController,
+    IntelligenceController,
     DashboardController,
     BlendsController,
     ReceiptsController,
@@ -104,9 +123,16 @@ import { StorefrontCatalogController } from "./storefront-catalog.controller";
     StorefrontCouponsController,
     StorefrontPartnersController,
     StorefrontCatalogController,
+    StorefrontOperationsController,
+    FiscalInboundController,
+    MarketplacesController,
+    StorefrontCustomerController,
+    AdminStorefrontMediaController,
+    PublicStorefrontMediaController,
   ],
   providers: [
     DashboardService,
+    IntelligenceService,
     ProductsService,
     ProductsRepository,
     ProductionService,
@@ -130,7 +156,13 @@ import { StorefrontCatalogController } from "./storefront-catalog.controller";
     MelhorEnvioShipmentService,
     MelhorEnvioAuthService,
     StorefrontCouponsService,
+    FiscalInboundService,
+    MarketplacesService,
+    MercadoLivreService,
+    StorefrontCustomerService,
+    StorefrontMediaService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RoleAccessGuard },
   ],
 })
 export class AppModule {}

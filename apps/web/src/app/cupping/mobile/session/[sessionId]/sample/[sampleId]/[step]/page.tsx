@@ -510,7 +510,7 @@ export default function CuppingStepPage() {
       );
   }
   return (
-    <main className={`mx-auto min-h-screen w-full overflow-x-clip px-[clamp(.75rem,3vw,2rem)] pb-[calc(12rem+env(safe-area-inset-bottom))] pt-[clamp(4.5rem,8vw,6rem)] ${step === "aroma" || step === "sabor" ? "max-w-[430px]" : step === "finalizacao" || step === "acidez" || step === "corpo" ? "max-w-[1180px]" : "max-w-3xl"}`}>
+    <main data-cupping-mobile-session className={`mx-auto min-h-screen w-full overflow-x-clip px-[clamp(.75rem,3vw,2rem)] pb-[calc(12rem+env(safe-area-inset-bottom))] pt-[clamp(4.5rem,8vw,6rem)] ${step === "aroma" || step === "sabor" ? "max-w-[430px]" : step === "finalizacao" || step === "acidez" || step === "corpo" ? "max-w-[1180px]" : "max-w-3xl"}`}>
       <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/70 bg-[#fbfaf7]/95 px-4 py-2 backdrop-blur">
         <div className="mx-auto flex max-w-[1180px] items-center justify-between">
           <div className="min-w-0"><p className="truncate text-xs font-black text-slate-800">{context?.participant?.name ?? context?.session?.participant?.name ?? "Provador"}</p><p className="text-[10px] font-semibold text-slate-500">Provador</p></div>

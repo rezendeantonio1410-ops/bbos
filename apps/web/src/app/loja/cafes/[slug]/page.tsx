@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Search, UserRound } from "lucide-react";
+import { ArrowLeft, MapPin, Search } from "lucide-react";
 import { AddToCartButton, CartButton, StorefrontCartProvider } from "../../StorefrontCart";
 import { microlots } from "../../microlots";
 import styles from "./microlot.module.css";
@@ -18,8 +18,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const lot = microlots.find((item) => item.slug === slug);
   if (!lot) return {};
   return {
-    title: `${lot.product.name} · ${lot.product.story.rareDetails?.producer} | Bispo Coffees`,
+    title: `${lot.product.name} · ${lot.product.story.rareDetails?.producer}`,
     description: lot.product.story.promise,
+    alternates: { canonical: `/loja/cafes/${slug}` },
+    openGraph: { title: `${lot.product.name} · Bispo Raros`, description: lot.product.story.promise, url: `/loja/cafes/${slug}` },
   };
 }
 
@@ -61,7 +63,6 @@ export default async function MicrolotPage({ params }: PageProps) {
           </nav>
           <div className={styles.actions}>
             <Link href="/loja#cafes" aria-label="Buscar cafés"><Search /></Link>
-            <Link href="/login" aria-label="Minha conta"><UserRound /></Link>
             <CartButton />
           </div>
         </header>

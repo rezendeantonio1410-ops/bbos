@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHash } from "node:crypto";
 import { BlingService } from "./bling.service";
 
@@ -49,7 +49,7 @@ type FiscalProfile = {
 
 @Injectable()
 export class BlingCatalogSyncService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly bling: BlingService) {}
 

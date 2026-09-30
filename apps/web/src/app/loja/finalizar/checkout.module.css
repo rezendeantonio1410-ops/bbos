@@ -266,3 +266,5 @@
     grid-template-columns: 1fr;
   }
 }
+
+.privacyNote{margin:0;color:rgba(14,25,29,.62);font-size:9px;line-height:1.45}.privacyNote a{color:inherit;text-underline-offset:2px}@media(max-width:780px){.privacyNote{font-size:10px}}

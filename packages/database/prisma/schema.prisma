@@ -13,6 +13,7 @@ enum UserRole {
   INDUSTRIAL
   FINANCE
   SALES
+  MARKETPLACE_OPERATOR
 }
 
 enum CoffeeLotStatus {
@@ -457,6 +458,7 @@ model Company {
   cuppingTrainingSessions   CuppingTrainingSession[]
   professionalCoffeeSamples ProfessionalCoffeeSample[]
   cuppingPublicSessions     CuppingPublicSession[]
+  storefrontMediaAssets     StorefrontMediaAsset[]
 }
 
 model User {
@@ -607,6 +609,7 @@ model SupplierOriginUnit {
   supplierId          String
   supplier            Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   name                String
+  originType          String                     @default("FARM")
   taxId               String?
   stateRegistration   String?
   country             String                     @default("Brasil")
@@ -1620,6 +1623,7 @@ model Product {
   active           Boolean                  @default(true)
   variants         ProductVariant[]
   storefrontImages StorefrontProductImage[]
+  mediaAssets      StorefrontMediaAsset[]
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
@@ -1643,6 +1647,33 @@ model StorefrontProductImage {
   @@index([productId, sortOrder])
   @@index([productId, isPrimary])
   @@index([productId, useInHero])
+}
+
+model StorefrontMediaAsset {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productId  String?
+  product    Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  category   String
+  entityKey  String?
+  placement  String?
+  title      String
+  altText    String
+  caption    String?
+  credit     String?
+  fileName   String
+  mimeType   String
+  data       Bytes
+  sortOrder  Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId, category, active, sortOrder])
+  @@index([companyId, placement, active])
+  @@index([productId, active, sortOrder])
 }
 
 model ProductVariant {
@@ -1680,22 +1711,31 @@ model ProductVariant {
 }
 
 model SalesChannel {
-  id        String           @id @default(cuid())
-  companyId String
-  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code      String
-  name      String
-  type      SalesChannelType
-  active    Boolean          @default(true)
-  country   String?
-  currency  String?
-  orders    SalesOrder[]
-  prices    ProductPrice[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id                String           @id @default(cuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  type              SalesChannelType
+  active            Boolean          @default(true)
+  country           String?
+  currency          String?
+  platformCode      String?          @db.VarChar(30)
+  connectionStatus  String           @default("NOT_CONNECTED") @db.VarChar(20)
+  externalAccountId String?
+  commissionPercent Decimal?         @db.Decimal(7, 4)
+  fixedFee          Decimal?         @db.Decimal(14, 2)
+  fulfillmentMode   String?          @db.VarChar(30)
+  lastSyncedAt      DateTime?
+  settings          Json?
+  orders            SalesOrder[]
+  prices            ProductPrice[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, active])
+  @@index([companyId, platformCode])
 }
 
 model ProductPrice {
@@ -1760,6 +1800,16 @@ model SalesOrder {
   shippingServiceId          String?
   shippingServiceName        String?
   estimatedDeliveryDays      Int?
+  externalOrderId            String?
+  externalOrderNumber        String?
+  externalStatus             String?
+  channelGrossAmount         Decimal?                @db.Decimal(14, 2)
+  channelFeeAmount           Decimal                 @default(0) @db.Decimal(14, 2)
+  channelFreightAmount       Decimal                 @default(0) @db.Decimal(14, 2)
+  channelNetAmount           Decimal?                @db.Decimal(14, 2)
+  channelPayload             Json?
+  importedAt                 DateTime?
+  channelUpdatedAt           DateTime?
   invoicedAt                 DateTime?
   deliveredAt                DateTime?
   costEvents                 CostEvent[]
@@ -1771,9 +1821,11 @@ model SalesOrder {
   updatedAt                  DateTime                @updatedAt
 
   @@unique([companyId, code])
+  @@unique([companyId, salesChannelId, externalOrderId])
   @@index([customerId, status])
   @@index([brokerId])
   @@index([salesChannelId, status])
+  @@index([companyId, importedAt])
 }
 
 model FinancialAccount {

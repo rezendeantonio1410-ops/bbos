@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="360" viewBox="0 0 1000 360" role="img" aria-labelledby="title desc">
+  <title id="title">Amplitude térmica ao longo de um dia</title>
+  <desc id="desc">Curva ilustrativa: a temperatura sobe durante o dia até uma máxima e desce à noite até uma mínima. A diferença entre ambas é a amplitude térmica.</desc>
+  <defs><linearGradient id="day-night"><stop stop-color="#d9c7a5"/><stop offset=".49" stop-color="#f0d9a9"/><stop offset=".51" stop-color="#44675e"/><stop offset="1" stop-color="#233b3a"/></linearGradient></defs>
+  <rect width="1000" height="360" rx="16" fill="url(#day-night)"/>
+  <circle cx="295" cy="64" r="30" fill="#f4e4a7"/><circle cx="758" cy="62" r="29" fill="#ebeee5"/><circle cx="771" cy="54" r="28" fill="#344e48"/>
+  <path d="M80 259H920" stroke="#fcf7ec" stroke-width="2" opacity=".65"/>
+  <path d="M80 106H920" stroke="#fcf7ec" stroke-width="2" opacity=".65" stroke-dasharray="7 9"/>
+  <path d="M80 259C224 252 277 103 427 106S647 228 920 251" fill="none" stroke="#fff9e9" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="427" cy="106" r="9" fill="#f4e4a7" stroke="#fff" stroke-width="3"/>
+  <circle cx="872" cy="251" r="9" fill="#d9e8e3" stroke="#fff" stroke-width="3"/>
+  <path d="M916 108V250" stroke="#fff" stroke-width="3" stroke-dasharray="5 5"/>
+  <path d="M907 116l9-9 9 9M907 241l9 9 9-9" fill="none" stroke="#fff" stroke-width="3"/>
+  <text x="80" y="52" font-family="Arial, sans-serif" font-size="19" font-weight="bold" letter-spacing="2" fill="#304c42">DIA</text>
+  <text x="605" y="52" font-family="Arial, sans-serif" font-size="19" font-weight="bold" letter-spacing="2" fill="#f3f5ec">NOITE</text>
+  <text x="337" y="93" font-family="Arial, sans-serif" font-size="17" fill="#344a40">máxima</text>
+  <text x="792" y="284" font-family="Arial, sans-serif" font-size="17" fill="#f3f5ec">mínima</text>
+  <text x="735" y="185" font-family="Arial, sans-serif" font-size="20" font-weight="bold" letter-spacing="1.1" fill="#f3f5ec">AMPLITUDE</text>
+  <text x="79" y="320" font-family="Arial, sans-serif" font-size="18" fill="#344a40">variação ilustrativa · sem dados de uma lavoura</text>
+</svg>

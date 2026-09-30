@@ -36,3 +36,17 @@
 @media(max-width:960px){.hero{grid-template-columns:1fr;min-height:auto}.media{min-height:56svh}.copy{padding:42px 6vw 48px}.copy h1{font-size:clamp(48px,10vw,70px)}.dots{top:23px}}
 @media(max-width:600px){.media{min-height:430px}.mediaSignature{left:20px;bottom:20px}.controls{right:16px;bottom:16px}.controls span{display:none}.copy{padding:38px 20px 42px}.copy h1{margin-top:18px;font-size:45px}.intro{font-size:14px}.productStage{grid-template-columns:132px 1fr;gap:14px;min-height:154px}.productImage{width:132px;height:132px}.productReading strong{font-size:16px}.buyRow{align-items:stretch;flex-direction:column}.buyRow button{width:100%;min-width:0}.dots{right:20px;top:21px}}
 @media(prefers-reduced-motion:reduce){.sceneImage,.controls button,.buyRow button,.dots button{transition:none}.activeImage{transform:none}}
+
+/* Premium editorial scale — product remains desirable without billboard typography. */
+@media(min-width:961px){
+ .hero{min-height:calc(92svh - 99px)}
+ .copy{padding:clamp(32px,3.25vw,58px)}
+ .copy h1{max-width:690px;margin:17px 0 13px;font-size:clamp(42px,4.05vw,66px);line-height:.96;letter-spacing:-.048em}
+ .intro{max-width:610px;margin-bottom:18px;font-size:14px;line-height:1.5}
+ .topline{font-size:8.5px}
+ .productStage{min-height:164px;grid-template-columns:185px 1fr;gap:20px;margin-bottom:14px}
+ .productImage{width:185px;height:145px}
+ .productReading strong{font-size:19px}
+ .buyRow strong{font-size:28px}
+ .buyRow button{min-height:50px;min-width:205px}
+}

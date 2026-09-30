@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Search, UserRound } from "lucide-react";
 import styles from "./sales.module.css";
 import tight from "./sales-tight.module.css";
@@ -8,12 +9,15 @@ import journey from "./conversion-review.module.css";
 import founder from "./founder-trust.module.css";
 import layers from "./layers.module.css";
 import brand from "./brand-review.module.css";
+import storyNav from "./story-navigation.module.css";
+import premium from "./premium-overrides.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
 import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { alexandreMicrolot } from "./microlots";
 import { loadStorefrontImages } from "@/lib/storefront-images";
+import { loadStorefrontMedia } from "@/lib/storefront-media";
 import {
   AddToCartButton,
   CartButton,
@@ -189,14 +193,47 @@ const collectionId = (name: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()}`;
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
+
+export const metadata: Metadata = {
+  title: "Cafés especiais brasileiros",
+  description: "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e curadoria de José e Suzi.",
+  alternates: { canonical: "/loja" },
+  openGraph: { title: "Bispo Coffees — cafés escolhidos, não apenas vendidos", url: "/loja" },
+};
 
 export default async function LojaPage() {
-  const storefrontImages = await loadStorefrontImages();
+  const [storefrontImages, mediaLibrary] = await Promise.all([
+    loadStorefrontImages(),
+    loadStorefrontMedia(),
+  ]);
   const catalogProducts = products.map((product) => ({
     ...product,
     image: storefrontImages[product.name]?.primary ?? product.image,
   }));
+  const featuredGuidance: Record<
+    string,
+    { eyebrow: string; reason: string }
+  > = {
+    Essencial: {
+      eyebrow: "PARA TODO DIA",
+      reason: "Macio e equilibrado para começar pelo conforto.",
+    },
+    Caramelo: {
+      eyebrow: "DOÇURA RECONHECÍVEL",
+      reason: "Caramelo e chocolate em uma xícara acolhedora.",
+    },
+    Sublime: {
+      eyebrow: "MAIS PROFUNDIDADE",
+      reason: "Uma experiência longa, densa e contemplativa.",
+    },
+  };
+  const featuredProducts = ["Essencial", "Caramelo", "Sublime"]
+    .map((name) => catalogProducts.find((product) => product.name === name))
+    .filter(
+      (product): product is (typeof catalogProducts)[number] =>
+        Boolean(product),
+    );
   return (
     <StorefrontCartProvider>
       <main className={`${styles.page} ${brand.storefront}`}>
@@ -205,7 +242,7 @@ export default async function LojaPage() {
           <span>Frete grátis Sul + Sudeste em compras a partir de R$ 270</span>
           <a href="#cafes">Comprar cafés →</a>
         </div>
-        <header className={`${styles.header} ${journey.header}`}>
+        <header className={`${styles.header} ${journey.header} ${storyNav.header}`}>
           <a
             href="#top"
             className={styles.brand}
@@ -219,11 +256,12 @@ export default async function LojaPage() {
               priority
             />
           </a>
-          <nav className={styles.nav} aria-label="Navegação principal">
+          <nav className={`${styles.nav} ${storyNav.nav}`} aria-label="Navegação principal">
             <a href="#cafes">Cafés</a>
             <a href="#camadas">Escolher</a>
             <Link href="/loja/descobrir">Descobrir o meu</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
+            <Link href="/loja/origem">A geografia na xícara</Link>
           </nav>
           <div className={`${styles.actions} ${journey.actions}`}>
             <a
@@ -233,18 +271,101 @@ export default async function LojaPage() {
             >
               <Search aria-hidden="true" />
             </a>
-            <Link
-              className={journey.actionLink}
-              href="/login"
-              aria-label="Minha conta"
-            >
+            <Link className={journey.actionLink} href="/loja/conta" aria-label="Minha Bispo">
               <UserRound aria-hidden="true" />
             </Link>
             <CartButton />
           </div>
         </header>
 
-        <EditorialHero productImages={storefrontImages} />
+        <EditorialHero productImages={storefrontImages} mediaSlots={mediaLibrary.slots} />
+
+        <section
+          className={premium.conversionShelf}
+          aria-labelledby="comece-por-aqui"
+        >
+          <header className={premium.conversionIntro}>
+            <div>
+              <small>COMECE POR AQUI</small>
+              <h2 id="comece-por-aqui">
+                Três escolhas para comprar sem dúvida.
+              </h2>
+            </div>
+            <p>
+              Escolha pelo momento. A moagem é definida na sacola e José e
+              Suzi acompanham a curadoria de cada perfil.
+            </p>
+          </header>
+          <div className={premium.featuredGrid}>
+            {featuredProducts.map((product) => {
+              const guidance = featuredGuidance[product.name] ?? {
+                eyebrow: product.tag.toUpperCase(),
+                reason: product.story.promise,
+              };
+              return (
+                <article
+                  key={product.name}
+                  className={premium.featuredCard}
+                  style={{ "--featured-tone": product.tone } as React.CSSProperties}
+                >
+                  <div className={premium.featuredVisual}>
+                    {product.image ? (
+                      <Image
+                        src={product.image}
+                        alt={`Embalagem Bispo ${product.name}`}
+                        width={180}
+                        height={230}
+                        sizes="(max-width: 600px) 112px, (max-width: 1050px) 200px, 14vw"
+                      />
+                    ) : (
+                      <span>BISPO</span>
+                    )}
+                  </div>
+                  <div className={premium.featuredCopy}>
+                    <small>{guidance.eyebrow}</small>
+                    <h3>{product.name}</h3>
+                    <p>{guidance.reason}</p>
+                    <span>{product.notes}</span>
+                    <div>
+                      <strong>
+                        {product.price} <small>· {product.weight}</small>
+                      </strong>
+                      <AddToCartButton
+                        product={{
+                          id: product.name.toLowerCase().replaceAll(" ", "-"),
+                          name: product.name,
+                          line: product.line,
+                          notes: product.notes,
+                          priceCents: product.priceCents,
+                          weightGrams: Number.parseInt(product.weight, 10),
+                          image: product.image,
+                          story: product.story,
+                        }}
+                      >
+                        Escolher {product.name} →
+                      </AddToCartButton>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className={premium.purchaseAssurances}>
+            <span>
+              <b>Pix simples</b>
+              <small>Confirmação automática</small>
+            </span>
+            <span>
+              <b>Moagem à sua escolha</b>
+              <small>Definida antes do pagamento</small>
+            </span>
+            <span>
+              <b>Receber regularmente</b>
+              <small>Sem cobrança automática</small>
+            </span>
+            <Link href="/loja/descobrir">Ainda em dúvida? Descubra o seu →</Link>
+          </div>
+        </section>
 
         <section id="camadas" className={layers.section}>
           <div className={layers.intro}>
@@ -285,8 +406,8 @@ export default async function LojaPage() {
             data-photo-slot="sectional-origin-new-photo"
           >
             <Image
-              src="/brand/story/jose-origem.jpeg"
-              alt="A leitura da origem pela Bispo Coffees"
+              src={mediaLibrary.slots["home.origin"]?.url ?? "/brand/story/jose-origem.jpeg"}
+              alt={mediaLibrary.slots["home.origin"]?.altText ?? "A leitura da origem pela Bispo Coffees"}
               fill
               sizes="(max-width: 800px) 100vw, 58vw"
             />
@@ -322,8 +443,8 @@ export default async function LojaPage() {
               <h2>Escolha pelo perfil.</h2>
             </div>
             <p>
-              Compare os perfis, escolha a moagem e compre. Se preferir, o Bispo
-              ajuda você a encontrar a xícara certa.
+              Compare os perfis, escolha a moagem e compre. Se preferir, José e
+              Suzi ajudam você a encontrar a xícara certa.
             </p>
           </div>
           <nav className={layers.filter} aria-label="Camadas dos cafés">
@@ -395,7 +516,7 @@ export default async function LojaPage() {
                             <div className={tight.catalogFallback}>
                               <span>BISPO</span>
                               <b>{p.name}</b>
-                              <small>NOVA COLHEITA · EM BREVE</small>
+                              <small>SAFRA ATUAL · {p.weight}</small>
                             </div>
                           )}
                           <small>{p.tag}</small>
@@ -418,11 +539,22 @@ export default async function LojaPage() {
                               tag: p.tag,
                               tone: p.tone,
                             }}
-                            story={p.story}
+                            story={{
+                              ...p.story,
+                              proofImages: (
+                                mediaLibrary.productProofs[
+                                  p.name === "Raro" ? "raros" : p.name.toLowerCase().replaceAll(" ", "-")
+                                ] ?? []
+                              ).map((photo) => ({
+                                src: photo.url,
+                                alt: photo.altText,
+                                caption: photo.caption ?? photo.title,
+                              })),
+                            }}
                             detailHref={p.name === "Raro" ? `/loja/cafes/${alexandreMicrolot.slug}` : undefined}
                             detailLabel={p.name === "Raro" ? "Conhecer este lote →" : undefined}
                           />
-                          <div className={styles.buyRow}>
+                          <div className={`${styles.buyRow} ${premium.buyRow}`}>
                             <strong>
                               {p.price} <small>· {p.weight}</small>
                             </strong>
@@ -438,7 +570,7 @@ export default async function LojaPage() {
                                 story: p.story,
                               }}
                             >
-                              Quero esse →
+                              Adicionar à sacola
                             </AddToCartButton>
                           </div>
                         </div>
@@ -473,15 +605,15 @@ export default async function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src="/brand/founders/jose-rezende.jpg"
-                alt="José Rezende avaliando um café"
+                src={mediaLibrary.slots["founder.jose.portrait"]?.url ?? "/brand/founders/jose-rezende.jpg"}
+                alt={mediaLibrary.slots["founder.jose.portrait"]?.altText ?? "José Rezende avaliando um café"}
               />
               <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
             <figure className={founder.portrait}>
               <img
-                src="/brand/founders/suzi-ninov.jpg"
-                alt="Suzi Ninov avaliando um café"
+                src={mediaLibrary.slots["founder.suzi.portrait"]?.url ?? "/brand/founders/suzi-ninov.jpg"}
+                alt={mediaLibrary.slots["founder.suzi.portrait"]?.altText ?? "Suzi Ninov avaliando um café"}
               />
               <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
             </figure>
@@ -489,38 +621,31 @@ export default async function LojaPage() {
           <div
             className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
           >
-            <small>QUEM ESCOLHE O SEU CAFÉ</small>
-            <h2>
-              Antes da sua xícara,
-              <br />
-              <em>cada café passa por nós.</em>
-            </h2>
-            <p className={founder.intro}>
-              José e Suzi trazem duas histórias próprias no café, unidas para
-              escolher, provar e preservar a identidade de cada xícara.
+            <small>O BISPO · A BISPO</small>
+            <h2>O Bispo é José. A Bispo é José e Suzi.</h2>
+            <p className={founder.sharedStory}>
+              A marca reúne dois percursos reais: José, do produtor ao mercado
+              internacional; Suzi, da planta e do solo à qualidade. A escolha
+              final é construída pelos dois.
             </p>
             <div className={founder.proofs}>
               <p>
                 <b>José Rezende</b>
                 <br />
-                Origem, prova e mercados construídos ao lado de produtores desde
-                2003.
+                No campo desde 2003. Q-Grader e, em 2015, cofundador da
+                Capricornio Coffees.
               </p>
               <p>
                 <b>Suzi Ninov</b>
                 <br />
-                Cofundadora, com trajetória própria no café, visão de produção,
-                sustentabilidade e o cuidado que preserva cada escolha.
+                No Paraná desde 2006, une nutrição, manejo, produtividade e
+                qualidade na relação com produtores.
               </p>
             </div>
-            <p className={founder.sharedStory}>
-              Parceiros de vida e de projeto, constroem juntos a Bispo — do
-              campo brasileiro aos mercados do mundo, e de volta à sua xícara.
-            </p>
             <div className={founder.trust} aria-label="Critérios Bispo">
-              <span>Provado por nós</span>
-              <span>Torra própria</span>
-              <span>Brasil e Europa</span>
+              <span>Campo · desde 2003</span>
+              <span>Suzi · Paraná desde 2006</span>
+              <span>Mercado internacional · desde 2015</span>
             </div>
             <div className={founder.actions}>
               <a className={founder.primary} href="#cafes">
@@ -541,7 +666,7 @@ export default async function LojaPage() {
           <span>Constância de xícara.</span>
           <span>Frete grátis Sul + Sudeste · R$ 270+</span>
         </section>
-        <footer className={styles.footer}>
+        <footer className={`${styles.footer} ${premium.footer}`}>
           <div className={styles.footerBrand}>
             <Image
               src="/brand/logo/bispo-logo-official-transparent.png"
@@ -556,15 +681,22 @@ export default async function LojaPage() {
             <strong>Explorar</strong>
             <Link href="/loja/descobrir">Descubra o seu café</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
+            <Link href="/loja/origem">A geografia na xícara</Link>
           </div>
           <div className={styles.footerNav}>
             <strong>Comprar</strong>
             <a href="#cafes">Todos os cafés</a>
             <a href="#camadas">Escolher por sensação</a>
           </div>
+          <div className={styles.footerNav}>
+            <strong>Atendimento</strong>
+            <Link href="/loja/entrega-e-devolucoes">Entrega e devoluções</Link>
+            <Link href="/loja/termos-de-compra">Termos de compra</Link>
+            <a href="mailto:pedidos@bispocoffees.com.br">pedidos@bispocoffees.com.br</a>
+          </div>
           <div className={styles.footerBottom}>
-            <span>Bispo Coffees · Brasil</span>
-            <Link href="/bbos">Área interna</Link>
+            <span>Bispo Coffees Ltda · CNPJ 13.008.726/0001-12 · Londrina, PR</span>
+            <span><Link href="/aviso-privacidade">Privacidade</Link> · © {new Date().getFullYear()}</span>
           </div>
         </footer>
       </main>

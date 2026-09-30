@@ -1,30 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isProtectedSystemPath } from "@/lib/system-routes";
 
 const SESSION_COOKIE = "bbos_session";
 
-const protectedPrefixes = [
-  "/home",
-  "/dashboard",
-  "/dashboard-industrial",
-  "/recebimento",
-  "/compras-cafe-verde",
-  "/laboratorio",
-  "/estoque",
-  "/producao",
-  "/financeiro",
-  "/custos",
-  "/pedidos",
-  "/vendas",
-  "/commerce",
-  "/bi",
-  "/produtos",
-];
-
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const protectedRoute = protectedPrefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  const protectedRoute = isProtectedSystemPath(pathname);
 
   // Session validity belongs to the API. This middleware only prevents a
   // protected page from rendering when the browser has no session cookie.

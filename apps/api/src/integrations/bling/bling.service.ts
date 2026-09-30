@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import {
   createCipheriv,
   createDecipheriv,
@@ -17,7 +17,7 @@ function sha256(value: string) {
 
 @Injectable()
 export class BlingService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   private config() {
     const clientId = process.env[BLING_ENV.clientId]?.trim();

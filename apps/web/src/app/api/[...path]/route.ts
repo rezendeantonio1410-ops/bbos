@@ -37,6 +37,19 @@ function upstreamHeaders(request: NextRequest) {
   if (authorization) headers.set("authorization", authorization);
   if (accept) headers.set("accept", accept);
   if (userAgent) headers.set("user-agent", userAgent);
+
+  for (const name of [
+    "x-storefront-order-token",
+    "x-bbos-webhook-secret",
+    "x-me-signature",
+    "x-signature",
+    "x-request-id",
+    "x-idempotency-key",
+  ]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+
   headers.set("x-forwarded-host", request.nextUrl.host);
   headers.set("x-forwarded-proto", request.nextUrl.protocol.replace(":", ""));
   return headers;

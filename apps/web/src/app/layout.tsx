@@ -15,7 +15,13 @@ import './order-drawer-vnext.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
 import { BbosAssistant } from '@/components/bbos-assistant';
 
-export const metadata: Metadata = { title: 'BBOS — Bispo Coffees', description: SYSTEM_NAME, creator: SYSTEM_CREATOR, authors: [{ name: SYSTEM_CREATOR }] };
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://loja.bispocoffees.com.br'),
+  title: 'BBOS — Bispo Coffees',
+  description: SYSTEM_NAME,
+  creator: SYSTEM_CREATOR,
+  authors: [{ name: SYSTEM_CREATOR }],
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="pt-BR"><body className="font-[var(--font-inter)] antialiased">{children}<BbosAssistant /></body></html>;

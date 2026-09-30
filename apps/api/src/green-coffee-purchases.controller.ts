@@ -19,7 +19,7 @@ import {
   GreenCoffeeSupplierType,
   PayableStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   PurchaseApprovalStatus,
   PurchaseInstallmentStatus,
   PurchaseOperationalStatus,
@@ -233,7 +233,7 @@ const contractLabel = (value?: unknown) => {
 
 @Controller("green-coffee-purchases")
 export class GreenCoffeePurchasesController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(
     private readonly auth: AuthService,
     private readonly taxRegistry: UnconfiguredTaxRegistryProvider,
@@ -1285,6 +1285,15 @@ export class GreenCoffeePurchasesController {
       throw new BadRequestException(
         "Nome da unidade e Estado são obrigatórios.",
       );
+    const defaultOriginType =
+      supplier.supplierType === "COOPERATIVE"
+        ? "COOPERATIVE_UNIT"
+        : supplier.supplierType === "RURAL_PERSON"
+          ? "FARM"
+          : "ORIGIN_UNIT";
+    const originType = String(body.originType || defaultOriginType);
+    if (!["FARM", "COOPERATIVE_UNIT", "ORIGIN_UNIT"].includes(originType))
+      throw new BadRequestException("Tipo de origem inválido.");
     const region = body.coffeeRegionId
       ? await this.db.coffeeRegion.findFirst({
           where: {
@@ -1303,6 +1312,7 @@ export class GreenCoffeePurchasesController {
       data: {
         supplierId,
         name: body.name.trim(),
+        originType,
         taxId: body.taxId || null,
         stateRegistration: body.stateRegistration || null,
         state: body.state,
@@ -1355,6 +1365,7 @@ export class GreenCoffeePurchasesController {
     }
     const allowed = [
       "name",
+      "originType",
       "taxId",
       "stateRegistration",
       "state",
@@ -1375,6 +1386,13 @@ export class GreenCoffeePurchasesController {
     const data = Object.fromEntries(
       Object.entries(body).filter(([key]) => allowed.includes(key)),
     );
+    if (
+      data.originType !== undefined &&
+      !["FARM", "COOPERATIVE_UNIT", "ORIGIN_UNIT"].includes(
+        String(data.originType),
+      )
+    )
+      throw new BadRequestException("Tipo de origem inválido.");
     if (data.postalCode !== undefined)
       data.postalCode = normalizePostalCode(data.postalCode);
     return this.db.supplierOriginUnit.update({ where: { id: unitId }, data });

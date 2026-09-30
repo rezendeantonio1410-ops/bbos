@@ -7,7 +7,7 @@ async function main() {
   if (!process.env.DATABASE_URL?.trim()) {
     throw new Error("Coffee reference seed requires DATABASE_URL.");
   }
-  const result = await seedCoffeeReferences(prisma, true);
+  const result = await seedCoffeeReferences(prisma, false);
   const company = await prisma.company.findFirst({
     where: { OR: [{ tradeName: "Bispo Coffees" }, { name: "Bispo Coffees" }] },
     select: { id: true },

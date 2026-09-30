@@ -7,7 +7,7 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Public } from "../../auth.guard";
 import type { BlingWebhookEnvelope } from "./bling.contract";
@@ -17,7 +17,7 @@ import { SalesOrderCustomerLifecycleService } from "../../sales-order-customer-l
 
 @Controller("integrations/bling/webhooks")
 export class BlingWebhookController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(
     private readonly bling: BlingService,

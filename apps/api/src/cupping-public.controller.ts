@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { CuppingParticipantInviteStatus, CuppingParticipantStatus, CuppingPublicKind, CuppingPublicStatus, Prisma, PrismaClient } from "@bbos/database";
+import { CuppingParticipantInviteStatus, CuppingParticipantStatus, CuppingPublicKind, CuppingPublicStatus, Prisma, prisma } from "@bbos/database";
 import { createHash, randomBytes } from "node:crypto";
 import * as QRCode from "qrcode";
 import { AuthService } from "./auth.service";
@@ -17,7 +17,7 @@ const normalizePhone = (value: string) => {
 
 @Controller("cupping-public")
 export class CuppingPublicController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(private readonly auth: AuthService) {}
 
   @Get("sessions")

@@ -13,6 +13,7 @@ export type CustomerEmailPayload = {
   orderCode?: string;
   eventType?: string;
   trackingUrl?: string | null;
+  paymentUrl?: string | null;
   customer?: { name?: string; phone?: string };
   delivery?: {
     street?: string;
@@ -81,9 +82,10 @@ function stepCells(eventType: string) {
       const complete = index < current;
       const active = index === current;
       const dot = complete ? "#E0EAE9" : active ? "#FFFFFF" : "#0E191D";
-      const border = complete || active ? "#E0EAE9" : "#84908f";
+      const border = complete || active ? "#FFFFFF" : "#84908f";
       const color = index <= current ? "#FFFFFF" : "#9AA3A1";
-      return `<td width="20%" valign="top" style="padding:0 4px 0 0;color:${color};font-family:Arial,sans-serif;font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.6px"><span style="display:block;width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid ${border};margin:0 0 10px"></span>${escapeHtml(label)}</td>`;
+      const weight = active ? "700" : "500";
+      return `<td width="20%" valign="top" style="padding:0 5px 0 0;color:${color};font-family:Arial,sans-serif;font-size:11px;line-height:15px;font-weight:${weight};text-transform:uppercase;letter-spacing:.7px"><span style="display:block;width:15px;height:15px;border-radius:50%;background:${dot};border:3px solid ${border};margin:0 0 12px;box-sizing:border-box"></span>${escapeHtml(label)}</td>`;
     })
     .join("");
 }
@@ -108,6 +110,9 @@ export function renderCustomerEmail(
   const delivery = payload.delivery || {};
   const address = [delivery.street, delivery.number, delivery.complement].filter(Boolean).join(", ");
   const place = [delivery.district, delivery.city && delivery.state ? `${delivery.city}/${delivery.state}` : delivery.city].filter(Boolean).join(" · ");
+  const paymentAction = payload.paymentUrl
+    ? `<tr><td style="padding:0 42px 18px"><a href="${escapeHtml(payload.paymentUrl)}" style="display:block;background:#087568;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Gerar novo Pix&nbsp;&nbsp;→</a></td></tr>`
+    : "";
   const tracking = payload.trackingUrl
     ? `<tr><td style="padding:0 42px 42px"><a href="${escapeHtml(payload.trackingUrl)}" style="display:block;background:#0A0A0A;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Acompanhar meu pedido&nbsp;&nbsp;→</a></td></tr>`
     : "";
@@ -122,8 +127,22 @@ export function renderCustomerEmail(
     <tr><td colspan="3" style="height:4px;background:#0E191D;font-size:0;line-height:0">&nbsp;</td></tr>
     <tr><td colspan="3" style="padding:25px 38px;background:#FFFFFF"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="72" valign="middle"><img src="${escapeHtml(assets.sealUrl)}" width="62" height="62" alt="Selo Bispo True Coffee" style="display:block;border:0;border-radius:50%"></td><td valign="middle"><img src="${escapeHtml(assets.logoUrl)}" width="168" alt="Bispo True Coffee" style="display:block;border:0;width:168px;max-width:100%;height:auto"></td><td align="right" valign="middle" style="font:9px/15px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Escolhido<br>na origem</td></tr></table></td></tr>
     <tr><td colspan="3" style="padding:43px 42px 38px;background:#0A0A0A;color:#FFFFFF"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#E0EAE9">${escapeHtml(payload.title || "Seu pedido Bispo")}</div><h1 style="margin:18px 0 17px;font-family:Georgia,'Times New Roman',serif;font-size:36px;line-height:42px;font-weight:400;color:#FFFFFF">Seu café já começou<br>a jornada.</h1><div style="font:14px/23px Arial,sans-serif;color:#E0EAE9">${escapeHtml(customerFirstName)}, ${escapeHtml(payload.detail || "acompanharemos cada etapa até o café chegar a você.")}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:27px;border-top:1px solid #3E484B"><tr><td style="padding-top:16px;font:11px/16px Arial,sans-serif;letter-spacing:.8px;text-transform:uppercase;color:#FFFFFF">${escapeHtml(payload.orderCode)}</td><td align="right" style="padding-top:16px;font:11px/16px Arial,sans-serif;color:#AEB8B6">Escolhido por José e Suzi</td></tr></table></td></tr>
-    <tr><td colspan="3" style="padding:28px 42px 32px;background:#0E191D"><div style="margin-bottom:22px;font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#E0EAE9">A jornada do seu pedido</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #84908F"><tr>${stepCells(String(payload.eventType || "ORDER_RECEIVED"))}</tr></table></td></tr>
-    <tr><td colspan="3"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${orderSummary}${tracking}<tr><td style="padding:0 42px 32px;text-align:center;font:11px/18px Arial,sans-serif;color:#626B69">Se precisar, responda a este e-mail.<br>Será um prazer cuidar da sua escolha.</td></tr></table></td></tr>
+    <tr><td colspan="3" style="padding:33px 42px 40px;background:#0E191D"><div style="margin-bottom:26px;font:700 12px/17px Arial,sans-serif;letter-spacing:2.2px;text-transform:uppercase;color:#FFFFFF">A jornada do seu pedido</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:2px solid #84908F"><tr>${stepCells(String(payload.eventType || "ORDER_RECEIVED"))}</tr></table></td></tr>
+    <tr><td colspan="3"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${orderSummary}${paymentAction}${tracking}<tr><td style="padding:0 42px 32px;text-align:center;font:11px/18px Arial,sans-serif;color:#626B69">Se precisar, responda a este e-mail.<br>Será um prazer cuidar da sua escolha.</td></tr></table></td></tr>
     <tr><td colspan="3" style="padding:25px 42px;background:#E0EAE9"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:500 13px Arial,sans-serif;letter-spacing:2px;color:#0E191D">BISPO</td><td align="right" style="font:9px/15px Arial,sans-serif;letter-spacing:.4px;text-transform:uppercase;color:#52605D">José &amp; Suzi · Bispo Coffees<br>True Coffee · Londrina, Paraná</td></tr></table></td></tr>
+  </table></td></tr></table></body></html>`;
+}
+
+export function renderCustomerAccessEmail(
+  payload: { code: string; expiresInMinutes: number },
+  assets: { logoUrl: string; sealUrl: string },
+) {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seu código de acesso · Bispo Coffees</title></head><body style="margin:0;padding:0;background:#F1EEE8;color:#0E191D"><div style="display:none;max-height:0;overflow:hidden;opacity:0">Seu acesso seguro à Minha Bispo.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F1EEE8"><tr><td align="center" style="padding:24px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#FFFFFF">
+    <tr><td style="height:4px;background:#0E191D;font-size:0;line-height:0">&nbsp;</td></tr>
+    <tr><td style="padding:25px 38px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="72" valign="middle"><img src="${escapeHtml(assets.sealUrl)}" width="62" height="62" alt="Selo Bispo True Coffee" style="display:block;border:0;border-radius:50%"></td><td valign="middle"><img src="${escapeHtml(assets.logoUrl)}" width="168" alt="Bispo True Coffee" style="display:block;border:0;width:168px;max-width:100%;height:auto"></td><td align="right" valign="middle" style="font:9px/15px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Minha<br>Bispo</td></tr></table></td></tr>
+    <tr><td style="padding:43px 42px 38px;background:#0A0A0A;color:#FFFFFF"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#E0EAE9">Acesso protegido</div><h1 style="margin:18px 0 17px;font-family:Georgia,'Times New Roman',serif;font-size:36px;line-height:42px;font-weight:400;color:#FFFFFF">Sua relação com o café<br>continua aqui.</h1><div style="font:14px/23px Arial,sans-serif;color:#E0EAE9">Use o código abaixo para entrar na sua área do cliente.</div></td></tr>
+    <tr><td style="padding:42px"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#626B69">Seu código de acesso</div><div style="margin:18px 0 22px;padding:24px 18px;background:#0E191D;color:#FFFFFF;text-align:center;font:500 34px/42px Arial,sans-serif;letter-spacing:10px">${escapeHtml(payload.code)}</div><div style="font:13px/21px Arial,sans-serif;color:#626B69">Este código vale por ${escapeHtml(payload.expiresInMinutes)} minutos e só pode ser usado uma vez. Se você não solicitou o acesso, ignore esta mensagem.</div></td></tr>
+    <tr><td style="padding:0 42px 32px;text-align:center;font:11px/18px Arial,sans-serif;color:#626B69">Nunca compartilhe este código.<br>Se precisar, responda a este e-mail.</td></tr>
+    <tr><td style="padding:25px 42px;background:#E0EAE9"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:500 13px Arial,sans-serif;letter-spacing:2px;color:#0E191D">BISPO</td><td align="right" style="font:9px/15px Arial,sans-serif;letter-spacing:.4px;text-transform:uppercase;color:#52605D">José &amp; Suzi · Bispo Coffees<br>True Coffee · Londrina, Paraná</td></tr></table></td></tr>
   </table></td></tr></table></body></html>`;
 }

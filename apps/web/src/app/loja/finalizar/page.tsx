@@ -16,7 +16,7 @@ type CheckoutState = {
   items: CheckoutItem[];
   cep: string;
   subtotal: number;
-  mode: "now" | "return";
+  mode: "now" | "return" | "reminder";
   rhythm: number;
   couponCode?: string;
   discountCents?: number;
@@ -104,6 +104,13 @@ export default function CheckoutPage() {
     status: string;
     confirmationToken?: string;
     checkoutUrl?: string;
+    paymentMethod?: "PIX" | "CARD";
+    pix?: {
+      ticketUrl?: string | null;
+      qrCode?: string | null;
+      qrCodeBase64?: string | null;
+      expiresInSeconds?: number;
+    } | null;
   } | null>(null);
 
   useEffect(() => {
@@ -115,8 +122,53 @@ export default function CheckoutPage() {
         setData((current) => ({ ...current, postalCode: parsed.cep }));
       }
       const paymentOrder = sessionStorage.getItem("bispo-payment-order");
-      if (paymentOrder) setOrder(JSON.parse(paymentOrder));
+      if (paymentOrder) {
+        const previous = JSON.parse(paymentOrder);
+        setOrder(previous);
+        if (previous.paymentMethod) setPaymentMethod(previous.paymentMethod);
+      }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/storefront/customer/me", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((customer) => {
+        if (!active || !customer?.account) return;
+        const primary =
+          customer.addresses?.find((item: { isDefault?: boolean }) => item.isDefault) ||
+          customer.addresses?.[0];
+        setData((current) => {
+          const useSavedAddress =
+            Boolean(primary) &&
+            (!current.postalCode ||
+              digits(current.postalCode) === digits(primary.postalCode || ""));
+          return {
+            ...current,
+            name: current.name || customer.account.name || "",
+            email: current.email || customer.account.email || "",
+            phone: current.phone || customer.account.phone || "",
+            cpf: current.cpf || customer.account.taxId || "",
+            postalCode:
+              current.postalCode || (useSavedAddress ? primary.postalCode : "") || "",
+            street: current.street || (useSavedAddress ? primary.street : "") || "",
+            number: current.number || (useSavedAddress ? primary.number : "") || "",
+            complement:
+              current.complement || (useSavedAddress ? primary.complement : "") || "",
+            district: current.district || (useSavedAddress ? primary.district : "") || "",
+            city: current.city || (useSavedAddress ? primary.city : "") || "",
+            state: current.state || (useSavedAddress ? primary.state : "") || "",
+          };
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -181,9 +233,9 @@ export default function CheckoutPage() {
     if (result === "failure")
       setMessage("O pagamento não foi concluído. Você pode tentar novamente.");
     if (result === "pending")
-      setMessage("O Mercado Pago está processando o pagamento.");
+      setMessage("Se escolheu Pix, conclua a transferência no aplicativo do seu banco usando o QR Code ou Pix Copia e Cola exibido pelo Mercado Pago. O pedido será confirmado após a aprovação do pagamento.");
     if (result === "success")
-      setMessage("Pagamento recebido. Estamos confirmando com o Mercado Pago…");
+      setMessage("Estamos consultando a aprovação do pagamento no Mercado Pago…");
   }, []);
 
   const total = useMemo(
@@ -194,6 +246,13 @@ export default function CheckoutPage() {
   const netSubtotal = Math.max(0, (checkout?.subtotal || 0) - discountCents);
   const change = (field: keyof FormData, value: string) =>
     setData((current) => ({ ...current, [field]: value }));
+
+  async function copyPix() {
+    const code = order?.pix?.qrCode;
+    if (!code) return;
+    await navigator.clipboard.writeText(code);
+    setMessage("Pix Copia e Cola copiado.");
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -235,9 +294,9 @@ export default function CheckoutPage() {
             grind: item.grind || "Grãos",
           })),
           recurrence: {
-            mode: checkout.mode,
-            rhythmDays:
-              checkout.mode === "return" ? checkout.rhythm : undefined,
+            mode: checkout.mode === "now" ? "now" : "reminder",
+            reminderDays:
+              checkout.mode === "now" ? undefined : checkout.rhythm,
           },
         }),
       });
@@ -246,6 +305,22 @@ export default function CheckoutPage() {
         throw new Error(
           result.message || "Não foi possível preparar o pedido.",
         );
+      if (result.shippingRefreshRequired && result.quote) {
+        const nextCheckout = {
+          ...checkout,
+          quote: {
+            ...checkout.quote,
+            ...result.quote,
+          },
+        };
+        setCheckout(nextCheckout);
+        localStorage.setItem("bispo-checkout-v1", JSON.stringify(nextCheckout));
+        setMessage(
+          result.message ||
+            "O frete foi atualizado. Confira o novo total e confirme novamente.",
+        );
+        return;
+      }
       setOrder(result);
       sessionStorage.setItem(
         "bispo-payment-order",
@@ -254,6 +329,8 @@ export default function CheckoutPage() {
           code: result.code,
           status: result.status,
           confirmationToken: result.confirmationToken,
+          paymentMethod,
+          pix: result.pix ?? null,
         }),
       );
       if (result.status === "PAID") {
@@ -262,13 +339,22 @@ export default function CheckoutPage() {
         sessionStorage.removeItem("bispo-checkout-idempotency");
         sessionStorage.removeItem("bispo-payment-order");
         setMessage(`Pagamento do pedido ${result.code} já está confirmado.`);
+      } else if (paymentMethod === "PIX" && result.pix?.qrCode) {
+        setOrder({ ...result, paymentMethod, pix: result.pix });
+        setMessage(
+          "Pix gerado. Escaneie o QR Code ou use o Pix Copia e Cola. A confirmação será automática.",
+        );
       } else if (result.checkoutUrl) {
         setMessage(
           "Pedido preparado. Abrindo o ambiente seguro do Mercado Pago…",
         );
         window.location.assign(result.checkoutUrl);
       } else {
-        throw new Error("O endereço seguro de pagamento não foi recebido.");
+        throw new Error(
+          paymentMethod === "PIX"
+            ? "O Mercado Pago não devolveu os dados do Pix."
+            : "O endereço seguro de pagamento não foi recebido.",
+        );
       }
     } catch (reason) {
       setMessage(
@@ -444,6 +530,7 @@ export default function CheckoutPage() {
                 Cartão
               </label>
             </div>
+            <p className={styles.privacyNote}>Seus dados são utilizados para processar e entregar seu pedido. <Link href="/aviso-privacidade">Privacidade</Link></p>
             <button
               disabled={submitting || order?.status === "PAID"}
               type="submit"
@@ -452,8 +539,76 @@ export default function CheckoutPage() {
                 ? "Conectando ao Mercado Pago…"
                 : order?.status === "PAID"
                   ? "Pagamento confirmado"
-                  : "Pagar com Mercado Pago →"}
+                  : paymentMethod === "PIX"
+                    ? "Gerar Pix →"
+                    : "Pagar com Mercado Pago →"}
             </button>
+            {order?.status !== "PAID" && order?.pix?.qrCode && (
+              <div
+                style={{
+                  marginTop: 22,
+                  padding: 22,
+                  border: "1px solid #d9ddd9",
+                  borderRadius: 16,
+                  background: "#fff",
+                  maxWidth: 520,
+                }}
+              >
+                <strong style={{ display: "block", fontSize: 18, marginBottom: 8 }}>
+                  Pague com Pix
+                </strong>
+                <p style={{ margin: "0 0 16px", lineHeight: 1.5 }}>
+                  Escaneie o QR Code no aplicativo do seu banco ou use o Pix Copia e Cola.
+                </p>
+                {order.pix.qrCodeBase64 && (
+                  <img
+                    alt="QR Code Pix"
+                    src={`data:image/png;base64,${order.pix.qrCodeBase64}`}
+                    style={{
+                      width: 220,
+                      height: 220,
+                      display: "block",
+                      margin: "0 auto 16px",
+                    }}
+                  />
+                )}
+                <textarea
+                  readOnly
+                  value={order.pix.qrCode || ""}
+                  aria-label="Pix Copia e Cola"
+                  style={{
+                    width: "100%",
+                    minHeight: 90,
+                    resize: "none",
+                    padding: 12,
+                    borderRadius: 10,
+                    border: "1px solid #d9ddd9",
+                    fontSize: 13,
+                    wordBreak: "break-all",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={copyPix}
+                  style={{
+                    width: "100%",
+                    marginTop: 10,
+                    padding: "12px 16px",
+                    borderRadius: 10,
+                    border: "1px solid #0b2024",
+                    background: "#fff",
+                    color: "#0b2024",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Copiar código Pix
+                </button>
+                <small style={{ display: "block", marginTop: 12, opacity: 0.72 }}>
+                  O BBOS confirma o pagamento automaticamente.
+                </small>
+              </div>
+            )}
             {message && (
               <p className={styles.message} role="status">
                 {message}
@@ -507,9 +662,10 @@ export default function CheckoutPage() {
                 : "Grátis"}
             </b>
           </div>
-          {checkout.mode === "return" && (
+          {checkout.mode !== "now" && (
             <p className={styles.return}>
-              <Check /> Reencontro escolhido a cada {checkout.rhythm} dias.
+              <Check /> Preferência de recompra: {checkout.rhythm} dias. Este
+              pedido é único e não será renovado automaticamente.
             </p>
           )}
           <div className={styles.total}>

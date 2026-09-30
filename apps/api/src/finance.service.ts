@@ -8,13 +8,13 @@ import {
   FinancialTransactionType,
   PayableStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   ReceivableStatus,
 } from "@bbos/database";
 
 @Injectable()
 export class FinanceService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
   onModuleDestroy() {
     return this.database.$disconnect();
   }

@@ -400,13 +400,30 @@ function historyCatalog(item: ProductionHistoryItem) {
 export default function IndustrialDashboardPage() {
   const [period, setPeriod] = useState<Period>("month");
   const [dashboardData, setData] = useState<IndustrialDashboard | null>(null);
+  const [dataState, setDataState] = useState<"loading" | "available" | "unavailable">("loading");
   const [costSummary, setCostSummary] = useState<{ metrics: { energy: number; gas: number; maintenance: number; averageCostPerKg: number } } | null>(null);
-  useEffect(() => { const root = getApiBaseUrl(); void Promise.all([fetch(`${root}/dashboard/industrial?period=${period}`, { credentials: "include" }).then((response) => response.ok ? response.json() : null), fetch(`${root}/costing/summary`, { credentials: "include" }).then((response) => response.ok ? response.json() : null)]).then(([dashboard, costs]) => { setData(dashboard); setCostSummary(costs); }).catch(() => undefined); }, [period]);
-  const emptyData: IndustrialDashboard = { updatedAt: new Date().toISOString(), metrics: [], goals: [], capacity: { usedKg: 0, totalKg: 0, utilization: 0, status: "attention" }, orders: { open: 0, inProgress: 0, completed: 0 }, productionChart: [], history: [], alerts: [] };
+  useEffect(() => {
+    const root = getApiBaseUrl();
+    setDataState("loading");
+    void Promise.all([
+      fetch(`${root}/dashboard/industrial?period=${period}`, { credentials: "include", cache: "no-store" }).then(async (response) => {
+        if (!response.ok) throw new Error("dashboard unavailable");
+        return response.json() as Promise<IndustrialDashboard>;
+      }),
+      fetch(`${root}/costing/summary`, { credentials: "include", cache: "no-store" }).then((response) => response.ok ? response.json() : null).catch(() => null),
+    ])
+      .then(([dashboard, costs]) => {
+        setData(dashboard);
+        setCostSummary(costs);
+        setDataState("available");
+      })
+      .catch(() => setDataState("unavailable"));
+  }, [period]);
+  const emptyData: IndustrialDashboard = { updatedAt: new Date().toISOString(), inventory: { greenAvailableKg: 0, greenReservedKg: 0, greenStockValue: 0, finishedGoodsUnits: 0 }, metrics: [], goals: [], capacity: { usedKg: 0, totalKg: 0, utilization: 0, status: "attention" }, orders: { open: 0, inProgress: 0, completed: 0 }, productionChart: [], history: [], alerts: [] };
   const current = dashboardData ?? emptyData;
   const data = current;
   const activeGoal = current.goals.find((goal) => goal.period === period) ?? { period, targetKg: 0, actualKg: 0, attainment: 0, differenceKg: 0, status: "attention" as const };
-  const greenAvailableKg = 0;
+  const greenAvailableKg = current.inventory.greenAvailableKg;
   const lineMatchers = [
     { name: "Raros", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("raro") },
     { name: "Épicos", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("épico") },
@@ -450,8 +467,16 @@ export default function IndustrialDashboardPage() {
         </div><button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><SlidersHorizontal size={14}/>Filtros</button><button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><Download size={14}/>Exportar</button></div>
       </div>
 
+      {dataState !== "available" && (
+        <div role="status" className={`mt-4 rounded-xl border px-4 py-3 text-xs ${dataState === "unavailable" ? "border-red-200 bg-red-50 text-red-800" : "border-stone-200 bg-white text-stone-600"}`}>
+          {dataState === "unavailable"
+            ? "A leitura industrial está temporariamente indisponível. Os últimos valores conhecidos permanecem na tela e não devem ser interpretados como atualização atual."
+            : "Atualizando os indicadores industriais a partir da base operacional…"}
+        </div>
+      )}
+
       <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <IndustrialKpi label="Produção realizada" value={`${kg.format(activeGoal.actualKg)} kg`} reference={`${activeGoal.attainment.toLocaleString("pt-BR")}% da meta`} change="+6,8%" icon={Factory}/>
+        <IndustrialKpi label="Produção realizada" value={`${kg.format(activeGoal.actualKg)} kg`} reference={`${activeGoal.attainment.toLocaleString("pt-BR")}% da meta`} change={activeGoal.targetKg > 0 ? `${activeGoal.attainment.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "Sem meta"} icon={Factory} status={activeGoal.status}/>
         <IndustrialKpi label="Produção planejada" value={`${kg.format(activeGoal.targetKg)} kg`} reference={periodLabels[period]} change="Meta" icon={Target}/>
         <IndustrialKpi label="Eficiência" value={current.metrics[0]?.value ?? "—"} reference={current.metrics[0]?.supportingText ?? ""} change="" icon={Gauge}/>
         <IndustrialKpi label="Rendimento" value={current.metrics[1]?.value ?? "—"} reference={current.metrics[1]?.supportingText ?? ""} change="" icon={TrendingUp} status="attention"/>
@@ -496,7 +521,7 @@ export default function IndustrialDashboardPage() {
           <Card className="p-4 transition hover:-translate-y-0.5">
             <p className="text-[11px] text-stone-500">Café verde disponível</p>
             <p className="mt-2 text-lg font-bold">
-              {kg.format(greenAvailableKg)} kg
+              {dashboardData ? `${kg.format(greenAvailableKg)} kg` : "Sem leitura"}
             </p>
           </Card>
         </Link>
@@ -512,9 +537,7 @@ export default function IndustrialDashboardPage() {
           <Card className="p-4 transition hover:-translate-y-0.5">
             <p className="text-[11px] text-stone-500">Valor do estoque</p>
             <p className="mt-2 text-lg font-bold">
-              {currency.format(
-                0,
-              )}
+              {dashboardData ? currency.format(current.inventory.greenStockValue) : "Sem leitura"}
             </p>
           </Card>
         </Link>

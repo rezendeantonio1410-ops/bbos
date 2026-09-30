@@ -1,0 +1,2 @@
+ALTER TABLE "SupplierOriginUnit"
+ADD COLUMN "originType" TEXT NOT NULL DEFAULT 'FARM';

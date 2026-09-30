@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AddToCartButton } from "./StorefrontCart";
 import styles from "./EditorialHero.module.css";
 import type { StorefrontImageSelection } from "@/lib/storefront-images";
+import type { StorefrontMediaAsset } from "@/lib/storefront-media";
 
 const scenes = [
   {
@@ -22,6 +23,7 @@ const scenes = [
     priceCents: 6800,
     tone: "#F96D01",
     crop: "center",
+    mediaSlot: "home.hero.caramelo",
   },
   {
     line: "GOURMET",
@@ -36,6 +38,7 @@ const scenes = [
     priceCents: 5200,
     tone: "#E9BB00",
     crop: "center 56%",
+    mediaSlot: "home.hero.essencial",
   },
   {
     line: "ÉPICOS",
@@ -50,13 +53,14 @@ const scenes = [
     priceCents: 8400,
     tone: "#5C7D5F",
     crop: "center 42%",
+    mediaSlot: "home.hero.singular",
   },
   {
-    line: "A ESCOLHA DO BISPO",
+    line: "CURADORIA BISPO",
     name: "Sublime",
     title: "Escolhido por quem",
     italic: "vive o café.",
-    copy: "José lê a origem. Suzi trabalhou na construção desse grão. Juntos, escolhem o que chega à sua xícara.",
+    copy: "José conhece a origem e a prova. Suzi acompanha a planta e a produção. Juntos, escolhem o que chega à sua xícara.",
     image: "/brand/story/suzi-fragrancia.jpeg",
     product: "/brand/products/sublime-treated.webp",
     notes: "Rapadura · Caramelo · Doçura profunda",
@@ -64,13 +68,16 @@ const scenes = [
     priceCents: 8400,
     tone: "#0E191D",
     crop: "center 35%",
+    mediaSlot: "home.hero.sublime",
   },
 ] as const;
 
 export default function EditorialHero({
   productImages = {},
+  mediaSlots = {},
 }: {
   productImages?: StorefrontImageSelection;
+  mediaSlots?: Record<string, StorefrontMediaAsset>;
 }) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -112,8 +119,8 @@ export default function EditorialHero({
           <Image
             key={item.name}
             className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
-            src={item.image}
-            alt={index === active ? `${item.name}: uma cena da experiência Bispo Coffees` : ""}
+            src={mediaSlots[item.mediaSlot]?.url ?? item.image}
+            alt={index === active ? mediaSlots[item.mediaSlot]?.altText ?? `${item.name}: uma cena da experiência Bispo Coffees` : ""}
             fill
             priority={index === 0}
             sizes="(max-width: 960px) 100vw, 54vw"
