@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  normalizeHostname,
+  resolveDomainRedirect,
+} from "@/lib/domain-routing";
 import { isProtectedSystemPath } from "@/lib/system-routes";
 
 const SESSION_COOKIE = "bbos_session";
@@ -6,10 +10,23 @@ const SESSION_COOKIE = "bbos_session";
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const protectedRoute = isProtectedSystemPath(pathname);
+  const hasSession = request.cookies.has(SESSION_COOKIE);
+  const hostname = normalizeHostname(
+    request.headers.get("x-forwarded-host") ?? request.nextUrl.hostname,
+  );
+  const domainRedirect = resolveDomainRedirect({
+    hostname,
+    pathname,
+    search: request.nextUrl.search,
+    hasSession,
+  });
+
+  if (domainRedirect) {
+    return NextResponse.redirect(new URL(domainRedirect, request.url));
+  }
 
   // Session validity belongs to the API. This middleware only prevents a
   // protected page from rendering when the browser has no session cookie.
-  const hasSession = request.cookies.has(SESSION_COOKIE);
   if (protectedRoute && !hasSession) {
     const login = new URL("/login", request.url);
     login.searchParams.set("returnTo", `${pathname}${request.nextUrl.search}`);
