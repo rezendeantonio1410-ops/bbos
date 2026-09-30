@@ -9,9 +9,10 @@ import { getApiBaseUrl } from "@/lib/api-url";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const freightLabels: Record<string, string> = {
-  BISPO: "Por conta da Bispo",
-  CUSTOMER: "Por conta do cliente",
-  PICKUP: "Retirada na fábrica",
+  BISPO: "Frete negociado pela Bispo",
+  CUSTOMER: "Frete cotado pela plataforma Bispo",
+  CUSTOMER_CARRIER: "Transportadora indicada pelo distribuidor",
+  PICKUP: "Retirada na Bispo Coffees",
 };
 
 type Snapshot = {
@@ -162,6 +163,18 @@ export default function PublicOrderApprovalPage() {
         <div className="flex items-start gap-3"><Truck size={18} className="mt-0.5 text-emerald-800"/><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Entrega e frete</p><p className="mt-1 text-sm font-semibold">{freightService || freightLabels[order.freightResponsibility ?? ""] || "A combinar"}</p><p className="mt-0.5 text-xs text-stone-500">{delivery} · {freightLabels[order.freightResponsibility ?? ""] || "Condição a combinar"}</p></div></div>
       </section>
 
+      {order.freightResponsibility === "CUSTOMER_CARRIER" && (
+        <section className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
+          A transportadora foi indicada pelo distribuidor. Contratação, custo, seguro, coleta, rastreamento e risco do transporte ficam sob responsabilidade do distribuidor.
+        </section>
+      )}
+
+      {order.freightResponsibility === "PICKUP" && (
+        <section className="mt-3 rounded-2xl border border-stone-200 bg-stone-50 p-4 text-xs leading-5 text-stone-600">
+          A retirada será agendada na Bispo Coffees depois da liberação financeira e fiscal do pedido.
+        </section>
+      )}
+
       <section className="mt-3 rounded-3xl bg-stone-950 p-5 text-white">
         <MoneyLine label="Produtos" value={order.subtotal} />
         {order.discount > 0 && <MoneyLine label="Desconto" value={-order.discount} />}
@@ -218,7 +231,7 @@ export default function PublicOrderApprovalPage() {
           <label className="mt-4 block text-xs font-semibold">Confirmado por<input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-sm" /></label>
           {!approval.emailConfigured && <label className="mt-3 block text-xs font-semibold">E-mail para confirmação e acompanhamento<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className="mt-2 w-full rounded-xl border px-3 py-3 text-sm" placeholder="nome@empresa.com.br" /></label>}
           {approval.verificationRequired && <label className="mt-3 block text-xs font-semibold">Código recebido no WhatsApp<input value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" className="mt-2 w-full rounded-xl border px-3 py-3 text-center text-xl font-bold tracking-[.35em]" placeholder="000000" /></label>}
-          <p className="mt-3 text-[10px] leading-4 text-stone-400">Ao tocar no botão, você declara que conferiu e concorda com produtos, quantidades, valores, frete, prazo e condições desta proposta.</p>
+          <p className="mt-3 text-[10px] leading-4 text-stone-400">{approval.termsText || "Ao tocar no botão, você declara que conferiu e concorda com os produtos, valores e condições desta proposta."}</p>
           {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
           <button disabled={sending} onClick={() => void approve()} className="mt-4 w-full rounded-xl bg-stone-950 py-4 text-sm font-bold text-white disabled:opacity-50">{sending ? "Confirmando…" : "Confirmar meu pedido"}</button>
         </section>

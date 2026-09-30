@@ -74,9 +74,10 @@ const statusLabel: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 const freightLabel: Record<string, string> = {
-  BISPO: "Por conta da Bispo",
-  CUSTOMER: "Por conta do cliente",
-  PICKUP: "Retirada na fábrica",
+  BISPO: "Frete negociado pela Bispo",
+  CUSTOMER: "Frete cotado pela plataforma Bispo",
+  CUSTOMER_CARRIER: "Transportadora indicada pelo distribuidor · por sua conta e risco",
+  PICKUP: "Retirada na Bispo Coffees",
 };
 
 async function resolveOrder(reference: string, signal: AbortSignal): Promise<Order> {
@@ -254,7 +255,9 @@ export default function OrderDocumentV2() {
               <Value label="Pagamento" value={payment} strong />
               <Value label="Frete" value={freightLabel[order.freightResponsibility ?? ""] ?? "A combinar"} strong />
               <Value label="Entrega prevista" value={delivery} />
-              <Value label="Transportadora" value={order.carrierName || "A definir"} />
+              {order.freightResponsibility === "PICKUP"
+                ? <Value label="Local" value="Bispo Coffees · retirada agendada" />
+                : <Value label="Transportadora" value={order.carrierName || "A definir"} />}
               {order.incoterm && <Value label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
             </div>
           </Block>
