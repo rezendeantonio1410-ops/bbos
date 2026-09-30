@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 
 export type CouponCalculation = {
   id: string;
@@ -19,7 +19,7 @@ const normalizedCode = (value: unknown) =>
 
 @Injectable()
 export class StorefrontCouponsService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   normalize(value: unknown) {
     return normalizedCode(value);

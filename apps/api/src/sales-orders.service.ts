@@ -8,7 +8,7 @@ import {
   FinishedGoodsMovementType,
   InventoryReservationStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   SalesOrderStatus,
 } from "@bbos/database";
 import {
@@ -43,7 +43,7 @@ export type CreateSalesOrderInput = {
 
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
 
   constructor(private readonly customerLifecycle: SalesOrderCustomerLifecycleService) {}
 
@@ -51,29 +51,123 @@ export class SalesOrdersService implements OnModuleDestroy {
     return this.database.$disconnect();
   }
 
-  list() {
-    return this.database.salesOrder.findMany({
+  async list(companyId: string) {
+    const orders = await this.database.salesOrder.findMany({
+      where: { companyId },
       include: this.orderInclude,
       orderBy: { orderedAt: "desc" },
     });
+    if (!orders.length) return orders;
+    const shipments = await this.database.$queryRawUnsafe<Array<{
+      salesOrderId: string;
+      status: string;
+      carrierName: string | null;
+      serviceName: string | null;
+      trackingCode: string | null;
+      authorizationCode: string | null;
+      updatedAt: Date;
+    }>>(
+      `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,"carrierName","serviceName",
+              "trackingCode",metadata->>'authorization_code' AS "authorizationCode","updatedAt"
+         FROM "Shipment"
+        WHERE provider='MELHOR_ENVIO' AND "salesOrderId"=ANY($1::text[])
+        ORDER BY "salesOrderId","updatedAt" DESC`,
+      orders.map((order) => order.id),
+    );
+    const byOrder = new Map(shipments.map((shipment) => [shipment.salesOrderId, shipment]));
+    return orders.map((order) => ({ ...order, shipment: byOrder.get(order.id) ?? null }));
   }
 
-  async get(id: string) {
-    const order = await this.database.salesOrder.findUnique({
-      where: { id },
+  async get(companyId: string, id: string) {
+    const order = await this.database.salesOrder.findFirst({
+      where: { id, companyId },
       include: this.orderInclude,
     });
     if (!order) throw new NotFoundException("Pedido não encontrado.");
     return order;
   }
 
-  async options(companyId?: string) {
+  async exportOverview(companyId: string) {
+    const orders = await this.database.salesOrder.findMany({
+      where: { companyId, salesChannel: { type: "EXPORTACAO" } },
+      select: {
+        id: true,
+        code: true,
+        orderNumber: true,
+        status: true,
+        totalAmount: true,
+        quantity: true,
+        orderedAt: true,
+        expectedDeliveryDate: true,
+        incoterm: true,
+        incotermLocation: true,
+        customerReference: true,
+        customer: { select: { name: true } },
+        salesChannel: { select: { name: true, currency: true } },
+        items: {
+          select: {
+            id: true,
+            sku: true,
+            productName: true,
+            quantity: true,
+          },
+        },
+      },
+      orderBy: { orderedAt: "desc" },
+    });
+    const active = orders.filter((order) => order.status !== "CANCELLED");
+    const totalsByCurrency = Array.from(
+      active.reduce((totals, order) => {
+        const currency = order.salesChannel?.currency || "BRL";
+        totals.set(
+          currency,
+          (totals.get(currency) ?? 0) + Number(order.totalAmount),
+        );
+        return totals;
+      }, new Map<string, number>()),
+    ).map(([currency, amount]) => ({ currency, amount }));
+    const items = orders.map((order) => {
+      const missing = [
+        ...(!order.incoterm ? ["Incoterm"] : []),
+        ...(!order.incotermLocation ? ["Local nomeado"] : []),
+        ...(!order.expectedDeliveryDate ? ["Prazo prometido"] : []),
+      ];
+      return {
+        ...order,
+        totalAmount: Number(order.totalAmount),
+        currency: order.salesChannel?.currency || "BRL",
+        readiness: { ready: missing.length === 0, missing },
+      };
+    });
+    return {
+      metrics: {
+        orders: orders.length,
+        open: active.filter(
+          (order) => !["DELIVERED", "CANCELLED"].includes(order.status),
+        ).length,
+        ready: items.filter(
+          (order) => order.status !== "CANCELLED" && order.readiness.ready,
+        ).length,
+        attention: items.filter(
+          (order) =>
+            !order.readiness.ready &&
+            !["DELIVERED", "CANCELLED"].includes(order.status),
+        ).length,
+        totalsByCurrency,
+      },
+      items,
+      source: "database" as const,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  async options(companyId: string) {
     const [customers, balances, brokers] = await Promise.all([
-      this.database.customer.findMany({ where: companyId ? { companyId } : undefined, orderBy: { name: "asc" } }),
+      this.database.customer.findMany({ where: { companyId }, orderBy: { name: "asc" } }),
       this.database.finishedProduct.findMany({
         where: {
           productVariantId: { not: null },
-          ...(companyId ? { productVariant: { product: { productLine: { companyId } } } } : {}),
+          productVariant: { product: { productLine: { companyId } } },
         },
         include: {
           warehouse: true,
@@ -82,7 +176,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           },
         },
       }),
-      this.database.broker.findMany({ where: { active: true, ...(companyId ? { companyId } : {}) }, orderBy: { name: "asc" } }),
+      this.database.broker.findMany({ where: { companyId, active: true }, orderBy: { name: "asc" } }),
     ]);
     return {
       customers,
@@ -102,7 +196,7 @@ export class SalesOrdersService implements OnModuleDestroy {
     };
   }
 
-  async create(input: CreateSalesOrderInput) {
+  async create(companyId: string, input: CreateSalesOrderInput) {
     if (!input.items.length)
       throw new BadRequestException("O pedido deve possuir ao menos um item.");
     if (
@@ -124,8 +218,8 @@ export class SalesOrdersService implements OnModuleDestroy {
     }
     return this.database.$transaction(
       async (transaction) => {
-        const customer = await transaction.customer.findUnique({
-          where: { id: input.customerId },
+        const customer = await transaction.customer.findFirst({
+          where: { id: input.customerId, companyId },
         });
         if (!customer) throw new BadRequestException("Cliente não encontrado.");
         if (input.brokerId) {
@@ -221,10 +315,10 @@ export class SalesOrdersService implements OnModuleDestroy {
     );
   }
 
-  async confirm(id: string) {
+  async confirm(companyId: string, id: string) {
     return this.database.$transaction(async (transaction) => {
-      const order = await transaction.salesOrder.findUnique({
-        where: { id },
+      const order = await transaction.salesOrder.findFirst({
+        where: { id, companyId },
         include: { items: true },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
@@ -250,11 +344,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     });
   }
 
-  async reserve(id: string, warehouseByVariant?: Record<string, string>) {
+  async reserve(companyId: string, id: string, warehouseByVariant?: Record<string, string>) {
     return this.database.$transaction(
       async (transaction) => {
-        const order = await transaction.salesOrder.findUnique({
-          where: { id },
+        const order = await transaction.salesOrder.findFirst({
+          where: { id, companyId },
           include: {
             items: {
               include: {
@@ -293,6 +387,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           const warehouseId = warehouseByVariant?.[item.productVariantId];
           const balance = await transaction.finishedProduct.findFirst({
             where: {
+              companyId,
               productVariantId: item.productVariantId,
               ...(warehouseId ? { warehouseId } : {}),
             },
@@ -351,11 +446,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     );
   }
 
-  async cancel(id: string) {
+  async cancel(companyId: string, id: string) {
     return this.database.$transaction(
       async (transaction) => {
-        const order = await transaction.salesOrder.findUnique({
-          where: { id },
+        const order = await transaction.salesOrder.findFirst({
+          where: { id, companyId },
           include: { reservations: true },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
@@ -406,11 +501,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     );
   }
 
-  async ship(id: string) {
+  async ship(companyId: string, id: string) {
     const result = await this.database.$transaction(
       async (transaction) => {
-        const order = await transaction.salesOrder.findUnique({
-          where: { id },
+        const order = await transaction.salesOrder.findFirst({
+          where: { id, companyId },
           include: {
             reservations: {
               include: { productVariant: true, salesOrderItem: true },
@@ -534,6 +629,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async transition(
+    companyId: string,
     id: string,
     target: "PICKING" | "READY_TO_SHIP" | "INVOICED",
   ) {
@@ -544,8 +640,8 @@ export class SalesOrdersService implements OnModuleDestroy {
     };
     const status = SalesOrderStatus[target];
     const result = await this.database.$transaction(async (transaction) => {
-      const order = await transaction.salesOrder.findUnique({
-        where: { id },
+      const order = await transaction.salesOrder.findFirst({
+        where: { id, companyId },
         select: {
           id: true,
           status: true,
@@ -639,10 +735,10 @@ export class SalesOrdersService implements OnModuleDestroy {
     return result;
   }
 
-  async confirmPicking(id: string, pickedByItem: Record<string, number>) {
+  async confirmPicking(companyId: string, id: string, pickedByItem: Record<string, number>) {
     return this.database.$transaction(async (transaction) => {
-      const order = await transaction.salesOrder.findUnique({
-        where: { id },
+      const order = await transaction.salesOrder.findFirst({
+        where: { id, companyId },
         include: { items: { include: { reservations: true } } },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");

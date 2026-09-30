@@ -12,6 +12,7 @@ export type ProductStory = StoreProductStory & {
   description: string;
   sensory: { label: string; value: number }[];
   sensoryDescription?: string;
+  proofImages?: { src: string; alt: string; caption: string }[];
   rareDetails?: {
     producer: string;
     farm: string;
@@ -68,13 +69,13 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
           <button className={styles.backdrop} type="button" aria-label="Fechar detalhes" onClick={() => setOpen(false)} />
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={`story-${product.id}`}>
             <header className={styles.header}>
-              <span>LEITURA DO BISPO · {product.line}</span>
+              <span>CURADORIA BISPO · {product.line}</span>
               <button type="button" onClick={() => setOpen(false)} aria-label="Fechar detalhes"><X /></button>
             </header>
 
             <div className={styles.hero} style={{ "--tone": product.tone } as React.CSSProperties}>
               <div className={styles.productImage}>
-                {product.image ? <img src={product.image} alt={`Embalagem do café ${product.name}`} /> : <div className={styles.fallback}><small>EDIÇÃO LIMITADA</small><b>BISPO</b><span>{product.name}</span><em>{product.weightLabel}</em></div>}
+                {product.image ? <img src={product.image} alt={`Embalagem do café ${product.name}`} /> : <div className={styles.fallback}><small>{product.line}</small><b>BISPO</b><span>{product.name}</span><em>{product.weightLabel}</em></div>}
               </div>
               <div className={styles.heroCopy}>
                 <small>{product.tag}</small>
@@ -166,6 +167,23 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
                     </figure>
                   ))}
                 </div>
+              )}
+
+              {Boolean(story.proofImages?.length) && (
+                <section className={styles.proofGallery} aria-label={`Fotos de prova e preparo do café ${product.name}`}>
+                  <header>
+                    <small>PROVADO PELA BISPO</small>
+                    <h3>Da prova à sua xícara.</h3>
+                  </header>
+                  <div>
+                    {story.proofImages?.map((photo) => (
+                      <figure key={photo.src}>
+                        <img src={photo.src} alt={photo.alt} />
+                        <figcaption>{photo.caption}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                </section>
               )}
 
               <blockquote className={styles.founders}>

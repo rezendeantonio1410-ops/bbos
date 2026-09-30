@@ -284,6 +284,8 @@ export default function SuppliersPage() {
   const [unitCity, setUnitCity] = useState("");
   const [unitIbgeCityCode, setUnitIbgeCityCode] = useState("");
   const [productionSpeciesId, setProductionSpeciesId] = useState("");
+  const [cultivarQuery, setCultivarQuery] = useState("");
+  const [selectedCultivarIds, setSelectedCultivarIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [contacts, setContacts] = useState<SupplierContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -372,6 +374,8 @@ export default function SuppliersPage() {
       setUnitCity("");
       setUnitIbgeCityCode("");
       setProductionSpeciesId("");
+      setCultivarQuery("");
+      setSelectedCultivarIds([]);
     }
   }, [unitSupplier]);
   useEffect(() => {
@@ -395,6 +399,16 @@ export default function SuppliersPage() {
       ),
     [items, query],
   );
+  const availableCultivars = useMemo(
+    () => species.find((item) => item.id === productionSpeciesId)?.varieties ?? [],
+    [productionSpeciesId, species],
+  );
+  const visibleCultivars = useMemo(() => {
+    const term = cultivarQuery.trim().toLocaleLowerCase("pt-BR");
+    return term
+      ? availableCultivars.filter((cultivar) => cultivar.name.toLocaleLowerCase("pt-BR").includes(term))
+      : availableCultivars;
+  }, [availableCultivars, cultivarQuery]);
   const saveSupplier = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -463,6 +477,12 @@ export default function SuppliersPage() {
       setCepStatus("error");
     }
   };
+  useEffect(() => {
+    if (supplierCountry !== "Brasil") return;
+    if (supplierCep.replace(/\D/g, "").length !== 8) return;
+    const timer = window.setTimeout(() => void handleCepLookup(), 250);
+    return () => window.clearTimeout(timer);
+  }, [supplierCep, supplierCountry]);
   const saveUnit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!unitSupplier) return;
@@ -978,12 +998,12 @@ export default function SuppliersPage() {
                     pattern="[0-9]{5}-?[0-9]{3}"
                     placeholder="00000-000"
                     value={supplierCep.replace(/(\d{5})(\d)/, "$1-$2")}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setCepStatus("idle");
                       setSupplierCep(
                         event.target.value.replace(/\D/g, "").slice(0, 8),
-                      )
-                    }
-                    onBlur={() => void handleCepLookup()}
+                      );
+                    }}
                     className={input}
                   />
                   {cepStatus !== "idle" && (
@@ -991,7 +1011,9 @@ export default function SuppliersPage() {
                       {cepStatus === "loading"
                         ? "Consultando CEP..."
                         : cepStatus === "found"
-                          ? "Endereço encontrado."
+                          ? supplierAddress || supplierDistrict
+                            ? "Endereço preenchido automaticamente."
+                            : "CEP geral: município e estado preenchidos. Informe o logradouro."
                           : cepStatus === "not-found"
                             ? "CEP não encontrado."
                             : "Serviço de CEP indisponível."}
@@ -1309,9 +1331,11 @@ export default function SuppliersPage() {
                   name="productionSpeciesId"
                   className={input}
                   value={productionSpeciesId}
-                  onChange={(event) =>
-                    setProductionSpeciesId(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setProductionSpeciesId(event.target.value);
+                    setCultivarQuery("");
+                    setSelectedCultivarIds([]);
+                  }}
                 >
                   <option value="">Opcional</option>
                   {species.map((item) => (
@@ -1330,27 +1354,54 @@ export default function SuppliersPage() {
                 />
               </label>
               <div className="sm:col-span-2">
-                <p className="text-sm font-semibold">
-                  Cultivares produzidas (opcional)
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(
-                    species.find((item) => item.id === productionSpeciesId)
-                      ?.varieties ?? []
-                  ).map((cultivar) => (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">
+                    Cultivares produzidas (opcional)
+                    {selectedCultivarIds.length > 0 && (
+                      <span className="ml-2 font-normal text-forest-700">
+                        {selectedCultivarIds.length} selecionada{selectedCultivarIds.length === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </p>
+                  {availableCultivars.length > 0 && (
+                    <div className="flex gap-2">
+                      <button type="button" className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold" onClick={() => setSelectedCultivarIds((current) => Array.from(new Set([...current, ...visibleCultivars.map((item) => item.id)])))}>
+                        {cultivarQuery ? "Selecionar exibidas" : "Selecionar todas"}
+                      </button>
+                      <button type="button" className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold" onClick={() => setSelectedCultivarIds([])}>
+                        Limpar
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {availableCultivars.length > 8 && (
+                  <input type="search" value={cultivarQuery} onChange={(event) => setCultivarQuery(event.target.value)} placeholder="Buscar cultivar..." className={`${input} mt-2`} />
+                )}
+                <div className="mt-2 grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50 p-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {visibleCultivars.map((cultivar) => {
+                    const selected = selectedCultivarIds.includes(cultivar.id);
+                    return (
                     <label
                       key={cultivar.id}
-                      className="rounded-lg bg-stone-50 px-2 py-1 text-xs"
+                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs ${selected ? "border-forest-700 bg-emerald-50 font-semibold text-forest-900" : "border-transparent bg-white"}`}
                     >
                       <input
                         type="checkbox"
                         name="cultivarIds"
                         value={cultivar.id}
+                        checked={selected}
+                        onChange={() => setSelectedCultivarIds((current) => selected ? current.filter((id) => id !== cultivar.id) : [...current, cultivar.id])}
                         className="mr-1"
                       />
                       {cultivar.name}
                     </label>
-                  ))}
+                    );
+                  })}
+                  {!visibleCultivars.length && (
+                    <p className="col-span-full px-2 py-3 text-xs text-stone-500">
+                      {productionSpeciesId ? "Nenhuma cultivar encontrada para esta busca." : "Selecione primeiro a espécie produzida."}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

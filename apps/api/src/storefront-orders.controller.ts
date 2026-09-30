@@ -4,20 +4,24 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   OnModuleInit,
+  OnModuleDestroy,
   Param,
   Post,
   Query,
+  Req,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient, SalesOrderStatus } from "@bbos/database";
+import { prisma, SalesOrderStatus } from "@bbos/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
+import { StorefrontCustomerService } from "./storefront-customer.service";
 
 const catalog: Record<
   string,
@@ -34,7 +38,7 @@ const catalog: Record<
   tangerina: { name: "Tangerina", unitPriceCents: 6800, weightGrams: 500 },
   singular: { name: "Singular", unitPriceCents: 8400, weightGrams: 500 },
   sublime: { name: "Sublime", unitPriceCents: 8400, weightGrams: 500 },
-  raros: { name: "Raros", unitPriceCents: 5400, weightGrams: 250 },
+  raros: { name: "Raro", unitPriceCents: 5200, weightGrams: 250 },
 };
 const grinds = new Set(["Grãos", "Espresso", "Coado", "Prensa francesa"]);
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
@@ -69,19 +73,26 @@ type CheckoutBody = {
     state?: string;
   };
   items?: Array<{ id?: string; quantity?: number; grind?: string }>;
-  recurrence?: { mode?: string; rhythmDays?: number };
+  recurrence?: {
+    mode?: string;
+    reminderDays?: number;
+    rhythmDays?: number;
+  };
   couponCode?: string;
 };
 
 @Controller("storefront/orders")
-export class StorefrontOrdersController implements OnModuleInit {
-  private readonly database = new PrismaClient();
+export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy {
+  private readonly database = prisma;
+  private reconciliationTimer?: NodeJS.Timeout;
+  private reconcilingPayments = false;
 
   constructor(
     private readonly mercadoPago: MercadoPagoService,
     private readonly shipping: StorefrontShippingService,
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly coupons: StorefrontCouponsService,
+    private readonly customers: StorefrontCustomerService,
   ) {}
 
   async onModuleInit() {
@@ -103,6 +114,267 @@ export class StorefrontOrdersController implements OnModuleInit {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+
+    const cancelledDrafts = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT so.id
+         FROM "StorefrontOrder" so
+         JOIN "SalesOrder" s
+           ON s."companyId"=so."companyId" AND s.code=so.code
+        WHERE so.status='CANCELLED'
+          AND s.status='DRAFT'
+        ORDER BY so."updatedAt" ASC
+        LIMIT 100`,
+    );
+    for (const order of cancelledDrafts) {
+      try {
+        await this.syncSalesOrder(order.id);
+      } catch (error) {
+        console.error("Não foi possível sincronizar pedido cancelado da loja", {
+          storefrontOrderId: order.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // Webhook é o caminho principal, mas pagamentos não podem ficar presos caso
+    // uma notificação externa atrase ou falhe. Reconciliamos pedidos pendentes
+    // em segundo plano e também na consulta pública de status.
+    void this.reconcilePendingMercadoPagoOrders();
+    this.reconciliationTimer = setInterval(
+      () => void this.reconcilePendingMercadoPagoOrders(),
+      15_000,
+    );
+    this.reconciliationTimer.unref();
+
+  }
+
+  async onModuleDestroy() {
+    if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+    await this.database.$disconnect();
+  }
+
+  private async processPendingMercadoPagoWebhookEvents() {
+    for (let index = 0; index < 20; index += 1) {
+      const rows = await this.database.$queryRawUnsafe<any[]>(
+        `WITH candidate AS (
+           SELECT id
+             FROM "IntegrationWebhookEvent"
+            WHERE provider='MERCADO_PAGO' AND status='RECEIVED'
+            ORDER BY "receivedAt" ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+         )
+         UPDATE "IntegrationWebhookEvent" w
+            SET status='PROCESSED',"processedAt"=NOW(),"lastError"=NULL
+           FROM candidate
+          WHERE w.id=candidate.id
+         RETURNING w.*`,
+      );
+      const event = rows[0];
+      if (!event) break;
+
+      try {
+        const payload = event.payload ?? {};
+        const externalId = String(
+          payload?._bbosExternalId ?? payload?.data?.id ?? payload?.id ?? "",
+        ).trim();
+        if (!externalId) {
+          await this.database.$executeRawUnsafe(
+            `UPDATE "IntegrationWebhookEvent"
+                SET status='IGNORED',"processedAt"=NOW(),"lastError"='Evento sem identificador da order'
+              WHERE id=$1`,
+            event.id,
+          );
+          continue;
+        }
+
+        const attempts = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT p.*,o.code,o."totalCents"
+             FROM "StorefrontPaymentAttempt" p
+             JOIN "StorefrontOrder" o ON o.id=p."storefrontOrderId"
+            WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
+            LIMIT 1`,
+          externalId,
+        );
+        const attempt = attempts[0];
+        if (!attempt) {
+          await this.database.$executeRawUnsafe(
+            `UPDATE "IntegrationWebhookEvent"
+                SET status='IGNORED',"processedAt"=NOW(),"lastError"='Order do Mercado Pago sem tentativa correspondente no BBOS'
+              WHERE id=$1`,
+            event.id,
+          );
+          continue;
+        }
+
+        await this.reconcileMercadoPago({
+          id: attempt.storefrontOrderId,
+          code: attempt.code,
+          totalCents: attempt.totalCents,
+          paymentExternalId: externalId,
+        });
+      } catch (error) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "IntegrationWebhookEvent"
+              SET status='ERROR',"processedAt"=NOW(),"lastError"=$2
+            WHERE id=$1`,
+          event.id,
+          (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+        );
+      }
+    }
+  }
+
+  private async reconcilePendingMercadoPagoOrders() {
+    if (this.reconcilingPayments) return;
+    this.reconcilingPayments = true;
+    try {
+      await this.processPendingMercadoPagoWebhookEvents();
+
+      for (let index = 0; index < 20; index += 1) {
+        const rows = await this.database.$queryRawUnsafe<any[]>(
+          `WITH candidate AS (
+             SELECT p.id
+               FROM "StorefrontPaymentAttempt" p
+               JOIN "StorefrontOrder" o ON o.id=p."storefrontOrderId"
+              WHERE p."externalId" IS NOT NULL
+                AND p."externalId"=o."paymentExternalId"
+                AND o.status='AWAITING_PAYMENT'
+                AND (
+                  (p.status='AWAITING_PAYMENT' AND (p."nextAttemptAt" IS NULL OR p."nextAttemptAt" <= NOW()))
+                  OR (p.status='PROCESSING' AND p."processingStartedAt" < NOW() - INTERVAL '2 minutes')
+                  OR (p.status='ERROR' AND (p."nextAttemptAt" IS NULL OR p."nextAttemptAt" <= NOW()))
+                  OR (p.status='FAILED' AND p."nextAttemptAt" IS NULL)
+                )
+              ORDER BY p."updatedAt" ASC
+              FOR UPDATE OF p SKIP LOCKED
+              LIMIT 1
+           )
+           UPDATE "StorefrontPaymentAttempt" p
+              SET status='PROCESSING',
+                  attempts=p.attempts+1,
+                  "processingStartedAt"=NOW(),
+                  "updatedAt"=NOW()
+             FROM candidate
+            WHERE p.id=candidate.id
+           RETURNING p.*`,
+        );
+        const attempt = rows[0];
+        if (!attempt) break;
+
+        const orders = await this.database.$queryRawUnsafe<any[]>(
+          `SELECT id,code,"totalCents","paymentExternalId"
+             FROM "StorefrontOrder"
+            WHERE id=$1
+            LIMIT 1`,
+          attempt.storefrontOrderId,
+        );
+        const order = orders[0];
+        if (!order) {
+          await this.database.$executeRawUnsafe(
+            `UPDATE "StorefrontPaymentAttempt"
+                SET status='ERROR',"lastError"='Pedido não encontrado',
+                    "nextAttemptAt"=NULL,"updatedAt"=NOW()
+              WHERE id=$1`,
+            attempt.id,
+          );
+          continue;
+        }
+
+        try {
+          await this.reconcileMercadoPago({
+            ...order,
+            paymentExternalId: attempt.externalId,
+          });
+        } catch (error) {
+          // A falha de consulta é transitória: o pedido pendente deve continuar
+          // sendo reconciliado até ser pago, recusado ou expirar.
+          const attempts = Number(attempt.attempts ?? 0);
+          const delaySeconds = Math.min(300, Math.max(15, 2 ** Math.min(attempts, 8)));
+          await this.database.$executeRawUnsafe(
+            `UPDATE "StorefrontPaymentAttempt"
+                SET status='ERROR',
+                    "lastError"=$2,
+                    "nextAttemptAt"=NOW() + ($3 || ' seconds')::interval,
+                    "processingStartedAt"=NULL,
+                    "updatedAt"=NOW()
+              WHERE id=$1`,
+            attempt.id,
+            (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+            String(delaySeconds),
+          );
+        }
+      }
+
+      const reminderCandidates = await this.database.$queryRawUnsafe<
+        Array<{ id: string; code: string }>
+      >(
+        `SELECT id,code
+           FROM "StorefrontOrder"
+          WHERE status='AWAITING_PAYMENT'
+            AND "createdAt" <= NOW() - INTERVAL '30 minutes'
+            AND "createdAt" > NOW() - INTERVAL '24 hours'
+          ORDER BY "createdAt" ASC
+          LIMIT 50`,
+      );
+      for (const order of reminderCandidates) {
+        await this.lifecycle.record(
+          order.id,
+          "ORDER_RECEIVED",
+          "Seu pedido Bispo está reservado",
+          `O pagamento do pedido ${order.code} ainda não foi identificado. Se quiser concluir sua escolha, o pagamento continua disponível por tempo limitado.`,
+          "BBOS",
+          `storefront:payment-reminder:${order.id}`,
+          {
+            paymentUrl: (() => {
+              const publicBase = (
+                process.env.STOREFRONT_WEB_URL?.trim() ||
+                "https://bbos-ecommerce-preview-v2.onrender.com"
+              ).replace(/\/$/, "");
+              const token = this.lifecycle.trackingToken(order.id);
+              return token
+                ? `${publicBase}/loja/pagar/${order.id}?token=${encodeURIComponent(token)}`
+                : null;
+            })(),
+          },
+          true,
+        );
+      }
+
+      const expired = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `UPDATE "StorefrontOrder"
+            SET status='CANCELLED',"updatedAt"=NOW()
+          WHERE status='AWAITING_PAYMENT'
+            AND "createdAt" <= NOW() - INTERVAL '24 hours'
+        RETURNING id`,
+      );
+      for (const order of expired) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "StorefrontPaymentAttempt"
+              SET status='EXPIRED',"updatedAt"=NOW()
+            WHERE "storefrontOrderId"=$1
+              AND status IN ('CREATING','AWAITING_PAYMENT','PROCESSING','ERROR')`,
+          order.id,
+        );
+        await this.lifecycle.record(
+          order.id,
+          "CANCELLED",
+          "Reserva do pedido encerrada",
+          "O prazo desta tentativa de pagamento terminou. Se desejar, você pode voltar à loja e gerar um novo pagamento.",
+          "BBOS",
+          `storefront:payment-expired:${order.id}`,
+          {},
+          false,
+        );
+        await this.syncSalesOrder(order.id);
+      }
+    } catch (error) {
+      console.error("Falha no worker de pagamentos da loja", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.reconcilingPayments = false;
     }
   }
 
@@ -204,7 +476,9 @@ export class StorefrontOrdersController implements OnModuleInit {
       const status =
         storefront.status === "PAID"
           ? SalesOrderStatus.CONFIRMED
-          : SalesOrderStatus.DRAFT;
+          : new Set(["EXCEPTION", "CANCELLED"]).has(storefront.status)
+            ? SalesOrderStatus.CANCELLED
+            : SalesOrderStatus.DRAFT;
       const existing = await transaction.salesOrder.findUnique({
         where: {
           companyId_code: {
@@ -215,12 +489,14 @@ export class StorefrontOrdersController implements OnModuleInit {
       });
       if (existing) {
         if (
-          status === SalesOrderStatus.CONFIRMED &&
-          existing.status === SalesOrderStatus.DRAFT
+          status !== existing.status &&
+          (existing.status === SalesOrderStatus.DRAFT ||
+            (existing.status === SalesOrderStatus.CANCELLED &&
+              status === SalesOrderStatus.CONFIRMED))
         ) {
           return transaction.salesOrder.update({
             where: { id: existing.id },
-            data: { status: SalesOrderStatus.CONFIRMED },
+            data: { status },
           });
         }
         return existing;
@@ -302,15 +578,53 @@ export class StorefrontOrdersController implements OnModuleInit {
       );
       const order = found[0];
       if (!order) throw new BadRequestException("Pedido não encontrado.");
-      if (order.status === "PAID")
+      if (["PAID", "PREPARING", "INVOICED", "SHIPPED", "DELIVERED"].includes(order.status)) {
+        const duplicatePayment =
+          Boolean(order.paymentExternalId) &&
+          String(order.paymentExternalId) !== String(externalId);
+        if (duplicatePayment) {
+          await transaction.$executeRawUnsafe(
+            `UPDATE "StorefrontPaymentAttempt"
+                SET status='PAID',"paidAt"=COALESCE("paidAt",NOW()),
+                    metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+                    "updatedAt"=NOW()
+              WHERE provider=$3 AND "externalId"=$1`,
+            externalId,
+            JSON.stringify({
+              duplicatePaymentDetected: true,
+              alreadyPaidExternalId: order.paymentExternalId,
+            }),
+            provider,
+          );
+        }
         return {
           id: order.id,
           code: order.code,
-          status: "PAID",
-          idempotent: true,
+          status: order.status,
+          idempotent: !duplicatePayment,
+          duplicatePayment,
+          alreadyPaidExternalId: order.paymentExternalId,
         };
+      }
       await transaction.$executeRawUnsafe(
         `UPDATE "StorefrontOrder" SET status='PAID',"paymentProvider"=$3,"paymentExternalId"=$2,"paidAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`,
+        order.id,
+        externalId,
+        provider,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status=CASE WHEN provider=$3 AND "externalId"=$2 THEN 'PAID' ELSE 'CANCELLED' END,
+                "paidAt"=CASE WHEN provider=$3 AND "externalId"=$2 THEN COALESCE("paidAt",NOW()) ELSE "paidAt" END,
+                metadata=CASE
+                  WHEN provider=$3 AND "externalId"=$2 THEN COALESCE(metadata,'{}'::jsonb)
+                  ELSE COALESCE(metadata,'{}'::jsonb) || '{"supersededByPaidAttempt":true}'::jsonb
+                END,
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                "updatedAt"=NOW()
+          WHERE "storefrontOrderId"=$1
+            AND status IN ('CREATING','AWAITING_PAYMENT','PROCESSING','ERROR','PAID')`,
         order.id,
         externalId,
         provider,
@@ -381,6 +695,24 @@ export class StorefrontOrdersController implements OnModuleInit {
       }
       return { id: order.id, code: order.code, status: "PAID" };
     });
+    if ((result as any).duplicatePayment) {
+      await this.lifecycle.record(
+        orderId,
+        "EXCEPTION",
+        "Pagamento duplicado detectado",
+        "O BBOS identificou uma segunda aprovação de pagamento para o mesmo pedido. A venda não foi duplicada e requer conferência financeira.",
+        provider === "MERCADO_PAGO" ? "MERCADO_PAGO" : "BBOS",
+        `storefront:duplicate-payment:${orderId}:${externalId}`,
+        {
+          externalId,
+          provider,
+          alreadyPaidExternalId: (result as any).alreadyPaidExternalId,
+        },
+        false,
+      );
+      return result;
+    }
+
     await this.lifecycle.record(
       orderId,
       "PAYMENT_CONFIRMED",
@@ -406,17 +738,32 @@ export class StorefrontOrdersController implements OnModuleInit {
     const amountCents = Math.round(
       Number(providerOrder.total_amount || 0) * 100,
     );
+
     if (
       providerOrder.id !== order.paymentExternalId ||
       providerOrder.external_reference !== order.code ||
       amountCents !== order.totalCents
     ) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='ERROR',
+                "providerStatus"=$2,
+                "providerStatusDetail"=$3,
+                "lastError"='Divergência entre a tentativa BBOS e a order do Mercado Pago',
+                "nextAttemptAt"=NOW() + INTERVAL '5 minutes',
+                "updatedAt"=NOW()
+          WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+        order.paymentExternalId,
+        providerOrder.status ?? null,
+        providerOrder.status_detail ?? null,
+      );
       console.error("Mercado Pago retornou dados divergentes para o pedido", {
         orderId: order.id,
         providerOrderId: providerOrder.id,
       });
       return { paid: false };
     }
+
     const payment = providerOrder.transactions?.payments?.find(
       (candidate) =>
         candidate.status === "processed" &&
@@ -425,19 +772,176 @@ export class StorefrontOrdersController implements OnModuleInit {
     const paid =
       providerOrder.status === "processed" &&
       providerOrder.status_detail === "accredited";
+
     if (paid || payment) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='PAID',
+                "providerStatus"=$2,
+                "providerStatusDetail"=$3,
+                "paidAt"=COALESCE("paidAt",NOW()),
+                "lastError"=NULL,
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                "updatedAt"=NOW()
+          WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+        providerOrder.id,
+        providerOrder.status ?? null,
+        providerOrder.status_detail ?? null,
+      );
       await this.markAsPaid(order.id, providerOrder.id);
       return { paid: true };
     }
+
+    const terminalFailure = new Set(["failed", "canceled", "expired"]);
+    if (providerOrder.status && terminalFailure.has(providerOrder.status)) {
+      const attemptStatus =
+        providerOrder.status === "canceled"
+          ? "CANCELLED"
+          : providerOrder.status === "expired"
+            ? "EXPIRED"
+            : "FAILED";
+
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status=$2,
+                "providerStatus"=$3,
+                "providerStatusDetail"=$4,
+                "lastError"=NULL,
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                "updatedAt"=NOW()
+          WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+        providerOrder.id,
+        attemptStatus,
+        providerOrder.status,
+        providerOrder.status_detail ?? null,
+      );
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder"
+            SET status='PAYMENT_FAILED',"updatedAt"=NOW()
+          WHERE id=$1 AND status='AWAITING_PAYMENT' AND "paymentExternalId"=$2`,
+        order.id,
+        providerOrder.id,
+      );
+      await this.lifecycle.record(
+        order.id,
+        "EXCEPTION",
+        "Pagamento não concluído",
+        "A tentativa de pagamento não foi concluída. Você pode iniciar uma nova tentativa com segurança.",
+        "MERCADO_PAGO",
+        `storefront:payment-failed:${order.id}:${providerOrder.id}`,
+        {
+          externalId: providerOrder.id,
+          providerStatus: providerOrder.status,
+          providerStatusDetail: providerOrder.status_detail,
+        },
+      );
+      return { paid: false };
+    }
+
+    await this.database.$executeRawUnsafe(
+      `UPDATE "StorefrontPaymentAttempt"
+          SET status='AWAITING_PAYMENT',
+              "providerStatus"=$2,
+              "providerStatusDetail"=$3,
+              "lastError"=NULL,
+              "nextAttemptAt"=NOW() + INTERVAL '20 seconds',
+              "processingStartedAt"=NULL,
+              "updatedAt"=NOW()
+        WHERE provider='MERCADO_PAGO' AND "externalId"=$1`,
+      providerOrder.id,
+      providerOrder.status ?? null,
+      providerOrder.status_detail ?? null,
+    );
+
     return { paid: false };
   }
 
-  private async ensureMercadoPagoCheckout(order: any, idempotencyKey: string) {
-    if (order.paymentExternalId) {
+  private async beginPaymentAttempt(order: any, idempotencyKey: string) {
+    return this.database.$transaction(async (transaction) => {
+      const existing = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "StorefrontPaymentAttempt"
+          WHERE "idempotencyKey"=$1
+          LIMIT 1`,
+        idempotencyKey,
+      );
+      if (existing[0]) return existing[0];
+
+      const lockedOrders = await transaction.$queryRawUnsafe<
+        Array<{ id: string; companyId: string }>
+      >(
+        `SELECT id,"companyId" FROM "StorefrontOrder" WHERE id=$1 FOR UPDATE`,
+        order.id,
+      );
+      const lockedOrder = lockedOrders[0];
+      if (!lockedOrder?.companyId)
+        throw new ServiceUnavailableException(
+          "O pedido não possui empresa vinculada para iniciar o pagamento.",
+        );
+
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='CANCELLED',
+                "nextAttemptAt"=NULL,
+                "processingStartedAt"=NULL,
+                metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+                "updatedAt"=NOW()
+          WHERE "storefrontOrderId"=$1
+            AND status IN ('CREATING','AWAITING_PAYMENT','PROCESSING')`,
+        order.id,
+        JSON.stringify({ supersededByNewAttempt: true }),
+      );
+
+      const numbers = await transaction.$queryRawUnsafe<Array<{ next: number }>>(
+        `SELECT COALESCE(MAX("attemptNumber"),0)::int + 1 AS next
+           FROM "StorefrontPaymentAttempt"
+          WHERE "storefrontOrderId"=$1`,
+        order.id,
+      );
+      const id = randomUUID();
+      const rows = await transaction.$queryRawUnsafe<any[]>(
+        `INSERT INTO "StorefrontPaymentAttempt"
+          (id,"companyId","storefrontOrderId",provider,method,status,"attemptNumber",
+           "amountCents","idempotencyKey",attempts,"nextAttemptAt",metadata,"createdAt","updatedAt")
+         VALUES ($1,$2,$3,'MERCADO_PAGO',$4,'CREATING',$5,$6,$7,0,NOW(),$8::jsonb,NOW(),NOW())
+         RETURNING *`,
+        id,
+        lockedOrder.companyId,
+        order.id,
+        order.requestedPaymentMethod === "CARD" ? "CARD" : "PIX",
+        Number(numbers[0]?.next ?? 1),
+        Number(order.totalCents),
+        idempotencyKey,
+        JSON.stringify({ orderCode: order.code }),
+      );
+      return rows[0];
+    });
+  }
+
+  private async ensureMercadoPagoCheckout(
+    order: any,
+    idempotencyKey: string,
+    forceNew = false,
+  ) {
+    if (!forceNew && order.paymentExternalId) {
       const current = await this.mercadoPago.getOrder(order.paymentExternalId);
-      if (current.checkout_url)
+      const terminalFailure = new Set(["failed", "canceled", "expired"]);
+      if (current.checkout_url && !terminalFailure.has(current.status || ""))
         return { externalId: current.id, checkoutUrl: current.checkout_url };
     }
+
+    const providerIdempotencyKey = `mp-${idempotencyKey}`.slice(0, 128);
+    const attempt = await this.beginPaymentAttempt(order, providerIdempotencyKey);
+
+    if (attempt.externalId && (attempt.checkoutUrl || attempt.metadata?.pix)) {
+      return {
+        externalId: attempt.externalId,
+        checkoutUrl: attempt.checkoutUrl || null,
+        pix: attempt.metadata?.pix || null,
+      };
+    }
+
     const customer = order.customer as CheckoutBody["customer"];
     const delivery = order.delivery as CheckoutBody["delivery"];
     const orderItems = order.items as Array<{
@@ -447,45 +951,95 @@ export class StorefrontOrdersController implements OnModuleInit {
       grind: string;
       unitPriceCents: number;
     }>;
-    const providerOrder = await this.mercadoPago.createCheckout({
-      idempotencyKey: `mp-${idempotencyKey}`.slice(0, 128),
-      orderCode: order.code,
-      totalCents: order.totalCents,
-      shippingCents: order.shippingCents,
-      discountCents: order.discountCents || 0,
-      couponCode: order.couponCode || undefined,
-      items: orderItems.map((item) => ({
-        externalCode: item.id,
-        title: item.name,
-        quantity: item.quantity,
-        unitPriceCents: item.unitPriceCents,
-        description: `${item.grind} · Café Bispo`,
-      })),
-      payer: {
-        name: customer?.name || "",
-        email: customer?.email || "",
-        phone: customer?.phone || "",
-        cpf: customer?.cpf || "",
-      },
-      delivery: {
-        postalCode: delivery?.postalCode || "",
-        street: delivery?.street || "",
-        number: delivery?.number || "",
-        complement: delivery?.complement,
-        district: delivery?.district || "",
-        city: delivery?.city || "",
-        state: delivery?.state || "",
-      },
-    });
-    await this.database.$executeRawUnsafe(
-      `UPDATE "StorefrontOrder" SET "paymentProvider"='MERCADO_PAGO',"paymentExternalId"=$2,"updatedAt"=NOW() WHERE id=$1`,
-      order.id,
-      providerOrder.id,
-    );
-    return {
-      externalId: providerOrder.id,
-      checkoutUrl: providerOrder.checkout_url!,
-    };
+
+    try {
+      const paymentInput = {
+        paymentMethod: order.requestedPaymentMethod === "CARD" ? "CARD" as const : "PIX" as const,
+        idempotencyKey: providerIdempotencyKey,
+        orderCode: order.code,
+        totalCents: order.totalCents,
+        shippingCents: order.shippingCents,
+        discountCents: order.discountCents || 0,
+        couponCode: order.couponCode || undefined,
+        items: orderItems.map((item) => ({
+          externalCode: item.id,
+          title: item.name,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          description: `${item.grind} · Café Bispo`,
+        })),
+        payer: {
+          name: customer?.name || "",
+          email: customer?.email || "",
+          phone: customer?.phone || "",
+          cpf: customer?.cpf || "",
+        },
+        delivery: {
+          postalCode: delivery?.postalCode || "",
+          street: delivery?.street || "",
+          number: delivery?.number || "",
+          complement: delivery?.complement,
+          district: delivery?.district || "",
+          city: delivery?.city || "",
+          state: delivery?.state || "",
+        },
+      };
+      const providerOrder =
+        order.requestedPaymentMethod === "PIX"
+          ? await this.mercadoPago.createPix(paymentInput)
+          : await this.mercadoPago.createCheckout(paymentInput);
+
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "StorefrontPaymentAttempt"
+              SET status='AWAITING_PAYMENT',
+                  "externalId"=$2,
+                  "checkoutUrl"=$3,
+                  "providerStatus"=$4,
+                  "providerStatusDetail"=$5,
+                  metadata=COALESCE(metadata,'{}'::jsonb) || $6::jsonb,
+                  "lastError"=NULL,
+                  "nextAttemptAt"=NOW() + INTERVAL '20 seconds',
+                  "updatedAt"=NOW()
+            WHERE id=$1`,
+          attempt.id,
+          providerOrder.id,
+          providerOrder.checkout_url ?? providerOrder.pix?.ticketUrl ?? null,
+          providerOrder.status ?? null,
+          providerOrder.status_detail ?? null,
+          JSON.stringify({ pix: providerOrder.pix ?? null }),
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "StorefrontOrder"
+              SET status=CASE WHEN status='PAID' THEN status ELSE 'AWAITING_PAYMENT' END,
+                  "paymentProvider"='MERCADO_PAGO',
+                  "paymentExternalId"=$2,
+                  "updatedAt"=NOW()
+            WHERE id=$1`,
+          order.id,
+          providerOrder.id,
+        );
+      });
+
+      return {
+        externalId: providerOrder.id,
+        checkoutUrl: providerOrder.checkout_url ?? providerOrder.pix?.ticketUrl ?? null,
+        pix: providerOrder.pix ?? null,
+      };
+    } catch (error) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontPaymentAttempt"
+            SET status='ERROR',
+                attempts=attempts+1,
+                "lastError"=$2,
+                "nextAttemptAt"=NOW() + INTERVAL '30 seconds',
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        attempt.id,
+        (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+      );
+      throw error;
+    }
   }
 
   private async companyId() {
@@ -504,7 +1058,7 @@ export class StorefrontOrdersController implements OnModuleInit {
 
   @Public()
   @Post()
-  async create(@Body() body: CheckoutBody) {
+  async create(@Body() body: CheckoutBody, @Req() request: any) {
     const key = body.idempotencyKey?.trim();
     if (!key || key.length < 16 || key.length > 100)
       throw new BadRequestException(
@@ -563,6 +1117,42 @@ export class StorefrontOrdersController implements OnModuleInit {
     const coupon = body.couponCode?.trim()
       ? await this.coupons.calculate(companyId, body.couponCode, subtotalCents)
       : null;
+    const existing = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
+      key,
+    );
+    if (existing[0]) {
+      if (existing[0].requestedPaymentMethod !== paymentMethod)
+        throw new BadRequestException(
+          "Este pedido já foi iniciado com outra forma de pagamento. Escolha a forma original ou inicie uma nova compra.",
+        );
+      const confirmationToken = randomBytes(32).toString("base64url");
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET "confirmationTokenHash"=$2,"updatedAt"=NOW() WHERE id=$1`,
+        existing[0].id,
+        tokenHash(confirmationToken),
+      );
+      await this.syncSalesOrder(existing[0].id);
+      const payment =
+        existing[0].status === "PAID"
+          ? await this.ensureMercadoPagoCheckout(existing[0], key)
+          : await this.ensureMercadoPagoCheckout(
+              existing[0],
+              `retry-${existing[0].id}-${Date.now()}`,
+              true,
+            );
+      return {
+        id: existing[0].id,
+        code: existing[0].code,
+        status: existing[0].status === "PAID" ? "PAID" : "AWAITING_PAYMENT",
+        totalCents: existing[0].totalCents,
+        confirmationToken,
+        checkoutUrl: payment.checkoutUrl,
+        pix: payment.pix ?? null,
+        idempotent: true,
+      };
+    }
+
     if (!body.shippingQuoteId?.trim())
       throw new BadRequestException(
         "Calcule e escolha uma modalidade de frete antes de pagar.",
@@ -577,27 +1167,138 @@ export class StorefrontOrdersController implements OnModuleInit {
       },
     );
     const shippingCents = Number(quote.customerPriceCents);
-    const existing = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "StorefrontOrder" WHERE "idempotencyKey"=$1 LIMIT 1`,
-      key,
-    );
-    if (existing[0]) {
-      const confirmationToken = randomBytes(32).toString("base64url");
-      await this.database.$executeRawUnsafe(
-        `UPDATE "StorefrontOrder" SET "confirmationTokenHash"=$2,"updatedAt"=NOW() WHERE id=$1`,
-        existing[0].id,
-        tokenHash(confirmationToken),
-      );
-      await this.syncSalesOrder(existing[0].id);
-      const payment = await this.ensureMercadoPagoCheckout(existing[0], key);
+    if (
+      quote.refreshed &&
+      Number.isFinite(Number(quote.previousCustomerPriceCents)) &&
+      shippingCents > Number(quote.previousCustomerPriceCents)
+    ) {
       return {
-        id: existing[0].id,
-        code: existing[0].code,
-        status: existing[0].status,
-        totalCents: existing[0].totalCents,
+        shippingRefreshRequired: true,
+        message: "O valor do frete foi atualizado pela transportadora. Confira o novo total e confirme o pagamento.",
+        quote: {
+          id: quote.id,
+          name: quote.serviceName,
+          serviceName: quote.serviceName,
+          carrierName: quote.carrierName,
+          priceCents: shippingCents,
+          deliveryDays: Number(quote.deliveryDays),
+          expiresAt: new Date(quote.expiresAt).toISOString(),
+        },
+      };
+    }
+
+    const equivalent = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT *
+         FROM "StorefrontOrder"
+        WHERE "companyId"=$1
+          AND status IN ('AWAITING_PAYMENT','PAYMENT_FAILED')
+          AND lower(customer->>'email')=lower($2)
+          AND customer->>'cpf'=$3
+          AND items=$4::jsonb
+          AND "totalCents"=$5
+          AND "createdAt" >= NOW() - INTERVAL '2 hours'
+        ORDER BY "createdAt" DESC
+        LIMIT 1`,
+      companyId,
+      customer.email!.trim(),
+      digits(customer.cpf),
+      JSON.stringify(items),
+      (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
+    );
+    if (equivalent[0]) {
+      const confirmationToken = randomBytes(32).toString("base64url");
+      const claimed = await this.database.$executeRawUnsafe(
+        `UPDATE "ShippingQuote"
+            SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW()
+          WHERE id=$1 AND status='VALID'`,
+        quote.id,
+      );
+      if (!claimed)
+        throw new BadRequestException(
+          "Esta cotação já foi utilizada. Calcule novamente.",
+        );
+
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder"
+            SET status='AWAITING_PAYMENT',
+                "confirmationTokenHash"=$2,
+                customer=$3::jsonb,
+                delivery=$4::jsonb,
+                recurrence=$5::jsonb,
+                "shippingQuoteId"=$6,
+                "shippingProvider"=$7,
+                "shippingServiceId"=$8,
+                "shippingServiceName"=$9,
+                "carrierName"=$10,
+                "estimatedDeliveryDays"=$11,
+                "shippingCents"=$12,
+                "totalCents"=$13,
+                "requestedPaymentMethod"=$14,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        equivalent[0].id,
+        tokenHash(confirmationToken),
+        JSON.stringify({
+          ...customer,
+          cpf: digits(customer.cpf),
+          phone: digits(customer.phone),
+        }),
+        JSON.stringify({
+          ...delivery,
+          postalCode: digits(delivery.postalCode),
+          state: delivery.state?.toUpperCase(),
+        }),
+        JSON.stringify(body.recurrence ?? { mode: "now" }),
+        quote.id,
+        quote.provider,
+        quote.serviceId,
+        quote.serviceName,
+        quote.carrierName,
+        quote.deliveryDays,
+        shippingCents,
+        (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
+        paymentMethod,
+      );
+
+      const refreshed = {
+        ...equivalent[0],
+        status: "AWAITING_PAYMENT",
+        customer: {
+          ...customer,
+          cpf: digits(customer.cpf),
+          phone: digits(customer.phone),
+        },
+        delivery: {
+          ...delivery,
+          postalCode: digits(delivery.postalCode),
+          state: delivery.state?.toUpperCase(),
+        },
+        items,
+        shippingCents,
+        totalCents: (coupon?.netSubtotalCents ?? subtotalCents) + shippingCents,
+        requestedPaymentMethod: paymentMethod,
+      };
+      const payment = await this.ensureMercadoPagoCheckout(refreshed, key);
+      await this.lifecycle.record(
+        equivalent[0].id,
+        "ORDER_RECEIVED",
+        "Nova tentativa de pagamento",
+        "Uma nova tentativa de pagamento foi aberta para o mesmo pedido, sem duplicar a compra.",
+        "BBOS",
+        `storefront:payment-retry:${equivalent[0].id}:${payment.externalId}`,
+        { externalId: payment.externalId },
+        false,
+      );
+      await this.syncSalesOrder(equivalent[0].id);
+      return {
+        id: equivalent[0].id,
+        code: equivalent[0].code,
+        status: "AWAITING_PAYMENT",
+        totalCents: refreshed.totalCents,
         confirmationToken,
         checkoutUrl: payment.checkoutUrl,
-        idempotent: true,
+        pix: payment.pix ?? null,
+        reusedPendingOrder: true,
       };
     }
 
@@ -643,6 +1344,14 @@ export class StorefrontOrdersController implements OnModuleInit {
       coupon?.discountCents ?? 0,
       coupon?.commissionCents ?? 0,
     );
+    const signedInCustomer = await this.customers.resolve(
+      this.customers.readToken(request),
+    );
+    await this.customers.linkOrder(
+      signedInCustomer,
+      id,
+      customer.email,
+    );
     const claimed = await this.database.$executeRawUnsafe(
       `UPDATE "ShippingQuote" SET status='USED',"usedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
       quote.id,
@@ -667,6 +1376,7 @@ export class StorefrontOrdersController implements OnModuleInit {
     await this.syncSalesOrder(id);
     const completeOrder = {
       ...rows[0],
+      requestedPaymentMethod: paymentMethod,
       customer: {
         ...customer,
         cpf: digits(customer.cpf),
@@ -684,6 +1394,113 @@ export class StorefrontOrdersController implements OnModuleInit {
       ...rows[0],
       confirmationToken,
       checkoutUrl: payment.checkoutUrl,
+      pix: payment.pix ?? null,
+    };
+  }
+
+  @Public()
+  @Post(":orderId/reorder")
+  async reorder(
+    @Param("orderId") orderId: string,
+    @Req() request: any,
+  ) {
+    const account = await this.customers.resolve(
+      this.customers.readToken(request),
+    );
+    if (!account || !(await this.customers.ownsOrder(account, orderId)))
+      throw new UnauthorizedException("Recompra não autorizada.");
+
+    const rows = await this.database.$queryRawUnsafe<Array<{ items: any }>>(
+      `SELECT items FROM "StorefrontOrder"
+        WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+      orderId,
+      account.companyId,
+    );
+    const previousItems = Array.isArray(rows[0]?.items) ? rows[0].items : [];
+    const items = previousItems.flatMap((item: any) => {
+      const id = String(item?.id || "");
+      const product = catalog[id];
+      if (!product) return [];
+      const quantity = Math.min(20, Math.max(1, Number(item.quantity) || 1));
+      const grind = grinds.has(String(item.grind)) ? String(item.grind) : "Grãos";
+      const line = new Set(["essencial", "intenso"]).has(id)
+        ? "Cotidiano"
+        : id === "raros"
+          ? "Raros"
+          : "Memórias";
+      return [{
+        id,
+        name: product.name,
+        line,
+        notes: "Sua escolha anterior, pronta para ser confirmada novamente.",
+        priceCents: product.unitPriceCents,
+        weightGrams: product.weightGrams,
+        quantity,
+        grind,
+        image: null,
+      }];
+    });
+    if (!items.length)
+      throw new BadRequestException(
+        "Os cafés deste pedido não estão disponíveis para recompra agora.",
+      );
+    return { items };
+  }
+
+  @Public()
+  @Post(":orderId/retry-payment")
+  async retryPayment(
+    @Param("orderId") orderId: string,
+    @Headers("x-storefront-order-token") suppliedToken: string | undefined,
+    @Req() request: any,
+  ) {
+    const account = await this.customers.resolve(this.customers.readToken(request));
+    const accountOwnsOrder = account
+      ? await this.customers.ownsOrder(account, orderId)
+      : false;
+    if (!suppliedToken && !accountOwnsOrder)
+      throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
+
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT *
+         FROM "StorefrontOrder"
+        WHERE id=$1
+          AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE OR $4::boolean=TRUE)
+        LIMIT 1`,
+      orderId,
+      tokenHash(suppliedToken || ""),
+      this.lifecycle.validTrackingToken(orderId, suppliedToken || ""),
+      accountOwnsOrder,
+    );
+    const order = rows[0];
+    if (!order)
+      throw new UnauthorizedException("Nova tentativa de pagamento não autorizada.");
+    if (order.status === "PAID")
+      return { id: order.id, code: order.code, status: "PAID" };
+    if (order.status === "CANCELLED")
+      throw new BadRequestException(
+        "Esta tentativa foi consolidada em outro pedido.",
+      );
+
+    const retryKey = `retry-${order.id}-${Date.now()}`;
+    const payment = await this.ensureMercadoPagoCheckout(order, retryKey, true);
+    await this.lifecycle.record(
+      order.id,
+      "ORDER_RECEIVED",
+      "Nova tentativa de pagamento",
+      "Seu pedido foi preservado e uma nova tentativa de pagamento está disponível.",
+      "BBOS",
+      `storefront:customer-payment-retry:${order.id}:${payment.externalId}`,
+      { externalId: payment.externalId },
+      false,
+    );
+    await this.syncSalesOrder(order.id);
+    return {
+      id: order.id,
+      code: order.code,
+      status: "AWAITING_PAYMENT",
+      checkoutUrl: payment.checkoutUrl,
+      pix: payment.pix ?? null,
     };
   }
 
@@ -692,27 +1509,34 @@ export class StorefrontOrdersController implements OnModuleInit {
   async status(
     @Param("orderId") orderId: string,
     @Headers("x-storefront-order-token") suppliedToken: string | undefined,
+    @Req() request: any,
   ) {
-    if (!suppliedToken)
+    const account = await this.customers.resolve(this.customers.readToken(request));
+    const accountOwnsOrder = account
+      ? await this.customers.ownsOrder(account, orderId)
+      : false;
+    if (!suppliedToken && !accountOwnsOrder)
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     let rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
-         FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE) LIMIT 1`,
+         FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE OR $4::boolean=TRUE) LIMIT 1`,
       orderId,
-      tokenHash(suppliedToken),
-      this.lifecycle.validTrackingToken(orderId, suppliedToken),
+      tokenHash(suppliedToken || ""),
+      this.lifecycle.validTrackingToken(orderId, suppliedToken || ""),
+      accountOwnsOrder,
     );
     if (!rows[0])
       throw new UnauthorizedException("Consulta de pedido não autorizada.");
     await this.syncSalesOrder(orderId);
-    if (rows[0].status !== "PAID" && rows[0].paymentExternalId) {
+    if (rows[0].status === "AWAITING_PAYMENT" && rows[0].paymentExternalId) {
       await this.reconcileMercadoPago(rows[0]);
       rows = await this.database.$queryRawUnsafe<any[]>(
         `SELECT id,code,status,"paidAt","totalCents","paymentExternalId","shippingServiceName","carrierName","estimatedDeliveryDays"
-           FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE) LIMIT 1`,
+           FROM "StorefrontOrder" WHERE id=$1 AND ("confirmationTokenHash"=$2 OR $3::boolean=TRUE OR $4::boolean=TRUE) LIMIT 1`,
         orderId,
-        tokenHash(suppliedToken),
-        this.lifecycle.validTrackingToken(orderId, suppliedToken),
+        tokenHash(suppliedToken || ""),
+        this.lifecycle.validTrackingToken(orderId, suppliedToken || ""),
+        accountOwnsOrder,
       );
     }
     const [events, shipments] = await Promise.all([
@@ -727,27 +1551,67 @@ export class StorefrontOrdersController implements OnModuleInit {
         orderId,
       ),
     ]);
-    const { paymentExternalId: _privatePaymentId, ...publicOrder } = rows[0];
+    const publicOrder = { ...rows[0] };
+    delete publicOrder.paymentExternalId;
     return { ...publicOrder, events, shipment: shipments[0] ?? null };
   }
 
   @Public()
   @Post("mercado-pago/webhook")
+  @HttpCode(202)
   async mercadoPagoWebhook(
     @Query("data.id") queryDataId: string | undefined,
     @Query("id") queryId: string | undefined,
     @Body() body: any,
   ) {
-    const externalId =
-      body?.data?.id || body?.id || queryDataId || queryId || undefined;
-    if (!externalId) return { received: true };
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,code,status,"totalCents","paymentExternalId" FROM "StorefrontOrder" WHERE "paymentExternalId"=$1 LIMIT 1`,
-      String(externalId),
+    const externalId = String(
+      body?.data?.id || body?.id || queryDataId || queryId || "",
+    ).trim();
+
+    const attempts = externalId
+      ? await this.database.$queryRawUnsafe<any[]>(
+          `SELECT p."companyId"
+             FROM "StorefrontPaymentAttempt" p
+            WHERE p.provider='MERCADO_PAGO' AND p."externalId"=$1
+            LIMIT 1`,
+          externalId,
+        )
+      : [];
+
+    const eventName = String(body?.action || body?.type || "order.updated");
+    const providerEventId = createHash("sha256")
+      .update(
+        JSON.stringify({
+          externalId,
+          eventName,
+          payload: body ?? {},
+        }),
+      )
+      .digest("hex");
+
+    const inserted = await this.database.$executeRawUnsafe(
+      `INSERT INTO "IntegrationWebhookEvent"
+        (id,"companyId",provider,"providerEventId","eventName",payload,status,"receivedAt")
+       VALUES ($1,$2,'MERCADO_PAGO',$3,$4,$5::jsonb,'RECEIVED',NOW())
+       ON CONFLICT (provider,"providerEventId") DO NOTHING`,
+      randomUUID(),
+      attempts[0]?.companyId ?? null,
+      providerEventId,
+      eventName,
+      JSON.stringify({
+        ...(body ?? {}),
+        _bbosExternalId: externalId || null,
+      }),
     );
-    if (!rows[0]) return { received: true };
-    await this.reconcileMercadoPago(rows[0]);
-    return { received: true };
+
+    // Não bloqueamos o webhook esperando Mercado Pago/Banco/Bling.
+    // O worker persistente processa o evento com retry e deduplicação.
+    void this.reconcilePendingMercadoPagoOrders();
+
+    return {
+      accepted: true,
+      duplicate: inserted === 0,
+    };
   }
 
   @Public()
@@ -777,6 +1641,6 @@ export class StorefrontOrdersController implements OnModuleInit {
       body.externalId,
     );
     if (!updated) throw new BadRequestException("Pedido não encontrado.");
-    return { id: body.orderId, status: "PAYMENT_FAILED" };
+    return { id: body.orderId, status: "EXCEPTION" };
   }
 }

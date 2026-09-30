@@ -103,3 +103,46 @@
 @media (max-width: 600px) {
   .storefront :global([class*="productCard"]) { border-radius: 3px !important; }
 }
+
+/* Final premium rhythm: BISPO typography stays sovereign; scale and whitespace are harmonized. */
+.storefront{--store-copy:680px;--store-h2:clamp(34px,3.8vw,56px);--store-body:clamp(13px,1.05vw,15px)}
+.storefront :global(h1),.storefront :global(h2),.storefront :global(h3){text-wrap:balance}
+.storefront :global(p){text-wrap:pretty}
+.storefront :global([class*="commerceBar"]){min-height:30px!important;font-size:9px!important;letter-spacing:.075em!important}
+.storefront :global([class*="header"]){height:66px!important;grid-template-columns:190px minmax(0,1fr) auto!important;padding-inline:clamp(22px,4vw,64px)!important;gap:20px!important}
+.storefront :global([class*="brand"]) img{width:132px!important}
+.storefront :global([class*="nav"]){gap:clamp(16px,2vw,30px)!important;font-size:10px!important;letter-spacing:.07em!important}
+.storefront :global([class*="sectionHeader"]) h2,.storefront :global([class*="founder-trust_copy"]) h2{font-size:var(--store-h2)!important;line-height:1.02!important;letter-spacing:-.035em!important}
+.storefront :global([class*="sectionHeader"]) p,.storefront :global([class*="catalogHeader"]) p,.storefront :global([class*="founder-trust_copy"]) p{max-width:var(--store-copy);font-size:var(--store-body);line-height:1.58}
+.storefront :global([class*="founder-trust_section"]){min-height:520px!important}.storefront :global([class*="founder-trust_photos"]){min-height:520px!important}.storefront :global([class*="founder-trust_copy"]){padding:clamp(34px,4vw,58px)!important}
+.storefront :global([class*="footerLogo"]){filter:none!important;opacity:1!important}
+@media(max-width:960px){.storefront :global([class*="header"]){grid-template-columns:1fr auto!important}}
+@media(max-width:600px){.storefront :global([class*="header"]){height:58px!important;padding-inline:16px!important}.storefront :global([class*="brand"]) img{width:108px!important}.storefront :global([class*="founder-trust_photos"]){min-height:330px!important}.storefront :global([class*="founder-trust_copy"]){padding:34px 20px!important}}
+
+/* Header polish — quieter navigation, stronger BISPO hierarchy. */
+.storefront :global([class*="commerceBar"]){min-height:27px!important;height:27px!important;padding-inline:clamp(24px,4vw,58px)!important;font-size:8px!important;letter-spacing:.095em!important}
+.storefront :global([class*="header"]){height:61px!important;grid-template-columns:170px minmax(0,1fr) 150px!important;padding-inline:clamp(28px,3.6vw,58px)!important;gap:16px!important}
+.storefront :global([class*="brand"]) img{width:122px!important}
+.storefront :global([class*="nav"]){gap:clamp(15px,1.65vw,25px)!important;font-size:9px!important;letter-spacing:.075em!important;font-weight:600}
+.storefront :global([class*="nav"]) a{position:relative;padding:22px 0 20px;text-decoration:none!important}
+.storefront :global([class*="nav"]) a[aria-current="page"]::after{content:"";position:absolute;left:0;right:0;bottom:14px;height:1px;background:currentColor}
+.storefront :global([class*="actions"]){justify-content:flex-end;gap:2px!important}
+.storefront :global([class*="actions"]) button,.storefront :global([class*="actions"]) a{width:34px!important;height:34px!important;display:grid!important;place-items:center!important}
+@media(max-width:980px){.storefront :global([class*="header"]){height:auto!important;min-height:58px!important;grid-template-columns:1fr auto!important;padding-inline:18px!important}.storefront :global([class*="nav"]){font-size:9px!important;gap:18px!important;padding:8px 0 11px!important}.storefront :global([class*="nav"]) a{padding:6px 0!important}.storefront :global([class*="nav"]) a[aria-current="page"]::after{bottom:0}.storefront :global([class*="brand"]) img{width:110px!important}}
+
+/* Header optical rebalance for wide desktop: readable without competing with hero. */
+@media(min-width:981px){
+ .storefront :global([class*="commerceBar"]){height:31px!important;min-height:31px!important;font-size:9.5px!important;letter-spacing:.09em!important;font-weight:600}
+ .storefront :global([class*="header"]){height:68px!important;grid-template-columns:190px minmax(0,1fr) 160px!important}
+ .storefront :global([class*="brand"]) img{width:132px!important}
+ .storefront :global([class*="nav"]){font-size:11px!important;letter-spacing:.065em!important;gap:clamp(18px,1.8vw,29px)!important;font-weight:650}
+ .storefront :global([class*="nav"]) a{padding:24px 0 22px!important}
+ .storefront :global([class*="actions"]) button,.storefront :global([class*="actions"]) a{width:37px!important;height:37px!important}
+}
+
+/* Shared premium scale across storefront pages. */
+.storefront{--premium-display:clamp(38px,3.9vw,62px);--premium-title:clamp(30px,3.15vw,50px);--premium-copy:clamp(13px,1vw,16px)}
+.storefront :global([class*="peopleIntro"]) h2,.storefront :global([class*="memory"]) h2,.storefront :global([class*="career"]) h2,.storefront :global([class*="deepIntro"]) h2,.storefront :global([class*="roastStory"]) h2,.storefront :global([class*="acidityStory"]) h2{font-size:var(--premium-title)!important;line-height:1.06!important;letter-spacing:-.04em!important}
+.storefront :global([class*="intro"])>h1{font-size:var(--premium-display)!important;line-height:1.01!important;letter-spacing:-.045em!important}
+.storefront :global([class*="intro"])>h2{font-size:clamp(24px,2.1vw,32px)!important;line-height:1.18!important}
+.storefront :global([class*="peopleGrid"]) p,.storefront :global([class*="memoryBody"]) p,.storefront :global([class*="careerChapters"]) p,.storefront :global([class*="landscapeText"])>p,.storefront :global([class*="roastStory"]) p,.storefront :global([class*="acidityStory"]) p{font-size:var(--premium-copy)!important;line-height:1.6!important}

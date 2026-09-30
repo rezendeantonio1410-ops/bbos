@@ -1,12 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 type EventSource = "BBOS" | "MERCADO_PAGO" | "BLING" | "MELHOR_ENVIO" | "CARRIER" | "ADMIN";
 
 @Injectable()
 export class StorefrontLifecycleService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   private trackingSecret() {
     return process.env.ORDER_TRACKING_SECRET?.trim() || process.env.PAYMENT_WEBHOOK_SECRET?.trim() || "";
@@ -71,6 +71,10 @@ export class StorefrontLifecycleService {
             title,
             detail,
             trackingUrl: token ? `${publicBase}/loja/pedido/${order.id}?token=${encodeURIComponent(token)}` : null,
+            paymentUrl:
+              typeof metadata.paymentUrl === "string"
+                ? metadata.paymentUrl
+                : null,
             customer: order.customer,
             delivery: order.delivery,
             items: order.items,

@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { BadRequestException, Injectable, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
+import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
@@ -8,14 +8,163 @@ import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifec
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
 @Injectable()
-export class MelhorEnvioShipmentService {
-  private readonly database = new PrismaClient();
+export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy {
+  private readonly database = prisma;
+  private trackingTimer?: NodeJS.Timeout;
+  private reconcilingTracking = false;
 
   constructor(
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly melhorEnvioAuth: MelhorEnvioAuthService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
+
+  async onModuleInit() {
+    // O status comercial continua protegido pelas regras de estoque.
+    // Aqui sincronizamos apenas o que o Melhor Envio informar sobre remessas ativas.
+    void this.reconcileActiveShipments();
+    this.trackingTimer = setInterval(
+      () => void this.reconcileActiveShipments(),
+      300_000,
+    );
+    this.trackingTimer.unref?.();
+  }
+
+  async onModuleDestroy() {
+    if (this.trackingTimer) clearInterval(this.trackingTimer);
+  }
+
+  private async reconcileActiveShipments() {
+    if (this.reconcilingTracking) return;
+    this.reconcilingTracking = true;
+    try {
+      const shipments = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT sh.id,sh."companyId",sh."externalId",sh.status,sh."salesOrderId",sh."storefrontOrderId",
+                sh."trackingCode",sh."trackingUrl",sh."postedAt"
+           FROM "Shipment" sh
+          WHERE sh.provider='MELHOR_ENVIO'
+            AND sh."externalId" IS NOT NULL
+            AND sh.status IN ('LABEL_READY','PURCHASED','IN_TRANSIT','OUT_FOR_DELIVERY')
+          ORDER BY sh."updatedAt" ASC
+          LIMIT 100`,
+      );
+
+      for (const shipment of shipments) {
+        try {
+          const [orderDetails, trackingResponse] = await Promise.all([
+            this.request(
+              shipment.companyId,
+              `/me/orders/${encodeURIComponent(shipment.externalId)}`,
+              { method: "GET" },
+            ).catch(() => ({})),
+            this.request(
+              shipment.companyId,
+              "/me/shipment/tracking",
+              {
+                method: "POST",
+                body: JSON.stringify({ orders: [shipment.externalId] }),
+              },
+            ).catch(() => ({})),
+          ]);
+
+          const trackingDetails =
+            (Array.isArray(trackingResponse) ? trackingResponse[0] : null) ||
+            trackingResponse?.[shipment.externalId] ||
+            trackingResponse?.data?.[0] ||
+            trackingResponse?.data?.[shipment.externalId] ||
+            trackingResponse ||
+            {};
+
+          const details = {
+            ...(orderDetails || {}),
+            ...(trackingDetails || {}),
+            tracking_snapshot: trackingDetails || {},
+            order_snapshot: orderDetails || {},
+          };
+
+          const trackingCode =
+            String(
+              trackingDetails?.tracking ||
+                trackingDetails?.tracking_code ||
+                trackingDetails?.melhorenvio_tracking ||
+                orderDetails?.tracking ||
+                orderDetails?.tracking_code ||
+                "",
+            ) || null;
+          const trackingUrl =
+            String(
+              trackingDetails?.tracking_url ||
+                trackingDetails?.tracking?.url ||
+                orderDetails?.tracking_url ||
+                orderDetails?.tracking?.url ||
+                orderDetails?.service?.company?.tracking_link ||
+                "",
+            ) || null;
+
+          await this.database.$executeRawUnsafe(
+            `UPDATE "Shipment"
+                SET "trackingCode"=COALESCE($2,"trackingCode"),
+                    "trackingUrl"=COALESCE($3,"trackingUrl"),
+                    metadata=$4::jsonb,
+                    "updatedAt"=NOW()
+              WHERE id=$1`,
+            shipment.id,
+            trackingCode,
+            trackingUrl,
+            JSON.stringify(details || {}),
+          );
+
+          const rawStatus = String(
+            trackingDetails?.status ||
+              trackingDetails?.tracking?.status ||
+              trackingDetails?.self_tracking?.status ||
+              orderDetails?.status ||
+              "",
+          ).toLowerCase();
+          const postedAt =
+            trackingDetails?.posted_at || orderDetails?.posted_at || null;
+          const deliveredAt =
+            trackingDetails?.delivered_at || orderDetails?.delivered_at || null;
+
+          if (deliveredAt || rawStatus.includes("deliver")) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              "delivered",
+              details,
+            );
+          } else if (
+            rawStatus.includes("out_for_delivery") ||
+            rawStatus.includes("saiu")
+          ) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              "out_for_delivery",
+              details,
+            );
+          } else if (
+            postedAt ||
+            rawStatus.includes("post") ||
+            rawStatus.includes("transit") ||
+            rawStatus.includes("movimenta")
+          ) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              "in_transit",
+              details,
+            );
+          }
+        } catch (error) {
+          console.error("Falha ao reconciliar rastreio do Melhor Envio", {
+            shipmentId: shipment.id,
+            externalId: shipment.externalId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } finally {
+      this.reconcilingTracking = false;
+    }
+  }
 
   private base() {
     return (process.env.MELHOR_ENVIO_API_URL?.trim() || "https://melhorenvio.com.br/api/v2").replace(/\/$/, "");
@@ -323,6 +472,81 @@ export class MelhorEnvioShipmentService {
       agencies,
     };
   }
+  async requoteForSalesOrder(orderId: string, packages?: Array<{ weight: number; length: number; width: number; height: number }>) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
+              q."serviceId",q."serviceName",q."carrierName",
+              c."postalCode" AS "customerPostalCode"
+         FROM "SalesOrder" so
+         JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 LIMIT 1`,
+      orderId,
+    );
+    const order = rows[0];
+    if (!order) throw new BadRequestException("Pedido comercial ou cotação de frete não encontrado.");
+    const originalPackages = Array.isArray(order.package) ? order.package : [order.package];
+    const packagePayload = Array.isArray(packages) && packages.length ? packages : originalPackages;
+    for (const volume of packagePayload) {
+      if (![volume.weight, volume.length, volume.width, volume.height].every((value) => Number(value) > 0)) throw new BadRequestException("Peso e dimensões de todas as caixas devem ser maiores que zero.");
+    }
+    const response = await this.request(order.companyId, "/me/shipment/calculate", {
+      method: "POST",
+      body: JSON.stringify({
+        from: { postal_code: this.sender().postal_code },
+        to: { postal_code: digits(order.customerPostalCode) },
+        packages: packagePayload,
+      }),
+    });
+    const raw = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+    const options = raw
+      .filter((item: any) => !item?.error && Number(item?.price ?? item?.custom_price ?? 0) > 0)
+      .map((item: any) => ({
+        serviceId: String(item.id ?? ""),
+        serviceName: String(item.name ?? ""),
+        carrierName: String(item.company?.name ?? ""),
+        priceCents: Math.round(Number(item.custom_price ?? item.price ?? 0) * 100),
+        deliveryDays: Number(item.custom_delivery_time ?? item.delivery_time ?? 0),
+      }))
+      .sort((a: any, b: any) => a.priceCents - b.priceCents);
+    return {
+      approvedPriceCents: Number(order.customerPriceCents),
+      originalProviderPriceCents: Number(order.providerPriceCents),
+      quoteExpired: true,
+      packages: packagePayload,
+      originalPackages,
+      customPackages: Boolean(packages?.length),
+      options,
+    };
+  }
+
+  async selectRequoteForSalesOrder(orderId: string, selection: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so."shippingQuoteId",so.freight,q."customerPriceCents",q."providerPriceCents",q.package
+         FROM "SalesOrder" so JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+        WHERE so.id=$1 LIMIT 1`, orderId);
+    const current = rows[0];
+    if (!current) throw new BadRequestException("Pedido ou cotação não encontrado.");
+    if (!selection?.serviceId || !selection?.priceCents) throw new BadRequestException("Selecione uma cotação válida.");
+    const packages = selection.packages?.length ? selection.packages : (Array.isArray(current.package) ? current.package : [current.package]);
+    await this.database.$executeRawUnsafe(
+      `UPDATE "ShippingQuote" SET "serviceId"=$2,"serviceName"=$3,"carrierName"=$4,
+         "providerPriceCents"=$5,package=$6::jsonb,"deliveryDays"=$7,"updatedAt"=NOW()
+       WHERE id=$1`,
+      current.shippingQuoteId, selection.serviceId, selection.serviceName, selection.carrierName,
+      selection.priceCents, JSON.stringify(packages), Number(selection.deliveryDays || 0));
+    await this.database.$executeRawUnsafe(
+      `UPDATE "SalesOrder" SET "shippingServiceId"=$2,"shippingServiceName"=$3,"carrierName"=$4,"updatedAt"=NOW() WHERE id=$1`,
+      orderId, selection.serviceId, selection.serviceName, selection.carrierName);
+    return {
+      selected: true,
+      customerFreightCents: Math.round(Number(current.freight || 0) * 100),
+      providerPriceCents: selection.priceCents,
+      logisticsResultCents: Math.round(Number(current.freight || 0) * 100) - selection.priceCents,
+      serviceId: selection.serviceId, serviceName: selection.serviceName, carrierName: selection.carrierName,
+    };
+  }
+
   async createLabelForSalesOrder(orderId: string) {
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
@@ -443,19 +667,21 @@ export class MelhorEnvioShipmentService {
       const cartPriceCents = Math.round(
         Number(cartResult?.price || cartResult?.custom_price || 0) * 100,
       );
+      if (externalId) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "Shipment" SET "externalId"=$2,metadata=$3::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+          shipmentId,
+          externalId,
+          JSON.stringify({ cartResult, cartPriceCents }),
+        );
+      }
       if (
         cartPriceCents > 0 &&
         cartPriceCents !== Number(order.providerPriceCents)
       ) {
         await this.database.$executeRawUnsafe(
-          `UPDATE "Shipment" SET status='EXCEPTION',metadata=$2::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+          `UPDATE "Shipment" SET status='EXCEPTION',"updatedAt"=NOW() WHERE id=$1`,
           shipmentId,
-          JSON.stringify({
-            reason: "PRICE_CHANGED",
-            quotedCents: Number(order.providerPriceCents),
-            cartPriceCents,
-            cartResult,
-          }),
         );
         throw new BadRequestException(
           "O valor da transportadora mudou após a cotação. Pedido enviado para conferência.",
@@ -568,14 +794,26 @@ export class MelhorEnvioShipmentService {
     } else if (shipment.salesOrderId) {
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrder"
-            SET status=$2,
-                "shippedAt"=CASE WHEN $2='SHIPPED' THEN COALESCE("shippedAt",NOW()) ELSE "shippedAt" END,
-                "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,
+            SET status=$2::"SalesOrderStatus",
                 "updatedAt"=NOW()
-          WHERE id=$1 AND status IN ('INVOICED','SHIPPED','DELIVERED')`,
+          WHERE id=$1
+            AND (
+              (status='INVOICED' AND $2::"SalesOrderStatus"='SHIPPED')
+              OR (status='SHIPPED' AND $2::"SalesOrderStatus"='DELIVERED')
+            )`,
         shipment.salesOrderId,
         mapping.order,
-      );
+      ).catch((error) => {
+        // O banco pode bloquear SHIPPED enquanto não houver baixa física.
+        // A remessa/rastreio continua sendo atualizada; o status comercial só
+        // avança quando as regras de estoque estiverem satisfeitas.
+        console.warn("Status comercial preservado durante sincronização de rastreio", {
+          salesOrderId: shipment.salesOrderId,
+          targetStatus: mapping.order,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return 0;
+      });
       await this.customerLifecycle.record(
         shipment.salesOrderId,
         mapping.event,

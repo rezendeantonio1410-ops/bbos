@@ -18,7 +18,7 @@ import {
   ProfessionalSampleSource,
   ProfessionalSampleStatus,
   Prisma,
-  PrismaClient,
+  prisma,
 } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { assertCompany, requireSession } from "./auth-context";
@@ -44,6 +44,7 @@ type ConfirmReceiptBody = {
   process?: string;
   supplierLotCode?: string;
   invoiceNumber?: string;
+  fiscalDocumentId?: string;
   transportDocument?: string;
   purchaseOrderNumber?: string;
   notes?: string;
@@ -53,7 +54,8 @@ type ConfirmReceiptBody = {
   packagingType?: "BAG_30_KG" | "BAG_60_KG" | "BIG_BAG" | "OTHER";
   volumeQuantity?: number;
   nominalWeightKg?: number;
-  grossWeightKg: number;
+  weightEntryMode?: "DOCUMENTAL" | "SCALE";
+  grossWeightKg?: number;
   tareWeightKg?: number;
   netWeightKg: number;
   qualityStatus?: GreenCoffeeQualityStatus;
@@ -81,7 +83,7 @@ const lotStatusFor = (quality: GreenCoffeeQualityStatus): CoffeeLotStatus => {
 
 @Controller("receipts")
 export class ReceiptsController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   constructor(private readonly auth: AuthService) {}
 
   @Get("lab-samples")
@@ -109,7 +111,7 @@ export class ReceiptsController {
   @Patch("lab-samples/:id/analysis")
   async completeLabAnalysis(
     @Param("id") id: string,
-    @Body() body: { qualityStatus: GreenCoffeeQualityStatus; moisturePercent?: number; defects?: number; screen?: string; score?: number; notes?: string },
+    @Body() body: { qualityStatus: GreenCoffeeQualityStatus; moisturePercent?: number; defects?: number; screen?: string; score?: number; notes?: string; recommendedLine?: string; recommendedLineNotes?: string },
     @Req() req: Request,
   ) {
     const actor = await requireSession(req, this.auth);
@@ -128,10 +130,17 @@ export class ReceiptsController {
         (body.qualityStatus === GreenCoffeeQualityStatus.APPROVED || body.qualityStatus === GreenCoffeeQualityStatus.APPROVED_WITH_RESTRICTION)
       )
         throw new BadRequestException("A divergência precisa ser aprovada antes da liberação do lote.");
+      const allowedLines = new Set(["GOURMET", "CLASSICOS", "EPICOS", "RAROS"]);
+      if (body.recommendedLine && !allowedLines.has(body.recommendedLine))
+        throw new BadRequestException("Escolha uma indicação de linha válida.");
       const updated = await transaction.greenCoffeeReceipt.update({
         where: { id: sample.receiptId },
         data: { qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent, defects: body.defects, screen: body.screen, qualityNotes: body.notes },
       });
+      await transaction.$executeRawUnsafe(
+        `UPDATE "GreenCoffeeReceipt" SET "recommendedLine"=$2,"recommendedLineNotes"=$3 WHERE id=$1`,
+        sample.receiptId, body.recommendedLine ?? null, body.recommendedLineNotes ?? null,
+      );
       await transaction.greenCoffeeLabSample.update({
         where: { id: sample.id },
         data: { status: body.qualityStatus === GreenCoffeeQualityStatus.REJECTED ? "REJECTED" : "COMPLETED" },
@@ -141,7 +150,7 @@ export class ReceiptsController {
         data: { status: lotStatusFor(body.qualityStatus), qualityScore: body.score },
       });
       await transaction.industrialEvent.create({
-        data: { companyId: actor.companyId, coffeeLotId: sample.receipt.coffeeLotId, warehouseId: sample.receipt.warehouseId, type: EventType.QUALITY_TEST, metadata: { receiptId: sample.receiptId, sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, screen: body.screen ?? null, score: body.score ?? null, notes: body.notes ?? null, userId: actor.id, userName: actor.name } },
+        data: { companyId: actor.companyId, coffeeLotId: sample.receipt.coffeeLotId, warehouseId: sample.receipt.warehouseId, type: EventType.QUALITY_TEST, metadata: { receiptId: sample.receiptId, sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, screen: body.screen ?? null, score: body.score ?? null, notes: body.notes ?? null, recommendedLine: body.recommendedLine ?? null, recommendedLineNotes: body.recommendedLineNotes ?? null, userId: actor.id, userName: actor.name } },
       });
       await transaction.greenCoffeeAuditEvent.create({
         data: { companyId: actor.companyId, purchaseId: sample.receipt.purchaseId, receiptId: sample.receiptId, action: "LAB_ANALYSIS_COMPLETED", actorId: actor.id, actorName: actor.name, metadata: { sampleId: sample.id, qualityStatus: body.qualityStatus, moisturePercent: body.moisturePercent ?? null, defects: body.defects ?? null, score: body.score ?? null, screen: body.screen ?? null, notes: body.notes ?? null } },
@@ -161,7 +170,7 @@ export class ReceiptsController {
         orderBy: { name: "asc" },
       }),
       this.database.warehouse.findMany({
-        where: { companyId: company.id },
+        where: { companyId: company.id, type: "GREEN_COFFEE" },
         orderBy: { name: "asc" },
       }),
       this.database.user.findMany({
@@ -169,22 +178,25 @@ export class ReceiptsController {
         select: { id: true, name: true, role: true },
         orderBy: { name: "asc" },
       }),
-      this.database.greenCoffeePurchase.findMany({
-        where: {
-          companyId: company.id,
-          status: { in: ["CONFIRMED", "PARTIALLY_RECEIVED"] },
-          approvalStatus: "APPROVED",
-          externalAcceptanceStatus: "ACCEPTED",
-          operationalStatus: {
-            in: ["AWAITING_DELIVERY", "PARTIALLY_RECEIVED"],
-          },
-        },
+      this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT DISTINCT p.id
+           FROM "GreenCoffeePurchase" p
+           LEFT JOIN "FiscalDocumentAllocation" a ON a."purchaseId"=p.id
+           LEFT JOIN "FiscalDocument" f ON f.id=a."fiscalDocumentId"
+          WHERE p."companyId"=$1
+            AND p.status IN ('CONFIRMED','PARTIALLY_RECEIVED')
+            AND p."approvalStatus"='APPROVED'
+            AND p."operationalStatus" IN ('AWAITING_DELIVERY','PARTIALLY_RECEIVED')
+            AND (p."externalAcceptanceStatus"='ACCEPTED' OR f."matchStatus"='MATCHED')`,
+        company.id,
+      ).then(async (eligible) => this.database.greenCoffeePurchase.findMany({
+        where: { id: { in: eligible.map((row) => row.id) } },
         include: {
           supplier: true,
           receipts: { select: { netWeightKg: true } },
         },
         orderBy: { purchasedAt: "desc" },
-      }),
+      })),
     ]);
     const eligiblePurchases = purchases
       .map((purchase) => {
@@ -285,7 +297,7 @@ export class ReceiptsController {
       };
     return this.database.$transaction(
       async (transaction) => {
-        const [supplier, warehouse, purchase] = await Promise.all([
+        const [supplier, warehouse, purchase, fiscalDocuments] = await Promise.all([
           transaction.supplier.findFirst({
             where: { id: body.supplierId, companyId: body.companyId },
           }),
@@ -296,6 +308,18 @@ export class ReceiptsController {
             where: { id: body.purchaseId, companyId: body.companyId },
             include: { receipts: { select: { netWeightKg: true } }, professionalSample: true },
           }),
+          body.fiscalDocumentId
+            ? transaction.$queryRawUnsafe<any[]>(
+                `SELECT f.id,f.status,f."supplierId",f.number,f."accessKey",a."purchaseId"
+                   FROM "FiscalDocument" f
+                   LEFT JOIN "FiscalDocumentAllocation" a ON a."fiscalDocumentId"=f.id AND a."purchaseId"=$3 AND a."allocationType"='GREEN_COFFEE_PURCHASE'
+                  WHERE f.id=$1 AND f."companyId"=$2 AND f.direction='INBOUND'
+                  LIMIT 1`,
+                body.fiscalDocumentId,
+                body.companyId,
+                body.purchaseId,
+              )
+            : Promise.resolve([]),
         ]);
         if (
           !supplier ||
@@ -308,8 +332,33 @@ export class ReceiptsController {
           );
         if (purchase.approvalStatus !== "APPROVED")
           throw new BadRequestException("A compra precisa estar aprovada internamente.");
-        if (purchase.externalAcceptanceStatus !== "ACCEPTED")
-          throw new BadRequestException("O aceite externo do fornecedor é necessário antes do recebimento.");
+        const fiscalDocument = fiscalDocuments[0];
+        const matchedFiscalPurchase = await transaction.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT f.id
+             FROM "FiscalDocument" f
+             JOIN "FiscalDocumentAllocation" a ON a."fiscalDocumentId"=f.id
+            WHERE a."purchaseId"=$1
+              AND a."allocationType"='GREEN_COFFEE_PURCHASE'
+              AND f."companyId"=$2
+              AND f.direction='INBOUND'
+              AND f."matchStatus"='MATCHED'
+            LIMIT 1`,
+          body.purchaseId,
+          body.companyId,
+        );
+        if (
+          purchase.externalAcceptanceStatus !== "ACCEPTED" &&
+          matchedFiscalPurchase.length === 0
+        )
+          throw new BadRequestException("O aceite externo do fornecedor é necessário antes do recebimento quando não há NF-e fiscalmente vinculada à compra.");
+        if (body.fiscalDocumentId && !fiscalDocument)
+          throw new BadRequestException("A NF-e selecionada não pertence à empresa ativa.");
+        if (fiscalDocument && fiscalDocument.status !== "AUTHORIZED")
+          throw new BadRequestException("A NF-e selecionada ainda não possui XML autorizado.");
+        if (fiscalDocument?.supplierId && fiscalDocument.supplierId !== supplier.id)
+          throw new BadRequestException("A NF-e selecionada pertence a outro fornecedor.");
+        if (fiscalDocument && !fiscalDocument.purchaseId)
+          throw new BadRequestException("Concilie a NF-e com esta compra antes do recebimento físico.");
         const sequence =
           (await transaction.greenCoffeeReceipt.count({
             where: { companyId: body.companyId },
@@ -401,14 +450,14 @@ export class ReceiptsController {
             variety: body.variety,
             process: body.process,
             supplierLotCode: body.supplierLotCode,
-            invoiceNumber: body.invoiceNumber,
+            invoiceNumber: fiscalDocument?.number ?? body.invoiceNumber,
             transportDocument: body.transportDocument,
             purchaseOrderNumber: body.purchaseOrderNumber,
             notes: body.notes,
             unit: body.unit,
             bagQuantity: body.bagQuantity,
             bagWeightKg: body.bagWeightKg,
-            grossWeightKg: body.grossWeightKg,
+            grossWeightKg: body.grossWeightKg ?? body.netWeightKg,
             tareWeightKg: body.tareWeightKg ?? 0,
             netWeightKg: body.netWeightKg,
             moisturePercent: body.moisturePercent,
@@ -432,6 +481,31 @@ export class ReceiptsController {
         await transaction.greenCoffeeLabSample.create({
           data: { receiptId: receipt.id, sampleNumber },
         });
+        if (fiscalDocument) {
+          await transaction.$executeRawUnsafe(
+            `UPDATE "FiscalDocumentAllocation"
+                SET "receiptId"=$3,"updatedAt"=NOW()
+              WHERE "fiscalDocumentId"=$1 AND "purchaseId"=$2 AND "receiptId" IS NULL`,
+            fiscalDocument.id,
+            purchase.id,
+            receipt.id,
+          );
+          await transaction.$executeRawUnsafe(
+            `UPDATE "FiscalDocument"
+                SET "greenCoffeeReceiptId"=COALESCE("greenCoffeeReceiptId",$2),"updatedAt"=NOW()
+              WHERE id=$1`,
+            fiscalDocument.id,
+            receipt.id,
+          );
+          await transaction.$executeRawUnsafe(
+            `INSERT INTO "FiscalDocumentEvent" (id,"fiscalDocumentId",type,source,status,message,payload,"occurredAt")
+             VALUES ($1,$2,'PHYSICAL_RECEIPT','BBOS','LINKED',$3,$4::jsonb,NOW())`,
+            `fiscal-event-${crypto.randomUUID()}`,
+            fiscalDocument.id,
+            `NF-e vinculada ao recebimento ${receiptNumber}`,
+            JSON.stringify({ purchaseId: purchase.id, receiptId: receipt.id, receiptNumber, lotId: lot.id, lotCode }),
+          );
+        }
         if (purchase.professionalSample) {
           const professionalSequence =
             (await transaction.professionalCoffeeSample.count({ where: { companyId: body.companyId } })) + 1;
@@ -738,22 +812,29 @@ export class ReceiptsController {
     ];
     if (required.some((value) => !value))
       throw new BadRequestException("Preencha todos os campos obrigatórios.");
-    if (
-      !Number.isFinite(body.netWeightKg) ||
-      body.netWeightKg <= 0 ||
-      !Number.isFinite(body.grossWeightKg) ||
-      body.grossWeightKg <= 0
-    )
-      throw new BadRequestException("Os pesos devem ser maiores que zero.");
-    if (
-      (body.tareWeightKg ?? 0) < 0 ||
-      Math.abs(
-        body.grossWeightKg - (body.tareWeightKg ?? 0) - body.netWeightKg,
-      ) > 0.01
-    )
+    if (!Number.isFinite(body.netWeightKg) || body.netWeightKg <= 0)
+      throw new BadRequestException("O peso líquido deve ser maior que zero.");
+    if (body.weightEntryMode !== "DOCUMENTAL") {
+      if (!Number.isFinite(body.grossWeightKg) || Number(body.grossWeightKg) <= 0)
+        throw new BadRequestException("O peso bruto deve ser maior que zero.");
+      if (
+        (body.tareWeightKg ?? 0) < 0 ||
+        Math.abs(
+          Number(body.grossWeightKg) - (body.tareWeightKg ?? 0) - body.netWeightKg,
+        ) > 0.01
+      )
+        throw new BadRequestException(
+          "Peso líquido deve ser igual ao peso bruto menos a tara.",
+        );
+    } else if (
+      !body.volumeQuantity ||
+      !body.nominalWeightKg ||
+      Math.abs(body.volumeQuantity * body.nominalWeightKg - body.netWeightKg) > 0.01
+    ) {
       throw new BadRequestException(
-        "Peso líquido deve ser igual ao peso bruto menos a tara.",
+        "No peso documental, volumes × peso nominal devem corresponder ao peso líquido.",
       );
+    }
     if (
       body.unit === "BAG" &&
       (!body.bagQuantity ||

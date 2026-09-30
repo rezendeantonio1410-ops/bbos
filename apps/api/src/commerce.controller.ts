@@ -29,21 +29,50 @@ export class CommerceController {
 
   private requireManagement(actor: any) {
     if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) {
-      throw new UnauthorizedException("Alterações de preço são restritas à Gestão.");
+      throw new UnauthorizedException(
+        "Alterações comerciais são restritas à Gestão.",
+      );
     }
   }
 
   @Get("dashboard")
-  dashboard(@Query("companyId") companyId?: string) { return this.commerce.dashboard(companyId); }
+  async dashboard(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.commerce.dashboard(actor.companyId);
+  }
 
   @Get("channels")
-  channels(@Query("companyId") companyId?: string) { return this.commerce.listChannels(companyId); }
+  async channels(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.commerce.listChannels(actor.companyId);
+  }
+
+  @Get("multichannel")
+  async multichannel(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.commerce.multichannel(actor.companyId);
+  }
 
   @Post("channels")
-  async createChannel(@Req() request: any, @Body() body: Parameters<CommerceService["createChannel"]>[0]) {
+  async createChannel(
+    @Req() request: any,
+    @Body() body: Parameters<CommerceService["createChannel"]>[0],
+  ) {
     const actor = await this.actor(request);
     this.requireManagement(actor);
     return this.commerce.createChannel({ ...body, companyId: actor.companyId });
+  }
+
+  @Patch("channels/:id/connection")
+  async updateChannelConnection(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body()
+    body: Parameters<CommerceService["updateChannelConnection"]>[2],
+  ) {
+    const actor = await this.actor(request);
+    this.requireManagement(actor);
+    return this.commerce.updateChannelConnection(actor.companyId, id, body);
   }
 
   @Get("prices")
@@ -101,7 +130,8 @@ export class CommerceController {
   async updateInternalPrice(
     @Param("id") id: string,
     @Req() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       price?: number;
       maxRequestDiscountPercent?: number;
       maxApprovalDiscountPercent?: number;
@@ -119,46 +149,99 @@ export class CommerceController {
       actor.companyId,
     );
     const current = currentRows[0];
-    if (!current) throw new BadRequestException("Linha de preço não encontrada.");
+    if (!current)
+      throw new BadRequestException("Linha de preço não encontrada.");
 
-    const price = body.price === undefined ? Number(current.price) : Number(body.price);
-    const maxRequest = body.maxRequestDiscountPercent === undefined
-      ? Number(current.maxRequestDiscountPercent ?? 0)
-      : Number(body.maxRequestDiscountPercent);
-    const maxApproval = body.maxApprovalDiscountPercent === undefined
-      ? Number(current.maxApprovalDiscountPercent ?? 0)
-      : Number(body.maxApprovalDiscountPercent);
-    const minimumPrice = body.minimumPrice === undefined
-      ? (current.minimumPrice == null ? null : Number(current.minimumPrice))
-      : (body.minimumPrice == null ? null : Number(body.minimumPrice));
-    const minimumMargin = body.minimumMarginPercent === undefined
-      ? (current.minimumMarginPercent == null ? null : Number(current.minimumMarginPercent))
-      : (body.minimumMarginPercent == null ? null : Number(body.minimumMarginPercent));
-    const minimumRoi = body.minimumRoiPercent === undefined
-      ? (current.minimumRoiPercent == null ? null : Number(current.minimumRoiPercent))
-      : (body.minimumRoiPercent == null ? null : Number(body.minimumRoiPercent));
+    const price =
+      body.price === undefined ? Number(current.price) : Number(body.price);
+    const maxRequest =
+      body.maxRequestDiscountPercent === undefined
+        ? Number(current.maxRequestDiscountPercent ?? 0)
+        : Number(body.maxRequestDiscountPercent);
+    const maxApproval =
+      body.maxApprovalDiscountPercent === undefined
+        ? Number(current.maxApprovalDiscountPercent ?? 0)
+        : Number(body.maxApprovalDiscountPercent);
+    const minimumPrice =
+      body.minimumPrice === undefined
+        ? current.minimumPrice == null
+          ? null
+          : Number(current.minimumPrice)
+        : body.minimumPrice == null
+          ? null
+          : Number(body.minimumPrice);
+    const minimumMargin =
+      body.minimumMarginPercent === undefined
+        ? current.minimumMarginPercent == null
+          ? null
+          : Number(current.minimumMarginPercent)
+        : body.minimumMarginPercent == null
+          ? null
+          : Number(body.minimumMarginPercent);
+    const minimumRoi =
+      body.minimumRoiPercent === undefined
+        ? current.minimumRoiPercent == null
+          ? null
+          : Number(current.minimumRoiPercent)
+        : body.minimumRoiPercent == null
+          ? null
+          : Number(body.minimumRoiPercent);
 
-    if (!Number.isFinite(price) || price < 0) throw new BadRequestException("Preço inválido.");
-    if (!Number.isFinite(maxRequest) || maxRequest < 0 || maxRequest > 100) throw new BadRequestException("Limite de solicitação de desconto inválido.");
-    if (!Number.isFinite(maxApproval) || maxApproval < 0 || maxApproval > 100) throw new BadRequestException("Limite de aprovação de desconto inválido.");
-    if (maxApproval > maxRequest) throw new BadRequestException("O limite aprovável não pode ser maior que o limite máximo solicitável.");
-    if (minimumPrice !== null && (!Number.isFinite(minimumPrice) || minimumPrice < 0 || minimumPrice > price)) {
-      throw new BadRequestException("O preço mínimo deve estar entre zero e o preço oficial.");
+    if (!Number.isFinite(price) || price < 0)
+      throw new BadRequestException("Preço inválido.");
+    if (!Number.isFinite(maxRequest) || maxRequest < 0 || maxRequest > 100)
+      throw new BadRequestException(
+        "Limite de solicitação de desconto inválido.",
+      );
+    if (!Number.isFinite(maxApproval) || maxApproval < 0 || maxApproval > 100)
+      throw new BadRequestException(
+        "Limite de aprovação de desconto inválido.",
+      );
+    if (maxApproval > maxRequest)
+      throw new BadRequestException(
+        "O limite aprovável não pode ser maior que o limite máximo solicitável.",
+      );
+    if (
+      minimumPrice !== null &&
+      (!Number.isFinite(minimumPrice) ||
+        minimumPrice < 0 ||
+        minimumPrice > price)
+    ) {
+      throw new BadRequestException(
+        "O preço mínimo deve estar entre zero e o preço oficial.",
+      );
     }
-    if (minimumMargin !== null && (!Number.isFinite(minimumMargin) || minimumMargin < 0 || minimumMargin > 100)) {
+    if (
+      minimumMargin !== null &&
+      (!Number.isFinite(minimumMargin) ||
+        minimumMargin < 0 ||
+        minimumMargin > 100)
+    ) {
       throw new BadRequestException("Margem mínima inválida.");
     }
-    if (minimumRoi !== null && (!Number.isFinite(minimumRoi) || minimumRoi < 0)) {
+    if (
+      minimumRoi !== null &&
+      (!Number.isFinite(minimumRoi) || minimumRoi < 0)
+    ) {
       throw new BadRequestException("ROI mínimo inválido.");
     }
 
     const beforeSnapshot = {
       price: Number(current.price),
       maxRequestDiscountPercent: Number(current.maxRequestDiscountPercent ?? 0),
-      maxApprovalDiscountPercent: Number(current.maxApprovalDiscountPercent ?? 0),
-      minimumPrice: current.minimumPrice == null ? null : Number(current.minimumPrice),
-      minimumMarginPercent: current.minimumMarginPercent == null ? null : Number(current.minimumMarginPercent),
-      minimumRoiPercent: current.minimumRoiPercent == null ? null : Number(current.minimumRoiPercent),
+      maxApprovalDiscountPercent: Number(
+        current.maxApprovalDiscountPercent ?? 0,
+      ),
+      minimumPrice:
+        current.minimumPrice == null ? null : Number(current.minimumPrice),
+      minimumMarginPercent:
+        current.minimumMarginPercent == null
+          ? null
+          : Number(current.minimumMarginPercent),
+      minimumRoiPercent:
+        current.minimumRoiPercent == null
+          ? null
+          : Number(current.minimumRoiPercent),
     };
     const afterSnapshot = {
       price,

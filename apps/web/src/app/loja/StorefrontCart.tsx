@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import {
+  CSSProperties,
   createContext,
   FormEvent,
   ReactNode,
@@ -30,9 +31,10 @@ export type StoreProduct = {
   weightGrams: number;
   image?: string | null;
   story?: StoreProductStory;
+  preferredGrind?: Grind;
 };
 type Item = StoreProduct & { quantity: number };
-type Grind = "Grãos" | "Espresso" | "Coado" | "Prensa francesa";
+export type Grind = "Grãos" | "Espresso" | "Coado" | "Prensa francesa";
 type CartItem = Item & { grind?: Grind };
 type Quote = {
   id: string;
@@ -105,6 +107,60 @@ const cartProductStories: Record<string, StoreProductStory> = {
   },
 };
 
+const cartRecommendationProducts: Record<string, StoreProduct> = {
+  essencial: {
+    id: "essencial",
+    name: "Essencial",
+    line: "GOURMET",
+    notes: "Macio · Doce · Fácil",
+    priceCents: 5200,
+    weightGrams: 500,
+    image: "/brand/products/essencial-treated.webp",
+    story: cartProductStories.essencial,
+  },
+  caramelo: {
+    id: "caramelo",
+    name: "Caramelo",
+    line: "CLÁSSICOS",
+    notes: "Caramelo · Chocolate · Equilíbrio",
+    priceCents: 6800,
+    weightGrams: 500,
+    image: "/brand/products/caramelo-treated.webp",
+    story: cartProductStories.caramelo,
+  },
+  singular: {
+    id: "singular",
+    name: "Singular",
+    line: "ÉPICOS",
+    notes: "Frutado · Complexo · Evolutivo",
+    priceCents: 8400,
+    weightGrams: 500,
+    image: "/brand/products/singular-treated.webp",
+    story: cartProductStories.singular,
+  },
+  sublime: {
+    id: "sublime",
+    name: "Sublime",
+    line: "ÉPICOS",
+    notes: "Rapadura · Caramelo · Doçura profunda",
+    priceCents: 8400,
+    weightGrams: 500,
+    image: "/brand/products/sublime-treated.webp",
+    story: cartProductStories.sublime,
+  },
+};
+
+const cartRecommendationOrder: Record<string, string[]> = {
+  essencial: ["caramelo", "singular", "sublime"],
+  intenso: ["caramelo", "singular", "essencial"],
+  caramelo: ["essencial", "sublime", "singular"],
+  "doce-de-leite": ["singular", "essencial", "sublime"],
+  tangerina: ["caramelo", "sublime", "essencial"],
+  singular: ["caramelo", "essencial", "sublime"],
+  sublime: ["essencial", "caramelo", "singular"],
+  raros: ["caramelo", "essencial", "sublime"],
+};
+
 function CartItemStory({ item }: { item: CartItem }) {
   const story = item.story ?? cartProductStories[item.id];
   if (!story) return null;
@@ -132,7 +188,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"now" | "return">("now");
+  const [mode, setMode] = useState<"now" | "reminder">("now");
   const [rhythm, setRhythm] = useState(30);
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; discountCents: number } | null>(null);
@@ -142,6 +198,10 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       setItems(JSON.parse(localStorage.getItem("bispo-cart-v2") || "[]"));
+      if (localStorage.getItem("bispo-open-cart") === "1") {
+        localStorage.removeItem("bispo-open-cart");
+        setVisible(true);
+      }
     } catch {}
   }, []);
   useEffect(() => {
@@ -163,6 +223,20 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   );
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const remaining = Math.max(0, 27000 - subtotal);
+  const currentItemIds = new Set(items.map((item) => item.id));
+  const primaryItemId = items[0]?.id;
+  const recommendationIds = [
+    ...(primaryItemId ? (cartRecommendationOrder[primaryItemId] ?? []) : []),
+    "caramelo",
+    "essencial",
+    "singular",
+    "sublime",
+  ];
+  const recommendations = [...new Set(recommendationIds)]
+    .filter((id) => !currentItemIds.has(id))
+    .map((id) => cartRecommendationProducts[id])
+    .filter((product): product is StoreProduct => Boolean(product))
+    .slice(0, 2);
   const add = (product: StoreProduct) => {
     setItems((current) => {
       const found = current.find((item) => item.id === product.id);
@@ -172,7 +246,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
               ? { ...item, quantity: item.quantity + 1 }
               : item,
           )
-        : [...current, { ...product, quantity: 1 }];
+        : [...current, { ...product, grind: product.preferredGrind, quantity: 1 }];
     });
     setQuote(null);
     setQuotes([]);
@@ -351,14 +425,14 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                       <div className={styles.qty}>
                         <button
                           onClick={() => quantity(item.id, item.quantity - 1)}
-                          aria-label="Diminuir"
+                          aria-label={`Diminuir quantidade de ${item.name}`}
                         >
                           <Minus />
                         </button>
                         <span>{item.quantity}</span>
                         <button
                           onClick={() => quantity(item.id, item.quantity + 1)}
-                          aria-label="Aumentar"
+                          aria-label={`Aumentar quantidade de ${item.name}`}
                         >
                           <Plus />
                         </button>
@@ -366,40 +440,87 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                       <CartItemStory item={item} />
                     </article>
                   ))}
+                  {recommendations.length > 0 && (
+                    <section className={styles.recommendations}>
+                      <div className={styles.recommendationIntro}>
+                        <small>COMPLETE SUA SELEÇÃO</small>
+                        <h3>Dois perfis, mais possibilidades.</h3>
+                        <p>
+                          Acrescente uma xícara diferente para provar lado a
+                          lado ou alternar ao longo da semana.
+                        </p>
+                      </div>
+                      <div className={styles.recommendationGrid}>
+                        {recommendations.map((product) => (
+                          <button
+                            type="button"
+                            key={product.id}
+                            className={styles.recommendation}
+                            onClick={() => add(product)}
+                            aria-label={`Adicionar café ${product.name} à sacola por ${money(product.priceCents)}`}
+                          >
+                            <span className={styles.recommendationPhoto}>
+                              {product.image ? (
+                                <Image
+                                  src={product.image}
+                                  alt=""
+                                  width={52}
+                                  height={62}
+                                />
+                              ) : (
+                                <span>BISPO</span>
+                              )}
+                            </span>
+                            <span className={styles.recommendationCopy}>
+                              <small>{product.line}</small>
+                              <b>{product.name}</b>
+                              <em>{product.notes}</em>
+                            </span>
+                            <strong>
+                              + {money(product.priceCents)}
+                            </strong>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                   <section className={styles.bispo}>
-                    <small>LEITURA DO BISPO</small>
+                    <small>CURADORIA BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
                       <Check /> Escolhido por José e Suzi, da origem à xícara.
                     </p>
                   </section>
                   <section className={styles.choice}>
-                    <small>SUA EXPERIÊNCIA</small>
-                    <h3>Uma vez — ou no seu ritmo.</h3>
+                    <small>SUA PRÓXIMA ESCOLHA</small>
+                    <h3>Uma compra agora. A próxima, quando você quiser.</h3>
                     <div>
                       <button
                         className={mode === "now" ? styles.active : ""}
                         onClick={() => setMode("now")}
                       >
-                        Comprar uma vez
+                        Somente esta compra
                       </button>
                       <button
-                        className={mode === "return" ? styles.active : ""}
-                        onClick={() => setMode("return")}
+                        className={mode === "reminder" ? styles.active : ""}
+                        onClick={() => setMode("reminder")}
                       >
                         Receber regularmente
                       </button>
                     </div>
-                    {mode === "return" && (
+                    {mode === "reminder" && (
                       <div className={styles.rhythm}>
-                        <p>O Bispo mantém o perfil. Você escolhe o ritmo.</p>
+                        <p>
+                          Escolha um intervalo de referência. Nada será cobrado
+                          ou enviado automaticamente.
+                        </p>
                         {[15, 30, 45].map((days) => (
                           <button
                             className={rhythm === days ? styles.active : ""}
                             key={days}
                             onClick={() => setRhythm(days)}
                           >
-                            A cada {days} dias
+                            Em {days} dias
                           </button>
                         ))}
                       </div>
@@ -513,15 +634,19 @@ function useCart() {
 export function AddToCartButton({
   product,
   className,
+  style,
   children,
+  disabled = false,
 }: {
   product: StoreProduct;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   const cart = useCart();
   return (
-    <button className={className} onClick={() => cart.add(product)}>
+    <button className={className} style={style} disabled={disabled} onClick={() => cart.add(product)}>
       {children}
     </button>
   );

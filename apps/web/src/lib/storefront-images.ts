@@ -21,7 +21,7 @@ export async function loadStorefrontImages(): Promise<StorefrontImageSelection> 
   try {
     const api = getApiBaseUrl();
     const response = await fetch(`${api}/storefront/catalog/images`, {
-      cache: "no-store",
+      next: { revalidate: 300 },
     });
     if (!response.ok) return {};
     const products = (await response.json()) as PublicProductImages[];

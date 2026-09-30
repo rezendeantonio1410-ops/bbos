@@ -9,7 +9,7 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 import { Public } from "./auth.guard";
@@ -17,7 +17,7 @@ import { StorefrontCouponsService } from "./storefront-coupons.service";
 
 @Controller("storefront/coupons")
 export class StorefrontCouponsController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   constructor(
     private readonly auth: AuthService,
     private readonly coupons: StorefrontCouponsService,

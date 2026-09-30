@@ -51,6 +51,21 @@ type Channel = {
   currency?: string | null;
   active: boolean;
 };
+type ChannelPerformance = Channel & {
+  platformCode?: string | null;
+  connectionStatus: string;
+  externalAccountId?: string | null;
+  commissionPercent?: number | null;
+  fixedFee?: number | null;
+  fulfillmentMode?: string | null;
+  lastSyncedAt?: string | null;
+  orders: number;
+  pending: number;
+  grossRevenue: number;
+  fees: number;
+  freight: number;
+  netRevenue: number;
+};
 type PriceRow = {
   id: string;
   productVariantId: string;
@@ -110,15 +125,27 @@ const emptyDraft = (): PriceDraft => ({
 export default function CommercePage() {
   const [data, setData] = React.useState<Dashboard | null>(null);
   const [channels, setChannels] = React.useState<Channel[]>([]);
+  const [channelPerformance, setChannelPerformance] = React.useState<
+    ChannelPerformance[]
+  >([]);
   const [prices, setPrices] = React.useState<PriceRow[]>([]);
   const [drafts, setDrafts] = React.useState<Record<string, PriceDraft>>({});
   const [channelFilter, setChannelFilter] = React.useState("ALL");
   const [saving, setSaving] = React.useState("");
   const [message, setMessage] = React.useState("");
+  const [loadStatus, setLoadStatus] = React.useState<
+    "loading" | "ready" | "error"
+  >("loading");
 
   const load = React.useCallback(async () => {
-    const [dashboardResponse, channelsResponse, pricesResponse] =
-      await Promise.all([
+    setLoadStatus("loading");
+    try {
+      const [
+        dashboardResponse,
+        channelsResponse,
+        multichannelResponse,
+        pricesResponse,
+      ] = await Promise.all([
         fetch(`${API}/commerce/dashboard`, {
           credentials: "include",
           cache: "no-store",
@@ -127,17 +154,39 @@ export default function CommercePage() {
           credentials: "include",
           cache: "no-store",
         }),
+        fetch(`${API}/commerce/multichannel`, {
+          credentials: "include",
+          cache: "no-store",
+        }),
         fetch(`${API}/commerce/prices`, {
           credentials: "include",
           cache: "no-store",
         }),
       ]);
-    if (dashboardResponse.ok) setData(await dashboardResponse.json());
-    if (channelsResponse.ok) setChannels(await channelsResponse.json());
-    if (pricesResponse.ok) {
-      const rows: PriceRow[] = await pricesResponse.json();
+      if (
+        !dashboardResponse.ok ||
+        !channelsResponse.ok ||
+        !multichannelResponse.ok ||
+        !pricesResponse.ok
+      ) {
+        throw new Error("commerce-unavailable");
+      }
+      const [nextData, nextChannels, nextPerformance, rows] = await Promise.all(
+        [
+          dashboardResponse.json() as Promise<Dashboard>,
+          channelsResponse.json() as Promise<Channel[]>,
+          multichannelResponse.json() as Promise<ChannelPerformance[]>,
+          pricesResponse.json() as Promise<PriceRow[]>,
+        ],
+      );
+      setData(nextData);
+      setChannels(nextChannels);
+      setChannelPerformance(nextPerformance);
       setPrices(rows);
       setDrafts(Object.fromEntries(rows.map((row) => [row.id, toDraft(row)])));
+      setLoadStatus("ready");
+    } catch {
+      setLoadStatus("error");
     }
   }, []);
 
@@ -155,6 +204,10 @@ export default function CommercePage() {
     channelFilter === "ALL"
       ? prices
       : prices.filter((row) => row.salesChannelId === channelFilter);
+  const connectedChannels = channelPerformance.filter(
+    (channel) => channel.connectionStatus === "CONNECTED",
+  ).length;
+  const available = loadStatus === "ready";
 
   const updateDraft = (id: string, field: keyof PriceDraft, value: string) => {
     setDrafts((current) => {
@@ -168,35 +221,42 @@ export default function CommercePage() {
     if (!draft) return;
     setSaving(row.id);
     setMessage("");
-    const response = await fetch(`${API}/commerce/prices/${row.id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        price: numberOrZero(draft.price),
-        maxRequestDiscountPercent: numberOrZero(
-          draft.maxRequestDiscountPercent,
-        ),
-        maxApprovalDiscountPercent: numberOrZero(
-          draft.maxApprovalDiscountPercent,
-        ),
-        minimumPrice: nullableNumber(draft.minimumPrice),
-        minimumMarginPercent: nullableNumber(draft.minimumMarginPercent),
-        minimumRoiPercent: nullableNumber(draft.minimumRoiPercent),
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok)
+    try {
+      const response = await fetch(`${API}/commerce/prices/${row.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          price: numberOrZero(draft.price),
+          maxRequestDiscountPercent: numberOrZero(
+            draft.maxRequestDiscountPercent,
+          ),
+          maxApprovalDiscountPercent: numberOrZero(
+            draft.maxApprovalDiscountPercent,
+          ),
+          minimumPrice: nullableNumber(draft.minimumPrice),
+          minimumMarginPercent: nullableNumber(draft.minimumMarginPercent),
+          minimumRoiPercent: nullableNumber(draft.minimumRoiPercent),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(
+          payload.message ?? "Não foi possível atualizar a política comercial.",
+        );
+      } else {
+        setMessage(
+          `${row.productName} · ${presentation(row.netWeightGrams)} atualizado.`,
+        );
+        await load();
+      }
+    } catch {
       setMessage(
-        payload.message ?? "Não foi possível atualizar a política comercial.",
+        "Conexão indisponível. A política comercial não foi alterada.",
       );
-    else {
-      setMessage(
-        `${row.productName} · ${presentation(row.netWeightGrams)} atualizado.`,
-      );
-      await load();
+    } finally {
+      setSaving("");
     }
-    setSaving("");
   };
 
   return (
@@ -214,6 +274,12 @@ export default function CommercePage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Link
+            href="/commerce/marketplaces"
+            className="rounded-xl bg-[#14201D] px-4 py-2.5 text-xs font-bold text-white"
+          >
+            Gestão de marketplaces
+          </Link>
+          <Link
             href="/commerce/parceiros"
             className="rounded-xl border border-[#087568] px-4 py-2.5 text-xs font-bold text-[#087568]"
           >
@@ -225,24 +291,52 @@ export default function CommercePage() {
           >
             Cupons e comissões
           </Link>
-          <Badge tone={value.isDemo ? "warning" : "success"}>
-            {value.isDemo ? "Sem canal e-commerce" : "Dados reais do canal"}
+          <Badge tone={available && connectedChannels ? "success" : "warning"}>
+            {loadStatus === "loading"
+              ? "Carregando canais"
+              : loadStatus === "error"
+                ? "Dados indisponíveis"
+                : `${connectedChannels} de ${channelPerformance.length} canais conectados`}
           </Badge>
         </div>
       </header>
+      {loadStatus === "error" && (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-xs text-amber-900">
+          <strong>Commerce temporariamente indisponível.</strong> O BBOS não
+          substituiu a falha por vendas, pedidos ou preços zerados.
+          <button
+            onClick={() => void load()}
+            className="ml-3 rounded-lg border border-amber-300 px-3 py-1.5 font-bold"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
       {message && (
         <div className="mt-5 rounded-xl border border-[#DDE7E4] bg-[#F4F8F7] px-4 py-3 text-xs font-semibold text-[#205C53]">
           {message}
         </div>
       )}
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Metric label="Vendas online" value={brl.format(value.vendasOnline)} />
-        <Metric label="Pedidos online" value={String(value.pedidosOnline)} />
-        <Metric label="Ticket médio" value={brl.format(value.ticketMedio)} />
-        <Metric label="Clientes" value={String(value.clientes)} />
+        <Metric
+          label="Vendas online"
+          value={available ? brl.format(value.vendasOnline) : "—"}
+        />
+        <Metric
+          label="Pedidos online"
+          value={available ? String(value.pedidosOnline) : "—"}
+        />
+        <Metric
+          label="Ticket médio"
+          value={available ? brl.format(value.ticketMedio) : "—"}
+        />
+        <Metric
+          label="Clientes"
+          value={available ? String(value.clientes) : "—"}
+        />
         <Metric
           label="Pedidos pendentes"
-          value={String(value.pedidosPendentes)}
+          value={available ? String(value.pedidosPendentes) : "—"}
         />
       </div>
 
@@ -356,7 +450,9 @@ export default function CommercePage() {
               })}
               {!visiblePrices.length && (
                 <div className="py-10 text-center text-xs text-[#7A8381]">
-                  Nenhuma linha de preço cadastrada para este filtro.
+                  {available
+                    ? "Nenhuma linha de preço cadastrada para este filtro."
+                    : "Tabela de preços indisponível no momento."}
                 </div>
               )}
             </div>
@@ -381,33 +477,44 @@ export default function CommercePage() {
                 Vendas nos últimos 30 dias
               </h2>
             </div>
-            <Badge tone="neutral">{value.pedidosUltimos30Dias} pedidos</Badge>
+            <Badge tone="neutral">
+              {available ? `${value.pedidosUltimos30Dias} pedidos` : "—"}
+            </Badge>
           </div>
           <div className="mt-4 flex flex-wrap gap-6">
             <Metric
               label="Vendas"
-              value={brl.format(value.vendasUltimos30Dias)}
+              value={available ? brl.format(value.vendasUltimos30Dias) : "—"}
             />
             <Metric
               label="Ticket médio"
-              value={brl.format(value.ticketMedio30Dias)}
+              value={available ? brl.format(value.ticketMedio30Dias) : "—"}
             />
             <Metric
               label="Período anterior"
               value={
-                variation === null
-                  ? "Sem histórico"
-                  : `${variation >= 0 ? "+" : ""}${variation.toFixed(1)}%`
+                !available
+                  ? "—"
+                  : variation === null
+                    ? "Sem histórico"
+                    : `${variation >= 0 ? "+" : ""}${variation.toFixed(1)}%`
               }
             />
           </div>
-          {value.historicoVendas.some((point) => point.value > 0) ? (
+          {available &&
+          value.historicoVendas.some((point) => point.value > 0) ? (
             <SalesChart points={value.historicoVendas} />
           ) : (
-            <EmptyState text="Ainda não há histórico suficiente de vendas online para exibir evolução." />
+            <EmptyState
+              text={
+                available
+                  ? "Ainda não há histórico suficiente de vendas online para exibir evolução."
+                  : "Histórico de vendas indisponível no momento."
+              }
+            />
           )}
         </Card>
-        <Attention items={value.atencao} />
+        <Attention items={available ? value.atencao : null} />
       </section>
       <section className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
         <Card className="p-5">
@@ -422,7 +529,7 @@ export default function CommercePage() {
               Catálogo <ArrowRight className="inline" size={13} />
             </Link>
           </div>
-          {value.produtosMaisVendidos.length ? (
+          {available && value.produtosMaisVendidos.length ? (
             <div className="mt-4 space-y-3">
               {value.produtosMaisVendidos.map((item, index) => (
                 <Link
@@ -461,7 +568,13 @@ export default function CommercePage() {
               ))}
             </div>
           ) : (
-            <EmptyState text="Os produtos aparecerão aqui quando houver pedidos online faturados." />
+            <EmptyState
+              text={
+                available
+                  ? "Os produtos aparecerão aqui quando houver pedidos online faturados."
+                  : "Desempenho dos produtos indisponível no momento."
+              }
+            />
           )}
         </Card>
         <Card className="p-5">
@@ -491,39 +604,89 @@ export default function CommercePage() {
           </div>
         </Card>
       </section>
-      <section className="mt-5">
+      <section className="mt-6 rounded-2xl border border-[#E7E7E3] bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#087568]">
-              Canais
+              Operação multicanal
             </p>
-            <h2 className="mt-1 text-lg font-bold">Canais de venda</h2>
+            <h2 className="mt-1 text-lg font-bold">
+              Loja e marketplaces em uma só gestão
+            </h2>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-[#626B69]">
+              Cada canal mantém seu pedido e suas tarifas de origem. O BBOS
+              consolida estoque, separação, nota fiscal, frete e valor líquido a
+              receber.
+            </p>
           </div>
           <Link href="/pedidos" className="text-xs font-bold text-[#087568]">
             Ver pedidos <ArrowRight className="inline" size={13} />
           </Link>
         </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          {channels.length ? (
-            channels.map((channel) => (
-              <Link href="/pedidos" key={channel.id}>
-                <Card className="flex items-center gap-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {available && channelPerformance.length ? (
+            channelPerformance.map((channel) => (
+              <Card key={channel.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
                   <span className="grid size-9 place-items-center rounded-full bg-[#F0F0ED] text-[#087568]">
                     <ShoppingBag size={16} />
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold">{channel.name}</p>
-                    <p className="text-[10px] text-[#7A8381]">
-                      {channel.type} · {channel.currency ?? "moeda da conta"}
-                    </p>
-                  </div>
-                  <ArrowRight size={13} className="text-[#7A8381]" />
-                </Card>
-              </Link>
+                  <Badge tone={connectionTone(channel.connectionStatus)}>
+                    {connectionLabel(channel.connectionStatus)}
+                  </Badge>
+                </div>
+                <p className="mt-4 truncate text-sm font-bold">
+                  {channel.name}
+                </p>
+                <p className="mt-1 text-[10px] text-[#7A8381]">
+                  {channel.fulfillmentMode === "MARKETPLACE"
+                    ? "Logística do canal"
+                    : "Expedição pela Bispo"}
+                  {channel.lastSyncedAt
+                    ? ` · sincronizado ${shortDate(channel.lastSyncedAt)}`
+                    : " · sem sincronização"}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[#F7F8F6] p-3">
+                  <ChannelMetric
+                    label="Pedidos"
+                    value={String(channel.orders)}
+                  />
+                  <ChannelMetric
+                    label="Pendentes"
+                    value={String(channel.pending)}
+                  />
+                  <ChannelMetric
+                    label="Venda bruta"
+                    value={brl.format(channel.grossRevenue)}
+                  />
+                  <ChannelMetric
+                    label="Líquido"
+                    value={brl.format(channel.netRevenue)}
+                  />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[10px] text-[#626B69]">
+                  <span>Taxas {brl.format(channel.fees)}</span>
+                  <span>Frete {brl.format(channel.freight)}</span>
+                </div>
+                {channel.connectionStatus === "CONNECTED" ? (
+                  <Link
+                    href="/pedidos"
+                    className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#087568]"
+                  >
+                    Ver pedidos <ArrowRight size={13} />
+                  </Link>
+                ) : (
+                  <p className="mt-4 text-[10px] font-semibold text-[#8A6424]">
+                    Conector preparado · credenciais pendentes
+                  </p>
+                )}
+              </Card>
             ))
           ) : (
             <Card className="p-4 text-xs text-[#7A8381]">
-              Nenhum canal ativo cadastrado.
+              {available
+                ? "Nenhum canal ativo cadastrado."
+                : "Canais indisponíveis no momento."}
             </Card>
           )}
         </div>
@@ -587,7 +750,7 @@ function PriceInput({
     </label>
   );
 }
-function Attention({ items }: { items: Dashboard["atencao"] }) {
+function Attention({ items }: { items: Dashboard["atencao"] | null }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
@@ -601,7 +764,9 @@ function Attention({ items }: { items: Dashboard["atencao"] }) {
           </h2>
         </div>
       </div>
-      {items.length ? (
+      {items === null ? (
+        <EmptyState text="Fila operacional indisponível no momento." />
+      ) : items.length ? (
         <div className="mt-4 divide-y divide-[#E7E7E3]">
           {items.map((item) => (
             <Link
@@ -688,4 +853,39 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-lg font-bold">{value}</p>
     </div>
   );
+}
+
+function ChannelMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-semibold text-[#7A8381]">{label}</p>
+      <p className="mt-1 truncate text-xs font-bold">{value}</p>
+    </div>
+  );
+}
+
+function connectionTone(
+  status: string,
+): "neutral" | "success" | "warning" | "danger" {
+  if (status === "CONNECTED") return "success";
+  if (status === "ERROR") return "danger";
+  if (status === "PENDING") return "warning";
+  return "neutral";
+}
+
+function connectionLabel(status: string) {
+  if (status === "CONNECTED") return "Conectado";
+  if (status === "ERROR") return "Atenção";
+  if (status === "PENDING") return "Conectando";
+  if (status === "PAUSED") return "Pausado";
+  return "Preparado";
+}
+
+function shortDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }

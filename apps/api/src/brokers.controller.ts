@@ -10,12 +10,12 @@ import {
   Post,
   Req,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
 
 @Controller("brokers")
 export class BrokersController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 

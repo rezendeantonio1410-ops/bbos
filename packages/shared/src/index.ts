@@ -299,6 +299,12 @@ export type SupplyAlert = {
 
 export type IndustrialDashboard = {
   updatedAt: string;
+  inventory: {
+    greenAvailableKg: number;
+    greenReservedKg: number;
+    greenStockValue: number;
+    finishedGoodsUnits: number;
+  };
   metrics: IndustrialMetric[];
   goals: ProductionGoal[];
   capacity: {

@@ -15,7 +15,7 @@ import {
   EventType,
   FinishedGoodsMovementType,
   Prisma,
-  PrismaClient,
+  prisma,
 } from "@bbos/database";
 import {
   calculateFinishedGoodsBalance,
@@ -59,7 +59,7 @@ const movementEventType: Record<InventoryMovementType, EventType> = {
 
 @Controller("inventory")
 export class InventoryController implements OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   constructor(private readonly auth: AuthService) {}
 
   onModuleDestroy() {

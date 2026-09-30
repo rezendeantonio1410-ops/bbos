@@ -1,0 +1,285 @@
+.footer {
+  grid-template-columns: 1.4fr .7fr .7fr .9fr;
+  border-top: 1px solid rgb(13 29 23 / 8%);
+}
+
+.buyRow button:disabled {
+  background: #d8d2c8;
+  color: #615e58;
+  cursor: not-allowed;
+}
+
+.conversionShelf {
+  padding: clamp(58px, 7vw, 96px) clamp(24px, 6vw, 96px) 0;
+  background: #fbfaf7;
+  color: #0d1d17;
+}
+
+.conversionIntro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, .7fr);
+  gap: 48px;
+  align-items: end;
+  margin-bottom: 32px;
+}
+
+.conversionIntro small,
+.featuredCopy > small {
+  display: block;
+  color: #735e49;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .18em;
+}
+
+.conversionIntro h2 {
+  max-width: 760px;
+  margin: 9px 0 0;
+  font: 440 clamp(30px, 4.2vw, 58px)/.98 var(--font-manrope);
+  letter-spacing: -.045em;
+}
+
+.conversionIntro p {
+  max-width: 430px;
+  margin: 0;
+  color: rgb(13 29 23 / 67%);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.featuredGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid rgb(13 29 23 / 11%);
+  background: #fff;
+}
+
+.featuredCard {
+  --featured-tone: #7b6147;
+  display: grid;
+  grid-template-columns: minmax(92px, .7fr) minmax(0, 1.3fr);
+  min-height: 270px;
+  overflow: hidden;
+  border-top: 3px solid var(--featured-tone);
+}
+
+.featuredCard + .featuredCard {
+  border-left: 1px solid rgb(13 29 23 / 11%);
+}
+
+.featuredVisual {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 24px 10px;
+  overflow: hidden;
+  background: #efede8;
+}
+
+.featuredVisual img {
+  width: 100%;
+  height: 210px;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 14px rgb(13 29 23 / 14%));
+  transition: transform .35s ease;
+}
+
+.featuredCard:hover .featuredVisual img {
+  transform: translateY(-4px);
+}
+
+.featuredVisual > span {
+  font-size: 12px;
+  letter-spacing: .24em;
+}
+
+.featuredCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 27px 24px;
+}
+
+.featuredCopy h3 {
+  margin: 7px 0 4px;
+  font: 470 clamp(24px, 2.2vw, 34px)/1 var(--font-manrope);
+  letter-spacing: -.035em;
+}
+
+.featuredCopy p {
+  min-height: 46px;
+  margin: 8px 0;
+  color: rgb(13 29 23 / 70%);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.featuredCopy > span {
+  color: rgb(13 29 23 / 55%);
+  font-size: 9px;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.featuredCopy > div {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.featuredCopy strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.featuredCopy strong small {
+  color: rgb(13 29 23 / 55%);
+  font-size: 9px;
+  font-weight: 550;
+}
+
+.featuredCopy button {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #0d1d17;
+  border-radius: 0;
+  background: #0d1d17;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+
+.featuredCopy button:hover {
+  background: transparent;
+  color: #0d1d17;
+}
+
+.purchaseAssurances {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  border: solid rgb(13 29 23 / 11%);
+  border-width: 0 1px 1px;
+  background: #f4f1eb;
+}
+
+.purchaseAssurances > span {
+  display: grid;
+  gap: 3px;
+  min-height: 64px;
+  align-content: center;
+  padding: 0 20px;
+  border-right: 1px solid rgb(13 29 23 / 9%);
+}
+
+.purchaseAssurances b {
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.purchaseAssurances small {
+  color: rgb(13 29 23 / 58%);
+  font-size: 9px;
+}
+
+.purchaseAssurances > a {
+  padding: 0 24px;
+  color: #0d1d17;
+  font-size: 10px;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 1050px) {
+  .featuredGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .featuredCard {
+    grid-template-columns: 200px 1fr;
+    min-height: 230px;
+  }
+
+  .featuredCard + .featuredCard {
+    border-left: 0;
+    border-top: 1px solid rgb(13 29 23 / 11%);
+    box-shadow: inset 0 3px var(--featured-tone);
+  }
+
+  .featuredVisual img {
+    height: 180px;
+  }
+
+  .purchaseAssurances {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .purchaseAssurances > a {
+    grid-column: 1 / -1;
+    padding: 16px 20px;
+    border-top: 1px solid rgb(13 29 23 / 9%);
+  }
+}
+
+@media (max-width: 600px) {
+  .footer { grid-template-columns: 1fr; }
+
+  .conversionShelf {
+    padding: 46px 18px 0;
+  }
+
+  .conversionIntro {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .conversionIntro h2 {
+    font-size: 34px;
+  }
+
+  .featuredCard {
+    grid-template-columns: 112px 1fr;
+    min-height: 230px;
+  }
+
+  .featuredVisual {
+    padding: 18px 5px;
+  }
+
+  .featuredVisual img {
+    height: 164px;
+  }
+
+  .featuredCopy {
+    padding: 22px 16px;
+  }
+
+  .featuredCopy h3 {
+    font-size: 25px;
+  }
+
+  .featuredCopy p {
+    min-height: 0;
+  }
+
+  .purchaseAssurances {
+    grid-template-columns: 1fr;
+  }
+
+  .purchaseAssurances > span {
+    min-height: 56px;
+    border-right: 0;
+    border-bottom: 1px solid rgb(13 29 23 / 9%);
+  }
+
+  .purchaseAssurances > a {
+    grid-column: auto;
+    border-top: 0;
+  }
+}

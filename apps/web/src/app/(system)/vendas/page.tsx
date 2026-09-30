@@ -65,8 +65,19 @@ export default function VendasPage() {
     void load();
   }, [load]);
 
-  const nextBestAction = data.overdueOrders > 0
+  const nextBestAction = state !== "ready"
     ? {
+        eyebrow: "Leitura operacional",
+        title: state === "loading" ? "Consolidando os dados comerciais" : "Dados comerciais indisponíveis",
+        text: state === "loading"
+          ? "O BBOS está confirmando pedidos e receita antes de recomendar uma ação."
+          : "Sem a fonte operacional, o BBOS não conclui que a carteira está livre de pendências. Tente reconectar os dados.",
+        href: "/pedidos",
+        action: state === "loading" ? "Ver pedidos" : "Abrir operação",
+        tone: "attention" as const,
+      }
+    : data.overdueOrders > 0
+      ? {
         eyebrow: "Prioridade comercial",
         title: `${data.overdueOrders} pedido${data.overdueOrders > 1 ? "s" : ""} atrasado${data.overdueOrders > 1 ? "s" : ""}`,
         text: "Resolva os pedidos em atraso antes de perseguir novas metas. O impacto mais próximo está no cliente e na expedição.",
@@ -74,8 +85,8 @@ export default function VendasPage() {
         action: "Revisar atrasos",
         tone: "attention" as const,
       }
-    : data.openOrders > 0
-      ? {
+      : data.openOrders > 0
+        ? {
           eyebrow: "Próxima melhor ação",
           title: "Acompanhar os pedidos em aberto",
           text: "Não há atraso registrado. O próximo passo é proteger o fluxo dos pedidos já assumidos antes de ampliar a carga comercial.",
@@ -83,7 +94,7 @@ export default function VendasPage() {
           action: "Abrir pedidos",
           tone: "normal" as const,
         }
-      : {
+        : {
           eyebrow: "Próxima melhor ação",
           title: "Nenhuma pendência comercial urgente",
           text: "O BBOS não encontrou pedidos abertos ou atrasados. Use a carteira de clientes para decidir a próxima ação comercial.",
@@ -128,10 +139,10 @@ export default function VendasPage() {
       )}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <TruthCard label="Vendas hoje" value={state === "loading" ? "Carregando…" : money.format(data.salesToday)} note="Receita registrada hoje" icon={CircleDollarSign} />
-        <TruthCard label="Vendas no mês" value={state === "loading" ? "Carregando…" : money.format(data.salesMonth)} note="Receita acumulada no mês" icon={CircleDollarSign} />
-        <TruthCard label="Pedidos em aberto" value={state === "loading" ? "—" : String(data.openOrders)} note="Pedidos ainda não concluídos" icon={ShoppingBag} />
-        <TruthCard label="Pedidos atrasados" value={state === "loading" ? "—" : String(data.overdueOrders)} note={data.overdueOrders > 0 ? "Exigem atenção comercial" : "Nenhum atraso registrado"} icon={Clock3} attention={data.overdueOrders > 0} />
+        <TruthCard label="Vendas hoje" value={state === "loading" ? "Carregando…" : state === "ready" ? money.format(data.salesToday) : "Indisponível"} note={state === "ready" ? "Receita registrada hoje" : "Aguardando fonte operacional"} icon={CircleDollarSign} />
+        <TruthCard label="Vendas no mês" value={state === "loading" ? "Carregando…" : state === "ready" ? money.format(data.salesMonth) : "Indisponível"} note={state === "ready" ? "Receita acumulada no mês" : "Aguardando fonte operacional"} icon={CircleDollarSign} />
+        <TruthCard label="Pedidos em aberto" value={state === "ready" ? String(data.openOrders) : "—"} note={state === "ready" ? "Pedidos ainda não concluídos" : "Aguardando fonte operacional"} icon={ShoppingBag} />
+        <TruthCard label="Pedidos atrasados" value={state === "ready" ? String(data.overdueOrders) : "—"} note={state === "ready" ? data.overdueOrders > 0 ? "Exigem atenção comercial" : "Nenhum atraso registrado" : "Aguardando fonte operacional"} icon={Clock3} attention={state === "ready" && data.overdueOrders > 0} />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
@@ -158,9 +169,9 @@ export default function VendasPage() {
             </div>
           </div>
           <div className="mt-5 space-y-3 text-xs text-[var(--bbos-text-secondary)]">
-            <DataStatus label="Receita hoje" ready />
-            <DataStatus label="Receita no mês" ready />
-            <DataStatus label="Pedidos abertos e atrasados" ready />
+            <DataStatus label="Receita hoje" ready={state === "ready"} />
+            <DataStatus label="Receita no mês" ready={state === "ready"} />
+            <DataStatus label="Pedidos abertos e atrasados" ready={state === "ready"} />
             <DataStatus label="Margem líquida" />
             <DataStatus label="Volume vendido por produto" />
             <DataStatus label="Meta, tendência e projeção de fechamento" />
