@@ -29,6 +29,7 @@ import { CommerceService } from "./commerce.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
+import { RoleAccessGuard } from "./role-access.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
@@ -161,6 +162,7 @@ import { IntelligenceService } from "./intelligence.service";
     StorefrontCustomerService,
     StorefrontMediaService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RoleAccessGuard },
   ],
 })
 export class AppModule {}
