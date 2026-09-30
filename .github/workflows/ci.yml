@@ -38,8 +38,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prepare database package
-        run: pnpm --filter @bbos/database build
+      - name: Prepare workspace packages
+        run: |
+          pnpm --filter @bbos/database build
+          pnpm --filter @bbos/shared build
 
       - name: Typecheck
         run: pnpm typecheck
