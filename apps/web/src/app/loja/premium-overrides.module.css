@@ -3,6 +3,10 @@
   border-top: 1px solid rgb(13 29 23 / 8%);
 }
 
+.mobileMenu {
+  display: none;
+}
+
 .buyRow button:disabled {
   background: #d8d2c8;
   color: #615e58;
@@ -263,12 +267,74 @@
 }
 
 @media (max-width: 600px) {
+  .desktopNav {
+    display: none !important;
+  }
+
+  .mobileMenu {
+    position: relative;
+    display: block;
+  }
+
+  .mobileMenu > button {
+    width: 33px;
+    height: 33px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: #0d1d17;
+    background: transparent;
+  }
+
+  .mobileMenu > button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mobileMenu > nav {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    z-index: 60;
+    width: min(310px, calc(100vw - 28px));
+    display: grid;
+    padding: 9px;
+    border: 1px solid rgb(13 29 23 / 11%);
+    border-radius: 12px;
+    background: rgb(255 255 255 / 98%);
+    box-shadow: 0 22px 54px rgb(13 29 23 / 18%);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobileMenu.mobileMenu > nav a {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 46px;
+    display: flex !important;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 0 13px;
+    border-bottom: 1px solid rgb(13 29 23 / 7%);
+    color: #0d1d17;
+    font-size: 11px;
+    font-weight: 720;
+    letter-spacing: 0.035em;
+    text-decoration: none;
+    justify-self: stretch;
+  }
+
+  .mobileMenu > nav a:last-child {
+    border-bottom: 0;
+  }
+
   .footer {
     grid-template-columns: 1fr;
   }
 
   .conversionShelf {
-    padding: 46px 18px 0;
+    display: none;
   }
 
   .conversionIntro {

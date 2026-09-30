@@ -14,6 +14,8 @@ import premium from "./premium-overrides.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
+import CoffeeLineExplorer from "./CoffeeLineExplorer";
+import MobileStoreMenu from "./MobileStoreMenu";
 import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { alexandreMicrolot } from "./microlots";
 import { loadStorefrontImages } from "@/lib/storefront-images";
@@ -316,7 +318,7 @@ export default async function LojaPage() {
             />
           </a>
           <nav
-            className={`${styles.nav} ${storyNav.nav}`}
+            className={`${styles.nav} ${storyNav.nav} ${premium.desktopNav}`}
             aria-label="Navegação principal"
           >
             <a href="#cafes">Cafés</a>
@@ -341,6 +343,7 @@ export default async function LojaPage() {
               <UserRound aria-hidden="true" />
             </Link>
             <CartButton />
+            <MobileStoreMenu />
           </div>
         </header>
 
@@ -440,7 +443,7 @@ export default async function LojaPage() {
           id="cafes"
           className={`${styles.productsSection} ${journey.productsSection}`}
         >
-          <div className={styles.sectionHeader}>
+          <div className={`${styles.sectionHeader} ${layers.catalogPageIntro}`}>
             <div>
               <small>ESCOLHA O SEU CAFÉ</small>
               <h2>Escolha pelo perfil.</h2>
@@ -450,179 +453,186 @@ export default async function LojaPage() {
               em dúvida, use o guia sensorial.
             </p>
           </div>
-          <nav
-            id="camadas"
-            className={layers.filter}
-            aria-label="Linhas de cafés"
-          >
-            {collections.map((collection) => (
-              <a
-                key={collection.name}
-                href={`#${collectionId(collection.name)}`}
-              >
-                {collection.name}
-              </a>
-            ))}
-          </nav>
-          {collections.map((collection) => {
-            const collectionProducts = catalogProducts.filter(
-              (product) => product.line === collection.name.toUpperCase(),
-            );
+          <div id="camadas" className={layers.lineExplorerAnchor}>
+            <CoffeeLineExplorer
+              lines={collections.map((collection) => ({
+                name: collection.name,
+                slug: collectionId(collection.name).replace("camada-", ""),
+                eyebrow: collection.eyebrow,
+                copy: collection.copy,
+                format: collection.name === "Gourmet" ? "Moído" : "Em grãos",
+                tone: collection.tone,
+              }))}
+            >
+              {collections.map((collection) => {
+                const collectionProducts = catalogProducts.filter(
+                  (product) => product.line === collection.name.toUpperCase(),
+                );
 
-            return (
-              <div
-                key={collection.name}
-                id={collectionId(collection.name)}
-                className={layers.catalogLayer}
-                style={
-                  { "--layer-tone": collection.tone } as React.CSSProperties
-                }
-              >
-                <header className={layers.catalogHeader}>
-                  <div>
-                    <small>{collection.eyebrow}</small>
-                    <h3>{collection.name}</h3>
-                  </div>
-                  <p>{collection.copy}</p>
-                </header>
-                {collectionProducts.length ? (
+                return (
                   <div
-                    className={`${styles.productGrid} ${
-                      collectionProducts.length === 1
-                        ? layers.oneProduct
-                        : collectionProducts.length === 2
-                          ? layers.twoProducts
-                          : ""
-                    }`}
+                    key={collection.name}
+                    id={collectionId(collection.name)}
+                    className={layers.catalogLayer}
+                    style={
+                      { "--layer-tone": collection.tone } as React.CSSProperties
+                    }
                   >
-                    {collectionProducts.map((p) => (
-                      <article
-                        key={p.name}
-                        id={p.name.toLowerCase().replaceAll(" ", "-")}
-                        className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard}`}
-                        style={{ "--tone": p.tone } as React.CSSProperties}
+                    <header className={layers.catalogHeader}>
+                      <div>
+                        <small>{collection.eyebrow}</small>
+                        <h3>{collection.name}</h3>
+                      </div>
+                      <p>{collection.copy}</p>
+                    </header>
+                    {collectionProducts.length ? (
+                      <div
+                        className={`${styles.productGrid} ${layers.mobileProductGrid} ${
+                          collectionProducts.length === 1
+                            ? layers.oneProduct
+                            : collectionProducts.length === 2
+                              ? layers.twoProducts
+                              : ""
+                        }`}
                       >
-                        <div
-                          className={styles.productVisual}
-                          data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
-                        >
-                          {p.image ? (
-                            <img
-                              src={p.image}
-                              alt={
-                                p.name === "Raro"
-                                  ? "Cerejas maduras do microlote Raro"
-                                  : `Embalagem Bispo ${p.name}`
-                              }
-                              className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
-                            />
-                          ) : p.name === "Raro" ? (
-                            <div
-                              className={tight.catalogFallback}
-                              aria-label="Foto do microlote Raro em atualização"
-                            >
-                              <span>MICROLOTE</span>
-                              <b>Raro</b>
-                              <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
-                            </div>
-                          ) : (
-                            <div className={tight.catalogFallback}>
-                              <span>BISPO</span>
-                              <b>{p.name}</b>
-                              <small>SAFRA ATUAL · {p.weight}</small>
-                            </div>
-                          )}
-                          <small>{p.tag}</small>
-                        </div>
-                        <div
-                          className={`${styles.productMeta} ${premium.catalogMeta}`}
-                        >
-                          <p>{p.line}</p>
-                          <h3>{p.name}</h3>
-                          <span>{p.notes}</span>
-                          <ProductDetails
-                            product={{
-                              id:
-                                p.name === "Raro"
-                                  ? "raros"
-                                  : p.name.toLowerCase().replaceAll(" ", "-"),
-                              name: p.name,
-                              line: p.line,
-                              notes: p.notes,
-                              priceCents: p.priceCents,
-                              weightGrams: Number.parseInt(p.weight, 10),
-                              image: p.image,
-                              priceLabel: p.price,
-                              weightLabel: p.weight,
-                              tag: p.tag,
-                              tone: p.tone,
-                            }}
-                            story={{
-                              ...p.story,
-                              proofImages: (
-                                mediaLibrary.productProofs[
-                                  p.name === "Raro"
-                                    ? "raros"
-                                    : p.name.toLowerCase().replaceAll(" ", "-")
-                                ] ?? []
-                              ).map((photo) => ({
-                                src: photo.url,
-                                alt: photo.altText,
-                                caption: photo.caption ?? photo.title,
-                              })),
-                            }}
-                            detailHref={
-                              p.name === "Raro"
-                                ? `/loja/cafes/${alexandreMicrolot.slug}`
-                                : undefined
-                            }
-                            detailLabel={
-                              p.name === "Raro"
-                                ? "Conhecer este lote →"
-                                : undefined
-                            }
-                          />
-                          <div
-                            className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
+                        {collectionProducts.map((p) => (
+                          <article
+                            key={p.name}
+                            id={p.name.toLowerCase().replaceAll(" ", "-")}
+                            className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard} ${layers.mobileProductCard}`}
+                            style={{ "--tone": p.tone } as React.CSSProperties}
                           >
-                            <strong>
-                              {p.price} <small>· {p.weight}</small>
-                            </strong>
-                            <AddToCartButton
-                              product={{
-                                id:
-                                  p.name === "Raro"
-                                    ? "raros"
-                                    : p.name.toLowerCase().replaceAll(" ", "-"),
-                                name: p.name,
-                                line: p.line,
-                                notes: p.notes,
-                                priceCents: p.priceCents,
-                                weightGrams: Number.parseInt(p.weight, 10),
-                                image: p.image,
-                                story: p.story,
-                              }}
+                            <div
+                              className={styles.productVisual}
+                              data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
                             >
-                              Adicionar à sacola
-                            </AddToCartButton>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
+                              {p.image ? (
+                                <img
+                                  src={p.image}
+                                  alt={
+                                    p.name === "Raro"
+                                      ? "Cerejas maduras do microlote Raro"
+                                      : `Embalagem Bispo ${p.name}`
+                                  }
+                                  className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
+                                />
+                              ) : p.name === "Raro" ? (
+                                <div
+                                  className={tight.catalogFallback}
+                                  aria-label="Foto do microlote Raro em atualização"
+                                >
+                                  <span>MICROLOTE</span>
+                                  <b>Raro</b>
+                                  <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
+                                </div>
+                              ) : (
+                                <div className={tight.catalogFallback}>
+                                  <span>BISPO</span>
+                                  <b>{p.name}</b>
+                                  <small>SAFRA ATUAL · {p.weight}</small>
+                                </div>
+                              )}
+                              <small>{p.tag}</small>
+                            </div>
+                            <div
+                              className={`${styles.productMeta} ${premium.catalogMeta}`}
+                            >
+                              <p>{p.line}</p>
+                              <h3>{p.name}</h3>
+                              <span>{p.notes}</span>
+                              <ProductDetails
+                                product={{
+                                  id:
+                                    p.name === "Raro"
+                                      ? "raros"
+                                      : p.name
+                                          .toLowerCase()
+                                          .replaceAll(" ", "-"),
+                                  name: p.name,
+                                  line: p.line,
+                                  notes: p.notes,
+                                  priceCents: p.priceCents,
+                                  weightGrams: Number.parseInt(p.weight, 10),
+                                  image: p.image,
+                                  priceLabel: p.price,
+                                  weightLabel: p.weight,
+                                  tag: p.tag,
+                                  tone: p.tone,
+                                }}
+                                story={{
+                                  ...p.story,
+                                  proofImages: (
+                                    mediaLibrary.productProofs[
+                                      p.name === "Raro"
+                                        ? "raros"
+                                        : p.name
+                                            .toLowerCase()
+                                            .replaceAll(" ", "-")
+                                    ] ?? []
+                                  ).map((photo) => ({
+                                    src: photo.url,
+                                    alt: photo.altText,
+                                    caption: photo.caption ?? photo.title,
+                                  })),
+                                }}
+                                detailHref={
+                                  p.name === "Raro"
+                                    ? `/loja/cafes/${alexandreMicrolot.slug}`
+                                    : undefined
+                                }
+                                detailLabel={
+                                  p.name === "Raro"
+                                    ? "Conhecer este lote →"
+                                    : undefined
+                                }
+                              />
+                              <div
+                                className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
+                              >
+                                <strong>
+                                  {p.price} <small>· {p.weight}</small>
+                                </strong>
+                                <AddToCartButton
+                                  product={{
+                                    id:
+                                      p.name === "Raro"
+                                        ? "raros"
+                                        : p.name
+                                            .toLowerCase()
+                                            .replaceAll(" ", "-"),
+                                    name: p.name,
+                                    line: p.line,
+                                    notes: p.notes,
+                                    priceCents: p.priceCents,
+                                    weightGrams: Number.parseInt(p.weight, 10),
+                                    image: p.image,
+                                    story: p.story,
+                                  }}
+                                >
+                                  Adicionar à sacola
+                                </AddToCartButton>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={layers.rareNote}>
+                        <span>EDIÇÕES LIMITADAS · 250 G</span>
+                        <strong>
+                          Os Raros aparecem quando a safra revela algo
+                          extraordinário.
+                        </strong>
+                        <Link href="/loja/descobrir">
+                          Descobrir meu perfil →
+                        </Link>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className={layers.rareNote}>
-                    <span>EDIÇÕES LIMITADAS · 250 G</span>
-                    <strong>
-                      Os Raros aparecem quando a safra revela algo
-                      extraordinário.
-                    </strong>
-                    <Link href="/loja/descobrir">Descobrir meu perfil →</Link>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </CoffeeLineExplorer>
+          </div>
           <div className={`${styles.allProducts} ${premium.catalogEnd}`}>
             <Link href="/loja/descobrir">
               Não sabe qual escolher? Descubra o seu →

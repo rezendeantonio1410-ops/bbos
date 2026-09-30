@@ -38,8 +38,12 @@
   object-position: center 30%;
 }
 
-.portrait:first-child img { object-position: 58% center; }
-.portrait:nth-child(2) img { object-position: 48% center; }
+.portrait:first-child img {
+  object-position: 58% center;
+}
+.portrait:nth-child(2) img {
+  object-position: 48% center;
+}
 
 .portrait figcaption {
   position: absolute;
@@ -168,10 +172,18 @@
 
   .actions {
     display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch !important;
   }
 
-  .primary,
-  .secondary {
+  .section .actions .primary,
+  .section .actions .secondary {
     width: 100% !important;
+    height: auto !important;
+    min-height: 44px;
+    display: inline-flex !important;
+    place-items: initial !important;
+    white-space: normal;
   }
 }
