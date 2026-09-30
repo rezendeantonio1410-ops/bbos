@@ -24,11 +24,16 @@ test("sales order list and detail are isolated by company", async () => {
 
   await service.list("company-a");
   await service.get("company-a", "order-a");
+  await service.exportOverview("company-a");
 
   assert.deepEqual(calls[0]?.args.where, { companyId: "company-a" });
   assert.deepEqual(calls[1]?.args.where, {
     id: "order-a",
     companyId: "company-a",
+  });
+  assert.deepEqual(calls[2]?.args.where, {
+    companyId: "company-a",
+    salesChannel: { type: "EXPORTACAO" },
   });
 });
 
@@ -63,6 +68,10 @@ test("sales order controller derives order access from the signed session", () =
     /nextOrderNumber\(\(await this\.actor\(request\)\)\.companyId\)/,
   );
   assert.match(source, /so\."companyId"=\$2/);
+  assert.match(
+    source,
+    /Pedidos de exportação exigem Incoterm e local nomeado/,
+  );
   assert.doesNotMatch(
     source,
     /this\.salesOrders\.(get|confirm|reserve|cancel|ship)\(id[,)]/,

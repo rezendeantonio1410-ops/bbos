@@ -17,6 +17,7 @@ import {
   FileInput,
   PlugZap,
   Settings,
+  Ship,
   ShoppingBag,
   UsersRound,
 } from "lucide-react";
@@ -126,6 +127,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: BarChart3,
         roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
         keywords: ["faturamento", "receita"],
+      },
+      {
+        href: "/exportacoes",
+        label: "Exportações",
+        description: "Carteira internacional e prontidão",
+        icon: Ship,
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        keywords: ["exportacao", "internacional", "incoterm", "proforma"],
       },
       {
         href: "/commerce",

@@ -16,6 +16,7 @@ export const protectedSystemPrefixes = [
   "/custos",
   "/pedidos",
   "/vendas",
+  "/exportacoes",
   "/commerce",
   "/bi",
   "/produtos",

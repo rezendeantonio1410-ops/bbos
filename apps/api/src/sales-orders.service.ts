@@ -87,6 +87,80 @@ export class SalesOrdersService implements OnModuleDestroy {
     return order;
   }
 
+  async exportOverview(companyId: string) {
+    const orders = await this.database.salesOrder.findMany({
+      where: { companyId, salesChannel: { type: "EXPORTACAO" } },
+      select: {
+        id: true,
+        code: true,
+        orderNumber: true,
+        status: true,
+        totalAmount: true,
+        quantity: true,
+        orderedAt: true,
+        expectedDeliveryDate: true,
+        incoterm: true,
+        incotermLocation: true,
+        customerReference: true,
+        customer: { select: { name: true } },
+        salesChannel: { select: { name: true, currency: true } },
+        items: {
+          select: {
+            id: true,
+            sku: true,
+            productName: true,
+            quantity: true,
+          },
+        },
+      },
+      orderBy: { orderedAt: "desc" },
+    });
+    const active = orders.filter((order) => order.status !== "CANCELLED");
+    const totalsByCurrency = Array.from(
+      active.reduce((totals, order) => {
+        const currency = order.salesChannel?.currency || "BRL";
+        totals.set(
+          currency,
+          (totals.get(currency) ?? 0) + Number(order.totalAmount),
+        );
+        return totals;
+      }, new Map<string, number>()),
+    ).map(([currency, amount]) => ({ currency, amount }));
+    const items = orders.map((order) => {
+      const missing = [
+        ...(!order.incoterm ? ["Incoterm"] : []),
+        ...(!order.incotermLocation ? ["Local nomeado"] : []),
+        ...(!order.expectedDeliveryDate ? ["Prazo prometido"] : []),
+      ];
+      return {
+        ...order,
+        totalAmount: Number(order.totalAmount),
+        currency: order.salesChannel?.currency || "BRL",
+        readiness: { ready: missing.length === 0, missing },
+      };
+    });
+    return {
+      metrics: {
+        orders: orders.length,
+        open: active.filter(
+          (order) => !["DELIVERED", "CANCELLED"].includes(order.status),
+        ).length,
+        ready: items.filter(
+          (order) => order.status !== "CANCELLED" && order.readiness.ready,
+        ).length,
+        attention: items.filter(
+          (order) =>
+            !order.readiness.ready &&
+            !["DELIVERED", "CANCELLED"].includes(order.status),
+        ).length,
+        totalsByCurrency,
+      },
+      items,
+      source: "database" as const,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   async options(companyId: string) {
     const [customers, balances, brokers] = await Promise.all([
       this.database.customer.findMany({ where: { companyId }, orderBy: { name: "asc" } }),

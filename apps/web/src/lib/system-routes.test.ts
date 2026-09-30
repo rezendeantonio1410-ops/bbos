@@ -14,6 +14,7 @@ test("all internal management roots require a session", () => {
     "/perfil",
     "/cafe-verde",
     "/blends/novo",
+    "/exportacoes",
     "/commerce/midia",
   ]) {
     assert.equal(isProtectedSystemPath(path), true, `${path} must be protected`);

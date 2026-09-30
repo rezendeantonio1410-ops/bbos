@@ -270,6 +270,13 @@ export class SalesOrdersController {
     return { ...result, postalCode };
   }
 
+  @Get("export-overview")
+  async exportOverview(@Req() request: any) {
+    return this.salesOrders.exportOverview(
+      (await this.actor(request)).companyId,
+    );
+  }
+
   @Get(":id/posting-agencies")
   async postingAgencies(@Param("id") id: string, @Req() request: any) {
     await this.actorForOrder(request, id);
@@ -355,6 +362,11 @@ export class SalesOrdersController {
       resolvedChannelType = price.salesChannelType;
       pricedItems.push({ ...item, unitPrice: price.officialUnitPrice });
     }
+    const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
+    const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
+    if (resolvedChannelType === "EXPORTACAO" && (!incoterm || !incotermLocation)) {
+      throw new BadRequestException("Pedidos de exportação exigem Incoterm e local nomeado.");
+    }
 
     const brokerId = String(body.brokerId ?? "").trim() || undefined;
     const brokerCommissionMode = brokerId ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase() : undefined;
@@ -428,9 +440,6 @@ export class SalesOrdersController {
 
     const carrierName = shippingQuote?.carrierName ?? (String(body.carrierName ?? "").trim() || null);
     const customerReference = String(body.customerReference ?? "").trim() || null;
-    const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
-    const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
-
     await this.salesOrders.database.$executeRawUnsafe(
       `UPDATE "SalesOrder"
           SET "paymentType"=$2,
