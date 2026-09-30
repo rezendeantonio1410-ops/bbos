@@ -28,6 +28,7 @@ export type CustomerEmailPayload = {
   subtotalCents?: number;
   shippingCents?: number;
   totalCents?: number;
+  freightResponsibility?: string;
   shippingServiceName?: string;
   carrierName?: string;
   estimatedDeliveryDays?: number;
@@ -111,6 +112,22 @@ export function renderCustomerEmail(
   const delivery = payload.delivery || {};
   const address = [delivery.street, delivery.number, delivery.complement].filter(Boolean).join(", ");
   const place = [delivery.district, delivery.city && delivery.state ? `${delivery.city}/${delivery.state}` : delivery.city].filter(Boolean).join(" · ");
+  const deliveryTitle = payload.freightResponsibility === "PICKUP"
+    ? "Retirada na Bispo Coffees"
+    : payload.freightResponsibility === "CUSTOMER_CARRIER"
+      ? "Transportadora do distribuidor"
+      : payload.shippingServiceName || "Entrega";
+  const deliveryDetail = payload.freightResponsibility === "CUSTOMER_CARRIER"
+    ? "Contratação, custo, seguro e risco por conta do distribuidor"
+    : payload.freightResponsibility === "PICKUP"
+      ? "Agendamento após liberação financeira e fiscal"
+      : payload.estimatedDeliveryDays
+        ? `Até ${payload.estimatedDeliveryDays} dias úteis`
+        : "";
+  const destinationTitle = payload.freightResponsibility === "PICKUP" ? "Retirada" : "Destino";
+  const destinationBody = payload.freightResponsibility === "PICKUP"
+    ? "Bispo Coffees · Londrina, Paraná"
+    : `${escapeHtml(address)}<br>${escapeHtml(place)}<br>CEP ${escapeHtml(postalCode(delivery.postalCode))}`;
   const paymentAction = payload.paymentUrl
     ? `<tr><td style="padding:0 42px 18px"><a href="${escapeHtml(payload.paymentUrl)}" style="display:block;background:#087568;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Abrir pagamento Pix&nbsp;&nbsp;→</a></td></tr>`
     : "";
@@ -120,7 +137,7 @@ export function renderCustomerEmail(
   const orderSummary = items.length
     ? `<tr><td style="padding:42px 42px 0"><div style="font-family:Arial,sans-serif;font-size:10px;line-height:14px;letter-spacing:2px;text-transform:uppercase;color:#0E191D">Sua escolha</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px">${itemRows(items)}<tr><td colspan="2" style="border-top:1px solid #E0EAE9"></td></tr></table></td></tr>
       <tr><td style="padding:28px 42px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#E0EAE9;border-left:3px solid #0E191D"><tr><td style="padding:20px 22px"><div style="font-family:Arial,sans-serif;font-size:10px;line-height:14px;letter-spacing:1.7px;text-transform:uppercase;color:#0E191D">Uma leitura de José e Suzi</div><div style="padding-top:8px;font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:23px;font-style:italic;color:#0E191D">${escapeHtml(note)}</div></td></tr></table></td></tr>
-      <tr><td style="padding:31px 42px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="50%" valign="top" style="padding:0 18px 25px 0"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Destino</div><div style="padding-top:8px;font:13px/21px Arial,sans-serif;color:#0E191D">${escapeHtml(address)}<br>${escapeHtml(place)}<br>CEP ${escapeHtml(postalCode(delivery.postalCode))}</div></td><td width="50%" valign="top" style="padding:0 0 25px 18px"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Envio</div><div style="padding-top:8px;font:13px/21px Arial,sans-serif;color:#0E191D">${escapeHtml(payload.shippingServiceName || "Entrega")}${payload.carrierName ? `<br>${escapeHtml(payload.carrierName)}` : ""}${payload.estimatedDeliveryDays ? `<br>Até ${escapeHtml(payload.estimatedDeliveryDays)} dias úteis` : ""}</div></td></tr></table></td></tr>
+      <tr><td style="padding:31px 42px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="50%" valign="top" style="padding:0 18px 25px 0"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">${escapeHtml(destinationTitle)}</div><div style="padding-top:8px;font:13px/21px Arial,sans-serif;color:#0E191D">${destinationBody}</div></td><td width="50%" valign="top" style="padding:0 0 25px 18px"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Envio</div><div style="padding-top:8px;font:13px/21px Arial,sans-serif;color:#0E191D">${escapeHtml(deliveryTitle)}${payload.carrierName ? `<br>${escapeHtml(payload.carrierName)}` : ""}${deliveryDetail ? `<br>${escapeHtml(deliveryDetail)}` : ""}</div></td></tr></table></td></tr>
       <tr><td style="padding:0 42px 31px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:5px 0;font:13px Arial,sans-serif;color:#626B69">Produto</td><td align="right" style="padding:5px 0;font:13px Arial,sans-serif;color:#0E191D">${escapeHtml(money(payload.subtotalCents))}</td></tr><tr><td style="padding:5px 0;font:13px Arial,sans-serif;color:#626B69">Entrega</td><td align="right" style="padding:5px 0;font:13px Arial,sans-serif;color:#0E191D">${escapeHtml(money(payload.shippingCents))}</td></tr><tr><td style="padding:17px 0 5px;border-top:1px solid #E0EAE9;font:20px Georgia,'Times New Roman',serif;color:#0E191D">Total</td><td align="right" style="padding:17px 0 5px;border-top:1px solid #E0EAE9;font:20px Georgia,'Times New Roman',serif;color:#0E191D">${escapeHtml(money(payload.totalCents))}</td></tr></table></td></tr>`
     : "";
 

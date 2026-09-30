@@ -40,7 +40,7 @@ export class SalesOrderCustomerLifecycleService {
     return this.database.$transaction(async (transaction) => {
       const orders = await transaction.$queryRawUnsafe<any[]>(
         `SELECT so.id,so."companyId",COALESCE(so."orderNumber",so.code) AS code,so.status,
-                so.subtotal,so.discount,so.freight,so."totalAmount",so."shippingServiceName",
+                so.subtotal,so.discount,so.freight,so."totalAmount",so."freightResponsibility",so."shippingServiceName",
                 so."carrierName",so."estimatedDeliveryDays",c.name AS "customerName",c.email,
                 c.phone,c.address,c.district,c.city,c.state,c."postalCode",sfo.id AS "storefrontOrderId"
            FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
@@ -117,6 +117,7 @@ export class SalesOrderCustomerLifecycleService {
             subtotalCents: Math.round(Number(order.subtotal ?? 0) * 100),
             shippingCents: Math.round(Number(order.freight ?? 0) * 100),
             totalCents: Math.round(Number(order.totalAmount ?? 0) * 100),
+            freightResponsibility: order.freightResponsibility,
             shippingServiceName: order.shippingServiceName,
             carrierName: order.carrierName,
             estimatedDeliveryDays: order.estimatedDeliveryDays,

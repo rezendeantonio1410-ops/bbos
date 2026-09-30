@@ -17,6 +17,7 @@ import {
 import { AuthService } from "./auth.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
+import { resolveSalesOrderDeliveryPolicy } from "./sales-order-delivery-policy";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -31,7 +32,7 @@ const roundMoney = (value: number) => Math.round(value * 100) / 100;
 type SalesOrderCommercialTerms = {
   paymentType?: string;
   paymentTerms?: string;
-  freightResponsibility?: "BISPO" | "CUSTOMER" | "PICKUP";
+  freightResponsibility?: "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP";
   carrierName?: string;
   customerReference?: string;
   incoterm?: string;
@@ -346,7 +347,7 @@ export class SalesOrdersController {
     if (!freightResponsibility) {
       throw new BadRequestException("Selecione quem será responsável pelo frete.");
     }
-    if (!["BISPO", "CUSTOMER", "PICKUP"].includes(freightResponsibility)) {
+    if (!["BISPO", "CUSTOMER", "CUSTOMER_CARRIER", "PICKUP"].includes(freightResponsibility)) {
       throw new BadRequestException("Responsabilidade do frete inválida.");
     }
 
@@ -367,6 +368,12 @@ export class SalesOrdersController {
     if (resolvedChannelType === "EXPORTACAO" && (!incoterm || !incotermLocation)) {
       throw new BadRequestException("Pedidos de exportação exigem Incoterm e local nomeado.");
     }
+    const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
+      salesChannelType: resolvedChannelType,
+      freightResponsibility,
+      carrierName: body.carrierName,
+    });
+    if (!deliveryPolicy.valid) throw new BadRequestException(deliveryPolicy.message);
 
     const brokerId = String(body.brokerId ?? "").trim() || undefined;
     const brokerCommissionMode = brokerId ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase() : undefined;
@@ -393,7 +400,7 @@ export class SalesOrdersController {
       : 0;
 
     let shippingQuote: any = null;
-    if (resolvedChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER") {
+    if (deliveryPolicy.usesPlatformShipping) {
       if (!body.shippingQuoteId || !body.destinationPostalCode) {
         throw new BadRequestException("Calcule e selecione o frete do distribuidor antes de salvar o pedido.");
       }
@@ -420,6 +427,8 @@ export class SalesOrdersController {
         })),
       });
       body.freight = Number(shippingQuote.customerPriceCents) / 100;
+    } else if (deliveryPolicy.forceFreightZero) {
+      body.freight = 0;
     }
 
     const orderNumber = await this.nextOrderNumber(actor.companyId);
@@ -438,7 +447,12 @@ export class SalesOrdersController {
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
     });
 
-    const carrierName = shippingQuote?.carrierName ?? (String(body.carrierName ?? "").trim() || null);
+    const carrierName = shippingQuote?.carrierName
+      ?? deliveryPolicy.carrierName;
+    const shippingProvider = shippingQuote?.provider
+      ?? deliveryPolicy.shippingProvider;
+    const shippingServiceName = shippingQuote?.serviceName
+      ?? deliveryPolicy.shippingServiceName;
     const customerReference = String(body.customerReference ?? "").trim() || null;
     await this.salesOrders.database.$executeRawUnsafe(
       `UPDATE "SalesOrder"
@@ -465,9 +479,9 @@ export class SalesOrdersController {
       incoterm,
       incotermLocation,
       shippingQuote?.id ?? null,
-      shippingQuote?.provider ?? null,
+      shippingProvider,
       shippingQuote?.serviceId ?? null,
-      shippingQuote?.serviceName ?? null,
+      shippingServiceName,
       shippingQuote?.deliveryDays ?? null,
     );
 
@@ -491,9 +505,9 @@ export class SalesOrdersController {
       incotermLocation,
       freight: body.freight ?? 0,
       shippingQuoteId: shippingQuote?.id ?? null,
-      shippingProvider: shippingQuote?.provider ?? null,
+      shippingProvider,
       shippingServiceId: shippingQuote?.serviceId ?? null,
-      shippingServiceName: shippingQuote?.serviceName ?? null,
+      shippingServiceName,
       estimatedDeliveryDays: shippingQuote?.deliveryDays ?? null,
       brokerId: brokerId ?? null,
       brokerCommissionMode: brokerId ? brokerCommissionMode : null,

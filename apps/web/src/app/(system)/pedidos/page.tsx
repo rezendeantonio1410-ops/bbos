@@ -27,9 +27,10 @@ const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
 const freightLabels: Record<string, string> = {
-  BISPO: "Frete por conta da Bispo",
-  CUSTOMER: "Frete por conta do cliente",
-  PICKUP: "Retirada na fábrica",
+  BISPO: "Frete negociado pela Bispo",
+  CUSTOMER: "Cotação pela plataforma Bispo",
+  CUSTOMER_CARRIER: "Transportadora do distribuidor",
+  PICKUP: "Retirada na Bispo Coffees",
 };
 
 type StockOption = {
@@ -506,7 +507,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const [packageBoxes, setPackageBoxes] = useState<PackageBox[]>(() => [newPackageBox()]);
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
-  const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "PICKUP">("");
+  const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP">("");
   const [carrierName, setCarrierName] = useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [customerReference, setCustomerReference] = useState("");
@@ -528,12 +529,14 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
     [lines],
   );
   const firstQuote = completeLines.length ? quotes[completeLines[0]!.id] : undefined;
+  const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
+  const usesPlatformShipping = isDistributor && freightResponsibility === "CUSTOMER";
   const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
   const sortedShippingQuotes = useMemo(
     () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
     [shippingQuotes, shippingSort],
   );
-  const freightAmount = Number(selectedShippingQuote?.priceCents ?? 0) / 100;
+  const freightAmount = usesPlatformShipping ? Number(selectedShippingQuote?.priceCents ?? 0) / 100 : 0;
   const productsTotal = completeLines.reduce((sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0), 0);
   const totalWeightGrams = completeLines.reduce((sum, line) => {
     const variant = variants.find((candidate) => candidate.productVariantId === line.variantId);
@@ -638,11 +641,25 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   }, [customerId, lines, customPackage, packageBoxes]);
 
   useEffect(() => {
-    if (firstQuote?.salesChannelType === "DISTRIBUIDOR") setFreightResponsibility("CUSTOMER");
-  }, [firstQuote?.salesChannelType]);
+    setFreightResponsibility("");
+    setCarrierName("");
+    setShippingQuotes([]);
+    setShippingQuoteId("");
+    setShippingPostalCode("");
+    setShippingSummary(null);
+    setShippingError("");
+  }, [customerId, firstQuote?.salesChannelType]);
+
+  useEffect(() => {
+    if (usesPlatformShipping) return;
+    setShippingQuotes([]);
+    setShippingQuoteId("");
+    setShippingPostalCode("");
+    setShippingSummary(null);
+    setShippingError("");
+  }, [usesPlatformShipping]);
 
   const shippingPackages = () => {
-    const count = Math.max(1, packageBoxes.length);
     const explicitWeightGrams = packageBoxes.map((box) => {
       const kg = Number(box.weightKg);
       return Number.isFinite(kg) && kg > 0 ? Math.round(kg * 1000) : 0;
@@ -697,8 +714,11 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
     if (completeLines.length !== lines.length || completeLines.some((line) => !quotes[line.id])) return setError("Todos os itens precisam de produto, quantidade e preço vigente.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
     if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
-    if (firstQuote?.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
+    if (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
       return setError("Calcule e selecione uma opção de frete para o distribuidor.");
+    }
+    if (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim()) {
+      return setError("Informe a transportadora indicada pelo distribuidor.");
     }
 
     const response = await fetch(salesOrdersApi(), {
@@ -712,11 +732,11 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
         paymentType,
         paymentTerms: isTerm ? paymentTerms : "À vista",
         freightResponsibility,
-        carrierName: selectedShippingQuote?.carrierName ?? carrierName,
+        carrierName: usesPlatformShipping ? selectedShippingQuote?.carrierName : carrierName.trim() || undefined,
         freight: freightAmount,
-        shippingQuoteId: selectedShippingQuote?.id,
-        destinationPostalCode: shippingPostalCode || undefined,
-        packages: shippingPackages(),
+        shippingQuoteId: usesPlatformShipping ? selectedShippingQuote?.id : undefined,
+        destinationPostalCode: usesPlatformShipping ? shippingPostalCode || undefined : undefined,
+        packages: usesPlatformShipping ? shippingPackages() : undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -867,21 +887,60 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
 
             {showTerms && (
               <div className="grid gap-3 border-t p-4 sm:grid-cols-2">
-                <Field label="Frete">
-                  <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "" | "BISPO" | "CUSTOMER" | "PICKUP")}>
-                    <option value="">Selecione</option>
-                    <option value="CUSTOMER">Por conta do cliente</option>
-                    <option value="BISPO">Por conta da Bispo</option>
-                    <option value="PICKUP">Retirada na fábrica</option>
-                  </select>
-                </Field>
+                {isDistributor ? (
+                  <div className="sm:col-span-2">
+                    <p className="mb-2 text-[10px] font-semibold text-stone-600">Como o distribuidor quer receber?</p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {([
+                        ["CUSTOMER", "Cotar pela Bispo", "Comparamos as opções. O frete escolhido entra no pedido e no Pix."],
+                        ["PICKUP", "Retirar na Bispo", "O distribuidor agenda a retirada em nossa empresa, sem frete no pedido."],
+                        ["CUSTOMER_CARRIER", "Transportadora própria", "O distribuidor indica e contrata a transportadora por sua conta e risco."],
+                      ] as const).map(([value, title, detail]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={freightResponsibility === value}
+                          onClick={() => setFreightResponsibility(value)}
+                          className={`rounded-xl border p-3 text-left transition ${freightResponsibility === value ? "border-emerald-800 bg-emerald-50 ring-1 ring-emerald-800" : "border-stone-200 bg-white hover:border-stone-400"}`}
+                        >
+                          <span className="block text-xs font-bold text-stone-900">{title}</span>
+                          <span className="mt-1 block text-[10px] leading-4 text-stone-500">{detail}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <Field label="Frete">
+                    <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP")}>
+                      <option value="">Selecione</option>
+                      <option value="CUSTOMER">Por conta do cliente</option>
+                      <option value="BISPO">Por conta da Bispo</option>
+                      <option value="PICKUP">Retirada na Bispo Coffees</option>
+                    </select>
+                  </Field>
+                )}
                 <Field label="Entrega prevista">
                   <input type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} />
                 </Field>
-                {freightResponsibility && freightResponsibility !== "PICKUP" && (
+                {freightResponsibility === "CUSTOMER_CARRIER" && (
+                  <Field label="Transportadora indicada pelo distribuidor">
+                    <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Nome da transportadora · obrigatório" />
+                  </Field>
+                )}
+                {!isDistributor && freightResponsibility && freightResponsibility !== "PICKUP" && (
                   <Field label="Transportadora">
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
                   </Field>
+                )}
+                {isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-4 text-amber-900 sm:col-span-2">
+                    A contratação, o pagamento, o seguro, a coleta e o risco do transporte ficam sob responsabilidade do distribuidor. A Bispo entregará a mercadoria à transportadora indicada mediante identificação e agendamento.
+                  </div>
+                )}
+                {isDistributor && freightResponsibility === "PICKUP" && (
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-[10px] leading-4 text-stone-600 sm:col-span-2">
+                    A retirada será agendada após a liberação financeira e fiscal. O pedido não terá valor de frete.
+                  </div>
                 )}
                 <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Corretor e comissão · opcional</p>
@@ -912,7 +971,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                   </div>
                   {brokerId && brokerCommissionMode === "PER_PACKAGE" && <p className="mt-2 text-[10px] text-stone-500">{totalPackages} pacote(s) × {money.format(Number(brokerCommissionPerPackage || 0))} por pacote.</p>}
                 </div>
-                {freightResponsibility === "CUSTOMER" && firstQuote?.salesChannelType === "DISTRIBUIDOR" && (
+                {usesPlatformShipping && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -1137,13 +1196,13 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
           )}
 
           {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
-          {selectedShippingQuote && (
+          {usesPlatformShipping && selectedShippingQuote && (
             <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
-              <span className="text-stone-500">Produtos + frete por conta do comprador</span>
+              <span className="text-stone-500">Produtos + frete escolhido na plataforma</span>
               <b>{money.format(orderTotal)}</b>
             </div>
           )}
-          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (firstQuote?.salesChannelType === "DISTRIBUIDOR" && freightResponsibility === "CUSTOMER" && !selectedShippingQuote)} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
+          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
         </div>
       </aside>
     </div>,
@@ -1362,8 +1421,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
     : "A combinar";
-  const freightLabel = order.shippingServiceName
-    ? `${order.carrierName ?? "Transportadora"} · ${order.shippingServiceName} · ${money.format(Number(order.freight ?? 0))}`
+  const freightLabel = order.freightResponsibility === "PICKUP"
+    ? (freightLabels.PICKUP ?? "Retirada na Bispo Coffees")
+    : order.shippingServiceName
+    ? [order.carrierName, order.shippingServiceName, Number(order.freight ?? 0) > 0 ? money.format(Number(order.freight)) : null].filter(Boolean).join(" · ")
     : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote ? quote.officialUnitPrice * (1 - requested / 100) : 0;

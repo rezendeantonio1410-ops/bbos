@@ -22,7 +22,8 @@
     "test:purchase-confirmation-pdf": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-confirmation-pdf.test.ts",
     "test:nfe-inbound": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/nfe-inbound.test.ts",
     "test:storefront-customer-auth": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/storefront-customer.service.test.ts",
-    "test:sales-order-payment-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-payment-policy.test.ts"
+    "test:sales-order-payment-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-payment-policy.test.ts",
+    "test:sales-order-delivery-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-delivery-policy.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",

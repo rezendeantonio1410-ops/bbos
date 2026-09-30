@@ -12,8 +12,11 @@ import { resolveSalesOrderPaymentPolicy } from "./sales-order-payment-policy";
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const OTP_THRESHOLD = Number(process.env.SALES_ORDER_ACCEPTANCE_OTP_THRESHOLD_CENTS ?? 1_000_000);
-const TERMS_VERSION = "sales-order-acceptance-v1";
-const TERMS_TEXT = "Confirmo que revisei os produtos, quantidades, valores, frete, prazo e condições comerciais desta proposta e autorizo a Bispo Coffees a confirmar o pedido.";
+const TERMS_VERSION = "sales-order-acceptance-v2";
+const BASE_TERMS_TEXT = "Confirmo que revisei os produtos, quantidades, valores, frete, prazo e condições comerciais desta proposta e autorizo a Bispo Coffees a confirmar o pedido.";
+const termsTextFor = (freightResponsibility: unknown) => freightResponsibility === "CUSTOMER_CARRIER"
+  ? `${BASE_TERMS_TEXT} Confirmo também que a transportadora indicada será contratada por minha conta e risco, incluindo custo, seguro, coleta e acompanhamento da entrega.`
+  : BASE_TERMS_TEXT;
 const maskPhone = (phone: string | null) => {
   const digits = String(phone ?? "").replace(/\D/g, "");
   return digits ? `${"•".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}` : null;
@@ -103,6 +106,7 @@ export class SalesOrderApprovalsController {
     delete publicSnapshot.customerPhone;
     const snapshotJson = JSON.stringify(publicSnapshot);
     const id = randomUUID();
+    const termsText = termsTextFor(snapshot.freightResponsibility);
 
     await this.salesOrders.database.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(
@@ -117,13 +121,18 @@ export class SalesOrderApprovalsController {
          VALUES ($1,$2,$3,$4,$5::jsonb,$6,'PENDING',$7,$8,$9,NOW(),NOW(),$10,$11,$12,$13,$14,$15,$16)`,
         id, actor.companyId, orderId, sha256(token), snapshotJson, sha256(snapshotJson), expiresAt,
         actor.id, actor.name, maskPhone(snapshot.customerPhone), snapshot.customerPhone, verificationRequired,
-        confirmationCode ? sha256(confirmationCode) : null, confirmationCode ? expiresAt : null, TERMS_VERSION, TERMS_TEXT,
+        confirmationCode ? sha256(confirmationCode) : null, confirmationCode ? expiresAt : null, TERMS_VERSION, termsText,
       );
     });
 
     const url = `${publicAppUrl()}/pedido/aprovar/${token}`;
     const codeText = confirmationCode ? `\n\nCódigo de confirmação: *${confirmationCode}*` : "";
-    const message = `Olá, ${snapshot.customerName}.\n\nA Bispo Coffees preparou o pedido *${snapshot.orderNumber}* no valor total de *${money(snapshot.totalAmount)}*, já com o frete de *${money(snapshot.freight)}*.\n\nConfira e confirme pelo celular:\n${url}${codeText}\n\nBispo Coffees`;
+    const deliveryMessage = snapshot.freightResponsibility === "PICKUP"
+      ? "com retirada na Bispo Coffees"
+      : snapshot.freightResponsibility === "CUSTOMER_CARRIER"
+        ? `com transporte por sua conta e risco${snapshot.carrierName ? ` pela *${snapshot.carrierName}*` : ""}`
+        : `já com o frete de *${money(snapshot.freight)}*`;
+    const message = `Olá, ${snapshot.customerName}.\n\nA Bispo Coffees preparou o pedido *${snapshot.orderNumber}* no valor total de *${money(snapshot.totalAmount)}*, ${deliveryMessage}.\n\nConfira e confirme pelo celular:\n${url}${codeText}\n\nBispo Coffees`;
     const phoneDigits = String(snapshot.customerPhone ?? "").replace(/\D/g, "");
     return {
       id, token, url, path: `/pedido/aprovar/${token}`,

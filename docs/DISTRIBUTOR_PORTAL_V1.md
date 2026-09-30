@@ -12,7 +12,8 @@ Dar autonomia ao distribuidor sem transformar a experiência em um ERP exposto. 
 - Nenhum preço pode ser digitado ou alterado pelo cliente.
 - Crédito é uma condição concedida pela Bispo, não uma escolha do checkout.
 - Sem crédito vigente ou suficiente, o pedido segue por Pix automaticamente.
-- Cotação de frete acontece antes da confirmação; contratação e compra de etiqueta somente depois da confirmação financeira e da autorização fiscal.
+- O distribuidor escolhe entre cotação pela plataforma Bispo, retirada na empresa ou transportadora própria.
+- Na cotação pela plataforma, a contratação e a compra da etiqueta acontecem somente depois da confirmação financeira e da autorização fiscal.
 - Toda ação relevante deixa trilha: usuário, data, IP resumido, versão do preço, cotação e aceite.
 
 ## Jornada do distribuidor
@@ -21,15 +22,17 @@ Dar autonomia ao distribuidor sem transformar a experiência em um ERP exposto. 
 2. O distribuidor recebe o endereço do portal e entra com e-mail + código temporário.
 3. O portal apresenta catálogo B2B, estoque disponível, preço da sua tabela e quantidade mínima.
 4. O distribuidor monta o pedido e vê o resumo por caixas, peso e valor.
-5. O BBOS consulta todas as modalidades de frete elegíveis para o CEP cadastrado.
-6. O distribuidor escolhe a transportadora e o prazo, ou informa retirada/frete próprio quando essa condição estiver habilitada.
+5. O distribuidor escolhe a modalidade de entrega:
+   - **Cotar pela plataforma Bispo:** o BBOS consulta as opções elegíveis para o CEP; a opção escolhida entra no total do pedido e a Bispo contrata o frete após as liberações financeira e fiscal.
+   - **Retirada na Bispo Coffees:** o frete do pedido é zero e a retirada é agendada após as liberações financeira e fiscal.
+   - **Transportadora do distribuidor:** o distribuidor informa a transportadora e assume contratação, custo, seguro, coleta, rastreamento e risco do transporte.
 7. O BBOS resolve o pagamento:
    - crédito aprovado e disponível: mantém o prazo concedido;
    - sem crédito, crédito vencido ou limite insuficiente: gera Pix;
    - cliente inativo: bloqueia e orienta contato com a Bispo.
 8. O cliente confirma a versão exata do pedido.
 9. Com crédito aprovado, o pedido avança para reserva. Com Pix, permanece protegido até a confirmação do Mercado Pago.
-10. Após pagamento, estoque, NF-e, contratação do frete, etiqueta e rastreamento seguem no fluxo atual do BBOS.
+10. Após pagamento, estoque e NF-e seguem no fluxo atual do BBOS. Etiqueta e rastreamento automáticos existem somente quando o frete foi escolhido na plataforma.
 
 ## Áreas da V1
 
@@ -46,7 +49,8 @@ Dar autonomia ao distribuidor sem transformar a experiência em um ERP exposto. 
 - busca, quantidade, múltiplos e disponibilidade;
 - preço oficial sem campo de desconto;
 - cálculo de caixas e peso;
-- cotação de frete com preço e prazo;
+- escolha entre cotação pela plataforma, retirada ou transportadora própria;
+- cotação de frete com preço e prazo quando a plataforma for escolhida;
 - resumo final e aceite.
 
 ### Pedidos
@@ -80,9 +84,12 @@ O aceite comercial e o pagamento são eventos diferentes. Um pedido que exige Pi
 ## Regra logística
 
 - A cotação é congelada pelo identificador da `ShippingQuote` e validada novamente ao salvar o pedido.
-- O frete entra no total do Pix quando a responsabilidade é do cliente e a Bispo fará a contratação.
+- O frete entra no total do Pix somente quando o distribuidor escolhe uma cotação da plataforma e a Bispo fará a contratação.
 - A compra da etiqueta não ocorre no checkout: ocorre após pagamento/crédito, autorização da NF-e e confirmação das dimensões finais.
 - Se preço ou dimensão mudar antes da contratação, o BBOS solicita nova cotação e registra a diferença.
+- Na retirada, o frete é zero e o BBOS não compra etiqueta.
+- Na transportadora própria, o frete é zero no pedido, o nome da transportadora é obrigatório e o BBOS não compra etiqueta nem assume custo, seguro, rastreamento ou risco de transporte.
+- A responsabilidade pela transportadora própria aparece no resumo, PDF, mensagem e termo de aceite do distribuidor.
 
 ## Segurança e escopo de acesso
 
@@ -98,4 +105,3 @@ O aceite comercial e o pagamento são eventos diferentes. Um pedido que exige Pi
 3. Catálogo e criação do pedido pelo distribuidor.
 4. Cotação e seleção do frete no portal.
 5. Documentos fiscais, contratação logística e recompra assistida.
-
