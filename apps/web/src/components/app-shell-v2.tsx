@@ -28,6 +28,15 @@ import { dismissRouteHelp, recordRouteVisit, routeHelpDismissed } from "@/lib/in
 type ShellUser = SessionIdentity & { initials: string; corporateTitle: string };
 
 type CommandItem = BbosNavItem & { groupLabel: string; groupTone: BbosNavGroup["tone"] };
+type ShellNotification = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  href: string;
+  readAt: string | null;
+  createdAt: string;
+};
 
 export function AppShellV2({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -40,6 +49,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
   const [frictionHelp, setFrictionHelp] = useState<string | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState<ShellNotification[]>([]);
+  const [notificationsAvailable, setNotificationsAvailable] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +73,32 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       });
     return () => { cancelled = true; };
   }, [sessionAttempt]);
+
+  useEffect(() => {
+    if (sessionState !== "authenticated") return;
+    let cancelled = false;
+    const load = () => {
+      void fetch(`${getApiRoot()}/notifications`, { credentials: "include", cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("notifications unavailable");
+          return response.json() as Promise<{ items: ShellNotification[] }>;
+        })
+        .then((payload) => {
+          if (cancelled) return;
+          setNotifications(payload.items);
+          setNotificationsAvailable(true);
+        })
+        .catch(() => {
+          if (!cancelled) setNotificationsAvailable(false);
+        });
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [sessionState]);
 
   const navGroups = useMemo(() => navigationForRole(sessionUser?.role), [sessionUser?.role]);
   const pageLabels = useMemo(() => Object.fromEntries(navGroups.flatMap((group) => group.items.map((item) => [item.href, item.label]))), [navGroups]);
@@ -112,6 +150,20 @@ export function AppShellV2({ children }: { children: ReactNode }) {
   const logout = async () => {
     await fetch(`${getApiRoot()}/auth/logout`, { method: "POST", credentials: "include" });
     window.location.href = "/login";
+  };
+  const unreadNotifications = notifications.filter((item) => !item.readAt).length;
+  const openNotification = async (item: ShellNotification) => {
+    if (!item.readAt) {
+      setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification));
+      await fetch(`${getApiRoot()}/notifications/${item.id}/read`, { method: "PATCH", credentials: "include" }).catch(() => undefined);
+    }
+    setNotificationOpen(false);
+    router.push(item.href);
+  };
+  const markAllNotificationsRead = async () => {
+    const readAt = new Date().toISOString();
+    setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? readAt })));
+    await fetch(`${getApiRoot()}/notifications/read-all`, { method: "PATCH", credentials: "include" }).catch(() => undefined);
   };
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
@@ -168,7 +220,13 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setCommandOpen(true)} className="hidden min-h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-[11px] font-semibold text-stone-500 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 md:flex"><Search size={15} /><span>Buscar ou agir no BBOS</span><kbd className="ml-2 rounded-md bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold text-stone-400">⌘K</kbd></button>
             <button type="button" onClick={() => setCommandOpen(true)} className="rounded-xl p-2 md:hidden" aria-label="Buscar ou agir no BBOS"><Search size={18} /></button>
-            <button className="rounded-xl p-2" aria-label="Notificações"><Bell size={18} /></button>
+            <div className="relative">
+              <button type="button" onClick={() => { setNotificationOpen((open) => !open); setProfileOpen(false); }} className="relative rounded-xl p-2 transition hover:bg-stone-100" aria-label={unreadNotifications ? `Notificações, ${unreadNotifications} não lidas` : "Notificações"} aria-expanded={notificationOpen}>
+                <Bell size={18} />
+                {unreadNotifications > 0 && <span className="absolute right-1 top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[8px] font-bold text-white">{Math.min(unreadNotifications, 9)}{unreadNotifications > 9 ? "+" : ""}</span>}
+              </button>
+              {notificationOpen && <><button type="button" aria-label="Fechar notificações" className="fixed inset-0 z-30 cursor-default" onClick={() => setNotificationOpen(false)} /><div className="absolute right-0 z-40 mt-2 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-stone-100 px-4 py-3"><div><p className="text-sm font-bold">Notificações</p><p className="mt-0.5 text-[10px] text-stone-400">Decisões e exceções da operação</p></div>{unreadNotifications > 0 && <button type="button" onClick={() => void markAllNotificationsRead()} className="text-[10px] font-bold text-emerald-700">Marcar todas como lidas</button>}</div><div className="max-h-[420px] overflow-y-auto">{!notificationsAvailable ? <div className="p-5 text-xs text-red-700">Não foi possível confirmar as notificações agora.</div> : notifications.length === 0 ? <div className="p-6 text-center"><Bell size={20} className="mx-auto text-stone-300"/><p className="mt-3 text-xs font-semibold text-stone-700">Nenhuma notificação operacional.</p><p className="mt-1 text-[10px] leading-4 text-stone-400">Novas exceções aparecerão aqui quando exigirem acompanhamento.</p></div> : <div className="divide-y divide-stone-100">{notifications.map((item) => <button key={item.id} type="button" onClick={() => void openNotification(item)} className={`w-full px-4 py-3 text-left transition hover:bg-stone-50 ${item.readAt ? "bg-white" : "bg-amber-50/45"}`}><div className="flex gap-3"><span className={`mt-1 size-2 shrink-0 rounded-full ${item.readAt ? "bg-stone-200" : "bg-amber-500"}`}/><span className="min-w-0"><strong className="block text-xs text-stone-900">{item.title}</strong><span className="mt-1 block text-[10px] leading-4 text-stone-500">{item.message}</span><span className="mt-2 block text-[9px] text-stone-400">{new Date(item.createdAt).toLocaleString("pt-BR")}</span></span></div></button>)}</div>}</div></div></>}
+            </div>
             {user && <div className="relative ml-1">
               <button type="button" onClick={() => setProfileOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-1 py-1 text-left transition hover:bg-stone-100"><UserAvatar name={user.name} avatarUrl={user.avatarUrl} /><div className="hidden sm:block"><p className="text-xs font-bold">{user.name}</p><p className="text-[10px] text-[var(--bbos-text-muted)]">{user.corporateTitle}</p></div><ChevronDown size={13} className={`hidden text-stone-400 transition-transform sm:block ${profileOpen ? "rotate-180" : ""}`} /></button>
               {profileOpen && <><button aria-label="Fechar menu de perfil" className="fixed inset-0 z-30 cursor-default" onClick={() => setProfileOpen(false)} /><div className="absolute right-0 z-40 mt-2 w-56 overflow-hidden rounded-2xl border border-stone-200 bg-white p-2 shadow-xl"><div className="px-3 py-2"><p className="text-xs font-bold">{user.name}</p><p className="text-[10px] text-stone-400">{user.corporateTitle}</p></div><div className="my-1 border-t border-stone-100"/><Link href="/perfil" onClick={() => setProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"><UserRound size={15}/>Meu perfil</Link>{user.role === "ADMIN" && <Link href="/usuarios" onClick={() => setProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"><Settings size={15}/>Usuários e acessos</Link>}<button type="button" onClick={() => void logout()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"><LogOut size={15}/>Sair</button></div></>}

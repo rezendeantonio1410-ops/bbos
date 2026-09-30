@@ -76,10 +76,12 @@ import {
   PublicStorefrontMediaController,
 } from "./storefront-media.controller";
 import { StorefrontMediaService } from "./storefront-media.service";
+import { NotificationsController } from "./notifications.controller";
 
 @Module({
   controllers: [
     HealthController,
+    NotificationsController,
     DashboardController,
     BlendsController,
     ReceiptsController,
