@@ -1,11 +1,11 @@
 import { ForbiddenException, Controller, Post, Req } from "@nestjs/common";
-import { PrismaClient, seedCoffeeReferences } from "@bbos/database";
+import { prisma, seedCoffeeReferences } from "@bbos/database";
 import { requireSession } from "./auth-context";
 import { AuthService } from "./auth.service";
 
 @Controller("admin/coffee-reference-data")
 export class AdminCoffeeReferenceController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 

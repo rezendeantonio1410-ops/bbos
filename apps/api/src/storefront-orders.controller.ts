@@ -14,7 +14,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient, SalesOrderStatus } from "@bbos/database";
+import { prisma, SalesOrderStatus } from "@bbos/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
@@ -83,7 +83,7 @@ type CheckoutBody = {
 
 @Controller("storefront/orders")
 export class StorefrontOrdersController implements OnModuleInit, OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
   private reconciliationTimer?: NodeJS.Timeout;
   private reconcilingPayments = false;
 

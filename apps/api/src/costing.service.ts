@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, type OnModuleDestroy } from "@nestjs/common";
-import { AllocationMethod, CostNature, CostTariffType, CostType, Prisma, PrismaClient } from "@bbos/database";
+import { AllocationMethod, CostNature, CostTariffType, CostType, Prisma, prisma } from "@bbos/database";
 import { allocateCost, assertCostPeriodMutable, calculateMachineHourCost, evaluateClosingReadiness, validateCostPeriod } from "@bbos/shared";
 
 type CostEventInput = {
@@ -22,7 +22,7 @@ type CostEventInput = {
 
 @Injectable()
 export class CostingService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
 
   onModuleDestroy() { return this.database.$disconnect(); }
 

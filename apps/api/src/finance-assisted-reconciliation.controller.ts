@@ -10,7 +10,7 @@ import {
 import {
   FinancialTransactionType,
   Prisma,
-  PrismaClient,
+  prisma,
   ReceivableStatus,
 } from "@bbos/database";
 import type { Request } from "express";
@@ -26,7 +26,7 @@ const normalize = (value: unknown) =>
 
 @Controller("finance/reconciliation-assisted")
 export class FinanceAssistedReconciliationController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 

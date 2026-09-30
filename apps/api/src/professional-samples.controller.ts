@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { Prisma, PrismaClient, ProfessionalSampleSource, ProfessionalSampleStatus } from "@bbos/database";
+import { Prisma, prisma, ProfessionalSampleSource, ProfessionalSampleStatus } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { CUPPING_ATTRIBUTES, scoreCuppingAttributes } from "./cupping-score";
@@ -30,7 +30,7 @@ type SampleBody = {
 
 @Controller("professional-samples")
 export class ProfessionalSamplesController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(private readonly auth: AuthService) {}
 
   @Get("options")

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 
 export const STOREFRONT_MEDIA_CATEGORIES = [
   "FOUNDERS",
@@ -33,7 +33,7 @@ type Upload = { originalname: string; mimetype: string; buffer: Buffer };
 
 @Injectable()
 export class StorefrontMediaService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   async listAdmin(companyId: string) {
     const assets = await this.database.storefrontMediaAsset.findMany({
@@ -179,9 +179,10 @@ export class StorefrontMediaService {
   }
 }
 
-function stripData<T extends { data: Uint8Array }>(asset: T) {
-  const { data: _data, ...metadata } = asset;
-  return metadata;
+function stripData<T extends { data: Uint8Array }>(asset: T): Omit<T, "data"> {
+  const metadata: Partial<T> = { ...asset };
+  delete metadata.data;
+  return metadata as Omit<T, "data">;
 }
 
 function mediaCategory(value?: string): MediaCategory {

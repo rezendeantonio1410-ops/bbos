@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Allow verification builds to run beside a local development server
+  // without both processes writing to the same Next.js artifacts.
+  distDir: process.env.NEXT_DIST_DIR?.trim() || '.next',
   transpilePackages: ['@bbos/ui', '@bbos/shared'],
   poweredByHeader: false,
   async headers() {

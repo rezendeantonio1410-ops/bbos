@@ -6,14 +6,14 @@ import {
   Param,
   Res,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import type { Response } from "express";
 import { Public } from "./auth.guard";
 import { ProductsService } from "./products.service";
 
 @Controller("storefront/catalog")
 export class StorefrontCatalogController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly products: ProductsService) {}
 

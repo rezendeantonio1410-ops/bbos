@@ -19,7 +19,7 @@ import {
   GreenCoffeeSupplierType,
   PayableStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   PurchaseApprovalStatus,
   PurchaseInstallmentStatus,
   PurchaseOperationalStatus,
@@ -233,7 +233,7 @@ const contractLabel = (value?: unknown) => {
 
 @Controller("green-coffee-purchases")
 export class GreenCoffeePurchasesController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(
     private readonly auth: AuthService,
     private readonly taxRegistry: UnconfiguredTaxRegistryProvider,

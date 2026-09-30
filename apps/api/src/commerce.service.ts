@@ -4,14 +4,14 @@ import {
   type OnModuleDestroy,
 } from "@nestjs/common";
 import {
-  PrismaClient,
+  prisma,
   SalesChannelType,
   SalesOrderStatus,
 } from "@bbos/database";
 
 @Injectable()
 export class CommerceService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
   onModuleDestroy() {
     return this.database.$disconnect();
   }

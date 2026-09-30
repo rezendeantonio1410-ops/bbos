@@ -1,5 +1,5 @@
 import { Injectable, type OnModuleDestroy } from "@nestjs/common";
-import { Prisma, PrismaClient, type ProductLineCode } from "@bbos/database";
+import { Prisma, PrismaClient, prisma, type ProductLineCode } from "@bbos/database";
 import {
   assertProductPresentationAllowed,
   normalizeProductCode,
@@ -75,7 +75,7 @@ const OFFICIAL_LINES: Record<
 
 @Injectable()
 export class ProductsRepository implements OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   onModuleDestroy() {
     return this.database.$disconnect();

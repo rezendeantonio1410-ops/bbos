@@ -1,10 +1,10 @@
 import { Controller, Get, OnModuleDestroy } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { MercadoPagoService } from "./mercado-pago.service";
 
 @Controller("storefront/operations")
 export class StorefrontOperationsController implements OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly mercadoPago: MercadoPagoService) {}
 

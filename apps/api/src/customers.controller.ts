@@ -10,7 +10,7 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 
@@ -34,7 +34,7 @@ const internationalPhone = (value: unknown) => {
 
 @Controller("customers")
 export class CustomersController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 

@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import {
   createHash,
   createHmac,
@@ -44,7 +44,7 @@ const safeEqual = (left: string, right: string) => {
 };
 @Injectable()
 export class StorefrontCustomerService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly notifications: CustomerNotificationService) {}
 

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import {
   renderCustomerAccessEmail,
   renderCustomerEmail,
@@ -13,7 +13,7 @@ type TransactionalEmail = {
 
 @Injectable()
 export class CustomerNotificationService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   private emailAssets() {
     return {

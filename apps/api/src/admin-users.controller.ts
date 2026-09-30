@@ -1,10 +1,11 @@
 import { BadRequestException, Body, Controller, Get, Patch, Post, Req, UnauthorizedException, Param } from "@nestjs/common";
-import { PrismaClient, UserRole } from "@bbos/database";
+import { prisma, UserRole } from "@bbos/database";
 import { AuthService, hashPassword } from "./auth.service";
+import { passwordPolicyError } from "./auth-security";
 
 @Controller("admin/users")
 export class AdminUsersController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(private readonly auth: AuthService) {}
 
   private async admin(request: any) {
@@ -33,7 +34,8 @@ export class AdminUsersController {
     const role = String(body.role ?? "ADMIN").toUpperCase();
     if (!name) throw new BadRequestException("Nome é obrigatório.");
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new BadRequestException("E-mail inválido.");
-    if (password.length < 6) throw new BadRequestException("A senha temporária precisa ter pelo menos 6 caracteres.");
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) throw new BadRequestException(passwordError);
     if (!(role in UserRole)) throw new BadRequestException("Perfil de acesso inválido.");
     const existing = await this.db.user.findUnique({ where: { email } });
     if (existing) throw new BadRequestException("Já existe um usuário com este e-mail.");

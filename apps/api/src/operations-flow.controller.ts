@@ -1,10 +1,10 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
 
 @Controller("operations-flow")
 export class OperationsFlowController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(private readonly auth: AuthService) {}
 
   private async actor(request: any) {

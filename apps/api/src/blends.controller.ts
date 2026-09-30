@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { calculateComponentRequirements, validateBlendComponents } from "./production-planning";
@@ -9,7 +9,7 @@ type BlendComponentInput = { coffeeLotId: string; percentage: number };
 
 @Controller("blends")
 export class BlendsController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(private readonly auth: AuthService) {}
 
   @Get()

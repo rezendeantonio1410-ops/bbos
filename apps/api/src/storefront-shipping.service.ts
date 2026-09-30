@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHash, randomUUID } from "node:crypto";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { selectCustomerShippingOptions } from "./storefront-shipping-selection";
@@ -20,7 +20,7 @@ const cents = (value: unknown) => Math.round(Number(value) * 100);
 
 @Injectable()
 export class StorefrontShippingService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly melhorEnvioAuth: MelhorEnvioAuthService) {}
 

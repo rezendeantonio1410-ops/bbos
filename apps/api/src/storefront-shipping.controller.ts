@@ -1,11 +1,11 @@
 import { Body, Controller, Post } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { Public } from "./auth.guard";
 import { StorefrontShippingService, type ShippingQuoteRequest } from "./storefront-shipping.service";
 
 @Controller("storefront/shipping")
 export class StorefrontShippingController {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   constructor(private readonly shipping: StorefrontShippingService) {}
 

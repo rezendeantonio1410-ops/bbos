@@ -8,7 +8,7 @@ import {
   FinishedGoodsMovementType,
   InventoryReservationStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   SalesOrderStatus,
 } from "@bbos/database";
 import {
@@ -43,7 +43,7 @@ export type CreateSalesOrderInput = {
 
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
 
   constructor(private readonly customerLifecycle: SalesOrderCustomerLifecycleService) {}
 

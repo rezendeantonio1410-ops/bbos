@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { publicAppUrl } from "./public-app-url";
 
@@ -7,7 +7,7 @@ type EventSource = "BBOS" | "BLING" | "MELHOR_ENVIO" | "CARRIER" | "ADMIN";
 
 @Injectable()
 export class SalesOrderCustomerLifecycleService {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   private trackingSecret() {
     return process.env.ORDER_TRACKING_SECRET?.trim() || process.env.PAYMENT_WEBHOOK_SECRET?.trim() || "";

@@ -8,6 +8,7 @@ async function bootstrap() {
   const bootstrapResult = await bootstrapAdminFromEnvironment();
   if (bootstrapResult) console.log(`BBOS admin bootstrap ${bootstrapResult.created ? "created" : "verified"} for configured account.`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  app.set('trust proxy', 1);
   app.useBodyParser('json', { limit: '2mb' });
   app.setGlobalPrefix('api');
   const configuredOrigins = process.env.WEB_URL?.split(',').map((origin) => origin.trim()).filter(Boolean);
