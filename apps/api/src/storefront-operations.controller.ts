@@ -1,4 +1,4 @@
-import { Controller, Get, OnModuleDestroy } from "@nestjs/common";
+import { Controller, Get, OnModuleDestroy, Req } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { MercadoPagoService } from "./mercado-pago.service";
 
@@ -13,53 +13,65 @@ export class StorefrontOperationsController implements OnModuleDestroy {
   }
 
   @Get("health")
-  async health() {
+  async health(@Req() request: { user: { companyId: string } }) {
+    const companyId = request.user.companyId;
     const [orders, payments, outbox, webhooks, shipments, duplicates] =
       await Promise.all([
         this.database.$queryRawUnsafe<any[]>(
           `SELECT status,COUNT(*)::int AS count
              FROM "StorefrontOrder"
-            WHERE "createdAt" >= NOW() - INTERVAL '7 days'
+            WHERE "companyId"=$1
+              AND "createdAt" >= NOW() - INTERVAL '7 days'
             GROUP BY status
             ORDER BY status`,
+          companyId,
         ),
         this.database.$queryRawUnsafe<any[]>(
           `SELECT status,COUNT(*)::int AS count,
                   MIN("createdAt") AS "oldestCreatedAt"
              FROM "StorefrontPaymentAttempt"
-            WHERE "createdAt" >= NOW() - INTERVAL '7 days'
+            WHERE "companyId"=$1
+              AND "createdAt" >= NOW() - INTERVAL '7 days'
             GROUP BY status
             ORDER BY status`,
+          companyId,
         ),
         this.database.$queryRawUnsafe<any[]>(
           `SELECT provider,status,COUNT(*)::int AS count,
                   MIN("createdAt") AS "oldestCreatedAt"
              FROM "IntegrationOutbox"
-            WHERE "createdAt" >= NOW() - INTERVAL '7 days'
+            WHERE "companyId"=$1
+              AND "createdAt" >= NOW() - INTERVAL '7 days'
             GROUP BY provider,status
             ORDER BY provider,status`,
+          companyId,
         ),
         this.database.$queryRawUnsafe<any[]>(
           `SELECT provider,status,COUNT(*)::int AS count,
                   MIN("receivedAt") AS "oldestReceivedAt"
              FROM "IntegrationWebhookEvent"
-            WHERE "receivedAt" >= NOW() - INTERVAL '7 days'
+            WHERE "companyId"=$1
+              AND "receivedAt" >= NOW() - INTERVAL '7 days'
             GROUP BY provider,status
             ORDER BY provider,status`,
+          companyId,
         ),
         this.database.$queryRawUnsafe<any[]>(
           `SELECT status,COUNT(*)::int AS count
              FROM "Shipment"
-            WHERE "createdAt" >= NOW() - INTERVAL '7 days'
+            WHERE "companyId"=$1
+              AND "createdAt" >= NOW() - INTERVAL '7 days'
             GROUP BY status
             ORDER BY status`,
+          companyId,
         ),
         this.database.$queryRawUnsafe<any[]>(
           `SELECT "storefrontOrderId",COUNT(*)::int AS "paidAttempts"
              FROM "StorefrontPaymentAttempt"
-            WHERE status='PAID'
+            WHERE "companyId"=$1 AND status='PAID'
             GROUP BY "storefrontOrderId"
            HAVING COUNT(*) > 1`,
+          companyId,
         ),
       ]);
 
