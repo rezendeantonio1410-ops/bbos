@@ -70,7 +70,7 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
           <button className={styles.backdrop} type="button" aria-label="Fechar detalhes" onClick={() => setOpen(false)} />
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={`story-${product.id}`}>
             <header className={styles.header}>
-              <span>CURADORIA BISPO · {product.line}</span>
+              <span>ESCOLHA BISPO · {product.line}</span>
               <button type="button" onClick={() => setOpen(false)} aria-label="Fechar detalhes"><X /></button>
             </header>
 
@@ -188,7 +188,7 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
               <blockquote className={styles.founders}>
                 <img src="/brand/founders/jose-rezende.jpg" alt="José Rezende" />
                 <img src="/brand/founders/suzi-ninov.jpg" alt="Suzi Ninov" />
-                <div><small>POR QUE ELE ESTÁ AQUI</small><p>“{story.founderNote}”</p><cite>José e Suzi · curadoria Bispo</cite></div>
+                <div><small>POR QUE ELE ESTÁ AQUI</small><p>“{story.founderNote}”</p><cite>José e Suzi · origem e prova</cite></div>
               </blockquote>
 
               <figure className={styles.origin}>

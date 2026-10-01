@@ -36,12 +36,12 @@ const products = [
     weight: "500 g",
     tone: "#E9BB00",
     image: "/brand/products/essencial-treated.webp",
-    tag: "para todo dia",
+    tag: "preparo simples",
     story: {
       promise:
-        "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
+        "Macio, doce e equilibrado, já moído para preparar com facilidade.",
       description:
-        "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. É uma escolha segura para quem está começando no café especial ou quer simplicidade bem-feita todos os dias.",
+        "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. Uma escolha segura para quem prefere uma xícara macia e simplicidade bem-feita.",
       founderNote:
         "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
       bestFor: "rotina, café da manhã e quem prefere uma xícara macia",
@@ -220,28 +220,28 @@ const products = [
 ];
 const collections = [
   {
-    name: "Gourmet",
-    eyebrow: "Para começar",
-    copy: "Perfis macios e doces para a xícara de todos os dias.",
-    tone: "#E9BB00",
-  },
-  {
     name: "Clássicos",
-    eyebrow: "A linha de conforto",
-    copy: "Doçura reconhecível, corpo e equilíbrio.",
+    eyebrow: "O café para todos os dias",
+    copy: "Doçura, corpo e equilíbrio na medida certa.",
     tone: "#F96D01",
   },
   {
     name: "Épicos",
-    eyebrow: "Para explorar",
-    copy: "Lotes de maior complexidade e leitura sensorial mais longa.",
+    eyebrow: "Para descobrir novas camadas",
+    copy: "Aromas marcantes e sabores que evoluem na xícara.",
     tone: "#5C7D5F",
   },
   {
     name: "Raros",
-    eyebrow: "Edições limitadas",
-    copy: "Microlotes selecionados em volumes pequenos e safras específicas.",
+    eyebrow: "Safras que não se repetem",
+    copy: "Microlotes singulares, selecionados em volumes limitados.",
     tone: "#FF0000",
+  },
+  {
+    name: "Gourmet",
+    eyebrow: "O cuidado Bispo, já moído",
+    copy: "Maciez e equilíbrio para preparar com facilidade.",
+    tone: "#E9BB00",
   },
 ] as const;
 
@@ -256,7 +256,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Cafés especiais brasileiros",
   description:
-    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e curadoria de José e Suzi.",
+    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e seleção de José e Suzi.",
   alternates: { canonical: "/loja" },
   openGraph: {
     title: "Bispo Coffees — cafés escolhidos, não apenas vendidos",
@@ -275,10 +275,6 @@ export default async function LojaPage() {
   }));
   const featuredGuidance: Record<string, { eyebrow: string; reason: string }> =
     {
-      Essencial: {
-        eyebrow: "PARA TODO DIA",
-        reason: "Macio e equilibrado para começar pelo conforto.",
-      },
       Caramelo: {
         eyebrow: "DOÇURA RECONHECÍVEL",
         reason: "Caramelo e chocolate em uma xícara acolhedora.",
@@ -287,8 +283,12 @@ export default async function LojaPage() {
         eyebrow: "MAIS PROFUNDIDADE",
         reason: "Uma experiência longa, densa e contemplativa.",
       },
+      Singular: {
+        eyebrow: "NOVAS CAMADAS",
+        reason: "Frutado, complexo e evolutivo na xícara.",
+      },
     };
-  const featuredProducts = ["Essencial", "Caramelo", "Sublime"]
+  const featuredProducts = ["Caramelo", "Singular", "Sublime"]
     .map((name) => catalogProducts.find((product) => product.name === name))
     .filter((product): product is (typeof catalogProducts)[number] =>
       Boolean(product),
@@ -359,13 +359,10 @@ export default async function LojaPage() {
           <header className={premium.conversionIntro}>
             <div>
               <small>COMECE POR AQUI</small>
-              <h2 id="comece-por-aqui">
-                Três escolhas para comprar sem dúvida.
-              </h2>
+              <h2 id="comece-por-aqui">Três escolhas para viver o café.</h2>
             </div>
             <p>
-              Escolha pelo momento. A linha Gourmet chega moída; as demais
-              linhas são enviadas em grãos.
+              Do equilíbrio cotidiano às experiências de maior profundidade.
             </p>
           </header>
           <div className={premium.featuredGrid}>
@@ -426,8 +423,8 @@ export default async function LojaPage() {
           </div>
           <div className={premium.purchaseAssurances}>
             <span>
-              <b>Formato definido por linha</b>
-              <small>Gourmet moído · demais em grãos</small>
+              <b>Cafés especiais em grãos</b>
+              <small>Torra própria · 500 g</small>
             </span>
             <span>
               <b>Receber regularmente</b>
