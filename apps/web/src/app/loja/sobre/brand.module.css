@@ -8,3 +8,39 @@
 .page :global([class*="storyManifesto"]) { background: #0e191d !important; border-left-color: #e0eae9 !important; border-radius: 0 8px 8px 0 !important; }
 .page :global([class*="storyChapters"]) { border-radius: 8px !important; }
 .page :global([class*="storyChapters"]) article { background: #fff !important; }
+
+.shopControl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.shopLink {
+  min-width: 118px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 16px;
+  border: 1px solid #0e191d;
+  border-radius: 999px;
+  color: #0e191d;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shopLink:hover,
+.shopLink:focus-visible {
+  color: #fff;
+  background: #0e191d;
+}
+
+@media (max-width: 600px) {
+  .shopLink {
+    display: none;
+  }
+}

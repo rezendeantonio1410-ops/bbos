@@ -1,4 +1,4 @@
-.hero{--scene-tone:#f96d01;display:grid;grid-template-columns:1.08fr .92fr;min-height:calc(100svh - 104px);color:#0e191d;background:#ebebeb;border-bottom:1px solid rgba(14,25,29,.1)}
+.hero{--scene-tone:#c86424;display:grid;grid-template-columns:1.08fr .92fr;min-height:calc(100svh - 104px);color:#0e191d;background:#ebebeb;border-bottom:1px solid rgba(14,25,29,.1)}
 .media{position:relative;min-height:620px;overflow:hidden;background:#0e191d}
 .sceneImage{object-fit:cover;opacity:0;transform:scale(1.025);transition:opacity .8s ease,transform 6.8s ease}
 .activeImage{opacity:1;transform:scale(1.075)}

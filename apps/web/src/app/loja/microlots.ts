@@ -32,7 +32,7 @@ export const alexandreMicrolot: Microlot = {
     priceCents: 5400,
     weight: "250 g",
     weightGrams: 250,
-    tone: "#8E2721",
+    tone: "#8C3E37",
     image: "/brand/products/raros/alexandre-colheita.webp",
     tag: "poucas unidades",
     story: {

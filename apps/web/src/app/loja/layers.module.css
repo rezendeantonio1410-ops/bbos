@@ -271,6 +271,26 @@
 }
 
 @media (min-width: 601px) {
+  .mobileLineCard {
+    background: color-mix(in srgb, var(--layer-tone) 3.5%, #fff);
+  }
+
+  .mobileLineCard > small,
+  .mobileLineCard > span {
+    font-size: 9px;
+  }
+
+  .mobileLineCardActive {
+    border-color: color-mix(in srgb, var(--layer-tone) 45%, #0d1d17 8%);
+    background: color-mix(in srgb, var(--layer-tone) 8%, #fff);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--layer-tone) 18%, transparent);
+  }
+
+  .mobileLineCard:hover {
+    background: color-mix(in srgb, var(--layer-tone) 7%, #fff);
+  }
+
   /* A quiet diagonal signature, inspired by the bishop's movement. */
   .mobileLineCard::after {
     content: "";
@@ -568,7 +588,7 @@
   .mobileLineCard > small {
     min-height: 22px;
     color: rgba(13, 29, 23, 0.58);
-    font-size: 7px;
+    font-size: 8px;
     font-weight: 800;
     letter-spacing: 0.13em;
     line-height: 1.35;
@@ -584,7 +604,7 @@
   .mobileLineCard > p {
     margin: 0 0 12px;
     color: rgba(13, 29, 23, 0.65);
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.4;
   }
 

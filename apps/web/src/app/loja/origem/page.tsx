@@ -5,6 +5,8 @@ import styles from "../page.module.css";
 import brand from "../brand-review.module.css";
 import origin from "./page.module.css";
 import storyNav from "../story-navigation.module.css";
+import premium from "../premium-overrides.module.css";
+import MobileStoreMenu from "../MobileStoreMenu";
 import GeoAtlasInteractive from "./GeoAtlasInteractive";
 import RoastMindMap from "./RoastMindMap";
 import CupMindMap from "./CupMindMap";
@@ -98,7 +100,7 @@ export default async function OrigemPage() {
           />
         </Link>
         <nav
-          className={`${styles.nav} ${storyNav.nav}`}
+          className={`${styles.nav} ${storyNav.nav} ${premium.desktopNav}`}
           aria-label="Navegação principal"
         >
           <Link href="/loja#cafes">Cafés</Link>
@@ -109,9 +111,12 @@ export default async function OrigemPage() {
             A geografia na xícara
           </Link>
         </nav>
-        <Link className={origin.headerShop} href="/loja#cafes">
-          Ver cafés ↗
-        </Link>
+        <div className={origin.shopControl}>
+          <Link className={origin.shopLink} href="/loja#cafes">
+            Ver cafés ↗
+          </Link>
+          <MobileStoreMenu />
+        </div>
       </header>
 
       <article>
