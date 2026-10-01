@@ -39,7 +39,8 @@
 
 /* Premium editorial scale — product remains desirable without billboard typography. */
 @media(min-width:961px){
- .hero{min-height:calc(92svh - 99px)}
+ .hero{min-height:calc(84svh - 99px)}
+ .media{min-height:560px}
  .copy{justify-content:flex-start;padding:clamp(26px,3vw,54px);padding-top:clamp(72px,8vh,96px)}
  .copy h1{max-width:690px;margin:17px 0 13px;font-size:clamp(42px,4.05vw,66px);line-height:.96;letter-spacing:-.048em}
  .intro{max-width:610px;margin-bottom:18px;font-size:14px;line-height:1.5}
