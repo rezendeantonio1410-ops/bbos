@@ -372,11 +372,11 @@ function ModuleRail({
     ["Financeiro", currencies == null ? "—" : `${currencies} moeda(s)`, ""],
   ];
   return (
-    <div className="grid overflow-hidden rounded-2xl border border-stone-200 bg-white sm:grid-cols-2 lg:grid-cols-6">
-      {modules.map(([label, detail, stateName]) => (
+    <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-stone-200 bg-white lg:grid-cols-6">
+      {modules.map(([label, detail, stateName], index) => (
         <div
           key={label}
-          className={`border-b border-stone-100 px-4 py-3 last:border-b-0 sm:border-r lg:border-b-0 ${stateName === "active" ? "bg-violet-50" : ""}`}
+          className={`border-b border-stone-100 px-4 py-3 even:border-l lg:border-b-0 lg:border-l-0 lg:border-r lg:last:border-r-0 ${index >= modules.length - 2 ? "border-b-0" : ""} ${stateName === "active" ? "bg-violet-50" : ""}`}
         >
           <p className="text-[10px] font-bold uppercase tracking-[.08em] text-stone-800">
             {label}
