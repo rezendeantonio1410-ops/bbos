@@ -209,10 +209,10 @@ const products = {
 };
 
 const lineColors = {
-  GOURMET: { background: "#E9BB00", foreground: "#102018" },
-  CLÁSSICOS: { background: "#F96D01", foreground: "#102018" },
+  GOURMET: { background: "#C39A24", foreground: "#102018" },
+  CLÁSSICOS: { background: "#C86424", foreground: "#102018" },
   ÉPICOS: { background: "#5C7D5F", foreground: "#FFFFFF" },
-  RAROS: { background: "#9D3B35", foreground: "#FFFFFF" },
+  RAROS: { background: "#8C3E37", foreground: "#FFFFFF" },
 } as const;
 
 export default function Page() {

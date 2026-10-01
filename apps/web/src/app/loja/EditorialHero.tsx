@@ -21,7 +21,7 @@ const scenes = [
     notes: "Caramelo · Chocolate · Equilíbrio",
     price: "R$ 68,00",
     priceCents: 6800,
-    tone: "#F96D01",
+    tone: "#C86424",
     crop: "center",
     mediaSlot: "home.hero.caramelo",
   },
@@ -51,7 +51,7 @@ const scenes = [
     notes: "Rapadura · Caramelo · Doçura profunda",
     price: "R$ 84,00",
     priceCents: 8400,
-    tone: "#0E191D",
+    tone: "#5C7D5F",
     crop: "center 35%",
     mediaSlot: "home.hero.sublime",
   },
@@ -66,7 +66,7 @@ const scenes = [
     notes: "Macio · Doce · Fácil",
     price: "R$ 52,00",
     priceCents: 5200,
-    tone: "#E9BB00",
+    tone: "#C39A24",
     crop: "center 56%",
     mediaSlot: "home.hero.essencial",
   },
@@ -81,6 +81,7 @@ export default function EditorialHero({
 }) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [interacted, setInteracted] = useState(false);
   const selectedScene = scenes[active] ?? scenes[0]!;
   const scene = {
     ...selectedScene,
@@ -91,16 +92,16 @@ export default function EditorialHero({
   };
 
   useEffect(() => {
-    if (paused) return;
+    if (paused || interacted) return;
     const timer = window.setInterval(
       () => setActive((current) => (current + 1) % scenes.length),
-      6800,
+      8200,
     );
     return () => window.clearInterval(timer);
-  }, [paused]);
+  }, [interacted, paused]);
 
   const move = (direction: number) => {
-    setPaused(true);
+    setInteracted(true);
     setActive(
       (current) => (current + direction + scenes.length) % scenes.length,
     );
@@ -202,7 +203,7 @@ export default function EditorialHero({
               key={item.name}
               className={index === active ? styles.activeDot : ""}
               onClick={() => {
-                setPaused(true);
+                setInteracted(true);
                 setActive(index);
               }}
               aria-label={`Mostrar ${item.name}`}

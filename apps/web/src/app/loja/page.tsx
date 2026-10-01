@@ -34,7 +34,7 @@ const products = [
     price: "R$ 52",
     priceCents: 5200,
     weight: "500 g",
-    tone: "#E9BB00",
+    tone: "#C39A24",
     image: "/brand/products/essencial-treated.webp",
     tag: "preparo simples",
     story: {
@@ -61,7 +61,7 @@ const products = [
     price: "R$ 52",
     priceCents: 5200,
     weight: "500 g",
-    tone: "#E9BB00",
+    tone: "#C39A24",
     image: "/brand/products/intenso-treated.webp",
     tag: "mais corpo",
     story: {
@@ -88,7 +88,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#F96D01",
+    tone: "#C86424",
     image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
     story: {
@@ -115,7 +115,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#F96D01",
+    tone: "#C86424",
     image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
     story: {
@@ -142,7 +142,7 @@ const products = [
     price: "R$ 68",
     priceCents: 6800,
     weight: "500 g",
-    tone: "#F96D01",
+    tone: "#C86424",
     image: null,
     tag: "frescor",
     story: {
@@ -223,7 +223,7 @@ const collections = [
     name: "Clássicos",
     eyebrow: "O café para todos os dias",
     copy: "Doçura, corpo e equilíbrio na medida certa.",
-    tone: "#F96D01",
+    tone: "#C86424",
   },
   {
     name: "Épicos",
@@ -235,13 +235,13 @@ const collections = [
     name: "Raros",
     eyebrow: "Safras que não se repetem",
     copy: "Microlotes singulares, selecionados em volumes limitados.",
-    tone: "#FF0000",
+    tone: "#8C3E37",
   },
   {
     name: "Gourmet",
     eyebrow: "O cuidado Bispo, já moído",
     copy: "Maciez e equilíbrio para preparar com facilidade.",
-    tone: "#E9BB00",
+    tone: "#C39A24",
   },
 ] as const;
 

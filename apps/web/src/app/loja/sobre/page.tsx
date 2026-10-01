@@ -6,6 +6,8 @@ import authority from "../authority.module.css";
 import brand from "../brand-review.module.css";
 import storyBrand from "./brand.module.css";
 import storyNav from "../story-navigation.module.css";
+import premium from "../premium-overrides.module.css";
+import MobileStoreMenu from "../MobileStoreMenu";
 import { loadStorefrontMedia } from "@/lib/storefront-media";
 
 export const metadata: Metadata = {
@@ -75,7 +77,7 @@ export default async function SobrePage() {
           />
         </Link>
         <nav
-          className={`${styles.nav} ${storyNav.nav}`}
+          className={`${styles.nav} ${storyNav.nav} ${premium.desktopNav}`}
           aria-label="Navegação principal"
         >
           <Link href="/loja#cafes">Cafés</Link>
@@ -86,10 +88,15 @@ export default async function SobrePage() {
           </Link>
           <Link href="/loja/origem">A geografia na xícara</Link>
         </nav>
-        <div className={styles.actions}>
-          <Link href="/loja#cafes" aria-label="Ver cafés">
-            Ver cafés
+        <div className={storyBrand.shopControl}>
+          <Link
+            className={storyBrand.shopLink}
+            href="/loja#cafes"
+            aria-label="Ver cafés"
+          >
+            Ver cafés ↗
           </Link>
+          <MobileStoreMenu />
         </div>
       </header>
 
@@ -377,8 +384,7 @@ export default async function SobrePage() {
               </strong>
               <p>
                 Em 2017, Wagner Rosseto conquistou o primeiro lugar nacional na
-                categoria Natural da primeira edição do Concurso NossoCafé
-                Yara.
+                categoria Natural da primeira edição do Concurso NossoCafé Yara.
               </p>
               <div className={authority.evidenceLinks}>
                 <a

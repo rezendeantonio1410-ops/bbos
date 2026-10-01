@@ -30,12 +30,12 @@ export default function MobileStoreMenu() {
       </button>
       {open ? (
         <nav id="menu-loja-mobile" aria-label="Navegação móvel">
-          <a href="#cafes" onClick={() => setOpen(false)}>
+          <Link href="/loja#cafes" onClick={() => setOpen(false)}>
             Cafés
-          </a>
-          <a href="#camadas" onClick={() => setOpen(false)}>
+          </Link>
+          <Link href="/loja#camadas" onClick={() => setOpen(false)}>
             Escolher uma linha
-          </a>
+          </Link>
           <Link href="/loja/descobrir" onClick={() => setOpen(false)}>
             Descobrir o meu café
           </Link>
