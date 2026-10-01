@@ -40,13 +40,13 @@
 /* Premium editorial scale — product remains desirable without billboard typography. */
 @media(min-width:961px){
  .hero{min-height:calc(92svh - 99px)}
- .copy{padding:clamp(32px,3.25vw,58px)}
+ .copy{justify-content:flex-start;padding:clamp(26px,3vw,54px);padding-top:clamp(72px,8vh,96px)}
  .copy h1{max-width:690px;margin:17px 0 13px;font-size:clamp(42px,4.05vw,66px);line-height:.96;letter-spacing:-.048em}
  .intro{max-width:610px;margin-bottom:18px;font-size:14px;line-height:1.5}
  .topline{font-size:8.5px}
- .productStage{min-height:164px;grid-template-columns:185px 1fr;gap:20px;margin-bottom:14px}
- .productImage{width:185px;height:145px}
- .productReading strong{font-size:19px}
+ .productStage{min-height:180px;grid-template-columns:205px 1fr;gap:24px;margin-bottom:12px}
+ .productImage{width:205px;height:160px}
+ .productReading strong{font-size:20px}
  .buyRow strong{font-size:28px}
  .buyRow button{min-height:50px;min-width:205px}
 }
