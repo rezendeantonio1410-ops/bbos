@@ -127,6 +127,14 @@
   background: #0d1d17;
 }
 
+.section .actions .primary {
+  width: max-content;
+  min-width: 214px;
+  height: auto;
+  display: inline-flex;
+  white-space: nowrap;
+}
+
 .secondary {
   border: 1px solid rgba(13, 29, 23, 0.2);
 }
@@ -180,6 +188,7 @@
   .section .actions .primary,
   .section .actions .secondary {
     width: 100% !important;
+    min-width: 0;
     height: auto !important;
     min-height: 44px;
     display: inline-flex !important;

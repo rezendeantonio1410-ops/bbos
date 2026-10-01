@@ -261,12 +261,46 @@
   .mobileLineCard:hover {
     border-color: color-mix(in srgb, var(--layer-tone) 44%, #0d1d17 8%);
     box-shadow: 0 16px 36px rgba(13, 29, 23, 0.06);
-    transform: translateY(-2px);
+    transform: translate(2px, -2px);
+  }
+
+  .mobileLineCard:hover > i {
+    width: 48px;
+    transform: translate(2px, -2px);
+  }
+}
+
+@media (min-width: 601px) {
+  /* A quiet diagonal signature, inspired by the bishop's movement. */
+  .mobileLineCard::after {
+    content: "";
+    position: absolute;
+    right: -23px;
+    bottom: 28px;
+    width: 78px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--layer-tone) 22%, transparent)
+    );
+    opacity: 0.32;
+    pointer-events: none;
+    transform: rotate(-45deg);
+  }
+
+  .mobileLineCard > i {
+    clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 100%, 7px 100%);
+    transform-origin: left center;
+    transition:
+      width 180ms ease,
+      transform 180ms ease;
   }
 }
 
 .catalogPanel {
   display: block;
+  scroll-margin-top: 99px;
 }
 
 .catalogLayer {
@@ -303,14 +337,18 @@
 }
 
 .oneProduct {
-  grid-template-columns: minmax(0, 430px) !important;
+  grid-template-columns: minmax(0, 940px) !important;
   justify-content: center;
-  max-width: 430px;
+  max-width: 940px;
 }
 
 .twoProducts {
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   max-width: 940px;
+}
+
+.rareProductPhoto.rareProductPhoto {
+  object-position: center bottom !important;
 }
 
 .rarePackagePlaceholder {
@@ -613,6 +651,10 @@
     min-width: 0;
   }
 
+  .rareProductPhoto.rareProductPhoto {
+    object-position: center bottom !important;
+  }
+
   .mobileProductCard > div:first-child {
     height: 238px !important;
   }
@@ -634,5 +676,12 @@
   .actions a {
     width: 100%;
     box-sizing: border-box;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileLineCard,
+  .mobileLineCard > i {
+    transition: none;
   }
 }
