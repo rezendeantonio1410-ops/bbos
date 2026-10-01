@@ -145,7 +145,7 @@
 .filter {
   position: relative;
   z-index: 2;
-  display: flex;
+  display: none;
   justify-content: center;
   gap: 6px;
   width: max-content;
@@ -177,9 +177,92 @@
   scroll-margin-top: 104px;
 }
 
-.mobileLineIntro,
-.mobileLineGrid {
+.mobileLineIntro {
   display: none;
+}
+
+.mobileLineGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 1280px;
+  margin: 22px auto 36px;
+}
+
+.mobileLineCard {
+  --layer-tone: #735e49;
+  position: relative;
+  min-width: 0;
+  min-height: 174px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 22px 22px 18px;
+  overflow: hidden;
+  border: 1px solid rgba(13, 29, 23, 0.1);
+  border-radius: 6px;
+  color: #0d1d17;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(13, 29, 23, 0.025);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.mobileLineCard > i {
+  width: 42px;
+  height: 3px;
+  display: block;
+  margin-bottom: 15px;
+  background: var(--layer-tone);
+}
+
+.mobileLineCard > small {
+  min-height: 24px;
+  color: rgba(13, 29, 23, 0.56);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.mobileLineCard > strong {
+  margin: 4px 0 8px;
+  font: 380 28px/1 var(--font-manrope);
+  letter-spacing: -0.035em;
+}
+
+.mobileLineCard > p {
+  margin: 0 0 16px;
+  color: rgba(13, 29, 23, 0.64);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mobileLineCard > span {
+  margin-top: auto;
+  color: rgba(13, 29, 23, 0.52);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mobileLineCard:focus-visible {
+  outline: 2px solid #0d1d17;
+  outline-offset: 3px;
+}
+
+@media (hover: hover) and (min-width: 601px) {
+  .mobileLineCard:hover {
+    border-color: color-mix(in srgb, var(--layer-tone) 44%, #0d1d17 8%);
+    box-shadow: 0 16px 36px rgba(13, 29, 23, 0.06);
+    transform: translateY(-2px);
+  }
 }
 
 .catalogPanel {
@@ -324,6 +407,10 @@
   .rareNote {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .mobileLineGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
