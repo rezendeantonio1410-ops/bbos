@@ -277,11 +277,14 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     "singular",
     "sublime",
   ];
-  const recommendations = [...new Set(recommendationIds)]
-    .filter((id) => !currentItemIds.has(id))
-    .map((id) => cartRecommendationProducts[id])
-    .filter((product): product is StoreProduct => Boolean(product))
-    .slice(0, 2);
+  const recommendations =
+    currentItemIds.size < 2
+      ? [...new Set(recommendationIds)]
+          .filter((id) => !currentItemIds.has(id))
+          .map((id) => cartRecommendationProducts[id])
+          .filter((product): product is StoreProduct => Boolean(product))
+          .slice(0, 2)
+      : [];
   const add = (product: StoreProduct) => {
     setItems((current) => {
       const found = current.find((item) => item.id === product.id);
