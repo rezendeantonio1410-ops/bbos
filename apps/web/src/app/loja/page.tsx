@@ -442,12 +442,12 @@ export default async function LojaPage() {
         >
           <div className={`${styles.sectionHeader} ${layers.catalogPageIntro}`}>
             <div>
-              <small>ESCOLHA O SEU CAFÉ</small>
-              <h2>Escolha pelo perfil.</h2>
+              <small>QUATRO LINHAS</small>
+              <h2>Encontre o seu Bispo.</h2>
             </div>
             <p>
-              Compare os perfis e escolha sua próxima xícara. Se ainda estiver
-              em dúvida, use o guia sensorial.
+              Da xícara equilibrada às experiências mais raras, cada linha
+              traduz uma maneira de viver o café.
             </p>
           </div>
           <div id="camadas" className={layers.lineExplorerAnchor}>
