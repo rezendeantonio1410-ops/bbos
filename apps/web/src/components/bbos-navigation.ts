@@ -41,7 +41,12 @@ export type BbosNavItem = {
 };
 
 export type BbosNavGroup = {
-  id: "overview" | "commercial" | "operations" | "management";
+  id:
+    | "overview"
+    | "commercial"
+    | "international"
+    | "operations"
+    | "management";
   label: string;
   description: string;
   alwaysOpen?: boolean;
@@ -130,14 +135,6 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["faturamento", "receita"],
       },
       {
-        href: "/exportacoes",
-        label: "Exportações",
-        description: "Carteira internacional e prontidão",
-        icon: Ship,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
-        keywords: ["exportacao", "internacional", "incoterm", "proforma"],
-      },
-      {
         href: "/commerce",
         label: "Commerce",
         description: "Canais, preços e governança",
@@ -160,6 +157,30 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: Images,
         roles: ["ADMIN", "EXECUTIVE", "SALES"],
         keywords: ["foto", "imagem", "fundadores", "prova", "origem", "loja"],
+      },
+    ],
+  },
+  {
+    id: "international",
+    label: "Mercado internacional",
+    description: "Contratos, bookings e moedas",
+    tone: "violet",
+    items: [
+      {
+        href: "/exportacoes",
+        label: "Central de exportações",
+        description: "Carteira, logística e documentos",
+        icon: Ship,
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        keywords: [
+          "exportacao",
+          "internacional",
+          "incoterm",
+          "booking",
+          "container",
+          "proforma",
+          "cambio",
+        ],
       },
     ],
   },
