@@ -146,9 +146,11 @@ export class SalesOrdersService implements OnModuleDestroy {
       orderBy: { orderedAt: "desc" },
     });
     const active = orders.filter((order) => order.status !== "CANCELLED");
+    const currencyFor = (order: (typeof orders)[number]) =>
+      order.salesChannel?.currency?.trim().toUpperCase() || "UNSPECIFIED";
     const totalsByCurrency = Array.from(
       active.reduce((totals, order) => {
-        const currency = order.salesChannel?.currency || "BRL";
+        const currency = currencyFor(order);
         totals.set(
           currency,
           (totals.get(currency) ?? 0) + Number(order.totalAmount),
@@ -158,6 +160,7 @@ export class SalesOrdersService implements OnModuleDestroy {
     ).map(([currency, amount]) => ({ currency, amount }));
     const items = orders.map((order) => {
       const missing = [
+        ...(currencyFor(order) === "UNSPECIFIED" ? ["Moeda"] : []),
         ...(!order.incoterm ? ["Incoterm"] : []),
         ...(!order.incotermLocation ? ["Local nomeado"] : []),
         ...(!order.expectedDeliveryDate ? ["Prazo prometido"] : []),
@@ -165,7 +168,7 @@ export class SalesOrdersService implements OnModuleDestroy {
       return {
         ...order,
         totalAmount: Number(order.totalAmount),
-        currency: order.salesChannel?.currency || "BRL",
+        currency: currencyFor(order),
         readiness: { ready: missing.length === 0, missing },
       };
     });

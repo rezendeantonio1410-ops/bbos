@@ -37,6 +37,42 @@ test("sales order list and detail are isolated by company", async () => {
   });
 });
 
+test("export overview never assumes BRL when export currency is missing", async () => {
+  const service = new SalesOrdersService({} as never);
+  Object.defineProperty(service, "database", {
+    value: {
+      salesOrder: {
+        findMany: async () => [
+          {
+            id: "export-a",
+            code: "EXP-001",
+            orderNumber: "EXP-001",
+            status: "CONFIRMED",
+            totalAmount: 12500,
+            quantity: 1,
+            orderedAt: new Date("2026-10-01T12:00:00.000Z"),
+            expectedDeliveryDate: new Date("2026-11-01T12:00:00.000Z"),
+            incoterm: "FOB",
+            incotermLocation: "Santos",
+            customerReference: null,
+            customer: { name: "International Buyer" },
+            salesChannel: { name: "Exportação", currency: null },
+            items: [],
+          },
+        ],
+      },
+    },
+  });
+
+  const overview = await service.exportOverview("company-a");
+
+  assert.deepEqual(overview.metrics.totalsByCurrency, [
+    { currency: "UNSPECIFIED", amount: 12500 },
+  ]);
+  assert.equal(overview.items[0]?.currency, "UNSPECIFIED");
+  assert.deepEqual(overview.items[0]?.readiness.missing, ["Moeda"]);
+});
+
 test("every sales order state transition loads the order inside company scope", () => {
   const source = readFileSync(
     join(__dirname, "sales-orders.service.ts"),
