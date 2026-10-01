@@ -511,7 +511,8 @@ export default async function LojaPage() {
                                       ? "Cerejas maduras do microlote Raro"
                                       : `Embalagem Bispo ${p.name}`
                                   }
-                                  className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
+                                  className={`${styles.productPhoto} ${review.editorialProductPhoto} ${p.name === "Raro" ? layers.rareProductPhoto : ""}`}
+                                  decoding="async"
                                 />
                               ) : p.name === "Raro" ? (
                                 <div
@@ -722,6 +723,9 @@ export default async function LojaPage() {
             <Link href="/loja/termos-de-compra">Termos de compra</Link>
             <a href="mailto:pedidos@bispocoffees.com.br">
               pedidos@bispocoffees.com.br
+            </a>
+            <a href="https://bispocorp.com" target="_blank" rel="noreferrer">
+              Bispo Corp · B2B e exportação
             </a>
           </div>
           <div className={styles.footerBottom}>
