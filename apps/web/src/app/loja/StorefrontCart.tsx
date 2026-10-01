@@ -210,7 +210,7 @@ function CartItemStory({ item }: { item: CartItem }) {
           </div>
         </dl>
         <blockquote>
-          “{story.founderNote}”<cite>José e Suzi · curadoria Bispo</cite>
+          “{story.founderNote}”<cite>José e Suzi · origem e prova</cite>
         </blockquote>
       </div>
     </details>
@@ -534,7 +534,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     </section>
                   )}
                   <section className={styles.bispo}>
-                    <small>CURADORIA BISPO</small>
+                    <small>ESCOLHA BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
                       <Check /> Escolhido por José e Suzi, da origem à xícara.

@@ -80,10 +80,10 @@ export default function CoffeeLineExplorer({
     <div className={styles.explorer}>
       <div className={styles.mobileLineIntro}>
         <small>QUATRO LINHAS</small>
-        <h3>Escolha pelo seu momento.</h3>
+        <h3>Encontre o seu Bispo.</h3>
         <p>
-          Da xícara cotidiana aos microlotes: cada linha indica um jeito claro
-          de viver o café.
+          Da xícara equilibrada às experiências mais raras, cada linha traduz
+          uma maneira de viver o café.
         </p>
       </div>
 
