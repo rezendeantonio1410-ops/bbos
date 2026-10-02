@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -12,6 +13,7 @@ import {
   CircleDollarSign,
   Clock3,
   Filter,
+  Flame,
   LockKeyhole,
   MapPin,
   PackageCheck,
@@ -619,7 +621,9 @@ export default function InventoryPage() {
   const [movementOpen, setMovementOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGoodsStock[]>([]);
-  const [finishedGoodsOptions, setFinishedGoodsOptions] = useState<FinishedGoodsOption[]>([]);
+  const [finishedGoodsOptions, setFinishedGoodsOptions] = useState<
+    FinishedGoodsOption[]
+  >([]);
   const [stockVariantId, setStockVariantId] = useState("");
   const [stockQuantity, setStockQuantity] = useState("1");
   const [stockBusy, setStockBusy] = useState(false);
@@ -652,67 +656,115 @@ export default function InventoryPage() {
           (rawLots as Array<Record<string, unknown>>).map((lot) => {
             const supplier = lot.supplier as { name?: string } | undefined;
             const receipt = lot.receipt as Record<string, unknown> | undefined;
-            const purchase = receipt?.purchase as Record<string, unknown> | undefined;
-            const originUnit = purchase?.originUnit as Record<string, unknown> | undefined;
-            const region = originUnit?.coffeeRegion as { name?: string } | undefined;
-            const qualityStatus = String(receipt?.qualityStatus ?? "AWAITING_ANALYSIS");
-            const available = lot.status === "APPROVED" ? Number(lot.currentWeightKg ?? 0) : 0;
-            const traceability = (lot.traceability as Array<{ id: string; label: string; detail?: string; occurredAt?: string; status: "complete" | "current" | "future" } | null> | undefined ?? [])
-              .filter((event): event is { id: string; label: string; detail?: string; occurredAt?: string; status: "complete" | "current" | "future" } => Boolean(event))
-              .map((event) => ({ ...event, occurredAt: event.occurredAt ? new Date(event.occurredAt).toLocaleString("pt-BR") : "—" }));
+            const purchase = receipt?.purchase as
+              Record<string, unknown> | undefined;
+            const originUnit = purchase?.originUnit as
+              Record<string, unknown> | undefined;
+            const region = originUnit?.coffeeRegion as
+              { name?: string } | undefined;
+            const qualityStatus = String(
+              receipt?.qualityStatus ?? "AWAITING_ANALYSIS",
+            );
+            const available =
+              lot.status === "APPROVED" ? Number(lot.currentWeightKg ?? 0) : 0;
+            const traceability = (
+              (lot.traceability as
+                | Array<{
+                    id: string;
+                    label: string;
+                    detail?: string;
+                    occurredAt?: string;
+                    status: "complete" | "current" | "future";
+                  } | null>
+                | undefined) ?? []
+            )
+              .filter(
+                (
+                  event,
+                ): event is {
+                  id: string;
+                  label: string;
+                  detail?: string;
+                  occurredAt?: string;
+                  status: "complete" | "current" | "future";
+                } => Boolean(event),
+              )
+              .map((event) => ({
+                ...event,
+                occurredAt: event.occurredAt
+                  ? new Date(event.occurredAt).toLocaleString("pt-BR")
+                  : "—",
+              }));
             return {
-            id: String(lot.id),
-            code: String(lot.code),
-            supplier: supplier?.name ?? "—",
-            producer: supplier?.name ?? "—",
-            farm: String(receipt?.farmName ?? originUnit?.name ?? "—"),
-            cityState: `${String(receipt?.municipality ?? originUnit?.municipality ?? "—")}/${String(receipt?.state ?? originUnit?.state ?? "—")}`,
-            origin: String(lot.origin ?? "—"),
-            harvest: String(receipt?.harvest ?? lot.harvest ?? "—"),
-            variety: String(receipt?.variety ?? lot.variety ?? "—"),
-            process: String(receipt?.process ?? "—"),
-            initialQuantityKg: Number(lot.initialWeightKg ?? 0),
-            availableQuantityKg: available,
-            reservedQuantityKg: Number(lot.reservedWeightKg ?? 0),
-            realCostPerKg:
-              Number(lot.initialWeightKg ?? 0) > 0
-                ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg)
-                : 0,
-            totalLotCost: Number(lot.landedCost ?? 0),
-            currentStockValue:
-              (available + Number(lot.reservedWeightKg ?? 0)) *
-              (Number(lot.initialWeightKg ?? 0) > 0
-                ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg)
-                : 0),
-            location: String(
-              (lot.warehouse as { name?: string } | undefined)?.name ?? "—",
-            ),
-            status: lot.status === "APPROVED" ? "approved" : lot.status === "BLOCKED" ? "blocked" : "awaiting-lab",
-            minimumStockKg: 0,
-            quality: {
-              moisturePercent: receipt?.moisturePercent == null ? undefined : Number(receipt.moisturePercent),
-              screen: receipt?.screen ? String(receipt.screen) : undefined,
-              defects: receipt?.defects == null ? undefined : Number(receipt.defects),
-              scaScore: lot.qualityScore == null ? undefined : Number(lot.qualityScore),
-              notes: receipt?.qualityNotes ? String(receipt.qualityNotes) : undefined,
-            },
-            costs: {
-              coffeeValue: Number(lot.purchaseCost ?? 0),
-              freight: 0,
-              nonRecoverableTaxes: 0,
-              unloading: 0,
-              initialProcessing: 0,
-              otherDirectCosts: 0,
-            },
-            traceability,
-            region: region?.name ?? String(receipt?.origin ?? "—"),
-            qualityStatus,
-            physicalQuantityKg: Number(lot.currentWeightKg ?? 0),
+              id: String(lot.id),
+              code: String(lot.code),
+              supplier: supplier?.name ?? "—",
+              producer: supplier?.name ?? "—",
+              farm: String(receipt?.farmName ?? originUnit?.name ?? "—"),
+              cityState: `${String(receipt?.municipality ?? originUnit?.municipality ?? "—")}/${String(receipt?.state ?? originUnit?.state ?? "—")}`,
+              origin: String(lot.origin ?? "—"),
+              harvest: String(receipt?.harvest ?? lot.harvest ?? "—"),
+              variety: String(receipt?.variety ?? lot.variety ?? "—"),
+              process: String(receipt?.process ?? "—"),
+              initialQuantityKg: Number(lot.initialWeightKg ?? 0),
+              availableQuantityKg: available,
+              reservedQuantityKg: Number(lot.reservedWeightKg ?? 0),
+              realCostPerKg:
+                Number(lot.initialWeightKg ?? 0) > 0
+                  ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg)
+                  : 0,
+              totalLotCost: Number(lot.landedCost ?? 0),
+              currentStockValue:
+                (available + Number(lot.reservedWeightKg ?? 0)) *
+                (Number(lot.initialWeightKg ?? 0) > 0
+                  ? Number(lot.landedCost ?? 0) / Number(lot.initialWeightKg)
+                  : 0),
+              location: String(
+                (lot.warehouse as { name?: string } | undefined)?.name ?? "—",
+              ),
+              status:
+                lot.status === "APPROVED"
+                  ? "approved"
+                  : lot.status === "BLOCKED"
+                    ? "blocked"
+                    : "awaiting-lab",
+              minimumStockKg: 0,
+              quality: {
+                moisturePercent:
+                  receipt?.moisturePercent == null
+                    ? undefined
+                    : Number(receipt.moisturePercent),
+                screen: receipt?.screen ? String(receipt.screen) : undefined,
+                defects:
+                  receipt?.defects == null
+                    ? undefined
+                    : Number(receipt.defects),
+                scaScore:
+                  lot.qualityScore == null
+                    ? undefined
+                    : Number(lot.qualityScore),
+                notes: receipt?.qualityNotes
+                  ? String(receipt.qualityNotes)
+                  : undefined,
+              },
+              costs: {
+                coffeeValue: Number(lot.purchaseCost ?? 0),
+                freight: 0,
+                nonRecoverableTaxes: 0,
+                unloading: 0,
+                initialProcessing: 0,
+                otherDirectCosts: 0,
+              },
+              traceability,
+              region: region?.name ?? String(receipt?.origin ?? "—"),
+              qualityStatus,
+              physicalQuantityKg: Number(lot.currentWeightKg ?? 0),
             };
           }),
         );
         setMovements(rawMovements as InventoryMovement[]);
-        const options = (stockOptions as { variants?: FinishedGoodsOption[] }).variants ?? [];
+        const options =
+          (stockOptions as { variants?: FinishedGoodsOption[] }).variants ?? [];
         setFinishedGoodsOptions(options);
         setStockVariantId((current) => current || options[0]?.id || "");
       })
@@ -727,7 +779,9 @@ export default function InventoryPage() {
   const stockInFinishedGoods = async () => {
     const quantity = Number(stockQuantity);
     if (!stockVariantId || !Number.isSafeInteger(quantity) || quantity <= 0) {
-      setResult("Selecione o produto e informe uma quantidade inteira maior que zero.");
+      setResult(
+        "Selecione o produto e informe uma quantidade inteira maior que zero.",
+      );
       return;
     }
     setStockBusy(true);
@@ -744,16 +798,25 @@ export default function InventoryPage() {
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message ?? "Não foi possível registrar a entrada.");
+      if (!response.ok)
+        throw new Error(
+          payload.message ?? "Não foi possível registrar a entrada.",
+        );
       const goodsResponse = await fetch(`${api}/inventory/finished-goods`, {
         cache: "no-store",
         credentials: "include",
       });
       if (goodsResponse.ok) setFinishedGoods(await goodsResponse.json());
       setStockQuantity("1");
-      setResult(`Entrada registrada: ${payload.product} · ${payload.sku} · +${payload.quantityAdded} un. · disponível ${payload.availableUnits} un.`);
+      setResult(
+        `Entrada registrada: ${payload.product} · ${payload.sku} · +${payload.quantityAdded} un. · disponível ${payload.availableUnits} un.`,
+      );
     } catch (error) {
-      setResult(error instanceof Error ? error.message : "Não foi possível registrar a entrada.");
+      setResult(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível registrar a entrada.",
+      );
     } finally {
       setStockBusy(false);
     }
@@ -783,7 +846,10 @@ export default function InventoryPage() {
       (locationFilter === "all" || lot.location === locationFilter)
     );
   });
-  const availableKg = lots.reduce((sum, lot) => sum + lot.availableQuantityKg, 0);
+  const availableKg = lots.reduce(
+    (sum, lot) => sum + lot.availableQuantityKg,
+    0,
+  );
   const awaitingQualityKg = lots
     .filter((lot) => lot.status === "awaiting-lab")
     .reduce((sum, lot) => sum + lot.initialQuantityKg, 0);
@@ -838,7 +904,10 @@ export default function InventoryPage() {
     },
     {
       label: "Custo médio/kg",
-      value: summary.totalGreenCoffeeKg > 0 ? currency.format(summary.averageCostPerKg) : "Sem dados",
+      value:
+        summary.totalGreenCoffeeKg > 0
+          ? currency.format(summary.averageCostPerKg)
+          : "Sem dados",
       icon: ShieldAlert,
     },
   ];
@@ -857,13 +926,22 @@ export default function InventoryPage() {
             Saldos, valor, reservas e rastreabilidade do café verde
           </p>
         </div>
-        <Button
-          onClick={() => setMovementOpen(true)}
-          className="flex items-center justify-center gap-2 px-5 py-3"
-        >
-          <Plus size={16} />
-          Nova movimentação
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link
+            href="/producao?nova=1"
+            className="flex items-center justify-center gap-2 rounded-xl bg-forest-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-forest-900"
+          >
+            <Flame size={16} />
+            Iniciar produção
+          </Link>
+          <Button
+            onClick={() => setMovementOpen(true)}
+            className="flex items-center justify-center gap-2 px-5 py-3"
+          >
+            <Plus size={16} />
+            Nova movimentação
+          </Button>
+        </div>
       </div>
       {result && (
         <div className="mt-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -891,39 +969,47 @@ export default function InventoryPage() {
           </h2>
         </div>
         <Card className="mt-4 p-5">
-          <div className="mb-5 grid gap-3 rounded-2xl border border-forest-100 bg-forest-50/40 p-4 md:grid-cols-[1fr_130px_auto] md:items-end">
-            <label className="text-xs font-semibold">
-              Entrada manual de produto acabado
-              <select
-                value={stockVariantId}
-                onChange={(event) => setStockVariantId(event.target.value)}
-                className={`${inputClass} mt-2`}
+          <details className="mb-5 rounded-2xl border border-stone-200 bg-stone-50/60">
+            <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-stone-600">
+              Ajuste manual de produto acabado · uso excepcional
+            </summary>
+            <div className="grid gap-3 border-t p-4 md:grid-cols-[1fr_130px_auto] md:items-end">
+              <label className="text-xs font-semibold">
+                Produto
+                <select
+                  value={stockVariantId}
+                  onChange={(event) => setStockVariantId(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                >
+                  {finishedGoodsOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.product} · {option.sku} ·{" "}
+                      {option.presentationGrams === 1000
+                        ? "1 kg"
+                        : `${option.presentationGrams} g`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold">
+                Quantidade
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={stockQuantity}
+                  onChange={(event) => setStockQuantity(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                />
+              </label>
+              <Button
+                disabled={stockBusy || !stockVariantId}
+                onClick={() => void stockInFinishedGoods()}
               >
-                {finishedGoodsOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.product} · {option.sku} · {option.presentationGrams === 1000 ? "1 kg" : `${option.presentationGrams} g`}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold">
-              Quantidade
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={stockQuantity}
-                onChange={(event) => setStockQuantity(event.target.value)}
-                className={`${inputClass} mt-2`}
-              />
-            </label>
-            <Button
-              disabled={stockBusy || !stockVariantId}
-              onClick={() => void stockInFinishedGoods()}
-            >
-              {stockBusy ? "Registrando…" : "Registrar entrada"}
-            </Button>
-          </div>
+                {stockBusy ? "Registrando…" : "Registrar ajuste"}
+              </Button>
+            </div>
+          </details>
           {finishedGoodsByLine.length ? (
             <div className="space-y-5">
               {finishedGoodsByLine.map(([lineName, items]) => (
@@ -987,7 +1073,8 @@ export default function InventoryPage() {
                 Nenhum saldo de produto acabado
               </p>
               <p className="mt-1 text-xs text-stone-400">
-                Registre uma entrada acima ou conclua uma OP para criar o saldo por SKU.
+                Registre uma entrada acima ou conclua uma OP para criar o saldo
+                por SKU.
               </p>
             </div>
           )}

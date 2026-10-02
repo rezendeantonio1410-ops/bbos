@@ -13,7 +13,8 @@ import {
   Flame,
   Gauge,
   PackageCheck,
-  Plus,
+  PackageOpen,
+  Play,
   Scale,
   Target,
   X,
@@ -55,6 +56,208 @@ const status: Record<
 };
 const field =
   "mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-forest-700";
+
+type ProductionOptions = {
+  warehouses: Array<{ id: string; code: string; name: string }>;
+  resources: Array<{ id: string; code: string; name: string }>;
+  users: Array<{ id: string; name: string }>;
+};
+
+const statusFromApi = (value: unknown): ProductionOrderStatus => {
+  const normalized = String(value ?? "PLANNED").toUpperCase();
+  const values: Record<string, ProductionOrderStatus> = {
+    PLANNED: "planned",
+    RESERVED: "reserved",
+    IN_PROGRESS: "in-production",
+    ROASTED: "roasted",
+    PACKAGING: "packaging",
+    COMPLETED: "completed",
+    BLOCKED: "blocked",
+    CANCELLED: "cancelled",
+  };
+  return values[normalized] ?? "planned";
+};
+
+const traceabilityForStatus = (current: ProductionOrderStatus) => {
+  const stage =
+    current === "completed"
+      ? 3
+      : current === "roasted" || current === "packaging"
+        ? 2
+        : current === "in-production"
+          ? 1
+          : 0;
+  return ["Ordem gerada", "Torra", "Empacotamento", "Produto acabado"].map(
+    (label, index) => ({
+      id: `${label}-${index}`,
+      label,
+      detail:
+        index < stage
+          ? "Concluído"
+          : index === stage
+            ? current === "completed"
+              ? "Concluído"
+              : "Etapa atual"
+            : "Próxima etapa",
+      status:
+        index < stage || current === "completed"
+          ? ("complete" as const)
+          : index === stage
+            ? ("current" as const)
+            : ("future" as const),
+    }),
+  );
+};
+
+const mapProductionOrder = (
+  row: Record<string, unknown>,
+): ProductionOrderView => {
+  const consumptions = Array.isArray(row.consumptions)
+    ? (row.consumptions as Array<Record<string, unknown>>)
+    : [];
+  const batches = Array.isArray(row.batches)
+    ? (row.batches as Array<Record<string, unknown>>)
+    : [];
+  const packagingConsumptions = Array.isArray(row.packagingConsumptions)
+    ? (row.packagingConsumptions as Array<Record<string, unknown>>)
+    : [];
+  const finishedMovements = Array.isArray(row.finishedGoodsMovements)
+    ? (row.finishedGoodsMovements as Array<Record<string, unknown>>)
+    : [];
+  const variant = row.productVariant as
+    { id?: string; netWeightGrams?: number; sku?: string } | undefined;
+  const plannedQuantity = Number(row.plannedWeightKg ?? 0);
+  const packageWeightG = Number(variant?.netWeightGrams ?? 500);
+  const producedPackages = finishedMovements.reduce(
+    (sum, item) => sum + Number(item.packageQuantity ?? 0),
+    0,
+  );
+  const finishedOutputKg = finishedMovements.reduce(
+    (sum, item) => sum + Number(item.totalWeightKg ?? 0),
+    0,
+  );
+  const currentStatus = statusFromApi(row.status);
+  const roastedOutputKg = batches.reduce(
+    (sum, batch) => sum + Number(batch.roastedOutputKg ?? 0),
+    0,
+  );
+  const greenCoffeeConsumedCost = consumptions.reduce(
+    (sum, item) =>
+      sum + Number(item.reservedKg ?? 0) * Number(item.realCostPerKg ?? 0),
+    0,
+  );
+  const packagingCost = packagingConsumptions.reduce(
+    (sum, item) => sum + Number(item.totalCost ?? 0),
+    0,
+  );
+  return {
+    id: String(row.id),
+    code: String(row.code),
+    productVariantId:
+      String(variant?.id ?? row.productVariantId ?? "") || undefined,
+    product: String(row.productName ?? "Produto não definido"),
+    sku: String(row.sku ?? variant?.sku ?? "—"),
+    plannedQuantity,
+    producedQuantity: finishedOutputKg || Number(row.actualOutputKg ?? 0),
+    unit: String(row.unit ?? "kg"),
+    plannedAt: String(row.plannedAt ?? ""),
+    startedAt: row.startedAt ? String(row.startedAt) : undefined,
+    completedAt: row.completedAt ? String(row.completedAt) : undefined,
+    responsible: String(row.responsible ?? "—"),
+    priority: String(
+      row.priority ?? "normal",
+    ).toLowerCase() as ProductionOrderView["priority"],
+    status: currentStatus,
+    blendName: String(
+      (row.blend as { name?: string } | undefined)?.name ?? "Café único",
+    ),
+    allocations: consumptions.map((item) => {
+      const lot = item.coffeeLot as
+        { id?: string; code?: string; origin?: string } | undefined;
+      return {
+        lotId: String(lot?.id ?? item.coffeeLotId),
+        lotCode: String(lot?.code ?? item.coffeeLotId),
+        origin: String(lot?.origin ?? "—"),
+        reservedKg: Number(item.reservedKg ?? 0),
+        consumedKg: Number(item.consumedKg ?? 0),
+        percentage: Number(item.percentage ?? 0),
+        realCostPerKg: Number(item.realCostPerKg ?? 0),
+      };
+    }),
+    batches: batches.map((batch) => ({
+      id: String(batch.id),
+      code: String(batch.code),
+      machine: String(batch.machine),
+      operator: String(batch.operator),
+      lotCode: "—",
+      greenInputKg: Number(batch.greenInputKg),
+      roastedOutputKg: Number(batch.roastedOutputKg),
+      lossKg: Number(batch.lossKg),
+      lossPercent: Number(batch.lossPercent),
+      startedAt: String(batch.startedAt),
+      completedAt: String(batch.completedAt),
+      notes: batch.notes ? String(batch.notes) : undefined,
+    })),
+    packaging: {
+      packageWeightG,
+      plannedPackages: Math.floor((plannedQuantity * 1000) / packageWeightG),
+      producedPackages,
+      lossPackages: Math.max(
+        0,
+        Math.floor((plannedQuantity * 1000) / packageWeightG) -
+          producedPackages,
+      ),
+      packagingName: String(
+        packagingConsumptions[0]?.materialName ?? `Embalagem ${row.sku ?? ""}`,
+      ),
+      packagingUnitCost: Number(packagingConsumptions[0]?.unitCost ?? 0),
+      labelsCost: 0,
+      boxesCost: 0,
+      otherSuppliesCost: 0,
+    },
+    costs: {
+      greenCoffeeConsumedCost,
+      roastLossCost: 0,
+      packagingCost,
+      suppliesCost: 0,
+      laborCost: 0,
+      energyCost: 0,
+      otherIndustrialCosts: 0,
+      roastedOutputKg,
+      finishedOutputKg,
+      producedPackages,
+      standardCostPerKg: 0,
+      sku: String(row.sku ?? "—"),
+      sourceCostEventIds: [],
+    },
+    traceability: traceabilityForStatus(currentStatus),
+  };
+};
+
+const fetchProductionOrders = async () => {
+  const response = await fetch(`${getApiBaseUrl()}/production/orders`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok)
+    throw new Error("Não foi possível atualizar as ordens de produção.");
+  const rows = (await response.json()) as Array<Record<string, unknown>>;
+  return rows.map(mapProductionOrder);
+};
+
+const readApiError = async (response: Response, fallback: string) => {
+  const payload = (await response.json().catch(() => ({}))) as {
+    message?: string | string[];
+  };
+  return Array.isArray(payload.message)
+    ? payload.message.join(" ")
+    : (payload.message ?? fallback);
+};
+
+const localDateTimeValue = (date: Date) => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+};
 
 function SummaryCard({
   label,
@@ -121,14 +324,30 @@ function NewOrderWizard({
     });
   }, []);
   const [quantity, setQuantity] = useState(240);
-  const [date, setDate] = useState("2026-08-08");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [responsible, setResponsible] = useState("");
   const [mode, setMode] = useState<"single" | "blend">("single");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
-  const [available, setAvailable] = useState<Array<{ id: string; code: string; origin: string; availableQuantityKg: number; realCostPerKg: number; supplier: string; warehouse: string }>>([]);
+  const [available, setAvailable] = useState<
+    Array<{
+      id: string;
+      code: string;
+      origin: string;
+      availableQuantityKg: number;
+      realCostPerKg: number;
+      supplier: string;
+      warehouse: string;
+    }>
+  >([]);
   useEffect(() => {
-    void fetch(`${getApiBaseUrl()}/production/available-lots`, { credentials: "include", cache: "no-store" })
-      .then((response) => response.ok ? response.json() as Promise<typeof available> : [])
+    void fetch(`${getApiBaseUrl()}/production/available-lots`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<typeof available>) : [],
+      )
       .then(setAvailable)
       .catch(() => setAvailable([]));
   }, []);
@@ -150,6 +369,8 @@ function NewOrderWizard({
       return setError("Selecione uma apresentação/SKU ativa do catálogo.");
     if (step === 1 && quantity <= 0)
       return setError("Informe uma quantidade maior que zero.");
+    if (step === 2 && !responsible.trim())
+      return setError("Informe o responsável pela produção.");
     if (step === 4 && Math.abs(allocated - quantity) > 0.001)
       return setError(
         `A reserva deve totalizar ${number.format(quantity)} kg.`,
@@ -196,7 +417,7 @@ function NewOrderWizard({
       producedQuantity: 0,
       unit: "kg",
       plannedAt: date,
-      responsible: "A definir",
+      responsible: responsible.trim(),
       priority: "normal",
       status: "reserved",
       blendName:
@@ -337,9 +558,7 @@ function NewOrderWizard({
                 SKU / Apresentação
                 <select
                   value={selectedVariant?.id ?? ""}
-                  onChange={(event) =>
-                    setProductVariantId(event.target.value)
-                  }
+                  onChange={(event) => setProductVariantId(event.target.value)}
                   className={field}
                   disabled={!variantsForProduct.length}
                 >
@@ -358,11 +577,12 @@ function NewOrderWizard({
               </label>
               {selectedVariant && (
                 <div className="sm:col-span-3 rounded-xl bg-stone-50 px-4 py-3 text-xs text-stone-600">
-                  <strong className="text-stone-900">{product}</strong> • {sku} •{" "}
+                  <strong className="text-stone-900">{product}</strong> • {sku}{" "}
+                  •{" "}
                   {selectedVariant.packageWeightG === 1000
                     ? "1 kg"
-                    : `${selectedVariant.packageWeightG} g`} • unidade{" "}
-                  {selectedVariant.commercialUnit} •{" "}
+                    : `${selectedVariant.packageWeightG} g`}{" "}
+                  • unidade {selectedVariant.commercialUnit} •{" "}
                   <span className="text-emerald-700">Ativo</span>
                 </div>
               )}
@@ -381,15 +601,26 @@ function NewOrderWizard({
             </label>
           )}
           {step === 2 && (
-            <label className="mx-auto block max-w-sm text-xs font-semibold">
-              Data planejada
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className={field}
-              />
-            </label>
+            <div className="mx-auto grid max-w-2xl gap-4 sm:grid-cols-2">
+              <label className="text-xs font-semibold">
+                Data planejada
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className={field}
+                />
+              </label>
+              <label className="text-xs font-semibold">
+                Responsável
+                <input
+                  value={responsible}
+                  onChange={(event) => setResponsible(event.target.value)}
+                  placeholder="Nome do responsável"
+                  className={field}
+                />
+              </label>
+            </div>
           )}
           {step === 3 && (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -423,7 +654,11 @@ function NewOrderWizard({
           )}
           {step === 4 && (
             <div className="space-y-3">
-              {!available.length && <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">Nenhum lote aprovado com saldo disponível.</p>}
+              {!available.length && (
+                <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">
+                  Nenhum lote aprovado com saldo disponível.
+                </p>
+              )}
               {available.map((lot) => (
                 <div
                   key={lot.id}
@@ -511,23 +746,544 @@ function NewOrderWizard({
   );
 }
 
+function RoastRegistration({
+  order,
+  onDone,
+  onCancel,
+}: {
+  order: ProductionOrderView;
+  onDone: (message: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const reservedKg = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg,
+    0,
+  );
+  const alreadyRoastedKg = order.batches.reduce(
+    (sum, item) => sum + item.greenInputKg,
+    0,
+  );
+  const remainingKg = Math.max(0, reservedKg - alreadyRoastedKg);
+  const now = new Date();
+  const [code, setCode] = useState(
+    `TOR-${order.code.replace(/^OP-/, "")}-${String(order.batches.length + 1).padStart(2, "0")}`,
+  );
+  const [machine, setMachine] = useState("Torrador 01");
+  const [operator, setOperator] = useState(order.responsible);
+  const [greenInputKg, setGreenInputKg] = useState(remainingKg);
+  const [roastedOutputKg, setRoastedOutputKg] = useState(
+    Number((remainingKg * 0.85).toFixed(3)),
+  );
+  const [startedAt, setStartedAt] = useState(
+    localDateTimeValue(new Date(now.getTime() - 60 * 60_000)),
+  );
+  const [completedAt, setCompletedAt] = useState(localDateTimeValue(now));
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const lossPercent =
+    greenInputKg > 0
+      ? ((greenInputKg - roastedOutputKg) / greenInputKg) * 100
+      : 0;
+  const submit = async () => {
+    setError("");
+    if (!code.trim() || !machine.trim() || !operator.trim())
+      return setError("Informe batch, torrador e operador.");
+    if (
+      greenInputKg <= 0 ||
+      greenInputKg > remainingKg + 0.001 ||
+      roastedOutputKg <= 0 ||
+      roastedOutputKg > greenInputKg
+    )
+      return setError("Revise os pesos verde e torrado informados.");
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/production/orders/${order.id}/batches`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            code: code.trim(),
+            machine: machine.trim(),
+            operator: operator.trim(),
+            greenInputKg,
+            roastedOutputKg,
+            startedAt: new Date(startedAt).toISOString(),
+            completedAt: new Date(completedAt).toISOString(),
+            coffeeLotIds: order.allocations.map((item) => item.lotId),
+            notes: notes.trim() || undefined,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiError(response, "Não foi possível registrar a torra."),
+        );
+      await onDone(
+        `Torra registrada: ${number.format(greenInputKg)} kg verdes → ${number.format(roastedOutputKg)} kg torrados.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível registrar a torra.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-amber-800">
+            Etapa 2 · Torra
+          </p>
+          <h3 className="mt-1 text-lg font-bold">
+            Registrar resultado da torra
+          </h3>
+          <p className="mt-1 text-xs text-stone-500">
+            Restam {number.format(remainingKg)} kg reservados nesta OP.
+          </p>
+        </div>
+        <button onClick={onCancel} className="rounded-xl border bg-white p-2">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold">
+          Código do batch
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Torrador
+          <input
+            value={machine}
+            onChange={(e) => setMachine(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Operador
+          <input
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Café verde utilizado (kg)
+          <input
+            type="number"
+            min="0.001"
+            max={remainingKg}
+            step="0.001"
+            value={greenInputKg}
+            onChange={(e) => setGreenInputKg(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Café torrado obtido (kg)
+          <input
+            type="number"
+            min="0.001"
+            max={greenInputKg}
+            step="0.001"
+            value={roastedOutputKg}
+            onChange={(e) => setRoastedOutputKg(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <div className="rounded-xl bg-white p-4 text-xs">
+          <span className="text-stone-500">Perda calculada</span>
+          <strong className="mt-1 block text-lg text-amber-800">
+            {number.format(Math.max(0, lossPercent))}%
+          </strong>
+        </div>
+        <label className="text-xs font-semibold">
+          Início
+          <input
+            type="datetime-local"
+            value={startedAt}
+            onChange={(e) => setStartedAt(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Término
+          <input
+            type="datetime-local"
+            value={completedAt}
+            onChange={(e) => setCompletedAt(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold sm:col-span-2">
+          Observações
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Opcional"
+            className={field}
+          />
+        </label>
+      </div>
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-semibold text-stone-500"
+        >
+          Cancelar
+        </button>
+        <Button disabled={busy} onClick={() => void submit()}>
+          {busy ? "Registrando…" : "Confirmar torra"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PackagingRegistration({
+  order,
+  onDone,
+  onCancel,
+}: {
+  order: ProductionOrderView;
+  onDone: (message: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const packageWeightG = order.packaging?.packageWeightG ?? 500;
+  const roastedKg = order.batches.reduce(
+    (sum, item) => sum + item.roastedOutputKg,
+    0,
+  );
+  const suggestedPackages = Math.floor((roastedKg * 1000) / packageWeightG);
+  const [options, setOptions] = useState<ProductionOptions>({
+    warehouses: [],
+    resources: [],
+    users: [],
+  });
+  const [warehouseId, setWarehouseId] = useState("");
+  const [producedPackages, setProducedPackages] = useState(suggestedPackages);
+  const [materialName, setMaterialName] = useState(`Embalagem ${order.sku}`);
+  const [packagingUnitCost, setPackagingUnitCost] = useState(0);
+  const [laborCost, setLaborCost] = useState(0);
+  const [energyCost, setEnergyCost] = useState(0);
+  const [suppliesCost, setSuppliesCost] = useState(0);
+  const [otherIndustrialCosts, setOtherIndustrialCosts] = useState(0);
+  const [standardCostPerKg, setStandardCostPerKg] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState("");
+  const finishedOutputKg = (producedPackages * packageWeightG) / 1000;
+  useEffect(() => {
+    const api = getApiBaseUrl();
+    void Promise.all([
+      fetch(`${api}/production/options`, {
+        credentials: "include",
+        cache: "no-store",
+      }).then((response) =>
+        response.ok
+          ? (response.json() as Promise<ProductionOptions>)
+          : { warehouses: [], resources: [], users: [] },
+      ),
+      fetch(`${api}/production/orders/${order.id}/packaging/start`, {
+        method: "POST",
+        credentials: "include",
+      }),
+    ])
+      .then(async ([loadedOptions, transition]) => {
+        if (!transition.ok)
+          throw new Error(
+            await readApiError(
+              transition,
+              "Não foi possível iniciar o empacotamento.",
+            ),
+          );
+        setOptions(loadedOptions);
+        setWarehouseId(loadedOptions.warehouses[0]?.id ?? "");
+        setReady(true);
+      })
+      .catch((caught) =>
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Não foi possível iniciar o empacotamento.",
+        ),
+      );
+  }, [order.id]);
+  const submit = async () => {
+    setError("");
+    if (!Number.isSafeInteger(producedPackages) || producedPackages <= 0)
+      return setError("Informe uma quantidade inteira de pacotes.");
+    if (finishedOutputKg > roastedKg + 0.001)
+      return setError(
+        "A quantidade de pacotes supera o café torrado disponível.",
+      );
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/production/orders/${order.id}/complete`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            warehouseId: warehouseId || undefined,
+            finishedOutputKg,
+            producedPackages,
+            packaging: [
+              {
+                materialType: "PACKAGE",
+                materialName: materialName.trim() || `Embalagem ${order.sku}`,
+                sku: order.sku,
+                quantity: producedPackages,
+                unit: "UN",
+                unitCost: packagingUnitCost,
+              },
+            ],
+            laborCost,
+            energyCost,
+            suppliesCost,
+            otherIndustrialCosts,
+            standardCostPerKg,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiError(
+            response,
+            "Não foi possível concluir o empacotamento.",
+          ),
+        );
+      await onDone(
+        `Empacotamento concluído: ${producedPackages.toLocaleString("pt-BR")} pacotes de ${packageWeightG} g adicionados ao estoque.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível concluir o empacotamento.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-2xl border border-forest-200 bg-forest-50/50 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+            Etapa 3 · Empacotamento
+          </p>
+          <h3 className="mt-1 text-lg font-bold">
+            Transformar em produto acabado
+          </h3>
+          <p className="mt-1 text-xs text-stone-500">
+            {number.format(roastedKg)} kg torrados disponíveis · pacotes de{" "}
+            {packageWeightG} g
+          </p>
+        </div>
+        <button onClick={onCancel} className="rounded-xl border bg-white p-2">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold">
+          Quantidade de pacotes
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={producedPackages}
+            onChange={(e) => setProducedPackages(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <div className="rounded-xl bg-white p-4 text-xs">
+          <span className="text-stone-500">Peso acabado</span>
+          <strong className="mt-1 block text-lg">
+            {number.format(finishedOutputKg)} kg
+          </strong>
+        </div>
+        <label className="text-xs font-semibold">
+          Destino
+          <select
+            value={warehouseId}
+            onChange={(e) => setWarehouseId(e.target.value)}
+            className={field}
+          >
+            {!options.warehouses.length && (
+              <option value="">Produto Acabado · automático</option>
+            )}
+            {options.warehouses.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold">
+          Material de embalagem
+          <input
+            value={materialName}
+            onChange={(e) => setMaterialName(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Custo unitário da embalagem
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={packagingUnitCost}
+            onChange={(e) => setPackagingUnitCost(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Mão de obra
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={laborCost}
+            onChange={(e) => setLaborCost(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <details className="sm:col-span-2 rounded-xl border bg-white p-4">
+          <summary className="cursor-pointer text-xs font-semibold">
+            Outros custos da produção
+          </summary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <label className="text-xs font-semibold">
+              Energia
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={energyCost}
+                onChange={(e) => setEnergyCost(Number(e.target.value))}
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Insumos
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={suppliesCost}
+                onChange={(e) => setSuppliesCost(Number(e.target.value))}
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Outros
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={otherIndustrialCosts}
+                onChange={(e) =>
+                  setOtherIndustrialCosts(Number(e.target.value))
+                }
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Custo padrão/kg
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={standardCostPerKg}
+                onChange={(e) => setStandardCostPerKg(Number(e.target.value))}
+                className={field}
+              />
+            </label>
+          </div>
+        </details>
+      </div>
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-semibold text-stone-500"
+        >
+          Cancelar
+        </button>
+        <Button disabled={busy || !ready} onClick={() => void submit()}>
+          {busy
+            ? "Concluindo…"
+            : ready
+              ? "Concluir e dar entrada"
+              : "Preparando…"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function OrderDrawer({
   order,
   alert,
   onClose,
+  onChanged,
 }: {
   order: ProductionOrderView;
   alert?: ProductionAlert;
   onClose: () => void;
+  onChanged: (message: string) => Promise<void>;
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
-  const cost = calculateProductionCost(order.costs);
+  const [action, setAction] = useState<"roast" | "pack" | null>(null);
+  const reservedKg = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg,
+    0,
+  );
+  const roastedInputKg = order.batches.reduce(
+    (sum, item) => sum + item.greenInputKg,
+    0,
+  );
+  const remainingRoastKg = Math.max(0, reservedKg - roastedInputKg);
+  const canRoast =
+    ["reserved", "in-production", "roasted"].includes(order.status) &&
+    remainingRoastKg > 0.001;
+  const canPack =
+    ["roasted", "packaging"].includes(order.status) &&
+    order.batches.length > 0 &&
+    remainingRoastKg <= 0.001;
+  const cost =
+    order.costs.roastedOutputKg > 0 &&
+    order.costs.finishedOutputKg > 0 &&
+    order.costs.producedPackages > 0
+      ? calculateProductionCost(order.costs)
+      : null;
   const sections = [
     "Resumo",
     "Produção",
     "Lotes",
     "Torra",
-    "Blend",
     "Embalagem",
     "Custos",
     "Rastreabilidade",
@@ -569,6 +1325,99 @@ function OrderDrawer({
             </a>
           ))}
         </nav>
+        <section className="mt-5 rounded-2xl border bg-stone-50 p-4">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              {
+                label: "1. Ordem gerada",
+                detail: `${number.format(reservedKg)} kg reservados`,
+                complete: true,
+                current: order.status === "reserved",
+                icon: Check,
+              },
+              {
+                label: "2. Torra",
+                detail:
+                  remainingRoastKg > 0.001
+                    ? `${number.format(remainingRoastKg)} kg pendentes`
+                    : `${number.format(order.costs.roastedOutputKg)} kg torrados`,
+                complete: order.batches.length > 0 && remainingRoastKg <= 0.001,
+                current: canRoast,
+                icon: Flame,
+              },
+              {
+                label: "3. Empacotar",
+                detail:
+                  order.status === "completed"
+                    ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos`
+                    : "Entrada no produto acabado",
+                complete: order.status === "completed",
+                current: canPack || order.status === "packaging",
+                icon: PackageOpen,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.label}
+                  className={`rounded-xl border p-3 ${item.complete ? "border-emerald-200 bg-emerald-50" : item.current ? "border-amber-200 bg-amber-50" : "bg-white"}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      size={15}
+                      className={
+                        item.complete
+                          ? "text-emerald-700"
+                          : item.current
+                            ? "text-amber-700"
+                            : "text-stone-300"
+                      }
+                    />
+                    <strong className="text-xs">{item.label}</strong>
+                  </div>
+                  <p className="mt-2 text-[10px] text-stone-500">
+                    {item.detail}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          {!action && (canRoast || canPack) && (
+            <div className="mt-4 flex justify-end">
+              <Button
+                onClick={() => setAction(canRoast ? "roast" : "pack")}
+                className="flex items-center gap-2"
+              >
+                {canRoast ? <Flame size={15} /> : <PackageOpen size={15} />}
+                {canRoast ? "Registrar torra" : "Empacotar"}
+              </Button>
+            </div>
+          )}
+        </section>
+        {action === "roast" && (
+          <div className="mt-5">
+            <RoastRegistration
+              order={order}
+              onCancel={() => setAction(null)}
+              onDone={async (successMessage) => {
+                await onChanged(successMessage);
+                setAction(null);
+              }}
+            />
+          </div>
+        )}
+        {action === "pack" && (
+          <div className="mt-5">
+            <PackagingRegistration
+              order={order}
+              onCancel={() => setAction(null)}
+              onDone={async (successMessage) => {
+                await onChanged(successMessage);
+                setAction(null);
+              }}
+            />
+          </div>
+        )}
         <div className="mt-5 space-y-7">
           <section
             id="op-Resumo"
@@ -651,12 +1500,7 @@ function OrderDrawer({
                         {batch.code} • {batch.machine}
                       </strong>
                       <Badge
-                        tone={
-                          batch.lossPercent >
-                          0
-                            ? "warning"
-                            : "success"
-                        }
+                        tone={batch.lossPercent > 0 ? "warning" : "success"}
                       >
                         Perda {number.format(batch.lossPercent)}%
                       </Badge>
@@ -709,31 +1553,37 @@ function OrderDrawer({
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">
               Custo real da OP
             </h3>
-            <div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white">
-              <p className="text-xs text-white/50">Custo total</p>
-              <p className="mt-1 text-2xl font-bold">
-                {brl.format(cost.totalCost)}
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
-                <span>
-                  Custo/kg acabado
-                  <br />
-                  <strong>{brl.format(cost.costPerFinishedKg)}</strong>
-                </span>
-                <span>
-                  Custo/pacote
-                  <br />
-                  <strong>{brl.format(cost.costPerPackage)}</strong>
-                </span>
-                <span>
-                  Desvio padrão
-                  <br />
-                  <strong>
-                    {number.format(cost.standardCostDeviationPercent)}%
-                  </strong>
-                </span>
+            {cost ? (
+              <div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white">
+                <p className="text-xs text-white/50">Custo total</p>
+                <p className="mt-1 text-2xl font-bold">
+                  {brl.format(cost.totalCost)}
+                </p>
+                <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                  <span>
+                    Custo/kg acabado
+                    <br />
+                    <strong>{brl.format(cost.costPerFinishedKg)}</strong>
+                  </span>
+                  <span>
+                    Custo/pacote
+                    <br />
+                    <strong>{brl.format(cost.costPerPackage)}</strong>
+                  </span>
+                  <span>
+                    Desvio padrão
+                    <br />
+                    <strong>
+                      {number.format(cost.standardCostDeviationPercent)}%
+                    </strong>
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="mt-3 rounded-xl bg-stone-50 p-4 text-xs text-stone-500">
+                O custo real será consolidado após o empacotamento.
+              </p>
+            )}
           </section>
           <section id="op-Rastreabilidade">
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">
@@ -816,22 +1666,51 @@ export default function ProductionPage() {
   const summary = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const month = today.slice(0, 7);
-    const plannedTodayKg = orders.filter((order) => order.plannedAt.slice(0, 10) === today).reduce((sum, order) => sum + order.plannedQuantity, 0);
-    const producedTodayKg = orders.filter((order) => order.completedAt?.slice(0, 10) === today).reduce((sum, order) => sum + order.producedQuantity, 0);
-    const openOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
-    const inProgressOrders = orders.filter((order) => ["in-production", "roasted", "packaging"].includes(order.status)).length;
-    const monthOrders = orders.filter((order) => order.plannedAt.startsWith(month));
-    const monthlyProducedKg = monthOrders.reduce((sum, order) => sum + order.producedQuantity, 0);
-    const losses = orders.flatMap((order) => order.batches).map((batch) => batch.lossPercent);
-    const averageRoastLossPercent = losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : null;
-    return { plannedTodayKg, producedTodayKg, openOrders, inProgressOrders, delayedOrders: 0, efficiencyPercent: null, averageRoastLossPercent, averageRealCostPerKg: null, monthlyProducedKg, monthlyTargetKg: null };
+    const plannedTodayKg = orders
+      .filter((order) => order.plannedAt.slice(0, 10) === today)
+      .reduce((sum, order) => sum + order.plannedQuantity, 0);
+    const producedTodayKg = orders
+      .filter((order) => order.completedAt?.slice(0, 10) === today)
+      .reduce((sum, order) => sum + order.producedQuantity, 0);
+    const openOrders = orders.filter(
+      (order) => !["completed", "cancelled"].includes(order.status),
+    ).length;
+    const inProgressOrders = orders.filter((order) =>
+      ["in-production", "roasted", "packaging"].includes(order.status),
+    ).length;
+    const monthOrders = orders.filter((order) =>
+      order.plannedAt.startsWith(month),
+    );
+    const monthlyProducedKg = monthOrders.reduce(
+      (sum, order) => sum + order.producedQuantity,
+      0,
+    );
+    const losses = orders
+      .flatMap((order) => order.batches)
+      .map((batch) => batch.lossPercent);
+    const averageRoastLossPercent = losses.length
+      ? losses.reduce((sum, value) => sum + value, 0) / losses.length
+      : null;
+    return {
+      plannedTodayKg,
+      producedTodayKg,
+      openOrders,
+      inProgressOrders,
+      delayedOrders: 0,
+      efficiencyPercent: null,
+      averageRoastLossPercent,
+      averageRealCostPerKg: null,
+      monthlyProducedKg,
+      monthlyTargetKg: null,
+    };
   }, [orders]);
-  useEffect(() => { void fetch(`${getApiBaseUrl()}/production/orders`, { credentials: "include" }).then((response) => response.ok ? response.json() : []).then((rows: Array<Record<string, unknown>>) => setOrders(rows.map((row) => {
-    const consumptions = Array.isArray(row.consumptions) ? row.consumptions as Array<Record<string, unknown>> : [];
-    const batches = Array.isArray(row.batches) ? row.batches as Array<Record<string, unknown>> : [];
-    const plannedQuantity = Number(row.plannedWeightKg ?? 0);
-    return { id: String(row.id), code: String(row.code), product: String(row.productName ?? "Produto não definido"), sku: String(row.sku ?? "—"), plannedQuantity, producedQuantity: Number(row.actualOutputKg ?? 0), unit: String(row.unit ?? "kg"), plannedAt: String(row.plannedAt ?? ""), startedAt: row.startedAt ? String(row.startedAt) : undefined, completedAt: row.completedAt ? String(row.completedAt) : undefined, responsible: String(row.responsible ?? "—"), priority: String(row.priority ?? "normal").toLowerCase() as ProductionOrderView["priority"], status: String(row.status ?? "PLANNED").toLowerCase().replace("_", "-") as ProductionOrderView["status"], blendName: String((row.blend as { name?: string } | undefined)?.name ?? "—"), allocations: consumptions.map((item) => { const lot = item.coffeeLot as { id?: string; code?: string; origin?: string } | undefined; return { lotId: String(lot?.id ?? item.coffeeLotId), lotCode: String(lot?.code ?? item.coffeeLotId), origin: String(lot?.origin ?? "—"), reservedKg: Number(item.reservedKg ?? 0), consumedKg: Number(item.consumedKg ?? 0), percentage: Number(item.percentage ?? 0), realCostPerKg: Number(item.realCostPerKg ?? 0) }; }), batches: batches.map((batch) => ({ id: String(batch.id), code: String(batch.code), machine: String(batch.machine), operator: String(batch.operator), lotCode: "—", greenInputKg: Number(batch.greenInputKg), roastedOutputKg: Number(batch.roastedOutputKg), lossKg: Number(batch.lossKg), lossPercent: Number(batch.lossPercent), startedAt: String(batch.startedAt), completedAt: String(batch.completedAt), notes: batch.notes ? String(batch.notes) : undefined })), packaging: undefined, costs: { greenCoffeeConsumedCost: 0, roastLossCost: 0, packagingCost: 0, suppliesCost: 0, laborCost: 0, energyCost: 0, otherIndustrialCosts: 0, roastedOutputKg: Number(row.actualOutputKg ?? 0), finishedOutputKg: 0, producedPackages: 0, totalCost: 0, costPerKg: 0, standardCostPerKg: 0, sku: String(row.sku ?? "—"), sourceCostEventIds: [] }, traceability: [] } as ProductionOrderView;
-  }))).catch(() => setOrders([])); }, []);
+  useEffect(() => {
+    void fetchProductionOrders()
+      .then(setOrders)
+      .catch(() => setOrders([]));
+    if (new URLSearchParams(window.location.search).get("nova") === "1")
+      setWizard(true);
+  }, []);
   const cards = useMemo(
     () => [
       {
@@ -858,18 +1737,27 @@ export default function ProductionPage() {
       },
       {
         label: "Eficiência industrial",
-        value: summary.efficiencyPercent == null ? "Sem dados" : `${number.format(summary.efficiencyPercent)}%`,
+        value:
+          summary.efficiencyPercent == null
+            ? "Sem dados"
+            : `${number.format(summary.efficiencyPercent)}%`,
         icon: Gauge,
       },
       {
         label: "Perda média de torra",
-        value: summary.averageRoastLossPercent == null ? "Sem dados" : `${number.format(summary.averageRoastLossPercent)}%`,
+        value:
+          summary.averageRoastLossPercent == null
+            ? "Sem dados"
+            : `${number.format(summary.averageRoastLossPercent)}%`,
         icon: Flame,
         tone: "warning" as const,
       },
       {
         label: "Custo médio/kg",
-        value: summary.averageRealCostPerKg == null ? "Sem dados" : brl.format(summary.averageRealCostPerKg),
+        value:
+          summary.averageRealCostPerKg == null
+            ? "Sem dados"
+            : brl.format(summary.averageRealCostPerKg),
         icon: CircleDollarSign,
       },
       {
@@ -879,18 +1767,65 @@ export default function ProductionPage() {
       },
       {
         label: "Meta do mês",
-        value: summary.monthlyTargetKg == null ? "Sem dados" : `${number.format(summary.monthlyTargetKg)} kg`,
+        value:
+          summary.monthlyTargetKg == null
+            ? "Sem dados"
+            : `${number.format(summary.monthlyTargetKg)} kg`,
         icon: Target,
       },
     ],
     [summary],
   );
   const monthlyTargetKg = summary.monthlyTargetKg;
+  const refreshOrders = async (successMessage?: string) => {
+    try {
+      const refreshed = await fetchProductionOrders();
+      setOrders(refreshed);
+      setSelected((current) =>
+        current
+          ? (refreshed.find((order) => order.id === current.id) ?? null)
+          : null,
+      );
+      if (successMessage) setMessage(successMessage);
+    } catch {
+      if (successMessage)
+        setMessage(
+          `${successMessage} Atualize a página para recarregar os dados.`,
+        );
+    }
+  };
   const create = async (order: ProductionOrderView) => {
-    const response = await fetch(`${getApiBaseUrl()}/production/orders`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: `OP-${Date.now()}`, productVariantId: order.productVariantId, productName: order.product, sku: order.sku, plannedWeightKg: order.plannedQuantity, plannedAt: order.plannedAt, responsible: order.responsible, blendId: undefined, allocations: order.allocations.map((item) => ({ coffeeLotId: item.lotId, reservedKg: item.reservedKg, percentage: item.percentage })) }) });
-    if (!response.ok) { setMessage("Não foi possível criar a ordem. Verifique os lotes e o saldo disponível."); return; }
-    const created = await response.json() as Record<string, unknown>;
-    setOrders((current) => [{ ...order, id: String(created.id), code: String(created.code) }, ...current]);
+    const response = await fetch(`${getApiBaseUrl()}/production/orders`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        code: `OP-${Date.now()}`,
+        productVariantId: order.productVariantId,
+        productName: order.product,
+        sku: order.sku,
+        plannedWeightKg: order.plannedQuantity,
+        plannedAt: order.plannedAt,
+        responsible: order.responsible,
+        blendId: undefined,
+        allocations: order.allocations.map((item) => ({
+          coffeeLotId: item.lotId,
+          reservedKg: item.reservedKg,
+          percentage: item.percentage,
+        })),
+      }),
+    });
+    if (!response.ok) {
+      setMessage(
+        await readApiError(
+          response,
+          "Não foi possível criar a ordem. Verifique os lotes e o saldo disponível.",
+        ),
+      );
+      return;
+    }
+    const created = (await response.json()) as Record<string, unknown>;
+    await refreshOrders();
     setWizard(false);
     setMessage(
       `${String(created.code)} criada e ${number.format(order.plannedQuantity)} kg reservados no estoque disponível.`,
@@ -922,8 +1857,8 @@ export default function ProductionPage() {
             onClick={() => setWizard(true)}
             className="flex items-center justify-center gap-2 px-5 py-3"
           >
-            <Plus size={16} />
-            Nova OP
+            <Play size={16} />
+            Iniciar produção
           </Button>
         </div>
       </div>
@@ -938,6 +1873,44 @@ export default function ProductionPage() {
           </button>
         </div>
       )}
+      <section className="mt-7 grid overflow-hidden rounded-2xl border bg-white sm:grid-cols-4">
+        {[
+          {
+            label: "1. Gerar ordem",
+            detail: "Escolher produto, volume e lote",
+            icon: Target,
+          },
+          {
+            label: "2. Torrar",
+            detail: "Registrar entrada, saída e perda",
+            icon: Flame,
+          },
+          {
+            label: "3. Empacotar",
+            detail: "Informar pacotes e custos",
+            icon: PackageOpen,
+          },
+          {
+            label: "4. Produto acabado",
+            detail: "Entrada automática no estoque",
+            icon: PackageCheck,
+          },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.label}
+              className="border-b p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+            >
+              <div className="flex items-center gap-2 text-forest-700">
+                <Icon size={15} />
+                <strong className="text-xs">{item.label}</strong>
+              </div>
+              <p className="mt-2 text-[11px] text-stone-500">{item.detail}</p>
+            </div>
+          );
+        })}
+      </section>
       <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {cards.map((card) => (
           <SummaryCard key={card.label} {...card} />
@@ -952,7 +1925,11 @@ export default function ProductionPage() {
               </p>
               <h2 className="mt-1 text-lg font-bold">Produção mensal</h2>
             </div>
-            <strong>{monthlyTargetKg != null && monthlyTargetKg > 0 ? `${number.format((summary.monthlyProducedKg / monthlyTargetKg) * 100)}%` : "Sem dados"}</strong>
+            <strong>
+              {monthlyTargetKg != null && monthlyTargetKg > 0
+                ? `${number.format((summary.monthlyProducedKg / monthlyTargetKg) * 100)}%`
+                : "Sem dados"}
+            </strong>
           </div>
           <div className="mt-6 h-3 overflow-hidden rounded-full bg-stone-100">
             <div
@@ -966,12 +1943,18 @@ export default function ProductionPage() {
             <span>
               {number.format(summary.monthlyProducedKg)} kg realizados
             </span>
-            <span>{summary.monthlyTargetKg == null ? "Sem meta cadastrada" : `${number.format(summary.monthlyTargetKg)} kg meta`}</span>
+            <span>
+              {summary.monthlyTargetKg == null
+                ? "Sem meta cadastrada"
+                : `${number.format(summary.monthlyTargetKg)} kg meta`}
+            </span>
           </div>
         </Card>
         <Card className="border-dashed p-6">
           <p className="text-sm font-bold">Alertas de produção</p>
-          <p className="mt-2 text-xs leading-5 text-stone-500">Sem dados reais de alertas para o período.</p>
+          <p className="mt-2 text-xs leading-5 text-stone-500">
+            Sem dados reais de alertas para o período.
+          </p>
         </Card>
       </section>
       <section className="mt-8">
@@ -982,6 +1965,18 @@ export default function ProductionPage() {
           <h2 className="mt-1 text-lg font-bold">Fluxo operacional</h2>
         </div>
         <div className="mt-4 space-y-3">
+          {!orders.length && (
+            <Card className="border-dashed p-8 text-center">
+              <Factory className="mx-auto text-stone-300" size={24} />
+              <p className="mt-3 text-sm font-semibold">
+                Nenhuma ordem de produção
+              </p>
+              <p className="mt-1 text-xs text-stone-500">
+                Inicie uma produção para reservar o café verde e acompanhar as
+                etapas.
+              </p>
+            </Card>
+          )}
           {orders.map((order) => (
             <button
               key={order.id}
@@ -1049,6 +2044,9 @@ export default function ProductionPage() {
           order={selected}
           alert={undefined}
           onClose={() => setSelected(null)}
+          onChanged={async (successMessage) => {
+            await refreshOrders(successMessage);
+          }}
         />
       )}
     </div>

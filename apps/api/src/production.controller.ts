@@ -9,6 +9,7 @@ import {
   Req,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { randomUUID } from "node:crypto";
 import {
   CostType,
   EventType,
@@ -55,7 +56,7 @@ type CreateBatchBody = {
   notes?: string;
 };
 type CompleteOrderBody = {
-  warehouseId: string;
+  warehouseId?: string;
   finishedProductId?: string;
   finishedOutputKg: number;
   producedPackages: number;
@@ -80,7 +81,10 @@ type CalculateV2Body = RealProductionCostInput & {
 
 @Controller("production")
 export class ProductionController {
-  constructor(private readonly production: ProductionService, private readonly auth: AuthService) {}
+  constructor(
+    private readonly production: ProductionService,
+    private readonly auth: AuthService,
+  ) {}
 
   @Post("orders/:id/cost-v2")
   calculateAndSnapshotV2(
@@ -171,7 +175,9 @@ export class ProductionController {
       where: { companyId: actor.companyId },
       include: {
         blend: true,
-        productVariant: { include: { product: { include: { productLine: true } } } },
+        productVariant: {
+          include: { product: { include: { productLine: true } } },
+        },
         consumptions: { include: { coffeeLot: true } },
         batches: true,
         packagingConsumptions: true,
@@ -185,7 +191,11 @@ export class ProductionController {
   async listAvailableLots(@Req() req: Request) {
     const actor = await requireSession(req, this.auth);
     const lots = await this.production.database.coffeeLot.findMany({
-      where: { companyId: actor.companyId, status: "APPROVED", currentWeightKg: { gt: 0 } },
+      where: {
+        companyId: actor.companyId,
+        status: "APPROVED",
+        currentWeightKg: { gt: 0 },
+      },
       include: { supplier: true, warehouse: true },
       orderBy: { receivedAt: "asc" },
     });
@@ -197,10 +207,36 @@ export class ProductionController {
       variety: lot.variety,
       availableQuantityKg: Number(lot.currentWeightKg),
       reservedQuantityKg: Number(lot.reservedWeightKg),
-      realCostPerKg: Number(lot.initialWeightKg) > 0 ? Number(lot.landedCost) / Number(lot.initialWeightKg) : 0,
+      realCostPerKg:
+        Number(lot.initialWeightKg) > 0
+          ? Number(lot.landedCost) / Number(lot.initialWeightKg)
+          : 0,
       supplier: lot.supplier.name,
       warehouse: lot.warehouse.name,
     }));
+  }
+
+  @Get("options")
+  async productionOptions(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const [warehouses, resources, users] = await Promise.all([
+      this.production.database.warehouse.findMany({
+        where: { companyId: actor.companyId, type: "FINISHED_GOODS" },
+        select: { id: true, code: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      this.production.database.productiveResource.findMany({
+        where: { companyId: actor.companyId, active: true },
+        select: { id: true, code: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      this.production.database.user.findMany({
+        where: { companyId: actor.companyId, active: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+    return { warehouses, resources, users };
   }
 
   @Get("orders/:id")
@@ -210,7 +246,9 @@ export class ProductionController {
       where: { id, companyId: actor.companyId },
       include: {
         blend: true,
-        productVariant: { include: { product: { include: { productLine: true } } } },
+        productVariant: {
+          include: { product: { include: { productLine: true } } },
+        },
         consumptions: {
           include: { coffeeLot: { include: { supplier: true } } },
         },
@@ -259,7 +297,10 @@ export class ProductionController {
           body.productVariantId,
         );
         const companyId = variant.product.productLine.companyId;
-        if (companyId !== actor.companyId) throw new BadRequestException("SKU não pertence à empresa da sessão.");
+        if (companyId !== actor.companyId)
+          throw new BadRequestException(
+            "SKU não pertence à empresa da sessão.",
+          );
         const lots = await transaction.coffeeLot.findMany({
           where: {
             id: { in: body.allocations.map((item) => item.coffeeLotId) },
@@ -273,7 +314,9 @@ export class ProductionController {
         for (const allocation of body.allocations) {
           const lot = lots.find((item) => item.id === allocation.coffeeLotId)!;
           if (lot.status !== "APPROVED")
-            throw new BadRequestException(`Lote ${lot.code} não está liberado pela Qualidade.`);
+            throw new BadRequestException(
+              `Lote ${lot.code} não está liberado pela Qualidade.`,
+            );
           if (Number(lot.currentWeightKg) < allocation.reservedKg)
             throw new BadRequestException(
               `Saldo insuficiente no lote ${lot.code}.`,
@@ -344,11 +387,24 @@ export class ProductionController {
   }
 
   @Post("orders/:id/batches")
-  async createBatch(@Param("id") id: string, @Body() body: CreateBatchBody, @Req() req: Request) {
+  async createBatch(
+    @Param("id") id: string,
+    @Body() body: CreateBatchBody,
+    @Req() req: Request,
+  ) {
     const actor = await requireSession(req, this.auth);
-    if (body.greenInputKg <= 0 || body.roastedOutputKg <= 0) throw new BadRequestException("Pesos da torra devem ser maiores que zero.");
+    if (body.greenInputKg <= 0 || body.roastedOutputKg <= 0)
+      throw new BadRequestException(
+        "Pesos da torra devem ser maiores que zero.",
+      );
     let loss;
-    try { loss = calculateRoastMetrics(body.greenInputKg, body.roastedOutputKg); } catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Pesos da torra inválidos."); }
+    try {
+      loss = calculateRoastMetrics(body.greenInputKg, body.roastedOutputKg);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Pesos da torra inválidos.",
+      );
+    }
     return this.production.database.$transaction(
       async (transaction) => {
         const order = await transaction.productionOrder.findFirst({
@@ -357,6 +413,18 @@ export class ProductionController {
         });
         if (!order)
           throw new NotFoundException("Ordem de produção não encontrada.");
+        if (!(
+          order.status === ProductionStatus.RESERVED ||
+          order.status === ProductionStatus.IN_PROGRESS ||
+          order.status === ProductionStatus.ROASTED
+        ))
+          throw new BadRequestException(
+            "A OP não está disponível para registrar torra.",
+          );
+        if (new Date(body.completedAt) < new Date(body.startedAt))
+          throw new BadRequestException(
+            "O término da torra não pode ser anterior ao início.",
+          );
         const consumptionIds = order.consumptions.filter((item) =>
           body.coffeeLotIds.includes(item.coffeeLotId),
         );
@@ -364,8 +432,20 @@ export class ProductionController {
           throw new BadRequestException(
             "O batch deve utilizar lotes reservados pela OP.",
           );
-        const reservedAvailable = consumptionIds.reduce((sum, item) => sum + Number(item.reservedKg) - Number(item.consumedKg), 0);
-        if (body.greenInputKg > reservedAvailable + 0.001) throw new BadRequestException("A torra não pode consumir mais café do que o reservado pela OP.");
+        const reservedTotal = order.consumptions.reduce(
+          (sum, item) => sum + Number(item.reservedKg),
+          0,
+        );
+        const alreadyRoasted = await transaction.productionBatch.aggregate({
+          where: { productionOrderId: id },
+          _sum: { greenInputKg: true },
+        });
+        const roastedInputTotal =
+          Number(alreadyRoasted._sum.greenInputKg ?? 0) + body.greenInputKg;
+        if (roastedInputTotal > reservedTotal + 0.001)
+          throw new BadRequestException(
+            "A torra não pode consumir mais café do que o reservado pela OP.",
+          );
         const batch = await transaction.productionBatch.create({
           data: {
             companyId: order.companyId,
@@ -393,7 +473,10 @@ export class ProductionController {
           },
         });
         await transaction.productionConsumption.updateMany({
-          where: { id: { in: consumptionIds.map((item) => item.id) }, productionBatchId: null },
+          where: {
+            id: { in: consumptionIds.map((item) => item.id) },
+            productionBatchId: null,
+          },
           data: { productionBatchId: batch.id },
         });
         await transaction.industrialEvent.createMany({
@@ -424,6 +507,40 @@ export class ProductionController {
     );
   }
 
+  @Post("orders/:id/packaging/start")
+  async startPackaging(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const order = await this.production.database.productionOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      include: { batches: true, consumptions: true },
+    });
+    if (!order)
+      throw new NotFoundException("Ordem de produção não encontrada.");
+    if (!(
+      order.status === ProductionStatus.ROASTED ||
+      order.status === ProductionStatus.PACKAGING
+    ))
+      throw new BadRequestException(
+        "Registre a torra antes de iniciar a embalagem.",
+      );
+    const reservedKg = order.consumptions.reduce(
+      (sum, item) => sum + Number(item.reservedKg),
+      0,
+    );
+    const roastedInputKg = order.batches.reduce(
+      (sum, item) => sum + Number(item.greenInputKg),
+      0,
+    );
+    if (Math.abs(reservedKg - roastedInputKg) > 0.001)
+      throw new BadRequestException(
+        `Ainda faltam ${(reservedKg - roastedInputKg).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg para concluir a torra da OP.`,
+      );
+    return this.production.database.productionOrder.update({
+      where: { id },
+      data: { status: ProductionStatus.PACKAGING },
+    });
+  }
+
   @Post("orders/:id/complete")
   async completeOrder(
     @Param("id") id: string,
@@ -450,8 +567,6 @@ export class ProductionController {
         });
         if (!order)
           throw new NotFoundException("Ordem de produção não encontrada.");
-        const warehouse = await transaction.warehouse.findFirst({ where: { id: body.warehouseId, companyId: actor.companyId } });
-        if (!warehouse) throw new BadRequestException("Armazém não pertence à empresa da sessão.");
         const idempotencyKey = `PRODUCTION_IN:${order.id}`;
         const existingMovement =
           await transaction.finishedGoodsMovement.findUnique({
@@ -465,21 +580,83 @@ export class ProductionController {
             idempotent: true,
             balance: {
               physicalUnits: existingMovement.finishedProduct.quantityOnHand,
-              reservedUnits:
-                existingMovement.finishedProduct.reservedQuantity,
+              reservedUnits: existingMovement.finishedProduct.reservedQuantity,
               availableUnits:
                 existingMovement.finishedProduct.quantityOnHand -
                 existingMovement.finishedProduct.reservedQuantity,
             },
           };
-        if (order.status === ProductionStatus.COMPLETED)
-          throw new BadRequestException("A OP já foi concluída.");
+        if (!(
+          order.status === ProductionStatus.ROASTED ||
+          order.status === ProductionStatus.PACKAGING
+        ))
+          throw new BadRequestException(
+            "A OP precisa estar torrada antes do empacotamento.",
+          );
+        const reservedInputKg = order.consumptions.reduce(
+          (sum, item) => sum + Number(item.reservedKg),
+          0,
+        );
+        const roastedInputKg = order.batches.reduce(
+          (sum, item) => sum + Number(item.greenInputKg),
+          0,
+        );
+        if (Math.abs(reservedInputKg - roastedInputKg) > 0.001)
+          throw new BadRequestException(
+            "Conclua a torra de todo o café reservado antes de empacotar.",
+          );
+        const totalRoastedOutputKg = order.batches.reduce(
+          (sum, item) => sum + Number(item.roastedOutputKg),
+          0,
+        );
+        if (body.finishedOutputKg > totalRoastedOutputKg + 0.001)
+          throw new BadRequestException(
+            "O peso empacotado não pode superar o peso torrado.",
+          );
+        let warehouse = body.warehouseId
+          ? await transaction.warehouse.findFirst({
+              where: {
+                id: body.warehouseId,
+                companyId: actor.companyId,
+                type: "FINISHED_GOODS",
+              },
+            })
+          : await transaction.warehouse.findFirst({
+              where: {
+                companyId: actor.companyId,
+                type: "FINISHED_GOODS",
+              },
+              orderBy: { createdAt: "asc" },
+            });
+        if (body.warehouseId && !warehouse)
+          throw new BadRequestException(
+            "O destino informado não é um armazém de produto acabado desta empresa.",
+          );
+        if (!warehouse) {
+          warehouse = await transaction.warehouse.create({
+            data: {
+              id: randomUUID(),
+              companyId: actor.companyId,
+              name: "Produto Acabado",
+              code: "PA",
+              type: "FINISHED_GOODS",
+            },
+          });
+        }
         const officialVariant = order.productVariantId
           ? await this.production.requireActiveVariant(
               transaction,
               order.productVariantId,
             )
           : null;
+        if (officialVariant) {
+          const packedWeightKg =
+            (body.producedPackages * officialVariant.netWeightGrams) / 1000;
+          if (Math.abs(packedWeightKg - body.finishedOutputKg) > 0.01)
+            throw new BadRequestException(
+              "O peso acabado deve corresponder à quantidade e à apresentação dos pacotes.",
+            );
+        }
         const consumedCost = order.consumptions.reduce(
           (sum, item) =>
             sum + Number(item.reservedKg) * Number(item.realCostPerKg),
@@ -567,7 +744,7 @@ export class ProductionController {
           ? await transaction.finishedProduct.findFirst({
               where: {
                 productVariantId: officialVariant.id,
-                warehouseId: body.warehouseId,
+                warehouseId: warehouse.id,
               },
             })
           : null;
@@ -578,7 +755,7 @@ export class ProductionController {
               blendId: order.blendId,
               productionOrderId: order.id,
               productVariantId: officialVariant.id,
-              warehouseId: body.warehouseId,
+              warehouseId: warehouse.id,
               sku: officialVariant.sku,
               name: officialVariant.product.name,
               line: officialVariant.product.productLine.code,
@@ -610,7 +787,8 @@ export class ProductionController {
           where: { id: finishedProduct.id },
           data: {
             quantityOnHand: { increment: body.producedPackages },
-            productVariantId: finishedProduct.productVariantId ?? order.productVariantId,
+            productVariantId:
+              finishedProduct.productVariantId ?? order.productVariantId,
           },
         });
         const movement = await transaction.finishedGoodsMovement.create({
@@ -619,7 +797,7 @@ export class ProductionController {
             productionOrderId: id,
             productVariantId: order.productVariantId,
             finishedProductId: finishedProduct.id,
-            warehouseId: body.warehouseId,
+            warehouseId: warehouse.id,
             type: order.productVariantId ? "PRODUCTION_IN" : "ENTRY",
             packageQuantity: body.producedPackages,
             unit: "UN",
@@ -640,17 +818,41 @@ export class ProductionController {
             active: true,
           },
         });
-        const roastingCenter = costCenters.find((item) => item.code === "IND-TOR");
-        const packagingCenter = costCenters.find((item) => item.code === "IND-EMP");
+        const roastingCenter = costCenters.find(
+          (item) => item.code === "IND-TOR",
+        );
+        const packagingCenter = costCenters.find(
+          (item) => item.code === "IND-EMP",
+        );
         if (!roastingCenter || !packagingCenter)
           throw new BadRequestException(
             "Configure os centros IND-TOR e IND-EMP antes de concluir a OP.",
           );
         const newCosts = [
-          { type: CostType.PACKAGING, amount: packagingCost, costCenterId: packagingCenter.id, nature: "DIRECT" as const },
-          { type: CostType.LABOR, amount: body.laborCost, costCenterId: packagingCenter.id, nature: "DIRECT" as const },
-          { type: CostType.ENERGY, amount: body.energyCost, costCenterId: roastingCenter.id, nature: "INDIRECT_INDUSTRIAL" as const },
-          { type: CostType.SUPPLIES, amount: body.suppliesCost, costCenterId: packagingCenter.id, nature: "DIRECT" as const },
+          {
+            type: CostType.PACKAGING,
+            amount: packagingCost,
+            costCenterId: packagingCenter.id,
+            nature: "DIRECT" as const,
+          },
+          {
+            type: CostType.LABOR,
+            amount: body.laborCost,
+            costCenterId: packagingCenter.id,
+            nature: "DIRECT" as const,
+          },
+          {
+            type: CostType.ENERGY,
+            amount: body.energyCost,
+            costCenterId: roastingCenter.id,
+            nature: "INDIRECT_INDUSTRIAL" as const,
+          },
+          {
+            type: CostType.SUPPLIES,
+            amount: body.suppliesCost,
+            costCenterId: packagingCenter.id,
+            nature: "DIRECT" as const,
+          },
           {
             type: CostType.OTHER,
             amount: body.otherIndustrialCosts,
