@@ -12,7 +12,6 @@ import RoastMindMap from "./RoastMindMap";
 import CupMindMap from "./CupMindMap";
 import LineageMap from "./LineageMap";
 import HistoryPath from "./HistoryPath";
-import { loadStorefrontMedia } from "@/lib/storefront-media";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara",
@@ -77,8 +76,7 @@ function OriginIcon({ kind }: { kind: OriginSymbol }) {
 
 export const revalidate = 300;
 
-export default async function OrigemPage() {
-  const media = await loadStorefrontMedia();
+export default function OrigemPage() {
   return (
     <main className={`${styles.page} ${brand.storefront} ${origin.page}`}>
       <div className={styles.commerceBar}>
@@ -154,14 +152,8 @@ export default async function OrigemPage() {
             <article>
               <div className={origin.portrait}>
                 <Image
-                  src={
-                    media.slots["origin.suzi"]?.url ??
-                    "/brand/story/suzi-fragrancia.jpeg"
-                  }
-                  alt={
-                    media.slots["origin.suzi"]?.altText ??
-                    "Suzi Ninov avaliando o café"
-                  }
+                  src="/brand/editorial/real/suzi-prova.jpg"
+                  alt="Suzi Ninov avaliando um café em prova"
                   fill
                   sizes="(max-width: 700px) 100vw, 50vw"
                 />
@@ -183,14 +175,8 @@ export default async function OrigemPage() {
             <article>
               <div className={origin.portrait}>
                 <Image
-                  src={
-                    media.slots["origin.jose"]?.url ??
-                    "/brand/story/jose-origem.jpeg"
-                  }
-                  alt={
-                    media.slots["origin.jose"]?.altText ??
-                    "José Rezende observando um cafeeiro"
-                  }
+                  src="/brand/editorial/real/jose-prova.jpg"
+                  alt="José Rezende avaliando o aroma de um café em prova"
                   fill
                   sizes="(max-width: 700px) 100vw, 50vw"
                 />

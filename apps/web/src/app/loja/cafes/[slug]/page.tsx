@@ -98,16 +98,16 @@ export default async function MicrolotPage({ params }: PageProps) {
             </Link>
             <div className={styles.packageStage}>
               <span className={styles.edition}>EDIÇÃO LIMITADA</span>
-              <div
-                className={styles.packagePlaceholder}
-                aria-label="Espaço reservado para a fotografia da embalagem do Raro"
-              >
-                <small>EDIÇÃO LIMITADA</small>
-                <span>BISPO</span>
-                <b>Raro</b>
-                <em>250 g</em>
-              </div>
-              <p>Espaço reservado para a fotografia oficial da embalagem.</p>
+              <Image
+                className={styles.packagePhoto}
+                src="/brand/products/real/raro-frontal.jpg"
+                width={1200}
+                height={1800}
+                sizes="(max-width: 600px) 196px, 270px"
+                alt="Embalagem do microlote Bispo Raro"
+                priority
+              />
+              <p>Microlote rastreável · embalagem de 250 g.</p>
             </div>
             <div className={styles.heroPhotos}>
               <figure>

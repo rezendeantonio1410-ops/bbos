@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { AddToCartButton } from "./StorefrontCart";
 import styles from "./EditorialHero.module.css";
 import type { StorefrontImageSelection } from "@/lib/storefront-images";
-import type { StorefrontMediaAsset } from "@/lib/storefront-media";
+import { realProductImages } from "./real-product-images";
 
 const scenes = [
   {
@@ -16,14 +16,13 @@ const scenes = [
     title: "Doce. Confortável.",
     italic: "Equilibrado.",
     copy: "Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem outra xícara.",
-    image: "/brand/visuals/bispo-hero-chemex-v2.png",
-    product: "/brand/products/caramelo-treated.webp",
+    image: "/brand/editorial/real/jose-preparo.jpg",
+    product: realProductImages.Caramelo,
     notes: "Caramelo · Chocolate · Equilíbrio",
     price: "R$ 68,00",
     priceCents: 6800,
     tone: "#C86424",
-    crop: "center",
-    mediaSlot: "home.hero.caramelo",
+    crop: "center 52%",
   },
   {
     line: "ÉPICOS",
@@ -31,14 +30,13 @@ const scenes = [
     title: "Novas camadas.",
     italic: "Uma origem única.",
     copy: "Frutado, complexo e evolutivo. Para quem encontra prazer na descoberta.",
-    image: "/brand/story/jose-origem.jpeg",
-    product: "/brand/products/singular-treated.webp",
+    image: "/brand/editorial/real/singular-ritual.jpg",
+    product: realProductImages.Singular,
     notes: "Frutado · Complexo · Evolutivo",
     price: "R$ 84,00",
     priceCents: 8400,
     tone: "#5C7D5F",
-    crop: "center 42%",
-    mediaSlot: "home.hero.singular",
+    crop: "center 50%",
   },
   {
     line: "ÉPICOS",
@@ -46,14 +44,13 @@ const scenes = [
     title: "Escolhido por quem",
     italic: "vive o café.",
     copy: "A Bispo acompanha a origem, a produção e a prova para escolher o que chega à sua xícara.",
-    image: "/brand/story/suzi-fragrancia.jpeg",
-    product: "/brand/products/sublime-treated.webp",
+    image: "/brand/editorial/real/sublime-ritual.jpg",
+    product: realProductImages.Sublime,
     notes: "Rapadura · Caramelo · Doçura profunda",
     price: "R$ 84,00",
     priceCents: 8400,
     tone: "#5C7D5F",
-    crop: "center 35%",
-    mediaSlot: "home.hero.sublime",
+    crop: "center 50%",
   },
   {
     line: "GOURMET",
@@ -61,23 +58,20 @@ const scenes = [
     title: "O cuidado de sempre.",
     italic: "Já moído.",
     copy: "Macio e equilibrado, pronto para preparar com facilidade.",
-    image: "/essencial.jpeg",
-    product: "/brand/products/essencial-treated.webp",
+    image: "/brand/editorial/real/preparo-agua.jpg",
+    product: realProductImages.Essencial,
     notes: "Macio · Doce · Fácil",
     price: "R$ 52,00",
     priceCents: 5200,
     tone: "#C39A24",
-    crop: "center 56%",
-    mediaSlot: "home.hero.essencial",
+    crop: "center 54%",
   },
 ] as const;
 
 export default function EditorialHero({
   productImages = {},
-  mediaSlots = {},
 }: {
   productImages?: StorefrontImageSelection;
-  mediaSlots?: Record<string, StorefrontMediaAsset>;
 }) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -86,6 +80,7 @@ export default function EditorialHero({
   const scene = {
     ...selectedScene,
     product:
+      realProductImages[selectedScene.name] ??
       productImages[selectedScene.name]?.hero ??
       productImages[selectedScene.name]?.primary ??
       selectedScene.product,
@@ -122,11 +117,10 @@ export default function EditorialHero({
           <Image
             key={item.name}
             className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
-            src={mediaSlots[item.mediaSlot]?.url ?? item.image}
+            src={item.image}
             alt={
               index === active
-                ? (mediaSlots[item.mediaSlot]?.altText ??
-                  `${item.name}: uma cena da experiência Bispo Coffees`)
+                ? `${item.name}: uma cena real da experiência Bispo Coffees`
                 : ""
             }
             fill

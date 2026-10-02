@@ -33,7 +33,7 @@ export const alexandreMicrolot: Microlot = {
     weight: "250 g",
     weightGrams: 250,
     tone: "#8C3E37",
-    image: "/brand/products/raros/alexandre-colheita.webp",
+    image: "/brand/products/real/raro-frontal.jpg",
     tag: "poucas unidades",
     story: {
       promise:
@@ -87,6 +87,11 @@ export const alexandreMicrolot: Microlot = {
             src: "/brand/products/raros/alexandre-secagem.webp",
             alt: "Cerejas de café durante a secagem",
             caption: "Cuidado depois da colheita",
+          },
+          {
+            src: "/brand/editorial/real/raro-rastreabilidade.jpg",
+            alt: "Verso da embalagem do Bispo Raro com informações do lote",
+            caption: "Rastreabilidade na embalagem",
           },
         ],
       },

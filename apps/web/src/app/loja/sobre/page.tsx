@@ -8,7 +8,6 @@ import storyBrand from "./brand.module.css";
 import storyNav from "../story-navigation.module.css";
 import premium from "../premium-overrides.module.css";
 import MobileStoreMenu from "../MobileStoreMenu";
-import { loadStorefrontMedia } from "@/lib/storefront-media";
 
 export const metadata: Metadata = {
   title: "José Rezende e Suzi Ninov — fundadores",
@@ -52,8 +51,7 @@ const founderStructuredData = {
   ],
 };
 
-export default async function SobrePage() {
-  const media = await loadStorefrontMedia();
+export default function SobrePage() {
   return (
     <main className={`${styles.page} ${brand.storefront} ${storyBrand.page}`}>
       <script
@@ -138,33 +136,21 @@ export default async function SobrePage() {
         <div className={authority.fieldStory}>
           <figure className={authority.fieldShot}>
             <Image
-              src={
-                media.slots["about.jose.field"]?.url ??
-                "/brand/story/jose-origem.jpeg"
-              }
-              alt={
-                media.slots["about.jose.field"]?.altText ??
-                "José Rezende examinando um cafeeiro na origem"
-              }
+              src="/brand/editorial/real/jose-prova.jpg"
+              alt="José Rezende avaliando o aroma de um café em prova"
               fill
               sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 62vw"
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
-              <span>JOSÉ · ORIGEM</span>
-              <strong>A qualidade começa perto de quem produz.</strong>
+              <span>JOSÉ · PROVA</span>
+              <strong>A qualidade se confirma na xícara.</strong>
             </figcaption>
           </figure>
           <figure className={authority.fieldShot}>
             <Image
-              src={
-                media.slots["about.suzi.cupping"]?.url ??
-                "/brand/story/suzi-fragrancia.jpeg"
-              }
-              alt={
-                media.slots["about.suzi.cupping"]?.altText ??
-                "Suzi Ninov avaliando a fragrância do café"
-              }
+              src="/brand/editorial/real/suzi-prova.jpg"
+              alt="Suzi Ninov avaliando um café em prova"
               fill
               sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 38vw"
             />

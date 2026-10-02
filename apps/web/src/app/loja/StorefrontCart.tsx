@@ -135,7 +135,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     notes: "Macio · Doce · Fácil",
     priceCents: 5200,
     weightGrams: 500,
-    image: "/brand/products/essencial-treated.webp",
+    image: "/brand/products/real/essencial-frontal.jpg",
     story: cartProductStories.essencial,
   },
   caramelo: {
@@ -145,7 +145,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     notes: "Caramelo · Chocolate · Equilíbrio",
     priceCents: 6800,
     weightGrams: 500,
-    image: "/brand/products/caramelo-treated.webp",
+    image: "/brand/products/real/caramelo-frontal.jpg",
     story: cartProductStories.caramelo,
   },
   singular: {
@@ -155,7 +155,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     notes: "Frutado · Complexo · Evolutivo",
     priceCents: 8400,
     weightGrams: 500,
-    image: "/brand/products/singular-treated.webp",
+    image: "/brand/products/real/singular-frontal.jpg",
     story: cartProductStories.singular,
   },
   sublime: {
@@ -165,7 +165,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     notes: "Rapadura · Caramelo · Doçura profunda",
     priceCents: 8400,
     weightGrams: 500,
-    image: "/brand/products/sublime-treated.webp",
+    image: "/brand/products/real/sublime-frontal.jpg",
     story: cartProductStories.sublime,
   },
 };

@@ -192,7 +192,7 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
               </blockquote>
 
               <figure className={styles.origin}>
-                <img src="/brand/story/jose-origem.jpeg" alt="Seleção de café na origem pela Bispo" />
+                <img src="/brand/editorial/real/jose-suzi-prova.jpg" alt="José Rezende e Suzi Ninov avaliando cafés em prova" />
                 <figcaption><small>DA ORIGEM À XÍCARA</small><b>Escolhido, provado e torrado para preservar sua identidade.</b></figcaption>
               </figure>
             </div>

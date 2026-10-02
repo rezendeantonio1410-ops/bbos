@@ -18,6 +18,7 @@ import CoffeeLineExplorer from "./CoffeeLineExplorer";
 import MobileStoreMenu from "./MobileStoreMenu";
 import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { alexandreMicrolot } from "./microlots";
+import { realProductImages } from "./real-product-images";
 import { loadStorefrontImages } from "@/lib/storefront-images";
 import { loadStorefrontMedia } from "@/lib/storefront-media";
 import {
@@ -35,7 +36,7 @@ const products = [
     priceCents: 5200,
     weight: "500 g",
     tone: "#C39A24",
-    image: "/brand/products/essencial-treated.webp",
+    image: realProductImages.Essencial,
     tag: "preparo simples",
     story: {
       promise:
@@ -62,7 +63,7 @@ const products = [
     priceCents: 5200,
     weight: "500 g",
     tone: "#C39A24",
-    image: "/brand/products/intenso-treated.webp",
+    image: realProductImages.Intenso,
     tag: "mais corpo",
     story: {
       promise:
@@ -89,7 +90,7 @@ const products = [
     priceCents: 6800,
     weight: "500 g",
     tone: "#C86424",
-    image: "/brand/products/caramelo-treated.webp",
+    image: realProductImages.Caramelo,
     tag: "conforto",
     story: {
       promise:
@@ -116,7 +117,7 @@ const products = [
     priceCents: 6800,
     weight: "500 g",
     tone: "#C86424",
-    image: "/brand/products/doce-de-leite-treated.webp",
+    image: realProductImages["Doce de Leite"],
     tag: "doçura",
     story: {
       promise:
@@ -143,7 +144,7 @@ const products = [
     priceCents: 6800,
     weight: "500 g",
     tone: "#C86424",
-    image: null,
+    image: realProductImages.Tangerina,
     tag: "frescor",
     story: {
       promise:
@@ -170,7 +171,7 @@ const products = [
     priceCents: 8400,
     weight: "500 g",
     tone: "#5C7D5F",
-    image: "/brand/products/singular-treated.webp",
+    image: realProductImages.Singular,
     tag: "descoberta",
     story: {
       promise:
@@ -197,7 +198,7 @@ const products = [
     priceCents: 8400,
     weight: "500 g",
     tone: "#5C7D5F",
-    image: "/brand/products/sublime-treated.webp",
+    image: realProductImages.Sublime,
     tag: "experiência",
     story: {
       promise:
@@ -271,7 +272,10 @@ export default async function LojaPage() {
   ]);
   const catalogProducts = products.map((product) => ({
     ...product,
-    image: storefrontImages[product.name]?.primary ?? product.image,
+    image:
+      realProductImages[product.name] ??
+      storefrontImages[product.name]?.primary ??
+      product.image,
   }));
   const featuredGuidance: Record<string, { eyebrow: string; reason: string }> =
     {
@@ -347,10 +351,7 @@ export default async function LojaPage() {
           </div>
         </header>
 
-        <EditorialHero
-          productImages={storefrontImages}
-          mediaSlots={mediaLibrary.slots}
-        />
+        <EditorialHero productImages={storefrontImages} />
 
         <section
           className={premium.conversionShelf}
@@ -506,11 +507,7 @@ export default async function LojaPage() {
                               {p.image ? (
                                 <img
                                   src={p.image}
-                                  alt={
-                                    p.name === "Raro"
-                                      ? "Cerejas maduras do microlote Raro"
-                                      : `Embalagem Bispo ${p.name}`
-                                  }
+                                  alt={`Embalagem Bispo ${p.name}`}
                                   className={`${styles.productPhoto} ${review.editorialProductPhoto} ${p.name === "Raro" ? layers.rareProductPhoto : ""}`}
                                   decoding="async"
                                 />
@@ -645,27 +642,15 @@ export default async function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src={
-                  mediaLibrary.slots["founder.jose.portrait"]?.url ??
-                  "/brand/founders/jose-rezende.jpg"
-                }
-                alt={
-                  mediaLibrary.slots["founder.jose.portrait"]?.altText ??
-                  "José Rezende avaliando um café"
-                }
+                src="/brand/editorial/real/jose-prova.jpg"
+                alt="José Rezende avaliando o aroma de um café em prova"
               />
               <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
             <figure className={founder.portrait}>
               <img
-                src={
-                  mediaLibrary.slots["founder.suzi.portrait"]?.url ??
-                  "/brand/founders/suzi-ninov.jpg"
-                }
-                alt={
-                  mediaLibrary.slots["founder.suzi.portrait"]?.altText ??
-                  "Suzi Ninov avaliando um café"
-                }
+                src="/brand/editorial/real/suzi-prova.jpg"
+                alt="Suzi Ninov avaliando um café em prova"
               />
               <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
             </figure>
