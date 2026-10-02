@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     template: "%s | Bispo Coffees",
   },
   description:
-    "Cafés especiais brasileiros escolhidos por José e Suzi, torrados pela Bispo e enviados de Londrina para a sua xícara.",
+    "Cafés especiais brasileiros escolhidos por Suzi e José, torrados pela Bispo e enviados de Londrina para a sua xícara.",
   openGraph: {
     type: "website",
     locale: "pt_BR",

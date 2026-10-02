@@ -49,8 +49,7 @@
   align-items: stretch;
   min-height: 220px;
 }
-.personPrimary,
-.personSecondary {
+.personCard {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -60,27 +59,21 @@
   background: linear-gradient(145deg, #f2f5f2 0%, #e0eae9 100%);
   color: #0e191d;
 }
-.personSecondary {
-  background: linear-gradient(145deg, #f2f5f2 0%, #e0eae9 100%);
-}
-.personPrimary small,
-.personSecondary small {
+.personCard small {
   font-size: 9px;
   line-height: 1.45;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   opacity: 0.66;
 }
-.personPrimary strong,
-.personSecondary strong {
+.personCard strong {
   display: block;
   margin-top: 18px;
   font-size: clamp(24px, 2.1vw, 35px);
   line-height: 1;
   letter-spacing: -0.035em;
 }
-.personPrimary span,
-.personSecondary span {
+.personCard span {
   display: block;
   margin-top: 9px;
   font-size: 12px;
@@ -138,7 +131,7 @@
 .milestoneRail {
   grid-column: 1/-1;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
   padding: 0;
   border: solid rgba(14, 25, 29, 0.11);
@@ -192,8 +185,7 @@
     grid-template-columns: 1fr 18px 1fr;
     min-height: 190px;
   }
-  .personPrimary,
-  .personSecondary {
+  .personCard {
     padding: 19px;
   }
   .storyManifesto {
@@ -228,8 +220,7 @@
   .thread {
     display: none;
   }
-  .personPrimary,
-  .personSecondary {
+  .personCard {
     min-height: 170px;
     padding: 20px;
   }
@@ -432,7 +423,7 @@
 }
 .evidenceGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border: solid rgba(255, 255, 255, 0.16);
   border-width: 1px 0 0 1px;
 }
@@ -443,10 +434,6 @@
   padding: 21px;
   border: solid rgba(255, 255, 255, 0.16);
   border-width: 0 1px 1px 0;
-}
-.evidenceGrid article:last-child:nth-child(odd) {
-  grid-column: 1/-1;
-  min-height: 150px;
 }
 .evidenceGrid strong {
   margin-top: 12px;
@@ -513,7 +500,7 @@
     gap: 10px;
   }
   .milestoneRail {
-    grid-template-columns: repeat(5, minmax(160px, 1fr));
+    grid-template-columns: repeat(4, minmax(200px, 1fr));
     overflow-x: auto;
     scroll-snap-type: x proximity;
   }
@@ -522,6 +509,13 @@
   }
   .evidence {
     grid-template-columns: 1fr;
+  }
+  .evidenceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .evidenceGrid article:last-child {
+    grid-column: 1/-1;
+    min-height: 150px;
   }
 }
 @media (max-width: 560px) {
@@ -580,7 +574,7 @@
   .evidenceGrid article {
     min-height: 160px;
   }
-  .evidenceGrid article:last-child:nth-child(odd) {
+  .evidenceGrid article:last-child {
     grid-column: auto;
   }
 }

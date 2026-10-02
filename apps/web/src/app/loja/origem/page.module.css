@@ -19,6 +19,7 @@
 .people{background:#e0eae9;padding:70px max(5vw,22px)}
 .peopleIntro{max-width:1000px;margin:0 auto 30px}
 .peopleIntro h2,.territory h2{font-size:clamp(34px,4vw,56px);line-height:1.12;letter-spacing:-.045em;font-weight:500;margin:10px 0 0}
+.peopleIntro>p:not(.kicker){max-width:760px;margin:18px 0 0;font-size:17px;line-height:1.6;color:#43585f}
 .peopleGrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1200px;margin:auto}
 .peopleGrid article{background:#fff;overflow:hidden;border-radius:8px}
 .portrait{height:330px;position:relative;background:#d2dcdd}

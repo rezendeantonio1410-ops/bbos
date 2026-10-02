@@ -147,6 +147,11 @@ export default function OrigemPage() {
           <div className={origin.peopleIntro}>
             <p className={origin.kicker}>DOIS OLHARES, UMA ESCOLHA</p>
             <h2>O lugar importa. Quem o interpreta também.</h2>
+            <p>
+              As histórias de Suzi e José começaram muito antes da Bispo. Cada
+              um chegou à marca com uma trajetória própria, construída em
+              territórios, trabalhos e experiências diferentes.
+            </p>
           </div>
           <div className={origin.peopleGrid}>
             <article>
@@ -163,12 +168,10 @@ export default function OrigemPage() {
                 <h3>O cuidado começa na planta.</h3>
                 <p>
                   Criada em uma fazenda no interior do Rio Grande do Sul, Suzi
-                  trabalha com cafeicultura no Paraná desde 2007. Ao lado de
-                  produtores, acompanha nutrição, fertilidade, manejo e
-                  desenvolvimento da lavoura: tratar o cafeeiro como um
-                  organismo vivo, cuidar dos recursos do solo e buscar
-                  produtividade com qualidade. Essa leitura de campo passou pelo
-                  projeto Longitude e hoje participa de cada escolha da Bispo.
+                  construiu sua história muito antes da Bispo e trabalha com
+                  cafeicultura no Paraná desde 2007. Empresária e cofundadora da
+                  Bispo Coffees, acompanha ao lado de produtores a nutrição, a
+                  fertilidade, o manejo e o desenvolvimento da lavoura.
                 </p>
               </div>
             </article>
@@ -186,11 +189,10 @@ export default function OrigemPage() {
                 <h3>Da origem para o mundo.</h3>
                 <p>
                   Filho de produtores do Norte do Paraná, José trabalha com
-                  cafeicultores desde 2003 e tornou-se Q-Grader em 2010. Em
-                  2015, cofundou a Capricornio Coffees e ampliou a conexão entre
-                  cafés do Trópico de Capricórnio e compradores internacionais.
-                  Na Bispo, prova os lotes e desenvolve perfis de torra a partir
-                  da identidade de cada café.
+                  cafeicultores desde 2003 e construiu sua história muito antes
+                  da Bispo. Tornou-se Q-Grader em 2010 e, em 2015, cofundou a
+                  Capricornio Coffees, ampliando a conexão entre cafés do
+                  Trópico de Capricórnio e compradores internacionais.
                 </p>
               </div>
             </article>

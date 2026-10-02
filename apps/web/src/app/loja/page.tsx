@@ -258,7 +258,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Cafés especiais brasileiros",
   description:
-    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e seleção de José e Suzi.",
+    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e seleção de Suzi e José.",
   alternates: { canonical: "/loja" },
   openGraph: {
     title: "Bispo Coffees — cafés escolhidos, não apenas vendidos",
@@ -661,12 +661,13 @@ export default async function LojaPage() {
             <small>QUEM ESTÁ POR TRÁS</small>
             <h2>Café escolhido por quem vive o café.</h2>
             <p className={founder.sharedStory}>
-              José e Suzi reúnem campo, produção, prova e torra para que cada
-              xícara chegue com identidade, constância e história.
+              Duas histórias que começaram muito antes da Bispo se encontram
+              aqui. Suzi e José reúnem campo, produção, prova e torra para que
+              cada xícara chegue com identidade, constância e história.
             </p>
             <div className={founder.actions}>
               <Link className={founder.primary} href="/loja/sobre">
-                Conhecer José, Suzi e a Bispo →
+                Conhecer Suzi, José e a Bispo →
               </Link>
             </div>
           </div>

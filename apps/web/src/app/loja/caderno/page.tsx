@@ -323,8 +323,9 @@ export default function CadernoPage() {
               Duas trajetórias. Uma escolha compartilhada.
             </h2>
             <span>
-              Nas histórias individuais, cada pessoa ocupa seu próprio quadro.
-              Quando o assunto é a construção da Bispo, os dois aparecem juntos.
+              Suzi e José têm histórias próprias, iniciadas muito antes da
+              Bispo. Nas narrativas individuais, cada pessoa ocupa seu próprio
+              quadro; na construção da marca, os dois aparecem juntos.
             </span>
           </header>
           <div className={journal.peopleGrid}>
