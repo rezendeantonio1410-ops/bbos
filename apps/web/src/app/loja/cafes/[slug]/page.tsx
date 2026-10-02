@@ -289,16 +289,10 @@ export default async function MicrolotPage({ params }: PageProps) {
         <section id="escolha" className={styles.curatorship}>
           <div className={styles.founderPhotos}>
             <Image
-              src="/brand/founders/jose-rezende.jpg"
-              alt="José Rezende"
-              width={180}
-              height={240}
-            />
-            <Image
               src="/brand/founders/suzi-ninov.jpg"
-              alt="Suzi Ninov"
-              width={180}
-              height={240}
+              alt="Suzi Ninov durante a prova e seleção do microlote"
+              width={340}
+              height={300}
             />
           </div>
           <div>
