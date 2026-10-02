@@ -21,6 +21,28 @@ export const metadata: Metadata = {
     ],
   },
   twitter: { card: "summary_large_image" },
+  icons: {
+    icon: [
+      {
+        url: "/brand/logo/bispo-favicon-v2.png",
+        type: "image/png",
+        sizes: "64x64",
+      },
+      {
+        url: "/brand/logo/bispo-icon-v2.png",
+        type: "image/png",
+        sizes: "192x192",
+      },
+    ],
+    shortcut: "/brand/logo/bispo-favicon-v2.png",
+    apple: [
+      {
+        url: "/brand/logo/bispo-apple-touch-v2.png",
+        type: "image/png",
+        sizes: "180x180",
+      },
+    ],
+  },
 };
 
 export default function StoreLayout({
