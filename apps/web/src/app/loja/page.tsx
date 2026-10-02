@@ -641,14 +641,14 @@ export default async function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src="/brand/editorial/real/jose-prova.jpg"
+                src="/brand/founders/jose-rezende.jpg"
                 alt="José Rezende avaliando o aroma de um café em prova"
               />
               <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
             <figure className={founder.portrait}>
               <img
-                src="/brand/editorial/real/suzi-prova.jpg"
+                src="/brand/founders/suzi-ninov.jpg"
                 alt="Suzi Ninov avaliando um café em prova"
               />
               <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>

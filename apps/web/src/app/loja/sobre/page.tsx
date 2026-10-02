@@ -136,7 +136,7 @@ export default function SobrePage() {
         <div className={authority.fieldStory}>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/editorial/real/jose-prova.jpg"
+              src="/brand/founders/jose-rezende.jpg"
               alt="José Rezende avaliando o aroma de um café em prova"
               fill
               sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 62vw"
@@ -149,7 +149,7 @@ export default function SobrePage() {
           </figure>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/editorial/real/suzi-prova.jpg"
+              src="/brand/founders/suzi-ninov.jpg"
               alt="Suzi Ninov avaliando um café em prova"
               fill
               sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 38vw"
