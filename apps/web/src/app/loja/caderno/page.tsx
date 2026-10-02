@@ -19,7 +19,7 @@ export const metadata: Metadata = {
       "Campo, seleção, prova, preparo e pessoas: o que acontece antes de um café se tornar Bispo.",
     url: "/loja/caderno",
     type: "website",
-    images: ["/brand/editorial/real/jose-suzi-prova.jpg"],
+    images: ["/brand/editorial/real/suzi-jose-escolha.jpg"],
   },
 };
 
@@ -86,9 +86,16 @@ const ritualScenes = [
     text: "Algumas xícaras entregam novas camadas quando recebem tempo. O ritual cria espaço para percebê-las.",
   },
   {
+    image: "/brand/editorial/real/suzi-aroma.jpg",
+    alt: "Suzi Ninov percebendo o aroma do café durante o ritual de prova",
+    eyebrow: "SUZI · PRESENÇA SENSORIAL",
+    title: "O aroma antecipa a experiência.",
+    text: "Antes do primeiro gole, o café já comunica temperatura, frescor e intenção. Perceber também faz parte do preparo.",
+  },
+  {
     image: "/brand/editorial/real/jose-preparo.jpg",
     alt: "José Rezende preparando café em método filtrado",
-    eyebrow: "PREPARO · PRECISÃO",
+    eyebrow: "JOSÉ · PREPARO E PRECISÃO",
     title: "Técnica para revelar, não para complicar.",
     text: "Boa moagem, proporção e temperatura tornam o preparo mais consistente — e deixam o café falar com clareza.",
   },
@@ -198,8 +205,8 @@ export default function CadernoPage() {
           </div>
           <figure>
             <Image
-              src="/brand/editorial/real/jose-suzi-prova.jpg"
-              alt="José e Suzi comparando cafés durante uma prova"
+              src="/brand/editorial/real/suzi-jose-escolha.jpg"
+              alt="Suzi Ninov e José Rezende escolhendo cafés durante uma prova"
               fill
               sizes="(max-width: 800px) 100vw, 58vw"
             />
@@ -259,16 +266,13 @@ export default function CadernoPage() {
             </span>
           </header>
           <div className={journal.cupGrid}>
-            {cupScenes.map((scene, index) => (
-              <figure
-                className={index === 2 ? journal.cupWide : undefined}
-                key={scene.title}
-              >
+            {cupScenes.map((scene) => (
+              <figure key={scene.title}>
                 <Image
                   src={scene.image}
                   alt={scene.alt}
                   fill
-                  sizes="(max-width: 760px) 100vw, 50vw"
+                  sizes="(max-width: 760px) 100vw, 33vw"
                 />
                 <div />
                 <figcaption>
@@ -355,13 +359,13 @@ export default function CadernoPage() {
             </figure>
             <figure className={journal.peopleTogether}>
               <Image
-                src="/brand/editorial/real/jose-suzi-prova.jpg"
-                alt="José Rezende e Suzi Ninov trabalhando juntos"
+                src="/brand/editorial/real/suzi-jose-escolha.jpg"
+                alt="Suzi Ninov e José Rezende trabalhando juntos na escolha dos cafés"
                 fill
-                sizes="(max-width: 760px) 100vw, 34vw"
+                sizes="(max-width: 760px) 100vw, 88vw"
               />
               <figcaption>
-                <small>JOSÉ + SUZI</small>
+                <small>SUZI + JOSÉ</small>
                 <strong>A Bispo se constrói no encontro.</strong>
               </figcaption>
             </figure>
