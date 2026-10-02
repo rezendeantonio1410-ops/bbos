@@ -134,7 +134,7 @@
 
 /* Keep the catalogue editorial, but give it the pace of a shop. */
 .productCard > div:first-child {
-  height: 270px;
+  height: 235px;
 }
 
 .productCard > div:last-child {

@@ -93,6 +93,13 @@ export default function EditorialHero({
       productImages[selectedScene.name]?.primary ??
       selectedScene.product,
   };
+  const pricePerPreparation =
+    scene.line === "GOURMET"
+      ? null
+      : (scene.priceCents / 100 / 25).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        });
 
   useEffect(() => {
     if (paused || interacted) return;
@@ -177,6 +184,11 @@ export default function EditorialHero({
           <div>
             <small>a partir de</small>
             <strong>{scene.price}</strong>
+            {pricePerPreparation ? (
+              <span className={styles.preparationValue}>
+                25 preparos de 20 g · ≈ {pricePerPreparation} cada
+              </span>
+            ) : null}
           </div>
           <AddToCartButton
             product={{

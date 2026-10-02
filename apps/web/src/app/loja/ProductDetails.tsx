@@ -42,6 +42,13 @@ type Props = {
 
 export default function ProductDetails({ product, story, detailHref, detailLabel = "Conhecer este café →" }: Props) {
   const [open, setOpen] = useState(false);
+  const pricePerPreparation =
+    product.line === "GOURMET"
+      ? null
+      : (product.priceCents / 100 / (product.weightGrams / 20)).toLocaleString(
+          "pt-BR",
+          { style: "currency", currency: "BRL" },
+        );
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +91,14 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
                 <strong>{product.notes}</strong>
                 <p>{story.promise}</p>
                 <div className={styles.quickBuy}>
-                  <span><b>{product.priceLabel}</b> · {product.weightLabel}</span>
+                  <span>
+                    <b>{product.priceLabel}</b> · {product.weightLabel}
+                    {pricePerPreparation ? (
+                      <small className={styles.preparationValue}>
+                        20 g por preparo · ≈ {pricePerPreparation} cada
+                      </small>
+                    ) : null}
+                  </span>
                   <AddToCartButton product={{ ...product, story }}>Comprar agora →</AddToCartButton>
                 </div>
               </div>

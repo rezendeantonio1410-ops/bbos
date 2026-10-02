@@ -253,6 +253,26 @@ const collectionId = (name: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()}`;
 
+const preparationProof = (product: {
+  line: string;
+  priceCents: number;
+  weight: string;
+}) => {
+  if (product.line === "GOURMET") return null;
+
+  const weightGrams = Number.parseInt(product.weight, 10);
+  const preparations = weightGrams / 20;
+  const pricePerPreparation = product.priceCents / 100 / preparations;
+  const preparationCount = Number.isInteger(preparations)
+    ? `${preparations} preparos de 20 g`
+    : "12 a 13 preparos de 20 g";
+
+  return `${preparationCount} · ≈ ${pricePerPreparation.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  })} cada`;
+};
+
 export const revalidate = 300;
 
 export const metadata: Metadata = {
@@ -400,6 +420,11 @@ export default async function LojaPage() {
                     <h3>{product.name}</h3>
                     <p>{guidance.reason}</p>
                     <span>{product.notes}</span>
+                    {preparationProof(product) ? (
+                      <small className={premium.preparationProof}>
+                        {preparationProof(product)}
+                      </small>
+                    ) : null}
                     <div>
                       <strong>
                         {product.price} <small>· {product.weight}</small>
@@ -426,12 +451,12 @@ export default async function LojaPage() {
           </div>
           <div className={premium.purchaseAssurances}>
             <span>
-              <b>Escolha com confiança</b>
-              <small>Perfis claros · cafés especiais</small>
+              <b>Escolhido por Suzi e José</b>
+              <small>Origem, prova e critério em cada perfil</small>
             </span>
             <span>
-              <b>Faça da xícara um ritual</b>
-              <small>Torra própria · 500 g</small>
+              <b>Valor que chega à xícara</b>
+              <small>100% Arábica · torra própria · até 25 preparos</small>
             </span>
             <Link href="/loja/sobre">Conheça quem escolhe com você →</Link>
           </div>
@@ -578,9 +603,14 @@ export default async function LojaPage() {
                                 detailLabel={
                                   p.name === "Raro"
                                     ? "Conhecer este lote →"
-                                    : undefined
+                                    : "Ver detalhes →"
                                 }
                               />
+                              {preparationProof(p) ? (
+                                <small className={premium.preparationProof}>
+                                  {preparationProof(p)}
+                                </small>
+                              ) : null}
                               <div
                                 className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
                               >

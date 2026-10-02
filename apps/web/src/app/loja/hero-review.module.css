@@ -43,9 +43,9 @@
 
 .editorialProductPhoto {
   position: absolute !important;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
+  inset: -6% 5%;
+  width: 90% !important;
+  height: 112% !important;
   object-fit: contain !important;
   object-position: center !important;
   filter: none !important;
