@@ -281,15 +281,15 @@ export default async function LojaPage() {
     {
       Caramelo: {
         eyebrow: "DOÇURA RECONHECÍVEL",
-        reason: "Caramelo e chocolate em uma xícara acolhedora.",
+        reason: "Doce e acolhedor, para a xícara que vira ritual.",
       },
       Sublime: {
         eyebrow: "MAIS PROFUNDIDADE",
-        reason: "Uma experiência longa, densa e contemplativa.",
+        reason: "Denso e contemplativo, para beber sem pressa.",
       },
       Singular: {
         eyebrow: "NOVAS CAMADAS",
-        reason: "Frutado, complexo e evolutivo na xícara.",
+        reason: "Frutado e evolutivo, para transformar a pausa em descoberta.",
       },
     };
   const featuredProducts = ["Caramelo", "Singular", "Sublime"]
@@ -359,11 +359,12 @@ export default async function LojaPage() {
         >
           <header className={premium.conversionIntro}>
             <div>
-              <small>COMECE POR AQUI</small>
-              <h2 id="comece-por-aqui">Três escolhas para viver o café.</h2>
+              <small>ESCOLHA PELO DESEJO</small>
+              <h2 id="comece-por-aqui">Um café para chamar de seu.</h2>
             </div>
             <p>
-              Do equilíbrio cotidiano às experiências de maior profundidade.
+              Três perfis claros — do conforto de todos os dias à profundidade
+              que pede tempo.
             </p>
           </header>
           <div className={premium.featuredGrid}>
@@ -414,7 +415,7 @@ export default async function LojaPage() {
                           story: product.story,
                         }}
                       >
-                        Escolher {product.name} →
+                        Levar {product.name} →
                       </AddToCartButton>
                     </div>
                   </div>
@@ -424,16 +425,14 @@ export default async function LojaPage() {
           </div>
           <div className={premium.purchaseAssurances}>
             <span>
-              <b>Cafés especiais em grãos</b>
-              <small>Torra própria · 500 g</small>
+              <b>Escolha com confiança</b>
+              <small>Perfis claros · cafés especiais</small>
             </span>
             <span>
-              <b>Receber regularmente</b>
-              <small>Sem cobrança automática</small>
+              <b>Faça da xícara um ritual</b>
+              <small>Torra própria · 500 g</small>
             </span>
-            <Link href="/loja/descobrir">
-              Ainda em dúvida? Descubra o seu →
-            </Link>
+            <Link href="/loja/sobre">Conheça quem escolhe com você →</Link>
           </div>
         </section>
 
@@ -658,15 +657,15 @@ export default async function LojaPage() {
           <div
             className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
           >
-            <small>NOSSA HISTÓRIA</small>
-            <h2>Escolha construída na origem.</h2>
+            <small>QUEM ESTÁ POR TRÁS</small>
+            <h2>Café escolhido por quem vive o café.</h2>
             <p className={founder.sharedStory}>
-              A Bispo reúne experiência de campo, produção, prova, torra e
-              mercado para selecionar cafés com identidade e constância.
+              José e Suzi reúnem campo, produção, prova e torra para que cada
+              xícara chegue com identidade, constância e história.
             </p>
             <div className={founder.actions}>
               <Link className={founder.primary} href="/loja/sobre">
-                Conhecer nossa história →
+                Conhecer José, Suzi e a Bispo →
               </Link>
             </div>
           </div>

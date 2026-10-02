@@ -189,7 +189,7 @@ export default function EditorialHero({
           </AddToCartButton>
         </div>
         <Link className={styles.assist} href="/loja/descobrir">
-          Prefere outra sensação? Descubra o café que combina com você →
+          Ainda não é o seu? Encontre o café que combina com você →
         </Link>
         <div className={styles.dots} aria-label="Escolher cena">
           {scenes.map((item, index) => (
