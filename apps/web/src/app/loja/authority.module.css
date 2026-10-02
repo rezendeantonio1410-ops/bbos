@@ -1,7 +1,7 @@
 .fieldStory {
   grid-column: 1/-1;
   display: grid;
-  grid-template-columns: 1.08fr 0.92fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 8px;
 }
@@ -56,12 +56,12 @@
   justify-content: flex-end;
   padding: 24px;
   border-radius: 22px;
-  background: #0e191d;
-  color: #fff;
+  border: 1px solid rgba(14, 25, 29, 0.1);
+  background: linear-gradient(145deg, #f2f5f2 0%, #e0eae9 100%);
+  color: #0e191d;
 }
 .personSecondary {
-  background: #e0eae9;
-  color: #0e191d;
+  background: linear-gradient(145deg, #f2f5f2 0%, #e0eae9 100%);
 }
 .personPrimary small,
 .personSecondary small {

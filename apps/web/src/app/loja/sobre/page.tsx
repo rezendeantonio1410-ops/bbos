@@ -100,12 +100,12 @@ export default function SobrePage() {
 
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
-          <p>O BISPO · A BISPO</p>
-          <h1>O Bispo é José. A Bispo é José e Suzi.</h1>
+          <p>DOIS FUNDADORES · UMA ESCOLHA</p>
+          <h1>A Bispo é José e Suzi.</h1>
           <span>
-            O apelido nasceu da trajetória de José no café. A marca nasce do
-            encontro dessa história com a experiência própria de Suzi — dois
-            fundadores, duas leituras e uma escolha compartilhada.
+            A marca leva um apelido da trajetória de José, mas nasce do encontro
+            entre a experiência dele e a de Suzi — dois fundadores, duas
+            leituras e uma escolha compartilhada.
           </span>
         </div>
         <div className={authority.peopleMarks}>
@@ -139,7 +139,7 @@ export default function SobrePage() {
               src="/brand/founders/jose-rezende.jpg"
               alt="José Rezende avaliando o aroma de um café em prova"
               fill
-              sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 62vw"
+              sizes="(max-width: 560px) 82vw, 50vw"
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
@@ -152,7 +152,7 @@ export default function SobrePage() {
               src="/brand/founders/suzi-ninov.jpg"
               alt="Suzi Ninov avaliando um café em prova"
               fill
-              sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 38vw"
+              sizes="(max-width: 560px) 82vw, 50vw"
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
