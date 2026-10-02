@@ -1,0 +1,637 @@
+.page {
+  --paper: #f4ecdf;
+  --paper-light: #fbf7ef;
+  --ink: #10201c;
+  --forest: #173b2e;
+  --brick: #923d31;
+  color: var(--ink);
+  background: var(--paper-light);
+}
+
+.shopControl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.shopLink {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero {
+  position: relative;
+  min-height: min(820px, calc(100svh - 110px));
+  display: grid;
+  align-items: end;
+  overflow: hidden;
+  background: #17221f;
+}
+
+.heroImage,
+.heroVeil {
+  position: absolute;
+  inset: 0;
+}
+
+.heroImage img {
+  object-fit: cover;
+  object-position: center 46%;
+}
+
+.heroVeil {
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 18, 15, 0.8) 0%,
+      rgba(8, 18, 15, 0.35) 46%,
+      rgba(8, 18, 15, 0.1) 72%
+    ),
+    linear-gradient(0deg, rgba(8, 18, 15, 0.7), transparent 50%);
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 2;
+  width: min(760px, 86vw);
+  padding: clamp(70px, 10vw, 150px) clamp(24px, 7vw, 110px);
+  color: #fff;
+}
+
+.heroCopy > p,
+.chapterLead > p,
+.featureCopy > p,
+.fieldGrid article > p,
+.ritualGrid article > p {
+  margin: 0 0 18px;
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.heroCopy h1 {
+  max-width: 690px;
+  margin: 0;
+  font-size: clamp(52px, 7.3vw, 112px);
+  font-weight: 430;
+  line-height: 0.9;
+  letter-spacing: -0.065em;
+}
+
+.heroCopy > span {
+  max-width: 590px;
+  display: block;
+  margin-top: 30px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(15px, 1.45vw, 20px);
+  line-height: 1.65;
+}
+
+.heroCopy nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.heroCopy nav a {
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  padding-bottom: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
+  min-height: 720px;
+  background: var(--paper);
+}
+
+.featureCopy {
+  align-self: center;
+  padding: clamp(60px, 8vw, 125px);
+}
+
+.featureCopy > p,
+.chapterLead > p {
+  color: var(--brick);
+}
+
+.featureCopy h2,
+.chapterLead h2 {
+  margin: 0;
+  font-size: clamp(38px, 5.2vw, 76px);
+  font-weight: 450;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.featureCopy > span,
+.chapterLead > span {
+  max-width: 630px;
+  display: block;
+  margin-top: 26px;
+  color: rgba(16, 32, 28, 0.7);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.feature figure {
+  position: relative;
+  min-height: 720px;
+  margin: 0;
+  overflow: hidden;
+}
+
+.feature figure img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.feature figcaption {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  padding: 10px 13px;
+  color: #fff;
+  background: rgba(8, 18, 15, 0.72);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.chapter,
+.people,
+.related {
+  padding: clamp(74px, 9vw, 140px) clamp(22px, 6.5vw, 104px);
+}
+
+.chapterLead {
+  max-width: 900px;
+  margin-bottom: clamp(44px, 6vw, 80px);
+}
+
+.fieldGrid,
+.ritualGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(22px, 3vw, 46px);
+}
+
+.fieldGrid article,
+.ritualGrid article {
+  min-width: 0;
+}
+
+.fieldImage,
+.ritualImage {
+  position: relative;
+  min-height: min(560px, 50vw);
+  margin-bottom: 28px;
+  overflow: hidden;
+  background: #dad1c5;
+}
+
+.fieldImage img,
+.ritualImage img {
+  object-fit: cover;
+}
+
+.fieldGrid article:nth-child(2) .fieldImage {
+  margin-top: 74px;
+}
+
+.fieldGrid article > p,
+.ritualGrid article > p {
+  margin-bottom: 12px;
+  color: var(--brick);
+}
+
+.fieldGrid h3,
+.ritualGrid h3 {
+  margin: 0;
+  font-size: clamp(25px, 2.3vw, 36px);
+  font-weight: 520;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+
+.fieldGrid article > span,
+.ritualGrid article > span {
+  display: block;
+  margin-top: 16px;
+  color: rgba(16, 32, 28, 0.67);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.textLink {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  margin-top: 42px;
+  padding-bottom: 6px;
+  color: var(--ink);
+  border-bottom: 1px solid rgba(16, 32, 28, 0.35);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.darkChapter {
+  color: #f9f4eb;
+  background: var(--forest);
+}
+
+.darkChapter .chapterLead > p {
+  color: #d8b878;
+}
+
+.darkChapter .chapterLead > span {
+  color: rgba(249, 244, 235, 0.7);
+}
+
+.cupGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(500px, 64vw);
+  gap: 10px;
+}
+
+.cupGrid figure {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  background: #08100d;
+}
+
+.cupGrid figure img {
+  object-fit: cover;
+}
+
+.cupGrid figure > div {
+  position: absolute;
+  inset: 35% 0 0;
+  background: linear-gradient(transparent, rgba(5, 13, 10, 0.78));
+}
+
+.cupGrid figcaption,
+.peopleGrid figcaption {
+  position: absolute;
+  z-index: 2;
+  left: 26px;
+  right: 26px;
+  bottom: 24px;
+  color: #fff;
+}
+
+.cupGrid figcaption small,
+.peopleGrid figcaption small {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.15em;
+}
+
+.cupGrid figcaption strong,
+.peopleGrid figcaption strong {
+  display: block;
+  max-width: 580px;
+  font-size: clamp(24px, 3vw, 42px);
+  font-weight: 480;
+  line-height: 1.03;
+  letter-spacing: -0.035em;
+}
+
+.cupWide {
+  grid-column: 1 / -1;
+}
+
+.ritualGrid article:nth-child(2) {
+  transform: translateY(62px);
+}
+
+.ritualImage {
+  aspect-ratio: 4 / 5;
+  min-height: 0;
+}
+
+.ritualImage img {
+  object-position: center;
+}
+
+.people {
+  background: var(--paper);
+}
+
+.peopleGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: 9px;
+}
+
+.peopleGrid figure {
+  position: relative;
+  min-height: 620px;
+  margin: 0;
+  overflow: hidden;
+  background: #d2c7ba;
+}
+
+.peopleGrid figure::after {
+  content: "";
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(transparent, rgba(8, 18, 15, 0.78));
+}
+
+.peopleGrid img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.peopleGrid figure:nth-child(1) img {
+  object-position: 50% 32%;
+}
+
+.peopleGrid figure:nth-child(2) img {
+  object-position: 57% center;
+}
+
+.peopleTogether img {
+  object-position: 56% center;
+}
+
+.related {
+  background: var(--paper-light);
+}
+
+.relatedGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(16, 32, 28, 0.17);
+}
+
+.relatedGrid > a {
+  min-height: 300px;
+  display: grid;
+  grid-template-columns: minmax(110px, 0.72fr) 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: 32px;
+  color: var(--ink);
+  border-right: 1px solid rgba(16, 32, 28, 0.17);
+  border-bottom: 1px solid rgba(16, 32, 28, 0.17);
+}
+
+.relatedGrid > a:first-child {
+  border-left: 1px solid rgba(16, 32, 28, 0.17);
+}
+
+.relatedGrid > a > div {
+  position: relative;
+  height: 235px;
+}
+
+.relatedGrid img {
+  object-fit: contain;
+}
+
+.relatedGrid a > span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.relatedGrid small {
+  color: var(--brick);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.relatedGrid strong {
+  margin-top: 12px;
+  font-size: 18px;
+  font-weight: 520;
+  line-height: 1.35;
+}
+
+.relatedGrid i {
+  margin-top: 26px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(16, 32, 28, 0.3);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.footer {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 32px;
+  align-items: center;
+  padding: 42px clamp(22px, 6.5vw, 104px);
+  color: #f9f4eb;
+  background: #101d19;
+}
+
+.footer img {
+  filter: brightness(0) invert(1);
+}
+
+.footer p {
+  margin: 0;
+  color: rgba(249, 244, 235, 0.63);
+  font-size: 12px;
+}
+
+.footer div {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.footer a {
+  color: #fff;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 980px) {
+  .shopLink {
+    display: none;
+  }
+
+  .feature {
+    grid-template-columns: 1fr;
+  }
+
+  .feature figure {
+    min-height: 70vw;
+  }
+
+  .fieldGrid,
+  .ritualGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fieldGrid article:last-child,
+  .ritualGrid article:last-child {
+    grid-column: 1 / -1;
+    max-width: 55%;
+  }
+
+  .peopleGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .peopleTogether {
+    grid-column: 1 / -1;
+  }
+
+  .relatedGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .relatedGrid > a,
+  .relatedGrid > a:first-child {
+    min-height: 260px;
+    border-left: 1px solid rgba(16, 32, 28, 0.17);
+  }
+
+  .footer {
+    grid-template-columns: auto 1fr;
+  }
+
+  .footer div {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .hero {
+    min-height: 710px;
+  }
+
+  .heroImage img {
+    object-position: 58% center;
+  }
+
+  .heroVeil {
+    background: linear-gradient(
+      0deg,
+      rgba(8, 18, 15, 0.86),
+      rgba(8, 18, 15, 0.03) 75%
+    );
+  }
+
+  .heroCopy {
+    width: auto;
+    padding: 56px 22px;
+  }
+
+  .heroCopy h1 {
+    font-size: clamp(49px, 16vw, 70px);
+  }
+
+  .featureCopy,
+  .chapter,
+  .people,
+  .related {
+    padding: 62px 22px;
+  }
+
+  .feature figure {
+    min-height: 480px;
+  }
+
+  .fieldGrid,
+  .ritualGrid,
+  .peopleGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldGrid article:nth-child(2),
+  .ritualGrid article:nth-child(2) {
+    margin-top: 0;
+    transform: none;
+  }
+
+  .fieldGrid article:last-child,
+  .ritualGrid article:last-child,
+  .peopleTogether {
+    grid-column: auto;
+    max-width: none;
+  }
+
+  .fieldImage,
+  .ritualImage {
+    min-height: 0;
+    aspect-ratio: 4 / 5;
+  }
+
+  .cupGrid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 620px;
+  }
+
+  .cupWide {
+    grid-column: auto;
+  }
+
+  .peopleGrid figure {
+    min-height: 520px;
+  }
+
+  .relatedGrid > a {
+    min-height: 240px;
+    grid-template-columns: 125px 1fr;
+    padding: 22px;
+  }
+
+  .relatedGrid > a > div {
+    height: 200px;
+  }
+
+  .footer {
+    grid-template-columns: 1fr;
+    padding: 38px 22px;
+  }
+
+  .footer div {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 420px) {
+  .cupGrid {
+    grid-auto-rows: 500px;
+  }
+
+  .relatedGrid > a {
+    grid-template-columns: 105px 1fr;
+    gap: 12px;
+    padding: 18px 14px;
+  }
+}

@@ -11,6 +11,7 @@ import layers from "./layers.module.css";
 import brand from "./brand-review.module.css";
 import storyNav from "./story-navigation.module.css";
 import premium from "./premium-overrides.module.css";
+import caderno from "./caderno-teaser.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
@@ -671,6 +672,27 @@ export default async function LojaPage() {
           </div>
         </section>
 
+        <section
+          className={caderno.section}
+          aria-labelledby="caderno-home-title"
+        >
+          <div className={caderno.image}>
+            <Image
+              src="/brand/editorial/real/jose-suzi-prova.jpg"
+              alt="José Rezende e Suzi Ninov durante uma prova de cafés"
+              fill
+              sizes="(max-width: 760px) 100vw, 57vw"
+            />
+            <span>CENAS DE ORIGEM, PROVA E RITUAL</span>
+          </div>
+          <div className={caderno.copy}>
+            <small>CADERNO BISPO</small>
+            <h2 id="caderno-home-title">Do campo ao laboratório.</h2>
+            <p>Veja o que acontece antes de um café se tornar Bispo.</p>
+            <Link href="/loja/caderno">Abrir o Caderno →</Link>
+          </div>
+        </section>
+
         <SensoryConcierge />
 
         <section className={styles.valueStrip}>
@@ -695,6 +717,7 @@ export default async function LojaPage() {
             <Link href="/loja/descobrir">Descubra o seu café</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
             <Link href="/loja/origem">A geografia na xícara</Link>
+            <Link href="/loja/caderno">Caderno Bispo</Link>
           </div>
           <div className={styles.footerNav}>
             <strong>Comprar</strong>
