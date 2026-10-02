@@ -17,6 +17,8 @@ const scenes = [
     italic: "Equilibrado.",
     copy: "Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem outra xícara.",
     image: "/brand/editorial/real/jose-preparo.jpg",
+    alt: "José Rezende preparando um café Bispo",
+    signature: "JOSÉ · PREPARO E RITUAL",
     product: realProductImages.Caramelo,
     notes: "Caramelo · Chocolate · Equilíbrio",
     price: "R$ 68,00",
@@ -31,6 +33,8 @@ const scenes = [
     italic: "Uma origem única.",
     copy: "Frutado, complexo e evolutivo. Para quem encontra prazer na descoberta.",
     image: "/brand/editorial/real/singular-ritual.jpg",
+    alt: "Café Singular servido em uma cena de ritual Bispo",
+    signature: "ESCOLHIDO NA ORIGEM",
     product: realProductImages.Singular,
     notes: "Frutado · Complexo · Evolutivo",
     price: "R$ 84,00",
@@ -43,14 +47,16 @@ const scenes = [
     name: "Sublime",
     title: "Escolhido por quem",
     italic: "vive o café.",
-    copy: "A Bispo acompanha a origem, a produção e a prova para escolher o que chega à sua xícara.",
-    image: "/brand/editorial/real/sublime-ritual.jpg",
+    copy: "Suzi prova cada perfil com rigor e sensibilidade para escolher o que merece chegar à sua xícara.",
+    image: "/brand/editorial/real/suzi-prova.jpg",
+    alt: "Suzi Ninov provando um café Bispo",
+    signature: "SUZI · PROVA E CRITÉRIO",
     product: realProductImages.Sublime,
     notes: "Rapadura · Caramelo · Doçura profunda",
     price: "R$ 84,00",
     priceCents: 8400,
     tone: "#5C7D5F",
-    crop: "center 50%",
+    crop: "58% 43%",
   },
   {
     line: "GOURMET",
@@ -59,6 +65,8 @@ const scenes = [
     italic: "Já moído.",
     copy: "Macio e equilibrado, pronto para preparar com facilidade.",
     image: "/brand/editorial/real/preparo-agua.jpg",
+    alt: "Água sendo servida para preparar café Bispo",
+    signature: "CUIDADO EM CADA PREPARO",
     product: realProductImages.Essencial,
     notes: "Macio · Doce · Fácil",
     price: "R$ 52,00",
@@ -118,11 +126,7 @@ export default function EditorialHero({
             key={item.name}
             className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
             src={item.image}
-            alt={
-              index === active
-                ? `${item.name}: uma cena real da experiência Bispo Coffees`
-                : ""
-            }
+            alt={index === active ? item.alt : ""}
             fill
             priority={index === 0}
             sizes="(max-width: 960px) 100vw, 54vw"
@@ -131,7 +135,7 @@ export default function EditorialHero({
         ))}
         <div className={styles.mediaShade} />
         <div className={styles.mediaSignature}>
-          <span>ESCOLHIDO NA ORIGEM</span>
+          <span>{scene.signature}</span>
         </div>
         <div className={styles.controls}>
           <button onClick={() => move(-1)} aria-label="Cena anterior">
