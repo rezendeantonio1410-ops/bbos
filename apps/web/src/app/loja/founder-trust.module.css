@@ -39,10 +39,10 @@
 }
 
 .portrait:first-child img {
-  object-position: 58% center;
+  object-position: 48% center;
 }
 .portrait:nth-child(2) img {
-  object-position: 48% center;
+  object-position: 58% center;
 }
 
 .portrait figcaption {
@@ -123,8 +123,19 @@
 }
 
 .primary {
+  position: relative;
   color: #fff !important;
   background: #0d1d17;
+  padding-inline: 38px !important;
+  text-align: center;
+}
+
+.primary::after {
+  content: "→";
+  position: absolute;
+  right: 17px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .section .actions .primary {

@@ -39,7 +39,7 @@ export default function LineageMap() {
         <p className={styles.kicker}>PESSOAS · TERRITÓRIO</p>
         <h2>Conhecer um lugar leva tempo.</h2>
         <p>
-          José e Suzi aparecem aqui apenas como parte dessa leitura construída
+          Suzi e José aparecem aqui apenas como parte dessa leitura construída
           no campo. Toque somente se quiser conhecer os rastros.
         </p>
       </header>

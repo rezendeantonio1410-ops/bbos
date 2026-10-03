@@ -8,6 +8,10 @@
   background: var(--paper-light);
 }
 
+.page :is(section[id], h2[id], article[id]) {
+  scroll-margin-top: 92px;
+}
+
 .shopControl {
   display: flex;
   align-items: center;
@@ -38,9 +42,21 @@ main.page .hero {
   inset: 0;
 }
 
-.heroImage img {
+.heroFilm,
+.heroVideo {
+  width: 100%;
+  height: 100%;
+}
+
+.heroFilm {
+  position: absolute;
+  inset: 0;
+}
+
+.heroVideo {
+  display: block;
   object-fit: cover;
-  object-position: center 46%;
+  object-position: center;
 }
 
 .heroVeil {
@@ -112,6 +128,38 @@ main.page .heroCopy {
   text-transform: uppercase;
 }
 
+.filmControl {
+  position: absolute;
+  z-index: 4;
+  right: clamp(20px, 3vw, 44px);
+  bottom: clamp(20px, 3vw, 40px);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px 9px 9px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  background: rgba(8, 18, 15, 0.45);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filmControl span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 8px;
+}
+
 .feature {
   display: grid;
   grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.1fr);
@@ -174,6 +222,243 @@ main.page .heroCopy {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.13em;
+}
+
+.fieldFilmSection {
+  padding: clamp(72px, 8vw, 132px) clamp(22px, 6.5vw, 104px);
+  color: #f9f4eb;
+  background: #101d19;
+}
+
+.fieldFilmLead {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  column-gap: clamp(36px, 7vw, 120px);
+  align-items: end;
+  margin-bottom: clamp(42px, 5vw, 76px);
+}
+
+.fieldFilmLead > p {
+  grid-column: 1 / -1;
+  margin: 0 0 18px;
+  color: #d8b878;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.fieldFilmLead h2 {
+  max-width: 900px;
+  margin: 0;
+  font-size: clamp(42px, 6vw, 88px);
+  font-weight: 430;
+  line-height: 0.94;
+  letter-spacing: -0.06em;
+}
+
+.fieldFilmLead > span {
+  display: block;
+  color: rgba(249, 244, 235, 0.7);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.fieldFilmFrame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  overflow: hidden;
+  background: #09110e;
+}
+
+.fieldFilm,
+.fieldFilmVideo {
+  width: 100%;
+  height: 100%;
+}
+
+.fieldFilm {
+  position: absolute;
+  inset: 0;
+}
+
+.fieldFilmVideo {
+  display: block;
+  object-fit: cover;
+}
+
+.fieldFilmVeil {
+  position: absolute;
+  z-index: 1;
+  inset: 45% 0 0;
+  pointer-events: none;
+  background: linear-gradient(transparent, rgba(5, 13, 10, 0.8));
+}
+
+.fieldFilmFrame figcaption {
+  position: absolute;
+  z-index: 2;
+  left: clamp(22px, 3vw, 46px);
+  bottom: clamp(22px, 3vw, 42px);
+  max-width: min(680px, 70%);
+}
+
+.fieldFilmFrame figcaption small {
+  display: block;
+  margin-bottom: 10px;
+  color: #d8b878;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.15em;
+}
+
+.fieldFilmFrame figcaption strong {
+  display: block;
+  font-size: clamp(25px, 3.2vw, 50px);
+  font-weight: 450;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.fieldFilmControl {
+  bottom: auto;
+  top: clamp(18px, 2.5vw, 34px);
+}
+
+.fieldFilmNotes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(249, 244, 235, 0.2);
+}
+
+.fieldFilmNotes article {
+  min-height: 150px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 18px;
+  align-content: center;
+  padding: 28px clamp(16px, 2.5vw, 38px);
+  border-left: 1px solid rgba(249, 244, 235, 0.2);
+}
+
+.fieldFilmNotes article:last-child {
+  border-right: 1px solid rgba(249, 244, 235, 0.2);
+}
+
+.fieldFilmNotes small {
+  grid-row: 1 / 3;
+  color: #d8b878;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.fieldFilmNotes strong {
+  font-size: 19px;
+  font-weight: 550;
+}
+
+.fieldFilmNotes span {
+  color: rgba(249, 244, 235, 0.62);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.phaseSection {
+  padding: clamp(76px, 8vw, 128px) clamp(22px, 4.5vw, 72px);
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.phaseLead {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.55fr);
+  gap: 40px;
+  align-items: end;
+  margin: 0 auto clamp(44px, 6vw, 84px);
+}
+
+.phaseLead p {
+  margin: 0 0 16px;
+  color: var(--brick);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.18em;
+}
+
+.phaseLead h2 {
+  margin: 0;
+  font-size: clamp(42px, 6vw, 86px);
+  font-weight: 430;
+  line-height: 0.94;
+  letter-spacing: -0.06em;
+}
+
+.phaseLead > span {
+  color: rgba(16, 32, 28, 0.68);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.phaseTrack {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.phaseTrack article {
+  min-width: 0;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(16, 32, 28, 0.22);
+}
+
+.phaseMedia {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  margin-bottom: 20px;
+  overflow: hidden;
+  background: #d5cabc;
+}
+
+.phaseMedia img,
+.phaseFilm,
+.phaseVideo {
+  width: 100%;
+  height: 100%;
+}
+
+.phaseMedia img,
+.phaseVideo {
+  display: block;
+  object-fit: cover;
+}
+
+.phaseFilm {
+  position: absolute;
+  inset: 0;
+}
+
+.phaseTrack small {
+  color: var(--brick);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.phaseTrack h3 {
+  margin: 9px 0 8px;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.phaseTrack article > span {
+  display: block;
+  color: rgba(16, 32, 28, 0.65);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .chapter,
@@ -496,6 +781,28 @@ main.page .footer {
     min-height: 70vw;
   }
 
+  .fieldFilmLead {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldFilmLead > p {
+    grid-column: auto;
+  }
+
+  .fieldFilmLead > span {
+    max-width: 620px;
+    margin-top: 24px;
+  }
+
+  .phaseLead {
+    grid-template-columns: 1fr;
+  }
+
+  .phaseTrack {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 38px;
+  }
+
   .fieldGrid,
   .ritualGrid {
     grid-template-columns: 1fr 1fr;
@@ -533,13 +840,13 @@ main.page .footer {
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 760px) {
   .hero {
-    min-height: 710px;
+    min-height: min(760px, calc(100svh - 100px));
   }
 
-  .heroImage img {
-    object-position: 58% center;
+  .heroVideo {
+    object-position: center;
   }
 
   .heroVeil {
@@ -565,6 +872,70 @@ main.page .footer {
   .people,
   .related {
     padding: 62px 22px;
+  }
+
+  .fieldFilmSection {
+    padding: 72px 0 0;
+  }
+
+  .fieldFilmLead {
+    padding: 0 22px;
+  }
+
+  .fieldFilmFrame {
+    aspect-ratio: 4 / 3;
+  }
+
+  .fieldFilmVideo {
+    object-position: center;
+  }
+
+  .fieldFilmFrame figcaption {
+    max-width: calc(100% - 44px);
+  }
+
+  .fieldFilmNotes {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldFilmNotes article,
+  .fieldFilmNotes article:last-child {
+    min-height: 120px;
+    border-right: 0;
+    border-left: 0;
+    border-top: 1px solid rgba(249, 244, 235, 0.2);
+  }
+
+  .filmControl {
+    padding-right: 9px;
+    font-size: 0;
+  }
+
+  .phaseSection {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .phaseLead {
+    padding: 0 22px;
+  }
+
+  .phaseTrack {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 0 22px 16px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .phaseTrack::-webkit-scrollbar {
+    display: none;
+  }
+
+  .phaseTrack article {
+    flex: 0 0 clamp(270px, 84vw, 520px);
+    scroll-snap-align: start;
   }
 
   .feature figure {

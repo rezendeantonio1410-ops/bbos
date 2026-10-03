@@ -37,13 +37,13 @@ export const alexandreMicrolot: Microlot = {
     tag: "poucas unidades",
     story: {
       promise:
-        "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
+        "Um pequeno lote de Carlos Alexandre Siqueira, eleito por Suzi e José entre os cafés provados ao longo das últimas safras.",
       description:
         "Produzido a 990 metros no Sítio Nossa Senhora Aparecida, este lote alcançou 86,5 pontos. A combinação entre o solo mineral do Norte do Paraná, manejo cuidadoso e evolução técnica se revela em uma xícara limpa, equilibrada e de acidez viva.",
       sensoryDescription:
         "A avaliação registra acidez de 8,5, corpo e equilíbrio de 8,25 e sabor de 8,0. A doçura, a uniformidade e a limpeza alcançam a nota máxima, 10, formando uma xícara precisa, consistente e sem interferências. A finalização, avaliada em 7,75, sustenta a experiência após o gole; a fragrância, em 7,5, completa um conjunto de 86,5 pontos, marcado por densidade, elegância e clareza.",
       founderNote:
-        "A Suzi acompanha o trabalho do Alexandre há três anos. José e Suzi provaram seus cafés ao longo das últimas safras e, para a safra atual, escolheram este pequeno lote como uma raridade Bispo.",
+        "A Suzi acompanha o trabalho do Alexandre há três anos. Suzi e José provaram seus cafés ao longo das últimas safras e, para a safra atual, escolheram este pequeno lote como uma raridade Bispo.",
       bestFor:
         "degustar com atenção, presentear e conhecer a expressão do Norte do Paraná",
       brew: "coado, com água filtrada e preparo cuidadoso",
@@ -61,7 +61,7 @@ export const alexandreMicrolot: Microlot = {
         area: "6 hectares",
         score: "86,5 pontos",
         relationship:
-          "A Suzi acompanha o trabalho do Alexandre há três anos. José e Suzi provaram seus cafés ao longo das últimas safras e, nesta safra, elegeram um pequeno lote pela qualidade e pela identidade encontrada na xícara.",
+          "A Suzi acompanha o trabalho do Alexandre há três anos. Suzi e José provaram seus cafés ao longo das últimas safras e, nesta safra, elegeram um pequeno lote pela qualidade e pela identidade encontrada na xícara.",
         history: [
           "Filho de cafeicultores, Alexandre cresceu entre os cafezais e sonhava em ter sua própria terra. Aos 22 anos, começou a trabalhar em parceria com produtores vizinhos, aprendendo cada etapa, do plantio à colheita. Em 2019, reuniu recursos para comprar as partes dos irmãos na propriedade do pai e realizar esse sonho.",
           "Desde então, vem renovando a pequena propriedade com variedades mais resilientes, manejo nutricional, adubação verde e mecanização. Ao lado de cooperativas e agrônomos, busca produzir melhor sem perder o respeito pela terra que atravessa gerações de sua família.",

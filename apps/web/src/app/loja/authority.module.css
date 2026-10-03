@@ -69,9 +69,10 @@
 .personCard strong {
   display: block;
   margin-top: 18px;
-  font-size: clamp(24px, 2.1vw, 35px);
+  font-size: clamp(22px, 1.8vw, 31px);
   line-height: 1;
   letter-spacing: -0.035em;
+  white-space: nowrap;
 }
 .personCard span {
   display: block;
@@ -336,28 +337,6 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.documentaryNote {
-  grid-column: 1/-1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 14px 2px 0;
-  color: #0e191d;
-}
-.documentaryNote p {
-  margin: 0;
-  max-width: 760px;
-  font-size: 13px;
-  line-height: 1.55;
-  opacity: 0.7;
-}
-.documentaryNote b {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
 .externalProof {
   grid-column: 1/-1;
   display: grid;
@@ -490,11 +469,6 @@
   .storyChapters article {
     padding: 20px;
   }
-  .documentaryNote {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
   .externalProof {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -539,12 +513,6 @@
   }
   .storyChapters {
     margin-top: 2px;
-  }
-  .documentaryNote {
-    padding-top: 8px;
-  }
-  .documentaryNote p {
-    font-size: 12px;
   }
   .milestoneRail {
     margin-right: -22px;

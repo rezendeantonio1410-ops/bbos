@@ -701,7 +701,7 @@ export default function CheckoutPage() {
             <strong>{money(total)}</strong>
           </div>
           <p className={styles.proof}>
-            Escolhido por José e Suzi, preparado para chegar à sua melhor
+            Escolhido por Suzi e José, preparado para chegar à sua melhor
             xícara.
           </p>
         </aside>

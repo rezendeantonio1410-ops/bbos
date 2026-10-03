@@ -7,6 +7,7 @@ import storyNav from "../story-navigation.module.css";
 import premium from "../premium-overrides.module.css";
 import MobileStoreMenu from "../MobileStoreMenu";
 import journal from "./page.module.css";
+import RealFilm from "./RealFilm";
 
 export const metadata: Metadata = {
   title: "Caderno Bispo — cenas de origem, prova e ritual",
@@ -41,9 +42,9 @@ const fieldScenes = [
     text: "A leitura acontece ao longo do ciclo: planta, solo, maturação e contexto. A qualidade não nasce apenas no dia da prova.",
   },
   {
-    image: "/brand/products/raros/alexandre-secagem.webp",
-    alt: "Café secando na propriedade de Carlos Alexandre Siqueira",
-    eyebrow: "PÓS-COLHEITA · SAFRA 26/27",
+    image: "/brand/editorial/real/phases/secagem.jpg",
+    alt: "Suzi Ninov inspecionando café durante a secagem",
+    eyebrow: "SUZI · PÓS-COLHEITA E SECAGEM",
     title: "O processo também deixa assinatura.",
     text: "Colheita e secagem preservam o trabalho construído no campo e definem parte importante do que a xícara poderá revelar.",
   },
@@ -122,6 +123,60 @@ const relatedCoffees = [
   },
 ];
 
+const phaseScenes = [
+  {
+    kind: "video" as const,
+    media: "/brand/editorial/real/phases/florada.mp4",
+    poster: "/brand/editorial/real/phases/florada-poster.jpg",
+    alt: "Abelha entre flores de café durante a florada",
+    number: "01",
+    title: "Florada",
+    text: "O ciclo recomeça em poucos dias decisivos.",
+  },
+  {
+    kind: "video" as const,
+    media: "/brand/editorial/real/phases/fruto.mp4",
+    poster: "/brand/editorial/real/phases/fruto-poster.jpg",
+    alt: "Frutos verdes se desenvolvendo no cafeeiro",
+    number: "02",
+    title: "Fruto",
+    text: "Primeiro verde; depois, cor, açúcar e maturação.",
+  },
+  {
+    kind: "image" as const,
+    media: "/brand/editorial/real/phases/maturacao.jpg",
+    alt: "Cerejas maduras de café ainda no cafeeiro",
+    number: "03",
+    title: "Maturação",
+    text: "A doçura que chega à xícara começa na planta.",
+  },
+  {
+    kind: "image" as const,
+    media: "/brand/products/raros/alexandre-colheita.webp",
+    alt: "Peneira com cerejas maduras de café recém-colhidas",
+    number: "04",
+    title: "Colheita",
+    text: "O ponto e o método definem o que segue adiante.",
+  },
+  {
+    kind: "image" as const,
+    media: "/brand/editorial/real/phases/secagem.jpg",
+    alt: "Suzi Ninov observando o café em etapa de secagem",
+    number: "05",
+    title: "Pós-colheita",
+    text: "Secagem e tempo preservam a identidade do lote.",
+  },
+  {
+    kind: "video" as const,
+    media: "/brand/editorial/real/phases/torra.mp4",
+    poster: "/brand/editorial/real/phases/torra-poster.jpg",
+    alt: "Grãos de café em movimento após a torra",
+    number: "06",
+    title: "Torra",
+    text: "O calor interpreta o que o campo construiu.",
+  },
+];
+
 export default function CadernoPage() {
   return (
     <main className={`${styles.page} ${brand.storefront} ${journal.page}`}>
@@ -166,12 +221,14 @@ export default function CadernoPage() {
       <article>
         <section className={journal.hero}>
           <div className={journal.heroImage}>
-            <Image
-              src="/brand/editorial/real/sublime-ritual.jpg"
-              alt="Café Sublime, xícara e método filtrado em um ritual de preparo"
-              fill
-              priority
-              sizes="100vw"
+            <RealFilm
+              className={journal.heroFilm}
+              videoClassName={journal.heroVideo}
+              controlClassName={journal.filmControl}
+              desktopSrc="/brand/story/origem-arrival/campo-desktop.mp4"
+              mobileSrc="/brand/story/origem-arrival/campo-mobile.mp4"
+              poster="/brand/story/origem-arrival/campo-dia.jpg"
+              label="Imagens reais de uma lavoura de café no Norte do Paraná"
             />
             <div className={journal.heroVeil} />
           </div>
@@ -212,6 +269,103 @@ export default function CadernoPage() {
             />
             <figcaption>LONDRINA · PROVA E SELEÇÃO</figcaption>
           </figure>
+        </section>
+
+        <section
+          className={journal.fieldFilmSection}
+          aria-labelledby="territorio-em-movimento"
+        >
+          <header className={journal.fieldFilmLead}>
+            <p>CADERNO DE CAMPO · REGISTRO REAL</p>
+            <h2 id="territorio-em-movimento">
+              A origem muda quando deixa de ser cenário.
+            </h2>
+            <span>
+              Caminhar a lavoura, observar a planta e ouvir quem produz fazem
+              parte da escolha. Estas imagens registram Suzi em campo, lendo a
+              lavoura de perto — presença antes da prova.
+            </span>
+          </header>
+          <figure className={journal.fieldFilmFrame}>
+            <RealFilm
+              className={journal.fieldFilm}
+              videoClassName={journal.fieldFilmVideo}
+              controlClassName={`${journal.filmControl} ${journal.fieldFilmControl}`}
+              desktopSrc="/brand/editorial/real/caderno-campo-encontro.mp4"
+              poster="/brand/editorial/real/caderno-campo-poster.jpg"
+              label="Suzi Ninov observando a lavoura no Norte do Paraná"
+              clipStart={0}
+              clipEnd={4}
+            />
+            <div className={journal.fieldFilmVeil} />
+            <figcaption>
+              <small>NORTE DO PARANÁ · CAMPO E ENCONTRO</small>
+              <strong>O café começa em relações que precisam de tempo.</strong>
+            </figcaption>
+          </figure>
+          <div className={journal.fieldFilmNotes}>
+            <article>
+              <small>01</small>
+              <strong>Observar</strong>
+              <span>A planta, o solo e o ritmo de cada lugar.</span>
+            </article>
+            <article>
+              <small>02</small>
+              <strong>Escutar</strong>
+              <span>Quem produz sabe o que nenhuma planilha conta sozinha.</span>
+            </article>
+            <article>
+              <small>03</small>
+              <strong>Voltar</strong>
+              <span>Qualidade consistente nasce de acompanhamento.</span>
+            </article>
+          </div>
+        </section>
+
+        <section
+          className={journal.phaseSection}
+          aria-labelledby="safra-em-movimento"
+        >
+          <header className={journal.phaseLead}>
+            <div>
+              <p>DO CAMPO À TORRA · MATÉRIA VIVA</p>
+              <h2 id="safra-em-movimento">A safra muda de estado.</h2>
+            </div>
+            <span>
+              Registros reais de diferentes momentos e propriedades tornam
+              visível o percurso que normalmente chega escondido dentro do
+              pacote.
+            </span>
+          </header>
+          <div className={journal.phaseTrack}>
+            {phaseScenes.map((scene) => (
+              <article id={`fase-${scene.number}`} key={scene.number}>
+                <div className={journal.phaseMedia}>
+                  {scene.kind === "video" ? (
+                    <RealFilm
+                      className={journal.phaseFilm}
+                      videoClassName={journal.phaseVideo}
+                      desktopSrc={scene.media}
+                      poster={scene.poster}
+                      label={scene.alt}
+                      loop={false}
+                      showControl={false}
+                    />
+                  ) : (
+                    <Image
+                      src={scene.media}
+                      alt={scene.alt}
+                      fill
+                      sizes="(max-width: 680px) 72vw, 18vw"
+                    />
+                  )}
+                </div>
+                <small>{scene.number}</small>
+                <h3>{scene.title}</h3>
+                <span>{scene.text}</span>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section

@@ -167,7 +167,7 @@ export default function OrigemPage() {
                 <span>SUZI NINOV · CAMPO E DESENVOLVIMENTO</span>
                 <h3>O cuidado começa na planta.</h3>
                 <p>
-                  Criada em uma fazenda no interior do Rio Grande do Sul, Suzi
+                  Criada em um sítio no interior do Rio Grande do Sul, Suzi
                   construiu sua história muito antes da Bispo e trabalha com
                   cafeicultura no Paraná desde 2007. Empresária e cofundadora da
                   Bispo Coffees, acompanha ao lado de produtores a nutrição, a
@@ -508,7 +508,7 @@ export default function OrigemPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Kolibri · José e Suzi no Paraná
+                  Kolibri · Suzi e José no Paraná
                 </a>
                 .
               </p>

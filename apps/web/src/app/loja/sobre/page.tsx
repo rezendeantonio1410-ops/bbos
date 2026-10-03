@@ -139,19 +139,6 @@ export default function SobrePage() {
         <div className={authority.fieldStory}>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/founders/jose-rezende.jpg"
-              alt="José Rezende avaliando o aroma de um café em prova"
-              fill
-              sizes="(max-width: 560px) 82vw, 50vw"
-            />
-            <i className={authority.fieldVeil} />
-            <figcaption className={authority.fieldCaption}>
-              <span>JOSÉ · PROVA</span>
-              <strong>A qualidade se confirma na xícara.</strong>
-            </figcaption>
-          </figure>
-          <figure className={authority.fieldShot}>
-            <Image
               src="/brand/founders/suzi-ninov.jpg"
               alt="Suzi Ninov avaliando um café em prova"
               fill
@@ -163,15 +150,28 @@ export default function SobrePage() {
               <strong>O cuidado reconhece o potencial antes da xícara.</strong>
             </figcaption>
           </figure>
+          <figure className={authority.fieldShot}>
+            <Image
+              src="/brand/founders/jose-rezende.jpg"
+              alt="José Rezende avaliando o aroma de um café em prova"
+              fill
+              sizes="(max-width: 560px) 82vw, 50vw"
+            />
+            <i className={authority.fieldVeil} />
+            <figcaption className={authority.fieldCaption}>
+              <span>JOSÉ · PROVA</span>
+              <strong>A qualidade se confirma na xícara.</strong>
+            </figcaption>
+          </figure>
         </div>
 
         <blockquote className={authority.storyManifesto}>
           <small>A AUTORIDADE VEM ANTES DA MARCA</small>
           <p>
-            As histórias de Suzi e José não começam na Bispo — e muito menos
-            quando a embalagem fica pronta. O trabalho de cada um já atravessava
-            campo, planta, processamento, prova, torra e mercado. A Bispo é o
-            encontro e a continuidade desses percursos.
+            José e Suzi não chegam ao café quando a embalagem fica pronta. O
+            trabalho começa no campo, passa pela planta, pelo processamento,
+            pela prova e pela torra — e só então encontra o mercado. A Bispo é a
+            continuidade desse percurso, não uma história criada para vender.
           </p>
         </blockquote>
 
@@ -182,7 +182,7 @@ export default function SobrePage() {
           <li>
             <b>MUITO ANTES DA BISPO</b>
             <span>
-              Suzi cresce em uma fazenda no Rio Grande do Sul. José cresce em
+              Suzi cresce em um sítio no Rio Grande do Sul. José cresce em
               uma família de produtores no Norte do Paraná.
             </span>
           </li>
@@ -197,8 +197,7 @@ export default function SobrePage() {
             <b>2010 · 2017</b>
             <span>
               José se torna Q-Grader e cofundador da Capricornio. O trabalho de
-              campo de Suzi participa de uma conquista nacional da família
-              Rosseto.
+              campo de Suzi contribui para uma conquista nacional de qualidade.
             </span>
           </li>
           <li>
@@ -243,9 +242,12 @@ export default function SobrePage() {
               dos recursos do solo.
             </p>
             <p>
-              Entre os produtores acompanhados por Suzi está a família Rosseto.
-              Em 2017, Wagner Rosseto alcançou o primeiro lugar nacional na
-              categoria Natural da primeira edição do Concurso NossoCafé Yara.
+              Esse acompanhamento também se traduziu em reconhecimento
+              nacional: em 2017, um dos cafés desenvolvidos junto a produtores
+              atendidos por Suzi alcançou o primeiro lugar em sua categoria em
+              um concurso de qualidade. Mais do que uma premiação isolada, o
+              resultado expressa a continuidade entre manejo, nutrição,
+              produtividade e qualidade na xícara.
             </p>
             <blockquote className={authority.suziPrinciple}>
               <p>
@@ -267,25 +269,15 @@ export default function SobrePage() {
               entregar na xícara.
             </p>
             <p>
-              “Bispo” é como José é conhecido há anos, mas a empresa pertence à
-              construção compartilhada de seus dois cofundadores. O nome é
-              singular; a história, o critério e a decisão são de Suzi e José. O
-              complexo fica com eles. Para quem compra, ficam uma escolha clara
-              e uma xícara que vale reencontrar.
+              A experiência construída por Suzi e José entre lavouras, prova,
+              sustentabilidade e mercados internacionais chega agora à xícara.
+              Cafés brasileiros escolhidos com o mesmo rigor aplicado às origens
+              apresentadas ao mundo — torrados para revelar identidade, não para
+              escondê-la.
             </p>
           </article>
         </div>
 
-        <div className={authority.documentaryNote}>
-          <p>
-            A experiência construída por Suzi e José entre lavouras, prova,
-            sustentabilidade e mercados internacionais chega agora à xícara.
-            Cafés brasileiros escolhidos com o mesmo rigor aplicado às origens
-            apresentadas ao mundo — torrados para revelar identidade, não para
-            escondê-la.
-          </p>
-          <b>DO CAFÉ VERDE À SUA XÍCARA</b>
-        </div>
         <section
           className={authority.evidence}
           aria-labelledby="rastro-publico"
@@ -331,12 +323,11 @@ export default function SobrePage() {
               </div>
             </article>
             <article>
-              <small>SUZI · 2017</small>
-              <strong>Do trabalho na produção ao reconhecimento.</strong>
+              <small>SUZI · CAMPO E QUALIDADE</small>
+              <strong>Do acompanhamento técnico ao reconhecimento.</strong>
               <p>
-                O acompanhamento da família Rosseto integra a trajetória de
-                Suzi. Em 2017, Wagner Rosseto venceu a categoria Natural do
-                primeiro Concurso NossoCafé Yara.
+                Em 2017, um café desenvolvido com acompanhamento técnico de
+                Suzi conquistou o primeiro lugar nacional em sua categoria.
               </p>
               <div className={authority.evidenceLinks}>
                 <a
@@ -344,7 +335,7 @@ export default function SobrePage() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Yara · 2017 ↗
+                  Registro da premiação · 2017 ↗
                 </a>
               </div>
             </article>

@@ -350,34 +350,6 @@ export default async function LojaPage() {
     .filter((product): product is (typeof catalogProducts)[number] =>
       Boolean(product),
     );
-  const featuredScenes: Record<
-    string,
-    {
-      src: string;
-      alt: string;
-      label: string;
-      objectPosition?: string;
-    }
-  > = {
-    Caramelo: {
-      src: "/brand/editorial/real/preparo-agua.jpg",
-      alt: "Água sendo adicionada às xícaras durante uma prova Bispo",
-      label: "CONFORTO QUE VIRA RITUAL",
-      objectPosition: "center 46%",
-    },
-    Singular: {
-      src: "/brand/editorial/real/singular-ritual.jpg",
-      alt: "Café Singular servido em uma cena de ritual Bispo",
-      label: "DESCOBERTA NA XÍCARA",
-      objectPosition: "center 50%",
-    },
-    Sublime: {
-      src: "/brand/editorial/real/sublime-ritual.jpg",
-      alt: "Cena de preparo e ritual do café Sublime",
-      label: "PAUSA SEM PRESSA",
-      objectPosition: "center 50%",
-    },
-  };
   return (
     <StorefrontCartProvider>
       <main className={`${styles.page} ${brand.storefront}`}>
@@ -454,7 +426,6 @@ export default async function LojaPage() {
                 eyebrow: product.tag.toUpperCase(),
                 reason: product.story.promise,
               };
-              const scene = featuredScenes[product.name];
               return (
                 <article
                   key={product.name}
@@ -464,31 +435,7 @@ export default async function LojaPage() {
                   }
                 >
                   <div className={premium.featuredVisual}>
-                    {scene ? (
-                      <>
-                        <img
-                          src={scene.src}
-                          alt={scene.alt}
-                          className={premium.featuredScene}
-                          style={{ objectPosition: scene.objectPosition }}
-                          decoding="async"
-                        />
-                        {product.image ? (
-                          <span className={premium.featuredPack}>
-                            <Image
-                              src={product.image}
-                              alt={`Embalagem Bispo ${product.name}`}
-                              width={132}
-                              height={172}
-                              sizes="(max-width: 600px) 82px, (max-width: 1050px) 124px, 8vw"
-                            />
-                          </span>
-                        ) : null}
-                        <span className={premium.featuredSceneLabel}>
-                          {scene.label}
-                        </span>
-                      </>
-                    ) : product.image ? (
+                    {product.image ? (
                       <Image
                         src={product.image}
                         alt={`Embalagem Bispo ${product.name}`}
@@ -813,17 +760,17 @@ export default async function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src="/brand/founders/jose-rezende.jpg"
-                alt="José Rezende avaliando o aroma de um café em prova"
-              />
-              <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
-            </figure>
-            <figure className={founder.portrait}>
-              <img
                 src="/brand/founders/suzi-ninov.jpg"
                 alt="Suzi Ninov avaliando um café em prova"
               />
               <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
+            </figure>
+            <figure className={founder.portrait}>
+              <img
+                src="/brand/founders/jose-rezende.jpg"
+                alt="José Rezende avaliando o aroma de um café em prova"
+              />
+              <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
           </div>
           <div
@@ -838,7 +785,7 @@ export default async function LojaPage() {
             </p>
             <div className={founder.actions}>
               <Link className={founder.primary} href="/loja/sobre">
-                Conhecer Suzi, José e a Bispo →
+                Conhecer Suzi, José e a Bispo
               </Link>
             </div>
           </div>
@@ -851,7 +798,7 @@ export default async function LojaPage() {
           <div className={caderno.image}>
             <Image
               src="/brand/editorial/real/jose-suzi-prova.jpg"
-              alt="José Rezende e Suzi Ninov durante uma prova de cafés"
+              alt="Suzi Ninov e José Rezende durante uma prova de cafés"
               fill
               sizes="(max-width: 760px) 100vw, 57vw"
             />

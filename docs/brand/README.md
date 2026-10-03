@@ -32,3 +32,12 @@ Os valores aprovados estão mapeados em `packages/ui/src/brand/tokens.ts`. O man
 - Ritual Black, Chinese Black, Whitt Sand e Platinum formam a paleta institucional.
 - Verde, âmbar e vermelho permanecem exclusivamente como estados funcionais do produto.
 - A marca horizontal respeita largura digital mínima de 80 px e área de proteção.
+
+## Regra de ouro — equidade entre os fundadores
+
+- Suzi Ninov e José Rezende têm o mesmo peso institucional na Bispo Coffees.
+- Quando aparecem juntos, recebem a mesma área, escala, cor, contraste, tipografia, moldura e tratamento fotográfico.
+- Cor, posição, movimento ou interação não podem criar uma hierarquia que destaque José acima de Suzi.
+- Imagens gerais da marca e peças de compartilhamento devem mostrar os dois juntos ou usar uma cena neutra; não devem ser representadas apenas por José.
+- Uma narrativa individual pode dar maior protagonismo a Suzi ou a José quando o assunto pertence à trajetória ou à especialidade daquela pessoa.
+- A ordem dos nomes e retratos compartilhados deve evitar uma precedência automática e recorrente de José; na experiência digital, adota-se preferencialmente “Suzi e José”.

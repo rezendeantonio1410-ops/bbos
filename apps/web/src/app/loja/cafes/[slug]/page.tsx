@@ -299,7 +299,7 @@ export default async function MicrolotPage({ params }: PageProps) {
             <small>A ESCOLHA BISPO</small>
             <h2>Três anos de acompanhamento. Um pequeno lote escolhido.</h2>
             <blockquote>“{product.story.founderNote}”</blockquote>
-            <p>José e Suzi · origem e prova</p>
+            <p>Suzi e José · origem e prova</p>
           </div>
         </section>
 

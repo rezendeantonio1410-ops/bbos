@@ -200,13 +200,13 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
               )}
 
               <blockquote className={styles.founders}>
-                <img src="/brand/founders/jose-rezende.jpg" alt="José Rezende" />
                 <img src="/brand/founders/suzi-ninov.jpg" alt="Suzi Ninov" />
-                <div><small>POR QUE ELE ESTÁ AQUI</small><p>“{story.founderNote}”</p><cite>José e Suzi · origem e prova</cite></div>
+                <img src="/brand/founders/jose-rezende.jpg" alt="José Rezende" />
+                <div><small>POR QUE ELE ESTÁ AQUI</small><p>“{story.founderNote}”</p><cite>Suzi e José · origem e prova</cite></div>
               </blockquote>
 
               <figure className={styles.origin}>
-                <img src="/brand/editorial/real/jose-suzi-prova.jpg" alt="José Rezende e Suzi Ninov avaliando cafés em prova" />
+                <img src="/brand/editorial/real/jose-suzi-prova.jpg" alt="Suzi Ninov e José Rezende avaliando cafés em prova" />
                 <figcaption><small>DA ORIGEM À XÍCARA</small><b>Escolhido, provado e torrado para preservar sua identidade.</b></figcaption>
               </figure>
             </div>

@@ -13,10 +13,10 @@ export const metadata: Metadata = {
     siteName: "Bispo Coffees",
     images: [
       {
-        url: "/brand/editorial/real/jose-preparo.jpg",
-        width: 2200,
-        height: 1467,
-        alt: "Ritual de preparo Bispo Coffees",
+        url: "/brand/editorial/real/suzi-jose-escolha.jpg",
+        width: 2400,
+        height: 1600,
+        alt: "Suzi Ninov e José Rezende escolhendo cafés na Bispo Coffees",
       },
     ],
   },

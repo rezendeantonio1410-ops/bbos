@@ -1,13 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useMemo } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
 
 type Layer = "localizar" | "latitude" | "clima" | "relevo" | "solo" | "cultivo" | "pesquisa";
 type Detail = "basalto"|"terra"|"argilas"|"raizes"|"nutricao"|"manejo"|"agua"|"sanidade"|"colheita"|null;
+type Season = "verao" | "outono" | "inverno" | "primavera";
+type Arrival = "pending" | "world" | "brazil" | "parana" | "north" | "video" | "done";
+type LiveWeather = {
+ location:string; observedAt:string|null; temperature:number; apparentTemperature:number|null;
+ humidity:number|null; precipitation:number; rain:number; cloudCover:number|null; windSpeed:number|null;
+ weatherCode:number; condition:string; isDay:number|null; sunrise:string|null; sunset:string|null; source:string;
+};
+
+const paranaClock = new Intl.DateTimeFormat("pt-BR", {
+ timeZone:"America/Sao_Paulo", hour:"2-digit", minute:"2-digit", hourCycle:"h23"
+});
+const paranaParts = new Intl.DateTimeFormat("pt-BR", {
+ timeZone:"America/Sao_Paulo", hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit", hourCycle:"h23"
+});
+function getParanaDate(date:Date){
+ const parts=paranaParts.formatToParts(date);
+ const get=(type:Intl.DateTimeFormatPartTypes)=>Number(parts.find(part=>part.type===type)?.value ?? 0);
+ return {hour:get("hour"),minute:get("minute"),day:get("day"),month:get("month")};
+}
+function getSouthernSeason(month:number,day:number):Season{
+ const value=month*100+day;
+ if(value>=1221||value<320)return "verao";
+ if(value<620)return "outono";
+ if(value<922)return "inverno";
+ return "primavera";
+}
 const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 {id:"localizar",label:"LOCALIZAR",title:"Do mundo ao Norte do Paraná",copy:"O mapa aproxima mundo, Brasil e Paraná sem perder a linha que organiza a história: o Trópico de Capricórnio."},
 {id:"latitude",label:"LATITUDE",title:"23°26′ S · Trópico de Capricórnio",copy:"Latitude situa norte e sul; longitude, leste e oeste. A posição ajuda a descrever o ambiente, mas não determina sozinha a qualidade ou o sabor."},
@@ -18,8 +43,32 @@ const layers: Array<{id:Layer; label:string; title:string; copy:string}> = [
 {id:"pesquisa",label:"PESQUISA",title:"Do Havaí ao Paraná: perguntas sobre a argila",copy:"O Havaí, próximo ao limite norte do cinturão cafeeiro, entra como referência externa para estudos de solo e tipologia da argila. No Paraná, usamos essas pesquisas para formular perguntas — nunca para transferir automaticamente conclusões entre territórios."},
 ];
 export default function GeoAtlasInteractive(){
- const now=useMemo(()=>new Date(),[]); const initialHour=now.getHours(); const [active,setActive]=useState<Layer>("localizar"); const [detail,setDetail]=useState<Detail>(null); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"brazil"|"parana">("world"); const [city,setCity]=useState<string|null>(null); const [hour,setHour]=useState(initialHour); const [season,setSeason]=useState<"verao"|"outono"|"inverno"|"primavera">(()=>{const m=now.getMonth()+1;return m>=9&&m<=11?"primavera":m===12||m<=2?"verao":m<=5?"outono":"inverno"});
- useEffect(()=>{const t=window.setTimeout(()=>setStarted(true),250);const a=window.setTimeout(()=>setFocus("brazil"),1200);const b=window.setTimeout(()=>setFocus("parana"),2600);return()=>{window.clearTimeout(t);window.clearTimeout(a);window.clearTimeout(b)}},[]);
+ const [active,setActive]=useState<Layer>("localizar"); const [detail,setDetail]=useState<Detail>(null); const [started,setStarted]=useState(false); const [focus,setFocus]=useState<"world"|"brazil"|"parana">("world"); const [city,setCity]=useState<string|null>(null); const [hour,setHour]=useState(12); const [season,setSeason]=useState<Season>("primavera"); const [clock,setClock]=useState<Date|null>(null); const [arrival,setArrival]=useState<Arrival>("pending"); const [weather,setWeather]=useState<LiveWeather|null>(null); const [weatherUnavailable,setWeatherUnavailable]=useState(false); const [videoNeedsPlay,setVideoNeedsPlay]=useState(true); const [videoSrc,setVideoSrc]=useState("/brand/story/origem-arrival/campo-desktop.mp4"); const videoRef=useRef<HTMLVideoElement|null>(null);
+ useEffect(()=>{
+  const current=new Date(); const local=getParanaDate(current); const reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches; const saveData=Boolean((navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData);
+  const syncClock=()=>{const now=new Date();const parts=getParanaDate(now);setClock(now);setSeason(getSouthernSeason(parts.month,parts.day))};
+  setClock(current); setHour(local.hour); setSeason(getSouthernSeason(local.month,local.day));
+  if(window.matchMedia("(max-width: 760px) and (orientation: portrait)").matches)setVideoSrc("/brand/story/origem-arrival/campo-mobile.mp4");
+  if(reduced||saveData){setStarted(true);setFocus("parana");setArrival("done")} else setArrival("world");
+  const tick=window.setInterval(syncClock,30000);
+  return()=>window.clearInterval(tick);
+ },[]);
+ useEffect(()=>{
+  let activeRequest=true;
+  const loadWeather=async()=>{try{const response=await fetch("/api/storefront/weather/norte-parana",{cache:"no-store"});if(!response.ok)throw new Error("weather");const data=await response.json() as LiveWeather;if(activeRequest){setWeather(data);setWeatherUnavailable(false)}}catch{if(activeRequest)setWeatherUnavailable(true)}};
+  void loadWeather(); const refresh=window.setInterval(()=>void loadWeather(),600000);
+  return()=>{activeRequest=false;window.clearInterval(refresh)};
+ },[]);
+ useEffect(()=>{
+  if(arrival==="world"){setStarted(true);setFocus("world")}
+  if(arrival==="brazil")setFocus("brazil");
+  if(arrival==="parana"||arrival==="north"||arrival==="done")setFocus("parana");
+  const next:Partial<Record<Arrival,Arrival>>={world:"brazil",brazil:"parana",parana:"north",north:"video"};
+  const delay:Partial<Record<Arrival,number>>={world:1500,brazil:1500,parana:1500,north:1800};
+  if(!next[arrival])return;
+  const timer=window.setTimeout(()=>setArrival(next[arrival]!),delay[arrival]);
+  return()=>window.clearTimeout(timer);
+ },[arrival]);
  const PR={west:-54.619253929,east:-48.02377828,north:-22.51669133,south:-26.725213854};
  const project=(lat:number,lon:number)=>({left:((lon-PR.west)/(PR.east-PR.west)*100).toFixed(2)+"%",top:((PR.north-lat)/(PR.north-PR.south)*100).toFixed(2)+"%"});
  const cities=[
@@ -31,9 +80,53 @@ export default function GeoAtlasInteractive(){
   ["Oeste",16,58,false],["Centro-Sul",48,64,false],["Sudoeste",29,78,false],["Sudeste",60,72,false],["Metropolitana",78,67,false]
  ] as const;
  const item=layers.find(x=>x.id===active)!;
- const daylight=Math.max(0,Math.sin(((hour-6)/12)*Math.PI)); const night=1-daylight; const lunarAge=((now.getTime()-Date.UTC(2000,0,6,18,14))/(86400000))%29.530588; const moon=Math.round((1-Math.cos(2*Math.PI*lunarAge/29.530588))*50);
+ const localNow=clock?getParanaDate(clock):{hour:12,minute:0,day:1,month:10}; const actualHour=localNow.hour+localNow.minute/60; const isNight=weather?.isDay===0||(weather?.isDay==null&&(actualHour<5||actualHour>=19)); const isEvening=actualHour>=16.5&&actualHour<19; const daylight=Math.max(0,Math.sin(((hour-6)/12)*Math.PI)); const night=1-daylight; const lunarAge=(((clock?.getTime()??Date.now())-Date.UTC(2000,0,6,18,14))/(86400000))%29.530588; const moon=Math.round((1-Math.cos(2*Math.PI*lunarAge/29.530588))*50); const seasonLabel={verao:"verão",outono:"outono",inverno:"inverno",primavera:"primavera"}[getSouthernSeason(localNow.month,localNow.day)]; const mapArrival=arrival==="pending"||arrival==="world"||arrival==="brazil"||arrival==="parana"||arrival==="north"; const arrivalStory={pending:["A GEOGRAFIA NA XÍCARA","Lendo o território…","Aproximando escala, latitude e tempo."],world:["MUNDO · 23°26′ S","O mundo cabe em uma linha.","O Trópico de Capricórnio é o primeiro fio desta história."],brazil:["BRASIL · CINTURÃO DO CAFÉ","Um país. Muitos territórios.","A mesma latitude atravessa paisagens, climas e culturas diferentes."],parana:["PARANÁ · SUL DO BRASIL","O mapa começa a ganhar relevo.","A escala muda. Solo, luz, água e manejo entram em relação."],north:["NORTE DO PARANÁ","Chegamos ao lugar.","Aqui, o Trópico cruza lavouras e histórias construídas no tempo."],video:["DO MAPA AO CAMPO","Agora, o território respira.","Cenas reais transformam coordenadas em presença."],done:["","",""]}[arrival]; const journeySteps=["world","brazil","parana","north"] as const; const activeJourney=arrival==="video"?3:Math.max(0,journeySteps.indexOf(arrival as typeof journeySteps[number])); const timeOnly=(value:string|null)=>value?.split("T")[1]?.slice(0,5)??"--:--";
+ const moveArrival=(event:PointerEvent<HTMLDivElement>)=>{const rect=event.currentTarget.getBoundingClientRect();const x=((event.clientX-rect.left)/rect.width-.5)*14;const y=((event.clientY-rect.top)/rect.height-.5)*10;event.currentTarget.style.setProperty("--arrival-x",`${x}px`);event.currentTarget.style.setProperty("--arrival-y",`${y}px`);event.currentTarget.style.setProperty("--arrival-rx",`${-y*.045}deg`);event.currentTarget.style.setProperty("--arrival-ry",`${x*.045}deg`)};
+ const resetArrival=(event:PointerEvent<HTMLDivElement>)=>{event.currentTarget.style.setProperty("--arrival-x","0px");event.currentTarget.style.setProperty("--arrival-y","0px");event.currentTarget.style.setProperty("--arrival-rx","0deg");event.currentTarget.style.setProperty("--arrival-ry","0deg")};
  return <section className={styles.geoExperience} aria-label="Mapa interativo da geografia na xícara">
+  {arrival!=="done"&&<div className={`${styles.arrival} ${isNight?styles.arrivalNight:""} ${styles[`arrival_${arrival}`]}`} onPointerMove={moveArrival} onPointerLeave={resetArrival} style={{"--arrival-progress":`${activeJourney*33.333}%`} as CSSProperties}>
+   {mapArrival&&<div className={styles.arrivalCartography} aria-hidden="true">
+    <Image className={styles.arrivalMapWorld} src="/brand/story/mapa-mundi-parana.svg" alt="" fill sizes="100vw" unoptimized/>
+    <Image className={styles.arrivalMapBrazil} src="/brand/story/brasil-parana.svg" alt="" fill sizes="100vw" unoptimized/>
+    <Image className={styles.arrivalMapParana} src="/brand/story/parana-nortes.svg" alt="" fill sizes="100vw" unoptimized/>
+    <span className={styles.arrivalMapPin}/><div className={styles.arrivalLens}><i/><span>{arrival==="world"?"PLANETA":arrival==="brazil"?"PAÍS":arrival==="parana"?"ESTADO":"TERRITÓRIO"}</span></div>
+   </div>}
+   {arrival==="video"&&<video
+    ref={videoRef}
+    className={styles.arrivalVideo}
+    src={videoSrc}
+    autoPlay
+    muted
+    playsInline
+    preload="auto"
+    poster={isEvening?"/brand/story/origem-arrival/campo-entardecer.jpg":"/brand/story/origem-arrival/campo-dia.jpg"}
+    onCanPlay={event=>void event.currentTarget.play().catch(()=>setVideoNeedsPlay(true))}
+    onPlay={()=>setVideoNeedsPlay(false)}
+    onPause={event=>{if(!event.currentTarget.ended)setVideoNeedsPlay(true)}}
+    onEnded={()=>setArrival("done")}
+    onError={()=>setVideoNeedsPlay(true)}
+   />}
+   {arrival==="video"&&videoNeedsPlay&&<button type="button" className={styles.arrivalPlay} onClick={()=>void videoRef.current?.play()}>Assistir ao território <span>▶</span></button>}
+   {isNight&&<div className={styles.arrivalSky} aria-hidden="true"><i/><i/><i/><span style={{"--moon":moon} as CSSProperties}/></div>}
+   <div className={styles.arrivalTropic} aria-hidden="true"><i/><span>23°26′ S · TRÓPICO DE CAPRICÓRNIO</span></div>
+   <div className={styles.arrivalShade}/>
+   <div className={styles.arrivalTop}><span>BISPO · GEOGRAFIA NA XÍCARA</span><span>{clock?paranaClock.format(clock):"--:--"} · {seasonLabel}{weather?` · ${Math.round(weather.temperature)}° · ${weather.condition}`:""}</span></div>
+   <div className={styles.arrivalCopy} key={arrival}>
+    <p>{arrivalStory[0]}</p>
+    <h2>{arrivalStory[1]}</h2>
+    <span>{arrivalStory[2]}</span>
+   </div>
+   <nav className={styles.arrivalJourney} aria-label="Escalas da aproximação">{journeySteps.map((step,index)=><button type="button" key={step} className={activeJourney===index?styles.arrivalJourneyActive:""} aria-current={activeJourney===index?"step":undefined} onClick={()=>setArrival(step)}><small>0{index+1}</small>{["MUNDO","BRASIL","PARANÁ","NORTE"][index]}</button>)}</nav>
+   <button type="button" className={styles.arrivalEnter} onClick={()=>setArrival("done")}>Ir ao território <span>→</span></button>
+   <small className={styles.arrivalNote}>{arrival==="video"?"Imagens editoriais":"Aproximação cartográfica"} · horário local real</small>
+  </div>}
+  {arrival==="done"&&<div className={styles.geoAtlasBody}>
   <div className={`${styles.geoStage} ${focus==="brazil"?styles.geoStageBrazil:""} ${focus==="parana"?styles.geoStageParana:""}`} style={{"--daylight":daylight,"--night":night} as CSSProperties}>{night>.55&&<div className={styles.moon} style={{"--moon":moon} as CSSProperties}><i/><span>Lua · {moon}% iluminada</span></div>}
+   <aside className={styles.liveTerritory} aria-live="polite">
+    <div className={styles.liveTerritoryHeading}><span>AGORA NO NORTE DO PARANÁ</span><strong>{clock?paranaClock.format(clock):"--:--"} · {seasonLabel}</strong></div>
+    {weather?<><div className={styles.liveTerritoryWeather}><strong>{Math.round(weather.temperature)}°</strong><div><b>{weather.condition}</b><span>Sensação {weather.apparentTemperature==null?"—":`${Math.round(weather.apparentTemperature)}°`} · umidade {weather.humidity==null?"—":`${Math.round(weather.humidity)}%`}</span></div></div><div className={styles.liveTerritoryFacts}><span>Chuva agora <b>{weather.precipitation.toFixed(1)} mm</b></span><span>Vento <b>{weather.windSpeed==null?"—":`${Math.round(weather.windSpeed)} km/h`}</b></span><span>Sol <b>{timeOnly(weather.sunrise)}–{timeOnly(weather.sunset)}</b></span></div><small>{weather.location} · dados {weather.source} · atualização {timeOnly(weather.observedAt)}</small></>:<div className={styles.liveTerritoryLoading}>{weatherUnavailable?"Condições meteorológicas indisponíveis agora. Horário e estação seguem ativos.":"Lendo temperatura, chuva e céu da região…"}</div>}
+    <button type="button" onClick={()=>{setVideoNeedsPlay(true);setArrival("world")}}>Rever a chegada <span>↻</span></button>
+   </aside>
    <button type="button" className={`${started ? styles.geoWorldLive : styles.geoWorld} ${styles.geoWorldButton}`} onClick={()=>setFocus(focus==="world"?"brazil":"world")} aria-label={focus==="world"?"Aproximar o Brasil":"Voltar ao mundo"}>
     <Image src="/brand/story/mapa-mundi-parana.svg" alt="Mapa-múndi com o Trópico de Capricórnio e a localização do Paraná" fill sizes="(max-width:900px) 100vw, 58vw" unoptimized/>
     <i className={styles.tropicLine}/><b className={styles.tropicLabel}>23°26′ S · TRÓPICO DE CAPRICÓRNIO</b>
@@ -61,5 +154,6 @@ export default function GeoAtlasInteractive(){
  </div><small>CAMADA VIVA · {detail.toUpperCase()}</small><h4>{detail==="basalto"?"Da rocha ao solo":detail==="terra"?"Terra Roxa: uma história geológica":detail==="argilas"?"Argila não é uma coisa só":detail==="raizes"?"Água, poros e raízes":detail==="nutricao"?"Nutrir é acompanhar a planta":detail==="manejo"?"Manejo é decisão no tempo certo":detail==="agua"?"A água atravessa todo o sistema":detail==="sanidade"?"Observar antes de corrigir":"Colher é também escolher o momento"}</h4><p>{detail==="terra"?"Solos vermelhos do Norte do Paraná se desenvolveram sobre materiais derivados de rochas basálticas. A cor é parte da história do ferro no solo; textura, estrutura, água e manejo precisam ser lidos junto.":detail==="argilas"?"Diferentes minerais e proporções de argila mudam propriedades físicas e químicas do solo. A pesquisa ajuda a compreender relações; não transforma um tipo de argila em uma promessa de sabor.":detail==="agua"?"Chuva, infiltração, armazenamento no solo e uso pela planta formam uma sequência. Aqui a animação acompanha a água da superfície às raízes.":detail==="colheita"?"Maturação, seleção e momento de colheita preservam ou limitam o potencial construído no campo.":detail==="nutricao"?"Nutrição equilibrada participa do desenvolvimento da planta e do fruto; diagnóstico e manejo importam mais que uma receita única.":detail==="sanidade"?"Folhas, frutos e ambiente são observados continuamente. Sanidade faz parte do cuidado que permite à planta desenvolver seu potencial.":detail==="manejo"?"Poda, cobertura, solo, água e decisões de campo mudam ao longo do ciclo. Manejo é leitura, não automatismo.":detail==="raizes"?"Estrutura e porosidade condicionam o caminho da água, do ar e das raízes. É uma relação física que acontece abaixo do que vemos.":"O basalto faz parte da base geológica que ajuda a contar a formação de muitos solos do Norte do Paraná. A rocha não vira uma nota sensorial: ela é uma camada da história do território."}</p></div>}
   </div>
   <p className={styles.geoConclusion}><strong>Uma origem. Muitas relações.</strong> Não há uma única variável que explique a xícara.</p>
+  </div>}
  </section>
 }

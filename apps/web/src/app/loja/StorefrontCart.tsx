@@ -118,9 +118,9 @@ const cartProductStories: Record<string, StoreProductStory> = {
   },
   raros: {
     promise:
-      "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
+      "Um pequeno lote de Carlos Alexandre Siqueira, eleito por Suzi e José entre os cafés provados ao longo das últimas safras.",
     founderNote:
-      "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, José e Suzi escolheram este pequeno lote como uma raridade Bispo.",
+      "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, Suzi e José escolheram este pequeno lote como uma raridade Bispo.",
     bestFor:
       "Degustar com atenção, presentear e conhecer a expressão do Norte do Paraná.",
     brew: "Coado, com água filtrada e preparo cuidadoso.",
@@ -210,7 +210,7 @@ function CartItemStory({ item }: { item: CartItem }) {
           </div>
         </dl>
         <blockquote>
-          “{story.founderNote}”<cite>José e Suzi · origem e prova</cite>
+          “{story.founderNote}”<cite>Suzi e José · origem e prova</cite>
         </blockquote>
       </div>
     </details>
@@ -540,7 +540,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     <small>ESCOLHA BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
-                      <Check /> Escolhido por José e Suzi, da origem à xícara.
+                      <Check /> Escolhido por Suzi e José, da origem à xícara.
                     </p>
                   </section>
                   <section className={styles.choice}>
