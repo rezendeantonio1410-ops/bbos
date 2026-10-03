@@ -350,6 +350,34 @@ export default async function LojaPage() {
     .filter((product): product is (typeof catalogProducts)[number] =>
       Boolean(product),
     );
+  const featuredScenes: Record<
+    string,
+    {
+      src: string;
+      alt: string;
+      label: string;
+      objectPosition?: string;
+    }
+  > = {
+    Caramelo: {
+      src: "/brand/editorial/real/preparo-agua.jpg",
+      alt: "Água sendo adicionada às xícaras durante uma prova Bispo",
+      label: "CONFORTO QUE VIRA RITUAL",
+      objectPosition: "center 46%",
+    },
+    Singular: {
+      src: "/brand/editorial/real/singular-ritual.jpg",
+      alt: "Café Singular servido em uma cena de ritual Bispo",
+      label: "DESCOBERTA NA XÍCARA",
+      objectPosition: "center 50%",
+    },
+    Sublime: {
+      src: "/brand/editorial/real/sublime-ritual.jpg",
+      alt: "Cena de preparo e ritual do café Sublime",
+      label: "PAUSA SEM PRESSA",
+      objectPosition: "center 50%",
+    },
+  };
   return (
     <StorefrontCartProvider>
       <main className={`${styles.page} ${brand.storefront}`}>
@@ -416,8 +444,8 @@ export default async function LojaPage() {
               <h2 id="comece-por-aqui">Um café para chamar de seu.</h2>
             </div>
             <p>
-              Três perfis claros — do conforto de todos os dias à profundidade
-              que pede tempo.
+              Três maneiras de desejar a próxima xícara — do conforto de todos
+              os dias à profundidade que pede tempo.
             </p>
           </header>
           <div className={premium.featuredGrid}>
@@ -426,6 +454,7 @@ export default async function LojaPage() {
                 eyebrow: product.tag.toUpperCase(),
                 reason: product.story.promise,
               };
+              const scene = featuredScenes[product.name];
               return (
                 <article
                   key={product.name}
@@ -435,7 +464,31 @@ export default async function LojaPage() {
                   }
                 >
                   <div className={premium.featuredVisual}>
-                    {product.image ? (
+                    {scene ? (
+                      <>
+                        <img
+                          src={scene.src}
+                          alt={scene.alt}
+                          className={premium.featuredScene}
+                          style={{ objectPosition: scene.objectPosition }}
+                          decoding="async"
+                        />
+                        {product.image ? (
+                          <span className={premium.featuredPack}>
+                            <Image
+                              src={product.image}
+                              alt={`Embalagem Bispo ${product.name}`}
+                              width={132}
+                              height={172}
+                              sizes="(max-width: 600px) 82px, (max-width: 1050px) 124px, 8vw"
+                            />
+                          </span>
+                        ) : null}
+                        <span className={premium.featuredSceneLabel}>
+                          {scene.label}
+                        </span>
+                      </>
+                    ) : product.image ? (
                       <Image
                         src={product.image}
                         alt={`Embalagem Bispo ${product.name}`}
