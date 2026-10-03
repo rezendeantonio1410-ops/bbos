@@ -703,8 +703,10 @@
     object-position: center bottom !important;
   }
 
+  .oneProduct > article.mobileProductCard > div:first-child,
   .mobileProductCard > div:first-child {
     height: 238px !important;
+    min-height: 238px;
   }
 
   .mobileProductCard > div:last-child {

@@ -267,10 +267,42 @@ const preparationProof = (product: {
     ? `${preparations} preparos de 20 g`
     : "12 a 13 preparos de 20 g";
 
-  return `${preparationCount} · ≈ ${pricePerPreparation.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  })} cada`;
+  return `${preparationCount} · ≈ ${pricePerPreparation.toLocaleString(
+    "pt-BR",
+    {
+      style: "currency",
+      currency: "BRL",
+    },
+  )} cada`;
+};
+
+const catalogRituals: Record<
+  string,
+  {
+    src: string;
+    alt: string;
+    label: string;
+    objectPosition?: string;
+  }
+> = {
+  "Doce de Leite": {
+    src: "/brand/editorial/real/preparo-agua.jpg",
+    alt: "Água sendo adicionada às xícaras durante uma prova de café Bispo",
+    label: "DOÇURA NO RITUAL",
+    objectPosition: "center 42%",
+  },
+  Sublime: {
+    src: "/brand/editorial/real/sublime-ritual.jpg",
+    alt: "Cena de preparo e ritual do café Sublime",
+    label: "PAUSA SEM PRESSA",
+    objectPosition: "center",
+  },
+  Raro: {
+    src: "/brand/editorial/real/raro-rastreabilidade.jpg",
+    alt: "Verso da embalagem Bispo Raro com a rastreabilidade do microlote",
+    label: "ORIGEM IDENTIFICADA",
+    objectPosition: "center 56%",
+  },
 };
 
 export const revalidate = 300;
@@ -518,106 +550,101 @@ export default async function LojaPage() {
                               : ""
                         }`}
                       >
-                        {collectionProducts.map((p) => (
-                          <article
-                            key={p.name}
-                            id={p.name.toLowerCase().replaceAll(" ", "-")}
-                            className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard} ${layers.mobileProductCard}`}
-                            style={{ "--tone": p.tone } as React.CSSProperties}
-                          >
-                            <div
-                              className={styles.productVisual}
-                              data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
+                        {collectionProducts.map((p) => {
+                          const ritual = catalogRituals[p.name];
+
+                          return (
+                            <article
+                              key={p.name}
+                              id={p.name.toLowerCase().replaceAll(" ", "-")}
+                              className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard} ${layers.mobileProductCard}`}
+                              style={
+                                { "--tone": p.tone } as React.CSSProperties
+                              }
                             >
-                              {p.image ? (
-                                <img
-                                  src={p.image}
-                                  alt={`Embalagem Bispo ${p.name}`}
-                                  className={`${styles.productPhoto} ${review.editorialProductPhoto} ${p.name === "Raro" ? layers.rareProductPhoto : ""}`}
-                                  decoding="async"
-                                />
-                              ) : p.name === "Raro" ? (
-                                <div
-                                  className={tight.catalogFallback}
-                                  aria-label="Foto do microlote Raro em atualização"
-                                >
-                                  <span>MICROLOTE</span>
-                                  <b>Raro</b>
-                                  <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
-                                </div>
-                              ) : (
-                                <div className={tight.catalogFallback}>
-                                  <span>BISPO</span>
-                                  <b>{p.name}</b>
-                                  <small>SAFRA ATUAL · {p.weight}</small>
-                                </div>
-                              )}
-                              <small>{p.tag}</small>
-                            </div>
-                            <div
-                              className={`${styles.productMeta} ${premium.catalogMeta}`}
-                            >
-                              <p>{p.line}</p>
-                              <h3>{p.name}</h3>
-                              <span>{p.notes}</span>
-                              <ProductDetails
-                                product={{
-                                  id:
-                                    p.name === "Raro"
-                                      ? "raros"
-                                      : p.name
-                                          .toLowerCase()
-                                          .replaceAll(" ", "-"),
-                                  name: p.name,
-                                  line: p.line,
-                                  notes: p.notes,
-                                  priceCents: p.priceCents,
-                                  weightGrams: Number.parseInt(p.weight, 10),
-                                  image: p.image,
-                                  priceLabel: p.price,
-                                  weightLabel: p.weight,
-                                  tag: p.tag,
-                                  tone: p.tone,
-                                }}
-                                story={{
-                                  ...p.story,
-                                  proofImages: (
-                                    mediaLibrary.productProofs[
-                                      p.name === "Raro"
-                                        ? "raros"
-                                        : p.name
-                                            .toLowerCase()
-                                            .replaceAll(" ", "-")
-                                    ] ?? []
-                                  ).map((photo) => ({
-                                    src: photo.url,
-                                    alt: photo.altText,
-                                    caption: photo.caption ?? photo.title,
-                                  })),
-                                }}
-                                detailHref={
-                                  p.name === "Raro"
-                                    ? `/loja/cafes/${alexandreMicrolot.slug}`
-                                    : undefined
-                                }
-                                detailLabel={
-                                  p.name === "Raro"
-                                    ? "Conhecer este lote →"
-                                    : "Ver detalhes →"
-                                }
-                              />
-                              {preparationProof(p) ? (
-                                <small className={premium.preparationProof}>
-                                  {preparationProof(p)}
-                                </small>
-                              ) : null}
                               <div
-                                className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
+                                className={`${styles.productVisual} ${ritual ? premium.ritualVisual : ""}`}
+                                data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
                               >
-                                <strong>
-                                  {p.price} <small>· {p.weight}</small>
-                                </strong>
-                                <AddToCartButton
+                                {ritual ? (
+                                  <>
+                                    <img
+                                      src={ritual.src}
+                                      alt={ritual.alt}
+                                      className={premium.ritualScene}
+                                      style={{
+                                        objectPosition: ritual.objectPosition,
+                                      }}
+                                      decoding="async"
+                                    />
+                                    {p.image ? (
+                                      <span
+                                        className={premium.ritualPack}
+                                        aria-hidden="true"
+                                      >
+                                        <img
+                                          src={p.image}
+                                          alt=""
+                                          decoding="async"
+                                        />
+                                      </span>
+                                    ) : null}
+                                    <span className={premium.ritualLabel}>
+                                      {ritual.label}
+                                    </span>
+                                  </>
+                                ) : p.image ? (
+                                  <img
+                                    src={p.image}
+                                    alt={`Embalagem Bispo ${p.name}`}
+                                    className={`${styles.productPhoto} ${review.editorialProductPhoto} ${p.name === "Raro" ? layers.rareProductPhoto : ""}`}
+                                    decoding="async"
+                                  />
+                                ) : p.name === "Raro" ? (
+                                  <div
+                                    className={tight.catalogFallback}
+                                    aria-label="Foto do microlote Raro em atualização"
+                                  >
+                                    <span>MICROLOTE</span>
+                                    <b>Raro</b>
+                                    <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
+                                  </div>
+                                ) : (
+                                  <div className={tight.catalogFallback}>
+                                    <span>BISPO</span>
+                                    <b>{p.name}</b>
+                                    <small>SAFRA ATUAL · {p.weight}</small>
+                                  </div>
+                                )}
+                                <small>{p.tag}</small>
+                              </div>
+                              <div
+                                className={`${styles.productMeta} ${premium.catalogMeta}`}
+                              >
+                                <p>{p.line}</p>
+                                <h3>{p.name}</h3>
+                                <span>{p.notes}</span>
+                                {p.name === "Raro" ? (
+                                  <dl className={premium.rareProofs}>
+                                    <div>
+                                      <dt>Produtor</dt>
+                                      <dd>Carlos Alexandre</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Origem</dt>
+                                      <dd>São Jerônimo · 990 m</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Seleção</dt>
+                                      <dd>Suzi + José · 86,5 pts</dd>
+                                    </div>
+                                  </dl>
+                                ) : (
+                                  <small className={premium.selectionProof}>
+                                    SELEÇÃO BISPO · SUZI + JOSÉ
+                                  </small>
+                                )}
+                                <ProductDetails
                                   product={{
                                     id:
                                       p.name === "Raro"
@@ -631,15 +658,76 @@ export default async function LojaPage() {
                                     priceCents: p.priceCents,
                                     weightGrams: Number.parseInt(p.weight, 10),
                                     image: p.image,
-                                    story: p.story,
+                                    priceLabel: p.price,
+                                    weightLabel: p.weight,
+                                    tag: p.tag,
+                                    tone: p.tone,
                                   }}
+                                  story={{
+                                    ...p.story,
+                                    proofImages: (
+                                      mediaLibrary.productProofs[
+                                        p.name === "Raro"
+                                          ? "raros"
+                                          : p.name
+                                              .toLowerCase()
+                                              .replaceAll(" ", "-")
+                                      ] ?? []
+                                    ).map((photo) => ({
+                                      src: photo.url,
+                                      alt: photo.altText,
+                                      caption: photo.caption ?? photo.title,
+                                    })),
+                                  }}
+                                  detailHref={
+                                    p.name === "Raro"
+                                      ? `/loja/cafes/${alexandreMicrolot.slug}`
+                                      : undefined
+                                  }
+                                  detailLabel={
+                                    p.name === "Raro"
+                                      ? "Conhecer este lote →"
+                                      : "Ver detalhes →"
+                                  }
+                                />
+                                {preparationProof(p) ? (
+                                  <small className={premium.preparationProof}>
+                                    {preparationProof(p)}
+                                  </small>
+                                ) : null}
+                                <div
+                                  className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
                                 >
-                                  Adicionar à sacola
-                                </AddToCartButton>
+                                  <strong>
+                                    {p.price} <small>· {p.weight}</small>
+                                  </strong>
+                                  <AddToCartButton
+                                    product={{
+                                      id:
+                                        p.name === "Raro"
+                                          ? "raros"
+                                          : p.name
+                                              .toLowerCase()
+                                              .replaceAll(" ", "-"),
+                                      name: p.name,
+                                      line: p.line,
+                                      notes: p.notes,
+                                      priceCents: p.priceCents,
+                                      weightGrams: Number.parseInt(
+                                        p.weight,
+                                        10,
+                                      ),
+                                      image: p.image,
+                                      story: p.story,
+                                    }}
+                                  >
+                                    Adicionar à sacola
+                                  </AddToCartButton>
+                                </div>
                               </div>
-                            </div>
-                          </article>
-                        ))}
+                            </article>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className={layers.rareNote}>
