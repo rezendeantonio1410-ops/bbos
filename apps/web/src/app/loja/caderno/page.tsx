@@ -28,31 +28,32 @@ export const revalidate = 300;
 
 const fieldScenes = [
   {
-    image: "/brand/products/raros/alexandre-produtor.webp",
-    alt: "Carlos Alexandre Siqueira na lavoura de café",
+    image: "/brand/editorial/real/caderno-carlos-alexandre-colheita.jpg",
+    alt: "Carlos Alexandre Siqueira segurando uma peneira com cerejas maduras de café",
     eyebrow: "PESSOAS · SÃO JERÔNIMO DA SERRA",
     title: "Uma história cultivada com persistência.",
     text: "O lote começa na relação com quem planta. Conhecer a trajetória do produtor ajuda a compreender cada decisão de manejo e cada safra.",
   },
   {
-    image: "/brand/products/raros/alexandre-lavoura.webp",
-    alt: "Lavoura de café de Carlos Alexandre Siqueira",
+    image: "/brand/editorial/real/caderno-suzi-carlos-acompanhamento.jpg",
+    alt: "Suzi Ninov e Carlos Alexandre acompanhando uma lavoura de café",
     eyebrow: "LAVOURA · NORTE DO PARANÁ",
     title: "Acompanhar antes de escolher.",
     text: "A leitura acontece ao longo do ciclo: planta, solo, maturação e contexto. A qualidade não nasce apenas no dia da prova.",
+    landscape: true,
   },
   {
-    image: "/brand/editorial/real/phases/secagem.jpg",
-    alt: "Suzi Ninov inspecionando café durante a secagem",
-    eyebrow: "SUZI · PÓS-COLHEITA E SECAGEM",
-    title: "O processo também deixa assinatura.",
-    text: "Colheita e secagem preservam o trabalho construído no campo e definem parte importante do que a xícara poderá revelar.",
+    image: "/brand/editorial/real/caderno-frutos-maturacao.jpg",
+    alt: "Frutos de café em diferentes pontos de maturação na mão",
+    eyebrow: "FRUTO · MATURAÇÃO",
+    title: "O ponto começa a aparecer no fruto.",
+    text: "Cor, uniformidade e estágio de maturação ajudam a orientar a colheita e a leitura do potencial construído na planta.",
   },
 ];
 
 const cupScenes = [
   {
-    image: "/brand/editorial/real/suzi-prova.jpg",
+    image: "/brand/editorial/real/suzi-criterio-caderno.jpg",
     alt: "Suzi Ninov avaliando o aroma de um café",
     eyebrow: "SUZI · CRITÉRIO E CUIDADO",
     title: "Provar é comparar com memória e atenção.",
@@ -384,7 +385,11 @@ export default function CadernoPage() {
           <div className={journal.fieldGrid}>
             {fieldScenes.map((scene) => (
               <article key={scene.title}>
-                <div className={journal.fieldImage}>
+                <div
+                  className={`${journal.fieldImage} ${
+                    scene.landscape ? journal.fieldImageLandscape : ""
+                  }`}
+                >
                   <Image
                     src={scene.image}
                     alt={scene.alt}

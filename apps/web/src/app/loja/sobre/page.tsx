@@ -139,14 +139,14 @@ export default function SobrePage() {
         <div className={authority.fieldStory}>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/founders/suzi-ninov.jpg"
-              alt="Suzi Ninov avaliando um café em prova"
+              src="/brand/editorial/real/suzi-cuidado-na-planta.jpg"
+              alt="Suzi Ninov observando uma planta de café na lavoura"
               fill
               sizes="(max-width: 560px) 82vw, 50vw"
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
-              <span>SUZI · CRITÉRIO</span>
+              <span>SUZI · CAMPO</span>
               <strong>O cuidado reconhece o potencial antes da xícara.</strong>
             </figcaption>
           </figure>

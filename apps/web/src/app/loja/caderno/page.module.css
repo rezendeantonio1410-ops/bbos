@@ -503,6 +503,11 @@ main.page .heroCopy {
   object-fit: cover;
 }
 
+.fieldImageLandscape {
+  min-height: 0;
+  aspect-ratio: 4 / 3;
+}
+
 .fieldGrid article:nth-child(2) .fieldImage {
   margin-top: 38px;
 }
