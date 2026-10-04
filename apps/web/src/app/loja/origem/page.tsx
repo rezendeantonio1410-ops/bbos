@@ -157,11 +157,11 @@ export default function OrigemPage() {
             <article>
               <div className={origin.portrait}>
                 <Image
-                  src="/brand/editorial/real/suzi-marislra-campo.jpg"
+                  src="/brand/editorial/real/suzi-marislra-lavoura-wide.jpg"
                   alt="Suzi Ninov orientando Marislra em uma lavoura de café"
                   fill
                   sizes="(max-width: 700px) 100vw, 50vw"
-                  style={{ objectPosition: "center 10%" }}
+                  style={{ objectPosition: "center 56%" }}
                 />
               </div>
               <div>
