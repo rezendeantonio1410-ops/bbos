@@ -285,12 +285,6 @@ const catalogRituals: Record<
     objectPosition?: string;
   }
 > = {
-  "Doce de Leite": {
-    src: "/brand/editorial/real/preparo-agua.jpg",
-    alt: "Água sendo adicionada às xícaras durante uma prova de café Bispo",
-    label: "DOÇURA NO RITUAL",
-    objectPosition: "center 42%",
-  },
   Sublime: {
     src: "/brand/editorial/real/sublime-ritual.jpg",
     alt: "Cena de preparo e ritual do café Sublime",

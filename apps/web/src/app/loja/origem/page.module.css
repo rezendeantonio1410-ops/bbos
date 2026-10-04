@@ -1085,3 +1085,48 @@
 .liveTerritory>button{width:100%;margin-top:12px;padding:10px 12px;border:1px solid rgba(255,255,255,.26);border-radius:999px;background:transparent;color:#fff;font:800 7px/1 var(--font-inter);letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:background .2s ease,color .2s ease}.liveTerritory>button span{float:right;color:#f96d01}.liveTerritory>button:hover,.liveTerritory>button:focus-visible{background:#fff;color:#10211f}
 .geoStage .moon{right:auto;left:4.5%}
 @media(max-width:760px){.liveTerritory{top:12px;right:12px;width:calc(100% - 24px);padding:14px;border-radius:13px}.liveTerritoryHeading span{font-size:6.5px}.liveTerritoryHeading strong{font-size:8.5px}.liveTerritoryWeather{padding:12px 0 10px}.liveTerritoryWeather>strong{font-size:38px}.liveTerritoryFacts{gap:4px}.liveTerritory>button{padding:9px 11px}.geoStageParana .realTerrain:before{top:200px!important}.geoStage .moon{display:none}}
+
+/* Mobile QA: keep the Geography experience inside the viewport and make its
+   interactive maps readable without changing the desktop composition. */
+@media(max-width:760px){
+ .page{width:100%;max-width:100%;overflow-x:clip}
+ .page article,.page article>section{max-width:100%;box-sizing:border-box}
+
+ .historyInteractive{margin-inline:-16px!important;padding-inline:8vw!important;scroll-padding-inline:8vw!important;overscroll-behavior-inline:contain}
+ .historyMoment{min-width:84vw!important;scroll-snap-align:center!important;scroll-snap-stop:always}
+
+ .roastMind,.cupMind{width:100%;overflow:clip!important;box-sizing:border-box}
+ .roastOrbit{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;overflow:hidden!important;border-radius:18px!important;padding:246px 0 12px!important}
+ .roastOrbit:before,.roastOrbit:after{display:none!important}
+ .roastCenter{top:14px!important;width:176px!important;height:218px!important}
+ .roastOrbit .roastNode{position:relative!important;left:auto!important;top:auto!important;transform:none!important;width:auto!important;min-width:0!important;min-height:142px!important;padding:12px 8px!important;border-radius:15px!important;backdrop-filter:none!important}
+ .roastNode .roastGlyph{width:72px!important;height:54px!important;margin-bottom:4px!important}
+ .roastNode>strong{font-size:10.5px!important;line-height:1.15!important}
+ .roastHint{display:block!important;max-width:138px!important;font-size:8px!important;line-height:1.35!important}
+ .roastCue{display:block!important;margin-top:4px!important;font-size:6.5px!important;line-height:1.2!important}
+ .roastNode[aria-expanded="true"]{transform:none!important}
+ .roastNode>span:last-child:not(.roastCue):not(.roastGlyph){position:fixed!important;z-index:100!important;left:16px!important;right:16px!important;top:auto!important;bottom:18px!important;width:auto!important;max-width:none!important;transform:none!important;padding:18px 20px!important;border-radius:18px!important;font-size:13px!important;line-height:1.5!important;text-align:left!important}
+ .roastNode>span:last-child:not(.roastCue):not(.roastGlyph) b{font-size:10px!important}
+ .roastNode>span:last-child:not(.roastCue):not(.roastGlyph) em{font-size:9px!important}
+
+ .cupHub{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;overflow:hidden!important;margin-bottom:16px!important;padding:188px 0 12px!important}
+ .cupHub .cupNode{position:relative!important;left:auto!important;top:auto!important;transform:none!important;width:auto!important;min-width:0!important;min-height:138px!important;padding:12px 8px!important;border-radius:15px!important;backdrop-filter:none!important}
+ .cupNode[aria-expanded="true"]{transform:none!important}
+ .cupNode>strong{font-size:10.5px!important;line-height:1.15!important}
+ .cupNode>small{font-size:8px!important;line-height:1.35!important}
+ .cupOriginCue{max-width:140px!important;font-size:7.5px!important;line-height:1.35!important}
+ .cupSenseRibbon span{min-width:116px;min-height:68px;font-size:8.5px}
+ .cupSenseRibbon small{font-size:7.5px}
+ .cupNeural{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;overflow:hidden!important;padding:14px!important}
+ .cupNeural span{min-width:0!important;padding:10px 8px!important;font-size:8.5px!important;line-height:1.25!important;text-align:center;scroll-snap-align:none!important}
+ .cupNeural span:last-of-type{grid-column:1/-1}
+ .cupNeural i{display:none!important}
+ .cupNeural small{display:block!important;position:static!important;grid-column:1/-1;font-size:8px!important;line-height:1.4!important;opacity:.72!important}
+
+ .lineageMap{width:100%;padding-inline:16px!important;overflow:hidden!important}
+ .lineageMap>header{max-width:100%}
+ .lineageMap>header h2{font-size:clamp(38px,11vw,48px)!important;line-height:1.02!important}
+ .lineageMap>header>p:last-child{font-size:14px!important;line-height:1.5!important}
+ .lineageRail{margin-inline:-16px;padding:0 8vw 8px!important;scroll-padding-inline:8vw!important;gap:10px!important;overscroll-behavior-inline:contain}
+ .lineageNode{min-width:84vw!important;scroll-snap-align:center!important;scroll-snap-stop:always}
+}
