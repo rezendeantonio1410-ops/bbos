@@ -287,7 +287,14 @@
 }
 @media (max-width: 600px) {
   .media {
-    min-height: 430px;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+  }
+  .sceneImage {
+    transform: scale(1);
+  }
+  .activeImage {
+    transform: scale(1.02);
   }
   .mediaSignature {
     left: 20px;
