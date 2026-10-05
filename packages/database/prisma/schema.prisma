@@ -17,6 +17,12 @@ enum UserRole {
   PARTNER
 }
 
+enum StorefrontPartnerAccessLevel {
+  VIEWER
+  SELLER
+  DISTRIBUTOR
+}
+
 enum CoffeeLotStatus {
   RECEIVED
   QUALITY_REVIEW
@@ -582,24 +588,38 @@ model Broker {
 }
 
 model StorefrontPartner {
-  id              String            @id @default(cuid())
-  companyId       String
-  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name            String
-  taxId           String?
-  contactName     String?
-  phone           String?
-  email           String?
-  pixKey          String?
-  bankDetails     Json?
-  active          Boolean           @default(true)
-  accountsPayable AccountsPayable[]
-  portalUser      User?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                String                       @id @default(cuid())
+  companyId         String
+  company           Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name              String
+  taxId             String?
+  contactName       String?
+  phone             String?
+  email             String?
+  pixKey            String?
+  bankDetails       Json?
+  active            Boolean                      @default(true)
+  portalAccessLevel StorefrontPartnerAccessLevel @default(VIEWER)
+  accountsPayable   AccountsPayable[]
+  portalUser        User?
+  customers         StorefrontPartnerCustomer[]
+  salesOrders       SalesOrder[]
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
+}
+
+model StorefrontPartnerCustomer {
+  partnerId  String
+  partner    StorefrontPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime          @default(now())
+
+  @@id([partnerId, customerId])
+  @@index([customerId])
 }
 
 model SupplierContact {
@@ -673,17 +693,18 @@ model SupplierOriginProduction {
 }
 
 model Customer {
-  id                  String               @id @default(cuid())
+  id                  String                      @id @default(cuid())
   companyId           String
-  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name                String
   taxId               String?
   segment             String?
   salesOrders         SalesOrder[]
   accountsReceivable  AccountsReceivable[]
   reconciliationItems ReconciliationItem[]
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  storefrontPartners  StorefrontPartnerCustomer[]
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
 
   @@index([companyId])
 }
@@ -1776,69 +1797,72 @@ model ProductPrice {
 }
 
 model SalesOrder {
-  id                         String                  @id @default(cuid())
-  companyId                  String
-  company                    Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerId                 String
-  customer                   Customer                @relation(fields: [customerId], references: [id])
-  brokerId                   String?
-  broker                     Broker?                 @relation(fields: [brokerId], references: [id], onDelete: SetNull)
-  brokerCommissionMode       String?                 @db.VarChar(20)
-  brokerCommissionPercent    Decimal?                @db.Decimal(7, 4)
-  brokerCommissionPerPackage Decimal?                @db.Decimal(14, 2)
-  brokerCommissionAmount     Decimal?                @db.Decimal(14, 2)
-  salesChannelId             String?
-  salesChannel               SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
-  finishedProductId          String?
-  finishedProduct            FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
-  code                       String
-  orderNumber                String?
-  status                     SalesOrderStatus        @default(DRAFT)
-  quantity                   Int
-  unitPrice                  Decimal                 @db.Decimal(14, 2)
-  totalAmount                Decimal                 @db.Decimal(14, 2)
-  orderedAt                  DateTime                @default(now())
-  orderDate                  DateTime?
-  expectedDeliveryDate       DateTime?
-  subtotal                   Decimal?                @db.Decimal(14, 2)
-  discount                   Decimal                 @default(0) @db.Decimal(14, 2)
-  freight                    Decimal                 @default(0) @db.Decimal(14, 2)
-  notes                      String?
-  paymentType                String                  @default("LEGACY")
-  paymentTermsSnapshot       String?
-  freightResponsibility      String?
-  carrierName                String?
-  customerReference          String?
-  incoterm                   String?
-  incotermLocation           String?
-  shippingQuoteId            String?
-  shippingProvider           String?
-  shippingServiceId          String?
-  shippingServiceName        String?
-  estimatedDeliveryDays      Int?
-  externalOrderId            String?
-  externalOrderNumber        String?
-  externalStatus             String?
-  channelGrossAmount         Decimal?                @db.Decimal(14, 2)
-  channelFeeAmount           Decimal                 @default(0) @db.Decimal(14, 2)
-  channelFreightAmount       Decimal                 @default(0) @db.Decimal(14, 2)
-  channelNetAmount           Decimal?                @db.Decimal(14, 2)
-  channelPayload             Json?
-  importedAt                 DateTime?
-  channelUpdatedAt           DateTime?
-  invoicedAt                 DateTime?
-  deliveredAt                DateTime?
-  costEvents                 CostEvent[]
-  items                      SalesOrderItem[]
-  reservations               InventoryReservation[]
-  finishedGoodsMovements     FinishedGoodsMovement[]
-  accountsReceivable         AccountsReceivable[]
-  createdAt                  DateTime                @default(now())
-  updatedAt                  DateTime                @updatedAt
+  id                           String                  @id @default(cuid())
+  companyId                    String
+  company                      Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId                   String
+  customer                     Customer                @relation(fields: [customerId], references: [id])
+  createdByStorefrontPartnerId String?
+  createdByStorefrontPartner   StorefrontPartner?      @relation(fields: [createdByStorefrontPartnerId], references: [id], onDelete: SetNull)
+  brokerId                     String?
+  broker                       Broker?                 @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerCommissionMode         String?                 @db.VarChar(20)
+  brokerCommissionPercent      Decimal?                @db.Decimal(7, 4)
+  brokerCommissionPerPackage   Decimal?                @db.Decimal(14, 2)
+  brokerCommissionAmount       Decimal?                @db.Decimal(14, 2)
+  salesChannelId               String?
+  salesChannel                 SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
+  finishedProductId            String?
+  finishedProduct              FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
+  code                         String
+  orderNumber                  String?
+  status                       SalesOrderStatus        @default(DRAFT)
+  quantity                     Int
+  unitPrice                    Decimal                 @db.Decimal(14, 2)
+  totalAmount                  Decimal                 @db.Decimal(14, 2)
+  orderedAt                    DateTime                @default(now())
+  orderDate                    DateTime?
+  expectedDeliveryDate         DateTime?
+  subtotal                     Decimal?                @db.Decimal(14, 2)
+  discount                     Decimal                 @default(0) @db.Decimal(14, 2)
+  freight                      Decimal                 @default(0) @db.Decimal(14, 2)
+  notes                        String?
+  paymentType                  String                  @default("LEGACY")
+  paymentTermsSnapshot         String?
+  freightResponsibility        String?
+  carrierName                  String?
+  customerReference            String?
+  incoterm                     String?
+  incotermLocation             String?
+  shippingQuoteId              String?
+  shippingProvider             String?
+  shippingServiceId            String?
+  shippingServiceName          String?
+  estimatedDeliveryDays        Int?
+  externalOrderId              String?
+  externalOrderNumber          String?
+  externalStatus               String?
+  channelGrossAmount           Decimal?                @db.Decimal(14, 2)
+  channelFeeAmount             Decimal                 @default(0) @db.Decimal(14, 2)
+  channelFreightAmount         Decimal                 @default(0) @db.Decimal(14, 2)
+  channelNetAmount             Decimal?                @db.Decimal(14, 2)
+  channelPayload               Json?
+  importedAt                   DateTime?
+  channelUpdatedAt             DateTime?
+  invoicedAt                   DateTime?
+  deliveredAt                  DateTime?
+  costEvents                   CostEvent[]
+  items                        SalesOrderItem[]
+  reservations                 InventoryReservation[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  accountsReceivable           AccountsReceivable[]
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
 
   @@unique([companyId, code])
   @@unique([companyId, salesChannelId, externalOrderId])
   @@index([customerId, status])
+  @@index([createdByStorefrontPartnerId, orderedAt])
   @@index([brokerId])
   @@index([salesChannelId, status])
   @@index([companyId, importedAt])

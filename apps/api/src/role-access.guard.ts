@@ -107,6 +107,8 @@ const HANDLER_ROLE_POLICY: Readonly<
   StorefrontPartnersController: {
     portalAccess: ["ADMIN"],
     portalAccessStatus: ["ADMIN"],
+    portalPermissions: ["ADMIN"],
+    getPortalPermissions: ["ADMIN"],
   },
 };
 

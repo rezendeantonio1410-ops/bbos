@@ -12,12 +12,18 @@ import {
   TicketPercent,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { PartnerOrderWorkspace } from "./PartnerOrderWorkspace";
 
 type PortalData = {
   partner: {
     name: string;
     contactName?: string | null;
     email?: string | null;
+    portalAccessLevel: "VIEWER" | "SELLER" | "DISTRIBUTOR";
+  };
+  capabilities: {
+    canCreateCustomers: boolean;
+    canCreateOrders: boolean;
   };
   metrics: {
     businessCount: number;
@@ -51,6 +57,14 @@ type PortalData = {
     payableStatus?: string | null;
     commissionPaidAt?: string | null;
     createdAt: string;
+  }>;
+  partnerOrders: Array<{
+    id: string;
+    code: string;
+    status: string;
+    totalAmount: number | string;
+    orderedAt: string;
+    customerName: string;
   }>;
   updatedAt: string;
 };
@@ -164,7 +178,9 @@ export default function PartnerPortalPage() {
                   Olá, {data.partner.contactName || data.partner.name}.
                 </h1>
                 <p className="mt-2 text-sm text-stone-500">
-                  Aqui aparecem somente negócios atribuídos aos seus cupons.
+                  {data.partner.portalAccessLevel === "VIEWER"
+                    ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
+                    : "Acompanhe seus negócios e monte pedidos para os clientes liberados."}
                 </p>
               </div>
               <p className="text-xs text-stone-400">
@@ -199,6 +215,14 @@ export default function PartnerPortalPage() {
                 value={cents(data.metrics.commissionOpenCents)}
               />
             </section>
+
+            {data.capabilities.canCreateOrders && (
+              <PartnerOrderWorkspace
+                accessLevel={data.partner.portalAccessLevel}
+                orders={data.partnerOrders}
+                onOrderCreated={load}
+              />
+            )}
 
             <section>
               <div className="mb-4">

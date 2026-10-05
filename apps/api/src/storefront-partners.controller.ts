@@ -42,13 +42,106 @@ export class StorefrontPartnersController {
     const actor = await this.actor(request);
     return this.database.$queryRawUnsafe<any[]>(
       `SELECT partner.*, portal.id AS "portalUserId", portal.email AS "portalEmail",
-              portal.active AS "portalActive"
+              portal.active AS "portalActive",
+              (SELECT COUNT(*)::int FROM "StorefrontPartnerCustomer" link
+                WHERE link."partnerId"=partner.id) AS "customerCount"
          FROM "StorefrontPartner" partner
          LEFT JOIN "User" portal ON portal."storefrontPartnerId"=partner.id
         WHERE partner."companyId"=$1
         ORDER BY partner.name ASC`,
       actor.companyId,
     );
+  }
+
+  @Patch(":id/portal-permissions")
+  async portalPermissions(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { accessLevel?: string; customerIds?: string[] },
+  ) {
+    const actor = await this.actor(request);
+    if (actor.role !== "ADMIN") {
+      throw new ForbiddenException(
+        "Somente administradores podem alterar as permissões do parceiro.",
+      );
+    }
+    const accessLevel = String(body.accessLevel ?? "VIEWER").toUpperCase();
+    if (!["VIEWER", "SELLER", "DISTRIBUTOR"].includes(accessLevel)) {
+      throw new BadRequestException("Nível de acesso inválido.");
+    }
+    const customerIds = [
+      ...new Set(
+        (body.customerIds ?? [])
+          .map((value) => String(value).trim())
+          .filter(Boolean),
+      ),
+    ];
+    const partner = await this.database.storefrontPartner.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!partner) throw new BadRequestException("Parceiro não encontrado.");
+    if (customerIds.length) {
+      const countRows = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*)::int AS count FROM "Customer"
+          WHERE "companyId"=$1 AND active=true AND id=ANY($2::text[])`,
+        actor.companyId,
+        customerIds,
+      );
+      const count = Number(countRows[0]?.count ?? 0);
+      if (count !== customerIds.length) {
+        throw new BadRequestException(
+          "Um ou mais clientes selecionados são inválidos ou estão inativos.",
+        );
+      }
+    }
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontPartner" SET "portalAccessLevel"=$3::"StorefrontPartnerAccessLevel","updatedAt"=NOW()
+          WHERE id=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+        accessLevel,
+      );
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "StorefrontPartnerCustomer" WHERE "partnerId"=$1`,
+        id,
+      );
+      for (const customerId of customerIds) {
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "StorefrontPartnerCustomer" ("partnerId","customerId","createdAt")
+           VALUES ($1,$2,NOW())`,
+          id,
+          customerId,
+        );
+      }
+    });
+    return { id, accessLevel, customerIds };
+  }
+
+  @Get(":id/portal-permissions")
+  async getPortalPermissions(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    if (actor.role !== "ADMIN") {
+      throw new ForbiddenException(
+        "Somente administradores podem consultar as permissões do parceiro.",
+      );
+    }
+    const partners = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,"portalAccessLevel"::text AS "accessLevel"
+         FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+      id,
+      actor.companyId,
+    );
+    if (!partners[0]) throw new BadRequestException("Parceiro não encontrado.");
+    const links = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT "customerId" FROM "StorefrontPartnerCustomer" WHERE "partnerId"=$1`,
+      id,
+    );
+    return {
+      ...partners[0],
+      customerIds: links.map((link) => link.customerId),
+    };
   }
 
   @Post(":id/portal-access")

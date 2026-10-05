@@ -164,7 +164,7 @@ test("partner access is isolated from the internal BBOS", () => {
     guard.canActivate(
       executionContext({
         controller: "PartnerPortalController",
-        handler: "summary",
+        handler: "createOrder",
         role: "PARTNER",
       }),
     ),
@@ -174,6 +174,17 @@ test("partner access is isolated from the internal BBOS", () => {
     () =>
       guard.canActivate(
         executionContext({ controller: "FinanceController", role: "PARTNER" }),
+      ),
+    ForbiddenException,
+  );
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({
+          controller: "StorefrontPartnersController",
+          handler: "portalPermissions",
+          role: "EXECUTIVE",
+        }),
       ),
     ForbiddenException,
   );
@@ -198,7 +209,10 @@ test("partner portal data queries are always scoped to the signed partner and co
   assert.match(source, /actor\.storefrontPartnerId/);
   assert.match(source, /r\."companyId"=\$1 AND r\."partnerId"=\$2/);
   assert.match(source, /c\."companyId"=\$1 AND c\."partnerId"=\$2/);
-  assert.doesNotMatch(source, /JOIN "Customer"/);
+  assert.match(source, /FROM "StorefrontPartnerCustomer" link/);
+  assert.match(source, /so\."createdByStorefrontPartnerId"=\$2/);
+  assert.match(source, /\["SELLER", "DISTRIBUTOR"\]/);
+  assert.doesNotMatch(source, /salesOrders\.confirm\(/);
 });
 
 test("every registered non-public controller has an explicit access policy", () => {
