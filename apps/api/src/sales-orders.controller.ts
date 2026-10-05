@@ -18,6 +18,10 @@ import { AuthService } from "./auth.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { resolveSalesOrderDeliveryPolicy } from "./sales-order-delivery-policy";
+import {
+  resolveSalesOrderType,
+  SAMPLE_FISCAL_UNIT_VALUE,
+} from "./sales-order-sample-policy";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -337,9 +341,17 @@ export class SalesOrdersController {
   @Post()
   async create(@Req() request: any, @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
     const actor = await this.actor(request);
-    const paymentType = String(body.paymentType ?? "CASH").toUpperCase();
-    if (!["CASH", "TERM"].includes(paymentType)) throw new BadRequestException("Forma de pagamento inválida.");
-    const paymentTerms = paymentType === "TERM" ? String(body.paymentTerms ?? "").trim() : "À vista";
+    const orderType = resolveSalesOrderType(body.orderType);
+    const isSample = orderType === "SAMPLE";
+    const paymentType = isSample
+      ? "SAMPLE"
+      : String(body.paymentType ?? "CASH").toUpperCase();
+    if (!isSample && !["CASH", "TERM"].includes(paymentType)) throw new BadRequestException("Forma de pagamento inválida.");
+    const paymentTerms = isSample
+      ? "Sem cobrança · amostra"
+      : paymentType === "TERM"
+        ? String(body.paymentTerms ?? "").trim()
+        : "À vista";
     if (paymentType === "TERM" && !paymentTerms) throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
     if (!body.customerId || !body.items?.length) throw new BadRequestException("Cliente e itens são obrigatórios.");
 
@@ -350,6 +362,12 @@ export class SalesOrdersController {
     if (!["BISPO", "CUSTOMER", "CUSTOMER_CARRIER", "PICKUP"].includes(freightResponsibility)) {
       throw new BadRequestException("Responsabilidade do frete inválida.");
     }
+    if (isSample && !["BISPO", "PICKUP"].includes(freightResponsibility)) {
+      throw new BadRequestException(
+        "Pedido de amostra deve ter frete por conta da Bispo ou retirada na empresa.",
+      );
+    }
+    if (isSample) body.freight = 0;
 
     const pricedItems = [] as CreateSalesOrderInput["items"];
     let resolvedChannelId: string | undefined;
@@ -361,7 +379,10 @@ export class SalesOrdersController {
       }
       resolvedChannelId = price.salesChannelId;
       resolvedChannelType = price.salesChannelType;
-      pricedItems.push({ ...item, unitPrice: price.officialUnitPrice });
+      pricedItems.push({
+        ...item,
+        unitPrice: isSample ? SAMPLE_FISCAL_UNIT_VALUE : price.officialUnitPrice,
+      });
     }
     const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
     const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
@@ -375,7 +396,12 @@ export class SalesOrdersController {
     });
     if (!deliveryPolicy.valid) throw new BadRequestException(deliveryPolicy.message);
 
-    const brokerId = String(body.brokerId ?? "").trim() || undefined;
+    if (isSample && String(body.brokerId ?? "").trim()) {
+      throw new BadRequestException("Pedido de amostra não pode gerar comissão comercial.");
+    }
+    const brokerId = isSample
+      ? undefined
+      : String(body.brokerId ?? "").trim() || undefined;
     const brokerCommissionMode = brokerId ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase() : undefined;
     if (brokerCommissionMode && !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)) {
       throw new BadRequestException("Modalidade de comissão inválida.");
@@ -436,12 +462,14 @@ export class SalesOrdersController {
       ...body,
       code: orderNumber,
       orderNumber,
+      orderType,
       salesChannelId: resolvedChannelId,
       brokerId,
       brokerCommissionMode: brokerId ? brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE" : undefined,
       brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : undefined,
       brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : undefined,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : undefined,
+      discount: isSample ? 0 : body.discount,
       items: pricedItems,
       notes: String(body.notes ?? "").trim() || undefined,
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
@@ -535,7 +563,7 @@ export class SalesOrdersController {
   ) {
     const actor = await this.actor(request);
     const itemRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT soi.id, soi.quantity, soi."productVariantId", so."customerId", so."companyId", so.status
+      `SELECT soi.id, soi.quantity, soi."productVariantId", so."customerId", so."companyId", so.status, so."orderType"
          FROM "SalesOrderItem" soi
          JOIN "SalesOrder" so ON so.id = soi."salesOrderId"
         WHERE so.id=$1 AND soi.id=$2`,
@@ -546,6 +574,7 @@ export class SalesOrdersController {
     if (!item) throw new BadRequestException("Item do pedido não encontrado.");
     if (item.companyId !== actor.companyId) throw new UnauthorizedException("Pedido fora da empresa do usuário.");
     if (item.status !== "DRAFT") throw new BadRequestException("Desconto só pode ser solicitado enquanto o pedido está em rascunho.");
+    if (item.orderType === "SAMPLE") throw new BadRequestException("Pedido de amostra usa valor fiscal fixo e não aceita desconto comercial.");
 
     const discountPercent = Number(body.discountPercent);
     const rationale = String(body.rationale ?? "").trim();
@@ -738,7 +767,7 @@ export class SalesOrdersController {
       actor.companyId,
     );
     const payment = rows[0];
-    if (payment && payment.paymentType !== "LEGACY") {
+    if (payment && ["CASH", "TERM"].includes(payment.paymentType)) {
       const days =
         payment.paymentType === "CASH"
           ? 0

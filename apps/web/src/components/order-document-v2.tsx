@@ -35,6 +35,7 @@ type Order = {
   id: string;
   code: string;
   orderNumber?: string | null;
+  orderType?: "COMMERCIAL" | "SAMPLE";
   status: string;
   orderedAt: string;
   totalAmount: string | number;
@@ -144,7 +145,8 @@ export default function OrderDocumentV2() {
 
   const businessNumber = order?.orderNumber ?? order?.code ?? "Pedido-Bispo";
   const provisional = order?.status === "DRAFT";
-  const fileName = `${businessNumber}${provisional ? "-PROVISORIO" : ""}.pdf`;
+  const sample = order?.orderType === "SAMPLE";
+  const fileName = `${businessNumber}${sample ? "-AMOSTRA" : ""}${provisional ? "-PROVISORIO" : ""}.pdf`;
   const acceptanceText = useMemo(() => {
     if (!approval?.acceptedByName || !approval.acceptedAt) return null;
     const acceptedAt = new Date(approval.acceptedAt);
@@ -163,7 +165,11 @@ export default function OrderDocumentV2() {
     };
   }, [order, businessNumber]);
 
-  const payment = order?.paymentType === "TERM" ? order.paymentTermsSnapshot || "A prazo" : "À vista";
+  const payment = sample
+    ? "Sem cobrança · amostra"
+    : order?.paymentType === "TERM"
+      ? order.paymentTermsSnapshot || "A prazo"
+      : "À vista";
   const delivery = order?.expectedDeliveryDate ? date.format(new Date(order.expectedDeliveryDate)) : "A combinar";
   const address = useMemo(() => {
     if (!customer) return "—";
@@ -201,8 +207,8 @@ export default function OrderDocumentV2() {
             <div className="mt-4">
               <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#087568]">Bispo Coffees</p>
               <p className="mt-1 text-[10px] font-medium text-stone-500">Sourcing Brazilian Coffees for the World.</p>
-              <h1 className="mt-4 text-xl font-bold tracking-tight">{provisional ? "Proposta Comercial Provisória" : "Confirmação de Pedido"}</h1>
-              <p className="mt-1 text-[10px] text-stone-500">Documento comercial para conferência do cliente</p>
+              <h1 className="mt-4 text-xl font-bold tracking-tight">{sample ? "Pedido de Amostra" : provisional ? "Proposta Comercial Provisória" : "Confirmação de Pedido"}</h1>
+              <p className="mt-1 text-[10px] text-stone-500">{sample ? "Documento operacional com valor fiscal simbólico" : "Documento comercial para conferência do cliente"}</p>
             </div>
           </div>
           <div className="rounded-2xl bg-[#F6F7F4] p-5 text-right">
@@ -214,7 +220,14 @@ export default function OrderDocumentV2() {
           </div>
         </header>
 
-        {provisional && (
+        {sample && (
+          <section className="mt-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <p className="text-[10px] font-black uppercase tracking-[.14em]">Remessa de amostra sem valor comercial</p>
+            <p className="mt-1 text-[10px] leading-4">Os itens estão registrados por valor fiscal simbólico. Este pedido não gera cobrança nem comissão. A natureza da operação, o CFOP e a tributação devem seguir a configuração fiscal validada no Bling.</p>
+          </section>
+        )}
+
+        {provisional && !sample && (
           <section className="mt-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950">
             <p className="text-[10px] font-black uppercase tracking-[.14em]">Documento provisório — aguardando confirmação do cliente</p>
             <p className="mt-1 text-[10px] leading-4">Esta proposta serve somente para conferência. Não confirma a venda, não reserva estoque, não gera cobrança e não constitui documento fiscal.</p>

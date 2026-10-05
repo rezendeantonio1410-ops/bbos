@@ -32,8 +32,8 @@ export class DashboardService implements OnModuleDestroy {
     const month = periodStart("month");
     const [orders, salesDay, salesMonth, production, pendingLab, lots, products, openPurchases, overdueReceivables] = await Promise.all([
       this.db.salesOrder.findMany({ where: { companyId }, select: { id: true, status: true, totalAmount: true, expectedDeliveryDate: true } }),
-      this.db.salesOrder.aggregate({ where: { companyId, orderedAt: { gte: day }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true } }),
-      this.db.salesOrder.aggregate({ where: { companyId, orderedAt: { gte: month }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true } }),
+      this.db.salesOrder.aggregate({ where: { companyId, orderType: "COMMERCIAL", orderedAt: { gte: day }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true } }),
+      this.db.salesOrder.aggregate({ where: { companyId, orderType: "COMMERCIAL", orderedAt: { gte: month }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true } }),
       this.db.productionOrder.aggregate({ where: { companyId, plannedAt: { gte: month } }, _sum: { actualOutputKg: true, plannedWeightKg: true } }),
       this.db.greenCoffeeLabSample.count({ where: { receipt: { companyId }, status: "PENDING" } }),
       this.db.coffeeLot.findMany({ where: { companyId }, select: { id: true, code: true, origin: true, variety: true, currentWeightKg: true, reservedWeightKg: true, status: true } }),
@@ -134,7 +134,7 @@ export class DashboardService implements OnModuleDestroy {
     const start = periodStart(period);
     const now = new Date();
     const [orders, green, finished, purchases, receivables, overdueReceivables, payables] = await Promise.all([
-      this.db.salesOrder.aggregate({ where: { companyId, orderedAt: { gte: start }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true }, _count: { _all: true } }),
+      this.db.salesOrder.aggregate({ where: { companyId, orderType: "COMMERCIAL", orderedAt: { gte: start }, status: { not: "CANCELLED" } }, _sum: { totalAmount: true }, _count: { _all: true } }),
       this.db.coffeeLot.aggregate({ where: { companyId, status: { in: ["RECEIVED", "APPROVED", "QUALITY_REVIEW"] } }, _sum: { currentWeightKg: true, landedCost: true } }),
       this.db.finishedProduct.aggregate({ where: { companyId }, _sum: { quantityOnHand: true } }),
       this.db.greenCoffeePurchase.aggregate({ where: { companyId, approvalStatus: "APPROVED" }, _sum: { totalValue: true } }),

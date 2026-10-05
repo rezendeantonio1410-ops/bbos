@@ -203,6 +203,7 @@ export class CommerceService implements OnModuleDestroy {
     const orders = await this.database.salesOrder.findMany({
       where: {
         companyId,
+        orderType: "COMMERCIAL",
         salesChannelId: { in: ecommerceIds },
       },
       include: {

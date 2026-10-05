@@ -12,6 +12,7 @@ import {
   CreditCard,
   Eye,
   PackageCheck,
+  PackagePlus,
   Plus,
   ShieldCheck,
   Sparkles,
@@ -24,6 +25,7 @@ import { OrderCustomerApprovalActions } from "@/components/order-customer-approv
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const SAMPLE_FISCAL_UNIT_VALUE = 0.01;
 const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
 const freightLabels: Record<string, string> = {
@@ -146,6 +148,7 @@ type Order = {
   id: string;
   code: string;
   orderNumber?: string;
+  orderType?: "COMMERCIAL" | "SAMPLE";
   status: string;
   totalAmount: string;
   freight?: string | number;
@@ -279,6 +282,7 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
 
 const filters: Array<[string, string]> = [
   ["ALL", "Todos"],
+  ["SAMPLE", "Amostras"],
   ["DRAFT", "Rascunho"],
   ["AWAITING_PAYMENT", "Aguardando Pix"],
   ["CONFIRMED", "Confirmados"],
@@ -300,7 +304,7 @@ export default function OrdersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<StockOption[]>([]);
   const [brokers, setBrokers] = useState<Broker[]>([]);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"COMMERCIAL" | "SAMPLE" | null>(null);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [busy, setBusy] = useState("");
@@ -333,12 +337,18 @@ export default function OrdersPage() {
   }, []);
 
   const visible = useMemo(
-    () => (filter === "ALL" ? orders : orders.filter((item) => displayStatus(item) === filter)),
+    () => (filter === "ALL"
+      ? orders
+      : filter === "SAMPLE"
+        ? orders.filter((item) => item.orderType === "SAMPLE")
+        : orders.filter((item) => displayStatus(item) === filter)),
     [orders, filter],
   );
   const open = orders.filter((item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status));
-  const avgTicket = orders.length
-    ? orders.reduce((sum, item) => sum + Number(item.totalAmount), 0) / orders.length
+  const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
+  const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
+  const avgTicket = commercialOrders.length
+    ? commercialOrders.reduce((sum, item) => sum + Number(item.totalAmount), 0) / commercialOrders.length
     : 0;
 
   const action = async (order: Order, endpoint: string) => {
@@ -379,16 +389,21 @@ export default function OrdersPage() {
           <h1 className="mt-1 text-3xl font-bold">Pedidos</h1>
           <p className="mt-2 text-sm text-stone-500">O BBOS acompanha cliente, preço, crédito e estoque antes de a venda avançar.</p>
         </div>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
-          <Plus size={15} /> Novo pedido
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setCreating("SAMPLE")} className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950">
+            <PackagePlus size={15} /> Novo pedido de amostra
+          </button>
+          <button onClick={() => setCreating("COMMERCIAL")} className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
+            <Plus size={15} /> Novo pedido
+          </button>
+        </div>
       </header>
 
       {message && <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">{message}</div>}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         <Kpi label="Pedidos em aberto" value={String(open.length)} />
-        <Kpi label="Valor em carteira" value={money.format(open.reduce((sum, item) => sum + Number(item.totalAmount), 0))} />
+        <Kpi label="Valor em carteira" value={money.format(commercialOpen.reduce((sum, item) => sum + Number(item.totalAmount), 0))} />
         <Kpi label="Aguardando Pix" value={String(orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT").length)} />
         <Kpi label="Pedidos reservados" value={String(orders.filter((item) => ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
         <Kpi label="Aguardando estoque" value={String(orders.filter((item) => item.status === "CONFIRMED").length)} />
@@ -419,7 +434,10 @@ export default function OrdersPage() {
               <button onClick={() => setSelected(order)} className="w-full text-left">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-[12rem]">
-                    <strong>{order.orderNumber ?? order.code}</strong>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong>{order.orderNumber ?? order.code}</strong>
+                      {order.orderType === "SAMPLE" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">Amostra</span>}
+                    </div>
                     <p className="text-xs text-stone-500">{order.customer.name}</p>
                   </div>
                   {order.shipment && (
@@ -466,12 +484,13 @@ export default function OrdersPage() {
 
       {creating && (
         <NewOrder
+          orderType={creating}
           customers={customers}
           variants={variants}
           brokers={brokers}
-          onClose={() => setCreating(false)}
+          onClose={() => setCreating(null)}
           onCreated={async () => {
-            setCreating(false);
+            setCreating(null);
             await refresh();
           }}
         />
@@ -488,7 +507,7 @@ export default function OrdersPage() {
   );
 }
 
-function NewOrder({ customers, variants, brokers, onClose, onCreated }: { customers: Customer[]; variants: StockOption[]; brokers: Broker[]; onClose: () => void; onCreated: () => Promise<void> }) {
+function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated }: { orderType: "COMMERCIAL" | "SAMPLE"; customers: Customer[]; variants: StockOption[]; brokers: Broker[]; onClose: () => void; onCreated: () => Promise<void> }) {
   const [orderNumber, setOrderNumber] = useState("Gerando…");
   const [customerId, setCustomerId] = useState("");
   const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
@@ -522,6 +541,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const [error, setError] = useState("");
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  const isSample = orderType === "SAMPLE";
 
   const customer = customers.find((candidate) => candidate.id === customerId);
   const completeLines = useMemo(
@@ -530,14 +550,17 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   );
   const firstQuote = completeLines.length ? quotes[completeLines[0]!.id] : undefined;
   const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
-  const usesPlatformShipping = isDistributor && freightResponsibility === "CUSTOMER";
+  const usesPlatformShipping = !isSample && isDistributor && freightResponsibility === "CUSTOMER";
   const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
   const sortedShippingQuotes = useMemo(
     () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
     [shippingQuotes, shippingSort],
   );
   const freightAmount = usesPlatformShipping ? Number(selectedShippingQuote?.priceCents ?? 0) / 100 : 0;
-  const productsTotal = completeLines.reduce((sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0), 0);
+  const productsTotal = completeLines.reduce(
+    (sum, line) => sum + (isSample ? line.quantity * SAMPLE_FISCAL_UNIT_VALUE : Number(quotes[line.id]?.totalAmount ?? 0)),
+    0,
+  );
   const totalWeightGrams = completeLines.reduce((sum, line) => {
     const variant = variants.find((candidate) => candidate.productVariantId === line.variantId);
     return sum + Number(variant?.presentationGrams ?? 0) * line.quantity;
@@ -549,7 +572,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       ? totalPackages * Number(brokerCommissionPerPackage || 0)
       : productsTotal * Number(brokerCommissionPercent || 0) / 100
     : 0;
-  const isTerm = paymentType === "TERM";
+  const isTerm = !isSample && paymentType === "TERM";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
@@ -641,14 +664,14 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   }, [customerId, lines, customPackage, packageBoxes]);
 
   useEffect(() => {
-    setFreightResponsibility("");
+    setFreightResponsibility(isSample ? "BISPO" : "");
     setCarrierName("");
     setShippingQuotes([]);
     setShippingQuoteId("");
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, firstQuote?.salesChannelType]);
+  }, [customerId, firstQuote?.salesChannelType, isSample]);
 
   useEffect(() => {
     if (usesPlatformShipping) return;
@@ -728,9 +751,10 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       body: JSON.stringify({
         code: orderNumber,
         orderNumber,
+        orderType,
         customerId,
-        paymentType,
-        paymentTerms: isTerm ? paymentTerms : "À vista",
+        paymentType: isSample ? "SAMPLE" : paymentType,
+        paymentTerms: isSample ? "Sem cobrança · amostra" : isTerm ? paymentTerms : "À vista",
         freightResponsibility,
         carrierName: usesPlatformShipping ? selectedShippingQuote?.carrierName : carrierName.trim() || undefined,
         freight: freightAmount,
@@ -742,17 +766,17 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
         notes,
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
-        brokerId: brokerId || undefined,
-        brokerCommissionMode: brokerId ? brokerCommissionMode : undefined,
-        brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(brokerCommissionPercent || 0) : undefined,
-        brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(brokerCommissionPerPackage || 0) : undefined,
+        brokerId: !isSample && brokerId ? brokerId : undefined,
+        brokerCommissionMode: !isSample && brokerId ? brokerCommissionMode : undefined,
+        brokerCommissionPercent: !isSample && brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(brokerCommissionPercent || 0) : undefined,
+        brokerCommissionPerPackage: !isSample && brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(brokerCommissionPerPackage || 0) : undefined,
         items: completeLines.map((line) => {
           const variant = variants.find((candidate) => candidate.productVariantId === line.variantId)!;
           return {
             productVariantId: variant.productVariantId,
             warehouseId: variant.warehouseId,
             quantity: line.quantity,
-            unitPrice: quotes[line.id]!.officialUnitPrice,
+            unitPrice: isSample ? SAMPLE_FISCAL_UNIT_VALUE : quotes[line.id]!.officialUnitPrice,
           };
         }),
       }),
@@ -769,7 +793,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh w-full max-w-6xl flex-col overflow-hidden border-l bg-white shadow-2xl">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">Novo pedido</h2>
+            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">{isSample ? "Novo pedido de amostra" : "Novo pedido"}</h2>
             <span className="shrink-0 text-xs font-semibold text-stone-500">{orderNumber}</span>
             <span className="min-w-0 truncate text-xs text-stone-500">
               <b className="text-stone-800">Comprador:</b> {customer?.name ?? "selecione o cliente"}
@@ -779,6 +803,13 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
         </header>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
+          {isSample && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+              <p className="text-xs font-bold uppercase tracking-wider">Amostra sem cobrança comercial</p>
+              <p className="mt-1 text-[11px] leading-5">Cada unidade será registrada por <b>{money.format(SAMPLE_FISCAL_UNIT_VALUE)}</b>, apenas como valor fiscal simbólico. Este pedido movimenta estoque, pode gerar NF-e e expedição, mas não gera cobrança, comissão nem receita comercial.</p>
+              <p className="mt-1 text-[10px] leading-4 text-amber-800">Antes da emissão, confirme no Bling a natureza da operação, CFOP e tributação definidos pela contabilidade.</p>
+            </div>
+          )}
           <Field label="Cliente">
             <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
               <option value="">Selecione</option>
@@ -786,13 +817,13 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
             </select>
           </Field>
 
-          <div>
+          {!isSample && <div>
             <p className="text-xs font-semibold">Forma de pagamento</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setPaymentType("CASH")} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}>À vista</button>
               <button type="button" onClick={() => setPaymentType("TERM")} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}>A prazo</button>
             </div>
-          </div>
+          </div>}
 
           {isTerm && (
             <>
@@ -822,7 +853,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
-                <p className="mt-0.5 text-[10px] text-stone-400">Adicione quantos produtos o distribuidor desejar.</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">{isSample ? "Selecione os produtos e quantidades enviados como amostra." : "Adicione quantos produtos o distribuidor desejar."}</p>
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setLines(variants.map((variant) => ({ ...newDraftLine(), variantId: variant.productVariantId })))} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600">Adicionar todos</button>
@@ -854,11 +885,11 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
-                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(lineQuote.officialUnitPrice) : "—"}</div>
+                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(isSample ? SAMPLE_FISCAL_UNIT_VALUE : lineQuote.officialUnitPrice) : "—"}</div>
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
-                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(lineQuote.totalAmount) : "—"}</div>
+                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(isSample ? line.quantity * SAMPLE_FISCAL_UNIT_VALUE : lineQuote.totalAmount) : "—"}</div>
                       </div>
                       <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
                     </div>
@@ -887,7 +918,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
 
             {showTerms && (
               <div className="grid gap-3 border-t p-4 sm:grid-cols-2">
-                {isDistributor ? (
+                {isDistributor && !isSample ? (
                   <div className="sm:col-span-2">
                     <p className="mb-2 text-[10px] font-semibold text-stone-600">Como o distribuidor quer receber?</p>
                     <div className="grid gap-2 sm:grid-cols-3">
@@ -913,7 +944,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                   <Field label="Frete">
                     <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP")}>
                       <option value="">Selecione</option>
-                      <option value="CUSTOMER">Por conta do cliente</option>
+                      {!isSample && <option value="CUSTOMER">Por conta do cliente</option>}
                       <option value="BISPO">Por conta da Bispo</option>
                       <option value="PICKUP">Retirada na Bispo Coffees</option>
                     </select>
@@ -942,7 +973,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                     A retirada será agendada após a liberação financeira e fiscal. O pedido não terá valor de frete.
                   </div>
                 )}
-                <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
+                {!isSample && <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Corretor e comissão · opcional</p>
                   <p className="mt-1 text-[10px] text-stone-500">Escolha percentual sobre os produtos ou valor fixo por pacote. O frete nunca entra na comissão.</p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
@@ -970,7 +1001,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                     <div><p className="mb-1.5 text-[10px] font-semibold text-stone-600">Valor a pagar</p><div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">{money.format(brokerCommission)}</div></div>
                   </div>
                   {brokerId && brokerCommissionMode === "PER_PACKAGE" && <p className="mt-2 text-[10px] text-stone-500">{totalPackages} pacote(s) × {money.format(Number(brokerCommissionPerPackage || 0))} por pacote.</p>}
-                </div>
+                </div>}
                 {usesPlatformShipping && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1202,7 +1233,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
               <b>{money.format(orderTotal)}</b>
             </div>
           )}
-          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
+          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">{isSample ? "Salvar pedido de amostra" : "Salvar pedido"}</button>
         </div>
       </aside>
     </div>,
@@ -1417,7 +1448,11 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     setBusy(false);
   };
 
-  const paymentLabel = order.paymentType === "TERM" ? (order.paymentTermsSnapshot || "A prazo") : "À vista";
+  const paymentLabel = order.orderType === "SAMPLE"
+    ? "Sem cobrança · amostra"
+    : order.paymentType === "TERM"
+      ? (order.paymentTermsSnapshot || "A prazo")
+      : "À vista";
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
     : "A combinar";
@@ -1526,7 +1561,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-white p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2>
+              {order.orderType === "SAMPLE" && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-900">Pedido de amostra</span>}
+            </div>
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -1559,6 +1597,20 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 <Clock3 size={14} /> Pedido registrado no fluxo operacional.
               </div>
             </div>
+
+            {order.orderType === "SAMPLE" && order.status === "DRAFT" && (
+              <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-amber-950">Amostra pronta para confirmação interna</p>
+                    <p className="mt-1 text-[10px] leading-4 text-amber-800">Confirme para reservar o estoque. Não haverá cobrança, aprovação do cliente ou comissão comercial.</p>
+                  </div>
+                  <button type="button" disabled={busy} onClick={() => void operationalAction("confirm")} className="rounded-xl bg-amber-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50">
+                    {busy ? "Confirmando…" : "Confirmar amostra"}
+                  </button>
+                </div>
+              </section>
+            )}
 
             {displayStatus(order) === "AWAITING_PAYMENT" && (
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -1665,7 +1717,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               </div>
             </section>
 
-            {(order.status === "DRAFT" || order.status === "CONFIRMED") && (
+            {order.orderType !== "SAMPLE" && (order.status === "DRAFT" || order.status === "CONFIRMED") && (
               <OrderCustomerApprovalActions orderId={order.id} onAccepted={onChanged} />
             )}
 
@@ -1795,7 +1847,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               </section>
             )}
 
-            {order.status === "DRAFT" && order.items.length > 0 && (
+            {order.orderType !== "SAMPLE" && order.status === "DRAFT" && order.items.length > 0 && (
               <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
                 <div className="flex items-center gap-2">
                   <BadgeDollarSign size={17} className="text-violet-700" />

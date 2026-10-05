@@ -1816,6 +1816,7 @@ model SalesOrder {
   finishedProduct              FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
   code                         String
   orderNumber                  String?
+  orderType                    String                  @default("COMMERCIAL") @db.VarChar(20)
   status                       SalesOrderStatus        @default(DRAFT)
   quantity                     Int
   unitPrice                    Decimal                 @db.Decimal(14, 2)
@@ -1862,6 +1863,7 @@ model SalesOrder {
   @@unique([companyId, code])
   @@unique([companyId, salesChannelId, externalOrderId])
   @@index([customerId, status])
+  @@index([companyId, orderType, status])
   @@index([createdByStorefrontPartnerId, orderedAt])
   @@index([brokerId])
   @@index([salesChannelId, status])

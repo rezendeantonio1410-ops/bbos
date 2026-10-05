@@ -48,7 +48,7 @@ export class SalesOrderApprovalsController {
               so."expectedDeliveryDate", so."paymentType", so."paymentTermsSnapshot",
               so."freightResponsibility", so."carrierName", so."shippingServiceName",
               so."estimatedDeliveryDays", so."customerReference", so.incoterm,
-              so."incotermLocation", so.notes,
+              so."incotermLocation", so.notes, so."orderType",
               c.name AS "customerName", c.phone AS "customerPhone"
          FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId"
         WHERE so.id=$1`, orderId,
@@ -70,6 +70,7 @@ export class SalesOrderApprovalsController {
       totalAmount: Number(order.totalAmount ?? 0),
       paymentType: order.paymentType,
       paymentTerms: order.paymentTermsSnapshot,
+      orderType: order.orderType,
       freightResponsibility: order.freightResponsibility,
       carrierName: order.carrierName,
       shippingServiceName: order.shippingServiceName,
@@ -90,6 +91,7 @@ export class SalesOrderApprovalsController {
     const actor = await this.actor(request);
     const snapshot = await this.snapshot(orderId);
     if (snapshot.companyId !== actor.companyId) throw new UnauthorizedException("Pedido fora da empresa do usuário.");
+    if (snapshot.orderType === "SAMPLE") throw new BadRequestException("Pedido de amostra é confirmado internamente e não exige aceite comercial do cliente.");
     if (snapshot.status !== "DRAFT") throw new BadRequestException("Somente pedidos provisórios podem ser enviados para confirmação do cliente.");
     const pending = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT COUNT(*)::int AS count FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND status='PENDING'`, orderId,

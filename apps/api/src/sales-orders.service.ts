@@ -18,10 +18,16 @@ import {
   shipSalesStock,
 } from "@bbos/shared";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
+import {
+  resolveSalesOrderType,
+  SAMPLE_FISCAL_UNIT_VALUE,
+  type SalesOrderType,
+} from "./sales-order-sample-policy";
 
 export type CreateSalesOrderInput = {
   code: string;
   orderNumber?: string;
+  orderType?: SalesOrderType;
   customerId: string;
   salesChannelId?: string;
   expectedDeliveryDate?: string;
@@ -249,6 +255,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async create(companyId: string, input: CreateSalesOrderInput) {
+    const orderType = resolveSalesOrderType(input.orderType);
     if (!input.items.length)
       throw new BadRequestException("O pedido deve possuir ao menos um item.");
     if (
@@ -268,6 +275,16 @@ export class SalesOrdersService implements OnModuleDestroy {
           "Quantidade e preço do item são inválidos.",
         );
     }
+    if (orderType === "SAMPLE" && input.brokerId) {
+      throw new BadRequestException(
+        "Pedido de amostra não pode gerar comissão comercial.",
+      );
+    }
+    const pricedItems = input.items.map((item) => ({
+      ...item,
+      unitPrice:
+        orderType === "SAMPLE" ? SAMPLE_FISCAL_UNIT_VALUE : item.unitPrice,
+    }));
     return this.database.$transaction(
       async (transaction) => {
         const customer = await transaction.customer.findFirst({
@@ -302,11 +319,11 @@ export class SalesOrdersService implements OnModuleDestroy {
           );
         const variants = await transaction.productVariant.findMany({
           where: {
-            id: { in: input.items.map((item) => item.productVariantId) },
+            id: { in: pricedItems.map((item) => item.productVariantId) },
           },
           include: { product: { include: { productLine: true } } },
         });
-        if (variants.length !== input.items.length)
+        if (variants.length !== pricedItems.length)
           throw new BadRequestException(
             "Um ou mais ProductVariants não foram encontrados.",
           );
@@ -326,11 +343,13 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Cliente e produtos devem pertencer à mesma empresa.",
           );
-        const totalQuantity = input.items.reduce(
+        const discount = orderType === "SAMPLE" ? 0 : (input.discount ?? 0);
+        const freight = orderType === "SAMPLE" ? 0 : (input.freight ?? 0);
+        const totalQuantity = pricedItems.reduce(
           (sum, item) => sum + item.quantity,
           0,
         );
-        const totalAmount = input.items.reduce(
+        const totalAmount = pricedItems.reduce(
           (sum, item) => sum + item.quantity * item.unitPrice,
           0,
         );
@@ -339,20 +358,25 @@ export class SalesOrdersService implements OnModuleDestroy {
             companyId: customer.companyId,
             customerId: customer.id,
             brokerId: input.brokerId,
-            brokerCommissionMode: input.brokerCommissionMode,
-            brokerCommissionPercent: input.brokerCommissionPercent,
-            brokerCommissionPerPackage: input.brokerCommissionPerPackage,
-            brokerCommissionAmount: input.brokerCommissionAmount,
+            brokerCommissionMode:
+              orderType === "SAMPLE" ? undefined : input.brokerCommissionMode,
+            brokerCommissionPercent:
+              orderType === "SAMPLE" ? undefined : input.brokerCommissionPercent,
+            brokerCommissionPerPackage:
+              orderType === "SAMPLE" ? undefined : input.brokerCommissionPerPackage,
+            brokerCommissionAmount:
+              orderType === "SAMPLE" ? undefined : input.brokerCommissionAmount,
             salesChannelId: salesChannel?.id,
             code: input.code,
             orderNumber: input.orderNumber ?? input.code,
+            orderType,
             quantity: totalQuantity,
             unitPrice: totalQuantity ? totalAmount / totalQuantity : 0,
             totalAmount:
-              totalAmount - (input.discount ?? 0) + (input.freight ?? 0),
+              totalAmount - discount + freight,
             subtotal: totalAmount,
-            discount: input.discount ?? 0,
-            freight: input.freight ?? 0,
+            discount,
+            freight,
             notes: input.notes,
             orderDate: new Date(),
             expectedDeliveryDate: input.expectedDeliveryDate
@@ -360,7 +384,7 @@ export class SalesOrdersService implements OnModuleDestroy {
               : undefined,
             status: SalesOrderStatus.DRAFT,
             items: {
-              create: input.items.map((item) => {
+              create: pricedItems.map((item) => {
                 const variant = variants.find(
                   (candidate) => candidate.id === item.productVariantId,
                 )!;
@@ -825,6 +849,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           brokerCommissionMode: true,
           brokerCommissionPerPackage: true,
           brokerCommissionAmount: true,
+          orderType: true,
         },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
@@ -841,7 +866,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           ...(target === "INVOICED" ? { invoicedAt: new Date() } : {}),
         },
       });
-      if (target === "INVOICED") {
+      if (target === "INVOICED" && order.orderType !== "SAMPLE") {
         const invoice = await transaction.accountsReceivable.findUnique({
           where: { salesOrderId: id },
         });

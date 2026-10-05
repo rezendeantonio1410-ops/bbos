@@ -343,7 +343,9 @@ export class BlingOutboxService {
           data: toBlingDate(order.orderDate ?? order.orderedAt ?? order.createdAt),
           contato: { id: Number(contactId) },
           itens: blingItems,
-          observacoes: `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
+          observacoes: order.orderType === "SAMPLE"
+            ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | Valor simbólico para fins fiscais | Origem: BBOS AMOSTRAS | BBOS: ${order.code}`
+            : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
           transporte: {
             fretePorConta: order.freightResponsibility === "CUSTOMER" ? 1 : 0,
             frete: Number(order.freight ?? 0),
@@ -358,7 +360,7 @@ export class BlingOutboxService {
         throw new Error("Bling não retornou o ID do pedido de venda comercial.");
       await this.mapResource(row.companyId, "SALES_ORDER", order.id, externalId, {
         code: order.code,
-        origin: "BBOS_COMERCIAL",
+        origin: order.orderType === "SAMPLE" ? "BBOS_SAMPLE" : "BBOS_COMERCIAL",
       });
       salesMap = { externalId };
     }

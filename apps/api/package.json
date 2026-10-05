@@ -25,7 +25,8 @@
     "test:storefront-customer-auth": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/storefront-customer.service.test.ts",
     "test:storefront-coupons": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/storefront-coupons.service.test.ts",
     "test:sales-order-payment-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-payment-policy.test.ts",
-    "test:sales-order-delivery-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-delivery-policy.test.ts"
+    "test:sales-order-delivery-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-delivery-policy.test.ts",
+    "test:sales-order-sample-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-sample-policy.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",
