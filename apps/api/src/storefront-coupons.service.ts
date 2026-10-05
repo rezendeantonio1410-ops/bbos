@@ -11,6 +11,42 @@ export type CouponCalculation = {
   netSubtotalCents: number;
 };
 
+export type CouponAmountRules = {
+  discountType: "PERCENT" | "FIXED";
+  discountValue: number;
+  commissionType: "PERCENT" | "FIXED";
+  commissionValue: number;
+  commissionBasis: "GROSS_SUBTOTAL" | "NET_SUBTOTAL";
+};
+
+export function calculateCouponAmounts(
+  subtotalCents: number,
+  rules: CouponAmountRules,
+) {
+  const discountCents = Math.min(
+    subtotalCents,
+    rules.discountType === "PERCENT"
+      ? Math.round((subtotalCents * rules.discountValue) / 100)
+      : Math.round(rules.discountValue * 100),
+  );
+  const netSubtotalCents = subtotalCents - discountCents;
+  const commissionBaseCents =
+    rules.commissionBasis === "GROSS_SUBTOTAL"
+      ? subtotalCents
+      : netSubtotalCents;
+  const commissionCents =
+    rules.commissionType === "PERCENT"
+      ? Math.round((commissionBaseCents * rules.commissionValue) / 100)
+      : Math.round(rules.commissionValue * 100);
+
+  return {
+    discountCents,
+    netSubtotalCents,
+    commissionBaseCents,
+    commissionCents,
+  };
+}
+
 const normalizedCode = (value: unknown) =>
   String(value ?? "")
     .trim()
@@ -61,21 +97,19 @@ export class StorefrontCouponsService {
         "O valor mínimo deste cupom ainda não foi atingido.",
       );
 
-    const discountCents = Math.min(
-      subtotalCents,
-      coupon.discountType === "PERCENT"
-        ? Math.round((subtotalCents * Number(coupon.discountValue)) / 100)
-        : Math.round(Number(coupon.discountValue) * 100),
-    );
-    const netSubtotalCents = subtotalCents - discountCents;
-    const commissionBase =
-      coupon.commissionBasis === "GROSS_SUBTOTAL"
-        ? subtotalCents
-        : netSubtotalCents;
-    const commissionCents =
-      coupon.commissionType === "PERCENT"
-        ? Math.round((commissionBase * Number(coupon.commissionValue)) / 100)
-        : Math.round(Number(coupon.commissionValue) * 100);
+    const { discountCents, commissionCents, netSubtotalCents } =
+      calculateCouponAmounts(subtotalCents, {
+        discountType:
+          coupon.discountType === "FIXED" ? "FIXED" : "PERCENT",
+        discountValue: Number(coupon.discountValue),
+        commissionType:
+          coupon.commissionType === "FIXED" ? "FIXED" : "PERCENT",
+        commissionValue: Number(coupon.commissionValue),
+        commissionBasis:
+          coupon.commissionBasis === "GROSS_SUBTOTAL"
+            ? "GROSS_SUBTOTAL"
+            : "NET_SUBTOTAL",
+      });
     return {
       id: coupon.id,
       code,

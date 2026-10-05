@@ -86,6 +86,9 @@ export class StorefrontCouponsController {
       );
     const discountValue = Number(body.discountValue);
     const commissionValue = Number(body.commissionValue);
+    const discountType = body.discountType === "FIXED" ? "FIXED" : "PERCENT";
+    const commissionType =
+      body.commissionType === "FIXED" ? "FIXED" : "PERCENT";
     if (
       !Number.isFinite(discountValue) ||
       discountValue < 0 ||
@@ -94,6 +97,14 @@ export class StorefrontCouponsController {
     )
       throw new BadRequestException(
         "Desconto e comissão devem ser valores válidos.",
+      );
+    if (discountType === "PERCENT" && discountValue > 100)
+      throw new BadRequestException(
+        "O desconto percentual ao cliente deve estar entre 0% e 100%.",
+      );
+    if (commissionType === "PERCENT" && commissionValue > 100)
+      throw new BadRequestException(
+        "A comissão percentual do parceiro deve estar entre 0% e 100%.",
       );
     const partners = await this.database.$queryRawUnsafe<any[]>(
       `SELECT id FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 AND active=true LIMIT 1`,
@@ -113,9 +124,9 @@ export class StorefrontCouponsController {
       partners[0].id,
       code,
       body.description?.trim() || null,
-      body.discountType === "FIXED" ? "FIXED" : "PERCENT",
+      discountType,
       discountValue,
-      body.commissionType === "FIXED" ? "FIXED" : "PERCENT",
+      commissionType,
       commissionValue,
       body.commissionBasis === "GROSS_SUBTOTAL"
         ? "GROSS_SUBTOTAL"

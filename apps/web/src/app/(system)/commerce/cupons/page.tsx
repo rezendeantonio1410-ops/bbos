@@ -129,8 +129,9 @@ export default function CouponsPage() {
             Cupons e comissões
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            Cada uso confirmado gera o desconto do cliente e reserva
-            automaticamente a comissão do proprietário no financeiro.
+            Configure separadamente o benefício do comprador e a remuneração
+            do parceiro. Cada uso confirmado aplica o desconto ao cliente e
+            reserva automaticamente a comissão no financeiro.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -192,7 +193,7 @@ export default function CouponsPage() {
                 defaultValue="0"
               />
             </Field>
-            <Field label="Desconto">
+            <Field label="Desconto ao cliente">
               <div className="grid grid-cols-[1fr_110px] gap-2">
                 <input
                   name="discountValue"
@@ -207,7 +208,7 @@ export default function CouponsPage() {
                 </select>
               </div>
             </Field>
-            <Field label="Comissão">
+            <Field label="Comissão do parceiro">
               <div className="grid grid-cols-[1fr_110px] gap-2">
                 <input
                   name="commissionValue"
@@ -227,6 +228,11 @@ export default function CouponsPage() {
                 <option value="NET_SUBTOTAL">Após desconto</option>
                 <option value="GROSS_SUBTOTAL">Antes do desconto</option>
               </select>
+              <p className="mt-2 text-[10px] font-normal leading-relaxed text-stone-500">
+                Exemplo: em R$ 100,00, desconto de 3% e comissão de 10% geram
+                R$ 3,00 para o cliente e R$ 9,70 de comissão após o desconto —
+                ou R$ 10,00 antes do desconto.
+              </p>
             </Field>
             <Field label="Limite de usos">
               <input
@@ -282,11 +288,11 @@ export default function CouponsPage() {
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
               <Metric
-                label="Desconto"
+                label="Desconto cliente"
                 value={`${Number(coupon.discountValue).toFixed(2)}${coupon.discountType === "PERCENT" ? "%" : " R$"}`}
               />
               <Metric
-                label="Comissão"
+                label="Comissão parceiro"
                 value={`${Number(coupon.commissionValue).toFixed(2)}${coupon.commissionType === "PERCENT" ? "%" : " R$"}`}
               />
               <Metric
