@@ -52,6 +52,7 @@ export default function CouponsPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const load = async () => {
     const [couponRows, partnerRows] = await Promise.all([
       api<Coupon[]>("/storefront/coupons"),
@@ -59,6 +60,7 @@ export default function CouponsPage() {
     ]);
     setCoupons(couponRows);
     setPartners(partnerRows.filter((item) => item.active));
+    setLoaded(true);
   };
   useEffect(() => {
     void load().catch((error) => setMessage(error.message));
@@ -243,6 +245,17 @@ export default function CouponsPage() {
         </Card>
       )}
       <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        {loaded && coupons.length === 0 && (
+          <Card className="p-8 text-center lg:col-span-2 xl:col-span-3">
+            <BadgePercent size={28} className="mx-auto text-stone-300" />
+            <h2 className="mt-3 text-base font-bold text-[#14201d]">
+              Nenhum cupom cadastrado
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              A base está pronta para começar com os parceiros e as regras corretas.
+            </p>
+          </Card>
+        )}
         {coupons.map((coupon) => (
           <Card key={coupon.id} className="p-5">
             <div className="flex items-start justify-between">
