@@ -19,6 +19,13 @@ export type CouponAmountRules = {
   commissionBasis: "GROSS_SUBTOTAL" | "NET_SUBTOTAL";
 };
 
+export function couponHasLinkedBusiness(value: {
+  hasLinkedOrder?: boolean;
+  hasRedemption?: boolean;
+}) {
+  return Boolean(value.hasLinkedOrder || value.hasRedemption);
+}
+
 export function calculateCouponAmounts(
   subtotalCents: number,
   rules: CouponAmountRules,
@@ -99,11 +106,9 @@ export class StorefrontCouponsService {
 
     const { discountCents, commissionCents, netSubtotalCents } =
       calculateCouponAmounts(subtotalCents, {
-        discountType:
-          coupon.discountType === "FIXED" ? "FIXED" : "PERCENT",
+        discountType: coupon.discountType === "FIXED" ? "FIXED" : "PERCENT",
         discountValue: Number(coupon.discountValue),
-        commissionType:
-          coupon.commissionType === "FIXED" ? "FIXED" : "PERCENT",
+        commissionType: coupon.commissionType === "FIXED" ? "FIXED" : "PERCENT",
         commissionValue: Number(coupon.commissionValue),
         commissionBasis:
           coupon.commissionBasis === "GROSS_SUBTOTAL"

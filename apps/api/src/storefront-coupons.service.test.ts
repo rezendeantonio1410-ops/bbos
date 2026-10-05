@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateCouponAmounts } from "./storefront-coupons.service";
+import {
+  calculateCouponAmounts,
+  couponHasLinkedBusiness,
+} from "./storefront-coupons.service";
 
 test("cupom permite 3% de desconto ao cliente e 10% de comissão após o desconto", () => {
   const result = calculateCouponAmounts(10_000, {
@@ -34,4 +37,22 @@ test("comissão pode usar o valor antes do desconto sem alterar o benefício do 
     commissionBaseCents: 10_000,
     commissionCents: 1_000,
   });
+});
+
+test("edição e exclusão são bloqueadas quando o cupom já possui negócio vinculado", () => {
+  assert.equal(
+    couponHasLinkedBusiness({ hasLinkedOrder: true, hasRedemption: false }),
+    true,
+  );
+  assert.equal(
+    couponHasLinkedBusiness({ hasLinkedOrder: false, hasRedemption: true }),
+    true,
+  );
+});
+
+test("cupom sem pedidos ou resgates permanece editável e removível", () => {
+  assert.equal(
+    couponHasLinkedBusiness({ hasLinkedOrder: false, hasRedemption: false }),
+    false,
+  );
 });
