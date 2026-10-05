@@ -461,6 +461,18 @@ model Company {
   storefrontMediaAssets     StorefrontMediaAsset[]
 }
 
+/// Recoverable archive for narrowly scoped production data cleanups.
+/// Entries are written by audited migrations before their source rows are removed.
+model DataCleanupArchive {
+  cleanupKey String
+  tableName  String
+  recordId   String
+  payload    Json
+  archivedAt DateTime @default(now())
+
+  @@id([cleanupKey, tableName, recordId])
+}
+
 model User {
   id           String        @id @default(cuid())
   companyId    String

@@ -1,7 +1,76 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Landmark } from "lucide-react";
 import { Card } from "@bbos/ui";
-import { financeDemo } from "@/lib/finance-demo-data";
-const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-export default function CashFlowPage() { return <div className="mx-auto max-w-[1500px]"><Link href="/financeiro" className="inline-flex items-center gap-2 text-xs font-bold text-forest-700"><ArrowLeft size={14}/>Financeiro</Link><h1 className="mt-5 text-3xl font-bold">Fluxo de Caixa</h1><p className="mt-2 text-sm text-stone-500">Realizado, projeção e compromissos financeiros.</p><div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Metric label="Caixa atual" value={money.format(financeDemo.cash)}/><Metric label="Entradas previstas" value={money.format(financeDemo.receivables)}/><Metric label="Saídas previstas" value={money.format(financeDemo.payables)}/><Metric label="Saldo projetado" value={money.format(financeDemo.projectedBalance)}/><Metric label="Limite mínimo" value={money.format(120000)}/></div><Card className="mt-6 p-5"><div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">Fluxo de Caixa</p><h2 className="mt-1 text-lg font-bold">Realizado e Projetado</h2></div><span className="rounded-lg bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-600">7 · 30 · 60 · 90 dias</span></div><svg viewBox="0 0 800 280" className="mt-5 h-[300px] w-full"><line x1="50" x2="750" y1="230" y2="230" stroke="#D8E1DE"/><line x1="50" x2="750" y1="110" y2="110" stroke="#D8E1DE"/><polyline points="50,150 170,138 290,145 410,120 530,106 650,92 750,70" fill="none" stroke="#3E73A8" strokeWidth="3"/><polyline points="530,106 650,80 750,48" fill="none" stroke="#7867A9" strokeWidth="3" strokeDasharray="7 6"/><polyline points="50,190 170,176 290,166 410,154 530,142 650,128 750,115" fill="none" stroke="#A8B0AE" strokeWidth="1.5" strokeDasharray="3 4"/><text x="42" y="114" textAnchor="end" fontSize="11" fill="#626B69">R$ 400k</text><text x="42" y="234" textAnchor="end" fontSize="11" fill="#626B69">R$ 0</text></svg><div className="mt-3 flex flex-wrap gap-5 text-xs text-stone-600"><span><i className="mr-2 inline-block size-2 rounded-full bg-[#3E73A8]"/>Saldo de Caixa</span><span><i className="mr-2 inline-block size-2 rounded-full bg-[#16A06A]"/>Entradas</span><span><i className="mr-2 inline-block size-2 rounded-full bg-[#C8923E]"/>Saídas</span><span><i className="mr-2 inline-block size-2 rounded-full bg-[#7867A9]"/>Caixa Projetado</span></div></Card><div className="mt-6 grid gap-4 md:grid-cols-2"><Card className="p-5"><h2 className="text-base font-bold">Próximas entradas</h2><div className="mt-4 space-y-3">{financeDemo.receivablesRows.map((row) => <div key={row.document} className="flex items-center justify-between border-b border-stone-100 pb-3 text-xs"><span className="flex items-center gap-2"><ArrowDownLeft size={14} className="text-emerald-600"/>{row.customer}</span><strong>{money.format(row.open)}</strong></div>)}</div></Card><Card className="p-5"><h2 className="text-base font-bold">Próximas saídas</h2><div className="mt-4 space-y-3">{financeDemo.payablesRows.map((row) => <div key={row.description} className="flex items-center justify-between border-b border-stone-100 pb-3 text-xs"><span className="flex items-center gap-2"><ArrowUpRight size={14} className="text-amber-600"/>{row.supplier}</span><strong>{money.format(row.open)}</strong></div>)}</div></Card></div><p className="mt-4 text-xs text-stone-400">Dados demonstrativos; o saldo real será calculado por transações persistidas.</p></div>; }
-function Metric({ label, value }: { label: string; value: string }) { return <Card className="p-4"><p className="text-[11px] text-stone-500">{label}</p><p className="mt-2 text-lg font-bold">{value}</p></Card>; }
+import { getApiBaseUrl } from "@/lib/api-url";
+
+type Transaction = { id: string; type: string; amount: number | string; category: string; description: string; occurredAt: string };
+type PurchaseProjection = { id: string; purchaseNumber: string; supplier: string; amount: number; dueDate: string; status: string };
+type Summary = { cash: number; receivables: number; payables: number; plannedPurchases: number; projectedBalance: number; transactions?: Transaction[]; greenCoffeePurchaseProjection?: PurchaseProjection[] };
+
+const emptySummary: Summary = { cash: 0, receivables: 0, payables: 0, plannedPurchases: 0, projectedBalance: 0, transactions: [], greenCoffeePurchaseProjection: [] };
+const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const date = new Intl.DateTimeFormat("pt-BR");
+
+export default function CashFlowPage() {
+  const [data, setData] = React.useState<Summary>(emptySummary);
+  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${getApiBaseUrl()}/finance/summary`, { credentials: "include", cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Não foi possível carregar o fluxo de caixa.");
+        return response.json() as Promise<Summary>;
+      })
+      .then((result) => { setData({ ...emptySummary, ...result }); setStatus("ready"); })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setData(emptySummary);
+        setStatus("error");
+      });
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <div className="mx-auto max-w-[1500px]">
+      <Link href="/financeiro" className="inline-flex items-center gap-2 text-xs font-bold text-forest-700"><ArrowLeft size={14} /> Financeiro</Link>
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+        <div><h1 className="text-3xl font-bold">Fluxo de caixa</h1><p className="mt-2 text-sm text-stone-500">Posição calculada exclusivamente com lançamentos persistidos.</p></div>
+        <span className={`rounded-full px-3 py-2 text-[10px] font-bold ${status === "ready" ? "bg-emerald-50 text-emerald-800" : status === "error" ? "bg-red-50 text-red-800" : "bg-stone-100 text-stone-600"}`}>{status === "ready" ? "Dados reais do PostgreSQL" : status === "error" ? "Falha ao carregar" : "Carregando…"}</span>
+      </div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Metric label="Caixa atual" value={money.format(data.cash)} />
+        <Metric label="Entradas previstas" value={money.format(data.receivables)} />
+        <Metric label="Saídas previstas" value={money.format(data.payables)} />
+        <Metric label="Compras previstas" value={money.format(data.plannedPurchases)} />
+        <Metric label="Saldo projetado" value={money.format(data.projectedBalance)} />
+      </div>
+
+      {status === "error" ? (
+        <Card className="mt-6 p-10 text-center text-sm text-red-700">Não foi possível confirmar o fluxo no banco. Nenhum número fictício foi usado como substituto.</Card>
+      ) : (
+        <div className="mt-6 grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
+          <Card className="p-5">
+            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">Movimentações</p><h2 className="mt-1 text-lg font-bold">Histórico real</h2></div><Landmark size={18} className="text-stone-400" /></div>
+            {status === "loading" ? <p className="mt-8 text-center text-sm text-stone-500">Carregando movimentações…</p> : (data.transactions?.length ?? 0) === 0 ? <Empty text="Ainda não há entradas ou saídas financeiras registradas." /> : <div className="mt-5 space-y-3">{data.transactions!.slice(0, 12).map((item) => {
+              const incoming = ["RECEIPT", "TRANSFER_IN"].includes(item.type);
+              return <div key={item.id} className="flex items-center justify-between gap-4 border-b border-stone-100 pb-3 text-xs"><span className="flex min-w-0 items-center gap-2">{incoming ? <ArrowDownLeft size={14} className="text-emerald-600" /> : <ArrowUpRight size={14} className="text-amber-600" />}<span className="truncate"><strong className="block text-stone-800">{item.description}</strong><span className="text-stone-400">{date.format(new Date(item.occurredAt))} · {item.category}</span></span></span><strong>{incoming ? "+" : "−"}{money.format(Number(item.amount || 0))}</strong></div>;
+            })}</div>}
+          </Card>
+
+          <Card className="p-5">
+            <p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">Compras de café verde</p><h2 className="mt-1 text-lg font-bold">Compromissos preservados</h2>
+            {status === "loading" ? <p className="mt-8 text-center text-sm text-stone-500">Carregando compras…</p> : (data.greenCoffeePurchaseProjection?.length ?? 0) === 0 ? <Empty text="As compras permanecem registradas; ainda não há parcelas planejadas ou comprometidas." /> : <div className="mt-5 space-y-3">{data.greenCoffeePurchaseProjection!.map((item) => <div key={item.id} className="border-b border-stone-100 pb-3 text-xs"><div className="flex justify-between gap-3"><strong>{item.purchaseNumber}</strong><strong>{money.format(Number(item.amount || 0))}</strong></div><p className="mt-1 text-stone-500">{item.supplier} · {date.format(new Date(item.dueDate))}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">{item.status}</p></div>)}</div>}
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) { return <Card className="p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-stone-400">{label}</p><p className="mt-2 text-xl font-bold">{value}</p></Card>; }
+function Empty({ text }: { text: string }) { return <div className="mt-5 rounded-xl border border-dashed border-stone-200 p-8 text-center text-sm text-stone-500">{text}</div>; }
