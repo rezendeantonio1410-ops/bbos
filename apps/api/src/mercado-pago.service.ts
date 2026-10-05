@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 
 type MercadoPagoItem = {
   externalCode: string;
@@ -111,12 +116,15 @@ export class MercadoPagoService implements OnModuleInit {
   }
 
   async paymentMethodsSummary() {
-    const response = await fetch("https://api.mercadopago.com/v1/payment_methods", {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${this.accessToken()}`,
+    const response = await fetch(
+      "https://api.mercadopago.com/v1/payment_methods",
+      {
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${this.accessToken()}`,
+        },
       },
-    });
+    );
     const body = await response.json().catch(() => []);
     if (!response.ok || !Array.isArray(body)) {
       return { ok: false, status: response.status, methods: [] as any[] };
@@ -252,13 +260,25 @@ export class MercadoPagoService implements OnModuleInit {
       total_amount: money(item.unitPriceCents * item.quantity),
     }));
     if ((input.discountCents || 0) > 0) {
-      checkoutItems = [{
-        title: "Cafés Bispo",
-        quantity: 1,
-        unit_measure: "unit",
-        unit_price: money(input.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0) - (input.discountCents || 0)),
-        total_amount: money(input.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0) - (input.discountCents || 0)),
-      }];
+      checkoutItems = [
+        {
+          title: "Cafés Bispo",
+          quantity: 1,
+          unit_measure: "unit",
+          unit_price: money(
+            input.items.reduce(
+              (sum, item) => sum + item.unitPriceCents * item.quantity,
+              0,
+            ) - (input.discountCents || 0),
+          ),
+          total_amount: money(
+            input.items.reduce(
+              (sum, item) => sum + item.unitPriceCents * item.quantity,
+              0,
+            ) - (input.discountCents || 0),
+          ),
+        },
+      ];
     }
     if (input.shippingCents > 0) {
       checkoutItems.push({
@@ -287,9 +307,22 @@ export class MercadoPagoService implements OnModuleInit {
           },
           config: {
             payment_method: {
-              not_allowed_types: input.paymentMethod === "PIX"
-                ? ["credit_card", "debit_card", "prepaid_card", "ticket", "account_money", "digital_currency"]
-                : ["bank_transfer", "ticket", "account_money", "digital_currency"],
+              not_allowed_types:
+                input.paymentMethod === "PIX"
+                  ? [
+                      "credit_card",
+                      "debit_card",
+                      "prepaid_card",
+                      "ticket",
+                      "account_money",
+                      "digital_currency",
+                    ]
+                  : [
+                      "bank_transfer",
+                      "ticket",
+                      "account_money",
+                      "digital_currency",
+                    ],
             },
             online: {
               success_url: `${returnBase}?payment=success`,
@@ -329,9 +362,12 @@ export class MercadoPagoService implements OnModuleInit {
           })),
         }),
       });
-      console.warn("Mercado Pago order created with documented minimal fallback", {
-        orderCode: input.orderCode,
-      });
+      console.warn(
+        "Mercado Pago order created with documented minimal fallback",
+        {
+          orderCode: input.orderCode,
+        },
+      );
     }
 
     if (!order.id || !order.checkout_url)
@@ -344,6 +380,13 @@ export class MercadoPagoService implements OnModuleInit {
   getOrder(orderId: string) {
     return this.request(`/v1/orders/${encodeURIComponent(orderId)}`, {
       method: "GET",
+    });
+  }
+
+  cancelOrder(orderId: string, idempotencyKey: string) {
+    return this.request(`/v1/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: "POST",
+      headers: { "X-Idempotency-Key": idempotencyKey.slice(0, 128) },
     });
   }
 }
