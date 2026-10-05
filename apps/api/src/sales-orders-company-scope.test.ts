@@ -26,7 +26,10 @@ test("sales order list and detail are isolated by company", async () => {
   await service.get("company-a", "order-a");
   await service.exportOverview("company-a");
 
-  assert.deepEqual(calls[0]?.args.where, { companyId: "company-a" });
+  assert.deepEqual(calls[0]?.args.where, {
+    companyId: "company-a",
+    status: { not: "CANCELLED" },
+  });
   assert.deepEqual(calls[1]?.args.where, {
     id: "order-a",
     companyId: "company-a",

@@ -55,7 +55,10 @@ export class SalesOrdersService implements OnModuleDestroy {
 
   async list(companyId: string) {
     const orders = await this.database.salesOrder.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        status: { not: SalesOrderStatus.CANCELLED },
+      },
       include: this.orderInclude,
       orderBy: { orderedAt: "desc" },
     });
