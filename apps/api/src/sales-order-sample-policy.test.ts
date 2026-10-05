@@ -4,8 +4,10 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   resolveSalesOrderType,
+  SAMPLE_DEFAULT_SHIPPING_BOX,
   SAMPLE_FISCAL_UNIT_VALUE,
   sampleFiscalPrice,
+  sampleShippingPackages,
 } from "./sales-order-sample-policy";
 
 test("sample orders use the fixed fiscal-only unit value", () => {
@@ -19,6 +21,27 @@ test("unknown order types cannot bypass commercial pricing", () => {
   assert.equal(resolveSalesOrderType("COMMERCIAL"), "COMMERCIAL");
   assert.equal(resolveSalesOrderType("free"), "COMMERCIAL");
   assert.equal(resolveSalesOrderType(undefined), "COMMERCIAL");
+});
+
+test("sample shipping reuses the standard Bispo box and splits weight safely", () => {
+  assert.deepEqual(SAMPLE_DEFAULT_SHIPPING_BOX, {
+    widthCm: 35,
+    heightCm: 22,
+    lengthCm: 11,
+    maxWeightGrams: 2_500,
+  });
+  assert.deepEqual(sampleShippingPackages(500), [
+    { widthCm: 35, heightCm: 22, lengthCm: 11, weightGrams: 500 },
+  ]);
+  assert.deepEqual(sampleShippingPackages(2_501), [
+    { widthCm: 35, heightCm: 22, lengthCm: 11, weightGrams: 1_251 },
+    { widthCm: 35, heightCm: 22, lengthCm: 11, weightGrams: 1_250 },
+  ]);
+  assert.deepEqual(sampleShippingPackages(5_001), [
+    { widthCm: 35, heightCm: 22, lengthCm: 11, weightGrams: 1_667 },
+    { widthCm: 35, heightCm: 22, lengthCm: 11, weightGrams: 1_667 },
+    { widthCm: 35, heightCm: 22, lengthCm: 11, weightGrams: 1_667 },
+  ]);
 });
 
 test("sample orders remain fiscal and operational without becoming revenue", () => {
@@ -35,6 +58,8 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
 
   assert.match(service, /target === "INVOICED" && order\.orderType !== "SAMPLE"/);
   assert.match(controller, /paymentType = isSample\s*\? "SAMPLE"/);
+  assert.match(controller, /isSample && freightResponsibility === "BISPO"/);
+  assert.match(controller, /sampleShippingPackages\(weightGrams\)/);
   assert.match(fiscal, /REMESSA DE AMOSTRA SEM VALOR COMERCIAL/);
   assert.match(dashboard, /orderType: "COMMERCIAL"/);
 });

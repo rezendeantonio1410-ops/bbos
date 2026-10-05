@@ -550,13 +550,17 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
   );
   const firstQuote = completeLines.length ? quotes[completeLines[0]!.id] : undefined;
   const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
-  const usesPlatformShipping = !isSample && isDistributor && freightResponsibility === "CUSTOMER";
+  const usesPlatformShipping =
+    (isSample && freightResponsibility === "BISPO") ||
+    (!isSample && isDistributor && freightResponsibility === "CUSTOMER");
   const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
   const sortedShippingQuotes = useMemo(
     () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
     [shippingQuotes, shippingSort],
   );
-  const freightAmount = usesPlatformShipping ? Number(selectedShippingQuote?.priceCents ?? 0) / 100 : 0;
+  const freightAmount = usesPlatformShipping && !isSample
+    ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
+    : 0;
   const productsTotal = completeLines.reduce(
     (sum, line) => sum + (isSample ? line.quantity * SAMPLE_FISCAL_UNIT_VALUE : Number(quotes[line.id]?.totalAmount ?? 0)),
     0,
@@ -713,9 +717,10 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          orderType,
           customerId,
           items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
-          packages: shippingPackages(),
+          packages: isSample ? undefined : shippingPackages(),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -737,8 +742,12 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
     if (completeLines.length !== lines.length || completeLines.some((line) => !quotes[line.id])) return setError("Todos os itens precisam de produto, quantidade e preço vigente.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
     if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
-    if (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
-      return setError("Calcule e selecione uma opção de frete para o distribuidor.");
+    if (usesPlatformShipping && !selectedShippingQuote) {
+      return setError(
+        isSample
+          ? "Pesquise e selecione o envio da amostra pelo Melhor Envio."
+          : "Calcule e selecione uma opção de frete para o distribuidor.",
+      );
     }
     if (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim()) {
       return setError("Informe a transportadora indicada pelo distribuidor.");
@@ -760,7 +769,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
         freight: freightAmount,
         shippingQuoteId: usesPlatformShipping ? selectedShippingQuote?.id : undefined,
         destinationPostalCode: usesPlatformShipping ? shippingPostalCode || undefined : undefined,
-        packages: usesPlatformShipping ? shippingPackages() : undefined,
+        packages: usesPlatformShipping && !isSample ? shippingPackages() : undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
@@ -958,7 +967,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Nome da transportadora · obrigatório" />
                   </Field>
                 )}
-                {!isDistributor && freightResponsibility && freightResponsibility !== "PICKUP" && (
+                {!isDistributor && !usesPlatformShipping && freightResponsibility && freightResponsibility !== "PICKUP" && (
                   <Field label="Transportadora">
                     <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
                   </Field>
@@ -1007,7 +1016,11 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold text-emerald-950">Cotação do frete · Melhor Envio</p>
-                        <p className="mt-1 text-[10px] text-emerald-800">Informe as medidas reais da caixa. O BBOS consulta todas as modalidades disponíveis para o CEP cadastrado.</p>
+                        <p className="mt-1 text-[10px] text-emerald-800">
+                          {isSample
+                            ? "O BBOS usa automaticamente a Caixa P padrão e pesquisa as modalidades disponíveis para o CEP do destinatário. O custo fica com a Bispo."
+                            : "Informe as medidas reais da caixa. O BBOS consulta todas as modalidades disponíveis para o CEP cadastrado."}
+                        </p>
                       </div>
                       <button
                         type="button"
@@ -1026,7 +1039,13 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                         onClick={() => void calculateShipping()}
                         className="rounded-lg bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
                       >
-                        {shippingBusy ? "Consultando todas…" : shippingQuotes.length ? "Cotar novamente" : "Ver todas as cotações"}
+                        {shippingBusy
+                          ? "Pesquisando envios…"
+                          : shippingQuotes.length
+                            ? "Pesquisar novamente"
+                            : isSample
+                              ? "Pesquisar envio"
+                              : "Ver todas as cotações"}
                       </button>
                     </div>
                     <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-3">
@@ -1034,10 +1053,12 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Volumes da cotação</p>
                           <p className="mt-1 text-[10px] text-stone-500">
-                            Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg. Cada caixa pode ter medidas e peso diferentes.
+                            {isSample
+                              ? "Caixa P Bispo padrão: 35 × 22 × 11 cm · até 2,5 kg. O BBOS calcula automaticamente a quantidade de caixas."
+                              : "Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg. Cada caixa pode ter medidas e peso diferentes."}
                           </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        {!isSample && <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => {
@@ -1066,7 +1087,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                           >
                             + Adicionar caixa
                           </button>
-                        </div>
+                        </div>}
                       </div>
 
                       <div className="mt-3 space-y-2">
@@ -1078,7 +1099,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                             <div key={box.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3">
                               <div className="mb-2 flex items-center justify-between">
                                 <b className="text-[11px] text-stone-800">Caixa {index + 1}</b>
-                                <button
+                                {!isSample && <button
                                   type="button"
                                   disabled={packageBoxes.length === 1}
                                   onClick={() => {
@@ -1088,7 +1109,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                   className="rounded-lg px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-25"
                                 >
                                   Remover
-                                </button>
+                                </button>}
                               </div>
                               <div className="grid gap-2 sm:grid-cols-4">
                                 <Field label="Largura (cm)">
@@ -1097,7 +1118,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     min="1"
                                     step="1"
                                     value={box.widthCm}
-                                    disabled={!customPackage}
+                                    disabled={isSample || !customPackage}
                                     onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, widthCm: event.target.value } : item))}
                                   />
                                 </Field>
@@ -1107,7 +1128,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     min="1"
                                     step="1"
                                     value={box.heightCm}
-                                    disabled={!customPackage}
+                                    disabled={isSample || !customPackage}
                                     onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, heightCm: event.target.value } : item))}
                                   />
                                 </Field>
@@ -1117,7 +1138,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     min="1"
                                     step="1"
                                     value={box.lengthCm}
-                                    disabled={!customPackage}
+                                    disabled={isSample || !customPackage}
                                     onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, lengthCm: event.target.value } : item))}
                                   />
                                 </Field>
@@ -1127,6 +1148,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     min="0.1"
                                     step="0.1"
                                     value={box.weightKg}
+                                    disabled={isSample}
                                     onChange={(event) => {
                                       setCustomPackage(true);
                                       setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, weightKg: event.target.value } : item));
@@ -1140,7 +1162,9 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                         })}
                       </div>
                       <p className="mt-2 text-[10px] text-stone-500">
-                        Se o peso de uma caixa ficar em branco, o BBOS distribui automaticamente o peso restante do pedido entre as caixas sem peso informado.
+                        {isSample
+                          ? "A embalagem padrão e a distribuição do peso serão preservadas na cotação, na etiqueta e na expedição."
+                          : "Se o peso de uma caixa ficar em branco, o BBOS distribui automaticamente o peso restante do pedido entre as caixas sem peso informado."}
                       </p>
                     </div>
                     {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
@@ -1229,11 +1253,15 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
           {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
           {usesPlatformShipping && selectedShippingQuote && (
             <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
-              <span className="text-stone-500">Produtos + frete escolhido na plataforma</span>
-              <b>{money.format(orderTotal)}</b>
+              <span className="text-stone-500">
+                {isSample
+                  ? `Custo do envio assumido pela Bispo: ${money.format(selectedShippingQuote.priceCents / 100)}`
+                  : "Produtos + frete escolhido na plataforma"}
+              </span>
+              <b>{isSample ? "Sem cobrança de frete" : money.format(orderTotal)}</b>
             </div>
           )}
-          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">{isSample ? "Salvar pedido de amostra" : "Salvar pedido"}</button>
+          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (usesPlatformShipping && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">{isSample ? "Salvar pedido de amostra" : "Salvar pedido"}</button>
         </div>
       </aside>
     </div>,

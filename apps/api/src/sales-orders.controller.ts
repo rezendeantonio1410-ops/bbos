@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
@@ -21,6 +22,7 @@ import { resolveSalesOrderDeliveryPolicy } from "./sales-order-delivery-policy";
 import {
   resolveSalesOrderType,
   SAMPLE_FISCAL_UNIT_VALUE,
+  sampleShippingPackages,
 } from "./sales-order-sample-policy";
 
 const isCashTerm = (value: unknown) => {
@@ -192,6 +194,7 @@ export class SalesOrdersController {
   async shippingQuotes(
     @Req() request: any,
     @Body() body: {
+      orderType?: string;
       customerId?: string;
       productVariantId?: string;
       quantity?: number;
@@ -204,6 +207,7 @@ export class SalesOrdersController {
     },
   ) {
     const actor = await this.actor(request);
+    const isSample = resolveSalesOrderType(body.orderType) === "SAMPLE";
     const customerId = String(body.customerId ?? "").trim();
     const requestedItems = body.items?.length
       ? body.items.map((item) => ({
@@ -250,9 +254,14 @@ export class SalesOrdersController {
         throw new BadRequestException("Os produtos precisam usar a mesma tabela comercial.");
       }
       salesChannelId = price.salesChannelId;
-      subtotalCents += Math.round(price.officialUnitPrice * item.quantity * 100);
+      subtotalCents += isSample
+        ? item.quantity
+        : Math.round(price.officialUnitPrice * item.quantity * 100);
       weightGrams += Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
     }
+    const samplePackages = isSample
+      ? sampleShippingPackages(weightGrams)
+      : undefined;
     const result = await this.shipping.quote(
       actor.companyId,
       {
@@ -263,7 +272,7 @@ export class SalesOrdersController {
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
         packageCount: body.packageCount,
-        packages: body.packages?.map((item) => ({
+        packages: samplePackages ?? body.packages?.map((item) => ({
           widthCm: Number(item.widthCm),
           heightCm: Number(item.heightCm),
           lengthCm: Number(item.lengthCm),
@@ -272,6 +281,11 @@ export class SalesOrdersController {
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
+    if (isSample && result.provider !== "MELHOR_ENVIO") {
+      throw new ServiceUnavailableException(
+        "O Melhor Envio precisa estar ativo para pesquisar o envio da amostra.",
+      );
+    }
     return { ...result, postalCode };
   }
 
@@ -395,6 +409,9 @@ export class SalesOrdersController {
       carrierName: body.carrierName,
     });
     if (!deliveryPolicy.valid) throw new BadRequestException(deliveryPolicy.message);
+    const usesPlatformShipping =
+      deliveryPolicy.usesPlatformShipping ||
+      (isSample && freightResponsibility === "BISPO");
 
     if (isSample && String(body.brokerId ?? "").trim()) {
       throw new BadRequestException("Pedido de amostra não pode gerar comissão comercial.");
@@ -426,9 +443,13 @@ export class SalesOrdersController {
       : 0;
 
     let shippingQuote: any = null;
-    if (deliveryPolicy.usesPlatformShipping) {
+    if (usesPlatformShipping) {
       if (!body.shippingQuoteId || !body.destinationPostalCode) {
-        throw new BadRequestException("Calcule e selecione o frete do distribuidor antes de salvar o pedido.");
+        throw new BadRequestException(
+          isSample
+            ? "Pesquise e selecione o envio da amostra pelo Melhor Envio antes de salvar o pedido."
+            : "Calcule e selecione o frete do distribuidor antes de salvar o pedido.",
+        );
       }
       const variants = await this.salesOrders.database.productVariant.findMany({
         where: { id: { in: pricedItems.map((item) => item.productVariantId) } },
@@ -437,6 +458,9 @@ export class SalesOrdersController {
       const weightById = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
       const subtotalCents = Math.round(pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) * 100);
       const weightGrams = pricedItems.reduce((sum, item) => sum + item.quantity * Number(weightById.get(item.productVariantId) ?? 0), 0);
+      const samplePackages = isSample
+        ? sampleShippingPackages(weightGrams)
+        : undefined;
       shippingQuote = await this.shipping.validateQuote(actor.companyId, body.shippingQuoteId, {
         postalCode: body.destinationPostalCode,
         subtotalCents,
@@ -445,14 +469,21 @@ export class SalesOrdersController {
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
         packageCount: body.packageCount,
-        packages: body.packages?.map((item) => ({
+        packages: samplePackages ?? body.packages?.map((item) => ({
           widthCm: Number(item.widthCm),
           heightCm: Number(item.heightCm),
           lengthCm: Number(item.lengthCm),
           weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
         })),
       });
-      body.freight = Number(shippingQuote.customerPriceCents) / 100;
+      if (isSample && shippingQuote.provider !== "MELHOR_ENVIO") {
+        throw new BadRequestException(
+          "A amostra deve usar uma cotação válida do Melhor Envio.",
+        );
+      }
+      body.freight = isSample
+        ? 0
+        : Number(shippingQuote.customerPriceCents) / 100;
     } else if (deliveryPolicy.forceFreightZero) {
       body.freight = 0;
     }
@@ -515,8 +546,14 @@ export class SalesOrdersController {
 
     if (shippingQuote) {
       await this.salesOrders.database.$executeRawUnsafe(
-        `UPDATE "ShippingQuote" SET status='USED', "usedAt"=NOW(), "updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
+        `UPDATE "ShippingQuote"
+            SET status='USED',
+                "customerPriceCents"=CASE WHEN $2 THEN 0 ELSE "customerPriceCents" END,
+                "usedAt"=NOW(),
+                "updatedAt"=NOW()
+          WHERE id=$1 AND status='VALID'`,
         shippingQuote.id,
+        isSample,
       );
     }
 
