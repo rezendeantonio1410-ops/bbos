@@ -13,7 +13,8 @@ export type BbosRole =
   | "INDUSTRIAL"
   | "FINANCE"
   | "SALES"
-  | "MARKETPLACE_OPERATOR";
+  | "MARKETPLACE_OPERATOR"
+  | "PARTNER";
 
 const ALL: readonly BbosRole[] = [
   "ADMIN",
@@ -23,6 +24,7 @@ const ALL: readonly BbosRole[] = [
   "SALES",
   "MARKETPLACE_OPERATOR",
 ];
+const AUTHENTICATED: readonly BbosRole[] = [...ALL, "PARTNER"];
 const CORE: readonly BbosRole[] = ALL.filter(
   (role) => role !== "MARKETPLACE_OPERATOR",
 );
@@ -49,7 +51,7 @@ const MARKETPLACE: readonly BbosRole[] = [
 export const CONTROLLER_ROLE_POLICY: Readonly<
   Record<string, readonly BbosRole[]>
 > = {
-  AuthController: ALL,
+  AuthController: AUTHENTICATED,
   NotificationsController: ALL,
   IntelligenceController: CORE,
   DashboardController: CORE,
@@ -84,6 +86,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   StorefrontFulfillmentController: MARKETPLACE,
   StorefrontCouponsController: MARKETPLACE,
   StorefrontPartnersController: ["ADMIN", "EXECUTIVE", "SALES"],
+  PartnerPortalController: ["PARTNER"],
   StorefrontOperationsController: LEADERSHIP,
   FiscalInboundController: OPERATIONS_FINANCE,
   MarketplacesController: MARKETPLACE,
@@ -100,6 +103,10 @@ const HANDLER_ROLE_POLICY: Readonly<
   OperationsFlowController: {
     stockIn: OPERATIONS,
     stockPolicy: OPERATIONS,
+  },
+  StorefrontPartnersController: {
+    portalAccess: ["ADMIN"],
+    portalAccessStatus: ["ADMIN"],
   },
 };
 

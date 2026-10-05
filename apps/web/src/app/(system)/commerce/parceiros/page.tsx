@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, Pencil, Plus, X } from "lucide-react";
+import { ArrowLeft, KeyRound, Pencil, Plus, Power, X } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 
@@ -16,6 +16,9 @@ type Partner = {
   email?: string;
   pixKey?: string;
   active: boolean;
+  portalUserId?: string | null;
+  portalEmail?: string | null;
+  portalActive?: boolean | null;
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -33,10 +36,18 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export default function StorefrontPartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [selected, setSelected] = useState<Partner | null>(null);
+  const [accessPartner, setAccessPartner] = useState<Partner | null>(null);
+  const [actorRole, setActorRole] = useState("");
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
-  const load = async () =>
-    setPartners(await api<Partner[]>("/storefront/partners"));
+  const load = async () => {
+    const [partnerRows, session] = await Promise.all([
+      api<Partner[]>("/storefront/partners"),
+      api<{ user?: { role?: string } }>("/auth/me"),
+    ]);
+    setPartners(partnerRows);
+    setActorRole(session.user?.role ?? "");
+  };
   useEffect(() => {
     void load().catch((error) => setMessage(error.message));
   }, []);
@@ -72,6 +83,55 @@ export default function StorefrontPartnersPage() {
         error instanceof Error
           ? error.message
           : "Não foi possível salvar o parceiro.",
+      );
+    }
+  }
+
+  async function saveAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!accessPartner) return;
+    const data = new FormData(event.currentTarget);
+    try {
+      await api(`/storefront/partners/${accessPartner.id}/portal-access`, {
+        method: "POST",
+        body: JSON.stringify({
+          email: data.get("email"),
+          password: data.get("password"),
+        }),
+      });
+      setAccessPartner(null);
+      setMessage(
+        accessPartner.portalUserId
+          ? "Senha do portal redefinida e acesso ativado."
+          : "Acesso ao portal criado para o parceiro.",
+      );
+      await load();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível liberar o portal.",
+      );
+    }
+  }
+
+  async function toggleAccess(partner: Partner) {
+    try {
+      await api(`/storefront/partners/${partner.id}/portal-access/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: !partner.portalActive }),
+      });
+      setMessage(
+        partner.portalActive
+          ? "Acesso do parceiro desativado."
+          : "Acesso do parceiro reativado.",
+      );
+      await load();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível alterar o acesso.",
       );
     }
   }
@@ -131,15 +191,45 @@ export default function StorefrontPartnersPage() {
             <p className="mt-4 text-xs text-stone-500">
               {partner.email || partner.phone || "Dados de contato pendentes"}
             </p>
-            <button
-              onClick={() => {
-                setSelected(partner);
-                setOpen(true);
-              }}
-              className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#087568]"
-            >
-              <Pencil size={13} /> Editar
-            </button>
+            {partner.portalUserId && (
+              <p
+                className={`mt-3 text-[10px] font-bold uppercase tracking-wider ${partner.portalActive ? "text-emerald-700" : "text-stone-400"}`}
+              >
+                Portal {partner.portalActive ? "liberado" : "desativado"} ·{" "}
+                {partner.portalEmail}
+              </p>
+            )}
+            <div className="mt-4 flex flex-wrap gap-4">
+              <button
+                onClick={() => {
+                  setSelected(partner);
+                  setOpen(true);
+                }}
+                className="inline-flex items-center gap-2 text-xs font-bold text-[#087568]"
+              >
+                <Pencil size={13} /> Editar
+              </button>
+              {actorRole === "ADMIN" && (
+                <button
+                  onClick={() => setAccessPartner(partner)}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-violet-700"
+                >
+                  <KeyRound size={13} />{" "}
+                  {partner.portalUserId ? "Redefinir acesso" : "Criar acesso"}
+                </button>
+              )}
+              {actorRole === "ADMIN" && partner.portalUserId && (
+                <button
+                  onClick={() => void toggleAccess(partner)}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-stone-600"
+                >
+                  <Power size={13} />{" "}
+                  {partner.portalActive
+                    ? "Desativar portal"
+                    : "Reativar portal"}
+                </button>
+              )}
+            </div>
           </Card>
         ))}
       </section>
@@ -212,6 +302,75 @@ export default function StorefrontPartnersPage() {
                 </button>
                 <button className="rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white">
                   Salvar parceiro
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {accessPartner && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="font-bold">Acesso ao portal</h2>
+                <p className="mt-1 text-xs text-stone-500">
+                  {accessPartner.name}
+                </p>
+              </div>
+              <button
+                aria-label="Fechar"
+                onClick={() => setAccessPartner(null)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <form onSubmit={saveAccess} className="space-y-4 p-6">
+              <p className="rounded-xl bg-violet-50 p-3 text-xs leading-5 text-violet-800">
+                O parceiro verá somente os próprios cupons, negócios confirmados
+                e comissões. Ele não terá acesso às demais áreas do BBOS.
+              </p>
+              <Field label="E-mail de acesso">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  defaultValue={
+                    accessPartner.portalEmail || accessPartner.email || ""
+                  }
+                />
+              </Field>
+              <Field
+                label={
+                  accessPartner.portalUserId
+                    ? "Nova senha temporária"
+                    : "Senha temporária"
+                }
+              >
+                <input
+                  name="password"
+                  type="password"
+                  minLength={12}
+                  required
+                  autoComplete="new-password"
+                />
+              </Field>
+              <p className="text-[11px] leading-5 text-stone-500">
+                Use ao menos 12 caracteres, com maiúsculas, minúsculas e
+                números. Compartilhe a senha diretamente com o parceiro.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAccessPartner(null)}
+                  className="rounded-xl border px-4 py-2.5 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button className="rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white">
+                  {accessPartner.portalUserId
+                    ? "Redefinir e ativar"
+                    : "Criar acesso"}
                 </button>
               </div>
             </form>

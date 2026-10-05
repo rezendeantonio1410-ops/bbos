@@ -64,6 +64,7 @@ import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { StorefrontCouponsController } from "./storefront-coupons.controller";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontPartnersController } from "./storefront-partners.controller";
+import { PartnerPortalController } from "./partner-portal.controller";
 import { StorefrontCatalogController } from "./storefront-catalog.controller";
 import { StorefrontOperationsController } from "./storefront-operations.controller";
 import { FiscalInboundController } from "./fiscal-inbound.controller";
@@ -123,6 +124,7 @@ import { IntelligenceService } from "./intelligence.service";
     StorefrontFulfillmentController,
     StorefrontCouponsController,
     StorefrontPartnersController,
+    PartnerPortalController,
     StorefrontCatalogController,
     StorefrontOperationsController,
     FiscalInboundController,

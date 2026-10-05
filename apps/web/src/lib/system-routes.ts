@@ -26,6 +26,7 @@ export const protectedSystemPrefixes = [
   "/perfil",
   "/sobre",
   "/usuarios",
+  "/parceiro",
 ] as const;
 
 export function isProtectedSystemPath(pathname: string) {

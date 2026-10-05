@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { navigationForRole } from "../components/bbos-navigation";
-import {
-  normalizeHostname,
-  resolveDomainRedirect,
-} from "./domain-routing";
+import { normalizeHostname, resolveDomainRedirect } from "./domain-routing";
 import { isProtectedSystemPath } from "./system-routes";
 
 test("all internal management roots require a session", () => {
@@ -21,6 +18,7 @@ test("all internal management roots require a session", () => {
     "/blends/novo",
     "/exportacoes",
     "/commerce/midia",
+    "/parceiro",
   ]) {
     assert.equal(
       isProtectedSystemPath(path),

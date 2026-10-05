@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -9,9 +10,10 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { prisma } from "@bbos/database";
+import { prisma, UserRole } from "@bbos/database";
 import { randomUUID } from "node:crypto";
-import { AuthService } from "./auth.service";
+import { AuthService, hashPassword } from "./auth.service";
+import { passwordPolicyError } from "./auth-security";
 
 const internationalPhone = (value: unknown) => {
   const raw = String(value ?? "").trim();
@@ -39,9 +41,107 @@ export class StorefrontPartnersController {
   async list(@Req() request: any) {
     const actor = await this.actor(request);
     return this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "StorefrontPartner" WHERE "companyId"=$1 ORDER BY name ASC`,
+      `SELECT partner.*, portal.id AS "portalUserId", portal.email AS "portalEmail",
+              portal.active AS "portalActive"
+         FROM "StorefrontPartner" partner
+         LEFT JOIN "User" portal ON portal."storefrontPartnerId"=partner.id
+        WHERE partner."companyId"=$1
+        ORDER BY partner.name ASC`,
       actor.companyId,
     );
+  }
+
+  @Post(":id/portal-access")
+  async portalAccess(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { email?: string; password?: string },
+  ) {
+    const actor = await this.actor(request);
+    if (actor.role !== "ADMIN")
+      throw new ForbiddenException(
+        "Somente administradores podem liberar o portal.",
+      );
+    const partner = await this.database.storefrontPartner.findFirst({
+      where: { id, companyId: actor.companyId },
+    });
+    if (!partner) throw new BadRequestException("Parceiro não encontrado.");
+    if (!partner.active)
+      throw new BadRequestException(
+        "Ative o parceiro antes de liberar o portal.",
+      );
+
+    const email = String(body.email ?? partner.email ?? "")
+      .trim()
+      .toLowerCase();
+    const password = String(body.password ?? "");
+    if (!/^\S+@\S+\.\S+$/.test(email))
+      throw new BadRequestException("Informe um e-mail válido para o portal.");
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) throw new BadRequestException(passwordError);
+
+    const [linkedUser, emailOwner] = await Promise.all([
+      this.database.user.findUnique({ where: { storefrontPartnerId: id } }),
+      this.database.user.findUnique({ where: { email } }),
+    ]);
+    if (emailOwner && emailOwner.id !== linkedUser?.id)
+      throw new BadRequestException(
+        "Este e-mail já pertence a outro acesso do BBOS.",
+      );
+
+    const data = {
+      companyId: actor.companyId,
+      storefrontPartnerId: partner.id,
+      name: partner.contactName?.trim() || partner.name,
+      email,
+      passwordHash: hashPassword(password),
+      role: UserRole.PARTNER,
+      active: true,
+    };
+    const user = linkedUser
+      ? await this.database.user.update({ where: { id: linkedUser.id }, data })
+      : await this.database.user.create({ data });
+    if (linkedUser) {
+      await this.database.authSession.updateMany({
+        where: { userId: linkedUser.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      active: user.active,
+      partnerId: partner.id,
+    };
+  }
+
+  @Patch(":id/portal-access/status")
+  async portalAccessStatus(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { active?: boolean },
+  ) {
+    const actor = await this.actor(request);
+    if (actor.role !== "ADMIN")
+      throw new ForbiddenException(
+        "Somente administradores podem alterar o portal.",
+      );
+    const user = await this.database.user.findFirst({
+      where: { companyId: actor.companyId, storefrontPartnerId: id },
+    });
+    if (!user)
+      throw new BadRequestException("Acesso do parceiro não encontrado.");
+    const updated = await this.database.user.update({
+      where: { id: user.id },
+      data: { active: body.active !== false },
+    });
+    if (!updated.active) {
+      await this.database.authSession.updateMany({
+        where: { userId: updated.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    return { id: updated.id, email: updated.email, active: updated.active };
   }
 
   @Post()

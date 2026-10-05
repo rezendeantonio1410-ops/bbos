@@ -157,6 +157,50 @@ test("unmapped private controllers fail closed", () => {
   );
 });
 
+test("partner access is isolated from the internal BBOS", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "PartnerPortalController",
+        handler: "summary",
+        role: "PARTNER",
+      }),
+    ),
+    true,
+  );
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({ controller: "FinanceController", role: "PARTNER" }),
+      ),
+    ForbiddenException,
+  );
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({
+          controller: "StorefrontPartnersController",
+          handler: "portalAccess",
+          role: "SALES",
+        }),
+      ),
+    ForbiddenException,
+  );
+});
+
+test("partner portal data queries are always scoped to the signed partner and company", () => {
+  const source = readFileSync(
+    join(__dirname, "partner-portal.controller.ts"),
+    "utf8",
+  );
+  assert.match(source, /actor\.storefrontPartnerId/);
+  assert.match(source, /r\."companyId"=\$1 AND r\."partnerId"=\$2/);
+  assert.match(source, /c\."companyId"=\$1 AND c\."partnerId"=\$2/);
+  assert.doesNotMatch(source, /JOIN "Customer"/);
+});
+
 test("every registered non-public controller has an explicit access policy", () => {
   const source = readFileSync(join(__dirname, "app.module.ts"), "utf8");
   const controllerBlock = source.match(
