@@ -16,6 +16,7 @@
     "test:sales-orders-company-scope": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-orders-company-scope.test.ts",
     "test:intelligence": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/intelligence.service.test.ts",
     "test:role-access": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/role-access.guard.test.ts",
+    "test:finance-receivable-payment": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/finance-receivable-payment.test.ts",
     "test:storefront-operations-scope": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/storefront-operations-company-scope.test.ts",
     "test:storefront-shipping-selection": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/storefront-shipping-selection.test.ts",
     "test:broker-commission": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/broker-commission.test.ts",

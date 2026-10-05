@@ -12,6 +12,35 @@ import {
   ReceivableStatus,
 } from "@bbos/database";
 
+const RECEIPT_METHODS = new Set([
+  "PIX",
+  "BANK_TRANSFER",
+  "CASH",
+  "CREDIT_CARD",
+  "DEBIT_CARD",
+  "BOLETO",
+  "OTHER",
+]);
+
+function receiptDate(value?: string) {
+  const parsed = value ? new Date(value) : new Date();
+  if (Number.isNaN(parsed.getTime()))
+    throw new BadRequestException("Data do recebimento inválida.");
+  if (parsed.getTime() > Date.now() + 5 * 60 * 1000)
+    throw new BadRequestException("A data do recebimento não pode estar no futuro.");
+  return parsed;
+}
+
+function receiptAmount(value: number) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0)
+    throw new BadRequestException("Valor recebido deve ser maior que zero.");
+  const cents = Math.round(amount * 100);
+  if (Math.abs(amount * 100 - cents) > 0.000001)
+    throw new BadRequestException("Informe o valor recebido com no máximo duas casas decimais.");
+  return cents / 100;
+}
+
 @Injectable()
 export class FinanceService implements OnModuleDestroy {
   readonly database = prisma;
@@ -256,51 +285,88 @@ export class FinanceService implements OnModuleDestroy {
     input: {
       financialAccountId: string;
       amount: number;
+      paidAt?: string;
       method?: string;
+      notes?: string;
       idempotencyKey: string;
+      recordedBy?: string;
     },
-    companyId?: string,
+    companyId: string,
   ) {
-    if (input.amount <= 0)
-      throw new BadRequestException("Valor recebido deve ser maior que zero.");
+    const amount = receiptAmount(input.amount);
+    const paidAt = receiptDate(input.paidAt);
+    const financialAccountId = String(input.financialAccountId ?? "").trim();
+    const idempotencyKey = String(input.idempotencyKey ?? "").trim();
+    const method = String(input.method ?? "BANK_TRANSFER").trim().toUpperCase();
+    const notes = String(input.notes ?? "").trim().slice(0, 500);
+    const recordedBy = String(input.recordedBy ?? "gestor autorizado").trim().slice(0, 120);
+    if (!financialAccountId)
+      throw new BadRequestException("Selecione a conta que recebeu o pagamento.");
+    if (!idempotencyKey)
+      throw new BadRequestException("Identificador da operação é obrigatório.");
+    if (!RECEIPT_METHODS.has(method))
+      throw new BadRequestException("Forma de pagamento inválida.");
     return this.database.$transaction(
       async (tx) => {
-        const item = await tx.accountsReceivable.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
+        const item = await tx.accountsReceivable.findFirst({ where: { id, companyId } });
         if (!item)
           throw new NotFoundException("Conta a receber não encontrada.");
         const existing = await tx.payment.findUnique({
-          where: { idempotencyKey: input.idempotencyKey },
+          where: { idempotencyKey },
           include: { transaction: true },
         });
-        if (existing) return { payment: existing, idempotent: true };
-        if (input.amount > Number(item.openAmount))
+        if (existing) {
+          if (
+            existing.companyId !== companyId ||
+            existing.accountsReceivableId !== id
+          )
+            throw new BadRequestException(
+              "Identificador já utilizado em outra operação.",
+            );
+          return { payment: existing, idempotent: true };
+        }
+        if (
+          item.status === ReceivableStatus.PAID ||
+          item.status === ReceivableStatus.CANCELLED ||
+          Number(item.openAmount) <= 0
+        )
+          throw new BadRequestException("Este título não está disponível para baixa.");
+        const account = await tx.financialAccount.findFirst({
+          where: { id: financialAccountId, companyId, active: true },
+        });
+        if (!account)
+          throw new BadRequestException("Conta financeira inválida ou inativa.");
+        if (amount > Number(item.openAmount))
           throw new BadRequestException(
             "Recebimento superior ao valor em aberto.",
           );
+        const auditNote = `Baixa manual registrada por ${recordedBy}`;
         const payment = await tx.payment.create({
           data: {
             companyId: item.companyId,
             accountsReceivableId: id,
-            financialAccountId: input.financialAccountId,
-            amount: input.amount,
-            paidAt: new Date(),
-            method: input.method ?? "TRANSFER",
-            idempotencyKey: input.idempotencyKey,
+            financialAccountId,
+            amount,
+            paidAt,
+            method,
+            notes: notes ? `${auditNote}. ${notes}` : auditNote,
+            idempotencyKey,
           },
         });
         await tx.financialTransaction.create({
           data: {
             companyId: item.companyId,
-            financialAccountId: input.financialAccountId,
+            financialAccountId,
             paymentId: payment.id,
             type: FinancialTransactionType.RECEIPT,
-            amount: input.amount,
+            amount,
             category: "RECEBIMENTO",
-            description: "Recebimento de " + item.id,
+            description: `Recebimento manual ${item.invoiceId ?? item.id}`,
+            occurredAt: paidAt,
           },
         });
-        const open = Number(item.openAmount) - input.amount;
-        await tx.accountsReceivable.update({
+        const open = Math.round((Number(item.openAmount) - amount) * 100) / 100;
+        const receivable = await tx.accountsReceivable.update({
           where: { id },
           data: {
             openAmount: open,
@@ -308,10 +374,10 @@ export class FinanceService implements OnModuleDestroy {
               open === 0
                 ? ReceivableStatus.PAID
                 : ReceivableStatus.PARTIALLY_PAID,
-            paymentDate: open === 0 ? new Date() : undefined,
+            paymentDate: open === 0 ? paidAt : undefined,
           },
         });
-        return { payment, idempotent: false };
+        return { payment, receivable, idempotent: false };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );

@@ -15,6 +15,26 @@ export class FinanceController {
   @Post("institutions") async createInstitution(@Body() body: { companyId: string; name: string; code?: string; country?: string }, @Req() req: Request) { body.companyId = (await this.actor(req)).companyId; return this.finance.createInstitution(body); }
   @Post("accounts") async createAccount(@Body() body: { companyId: string; financialInstitutionId?: string; name: string; type: "CASH" | "BANK" | "DIGITAL_ACCOUNT" | "OTHER"; currency?: string; bankCode?: string; branch?: string; accountNumberMasked?: string; country?: string; openingBalance?: number }, @Req() req: Request) { body.companyId = (await this.actor(req)).companyId; return this.finance.createAccount(body); }
   @Post("payables") async createPayable(@Body() body: { companyId: string; supplierId?: string; costCenterId?: string; description: string; issueDate: string; dueDate: string; amount: number; category: string; notes?: string }, @Req() req: Request) { body.companyId = (await this.actor(req)).companyId; return this.finance.createPayable(body); }
-  @Post("receivables/:id/payments") async receive(@Param("id") id: string, @Body() body: { financialAccountId: string; amount: number; method?: string; idempotencyKey: string }, @Req() req: Request) { return this.finance.receive(id, body, (await this.actor(req)).companyId); }
+  @Post("receivables/:id/payments")
+  async receive(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      financialAccountId: string;
+      amount: number;
+      paidAt?: string;
+      method?: string;
+      notes?: string;
+      idempotencyKey: string;
+    },
+    @Req() req: Request,
+  ) {
+    const actor = await this.actor(req);
+    return this.finance.receive(
+      id,
+      { ...body, recordedBy: actor.name },
+      actor.companyId,
+    );
+  }
   @Post("payables/:id/payments") async pay(@Param("id") id: string, @Body() body: { financialAccountId: string; amount: number; method?: string; idempotencyKey: string }, @Req() req: Request) { return this.finance.pay(id, body, (await this.actor(req)).companyId); }
 }
