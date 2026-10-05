@@ -14,7 +14,7 @@ export type CustomerEmailPayload = {
   eventType?: string;
   trackingUrl?: string | null;
   paymentUrl?: string | null;
-  customer?: { name?: string; phone?: string };
+  customer?: { name?: string; phone?: string; email?: string };
   delivery?: {
     street?: string;
     number?: string;
@@ -43,12 +43,16 @@ const escapeHtml = (value: unknown) =>
     .replace(/'/g, "&#039;");
 
 const money = (cents: unknown) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(cents || 0) / 100);
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+    Number(cents || 0) / 100,
+  );
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 const postalCode = (value: unknown) => {
   const normalized = digits(value);
-  return normalized.length === 8 ? `${normalized.slice(0, 5)}-${normalized.slice(5)}` : String(value ?? "");
+  return normalized.length === 8
+    ? `${normalized.slice(0, 5)}-${normalized.slice(5)}`
+    : String(value ?? "");
 };
 
 const statusIndex: Record<string, number> = {
@@ -65,17 +69,31 @@ const statusIndex: Record<string, number> = {
 };
 
 const sensoryNotes: Record<string, string> = {
-  caramelo: "Caramelo e chocolate em uma xícara equilibrada — um café para transformar o cotidiano em ritual.",
-  "doce de leite": "Açúcar mascavo, doce de leite e a lembrança de alfajor em uma experiência vibrante.",
-  tangerina: "Uma leitura luminosa, cítrica e elegante, escolhida para trazer frescor à xícara.",
-  singular: "Um perfil de identidade marcante, com complexidade e acabamento prolongado.",
-  sublime: "Uma experiência épica, rara em expressão e precisa em cada camada sensorial.",
-  essencial: "Equilíbrio e conforto para o café de todos os dias, sem abrir mão da origem.",
-  intenso: "Estrutura, presença e uma doçura profunda para uma xícara de personalidade.",
-  raros: "Uma seleção de disponibilidade limitada, construída para revelar o extraordinário da origem.",
+  caramelo:
+    "Caramelo e chocolate em uma xícara equilibrada — um café para transformar o cotidiano em ritual.",
+  "doce de leite":
+    "Açúcar mascavo, doce de leite e a lembrança de alfajor em uma experiência vibrante.",
+  tangerina:
+    "Uma leitura luminosa, cítrica e elegante, escolhida para trazer frescor à xícara.",
+  singular:
+    "Um perfil de identidade marcante, com complexidade e acabamento prolongado.",
+  sublime:
+    "Uma experiência épica, rara em expressão e precisa em cada camada sensorial.",
+  essencial:
+    "Equilíbrio e conforto para o café de todos os dias, sem abrir mão da origem.",
+  intenso:
+    "Estrutura, presença e uma doçura profunda para uma xícara de personalidade.",
+  raros:
+    "Uma seleção de disponibilidade limitada, construída para revelar o extraordinário da origem.",
 };
 
-const steps = ["Confirmado", "Em preparo", "NF emitida", "A caminho", "Entregue"];
+const steps = [
+  "Confirmado",
+  "Em preparo",
+  "NF emitida",
+  "A caminho",
+  "Entregue",
+];
 
 function stepCells(eventType: string) {
   const current = statusIndex[eventType] ?? 0;
@@ -95,7 +113,10 @@ function stepCells(eventType: string) {
 function itemRows(items: EmailItem[]) {
   return items
     .map((item) => {
-      const price = Number(item.totalCents ?? Number(item.unitPriceCents || 0) * Number(item.quantity || 1));
+      const price = Number(
+        item.totalCents ??
+          Number(item.unitPriceCents || 0) * Number(item.quantity || 1),
+      );
       return `<tr><td style="padding:18px 0;border-top:1px solid #E0EAE9"><div style="font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:27px;color:#0E191D">${escapeHtml(item.name || "Café Bispo")}</div><div style="padding-top:5px;font-family:Arial,sans-serif;font-size:12px;line-height:19px;color:#626B69">${escapeHtml(item.quantity || 1)} × ${escapeHtml(item.grind || "Grãos")}${item.weightGrams ? ` · ${escapeHtml(item.weightGrams)} g` : ""}</div></td><td align="right" valign="top" style="padding:21px 0 18px;border-top:1px solid #E0EAE9;font-family:Arial,sans-serif;font-size:14px;color:#0E191D;white-space:nowrap">${escapeHtml(money(price))}</td></tr>`;
     })
     .join("");
@@ -105,29 +126,47 @@ export function renderCustomerEmail(
   payload: CustomerEmailPayload,
   assets: { logoUrl: string; sealUrl: string },
 ) {
-  const customerFirstName = String(payload.customer?.name || "").trim().split(/\s+/)[0] || "Olá";
+  const customerFirstName =
+    String(payload.customer?.name || "")
+      .trim()
+      .split(/\s+/)[0] || "Olá";
   const items = Array.isArray(payload.items) ? payload.items : [];
   const firstItem = String(items[0]?.name || "").toLowerCase();
-  const note = sensoryNotes[firstItem] || "Escolhido com critério, preparado com cuidado e acompanhado até chegar à sua xícara.";
+  const note =
+    sensoryNotes[firstItem] ||
+    "Escolhido com critério, preparado com cuidado e acompanhado até chegar à sua xícara.";
   const delivery = payload.delivery || {};
-  const address = [delivery.street, delivery.number, delivery.complement].filter(Boolean).join(", ");
-  const place = [delivery.district, delivery.city && delivery.state ? `${delivery.city}/${delivery.state}` : delivery.city].filter(Boolean).join(" · ");
-  const deliveryTitle = payload.freightResponsibility === "PICKUP"
-    ? "Retirada na Bispo Coffees"
-    : payload.freightResponsibility === "CUSTOMER_CARRIER"
-      ? "Transportadora do distribuidor"
-      : payload.shippingServiceName || "Entrega";
-  const deliveryDetail = payload.freightResponsibility === "CUSTOMER_CARRIER"
-    ? "Contratação, custo, seguro e risco por conta do distribuidor"
-    : payload.freightResponsibility === "PICKUP"
-      ? "Agendamento após liberação financeira e fiscal"
-      : payload.estimatedDeliveryDays
-        ? `Até ${payload.estimatedDeliveryDays} dias úteis`
-        : "";
-  const destinationTitle = payload.freightResponsibility === "PICKUP" ? "Retirada" : "Destino";
-  const destinationBody = payload.freightResponsibility === "PICKUP"
-    ? "Bispo Coffees · Londrina, Paraná"
-    : `${escapeHtml(address)}<br>${escapeHtml(place)}<br>CEP ${escapeHtml(postalCode(delivery.postalCode))}`;
+  const address = [delivery.street, delivery.number, delivery.complement]
+    .filter(Boolean)
+    .join(", ");
+  const place = [
+    delivery.district,
+    delivery.city && delivery.state
+      ? `${delivery.city}/${delivery.state}`
+      : delivery.city,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const deliveryTitle =
+    payload.freightResponsibility === "PICKUP"
+      ? "Retirada na Bispo Coffees"
+      : payload.freightResponsibility === "CUSTOMER_CARRIER"
+        ? "Transportadora do distribuidor"
+        : payload.shippingServiceName || "Entrega";
+  const deliveryDetail =
+    payload.freightResponsibility === "CUSTOMER_CARRIER"
+      ? "Contratação, custo, seguro e risco por conta do distribuidor"
+      : payload.freightResponsibility === "PICKUP"
+        ? "Agendamento após liberação financeira e fiscal"
+        : payload.estimatedDeliveryDays
+          ? `Até ${payload.estimatedDeliveryDays} dias úteis`
+          : "";
+  const destinationTitle =
+    payload.freightResponsibility === "PICKUP" ? "Retirada" : "Destino";
+  const destinationBody =
+    payload.freightResponsibility === "PICKUP"
+      ? "Bispo Coffees · Londrina, Paraná"
+      : `${escapeHtml(address)}<br>${escapeHtml(place)}<br>CEP ${escapeHtml(postalCode(delivery.postalCode))}`;
   const paymentAction = payload.paymentUrl
     ? `<tr><td style="padding:0 42px 18px"><a href="${escapeHtml(payload.paymentUrl)}" style="display:block;background:#087568;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Abrir pagamento Pix&nbsp;&nbsp;→</a></td></tr>`
     : "";
@@ -148,6 +187,43 @@ export function renderCustomerEmail(
     <tr><td colspan="3" style="padding:33px 42px 40px;background:#0E191D"><div style="margin-bottom:26px;font:700 12px/17px Arial,sans-serif;letter-spacing:2.2px;text-transform:uppercase;color:#FFFFFF">A jornada do seu pedido</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:2px solid #84908F"><tr>${stepCells(String(payload.eventType || "ORDER_RECEIVED"))}</tr></table></td></tr>
     <tr><td colspan="3"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${orderSummary}${paymentAction}${tracking}<tr><td style="padding:0 42px 32px;text-align:center;font:11px/18px Arial,sans-serif;color:#626B69">Se precisar, responda a este e-mail.<br>Será um prazer cuidar da sua escolha.</td></tr></table></td></tr>
     <tr><td colspan="3" style="padding:25px 42px;background:#E0EAE9"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:500 13px Arial,sans-serif;letter-spacing:2px;color:#0E191D">BISPO</td><td align="right" style="font:9px/15px Arial,sans-serif;letter-spacing:.4px;text-transform:uppercase;color:#52605D">José &amp; Suzi · Bispo Coffees<br>True Coffee · Londrina, Paraná</td></tr></table></td></tr>
+  </table></td></tr></table></body></html>`;
+}
+
+export function renderOperationsOrderEmail(
+  payload: CustomerEmailPayload,
+  assets: { logoUrl: string; sealUrl: string },
+) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const customer = payload.customer || {};
+  const delivery = payload.delivery || {};
+  const address = [delivery.street, delivery.number, delivery.complement]
+    .filter(Boolean)
+    .join(", ");
+  const place = [
+    delivery.district,
+    delivery.city && delivery.state
+      ? `${delivery.city}/${delivery.state}`
+      : delivery.city,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const tracking = payload.trackingUrl
+    ? `<tr><td style="padding:0 42px 38px"><a href="${escapeHtml(payload.trackingUrl)}" style="display:block;background:#0E191D;color:#FFFFFF;text-decoration:none;text-align:center;padding:17px 22px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.7px;text-transform:uppercase">Abrir pedido&nbsp;&nbsp;→</a></td></tr>`
+    : "";
+  const rows = items.length
+    ? itemRows(items)
+    : `<tr><td style="padding:18px 0;border-top:1px solid #E0EAE9;font:14px Arial,sans-serif;color:#626B69">Itens não informados</td></tr>`;
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pedido pago · preparar ${escapeHtml(payload.orderCode)}</title></head><body style="margin:0;padding:0;background:#F1EEE8;color:#0E191D"><div style="display:none;max-height:0;overflow:hidden;opacity:0">Pagamento aprovado. Pedido liberado para preparo.&nbsp;&zwnj;&nbsp;&zwnj;</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F1EEE8"><tr><td align="center" style="padding:24px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#FFFFFF">
+    <tr><td style="height:4px;background:#0E191D;font-size:0;line-height:0">&nbsp;</td></tr>
+    <tr><td style="padding:25px 38px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="72"><img src="${escapeHtml(assets.sealUrl)}" width="62" height="62" alt="Selo Bispo True Coffee" style="display:block;border:0;border-radius:50%"></td><td valign="middle"><img src="${escapeHtml(assets.logoUrl)}" width="168" alt="Bispo True Coffee" style="display:block;border:0;width:168px;max-width:100%;height:auto"></td><td align="right" valign="middle" style="font:9px/15px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Aviso<br>operacional</td></tr></table></td></tr>
+    <tr><td style="padding:43px 42px 38px;background:#0A0A0A;color:#FFFFFF"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#E0EAE9">Pagamento aprovado</div><h1 style="margin:18px 0 17px;font-family:Georgia,'Times New Roman',serif;font-size:36px;line-height:42px;font-weight:400;color:#FFFFFF">Pedido liberado<br>para preparo.</h1><div style="font:14px/23px Arial,sans-serif;color:#E0EAE9">Separe, prepare e encaminhe o pedido conforme os dados abaixo.</div><div style="margin-top:25px;padding-top:16px;border-top:1px solid #3E484B;font:700 12px/17px Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;color:#FFFFFF">${escapeHtml(payload.orderCode)}</div></td></tr>
+    <tr><td style="padding:38px 42px 0"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#0E191D">Preparar</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px">${rows}<tr><td colspan="2" style="border-top:1px solid #E0EAE9"></td></tr></table></td></tr>
+    <tr><td style="padding:30px 42px 24px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="50%" valign="top" style="padding-right:18px"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Cliente</div><div style="padding-top:8px;font:13px/21px Arial,sans-serif;color:#0E191D">${escapeHtml(customer.name || "Não informado")}<br>${escapeHtml(customer.phone || "")}${customer.email ? `<br>${escapeHtml(customer.email)}` : ""}</div></td><td width="50%" valign="top" style="padding-left:18px"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Entrega</div><div style="padding-top:8px;font:13px/21px Arial,sans-serif;color:#0E191D">${escapeHtml(address)}<br>${escapeHtml(place)}${delivery.postalCode ? `<br>CEP ${escapeHtml(postalCode(delivery.postalCode))}` : ""}</div></td></tr></table></td></tr>
+    <tr><td style="padding:0 42px 31px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:17px 0 5px;border-top:1px solid #E0EAE9;font:20px Georgia,'Times New Roman',serif;color:#0E191D">Total pago</td><td align="right" style="padding:17px 0 5px;border-top:1px solid #E0EAE9;font:20px Georgia,'Times New Roman',serif;color:#0E191D">${escapeHtml(money(payload.totalCents))}</td></tr></table></td></tr>
+    ${tracking}
+    <tr><td style="padding:25px 42px;background:#E0EAE9"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:500 13px Arial,sans-serif;letter-spacing:2px;color:#0E191D">BISPO</td><td align="right" style="font:9px/15px Arial,sans-serif;letter-spacing:.4px;text-transform:uppercase;color:#52605D">Equipe Bispo Coffees<br>True Coffee · Londrina, Paraná</td></tr></table></td></tr>
   </table></td></tr></table></body></html>`;
 }
 

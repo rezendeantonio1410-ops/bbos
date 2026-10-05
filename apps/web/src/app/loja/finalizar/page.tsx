@@ -210,7 +210,11 @@ export default function CheckoutPage() {
   }, [data.postalCode]);
 
   useEffect(() => {
-    if (!order?.confirmationToken || order.status === "PAID") return;
+    if (
+      !order?.confirmationToken ||
+      ["PAID", "PAYMENT_FAILED", "CANCELLED"].includes(order.status)
+    )
+      return;
     const poll = async () => {
       const response = await fetch(
         `/api/storefront/orders/${order.id}/status`,
@@ -221,6 +225,24 @@ export default function CheckoutPage() {
       );
       if (!response.ok) return;
       const current = await response.json();
+      if (current.status === "PAYMENT_FAILED") {
+        setOrder(
+          (previous) => previous && { ...previous, status: "PAYMENT_FAILED" },
+        );
+        setMessage(
+          "O pagamento não foi concluído. O estoque foi liberado e você pode gerar uma nova tentativa.",
+        );
+        return;
+      }
+      if (current.status === "CANCELLED") {
+        setOrder(
+          (previous) => previous && { ...previous, status: "CANCELLED" },
+        );
+        setMessage(
+          "O prazo desta reserva terminou. Volte à loja para iniciar uma nova compra.",
+        );
+        return;
+      }
       if (current.status !== "PAID") return;
       localStorage.removeItem("bispo-cart-v2");
       localStorage.removeItem("bispo-checkout-v1");
@@ -264,6 +286,7 @@ export default function CheckoutPage() {
   );
   const discountCents = checkout?.discountCents || 0;
   const netSubtotal = Math.max(0, (checkout?.subtotal || 0) - discountCents);
+  const paymentPending = order?.status === "AWAITING_PAYMENT";
   const change = (field: keyof FormData, value: string) =>
     setData((current) => ({ ...current, [field]: value }));
 
@@ -272,6 +295,53 @@ export default function CheckoutPage() {
     if (!code) return;
     await navigator.clipboard.writeText(code);
     setMessage("Pix Copia e Cola copiado.");
+  }
+
+  async function retryPayment() {
+    if (!order?.confirmationToken) return;
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/storefront/orders/${encodeURIComponent(order.id)}/retry-payment`,
+        {
+          method: "POST",
+          headers: {
+            "x-storefront-order-token": order.confirmationToken,
+          },
+        },
+      );
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(
+          result.message || "Não foi possível gerar uma nova tentativa.",
+        );
+      const nextOrder = {
+        ...order,
+        ...result,
+        paymentMethod,
+        pix: result.pix ?? null,
+      };
+      setOrder(nextOrder);
+      sessionStorage.setItem("bispo-payment-order", JSON.stringify(nextOrder));
+      if (result.status === "PAID") {
+        setMessage(`Pagamento do pedido ${result.code} já está confirmado.`);
+      } else if (paymentMethod === "PIX" && result.pix?.qrCode) {
+        setMessage(
+          "Novo Pix gerado. A cobrança anterior foi encerrada com segurança.",
+        );
+      } else if (result.checkoutUrl) {
+        window.location.assign(result.checkoutUrl);
+      }
+    } catch (reason) {
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível gerar uma nova tentativa.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -554,18 +624,34 @@ export default function CheckoutPage() {
               <Link href="/aviso-privacidade">Privacidade</Link>
             </p>
             <button
-              disabled={submitting || order?.status === "PAID"}
-              type="submit"
+              disabled={
+                submitting ||
+                order?.status === "PAID" ||
+                order?.status === "CANCELLED" ||
+                paymentPending
+              }
+              onClick={
+                order?.status === "PAYMENT_FAILED"
+                  ? () => void retryPayment()
+                  : undefined
+              }
+              type={order?.status === "PAYMENT_FAILED" ? "button" : "submit"}
             >
               {submitting
                 ? "Conectando ao Mercado Pago…"
                 : order?.status === "PAID"
                   ? "Pagamento confirmado"
-                  : paymentMethod === "PIX"
-                    ? "Gerar Pix →"
-                    : "Pagar com Mercado Pago →"}
+                  : order?.status === "CANCELLED"
+                    ? "Reserva encerrada"
+                    : order?.status === "PAYMENT_FAILED"
+                      ? "Gerar nova tentativa →"
+                      : paymentPending
+                        ? "Pagamento aguardando confirmação"
+                        : paymentMethod === "PIX"
+                          ? "Gerar Pix →"
+                          : "Pagar com Mercado Pago →"}
             </button>
-            {order?.status !== "PAID" && order?.pix?.qrCode && (
+            {order?.status === "AWAITING_PAYMENT" && order.pix?.qrCode && (
               <div
                 style={{
                   marginTop: 22,

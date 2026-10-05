@@ -56,6 +56,10 @@ services:
         sync: false
       - key: STOREFRONT_REPLY_TO
         sync: false
+      - key: STOREFRONT_OPERATIONS_EMAIL
+        sync: false
+      - key: CUSTOMER_NOTIFICATIONS_ENABLED_AT
+        sync: false
       - key: MELHOR_ENVIO_API_URL
         sync: false
       - key: MELHOR_ENVIO_ACCESS_TOKEN

@@ -3,6 +3,7 @@ import { prisma } from "@bbos/database";
 import {
   renderCustomerAccessEmail,
   renderCustomerEmail,
+  renderOperationsOrderEmail,
 } from "./customer-email-template";
 
 type TransactionalEmail = {
@@ -59,6 +60,13 @@ export class CustomerNotificationService {
 
   private async sendEmail(row: any) {
     const payload = row.payload || {};
+    if (row.template === "ORDER_PREPARATION") {
+      return this.sendTransactionalEmail({
+        destination: row.destination,
+        subject: `Pedido pago · preparar ${payload.orderCode}`,
+        html: renderOperationsOrderEmail(payload, this.emailAssets()),
+      });
+    }
     return this.sendTransactionalEmail({
       destination: row.destination,
       subject: `${payload.title} · pedido ${payload.orderCode}`,
@@ -101,7 +109,7 @@ export class CustomerNotificationService {
        UPDATE "CustomerNotificationOutbox" n
           SET status='PROCESSING',attempts=n.attempts+1,"lastError"=NULL,"updatedAt"=NOW()
          FROM candidate WHERE n.id=candidate.id
-       RETURNING n.id,n.channel,n.destination,n.payload,n.attempts`,
+       RETURNING n.id,n.channel,n.destination,n.template,n.payload,n.attempts`,
       activationDate,
     );
     const row = rows[0];

@@ -45,7 +45,9 @@ export type CreateSalesOrderInput = {
 export class SalesOrdersService implements OnModuleDestroy {
   readonly database = prisma;
 
-  constructor(private readonly customerLifecycle: SalesOrderCustomerLifecycleService) {}
+  constructor(
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+  ) {}
 
   onModuleDestroy() {
     return this.database.$disconnect();
@@ -59,30 +61,34 @@ export class SalesOrdersService implements OnModuleDestroy {
     });
     if (!orders.length) return orders;
     const [shipments, payments] = await Promise.all([
-      this.database.$queryRawUnsafe<Array<{
-      salesOrderId: string;
-      status: string;
-      carrierName: string | null;
-      serviceName: string | null;
-      trackingCode: string | null;
-      authorizationCode: string | null;
-      updatedAt: Date;
-      }>>(
-      `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,"carrierName","serviceName",
+      this.database.$queryRawUnsafe<
+        Array<{
+          salesOrderId: string;
+          status: string;
+          carrierName: string | null;
+          serviceName: string | null;
+          trackingCode: string | null;
+          authorizationCode: string | null;
+          updatedAt: Date;
+        }>
+      >(
+        `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,"carrierName","serviceName",
               "trackingCode",metadata->>'authorization_code' AS "authorizationCode","updatedAt"
          FROM "Shipment"
         WHERE provider='MELHOR_ENVIO' AND "salesOrderId"=ANY($1::text[])
         ORDER BY "salesOrderId","updatedAt" DESC`,
-      orders.map((order) => order.id),
+        orders.map((order) => order.id),
       ),
-      this.database.$queryRawUnsafe<Array<{
-        salesOrderId: string;
-        status: string;
-        method: string;
-        amountCents: number;
-        expiresAt: Date | null;
-        paidAt: Date | null;
-      }>>(
+      this.database.$queryRawUnsafe<
+        Array<{
+          salesOrderId: string;
+          status: string;
+          method: string;
+          amountCents: number;
+          expiresAt: Date | null;
+          paidAt: Date | null;
+        }>
+      >(
         `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,method,"amountCents","expiresAt","paidAt"
            FROM "SalesOrderPaymentAttempt"
           WHERE "salesOrderId"=ANY($1::text[])
@@ -90,8 +96,12 @@ export class SalesOrdersService implements OnModuleDestroy {
         orders.map((order) => order.id),
       ),
     ]);
-    const byOrder = new Map(shipments.map((shipment) => [shipment.salesOrderId, shipment]));
-    const paymentByOrder = new Map(payments.map((payment) => [payment.salesOrderId, payment]));
+    const byOrder = new Map(
+      shipments.map((shipment) => [shipment.salesOrderId, shipment]),
+    );
+    const paymentByOrder = new Map(
+      payments.map((payment) => [payment.salesOrderId, payment]),
+    );
     return orders.map((order) => ({
       ...order,
       shipment: byOrder.get(order.id) ?? null,
@@ -196,7 +206,10 @@ export class SalesOrdersService implements OnModuleDestroy {
 
   async options(companyId: string) {
     const [customers, balances, brokers] = await Promise.all([
-      this.database.customer.findMany({ where: { companyId }, orderBy: { name: "asc" } }),
+      this.database.customer.findMany({
+        where: { companyId },
+        orderBy: { name: "asc" },
+      }),
       this.database.finishedProduct.findMany({
         where: {
           productVariantId: { not: null },
@@ -209,7 +222,10 @@ export class SalesOrdersService implements OnModuleDestroy {
           },
         },
       }),
-      this.database.broker.findMany({ where: { companyId, active: true }, orderBy: { name: "asc" } }),
+      this.database.broker.findMany({
+        where: { companyId, active: true },
+        orderBy: { name: "asc" },
+      }),
     ]);
     return {
       customers,
@@ -257,14 +273,30 @@ export class SalesOrdersService implements OnModuleDestroy {
         if (!customer) throw new BadRequestException("Cliente não encontrado.");
         if (input.brokerId) {
           const broker = await transaction.broker.findFirst({
-            where: { id: input.brokerId, companyId: customer.companyId, active: true },
+            where: {
+              id: input.brokerId,
+              companyId: customer.companyId,
+              active: true,
+            },
           });
-          if (!broker) throw new BadRequestException("Corretor inválido ou inativo para esta empresa.");
+          if (!broker)
+            throw new BadRequestException(
+              "Corretor inválido ou inativo para esta empresa.",
+            );
         }
         const salesChannel = input.salesChannelId
-          ? await transaction.salesChannel.findFirst({ where: { id: input.salesChannelId, companyId: customer.companyId, active: true } })
+          ? await transaction.salesChannel.findFirst({
+              where: {
+                id: input.salesChannelId,
+                companyId: customer.companyId,
+                active: true,
+              },
+            })
           : null;
-        if (input.salesChannelId && !salesChannel) throw new BadRequestException("Canal de venda inválido para a empresa.");
+        if (input.salesChannelId && !salesChannel)
+          throw new BadRequestException(
+            "Canal de venda inválido para a empresa.",
+          );
         const variants = await transaction.productVariant.findMany({
           where: {
             id: { in: input.items.map((item) => item.productVariantId) },
@@ -377,9 +409,52 @@ export class SalesOrdersService implements OnModuleDestroy {
     });
   }
 
-  async reserve(companyId: string, id: string, warehouseByVariant?: Record<string, string>) {
+  async reserve(
+    companyId: string,
+    id: string,
+    warehouseByVariant?: Record<string, string>,
+  ) {
+    return this.reserveWithStatuses(
+      companyId,
+      id,
+      [SalesOrderStatus.CONFIRMED],
+      warehouseByVariant,
+    );
+  }
+
+  async reserveForPayment(
+    companyId: string,
+    id: string,
+    warehouseByVariant?: Record<string, string>,
+  ) {
+    return this.reserveWithStatuses(
+      companyId,
+      id,
+      [
+        SalesOrderStatus.DRAFT,
+        SalesOrderStatus.CONFIRMED,
+        SalesOrderStatus.CANCELLED,
+      ],
+      warehouseByVariant,
+    );
+  }
+
+  private async reserveWithStatuses(
+    companyId: string,
+    id: string,
+    allowedStatuses: SalesOrderStatus[],
+    warehouseByVariant?: Record<string, string>,
+  ) {
     return this.database.$transaction(
       async (transaction) => {
+        const locked = await transaction.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+            FROM "SalesOrder"
+           WHERE id=${id} AND "companyId"=${companyId}
+           FOR UPDATE
+        `;
+        if (!locked[0]) throw new NotFoundException("Pedido não encontrado.");
+
         const order = await transaction.salesOrder.findFirst({
           where: { id, companyId },
           include: {
@@ -394,20 +469,29 @@ export class SalesOrdersService implements OnModuleDestroy {
           },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
+        const activeReservations = order.reservations.filter(
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.ACTIVE,
+        );
         if (
           (order.status === SalesOrderStatus.RESERVED ||
             order.status === SalesOrderStatus.PICKING ||
             order.status === SalesOrderStatus.READY_TO_SHIP ||
             order.status === SalesOrderStatus.INVOICED) &&
-          order.reservations.length
+          activeReservations.length === order.items.length
         )
           return {
             orderId: id,
             idempotent: true,
-            reservations: order.reservations,
+            reservations: activeReservations,
             status: order.status,
           };
-        if (order.status !== SalesOrderStatus.CONFIRMED)
+        if (activeReservations.length) {
+          throw new BadRequestException(
+            "O pedido possui uma reserva de estoque incompleta e requer conferência.",
+          );
+        }
+        if (!allowedStatuses.includes(order.status))
           throw new BadRequestException(
             "Somente pedidos confirmados podem reservar estoque.",
           );
@@ -418,15 +502,33 @@ export class SalesOrdersService implements OnModuleDestroy {
         const requestedBalances = [];
         for (const item of order.items) {
           const warehouseId = warehouseByVariant?.[item.productVariantId];
-          const balance = await transaction.finishedProduct.findFirst({
-            where: {
-              companyId,
-              productVariantId: item.productVariantId,
-              ...(warehouseId ? { warehouseId } : {}),
-            },
-          });
+          const previousReservation = order.reservations.find(
+            (reservation) => reservation.salesOrderItemId === item.id,
+          );
+          if (
+            previousReservation?.status === InventoryReservationStatus.CONSUMED
+          ) {
+            throw new BadRequestException(
+              "Estoque já consumido não pode ser reservado novamente.",
+            );
+          }
+          const balance = previousReservation
+            ? await transaction.finishedProduct.findFirst({
+                where: {
+                  id: previousReservation.finishedProductId,
+                  companyId,
+                  ...(warehouseId ? { warehouseId } : {}),
+                },
+              })
+            : await transaction.finishedProduct.findFirst({
+                where: {
+                  companyId,
+                  productVariantId: item.productVariantId,
+                  ...(warehouseId ? { warehouseId } : {}),
+                },
+              });
           if (!balance) throw this.insufficient(item, 0);
-          requestedBalances.push({ item, balance });
+          requestedBalances.push({ item, balance, previousReservation });
         }
         requestedBalances.sort((a, b) =>
           a.balance.id.localeCompare(b.balance.id),
@@ -450,18 +552,32 @@ export class SalesOrdersService implements OnModuleDestroy {
             where: { id: current.id },
             data: { reservedQuantity: { increment: entry.item.quantity } },
           });
-          await transaction.inventoryReservation.create({
-            data: {
-              companyId: order.companyId,
-              salesOrderId: order.id,
-              salesOrderItemId: entry.item.id,
-              productVariantId: entry.item.productVariantId,
-              finishedProductId: current.id,
-              warehouseId: current.warehouseId,
-              quantity: entry.item.quantity,
-              idempotencyKey: `SALES_RESERVATION:${entry.item.id}`,
-            },
-          });
+          if (entry.previousReservation) {
+            await transaction.inventoryReservation.update({
+              where: { id: entry.previousReservation.id },
+              data: {
+                productVariantId: entry.item.productVariantId,
+                finishedProductId: current.id,
+                warehouseId: current.warehouseId,
+                quantity: entry.item.quantity,
+                status: InventoryReservationStatus.ACTIVE,
+                releasedAt: null,
+              },
+            });
+          } else {
+            await transaction.inventoryReservation.create({
+              data: {
+                companyId: order.companyId,
+                salesOrderId: order.id,
+                salesOrderItemId: entry.item.id,
+                productVariantId: entry.item.productVariantId,
+                finishedProductId: current.id,
+                warehouseId: current.warehouseId,
+                quantity: entry.item.quantity,
+                idempotencyKey: `SALES_RESERVATION:${entry.item.id}`,
+              },
+            });
+          }
         }
         await transaction.salesOrder.update({
           where: { id },
@@ -473,6 +589,7 @@ export class SalesOrdersService implements OnModuleDestroy {
           reservations: await transaction.inventoryReservation.findMany({
             where: { salesOrderId: id },
           }),
+          status: SalesOrderStatus.RESERVED,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -482,12 +599,27 @@ export class SalesOrdersService implements OnModuleDestroy {
   async cancel(companyId: string, id: string) {
     return this.database.$transaction(
       async (transaction) => {
+        const locked = await transaction.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+            FROM "SalesOrder"
+           WHERE id=${id} AND "companyId"=${companyId}
+           FOR UPDATE
+        `;
+        if (!locked[0]) throw new NotFoundException("Pedido não encontrado.");
+
         const order = await transaction.salesOrder.findFirst({
           where: { id, companyId },
           include: { reservations: true },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
-        if (order.status === SalesOrderStatus.CANCELLED)
+        const activeReservations = order.reservations.filter(
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.ACTIVE,
+        );
+        if (
+          order.status === SalesOrderStatus.CANCELLED &&
+          activeReservations.length === 0
+        )
           return { orderId: id, idempotent: true };
         if (
           order.status === SalesOrderStatus.SHIPPED ||
@@ -496,11 +628,9 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Pedido expedido não pode ser cancelado por este fluxo.",
           );
-        for (const reservation of order.reservations
-          .filter((item) => item.status === InventoryReservationStatus.ACTIVE)
-          .sort((a, b) =>
-            a.finishedProductId.localeCompare(b.finishedProductId),
-          )) {
+        for (const reservation of activeReservations.sort((a, b) =>
+          a.finishedProductId.localeCompare(b.finishedProductId),
+        )) {
           await transaction.$queryRaw`SELECT id FROM "FinishedProduct" WHERE id = ${reservation.finishedProductId} FOR UPDATE`;
           const balance = await transaction.finishedProduct.findUniqueOrThrow({
             where: { id: reservation.finishedProductId },
@@ -575,9 +705,13 @@ export class SalesOrdersService implements OnModuleDestroy {
           const shipment = shipments[0];
           if (
             !shipment?.labelUrl ||
-            !["LABEL_READY", "POSTED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
-              String(shipment.status),
-            )
+            ![
+              "LABEL_READY",
+              "POSTED",
+              "IN_TRANSIT",
+              "OUT_FOR_DELIVERY",
+              "DELIVERED",
+            ].includes(String(shipment.status))
           ) {
             throw new BadRequestException(
               "A etiqueta do Melhor Envio precisa estar pronta antes de expedir o pedido.",
@@ -745,9 +879,14 @@ export class SalesOrdersService implements OnModuleDestroy {
                 openAmount: order.brokerCommissionAmount!,
                 status: "OPEN",
                 category: "COMISSAO_VENDA",
-                notes: order.brokerCommissionMode === "PER_PACKAGE"
-                  ? `Comissão de R$ ${Number(order.brokerCommissionPerPackage ?? 0).toFixed(2).replace(".", ",")} por pacote vendido.`
-                  : `Comissão de ${order.brokerCommissionPercent ?? 0}% sobre os produtos do pedido.`,
+                notes:
+                  order.brokerCommissionMode === "PER_PACKAGE"
+                    ? `Comissão de R$ ${Number(
+                        order.brokerCommissionPerPackage ?? 0,
+                      )
+                        .toFixed(2)
+                        .replace(".", ",")} por pacote vendido.`
+                    : `Comissão de ${order.brokerCommissionPercent ?? 0}% sobre os produtos do pedido.`,
               },
             });
           }
@@ -768,7 +907,11 @@ export class SalesOrdersService implements OnModuleDestroy {
     return result;
   }
 
-  async confirmPicking(companyId: string, id: string, pickedByItem: Record<string, number>) {
+  async confirmPicking(
+    companyId: string,
+    id: string,
+    pickedByItem: Record<string, number>,
+  ) {
     return this.database.$transaction(async (transaction) => {
       const order = await transaction.salesOrder.findFirst({
         where: { id, companyId },
