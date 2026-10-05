@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   BadgeDollarSign,
   CheckCircle2,
   LogOut,
@@ -12,6 +13,7 @@ import {
   TicketPercent,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
+import type { SessionIdentity } from "@/lib/auth-session";
 import { PartnerOrderWorkspace } from "./PartnerOrderWorkspace";
 
 type PortalData = {
@@ -69,6 +71,25 @@ type PortalData = {
   updatedAt: string;
 };
 
+type AccessIssue =
+  | {
+      kind: "INTERNAL_PROFILE";
+      user: SessionIdentity;
+    }
+  | {
+      kind: "PARTNER_ACCESS";
+      user?: SessionIdentity;
+    };
+
+const internalRoleLabel: Record<string, string> = {
+  ADMIN: "Administrador",
+  EXECUTIVE: "Diretoria",
+  SALES: "Comercial",
+  FINANCE: "Financeiro",
+  INDUSTRIAL: "Industrial",
+  MARKETPLACE_OPERATOR: "Operador de marketplace",
+};
+
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -80,10 +101,12 @@ export default function PartnerPortalPage() {
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accessIssue, setAccessIssue] = useState<AccessIssue | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setAccessIssue(null);
     try {
       const response = await fetch("/api/partner-portal/summary", {
         credentials: "include",
@@ -92,6 +115,20 @@ export default function PartnerPortalPage() {
       const payload = await response.json().catch(() => ({}));
       if (response.status === 401) {
         router.replace("/login?returnTo=%2Fparceiro");
+        return;
+      }
+      if (response.status === 403) {
+        const sessionResponse = await fetch("/api/auth/me", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const sessionPayload = await sessionResponse.json().catch(() => ({}));
+        const user = sessionPayload?.user as SessionIdentity | undefined;
+        setAccessIssue(
+          user?.role && user.role !== "PARTNER"
+            ? { kind: "INTERNAL_PROFILE", user }
+            : { kind: "PARTNER_ACCESS", user },
+        );
         return;
       }
       if (!response.ok)
@@ -164,6 +201,70 @@ export default function PartnerPortalPage() {
             >
               <RefreshCw size={14} /> Tentar novamente
             </button>
+          </div>
+        )}
+
+        {accessIssue?.kind === "INTERNAL_PROFILE" && (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950 shadow-sm">
+            <p className="text-base font-bold">
+              Você está conectado com um perfil interno do BBOS.
+            </p>
+            <p className="mt-2 max-w-3xl leading-6">
+              A sessão atual pertence a {accessIssue.user.name} (
+              {internalRoleLabel[accessIssue.user.role] ??
+                accessIssue.user.role}
+              ). Para proteger os dados de cada parceiro, este portal exige uma
+              conta própria vinculada ao parceiro em Commerce.
+            </p>
+            <p className="mt-2 max-w-3xl leading-6 text-amber-900/80">
+              Se o acesso ainda não foi criado, vá em Commerce → Parceiros de
+              venda → Criar acesso. Se já existe, saia e entre com o e-mail do
+              parceiro.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/commerce/parceiros")}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white"
+              >
+                <ArrowLeft size={15} /> Voltar à gestão de parceiros
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-950"
+              >
+                <LogOut size={15} /> Sair e entrar como parceiro
+              </button>
+            </div>
+          </div>
+        )}
+
+        {accessIssue?.kind === "PARTNER_ACCESS" && (
+          <div className="rounded-3xl border border-red-100 bg-red-50 p-6 text-sm text-red-900 shadow-sm">
+            <p className="text-base font-bold">
+              O acesso deste parceiro está inativo ou sem vínculo.
+            </p>
+            <p className="mt-2 max-w-3xl leading-6">
+              Peça a um administrador para revisar o parceiro em Commerce →
+              Parceiros de venda e reativar ou recriar o acesso ao portal.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-bold"
+              >
+                <RefreshCw size={14} /> Tentar novamente
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="inline-flex items-center gap-2 rounded-xl bg-red-900 px-4 py-2.5 text-xs font-bold text-white"
+              >
+                <LogOut size={15} /> Entrar com outra conta
+              </button>
+            </div>
           </div>
         )}
 
