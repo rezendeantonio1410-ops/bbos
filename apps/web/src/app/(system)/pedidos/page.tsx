@@ -26,6 +26,10 @@ import { OrderCustomerApprovalActions } from "@/components/order-customer-approv
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const SAMPLE_FISCAL_PACKAGE_VALUE = 1;
+const itemQuantityLabel = (quantity: number, sample: boolean) =>
+  sample
+    ? `${quantity} ${quantity === 1 ? "pacote" : "pacotes"}`
+    : `${quantity} un.`;
 const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
 const freightLabels: Record<string, string> = {
@@ -1512,7 +1516,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     `PEDIDO ${order.orderNumber ?? order.code}`,
     `Cliente: ${order.customer.name}`,
     "",
-    ...order.items.map((item) => `${item.productName} · ${item.quantity} un. · ${money.format(Number(item.unitPrice ?? 0))} · ${money.format(Number(item.totalAmount))}`),
+    ...order.items.map((item) => `${item.productName} · ${itemQuantityLabel(item.quantity, order.orderType === "SAMPLE")} · ${money.format(Number(item.unitPrice ?? 0))} · ${money.format(Number(item.totalAmount))}`),
     "",
     `Total: ${money.format(Number(order.totalAmount))}`,
     `Pagamento: ${paymentLabel}`,
@@ -1701,7 +1705,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               {order.items.map((item) => (
                 <div key={item.id} className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs">
                   <strong>{item.productName}<span className="ml-1 font-normal text-stone-400">{item.sku}</span></strong>
-                  <span>{item.quantity} un.</span>
+                  <span>{itemQuantityLabel(item.quantity, order.orderType === "SAMPLE")}</span>
                   <span>{money.format(Number(item.unitPrice ?? 0))}</span>
                   <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
                 </div>
@@ -2034,12 +2038,12 @@ function ClientOrderView({
 
       <div className="mt-6 overflow-hidden rounded-2xl border bg-white">
         <div className="grid grid-cols-[1fr_58px_100px_108px] gap-2 border-b bg-stone-50 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-stone-400">
-          <span>Produto</span><span>Qtd.</span><span>Preço</span><span className="text-right">Total</span>
+          <span>Produto</span><span>{order.orderType === "SAMPLE" ? "Pacotes" : "Qtd."}</span><span>{order.orderType === "SAMPLE" ? "Preço/pacote" : "Preço"}</span><span className="text-right">Total</span>
         </div>
         {order.items.map((item) => (
           <div key={item.id} className="grid grid-cols-[1fr_58px_100px_108px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0">
             <strong>{item.productName}</strong>
-            <span>{item.quantity}</span>
+            <span>{order.orderType === "SAMPLE" ? itemQuantityLabel(item.quantity, true) : item.quantity}</span>
             <span>{money.format(Number(item.unitPrice ?? 0))}</span>
             <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
           </div>

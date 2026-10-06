@@ -250,7 +250,7 @@ export default function OrderDocumentV2() {
 
         <section className="mt-5 overflow-hidden rounded-2xl border border-stone-200">
           <div className="grid grid-cols-[1fr_60px_110px_120px] bg-[#F6F7F4] px-4 py-3 text-[9px] font-extrabold uppercase tracking-[.12em] text-stone-500">
-            <span>Produto / SKU</span><span className="text-center">Qtd.</span><span className="text-right">Preço unit.</span><span className="text-right">Total</span>
+            <span>Produto / SKU</span><span className="text-center">{sample ? "Pacotes" : "Qtd."}</span><span className="text-right">{sample ? "Preço/pacote" : "Preço unit."}</span><span className="text-right">Total</span>
           </div>
           {order.items.map((item) => (
             <div key={item.id} className="grid grid-cols-[1fr_60px_110px_120px] items-center border-t border-stone-100 px-4 py-4 text-xs">
