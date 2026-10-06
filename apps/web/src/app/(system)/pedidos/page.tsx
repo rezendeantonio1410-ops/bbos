@@ -810,9 +810,9 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex overflow-hidden justify-end">
+    <div className="fixed inset-0 z-50 flex overflow-clip justify-end">
       <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh max-h-dvh min-h-0 w-full max-w-6xl flex-col overflow-hidden border-l bg-white shadow-2xl">
+      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh max-h-dvh min-h-0 w-full max-w-6xl flex-col overflow-clip overscroll-none border-l bg-white shadow-2xl">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 id="new-order-title" className="shrink-0 text-lg font-bold">{isSample ? "Novo pedido de amostra" : "Novo pedido"}</h2>
