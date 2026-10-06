@@ -1573,6 +1573,39 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     }
   };
 
+  const resetCancelledInvoice = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/reset-cancelled-invoice`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Não foi possível regularizar a NF-e cancelada.",
+        );
+      }
+      await onChanged();
+      await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível regularizar a NF-e cancelada.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const copySummary = async () => {
     try {
       await navigator.clipboard.writeText(clientSummary);
@@ -1796,14 +1829,26 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                         {busy ? "Reprocessando…" : "Reprocessar NF-e"}
                       </button>
                     ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
-                      <button
-                        type="button"
-                        disabled={fulfillmentBusy}
-                        onClick={() => void generateLabel()}
-                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-                      >
-                        {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
-                      </button>
+                      <>
+                        {order.orderType === "SAMPLE" && (
+                          <button
+                            type="button"
+                            disabled={busy || fulfillmentBusy}
+                            onClick={() => void resetCancelledInvoice()}
+                            className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
+                          >
+                            {busy ? "Regularizando…" : "NF-e cancelada no Bling"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={fulfillmentBusy || busy}
+                          onClick={() => void generateLabel()}
+                          className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                        >
+                          {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                        </button>
+                      </>
                     ) : null}
                   </div>
                 </div>
