@@ -92,6 +92,25 @@ test("every sales order state transition loads the order inside company scope", 
   );
 });
 
+test("insufficient stock responses explain the blocking item", () => {
+  const service = new SalesOrdersService({} as never);
+  const exception = (service as any).insufficient(
+    { productName: "Raros", sku: "RAR-RAR-250", quantity: 1 },
+    0,
+  );
+
+  assert.deepEqual(exception.getResponse(), {
+    message:
+      "Estoque insuficiente para Raros (RAR-RAR-250): solicitado 1, disponível 0, faltante 1.",
+    code: "INSUFFICIENT_STOCK",
+    product: "Raros",
+    sku: "RAR-RAR-250",
+    requested: 1,
+    available: 0,
+    missing: 1,
+  });
+});
+
 test("sales order controller derives order access from the signed session", () => {
   const source = readFileSync(
     join(__dirname, "sales-orders.controller.ts"),

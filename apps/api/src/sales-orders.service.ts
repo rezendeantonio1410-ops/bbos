@@ -991,13 +991,15 @@ export class SalesOrdersService implements OnModuleDestroy {
     item: { sku: string; productName: string; quantity: number },
     available: number,
   ) {
+    const missing = Math.max(0, item.quantity - available);
     return new BadRequestException({
+      message: `Estoque insuficiente para ${item.productName} (${item.sku}): solicitado ${item.quantity}, disponível ${available}, faltante ${missing}.`,
       code: "INSUFFICIENT_STOCK",
       product: item.productName,
       sku: item.sku,
       requested: item.quantity,
       available,
-      missing: Math.max(0, item.quantity - available),
+      missing,
     });
   }
 
