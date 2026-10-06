@@ -524,10 +524,39 @@ export class BlingOutboxService {
       }),
     );
 
+    let fulfillment: any = null;
+    let fulfillmentError: string | null = null;
+    if (sefaz.status === "AUTHORIZED") {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrder"
+            SET status='INVOICED',"invoicedAt"=COALESCE("invoicedAt",NOW()),"updatedAt"=NOW()
+          WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
+        order.id,
+      );
+      await this.customerLifecycle.record(
+        order.id,
+        "INVOICE_AUTHORIZED",
+        "Nota fiscal emitida",
+        "A nota fiscal do seu pedido foi autorizada e a expedição será preparada.",
+        "BLING",
+        `sales-order:invoice-authorized:${order.id}`,
+        { fiscalId, externalId: blingNfeId, accessKey, number, series },
+      );
+      if (order.shippingProvider === "MELHOR_ENVIO" && order.shippingQuoteId) {
+        try {
+          fulfillment = await this.shipment.createLabelForSalesOrder(order.id);
+        } catch (error) {
+          fulfillmentError = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
+
     return {
       blingOrderId: salesMap.externalId,
       fiscalId,
       blingNfeId,
+      fulfillment,
+      fulfillmentError,
       idempotent: false,
     };
   }
@@ -630,7 +659,13 @@ export class BlingOutboxService {
             f.status='SENT'
             OR (
               f.status='AUTHORIZED'
-              AND NOT (COALESCE(f."payloadSnapshot",'{}'::jsonb) ? 'blingNfe')
+              AND (
+                NOT (COALESCE(f."payloadSnapshot",'{}'::jsonb) ? 'blingNfe')
+                OR EXISTS (
+                  SELECT 1 FROM "SalesOrder" so
+                   WHERE so.id=f."salesOrderId" AND so.status='READY_TO_SHIP'
+                )
+              )
             )
           )
         ORDER BY f."updatedAt" ASC

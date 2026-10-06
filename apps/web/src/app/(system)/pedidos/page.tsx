@@ -1704,6 +1704,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                           ? "O estoque está reservado. Inicie a separação física do pedido."
                         : order.status === "PICKING"
                           ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                          : order.status === "READY_TO_SHIP" && fulfillment?.fiscalStatus === "AUTHORIZED"
+                            ? fulfillment?.labelUrl
+                              ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                              : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
                           : order.status === "READY_TO_SHIP"
                             ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
                             : fulfillment?.labelUrl
@@ -1741,7 +1745,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {busy ? "Processando…" : "Confirmar separação"}
                     </button>
                   )}
-                  {order.status === "READY_TO_SHIP" && (
+                  {order.status === "READY_TO_SHIP" && fulfillment?.fiscalStatus !== "AUTHORIZED" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -1751,7 +1755,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
                     </button>
                   )}
-                  {order.status === "INVOICED" && fulfillment?.labelUrl && (
+                  {(order.status === "INVOICED" || (order.status === "READY_TO_SHIP" && fulfillment?.fiscalStatus === "AUTHORIZED")) && fulfillment?.labelUrl && (
                     <button
                       type="button"
                       disabled={busy}
