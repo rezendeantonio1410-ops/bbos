@@ -24,14 +24,26 @@ import { OrderPdfLink } from "@/components/order-pdf-link";
 import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
-const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const money = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 const SAMPLE_FISCAL_PACKAGE_VALUE = 1;
 const itemQuantityLabel = (quantity: number, sample: boolean) =>
   sample
     ? `${quantity} ${quantity === 1 ? "pacote" : "pacotes"}`
     : `${quantity} un.`;
-const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
-const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
+const formatPostalCode = (value: string) =>
+  value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
+const paymentOptions = [
+  "7 dias",
+  "14 dias",
+  "21 dias",
+  "28 dias",
+  "30 dias",
+  "45 dias",
+  "60 dias",
+];
 const freightLabels: Record<string, string> = {
   BISPO: "Frete negociado pela Bispo",
   CUSTOMER: "Cotação pela plataforma Bispo",
@@ -57,6 +69,7 @@ type Customer = {
   paymentTerms?: string | null;
   creditStatus?: "NOT_ANALYZED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
   creditLimit?: string | number;
+  fiscalReadiness?: { ready: boolean; issues: string[] };
 };
 
 type Broker = { id: string; name: string; tradeName?: string | null };
@@ -121,7 +134,10 @@ type PackageBox = {
   weightKg: string;
 };
 
-const randomId = () => typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+const randomId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
 
 const newDraftLine = (): DraftOrderLine => ({
   id: randomId(),
@@ -245,8 +261,6 @@ type PostingAgencyResponse = {
   agencies: PostingAgency[];
 };
 
-
-
 type DiscountRequest = {
   id: string;
   salesOrderItemId: string;
@@ -271,18 +285,19 @@ const statusLabel: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 
-const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> = {
-  DRAFT: "neutral",
-  AWAITING_PAYMENT: "warning",
-  CONFIRMED: "warning",
-  RESERVED: "warning",
-  PICKING: "warning",
-  READY_TO_SHIP: "success",
-  INVOICED: "success",
-  SHIPPED: "success",
-  DELIVERED: "success",
-  CANCELLED: "danger",
-};
+const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
+  {
+    DRAFT: "neutral",
+    AWAITING_PAYMENT: "warning",
+    CONFIRMED: "warning",
+    RESERVED: "warning",
+    PICKING: "warning",
+    READY_TO_SHIP: "success",
+    INVOICED: "success",
+    SHIPPED: "success",
+    DELIVERED: "success",
+    CANCELLED: "danger",
+  };
 
 const filters: Array<[string, string]> = [
   ["ALL", "Todos"],
@@ -299,7 +314,10 @@ const filters: Array<[string, string]> = [
 ];
 
 const displayStatus = (order: Order) =>
-  order.status === "DRAFT" && ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(order.payment?.status ?? "")
+  order.status === "DRAFT" &&
+  ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
+    order.payment?.status ?? "",
+  )
     ? "AWAITING_PAYMENT"
     : order.status;
 
@@ -308,7 +326,9 @@ export default function OrdersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<StockOption[]>([]);
   const [brokers, setBrokers] = useState<Broker[]>([]);
-  const [creating, setCreating] = useState<"COMMERCIAL" | "SAMPLE" | null>(null);
+  const [creating, setCreating] = useState<"COMMERCIAL" | "SAMPLE" | null>(
+    null,
+  );
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [busy, setBusy] = useState("");
@@ -333,37 +353,51 @@ export default function OrdersPage() {
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => {
-      void fetch(salesOrdersApi(), { credentials: "include", cache: "no-store" })
-        .then(async (response) => { if (response.ok) setOrders(await response.json()); })
+      void fetch(salesOrdersApi(), {
+        credentials: "include",
+        cache: "no-store",
+      })
+        .then(async (response) => {
+          if (response.ok) setOrders(await response.json());
+        })
         .catch(() => undefined);
     }, 60000);
     return () => window.clearInterval(timer);
   }, []);
 
   const visible = useMemo(
-    () => (filter === "ALL"
-      ? orders
-      : filter === "SAMPLE"
-        ? orders.filter((item) => item.orderType === "SAMPLE")
-        : orders.filter((item) => displayStatus(item) === filter)),
+    () =>
+      filter === "ALL"
+        ? orders
+        : filter === "SAMPLE"
+          ? orders.filter((item) => item.orderType === "SAMPLE")
+          : orders.filter((item) => displayStatus(item) === filter),
     [orders, filter],
   );
-  const open = orders.filter((item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status));
+  const open = orders.filter(
+    (item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status),
+  );
   const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
   const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
   const avgTicket = commercialOrders.length
-    ? commercialOrders.reduce((sum, item) => sum + Number(item.totalAmount), 0) / commercialOrders.length
+    ? commercialOrders.reduce(
+        (sum, item) => sum + Number(item.totalAmount),
+        0,
+      ) / commercialOrders.length
     : 0;
 
   const action = async (order: Order, endpoint: string) => {
     setBusy(order.id + endpoint);
     setMessage("");
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/${endpoint}`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/${endpoint}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      },
+    );
     const result = await response.json().catch(() => ({}));
     setMessage(
       response.ok
@@ -391,27 +425,75 @@ export default function OrdersPage() {
             <Sparkles size={13} /> Comercial inteligente
           </p>
           <h1 className="mt-1 text-3xl font-bold">Pedidos</h1>
-          <p className="mt-2 text-sm text-stone-500">O BBOS acompanha cliente, preço, crédito e estoque antes de a venda avançar.</p>
+          <p className="mt-2 text-sm text-stone-500">
+            O BBOS acompanha cliente, preço, crédito e estoque antes de a venda
+            avançar.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setCreating("SAMPLE")} className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950">
+          <button
+            onClick={() => setCreating("SAMPLE")}
+            className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950"
+          >
             <PackagePlus size={15} /> Novo pedido de amostra
           </button>
-          <button onClick={() => setCreating("COMMERCIAL")} className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
+          <button
+            onClick={() => setCreating("COMMERCIAL")}
+            className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white"
+          >
             <Plus size={15} /> Novo pedido
           </button>
         </div>
       </header>
 
-      {message && <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">{message}</div>}
+      {message && (
+        <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">
+          {message}
+        </div>
+      )}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         <Kpi label="Pedidos em aberto" value={String(open.length)} />
-        <Kpi label="Valor em carteira" value={money.format(commercialOpen.reduce((sum, item) => sum + Number(item.totalAmount), 0))} />
-        <Kpi label="Aguardando Pix" value={String(orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT").length)} />
-        <Kpi label="Pedidos reservados" value={String(orders.filter((item) => ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
-        <Kpi label="Aguardando estoque" value={String(orders.filter((item) => item.status === "CONFIRMED").length)} />
-        <Kpi label="Prontos para expedição" value={String(orders.filter((item) => ["READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
+        <Kpi
+          label="Valor em carteira"
+          value={money.format(
+            commercialOpen.reduce(
+              (sum, item) => sum + Number(item.totalAmount),
+              0,
+            ),
+          )}
+        />
+        <Kpi
+          label="Aguardando Pix"
+          value={String(
+            orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT")
+              .length,
+          )}
+        />
+        <Kpi
+          label="Pedidos reservados"
+          value={String(
+            orders.filter((item) =>
+              ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(
+                item.status,
+              ),
+            ).length,
+          )}
+        />
+        <Kpi
+          label="Aguardando estoque"
+          value={String(
+            orders.filter((item) => item.status === "CONFIRMED").length,
+          )}
+        />
+        <Kpi
+          label="Prontos para expedição"
+          value={String(
+            orders.filter((item) =>
+              ["READY_TO_SHIP", "INVOICED"].includes(item.status),
+            ).length,
+          )}
+        />
         <Kpi label="Ticket médio" value={money.format(avgTicket)} />
       </section>
 
@@ -430,35 +512,60 @@ export default function OrdersPage() {
       <section className="mt-5">
         <div className="mb-3 flex justify-between">
           <h2 className="text-lg font-semibold">Pedidos recentes</h2>
-          <span className="text-xs text-stone-400">{visible.length} pedidos</span>
+          <span className="text-xs text-stone-400">
+            {visible.length} pedidos
+          </span>
         </div>
         <div className="space-y-3">
           {visible.map((order) => (
             <Card key={order.id} className="p-4">
-              <button onClick={() => setSelected(order)} className="w-full text-left">
+              <button
+                onClick={() => setSelected(order)}
+                className="w-full text-left"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-[12rem]">
                     <div className="flex flex-wrap items-center gap-2">
                       <strong>{order.orderNumber ?? order.code}</strong>
-                      {order.orderType === "SAMPLE" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">Amostra</span>}
+                      {order.orderType === "SAMPLE" && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                          Amostra
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-stone-500">{order.customer.name}</p>
+                    <p className="text-xs text-stone-500">
+                      {order.customer.name}
+                    </p>
                   </div>
                   {order.shipment && (
                     <div className="min-w-0 flex-1 text-xs sm:text-center">
                       <span className="font-semibold text-forest-900">
-                        {shipmentStatusLabel[order.shipment.status] ?? "Frete em acompanhamento"}
+                        {shipmentStatusLabel[order.shipment.status] ??
+                          "Frete em acompanhamento"}
                       </span>
-                      <span className="text-stone-500"> · {order.shipment.carrierName ?? "Melhor Envio"}</span>
-                      {(order.shipment.authorizationCode || order.shipment.trackingCode) && (
+                      <span className="text-stone-500">
+                        {" "}
+                        · {order.shipment.carrierName ?? "Melhor Envio"}
+                      </span>
+                      {(order.shipment.authorizationCode ||
+                        order.shipment.trackingCode) && (
                         <p className="mt-1 text-[11px] text-stone-600">
-                          Rastreio {order.shipment.authorizationCode ?? order.shipment.trackingCode}
-                          {order.shipment.authorizationCode && order.shipment.trackingCode && order.shipment.authorizationCode !== order.shipment.trackingCode
-                            ? ` · ${order.shipment.trackingCode}` : ""}
+                          Rastreio{" "}
+                          {order.shipment.authorizationCode ??
+                            order.shipment.trackingCode}
+                          {order.shipment.authorizationCode &&
+                          order.shipment.trackingCode &&
+                          order.shipment.authorizationCode !==
+                            order.shipment.trackingCode
+                            ? ` · ${order.shipment.trackingCode}`
+                            : ""}
                         </p>
                       )}
                       <p className="text-[10px] text-stone-400">
-                        Sincronizado {new Date(order.shipment.updatedAt).toLocaleString("pt-BR")}
+                        Sincronizado{" "}
+                        {new Date(order.shipment.updatedAt).toLocaleString(
+                          "pt-BR",
+                        )}
                       </p>
                     </div>
                   )}
@@ -470,9 +577,21 @@ export default function OrdersPage() {
                 </div>
               </button>
               <div className="mt-3 flex gap-2">
-                <OrderPdfLink orderNumber={order.orderNumber ?? order.code} compact provisional={order.status === "DRAFT"} />
-                {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && (
-                  <button disabled={!!busy} onClick={() => void action(order, "cancel")} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
+                <OrderPdfLink
+                  orderNumber={order.orderNumber ?? order.code}
+                  compact
+                  provisional={order.status === "DRAFT"}
+                />
+                {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
+                  order.status,
+                ) && (
+                  <button
+                    disabled={!!busy}
+                    onClick={() => void action(order, "cancel")}
+                    className="rounded-lg border px-3 py-2 text-xs"
+                  >
+                    Cancelar
+                  </button>
                 )}
               </div>
             </Card>
@@ -480,7 +599,9 @@ export default function OrdersPage() {
           {!visible.length && (
             <Card className="py-14 text-center">
               <PackageCheck className="mx-auto text-stone-300" />
-              <p className="mt-3 text-sm font-semibold">Nenhum pedido neste filtro</p>
+              <p className="mt-3 text-sm font-semibold">
+                Nenhum pedido neste filtro
+              </p>
             </Card>
           )}
         </div>
@@ -511,26 +632,49 @@ export default function OrdersPage() {
   );
 }
 
-function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated }: { orderType: "COMMERCIAL" | "SAMPLE"; customers: Customer[]; variants: StockOption[]; brokers: Broker[]; onClose: () => void; onCreated: () => Promise<void> }) {
+function NewOrder({
+  orderType,
+  customers,
+  variants,
+  brokers,
+  onClose,
+  onCreated,
+}: {
+  orderType: "COMMERCIAL" | "SAMPLE";
+  customers: Customer[];
+  variants: StockOption[];
+  brokers: Broker[];
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
   const [orderNumber, setOrderNumber] = useState("Gerando…");
   const [customerId, setCustomerId] = useState("");
   const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
   const [lines, setLines] = useState<DraftOrderLine[]>(() => [newDraftLine()]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
-  const [lineQuoteErrors, setLineQuoteErrors] = useState<Record<string, string>>({});
+  const [lineQuoteErrors, setLineQuoteErrors] = useState<
+    Record<string, string>
+  >({});
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
-  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>([]);
+  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>(
+    [],
+  );
   const [shippingQuoteId, setShippingQuoteId] = useState("");
   const [shippingPostalCode, setShippingPostalCode] = useState("");
-  const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
+  const [shippingSummary, setShippingSummary] =
+    useState<ShippingSummary | null>(null);
   const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
   const [customPackage, setCustomPackage] = useState(false);
-  const [packageBoxes, setPackageBoxes] = useState<PackageBox[]>(() => [newPackageBox()]);
+  const [packageBoxes, setPackageBoxes] = useState<PackageBox[]>(() => [
+    newPackageBox(),
+  ]);
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
-  const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP">("");
+  const [freightResponsibility, setFreightResponsibility] = useState<
+    "" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP"
+  >("");
   const [carrierName, setCarrierName] = useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [customerReference, setCustomerReference] = useState("");
@@ -538,9 +682,12 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
   const [brokerId, setBrokerId] = useState("");
-  const [brokerCommissionMode, setBrokerCommissionMode] = useState<"PERCENTAGE" | "PER_PACKAGE">("PERCENTAGE");
+  const [brokerCommissionMode, setBrokerCommissionMode] = useState<
+    "PERCENTAGE" | "PER_PACKAGE"
+  >("PERCENTAGE");
   const [brokerCommissionPercent, setBrokerCommissionPercent] = useState("");
-  const [brokerCommissionPerPackage, setBrokerCommissionPerPackage] = useState("");
+  const [brokerCommissionPerPackage, setBrokerCommissionPerPackage] =
+    useState("");
   const [showTerms, setShowTerms] = useState(true);
   const [error, setError] = useState("");
   const [health, setHealth] = useState<CustomerHealth | null>(null);
@@ -562,49 +709,80 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
 
   const customer = customers.find((candidate) => candidate.id === customerId);
   const completeLines = useMemo(
-    () => lines.filter((line) => line.variantId && Number.isSafeInteger(line.quantity) && line.quantity > 0),
+    () =>
+      lines.filter(
+        (line) =>
+          line.variantId &&
+          Number.isSafeInteger(line.quantity) &&
+          line.quantity > 0,
+      ),
     [lines],
   );
-  const firstQuote = completeLines.length ? quotes[completeLines[0]!.id] : undefined;
+  const firstQuote = completeLines.length
+    ? quotes[completeLines[0]!.id]
+    : undefined;
   const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
   const usesPlatformShipping =
     (isSample && freightResponsibility === "BISPO") ||
     (!isSample && isDistributor && freightResponsibility === "CUSTOMER");
-  const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
+  const selectedShippingQuote = shippingQuotes.find(
+    (option) => option.id === shippingQuoteId,
+  );
   const sortedShippingQuotes = useMemo(
-    () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
+    () =>
+      [...shippingQuotes].sort((a, b) =>
+        shippingSort === "PRICE"
+          ? a.priceCents - b.priceCents
+          : a.deliveryDays - b.deliveryDays,
+      ),
     [shippingQuotes, shippingSort],
   );
-  const freightAmount = usesPlatformShipping && !isSample
-    ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
-    : 0;
+  const freightAmount =
+    usesPlatformShipping && !isSample
+      ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
+      : 0;
   const productsTotal = completeLines.reduce(
-    (sum, line) => sum + (isSample ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE : Number(quotes[line.id]?.totalAmount ?? 0)),
+    (sum, line) =>
+      sum +
+      (isSample
+        ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE
+        : Number(quotes[line.id]?.totalAmount ?? 0)),
     0,
   );
   const totalWeightGrams = completeLines.reduce((sum, line) => {
-    const variant = variants.find((candidate) => candidate.productVariantId === line.variantId);
+    const variant = variants.find(
+      (candidate) => candidate.productVariantId === line.variantId,
+    );
     return sum + Number(variant?.presentationGrams ?? 0) * line.quantity;
   }, 0);
   const orderTotal = productsTotal + freightAmount;
-  const totalPackages = completeLines.reduce((sum, line) => sum + line.quantity, 0);
+  const totalPackages = completeLines.reduce(
+    (sum, line) => sum + line.quantity,
+    0,
+  );
   const brokerCommission = brokerId
     ? brokerCommissionMode === "PER_PACKAGE"
       ? totalPackages * Number(brokerCommissionPerPackage || 0)
-      : productsTotal * Number(brokerCommissionPercent || 0) / 100
+      : (productsTotal * Number(brokerCommissionPercent || 0)) / 100
     : 0;
   const isTerm = !isSample && paymentType === "TERM";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
-  const available = Number(health?.financialHealth?.availableCredit ?? Math.max(0, limit - used));
+  const available = Number(
+    health?.financialHealth?.availableCredit ?? Math.max(0, limit - used),
+  );
   const utilization = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   const after = Math.max(0, available - orderTotal);
   const exceeds = isTerm && orderTotal > available;
-  const usesPixFallback = isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
+  const usesPixFallback =
+    isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
 
   useEffect(() => {
-    void fetch(`${salesOrdersApi()}/next-number`, { credentials: "include", cache: "no-store" })
+    void fetch(`${salesOrdersApi()}/next-number`, {
+      credentials: "include",
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         const data = await response.json();
@@ -618,10 +796,19 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
       setHealth(null);
       return;
     }
-    const selectedCustomer = customers.find((candidate) => candidate.id === customerId);
-    if (selectedCustomer?.paymentTerms && selectedCustomer.paymentTerms !== "À vista") setPaymentTerms(selectedCustomer.paymentTerms);
+    const selectedCustomer = customers.find(
+      (candidate) => candidate.id === customerId,
+    );
+    if (
+      selectedCustomer?.paymentTerms &&
+      selectedCustomer.paymentTerms !== "À vista"
+    )
+      setPaymentTerms(selectedCustomer.paymentTerms);
     setHealthBusy(true);
-    void fetch(`/api/customers/${customerId}/health`, { credentials: "include", cache: "no-store" })
+    void fetch(`/api/customers/${customerId}/health`, {
+      credentials: "include",
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         setHealth(await response.json());
@@ -640,39 +827,80 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
     let cancelled = false;
     setQuoteBusy(true);
     setQuoteError("");
-    void Promise.all(completeLines.map(async (line) => {
-      try {
-        const params = new URLSearchParams({ customerId, productVariantId: line.variantId, quantity: String(line.quantity) });
-        const response = await fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
-        return { id: line.id, quote: payload as Quote, error: "" };
-      } catch (cause) {
-        return { id: line.id, quote: null, error: cause instanceof Error ? cause.message : "Preço interno não encontrado." };
-      }
-    }))
+    void Promise.all(
+      completeLines.map(async (line) => {
+        try {
+          const params = new URLSearchParams({
+            customerId,
+            productVariantId: line.variantId,
+            quantity: String(line.quantity),
+          });
+          const response = await fetch(
+            `${salesOrdersApi()}/quote?${params.toString()}`,
+            { credentials: "include", cache: "no-store" },
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok)
+            throw new Error(payload.message ?? "Preço interno não encontrado.");
+          return { id: line.id, quote: payload as Quote, error: "" };
+        } catch (cause) {
+          return {
+            id: line.id,
+            quote: null,
+            error:
+              cause instanceof Error
+                ? cause.message
+                : "Preço interno não encontrado.",
+          };
+        }
+      }),
+    )
       .then((results) => {
         if (!cancelled) {
-          setQuotes(results.reduce<Record<string, Quote>>((acc, result) => {
-            if (result.quote) acc[result.id] = result.quote;
-            return acc;
-          }, {}));
-          setLineQuoteErrors(Object.fromEntries(results.filter((result) => result.error).map((result) => [result.id, result.error])));
-          setQuoteError(results.some((result) => result.error) ? "Existem produtos sem preço vigente. Verifique os itens destacados." : "");
+          setQuotes(
+            results.reduce<Record<string, Quote>>((acc, result) => {
+              if (result.quote) acc[result.id] = result.quote;
+              return acc;
+            }, {}),
+          );
+          setLineQuoteErrors(
+            Object.fromEntries(
+              results
+                .filter((result) => result.error)
+                .map((result) => [result.id, result.error]),
+            ),
+          );
+          setQuoteError(
+            results.some((result) => result.error)
+              ? "Existem produtos sem preço vigente. Verifique os itens destacados."
+              : "",
+          );
         }
       })
-      .finally(() => { if (!cancelled) setQuoteBusy(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setQuoteBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [customerId, completeLines]);
 
   useEffect(() => {
     if (!customPackage) {
       const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
-      setPackageBoxes((current) => Array.from({ length: suggested }, (_, index) =>
-        current[index]
-          ? { ...current[index]!, widthCm: "35", heightCm: "22", lengthCm: "11", weightKg: "" }
-          : newPackageBox(),
-      ));
+      setPackageBoxes((current) =>
+        Array.from({ length: suggested }, (_, index) =>
+          current[index]
+            ? {
+                ...current[index]!,
+                widthCm: "35",
+                heightCm: "22",
+                lengthCm: "11",
+                weightKg: "",
+              }
+            : newPackageBox(),
+        ),
+      );
     }
   }, [customPackage, totalWeightGrams]);
 
@@ -708,22 +936,37 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
       const kg = Number(box.weightKg);
       return Number.isFinite(kg) && kg > 0 ? Math.round(kg * 1000) : 0;
     });
-    const explicitTotal = explicitWeightGrams.reduce((sum, value) => sum + value, 0);
+    const explicitTotal = explicitWeightGrams.reduce(
+      (sum, value) => sum + value,
+      0,
+    );
     const missing = explicitWeightGrams.filter((value) => value <= 0).length;
-    const automaticWeight = missing > 0
-      ? Math.max(1, Math.ceil(Math.max(0, totalWeightGrams - explicitTotal) / missing))
-      : 0;
+    const automaticWeight =
+      missing > 0
+        ? Math.max(
+            1,
+            Math.ceil(Math.max(0, totalWeightGrams - explicitTotal) / missing),
+          )
+        : 0;
 
     return packageBoxes.map((box, index) => ({
       widthCm: Number(box.widthCm),
       heightCm: Number(box.heightCm),
       lengthCm: Number(box.lengthCm),
-      weightGrams: (explicitWeightGrams[index] ?? 0) > 0 ? (explicitWeightGrams[index] ?? 0) : automaticWeight,
+      weightGrams:
+        (explicitWeightGrams[index] ?? 0) > 0
+          ? (explicitWeightGrams[index] ?? 0)
+          : automaticWeight,
     }));
   };
 
   const calculateShipping = async () => {
-    if (!customerId || !completeLines.length || completeLines.some((line) => !quotes[line.id])) return;
+    if (
+      !customerId ||
+      !completeLines.length ||
+      completeLines.some((line) => !quotes[line.id])
+    )
+      return;
     setShippingBusy(true);
     setShippingError("");
     setShippingQuotes([]);
@@ -736,18 +979,27 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
         body: JSON.stringify({
           orderType,
           customerId,
-          items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
+          items: completeLines.map((line) => ({
+            productVariantId: line.variantId,
+            quantity: line.quantity,
+          })),
           packages: isSample ? undefined : shippingPackages(),
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message ?? "Não foi possível cotar o frete.");
+      if (!response.ok)
+        throw new Error(payload.message ?? "Não foi possível cotar o frete.");
       setShippingQuotes(payload.options ?? []);
       setShippingPostalCode(payload.postalCode ?? "");
       setShippingSummary(payload.summary ?? null);
-      if (payload.options?.length === 1) setShippingQuoteId(payload.options[0].id);
+      if (payload.options?.length === 1)
+        setShippingQuoteId(payload.options[0].id);
     } catch (cause) {
-      setShippingError(cause instanceof Error ? cause.message : "Não foi possível cotar o frete.");
+      setShippingError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível cotar o frete.",
+      );
     } finally {
       setShippingBusy(false);
     }
@@ -755,10 +1007,19 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
 
   const submit = async () => {
     setError("");
-    if (!customerId || !completeLines.length) return setError("Selecione o cliente e ao menos um produto.");
-    if (completeLines.length !== lines.length || completeLines.some((line) => !quotes[line.id])) return setError("Todos os itens precisam de produto, quantidade e preço vigente.");
-    if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
-    if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
+    if (!customerId || !completeLines.length)
+      return setError("Selecione o cliente e ao menos um produto.");
+    if (
+      completeLines.length !== lines.length ||
+      completeLines.some((line) => !quotes[line.id])
+    )
+      return setError(
+        "Todos os itens precisam de produto, quantidade e preço vigente.",
+      );
+    if (isTerm && !paymentTerms)
+      return setError("Informe a condição da venda a prazo.");
+    if (!freightResponsibility)
+      return setError("Selecione quem será responsável pelo frete.");
     if (usesPlatformShipping && !selectedShippingQuote) {
       return setError(
         isSample
@@ -766,7 +1027,11 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
           : "Calcule e selecione uma opção de frete para o distribuidor.",
       );
     }
-    if (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim()) {
+    if (
+      isDistributor &&
+      freightResponsibility === "CUSTOMER_CARRIER" &&
+      !carrierName.trim()
+    ) {
       return setError("Informe a transportadora indicada pelo distribuidor.");
     }
 
@@ -780,82 +1045,179 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
         orderType,
         customerId,
         paymentType: isSample ? "SAMPLE" : paymentType,
-        paymentTerms: isSample ? "Sem cobrança · amostra" : isTerm ? paymentTerms : "À vista",
+        paymentTerms: isSample
+          ? "Sem cobrança · amostra"
+          : isTerm
+            ? paymentTerms
+            : "À vista",
         freightResponsibility,
-        carrierName: usesPlatformShipping ? selectedShippingQuote?.carrierName : carrierName.trim() || undefined,
+        carrierName: usesPlatformShipping
+          ? selectedShippingQuote?.carrierName
+          : carrierName.trim() || undefined,
         freight: freightAmount,
-        shippingQuoteId: usesPlatformShipping ? selectedShippingQuote?.id : undefined,
-        destinationPostalCode: usesPlatformShipping ? shippingPostalCode || undefined : undefined,
-        packages: usesPlatformShipping && !isSample ? shippingPackages() : undefined,
+        shippingQuoteId: usesPlatformShipping
+          ? selectedShippingQuote?.id
+          : undefined,
+        destinationPostalCode: usesPlatformShipping
+          ? shippingPostalCode || undefined
+          : undefined,
+        packages:
+          usesPlatformShipping && !isSample ? shippingPackages() : undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
         brokerId: !isSample && brokerId ? brokerId : undefined,
-        brokerCommissionMode: !isSample && brokerId ? brokerCommissionMode : undefined,
-        brokerCommissionPercent: !isSample && brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(brokerCommissionPercent || 0) : undefined,
-        brokerCommissionPerPackage: !isSample && brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(brokerCommissionPerPackage || 0) : undefined,
+        brokerCommissionMode:
+          !isSample && brokerId ? brokerCommissionMode : undefined,
+        brokerCommissionPercent:
+          !isSample && brokerId && brokerCommissionMode === "PERCENTAGE"
+            ? Number(brokerCommissionPercent || 0)
+            : undefined,
+        brokerCommissionPerPackage:
+          !isSample && brokerId && brokerCommissionMode === "PER_PACKAGE"
+            ? Number(brokerCommissionPerPackage || 0)
+            : undefined,
         items: completeLines.map((line) => {
-          const variant = variants.find((candidate) => candidate.productVariantId === line.variantId)!;
+          const variant = variants.find(
+            (candidate) => candidate.productVariantId === line.variantId,
+          )!;
           return {
             productVariantId: variant.productVariantId,
             warehouseId: variant.warehouseId,
             quantity: line.quantity,
-            unitPrice: isSample ? SAMPLE_FISCAL_PACKAGE_VALUE : quotes[line.id]!.officialUnitPrice,
+            unitPrice: isSample
+              ? SAMPLE_FISCAL_PACKAGE_VALUE
+              : quotes[line.id]!.officialUnitPrice,
           };
         }),
       }),
     });
 
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) return setError(result.message ?? "Não foi possível criar o pedido.");
+    if (!response.ok)
+      return setError(result.message ?? "Não foi possível criar o pedido.");
     await onCreated();
   };
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex overflow-clip justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh max-h-dvh min-h-0 w-full max-w-6xl flex-col overflow-clip overscroll-none border-l bg-white shadow-2xl">
+      <button
+        aria-label="Fechar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/25"
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-order-title"
+        className="relative flex h-dvh max-h-dvh min-h-0 w-full max-w-6xl flex-col overflow-clip overscroll-none border-l bg-white shadow-2xl"
+      >
         <header className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">{isSample ? "Novo pedido de amostra" : "Novo pedido"}</h2>
-            <span className="shrink-0 text-xs font-semibold text-stone-500">{orderNumber}</span>
+            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">
+              {isSample ? "Novo pedido de amostra" : "Novo pedido"}
+            </h2>
+            <span className="shrink-0 text-xs font-semibold text-stone-500">
+              {orderNumber}
+            </span>
             <span className="min-w-0 truncate text-xs text-stone-500">
-              <b className="text-stone-800">Comprador:</b> {customer?.name ?? "selecione o cliente"}
+              <b className="text-stone-800">Comprador:</b>{" "}
+              {customer?.name ?? "selecione o cliente"}
             </span>
           </div>
-          <button type="button" aria-label="Fechar novo pedido" onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"><X size={19} /></button>
+          <button
+            type="button"
+            aria-label="Fechar novo pedido"
+            onClick={onClose}
+            className="grid size-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"
+          >
+            <X size={19} />
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
           {isSample && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
-              <p className="text-xs font-bold uppercase tracking-wider">Amostra sem cobrança comercial</p>
-              <p className="mt-1 text-[11px] leading-5">Cada pacote será registrado por <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas como valor fiscal simbólico. Esta regra vale para todos os usuários. O pedido movimenta estoque, pode gerar NF-e e expedição, mas não gera cobrança, comissão nem receita comercial.</p>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">Antes da emissão, confirme no Bling a natureza da operação, CFOP e tributação definidos pela contabilidade.</p>
+              <p className="text-xs font-bold uppercase tracking-wider">
+                Amostra sem cobrança comercial
+              </p>
+              <p className="mt-1 text-[11px] leading-5">
+                Cada pacote será registrado por{" "}
+                <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas como
+                valor fiscal simbólico. Esta regra vale para todos os usuários.
+                O pedido movimenta estoque, pode gerar NF-e e expedição, mas não
+                gera cobrança, comissão nem receita comercial.
+              </p>
+              <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                Antes da emissão, confirme no Bling a natureza da operação, CFOP
+                e tributação definidos pela contabilidade.
+              </p>
             </div>
           )}
           <Field label="Cliente">
-            <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
+            <select
+              value={customerId}
+              onChange={(event) => setCustomerId(event.target.value)}
+            >
               <option value="">Selecione</option>
-              {customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {customers.map((item) => (
+                <option
+                  key={item.id}
+                  value={item.id}
+                  disabled={item.fiscalReadiness?.ready === false}
+                >
+                  {item.name}
+                  {item.fiscalReadiness?.ready === false
+                    ? " · cadastro fiscal pendente"
+                    : ""}
+                </option>
+              ))}
             </select>
           </Field>
-
-          {!isSample && <div>
-            <p className="text-xs font-semibold">Forma de pagamento</p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setPaymentType("CASH")} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}>À vista</button>
-              <button type="button" onClick={() => setPaymentType("TERM")} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}>A prazo</button>
+          {customer?.fiscalReadiness?.ready === false && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              <b>Cliente ainda não está pronto para NF-e.</b>
+              <p className="mt-1">
+                Complete em Clientes:{" "}
+                {customer.fiscalReadiness.issues.join(", ")}.
+              </p>
             </div>
-          </div>}
+          )}
+
+          {!isSample && (
+            <div>
+              <p className="text-xs font-semibold">Forma de pagamento</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentType("CASH")}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                >
+                  À vista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentType("TERM")}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}
+                >
+                  A prazo
+                </button>
+              </div>
+            </div>
+          )}
 
           {isTerm && (
             <>
               <Field label="Condição de pagamento">
-                <select value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)}>
-                  {paymentOptions.map((option) => <option key={option}>{option}</option>)}
+                <select
+                  value={paymentTerms}
+                  onChange={(event) => setPaymentTerms(event.target.value)}
+                >
+                  {paymentOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
                 </select>
               </Field>
               {customerId && (
@@ -879,80 +1241,236 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
-                <p className="mt-0.5 text-[10px] text-stone-400">{isSample ? "Selecione os produtos e quantidades enviados como amostra." : "Adicione quantos produtos o distribuidor desejar."}</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">
+                  {isSample
+                    ? "Selecione os produtos e quantidades enviados como amostra."
+                    : "Adicione quantos produtos o distribuidor desejar."}
+                </p>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setLines(variants.map((variant) => ({ ...newDraftLine(), variantId: variant.productVariantId })))} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600">Adicionar todos</button>
-                <button type="button" onClick={() => setLines((current) => [...current, newDraftLine()])} className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"><Plus size={12} className="mr-1 inline" /> Produto</button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLines(
+                      variants.map((variant) => ({
+                        ...newDraftLine(),
+                        variantId: variant.productVariantId,
+                      })),
+                    )
+                  }
+                  className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600"
+                >
+                  Adicionar todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLines((current) => [...current, newDraftLine()])
+                  }
+                  className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"
+                >
+                  <Plus size={12} className="mr-1 inline" /> Produto
+                </button>
               </div>
             </div>
 
             <div className="space-y-1.5">
               {lines.map((line, index) => {
-                const selectedVariant = variants.find((variant) => variant.productVariantId === line.variantId);
+                const selectedVariant = variants.find(
+                  (variant) => variant.productVariantId === line.variantId,
+                );
                 const lineQuote = quotes[line.id];
                 return (
-                  <div key={line.id} className="rounded-lg border bg-white px-2.5 py-2">
+                  <div
+                    key={line.id}
+                    className="rounded-lg border bg-white px-2.5 py-2"
+                  >
                     <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_30px]">
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
-                        <select value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs">
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Produto / apresentação
+                        </p>
+                        <select
+                          value={line.variantId}
+                          onChange={(event) =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.id === line.id
+                                  ? { ...item, variantId: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs"
+                        >
                           <option value="">Selecione</option>
                           {variants.map((variant) => (
-                            <option key={variant.productVariantId} value={variant.productVariantId} disabled={lines.some((item) => item.id !== line.id && item.variantId === variant.productVariantId)}>
-                              {variant.product} · {variant.presentationGrams >= 1000 ? `${variant.presentationGrams / 1000} kg` : `${variant.presentationGrams} g`} · {variant.sku}
+                            <option
+                              key={variant.productVariantId}
+                              value={variant.productVariantId}
+                              disabled={lines.some(
+                                (item) =>
+                                  item.id !== line.id &&
+                                  item.variantId === variant.productVariantId,
+                              )}
+                            >
+                              {variant.product} ·{" "}
+                              {variant.presentationGrams >= 1000
+                                ? `${variant.presentationGrams / 1000} kg`
+                                : `${variant.presentationGrams} g`}{" "}
+                              · {variant.sku}
                             </option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
-                        <input type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, quantity: Math.max(1, Number(event.target.value)) } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs" />
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Qtd.
+                        </p>
+                        <input
+                          type="number"
+                          min="1"
+                          value={line.quantity}
+                          onChange={(event) =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.id === line.id
+                                  ? {
+                                      ...item,
+                                      quantity: Math.max(
+                                        1,
+                                        Number(event.target.value),
+                                      ),
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs"
+                        />
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">{isSample ? "Preço / pacote" : "Preço unit."}</p>
-                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(isSample ? SAMPLE_FISCAL_PACKAGE_VALUE : lineQuote.officialUnitPrice) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          {isSample ? "Preço / pacote" : "Preço unit."}
+                        </p>
+                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">
+                          {quoteBusy && line.variantId
+                            ? "…"
+                            : lineQuote
+                              ? money.format(
+                                  isSample
+                                    ? SAMPLE_FISCAL_PACKAGE_VALUE
+                                    : lineQuote.officialUnitPrice,
+                                )
+                              : "—"}
+                        </div>
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
-                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(isSample ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE : lineQuote.totalAmount) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Subtotal
+                        </p>
+                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">
+                          {lineQuote
+                            ? money.format(
+                                isSample
+                                  ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE
+                                  : lineQuote.totalAmount,
+                              )
+                            : "—"}
+                        </div>
                       </div>
-                      <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
+                      <button
+                        type="button"
+                        aria-label={`Remover item ${index + 1}`}
+                        disabled={lines.length === 1}
+                        onClick={() =>
+                          setLines((current) =>
+                            current.filter((item) => item.id !== line.id),
+                          )
+                        }
+                        className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"
+                      >
+                        <X size={15} />
+                      </button>
                     </div>
-                    {selectedVariant && <p className="mt-1 text-[9px] leading-tight text-stone-400">{selectedVariant.line} · estoque disponível {selectedVariant.availableStock} pacote(s){lineQuote ? ` · tabela ${lineQuote.salesChannelName}` : ""}</p>}
-                    {lineQuoteErrors[line.id] && <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-800">{lineQuoteErrors[line.id]}</p>}
+                    {selectedVariant && (
+                      <p className="mt-1 text-[9px] leading-tight text-stone-400">
+                        {selectedVariant.line} · estoque disponível{" "}
+                        {selectedVariant.availableStock} pacote(s)
+                        {lineQuote
+                          ? ` · tabela ${lineQuote.salesChannelName}`
+                          : ""}
+                      </p>
+                    )}
+                    {lineQuoteErrors[line.id] && (
+                      <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-800">
+                        {lineQuoteErrors[line.id]}
+                      </p>
+                    )}
                   </div>
                 );
               })}
             </div>
 
             <div className="mt-2 flex items-center justify-between rounded-xl bg-forest-900 px-4 py-2 text-white">
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Subtotal dos produtos</span>
-              <b className="text-sm">{quoteBusy ? "Consultando…" : money.format(productsTotal)}</b>
+              <span className="text-[10px] font-semibold uppercase tracking-wider">
+                Subtotal dos produtos
+              </span>
+              <b className="text-sm">
+                {quoteBusy ? "Consultando…" : money.format(productsTotal)}
+              </b>
             </div>
-            {quoteError && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{quoteError}</p>}
+            {quoteError && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                {quoteError}
+              </p>
+            )}
           </section>
 
           <section className="rounded-2xl border border-stone-200 bg-white">
-            <button type="button" onClick={() => setShowTerms((value) => !value)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+            <button
+              type="button"
+              onClick={() => setShowTerms((value) => !value)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+            >
               <div>
                 <p className="text-xs font-bold">Condições do pedido</p>
-                <p className="mt-0.5 text-[10px] text-stone-400">Frete, entrega, referência e observações.</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">
+                  Frete, entrega, referência e observações.
+                </p>
               </div>
-              <span className="text-xs font-semibold text-violet-700">{showTerms ? "Recolher" : "Editar"}</span>
+              <span className="text-xs font-semibold text-violet-700">
+                {showTerms ? "Recolher" : "Editar"}
+              </span>
             </button>
 
             {showTerms && (
               <div className="grid gap-3 border-t p-4 sm:grid-cols-2">
                 {isDistributor && !isSample ? (
                   <div className="sm:col-span-2">
-                    <p className="mb-2 text-[10px] font-semibold text-stone-600">Como o distribuidor quer receber?</p>
+                    <p className="mb-2 text-[10px] font-semibold text-stone-600">
+                      Como o distribuidor quer receber?
+                    </p>
                     <div className="grid gap-2 sm:grid-cols-3">
-                      {([
-                        ["CUSTOMER", "Cotar pela Bispo", "Comparamos as opções. O frete escolhido entra no pedido e no Pix."],
-                        ["PICKUP", "Retirar na Bispo", "O distribuidor agenda a retirada em nossa empresa, sem frete no pedido."],
-                        ["CUSTOMER_CARRIER", "Transportadora própria", "O distribuidor indica e contrata a transportadora por sua conta e risco."],
-                      ] as const).map(([value, title, detail]) => (
+                      {(
+                        [
+                          [
+                            "CUSTOMER",
+                            "Cotar pela Bispo",
+                            "Comparamos as opções. O frete escolhido entra no pedido e no Pix.",
+                          ],
+                          [
+                            "PICKUP",
+                            "Retirar na Bispo",
+                            "O distribuidor agenda a retirada em nossa empresa, sem frete no pedido.",
+                          ],
+                          [
+                            "CUSTOMER_CARRIER",
+                            "Transportadora própria",
+                            "O distribuidor indica e contrata a transportadora por sua conta e risco.",
+                          ],
+                        ] as const
+                      ).map(([value, title, detail]) => (
                         <button
                           key={value}
                           type="button"
@@ -960,79 +1478,184 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                           onClick={() => setFreightResponsibility(value)}
                           className={`rounded-xl border p-3 text-left transition ${freightResponsibility === value ? "border-emerald-800 bg-emerald-50 ring-1 ring-emerald-800" : "border-stone-200 bg-white hover:border-stone-400"}`}
                         >
-                          <span className="block text-xs font-bold text-stone-900">{title}</span>
-                          <span className="mt-1 block text-[10px] leading-4 text-stone-500">{detail}</span>
+                          <span className="block text-xs font-bold text-stone-900">
+                            {title}
+                          </span>
+                          <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                            {detail}
+                          </span>
                         </button>
                       ))}
                     </div>
                   </div>
                 ) : (
                   <Field label="Frete">
-                    <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP")}>
+                    <select
+                      value={freightResponsibility}
+                      onChange={(event) =>
+                        setFreightResponsibility(
+                          event.target.value as
+                            | ""
+                            | "BISPO"
+                            | "CUSTOMER"
+                            | "CUSTOMER_CARRIER"
+                            | "PICKUP",
+                        )
+                      }
+                    >
                       <option value="">Selecione</option>
-                      {!isSample && <option value="CUSTOMER">Por conta do cliente</option>}
+                      {!isSample && (
+                        <option value="CUSTOMER">Por conta do cliente</option>
+                      )}
                       <option value="BISPO">Por conta da Bispo</option>
                       <option value="PICKUP">Retirada na Bispo Coffees</option>
                     </select>
                   </Field>
                 )}
                 <Field label="Entrega prevista">
-                  <input type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} />
+                  <input
+                    type="date"
+                    value={expectedDeliveryDate}
+                    onChange={(event) =>
+                      setExpectedDeliveryDate(event.target.value)
+                    }
+                  />
                 </Field>
                 {freightResponsibility === "CUSTOMER_CARRIER" && (
                   <Field label="Transportadora indicada pelo distribuidor">
-                    <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Nome da transportadora · obrigatório" />
+                    <input
+                      value={carrierName}
+                      onChange={(event) => setCarrierName(event.target.value)}
+                      placeholder="Nome da transportadora · obrigatório"
+                    />
                   </Field>
                 )}
-                {!isDistributor && !usesPlatformShipping && freightResponsibility && freightResponsibility !== "PICKUP" && (
-                  <Field label="Transportadora">
-                    <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
-                  </Field>
-                )}
-                {isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-4 text-amber-900 sm:col-span-2">
-                    A contratação, o pagamento, o seguro, a coleta e o risco do transporte ficam sob responsabilidade do distribuidor. A Bispo entregará a mercadoria à transportadora indicada mediante identificação e agendamento.
-                  </div>
-                )}
+                {!isDistributor &&
+                  !usesPlatformShipping &&
+                  freightResponsibility &&
+                  freightResponsibility !== "PICKUP" && (
+                    <Field label="Transportadora">
+                      <input
+                        value={carrierName}
+                        onChange={(event) => setCarrierName(event.target.value)}
+                        placeholder="Opcional / a definir"
+                      />
+                    </Field>
+                  )}
+                {isDistributor &&
+                  freightResponsibility === "CUSTOMER_CARRIER" && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-4 text-amber-900 sm:col-span-2">
+                      A contratação, o pagamento, o seguro, a coleta e o risco
+                      do transporte ficam sob responsabilidade do distribuidor.
+                      A Bispo entregará a mercadoria à transportadora indicada
+                      mediante identificação e agendamento.
+                    </div>
+                  )}
                 {isDistributor && freightResponsibility === "PICKUP" && (
                   <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-[10px] leading-4 text-stone-600 sm:col-span-2">
-                    A retirada será agendada após a liberação financeira e fiscal. O pedido não terá valor de frete.
+                    A retirada será agendada após a liberação financeira e
+                    fiscal. O pedido não terá valor de frete.
                   </div>
                 )}
-                {!isSample && <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Corretor e comissão · opcional</p>
-                  <p className="mt-1 text-[10px] text-stone-500">Escolha percentual sobre os produtos ou valor fixo por pacote. O frete nunca entra na comissão.</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
-                    <Field label="Corretor">
-                      <select value={brokerId} onChange={(event) => { setBrokerId(event.target.value); if (!event.target.value) { setBrokerCommissionPercent(""); setBrokerCommissionPerPackage(""); } }}>
-                        <option value="">Sem corretor</option>
-                        {brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.tradeName || broker.name}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Forma da comissão">
-                      <select disabled={!brokerId} value={brokerCommissionMode} onChange={(event) => setBrokerCommissionMode(event.target.value as "PERCENTAGE" | "PER_PACKAGE")}>
-                        <option value="PERCENTAGE">Percentual</option>
-                        <option value="PER_PACKAGE">Valor por pacote</option>
-                      </select>
-                    </Field>
-                    {brokerCommissionMode === "PERCENTAGE" ? (
-                      <Field label="Comissão (%)">
-                        <input type="number" min="0" max="100" step="0.01" disabled={!brokerId} value={brokerCommissionPercent} onChange={(event) => setBrokerCommissionPercent(event.target.value)} placeholder="0,00" />
+                {!isSample && (
+                  <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">
+                      Corretor e comissão · opcional
+                    </p>
+                    <p className="mt-1 text-[10px] text-stone-500">
+                      Escolha percentual sobre os produtos ou valor fixo por
+                      pacote. O frete nunca entra na comissão.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
+                      <Field label="Corretor">
+                        <select
+                          value={brokerId}
+                          onChange={(event) => {
+                            setBrokerId(event.target.value);
+                            if (!event.target.value) {
+                              setBrokerCommissionPercent("");
+                              setBrokerCommissionPerPackage("");
+                            }
+                          }}
+                        >
+                          <option value="">Sem corretor</option>
+                          {brokers.map((broker) => (
+                            <option key={broker.id} value={broker.id}>
+                              {broker.tradeName || broker.name}
+                            </option>
+                          ))}
+                        </select>
                       </Field>
-                    ) : (
-                      <Field label="Valor por pacote">
-                        <input type="number" min="0" step="0.01" disabled={!brokerId} value={brokerCommissionPerPackage} onChange={(event) => setBrokerCommissionPerPackage(event.target.value)} placeholder="R$ 0,00" />
+                      <Field label="Forma da comissão">
+                        <select
+                          disabled={!brokerId}
+                          value={brokerCommissionMode}
+                          onChange={(event) =>
+                            setBrokerCommissionMode(
+                              event.target.value as
+                                "PERCENTAGE" | "PER_PACKAGE",
+                            )
+                          }
+                        >
+                          <option value="PERCENTAGE">Percentual</option>
+                          <option value="PER_PACKAGE">Valor por pacote</option>
+                        </select>
                       </Field>
+                      {brokerCommissionMode === "PERCENTAGE" ? (
+                        <Field label="Comissão (%)">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            disabled={!brokerId}
+                            value={brokerCommissionPercent}
+                            onChange={(event) =>
+                              setBrokerCommissionPercent(event.target.value)
+                            }
+                            placeholder="0,00"
+                          />
+                        </Field>
+                      ) : (
+                        <Field label="Valor por pacote">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            disabled={!brokerId}
+                            value={brokerCommissionPerPackage}
+                            onChange={(event) =>
+                              setBrokerCommissionPerPackage(event.target.value)
+                            }
+                            placeholder="R$ 0,00"
+                          />
+                        </Field>
+                      )}
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-semibold text-stone-600">
+                          Valor a pagar
+                        </p>
+                        <div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">
+                          {money.format(brokerCommission)}
+                        </div>
+                      </div>
+                    </div>
+                    {brokerId && brokerCommissionMode === "PER_PACKAGE" && (
+                      <p className="mt-2 text-[10px] text-stone-500">
+                        {totalPackages} pacote(s) ×{" "}
+                        {money.format(Number(brokerCommissionPerPackage || 0))}{" "}
+                        por pacote.
+                      </p>
                     )}
-                    <div><p className="mb-1.5 text-[10px] font-semibold text-stone-600">Valor a pagar</p><div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">{money.format(brokerCommission)}</div></div>
                   </div>
-                  {brokerId && brokerCommissionMode === "PER_PACKAGE" && <p className="mt-2 text-[10px] text-stone-500">{totalPackages} pacote(s) × {money.format(Number(brokerCommissionPerPackage || 0))} por pacote.</p>}
-                </div>}
+                )}
                 {usesPlatformShipping && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold text-emerald-950">Cotação do frete · Melhor Envio</p>
+                        <p className="text-xs font-bold text-emerald-950">
+                          Cotação do frete · Melhor Envio
+                        </p>
                         <p className="mt-1 text-[10px] text-emerald-800">
                           {isSample
                             ? "O BBOS usa automaticamente a Caixa P padrão e pesquisa as modalidades disponíveis para o CEP do destinatário. O custo fica com a Bispo."
@@ -1047,10 +1670,14 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                           !completeLines.length ||
                           completeLines.some((line) => !quotes[line.id]) ||
                           !packageBoxes.length ||
-                          packageBoxes.some((box) =>
-                            !Number.isFinite(Number(box.widthCm)) || Number(box.widthCm) <= 0 ||
-                            !Number.isFinite(Number(box.heightCm)) || Number(box.heightCm) <= 0 ||
-                            !Number.isFinite(Number(box.lengthCm)) || Number(box.lengthCm) <= 0
+                          packageBoxes.some(
+                            (box) =>
+                              !Number.isFinite(Number(box.widthCm)) ||
+                              Number(box.widthCm) <= 0 ||
+                              !Number.isFinite(Number(box.heightCm)) ||
+                              Number(box.heightCm) <= 0 ||
+                              !Number.isFinite(Number(box.lengthCm)) ||
+                              Number(box.lengthCm) <= 0,
                           )
                         }
                         onClick={() => void calculateShipping()}
@@ -1068,43 +1695,57 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                     <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Volumes da cotação</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                            Volumes da cotação
+                          </p>
                           <p className="mt-1 text-[10px] text-stone-500">
                             {isSample
                               ? "Caixa P Bispo padrão: 35 × 22 × 11 cm · até 2,5 kg. O BBOS calcula automaticamente a quantidade de caixas."
                               : "Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg. Cada caixa pode ter medidas e peso diferentes."}
                           </p>
                         </div>
-                        {!isSample && <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomPackage(false);
-                              const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
-                              setPackageBoxes(Array.from({ length: suggested }, () => newPackageBox()));
-                            }}
-                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
-                          >
-                            Usar Caixa P
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCustomPackage(true)}
-                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
-                          >
-                            Personalizar caixas
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomPackage(true);
-                              setPackageBoxes((current) => [...current, newPackageBox(current[current.length - 1])]);
-                            }}
-                            className="rounded-lg bg-emerald-950 px-3 py-2 text-[10px] font-bold text-white"
-                          >
-                            + Adicionar caixa
-                          </button>
-                        </div>}
+                        {!isSample && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomPackage(false);
+                                const suggested = Math.max(
+                                  1,
+                                  Math.ceil(totalWeightGrams / 2500),
+                                );
+                                setPackageBoxes(
+                                  Array.from({ length: suggested }, () =>
+                                    newPackageBox(),
+                                  ),
+                                );
+                              }}
+                              className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                            >
+                              Usar Caixa P
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomPackage(true)}
+                              className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                            >
+                              Personalizar caixas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomPackage(true);
+                                setPackageBoxes((current) => [
+                                  ...current,
+                                  newPackageBox(current[current.length - 1]),
+                                ]);
+                              }}
+                              className="rounded-lg bg-emerald-950 px-3 py-2 text-[10px] font-bold text-white"
+                            >
+                              + Adicionar caixa
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-3 space-y-2">
@@ -1113,20 +1754,31 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                             ? totalWeightGrams / packageBoxes.length / 1000
                             : 0;
                           return (
-                            <div key={box.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                            <div
+                              key={box.id}
+                              className="rounded-xl border border-stone-200 bg-stone-50 p-3"
+                            >
                               <div className="mb-2 flex items-center justify-between">
-                                <b className="text-[11px] text-stone-800">Caixa {index + 1}</b>
-                                {!isSample && <button
-                                  type="button"
-                                  disabled={packageBoxes.length === 1}
-                                  onClick={() => {
-                                    setCustomPackage(true);
-                                    setPackageBoxes((current) => current.filter((item) => item.id !== box.id));
-                                  }}
-                                  className="rounded-lg px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-25"
-                                >
-                                  Remover
-                                </button>}
+                                <b className="text-[11px] text-stone-800">
+                                  Caixa {index + 1}
+                                </b>
+                                {!isSample && (
+                                  <button
+                                    type="button"
+                                    disabled={packageBoxes.length === 1}
+                                    onClick={() => {
+                                      setCustomPackage(true);
+                                      setPackageBoxes((current) =>
+                                        current.filter(
+                                          (item) => item.id !== box.id,
+                                        ),
+                                      );
+                                    }}
+                                    className="rounded-lg px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-25"
+                                  >
+                                    Remover
+                                  </button>
+                                )}
                               </div>
                               <div className="grid gap-2 sm:grid-cols-4">
                                 <Field label="Largura (cm)">
@@ -1136,7 +1788,18 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     step="1"
                                     value={box.widthCm}
                                     disabled={isSample || !customPackage}
-                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, widthCm: event.target.value } : item))}
+                                    onChange={(event) =>
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                widthCm: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      )
+                                    }
                                   />
                                 </Field>
                                 <Field label="Altura (cm)">
@@ -1146,7 +1809,18 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     step="1"
                                     value={box.heightCm}
                                     disabled={isSample || !customPackage}
-                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, heightCm: event.target.value } : item))}
+                                    onChange={(event) =>
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                heightCm: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      )
+                                    }
                                   />
                                 </Field>
                                 <Field label="Comprimento (cm)">
@@ -1156,7 +1830,18 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     step="1"
                                     value={box.lengthCm}
                                     disabled={isSample || !customPackage}
-                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, lengthCm: event.target.value } : item))}
+                                    onChange={(event) =>
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                lengthCm: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      )
+                                    }
                                   />
                                 </Field>
                                 <Field label="Peso da caixa (kg)">
@@ -1168,9 +1853,22 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                                     disabled={isSample}
                                     onChange={(event) => {
                                       setCustomPackage(true);
-                                      setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, weightKg: event.target.value } : item));
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                weightKg: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      );
                                     }}
-                                    placeholder={automaticKg > 0 ? `Auto: ${automaticKg.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}` : "Automático"}
+                                    placeholder={
+                                      automaticKg > 0
+                                        ? `Auto: ${automaticKg.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`
+                                        : "Automático"
+                                    }
                                   />
                                 </Field>
                               </div>
@@ -1184,93 +1882,202 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                           : "Se o peso de uma caixa ficar em branco, o BBOS distribui automaticamente o peso restante do pedido entre as caixas sem peso informado."}
                       </p>
                     </div>
-                    {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
+                    {shippingError && (
+                      <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">
+                        {shippingError}
+                      </p>
+                    )}
                     {shippingSummary && (
                       <div className="mt-3 grid gap-2 rounded-xl bg-emerald-950 p-3 text-white sm:grid-cols-[1.4fr_.8fr_.8fr]">
                         <div className="flex items-center gap-3">
                           <div>
-                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Origem</small>
-                            <b className="text-xs">{formatPostalCode(shippingSummary.originPostalCode)}</b>
+                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                              Origem
+                            </small>
+                            <b className="text-xs">
+                              {formatPostalCode(
+                                shippingSummary.originPostalCode,
+                              )}
+                            </b>
                           </div>
                           <span className="text-emerald-300">→</span>
                           <div>
-                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Destino</small>
-                            <b className="text-xs">{formatPostalCode(shippingSummary.destinationPostalCode)}</b>
+                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                              Destino
+                            </small>
+                            <b className="text-xs">
+                              {formatPostalCode(
+                                shippingSummary.destinationPostalCode,
+                              )}
+                            </b>
                           </div>
                         </div>
                         <div>
-                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Peso</small>
-                          <b className="text-xs">{(shippingSummary.weightGrams / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</b>
+                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                            Peso
+                          </small>
+                          <b className="text-xs">
+                            {(
+                              shippingSummary.weightGrams / 1000
+                            ).toLocaleString("pt-BR", {
+                              maximumFractionDigits: 3,
+                            })}{" "}
+                            kg
+                          </b>
                         </div>
                         <div>
-                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Embalagem cotada</small>
-                          <b className="text-xs">{shippingSummary.widthCm} × {shippingSummary.heightCm} × {shippingSummary.lengthCm} cm</b>
+                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                            Embalagem cotada
+                          </small>
+                          <b className="text-xs">
+                            {shippingSummary.widthCm} ×{" "}
+                            {shippingSummary.heightCm} ×{" "}
+                            {shippingSummary.lengthCm} cm
+                          </b>
                         </div>
                       </div>
                     )}
                     {shippingQuotes.length > 0 && (
                       <div className="mt-3">
                         <div className="mb-2 flex items-center gap-2">
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-stone-500">Ordenar por</span>
-                          <button type="button" onClick={() => setShippingSort("PRICE")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "PRICE" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Mais barato</button>
-                          <button type="button" onClick={() => setShippingSort("TIME")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "TIME" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Menor prazo</button>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-stone-500">
+                            Ordenar por
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShippingSort("PRICE")}
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "PRICE" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}
+                          >
+                            Mais barato
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShippingSort("TIME")}
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "TIME" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}
+                          >
+                            Menor prazo
+                          </button>
                         </div>
                         <div className="grid gap-2 lg:grid-cols-2">
-                        {sortedShippingQuotes.map((option) => (
-                          <label key={option.id} className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}>
-                            <input type="radio" name="shipping-quote" value={option.id} checked={shippingQuoteId === option.id} onChange={() => setShippingQuoteId(option.id)} className="sr-only" />
-                            <span className="grid items-center gap-3 sm:grid-cols-[1.4fr_1fr_.7fr_.7fr]">
-                              <span className="flex min-w-0 items-center gap-2">
-                                {option.carrierLogoUrl ? <img src={option.carrierLogoUrl} alt="" className="h-6 w-10 object-contain" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-100 text-[9px] font-bold">{option.carrierName.slice(0, 2).toUpperCase()}</span>}
-                                <span className="min-w-0">
-                                  <b className="block truncate text-xs text-stone-900">{option.carrierName}</b>
-                                  <small className="block truncate text-[10px] text-stone-500">{option.serviceName}</small>
+                          {sortedShippingQuotes.map((option) => (
+                            <label
+                              key={option.id}
+                              className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}
+                            >
+                              <input
+                                type="radio"
+                                name="shipping-quote"
+                                value={option.id}
+                                checked={shippingQuoteId === option.id}
+                                onChange={() => setShippingQuoteId(option.id)}
+                                className="sr-only"
+                              />
+                              <span className="grid items-center gap-3 sm:grid-cols-[1.4fr_1fr_.7fr_.7fr]">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  {option.carrierLogoUrl ? (
+                                    <img
+                                      src={option.carrierLogoUrl}
+                                      alt=""
+                                      className="h-6 w-10 object-contain"
+                                    />
+                                  ) : (
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-100 text-[9px] font-bold">
+                                      {option.carrierName
+                                        .slice(0, 2)
+                                        .toUpperCase()}
+                                    </span>
+                                  )}
+                                  <span className="min-w-0">
+                                    <b className="block truncate text-xs text-stone-900">
+                                      {option.carrierName}
+                                    </b>
+                                    <small className="block truncate text-[10px] text-stone-500">
+                                      {option.serviceName}
+                                    </small>
+                                  </span>
                                 </span>
+                                <small className="text-[10px] text-stone-500">
+                                  {option.postingType}
+                                </small>
+                                <small className="text-[10px] font-semibold text-stone-700">
+                                  Até {option.deliveryDays} dias úteis
+                                </small>
+                                <b className="whitespace-nowrap text-right text-xs text-stone-900">
+                                  {money.format(option.priceCents / 100)}
+                                </b>
                               </span>
-                              <small className="text-[10px] text-stone-500">{option.postingType}</small>
-                              <small className="text-[10px] font-semibold text-stone-700">Até {option.deliveryDays} dias úteis</small>
-                              <b className="whitespace-nowrap text-right text-xs text-stone-900">{money.format(option.priceCents / 100)}</b>
-                            </span>
-                          </label>
-                        ))}
+                            </label>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
                 <Field label="Referência / PO do cliente">
-                  <input value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} placeholder="Opcional" />
+                  <input
+                    value={customerReference}
+                    onChange={(event) =>
+                      setCustomerReference(event.target.value)
+                    }
+                    placeholder="Opcional"
+                  />
                 </Field>
                 {isExport && (
                   <>
                     <Field label="Incoterm">
-                      <input value={incoterm} onChange={(event) => setIncoterm(event.target.value.toUpperCase())} placeholder="Ex.: FOB, CIF" />
+                      <input
+                        value={incoterm}
+                        onChange={(event) =>
+                          setIncoterm(event.target.value.toUpperCase())
+                        }
+                        placeholder="Ex.: FOB, CIF"
+                      />
                     </Field>
                     <Field label="Local do Incoterm">
-                      <input value={incotermLocation} onChange={(event) => setIncotermLocation(event.target.value)} placeholder="Ex.: Santos, Barcelona" />
+                      <input
+                        value={incotermLocation}
+                        onChange={(event) =>
+                          setIncotermLocation(event.target.value)
+                        }
+                        placeholder="Ex.: Santos, Barcelona"
+                      />
                     </Field>
                   </>
                 )}
                 <label className="block text-xs font-semibold sm:col-span-2">
                   Observações comerciais
-                  <textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-sm" placeholder="Somente o que precisa aparecer no pedido..." />
+                  <textarea
+                    rows={2}
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    className="mt-2 w-full rounded-xl border px-3 py-3 text-sm"
+                    placeholder="Somente o que precisa aparecer no pedido..."
+                  />
                 </label>
               </div>
             )}
           </section>
 
           {isTerm && health && (
-            <p className={`rounded-xl px-3 py-2 text-xs ${usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}>
+            <p
+              className={`rounded-xl px-3 py-2 text-xs ${usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}
+            >
               {usesPixFallback
                 ? `Sem crédito suficiente para esta compra. Ao confirmar, o cliente receberá o Pix automaticamente; o pedido só avançará depois do pagamento.`
                 : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
             </p>
           )}
-
         </div>
 
         <footer className="shrink-0 space-y-2 border-t bg-white/95 p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-5">
-          {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
+          {error && (
+            <p
+              role="alert"
+              className="rounded-xl bg-red-50 p-3 text-xs text-red-700"
+            >
+              {error}
+            </p>
+          )}
           {usesPlatformShipping && selectedShippingQuote && (
             <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
               <span className="text-stone-500">
@@ -1278,10 +2085,28 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                   ? `Custo do envio assumido pela Bispo: ${money.format(selectedShippingQuote.priceCents / 100)}`
                   : "Produtos + frete escolhido na plataforma"}
               </span>
-              <b>{isSample ? "Sem cobrança de frete" : money.format(orderTotal)}</b>
+              <b>
+                {isSample ? "Sem cobrança de frete" : money.format(orderTotal)}
+              </b>
             </div>
           )}
-          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (usesPlatformShipping && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">{isSample ? "Salvar pedido de amostra" : "Salvar pedido"}</button>
+          <button
+            disabled={
+              !completeLines.length ||
+              completeLines.length !== lines.length ||
+              quoteBusy ||
+              completeLines.some((line) => !quotes[line.id]) ||
+              !freightResponsibility ||
+              (usesPlatformShipping && !selectedShippingQuote) ||
+              (isDistributor &&
+                freightResponsibility === "CUSTOMER_CARRIER" &&
+                !carrierName.trim())
+            }
+            onClick={() => void submit()}
+            className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40"
+          >
+            {isSample ? "Salvar pedido de amostra" : "Salvar pedido"}
+          </button>
         </footer>
       </aside>
     </div>,
@@ -1313,16 +2138,31 @@ function CreditContext({
   reviewPending?: boolean;
 }) {
   if (loading) {
-    return <div className="rounded-2xl border bg-stone-50 p-4 text-xs text-stone-500">Consultando crédito do cliente…</div>;
+    return (
+      <div className="rounded-2xl border bg-stone-50 p-4 text-xs text-stone-500">
+        Consultando crédito do cliente…
+      </div>
+    );
   }
 
   return (
-    <div className={`rounded-2xl border p-4 ${exceeds ? "border-red-200 bg-red-50" : "border-violet-100 bg-violet-50/60"}`}>
+    <div
+      className={`rounded-2xl border p-4 ${exceeds ? "border-red-200 bg-red-50" : "border-violet-100 bg-violet-50/60"}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[.14em] text-violet-700">Linha de crédito vigente</p>
+          <p className="text-[10px] font-black uppercase tracking-[.14em] text-violet-700">
+            Linha de crédito vigente
+          </p>
           <p className="mt-1 text-xs text-stone-500">
-            Status: {status === "APPROVED" ? "Aprovado" : status === "UNDER_REVIEW" ? "Em análise" : status === "REJECTED" ? "Reprovado" : "Não analisado"}
+            Status:{" "}
+            {status === "APPROVED"
+              ? "Aprovado"
+              : status === "UNDER_REVIEW"
+                ? "Em análise"
+                : status === "REJECTED"
+                  ? "Reprovado"
+                  : "Não analisado"}
             {reviewPending ? " · revisão de limite pendente" : ""}
           </p>
         </div>
@@ -1341,12 +2181,17 @@ function CreditContext({
           <strong>{Math.round(utilization)}%</strong>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white">
-          <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, utilization)}%` }} />
+          <div
+            className="h-full rounded-full bg-violet-500"
+            style={{ width: `${Math.min(100, utilization)}%` }}
+          />
         </div>
       </div>
 
       {orderTotal > 0 && (
-        <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-100 text-red-800" : "bg-white text-stone-600"}`}>
+        <div
+          className={`mt-3 rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-100 text-red-800" : "bg-white text-stone-600"}`}
+        >
           {exceeds
             ? `Pedido acima do disponível em ${money.format(orderTotal - available)}.`
             : `Impacto do pedido: crédito restante ${money.format(after)}.`}
@@ -1359,18 +2204,30 @@ function CreditContext({
 function MiniCredit({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-white p-2.5">
-      <p className="text-[9px] uppercase tracking-wider text-stone-400">{label}</p>
+      <p className="text-[9px] uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
       <p className="mt-1 text-xs font-bold text-stone-800">{value}</p>
     </div>
   );
 }
 
-function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () => void; onChanged: () => Promise<void> }) {
+function OrderDrawer({
+  order,
+  onClose,
+  onChanged,
+}: {
+  order: Order;
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+}) {
   const [mode, setMode] = useState<"INTERNAL" | "CLIENT">("INTERNAL");
   const [requests, setRequests] = useState<DiscountRequest[]>([]);
   const [discountPercent, setDiscountPercent] = useState("");
   const [rationale, setRationale] = useState("");
-  const [selectedItemId, setSelectedItemId] = useState(order.items[0]?.id ?? "");
+  const [selectedItemId, setSelectedItemId] = useState(
+    order.items[0]?.id ?? "",
+  );
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1380,13 +2237,17 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
   const [postingBusy, setPostingBusy] = useState(false);
 
-  const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
+  const selectedItem =
+    order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
   const loadRequests = async () => {
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-requests`, {
-      credentials: "include",
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/discount-requests`,
+      {
+        credentials: "include",
+        cache: "no-store",
+      },
+    );
     if (response.ok) setRequests(await response.json());
   };
 
@@ -1395,10 +2256,13 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   }, [order.id]);
 
   const loadFulfillment = async () => {
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/fulfillment`, {
-      credentials: "include",
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/fulfillment`,
+      {
+        credentials: "include",
+        cache: "no-store",
+      },
+    );
     if (response.ok) setFulfillment(await response.json());
   };
 
@@ -1420,10 +2284,13 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     }
     setPostingBusy(true);
     try {
-      const response = await fetch(`${salesOrdersApi()}/${order.id}/posting-agencies`, {
-        credentials: "include",
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/posting-agencies`,
+        {
+          credentials: "include",
+          cache: "no-store",
+        },
+      );
       if (response.ok) setPosting(await response.json());
     } finally {
       setPostingBusy(false);
@@ -1448,24 +2315,33 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       credentials: "include",
       cache: "no-store",
     })
-      .then(async (response) => (response.ok ? setQuote(await response.json()) : setQuote(null)))
+      .then(async (response) =>
+        response.ok ? setQuote(await response.json()) : setQuote(null),
+      )
       .catch(() => setQuote(null));
-  }, [selectedItem?.productVariantId, selectedItem?.quantity, order.customer.id]);
+  }, [
+    selectedItem?.productVariantId,
+    selectedItem?.quantity,
+    order.customer.id,
+  ]);
 
   const requestDiscount = async () => {
     if (!selectedItem) return;
     setBusy(true);
     setError("");
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-request`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        salesOrderItemId: selectedItem.id,
-        discountPercent: Number(discountPercent),
-        rationale,
-      }),
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/discount-request`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          salesOrderItemId: selectedItem.id,
+          discountPercent: Number(discountPercent),
+          rationale,
+        }),
+      },
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(payload.message ?? "Não foi possível solicitar desconto.");
@@ -1480,12 +2356,15 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const decide = async (requestId: string, decision: "APPROVE" | "REJECT") => {
     setBusy(true);
     setError("");
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-request/${requestId}/decision`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision }),
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/discount-request/${requestId}/decision`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision }),
+      },
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(payload.message ?? "Não foi possível decidir a solicitação.");
@@ -1496,27 +2375,42 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     setBusy(false);
   };
 
-  const paymentLabel = order.orderType === "SAMPLE"
-    ? "Sem cobrança · amostra"
-    : order.paymentType === "TERM"
-      ? (order.paymentTermsSnapshot || "A prazo")
-      : "À vista";
+  const paymentLabel =
+    order.orderType === "SAMPLE"
+      ? "Sem cobrança · amostra"
+      : order.paymentType === "TERM"
+        ? order.paymentTermsSnapshot || "A prazo"
+        : "À vista";
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
     : "A combinar";
-  const freightLabel = order.freightResponsibility === "PICKUP"
-    ? (freightLabels.PICKUP ?? "Retirada na Bispo Coffees")
-    : order.shippingServiceName
-    ? [order.carrierName, order.shippingServiceName, Number(order.freight ?? 0) > 0 ? money.format(Number(order.freight)) : null].filter(Boolean).join(" · ")
-    : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
+  const freightLabel =
+    order.freightResponsibility === "PICKUP"
+      ? (freightLabels.PICKUP ?? "Retirada na Bispo Coffees")
+      : order.shippingServiceName
+        ? [
+            order.carrierName,
+            order.shippingServiceName,
+            Number(order.freight ?? 0) > 0
+              ? money.format(Number(order.freight))
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
   const requested = Number(discountPercent || 0);
-  const simulatedPrice = quote ? quote.officialUnitPrice * (1 - requested / 100) : 0;
+  const simulatedPrice = quote
+    ? quote.officialUnitPrice * (1 - requested / 100)
+    : 0;
 
   const clientSummary = [
     `PEDIDO ${order.orderNumber ?? order.code}`,
     `Cliente: ${order.customer.name}`,
     "",
-    ...order.items.map((item) => `${item.productName} · ${itemQuantityLabel(item.quantity, order.orderType === "SAMPLE")} · ${money.format(Number(item.unitPrice ?? 0))} · ${money.format(Number(item.totalAmount))}`),
+    ...order.items.map(
+      (item) =>
+        `${item.productName} · ${itemQuantityLabel(item.quantity, order.orderType === "SAMPLE")} · ${money.format(Number(item.unitPrice ?? 0))} · ${money.format(Number(item.totalAmount))}`,
+    ),
     "",
     `Total: ${money.format(Number(order.totalAmount))}`,
     `Pagamento: ${paymentLabel}`,
@@ -1524,9 +2418,13 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     `Entrega prevista: ${deliveryLabel}`,
     order.carrierName ? `Transportadora: ${order.carrierName}` : "",
     order.customerReference ? `Referência: ${order.customerReference}` : "",
-    order.incoterm ? `Incoterm: ${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}` : "",
+    order.incoterm
+      ? `Incoterm: ${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`
+      : "",
     order.notes ? `Observações: ${order.notes}` : "",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const operationalAction = async (
     endpoint: string,
@@ -1535,25 +2433,31 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`${salesOrdersApi()}/${order.id}/${endpoint}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/${endpoint}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
           typeof payload.message === "string"
             ? payload.message
-            : payload.message?.message ?? "Não foi possível avançar o pedido.",
+            : (payload.message?.message ??
+                "Não foi possível avançar o pedido."),
         );
       }
       await onChanged();
       if (endpoint === "invoice") await loadFulfillment();
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "Não foi possível avançar o pedido.",
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível avançar o pedido.",
       );
     } finally {
       setBusy(false);
@@ -1582,12 +2486,18 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message ?? "Não foi possível gerar a etiqueta.");
+        throw new Error(
+          payload.message ?? "Não foi possível gerar a etiqueta.",
+        );
       }
       setFulfillment(payload);
       await onChanged();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível gerar a etiqueta.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível gerar a etiqueta.",
+      );
     } finally {
       setFulfillmentBusy(false);
     }
@@ -1638,25 +2548,48 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
+      <button
+        aria-label="Fechar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/25"
+      />
       <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-white p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2>
-              {order.orderType === "SAMPLE" && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-900">Pedido de amostra</span>}
+              <h2 className="text-xl font-bold">
+                {order.orderNumber ?? order.code}
+              </h2>
+              {order.orderType === "SAMPLE" && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                  Pedido de amostra
+                </span>
+              )}
             </div>
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
           <div className="flex items-center gap-2">
-            <OrderPdfLink orderNumber={order.orderNumber ?? order.code} provisional={order.status === "DRAFT"} />
-            <button onClick={onClose}><X /></button>
+            <OrderPdfLink
+              orderNumber={order.orderNumber ?? order.code}
+              provisional={order.status === "DRAFT"}
+            />
+            <button onClick={onClose}>
+              <X />
+            </button>
           </div>
         </div>
 
         <div className="mt-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1">
-          <button onClick={() => setMode("INTERNAL")} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === "INTERNAL" ? "bg-white shadow-sm" : "text-stone-500"}`}>Interno</button>
-          <button onClick={() => setMode("CLIENT")} className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${mode === "CLIENT" ? "bg-white shadow-sm" : "text-stone-500"}`}>
+          <button
+            onClick={() => setMode("INTERNAL")}
+            className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === "INTERNAL" ? "bg-white shadow-sm" : "text-stone-500"}`}
+          >
+            Interno
+          </button>
+          <button
+            onClick={() => setMode("CLIENT")}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${mode === "CLIENT" ? "bg-white shadow-sm" : "text-stone-500"}`}
+          >
             <Eye size={13} /> Visualização do cliente
           </button>
         </div>
@@ -1683,10 +2616,20 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold text-amber-950">Amostra pronta para confirmação interna</p>
-                    <p className="mt-1 text-[10px] leading-4 text-amber-800">Confirme para reservar o estoque. Não haverá cobrança, aprovação do cliente ou comissão comercial.</p>
+                    <p className="text-xs font-bold text-amber-950">
+                      Amostra pronta para confirmação interna
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                      Confirme para reservar o estoque. Não haverá cobrança,
+                      aprovação do cliente ou comissão comercial.
+                    </p>
                   </div>
-                  <button type="button" disabled={busy} onClick={() => void operationalAction("confirm")} className="rounded-xl bg-amber-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void operationalAction("confirm")}
+                    className="rounded-xl bg-amber-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                  >
                     {busy ? "Confirmando…" : "Confirmar amostra"}
                   </button>
                 </div>
@@ -1695,44 +2638,79 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
 
             {displayStatus(order) === "AWAITING_PAYMENT" && (
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-bold text-amber-950">Pix enviado com a confirmação</p>
-                <p className="mt-1 text-[11px] leading-5 text-amber-800">O pedido permanece protegido em rascunho e só avança para estoque e faturamento depois que o Mercado Pago confirmar o crédito.</p>
-                {order.payment?.expiresAt && <p className="mt-2 text-[10px] text-amber-700">Expira em {new Date(order.payment.expiresAt).toLocaleString("pt-BR")}</p>}
+                <p className="text-xs font-bold text-amber-950">
+                  Pix enviado com a confirmação
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-amber-800">
+                  O pedido permanece protegido em rascunho e só avança para
+                  estoque e faturamento depois que o Mercado Pago confirmar o
+                  crédito.
+                </p>
+                {order.payment?.expiresAt && (
+                  <p className="mt-2 text-[10px] text-amber-700">
+                    Expira em{" "}
+                    {new Date(order.payment.expiresAt).toLocaleString("pt-BR")}
+                  </p>
+                )}
               </section>
             )}
 
             <div className="mt-6 space-y-2">
               {order.items.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs">
-                  <strong>{item.productName}<span className="ml-1 font-normal text-stone-400">{item.sku}</span></strong>
-                  <span>{itemQuantityLabel(item.quantity, order.orderType === "SAMPLE")}</span>
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs"
+                >
+                  <strong>
+                    {item.productName}
+                    <span className="ml-1 font-normal text-stone-400">
+                      {item.sku}
+                    </span>
+                  </strong>
+                  <span>
+                    {itemQuantityLabel(
+                      item.quantity,
+                      order.orderType === "SAMPLE",
+                    )}
+                  </span>
                   <span>{money.format(Number(item.unitPrice ?? 0))}</span>
-                  <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
+                  <strong className="text-right">
+                    {money.format(Number(item.totalAmount))}
+                  </strong>
                 </div>
               ))}
             </div>
 
-            {["CONFIRMED", "RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(order.status) && (
+            {[
+              "CONFIRMED",
+              "RESERVED",
+              "PICKING",
+              "READY_TO_SHIP",
+              "INVOICED",
+            ].includes(order.status) && (
               <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold text-stone-900">Próxima ação operacional</p>
+                    <p className="text-xs font-bold text-stone-900">
+                      Próxima ação operacional
+                    </p>
                     <p className="mt-1 text-[10px] text-stone-600">
                       {order.status === "CONFIRMED"
                         ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
                         : order.status === "RESERVED"
                           ? "O estoque está reservado. Inicie a separação física do pedido."
-                        : order.status === "PICKING"
-                          ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                          : order.status === "READY_TO_SHIP" && fulfillment?.fiscalStatus === "AUTHORIZED"
-                            ? fulfillment?.labelUrl
-                              ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                              : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
-                          : order.status === "READY_TO_SHIP"
-                            ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                            : fulfillment?.labelUrl
-                              ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                              : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                          : order.status === "PICKING"
+                            ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                            : order.status === "READY_TO_SHIP" &&
+                                fulfillment?.fiscalStatus === "AUTHORIZED"
+                              ? fulfillment?.labelUrl
+                                ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                              : order.status === "READY_TO_SHIP"
+                                ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                : fulfillment?.labelUrl
+                                  ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                  : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
                   {order.status === "CONFIRMED" && (
@@ -1765,26 +2743,30 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {busy ? "Processando…" : "Confirmar separação"}
                     </button>
                   )}
-                  {order.status === "READY_TO_SHIP" && fulfillment?.fiscalStatus !== "AUTHORIZED" && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void operationalAction("invoice")}
-                      className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
-                    >
-                      {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
-                    </button>
-                  )}
-                  {(order.status === "INVOICED" || (order.status === "READY_TO_SHIP" && fulfillment?.fiscalStatus === "AUTHORIZED")) && fulfillment?.labelUrl && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void operationalAction("ship")}
-                      className="rounded-xl bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
-                    >
-                      {busy ? "Processando…" : "Confirmar expedição"}
-                    </button>
-                  )}
+                  {order.status === "READY_TO_SHIP" &&
+                    fulfillment?.fiscalStatus !== "AUTHORIZED" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void operationalAction("invoice")}
+                        className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
+                      </button>
+                    )}
+                  {(order.status === "INVOICED" ||
+                    (order.status === "READY_TO_SHIP" &&
+                      fulfillment?.fiscalStatus === "AUTHORIZED")) &&
+                    fulfillment?.labelUrl && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void operationalAction("ship")}
+                        className="rounded-xl bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy ? "Processando…" : "Confirmar expedição"}
+                      </button>
+                    )}
                 </div>
               </section>
             )}
@@ -1795,43 +2777,74 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 <MiniValue label="Pagamento" value={paymentLabel} />
                 <MiniValue label="Frete" value={freightLabel} />
                 <MiniValue label="Entrega" value={deliveryLabel} />
-                {order.carrierName && <MiniValue label="Transportadora" value={order.carrierName} />}
-                {order.customerReference && <MiniValue label="Referência" value={order.customerReference} />}
-                {order.incoterm && <MiniValue label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
-                {order.broker && <MiniValue label="Corretor" value={`${order.broker.tradeName || order.broker.name} · ${order.brokerCommissionMode === "PER_PACKAGE" ? `${money.format(Number(order.brokerCommissionPerPackage ?? 0))}/pacote` : `${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`} · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`} />}
+                {order.carrierName && (
+                  <MiniValue label="Transportadora" value={order.carrierName} />
+                )}
+                {order.customerReference && (
+                  <MiniValue
+                    label="Referência"
+                    value={order.customerReference}
+                  />
+                )}
+                {order.incoterm && (
+                  <MiniValue
+                    label="Incoterm"
+                    value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`}
+                  />
+                )}
+                {order.broker && (
+                  <MiniValue
+                    label="Corretor"
+                    value={`${order.broker.tradeName || order.broker.name} · ${order.brokerCommissionMode === "PER_PACKAGE" ? `${money.format(Number(order.brokerCommissionPerPackage ?? 0))}/pacote` : `${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`} · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`}
+                  />
+                )}
               </div>
             </section>
 
-            {order.orderType !== "SAMPLE" && (order.status === "DRAFT" || order.status === "CONFIRMED") && (
-              <OrderCustomerApprovalActions orderId={order.id} onAccepted={onChanged} />
-            )}
+            {order.orderType !== "SAMPLE" &&
+              (order.status === "DRAFT" || order.status === "CONFIRMED") && (
+                <OrderCustomerApprovalActions
+                  orderId={order.id}
+                  onAccepted={onChanged}
+                />
+              )}
 
             {order.shippingProvider === "MELHOR_ENVIO" && (
               <section className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold text-emerald-950">Expedição · Melhor Envio</p>
+                    <p className="text-xs font-bold text-emerald-950">
+                      Expedição · Melhor Envio
+                    </p>
                     <p className="mt-1 text-[10px] text-emerald-800">
                       {fulfillment?.labelUrl
                         ? "Etiqueta pronta para impressão."
                         : fulfillment?.fiscalStatus === "REJECTED"
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
-                        : fulfillment?.fiscalStatus === "AUTHORIZED"
-                          ? "NF-e autorizada. A etiqueta já pode ser gerada."
-                        : order.status === "INVOICED"
-                          ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
-                          : "A etiqueta será liberada após a autorização da NF-e."}
+                          : fulfillment?.fiscalStatus === "AUTHORIZED"
+                            ? "NF-e autorizada. A etiqueta já pode ser gerada."
+                            : order.status === "INVOICED"
+                              ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
+                              : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {(fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl) && (
+                    {(fulfillment?.fiscalPdfUrl ||
+                      fulfillment?.fiscalDanfeUrl) && (
                       <a
-                        href={fulfillment.fiscalPdfUrl || fulfillment.fiscalDanfeUrl || "#"}
+                        href={
+                          fulfillment.fiscalPdfUrl ||
+                          fulfillment.fiscalDanfeUrl ||
+                          "#"
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
                       >
-                        Ver NF-e{fulfillment.fiscalNumber ? ` nº ${fulfillment.fiscalNumber}` : ""}
+                        Ver NF-e
+                        {fulfillment.fiscalNumber
+                          ? ` nº ${fulfillment.fiscalNumber}`
+                          : ""}
                       </a>
                     )}
                     {fulfillment?.labelUrl ? (
@@ -1861,7 +2874,9 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                             onClick={() => void resetCancelledInvoice()}
                             className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
                           >
-                            {busy ? "Regularizando…" : "NF-e cancelada no Bling"}
+                            {busy
+                              ? "Regularizando…"
+                              : "NF-e cancelada no Bling"}
                           </button>
                         )}
                         <button
@@ -1885,7 +2900,9 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 <div className="mt-4 border-t border-emerald-100 pt-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">Onde postar</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">
+                        Onde postar
+                      </p>
                       <p className="mt-1 text-[10px] text-emerald-700">
                         {postingBusy
                           ? "Consultando unidades disponíveis no Melhor Envio…"
@@ -1906,7 +2923,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                   {posting?.agencies?.length ? (
                     <div className="mt-3 grid gap-2">
                       {posting.agencies.slice(0, 4).map((agency, index) => (
-                        <div key={agency.id} className="rounded-xl border border-emerald-100 bg-white p-3">
+                        <div
+                          key={agency.id}
+                          className="rounded-xl border border-emerald-100 bg-white p-3"
+                        >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2">
@@ -1915,14 +2935,22 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                                     Opção de postagem
                                   </span>
                                 )}
-                                <p className="text-[11px] font-bold text-stone-900">{agency.name}</p>
+                                <p className="text-[11px] font-bold text-stone-900">
+                                  {agency.name}
+                                </p>
                               </div>
                               {agency.address && (
-                                <p className="mt-1 text-[10px] text-stone-700">{agency.address}</p>
+                                <p className="mt-1 text-[10px] text-stone-700">
+                                  {agency.address}
+                                </p>
                               )}
                               <p className="mt-1 text-[10px] text-stone-500">
-                                {[agency.district, agency.city, agency.state].filter(Boolean).join(" · ")}
-                                {agency.postalCode ? ` · CEP ${agency.postalCode}` : ""}
+                                {[agency.district, agency.city, agency.state]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                                {agency.postalCode
+                                  ? ` · CEP ${agency.postalCode}`
+                                  : ""}
                               </p>
                             </div>
                             {agency.mapsUrl && (
@@ -1944,56 +2972,142 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               </section>
             )}
 
-            {order.orderType !== "SAMPLE" && order.status === "DRAFT" && order.items.length > 0 && (
-              <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
-                <div className="flex items-center gap-2">
-                  <BadgeDollarSign size={17} className="text-violet-700" />
-                  <div>
-                    <p className="text-xs font-bold text-violet-900">Solicitar desconto</p>
-                    <p className="text-[10px] text-violet-700">Controle interno. Nada desta aprovação aparece para o cliente.</p>
+            {order.orderType !== "SAMPLE" &&
+              order.status === "DRAFT" &&
+              order.items.length > 0 && (
+                <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                  <div className="flex items-center gap-2">
+                    <BadgeDollarSign size={17} className="text-violet-700" />
+                    <div>
+                      <p className="text-xs font-bold text-violet-900">
+                        Solicitar desconto
+                      </p>
+                      <p className="text-[10px] text-violet-700">
+                        Controle interno. Nada desta aprovação aparece para o
+                        cliente.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <Field label="Item">
-                    <select value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)}>
-                      {order.items.map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.sku}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Desconto solicitado (%)">
-                    <input type="number" min="0" step="0.01" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} />
-                  </Field>
-                </div>
-                {quote && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                    <MiniValue label="Preço oficial" value={money.format(quote.officialUnitPrice)} />
-                    <MiniValue label="Preço proposto" value={money.format(simulatedPrice)} />
-                    <MiniValue label="Máx. solicitável" value={`${quote.discountPolicy.maxRequestPercent.toFixed(2)}%`} />
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Item">
+                      <select
+                        value={selectedItemId}
+                        onChange={(event) =>
+                          setSelectedItemId(event.target.value)
+                        }
+                      >
+                        {order.items.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.productName} · {item.sku}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Desconto solicitado (%)">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={discountPercent}
+                        onChange={(event) =>
+                          setDiscountPercent(event.target.value)
+                        }
+                      />
+                    </Field>
                   </div>
-                )}
-                <label className="mt-3 block text-xs font-semibold">
-                  Justificativa
-                  <textarea rows={3} value={rationale} onChange={(event) => setRationale(event.target.value)} className="mt-2 w-full rounded-xl border bg-white px-3 py-3 text-sm" placeholder="Motivo comercial da exceção..." />
-                </label>
-                <button disabled={busy || !quote || requested <= 0 || !rationale.trim()} onClick={() => void requestDiscount()} className="mt-3 w-full rounded-xl bg-stone-950 py-3 text-xs font-bold text-white disabled:opacity-40">Enviar para aprovação</button>
-              </section>
-            )}
+                  {quote && (
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                      <MiniValue
+                        label="Preço oficial"
+                        value={money.format(quote.officialUnitPrice)}
+                      />
+                      <MiniValue
+                        label="Preço proposto"
+                        value={money.format(simulatedPrice)}
+                      />
+                      <MiniValue
+                        label="Máx. solicitável"
+                        value={`${quote.discountPolicy.maxRequestPercent.toFixed(2)}%`}
+                      />
+                    </div>
+                  )}
+                  <label className="mt-3 block text-xs font-semibold">
+                    Justificativa
+                    <textarea
+                      rows={3}
+                      value={rationale}
+                      onChange={(event) => setRationale(event.target.value)}
+                      className="mt-2 w-full rounded-xl border bg-white px-3 py-3 text-sm"
+                      placeholder="Motivo comercial da exceção..."
+                    />
+                  </label>
+                  <button
+                    disabled={
+                      busy || !quote || requested <= 0 || !rationale.trim()
+                    }
+                    onClick={() => void requestDiscount()}
+                    className="mt-3 w-full rounded-xl bg-stone-950 py-3 text-xs font-bold text-white disabled:opacity-40"
+                  >
+                    Enviar para aprovação
+                  </button>
+                </section>
+              )}
 
             {requests.length > 0 && (
               <section className="mt-6">
-                <div className="flex items-center gap-2"><ShieldCheck size={16} /><h3 className="text-sm font-semibold">Histórico interno de descontos</h3></div>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} />
+                  <h3 className="text-sm font-semibold">
+                    Histórico interno de descontos
+                  </h3>
+                </div>
                 <div className="mt-3 space-y-2">
                   {requests.map((request) => (
                     <div key={request.id} className="rounded-xl border p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-semibold">{Number(request.discountPercent).toFixed(2)}% · {money.format(Number(request.officialUnitPrice))} → {money.format(Number(request.requestedUnitPrice))}</p>
-                        <Badge tone={request.status === "APPROVED" ? "success" : request.status === "REJECTED" ? "danger" : "warning"}>{request.status === "APPROVED" ? "Aprovado" : request.status === "REJECTED" ? "Recusado" : "Pendente"}</Badge>
+                        <p className="text-xs font-semibold">
+                          {Number(request.discountPercent).toFixed(2)}% ·{" "}
+                          {money.format(Number(request.officialUnitPrice))} →{" "}
+                          {money.format(Number(request.requestedUnitPrice))}
+                        </p>
+                        <Badge
+                          tone={
+                            request.status === "APPROVED"
+                              ? "success"
+                              : request.status === "REJECTED"
+                                ? "danger"
+                                : "warning"
+                          }
+                        >
+                          {request.status === "APPROVED"
+                            ? "Aprovado"
+                            : request.status === "REJECTED"
+                              ? "Recusado"
+                              : "Pendente"}
+                        </Badge>
                       </div>
-                      <p className="mt-1 text-[11px] text-stone-500">{request.rationale}</p>
-                      <p className="mt-1 text-[10px] text-stone-400">Solicitado por {request.requestedByName}</p>
+                      <p className="mt-1 text-[11px] text-stone-500">
+                        {request.rationale}
+                      </p>
+                      <p className="mt-1 text-[10px] text-stone-400">
+                        Solicitado por {request.requestedByName}
+                      </p>
                       {request.status === "PENDING" && (
                         <div className="mt-3 flex gap-2">
-                          <button disabled={busy} onClick={() => void decide(request.id, "APPROVE")} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-[11px] font-semibold text-white"><Check size={13} /> Aprovar</button>
-                          <button disabled={busy} onClick={() => void decide(request.id, "REJECT")} className="rounded-lg border px-3 py-2 text-[11px] font-semibold">Recusar</button>
+                          <button
+                            disabled={busy}
+                            onClick={() => void decide(request.id, "APPROVE")}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-[11px] font-semibold text-white"
+                          >
+                            <Check size={13} /> Aprovar
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => void decide(request.id, "REJECT")}
+                            className="rounded-lg border px-3 py-2 text-[11px] font-semibold"
+                          >
+                            Recusar
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2004,7 +3118,11 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
           </>
         )}
 
-        {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</div>}
+        {error && (
+          <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">
+            {error}
+          </div>
+        )}
       </aside>
     </div>
   );
@@ -2029,23 +3147,41 @@ function ClientOrderView({
     <section className="mt-6 rounded-3xl border bg-stone-50 p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">Bispo Coffees · Pedido</p>
-          <h3 className="mt-1 text-2xl font-bold">{order.orderNumber ?? order.code}</h3>
-          <p className="mt-1 text-sm text-stone-500">Preparado para {order.customer.name}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">
+            Bispo Coffees · Pedido
+          </p>
+          <h3 className="mt-1 text-2xl font-bold">
+            {order.orderNumber ?? order.code}
+          </h3>
+          <p className="mt-1 text-sm text-stone-500">
+            Preparado para {order.customer.name}
+          </p>
         </div>
         <Status status={order.status} />
       </div>
 
       <div className="mt-6 overflow-hidden rounded-2xl border bg-white">
         <div className="grid grid-cols-[1fr_58px_100px_108px] gap-2 border-b bg-stone-50 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-stone-400">
-          <span>Produto</span><span>{order.orderType === "SAMPLE" ? "Pacotes" : "Qtd."}</span><span>{order.orderType === "SAMPLE" ? "Preço/pacote" : "Preço"}</span><span className="text-right">Total</span>
+          <span>Produto</span>
+          <span>{order.orderType === "SAMPLE" ? "Pacotes" : "Qtd."}</span>
+          <span>{order.orderType === "SAMPLE" ? "Preço/pacote" : "Preço"}</span>
+          <span className="text-right">Total</span>
         </div>
         {order.items.map((item) => (
-          <div key={item.id} className="grid grid-cols-[1fr_58px_100px_108px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0">
+          <div
+            key={item.id}
+            className="grid grid-cols-[1fr_58px_100px_108px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0"
+          >
             <strong>{item.productName}</strong>
-            <span>{order.orderType === "SAMPLE" ? itemQuantityLabel(item.quantity, true) : item.quantity}</span>
+            <span>
+              {order.orderType === "SAMPLE"
+                ? itemQuantityLabel(item.quantity, true)
+                : item.quantity}
+            </span>
             <span>{money.format(Number(item.unitPrice ?? 0))}</span>
-            <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
+            <strong className="text-right">
+              {money.format(Number(item.totalAmount))}
+            </strong>
           </div>
         ))}
       </div>
@@ -2054,49 +3190,100 @@ function ClientOrderView({
         <ClientTerm label="Pagamento" value={paymentLabel} />
         <ClientTerm label="Frete" value={freightLabel} />
         <ClientTerm label="Entrega prevista" value={deliveryLabel} />
-        {order.carrierName && <ClientTerm label="Transportadora" value={order.carrierName} />}
-        {order.customerReference && <ClientTerm label="Referência" value={order.customerReference} />}
-        {order.incoterm && <ClientTerm label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
+        {order.carrierName && (
+          <ClientTerm label="Transportadora" value={order.carrierName} />
+        )}
+        {order.customerReference && (
+          <ClientTerm label="Referência" value={order.customerReference} />
+        )}
+        {order.incoterm && (
+          <ClientTerm
+            label="Incoterm"
+            value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`}
+          />
+        )}
       </div>
 
       {order.notes && (
         <div className="mt-4 rounded-2xl bg-white p-4">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">Observações</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
+            Observações
+          </p>
           <p className="mt-1 text-xs leading-5 text-stone-700">{order.notes}</p>
         </div>
       )}
 
       <div className="mt-5 flex items-end justify-between rounded-2xl bg-stone-950 px-5 py-4 text-white">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-stone-400">Total do pedido</p>
-          <p className="mt-1 text-xs text-stone-300">Condições resumidas para aprovação</p>
+          <p className="text-[10px] uppercase tracking-wider text-stone-400">
+            Total do pedido
+          </p>
+          <p className="mt-1 text-xs text-stone-300">
+            Condições resumidas para aprovação
+          </p>
         </div>
-        <strong className="text-2xl">{money.format(Number(order.totalAmount))}</strong>
+        <strong className="text-2xl">
+          {money.format(Number(order.totalAmount))}
+        </strong>
       </div>
 
-      <button onClick={onCopy} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border bg-white px-4 py-3 text-xs font-bold">
-        <Copy size={14} /> {copied ? "Resumo copiado" : "Copiar resumo para enviar"}
+      <button
+        onClick={onCopy}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border bg-white px-4 py-3 text-xs font-bold"
+      >
+        <Copy size={14} />{" "}
+        {copied ? "Resumo copiado" : "Copiar resumo para enviar"}
       </button>
     </section>
   );
 }
 
 function ClientTerm({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl bg-white p-4"><p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-sm font-semibold text-stone-900">{value}</p></div>;
+  return (
+    <div className="rounded-2xl bg-white p-4">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-stone-900">{value}</p>
+    </div>
+  );
 }
 
 function MiniValue({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-white p-3"><p className="text-[9px] uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 font-bold text-stone-800">{value}</p></div>;
+  return (
+    <div className="rounded-xl bg-white p-3">
+      <p className="text-[9px] uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
+      <p className="mt-1 font-bold text-stone-800">{value}</p>
+    </div>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="block text-xs font-semibold">{label}<div className="mt-2 [&>*]:w-full [&>*]:rounded-xl [&>*]:border [&>*]:px-3 [&>*]:py-3">{children}</div></label>;
+  return (
+    <label className="block text-xs font-semibold">
+      {label}
+      <div className="mt-2 [&>*]:w-full [&>*]:rounded-xl [&>*]:border [&>*]:px-3 [&>*]:py-3">
+        {children}
+      </div>
+    </label>
+  );
 }
 
 function Kpi({ label, value }: { label: string; value: string }) {
-  return <Card className="p-4"><p className="text-[11px] text-stone-500">{label}</p><p className="mt-2 text-xl font-bold">{value}</p></Card>;
+  return (
+    <Card className="p-4">
+      <p className="text-[11px] text-stone-500">{label}</p>
+      <p className="mt-2 text-xl font-bold">{value}</p>
+    </Card>
+  );
 }
 
 function Status({ status }: { status: string }) {
-  return <Badge tone={statusTone[status] ?? "neutral"}>{statusLabel[status] ?? status}</Badge>;
+  return (
+    <Badge tone={statusTone[status] ?? "neutral"}>
+      {statusLabel[status] ?? status}
+    </Badge>
+  );
 }

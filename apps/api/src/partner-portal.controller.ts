@@ -10,6 +10,7 @@ import {
 import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { SalesOrdersService } from "./sales-orders.service";
+import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 
 type PartnerActor = {
   companyId: string;
@@ -226,7 +227,9 @@ export class PartnerPortalController {
     this.assertCanCreateOrders(partner);
     const [customers, internalOptions] = await Promise.all([
       this.database.$queryRawUnsafe<any[]>(
-        `SELECT c.id,c.name,c."tradeName",c.segment,c.city,c.state
+        `SELECT c.id,c.name,c."legalName",c."tradeName",c."taxId",c.segment,c."postalCode",
+                c.address,c."addressNumber",c."addressComplement",c.district,c.city,c.state,
+                c."stateRegistration",c."stateRegistrationType"
            FROM "StorefrontPartnerCustomer" link
            JOIN "Customer" c ON c.id=link."customerId"
           WHERE link."partnerId"=$1 AND c."companyId"=$2 AND c.active=true
@@ -236,7 +239,13 @@ export class PartnerPortalController {
       ),
       this.salesOrders.options(actor.companyId),
     ]);
-    return { customers, variants: internalOptions.variants };
+    return {
+      customers: customers.map((customer) => ({
+        ...customer,
+        fiscalReadiness: assessCustomerFiscalReadiness(customer),
+      })),
+      variants: internalOptions.variants,
+    };
   }
 
   @Post("customers")
@@ -246,19 +255,22 @@ export class PartnerPortalController {
   ) {
     const { actor, partner } = await this.context(request);
     this.assertCanCreateOrders(partner);
-    const name = String(body.name ?? "").trim();
-    const taxId = String(body.taxId ?? "").replace(/\D/g, "");
+    const fiscalReadiness = assessCustomerFiscalReadiness(body);
+    if (!fiscalReadiness.ready) {
+      throw new BadRequestException(
+        `Complete o cadastro fiscal do cliente: ${fiscalReadiness.issues.join(", ")}.`,
+      );
+    }
+    const fiscal = fiscalReadiness.normalized;
+    const name = fiscal.name;
+    const taxId = fiscal.taxId;
     const email =
       String(body.email ?? "")
         .trim()
         .toLowerCase() || null;
     const phoneRaw = String(body.phone ?? "").trim();
     const phone = phoneRaw ? `+${phoneRaw.replace(/\D/g, "")}` : null;
-    const postalCode = String(body.postalCode ?? "").replace(/\D/g, "") || null;
-    if (!name) throw new BadRequestException("Nome do cliente é obrigatório.");
-    if (taxId && ![11, 14].includes(taxId.length)) {
-      throw new BadRequestException("Informe um CPF ou CNPJ válido.");
-    }
+    const postalCode = fiscal.postalCode;
     if (email && !/^\S+@\S+\.\S+$/.test(email)) {
       throw new BadRequestException("Informe um e-mail válido.");
     }
@@ -267,12 +279,12 @@ export class PartnerPortalController {
         "Informe o telefone no padrão internacional.",
       );
     }
-    if (postalCode && postalCode.length !== 8) {
-      throw new BadRequestException("Informe um CEP com oito dígitos.");
-    }
     if (taxId) {
       const duplicate = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT id FROM "Customer" WHERE "companyId"=$1 AND "taxId"=$2 LIMIT 1`,
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1
+            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$2
+          LIMIT 1`,
         actor.companyId,
         taxId,
       );
@@ -286,22 +298,28 @@ export class PartnerPortalController {
     await this.database.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe(
         `INSERT INTO "Customer"
-          (id,"companyId",name,"tradeName","taxId",segment,email,phone,"postalCode",city,state,
+          (id,"companyId",name,"legalName","tradeName","taxId",segment,email,phone,"postalCode",
+           address,"addressNumber","addressComplement",district,city,state,"stateRegistration","stateRegistrationType",
            "paymentTerms",active,"creditStatus","creditLimit","createdAt","updatedAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'À vista',true,'NOT_ANALYZED',0,NOW(),NOW())`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'À vista',true,'NOT_ANALYZED',0,NOW(),NOW())`,
         customerId,
         actor.companyId,
         name,
+        fiscal.legalName || null,
         String(body.tradeName ?? "").trim() || null,
         taxId || null,
         String(body.segment ?? "B2B").trim() || "B2B",
         email,
         phone,
         postalCode,
-        String(body.city ?? "").trim() || null,
-        String(body.state ?? "")
-          .trim()
-          .toUpperCase() || null,
+        fiscal.address,
+        fiscal.addressNumber,
+        fiscal.addressComplement || null,
+        fiscal.district,
+        fiscal.city,
+        fiscal.state,
+        fiscal.stateRegistration || null,
+        fiscal.stateRegistrationType,
       );
       await transaction.$executeRawUnsafe(
         `INSERT INTO "StorefrontPartnerCustomer" ("partnerId","customerId","createdAt")

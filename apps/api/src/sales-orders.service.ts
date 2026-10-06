@@ -23,6 +23,10 @@ import {
   SAMPLE_FISCAL_PACKAGE_VALUE,
   type SalesOrderType,
 } from "./sales-order-sample-policy";
+import {
+  assessCustomerFiscalReadiness,
+  customerFiscalReadinessMessage,
+} from "./customer-fiscal-readiness";
 
 export type CreateSalesOrderInput = {
   code: string;
@@ -237,7 +241,10 @@ export class SalesOrdersService implements OnModuleDestroy {
       }),
     ]);
     return {
-      customers,
+      customers: customers.map((customer) => ({
+        ...customer,
+        fiscalReadiness: assessCustomerFiscalReadiness(customer),
+      })),
       brokers,
       variants: balances.map((item) => ({
         productVariantId: item.productVariantId,
@@ -283,9 +290,7 @@ export class SalesOrdersService implements OnModuleDestroy {
     const pricedItems = input.items.map((item) => ({
       ...item,
       unitPrice:
-        orderType === "SAMPLE"
-          ? SAMPLE_FISCAL_PACKAGE_VALUE
-          : item.unitPrice,
+        orderType === "SAMPLE" ? SAMPLE_FISCAL_PACKAGE_VALUE : item.unitPrice,
     }));
     return this.database.$transaction(
       async (transaction) => {
@@ -293,6 +298,8 @@ export class SalesOrdersService implements OnModuleDestroy {
           where: { id: input.customerId, companyId },
         });
         if (!customer) throw new BadRequestException("Cliente não encontrado.");
+        const fiscalError = customerFiscalReadinessMessage(customer);
+        if (fiscalError) throw new BadRequestException(fiscalError);
         if (input.brokerId) {
           const broker = await transaction.broker.findFirst({
             where: {
@@ -363,9 +370,13 @@ export class SalesOrdersService implements OnModuleDestroy {
             brokerCommissionMode:
               orderType === "SAMPLE" ? undefined : input.brokerCommissionMode,
             brokerCommissionPercent:
-              orderType === "SAMPLE" ? undefined : input.brokerCommissionPercent,
+              orderType === "SAMPLE"
+                ? undefined
+                : input.brokerCommissionPercent,
             brokerCommissionPerPackage:
-              orderType === "SAMPLE" ? undefined : input.brokerCommissionPerPackage,
+              orderType === "SAMPLE"
+                ? undefined
+                : input.brokerCommissionPerPackage,
             brokerCommissionAmount:
               orderType === "SAMPLE" ? undefined : input.brokerCommissionAmount,
             salesChannelId: salesChannel?.id,
@@ -374,8 +385,7 @@ export class SalesOrdersService implements OnModuleDestroy {
             orderType,
             quantity: totalQuantity,
             unitPrice: totalQuantity ? totalAmount / totalQuantity : 0,
-            totalAmount:
-              totalAmount - discount + freight,
+            totalAmount: totalAmount - discount + freight,
             subtotal: totalAmount,
             discount,
             freight,

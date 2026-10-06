@@ -11,6 +11,7 @@ type Customer = {
   segment?: string | null;
   city?: string | null;
   state?: string | null;
+  fiscalReadiness?: { ready: boolean; issues: string[] };
 };
 type Variant = {
   productVariantId: string;
@@ -296,11 +297,14 @@ export function PartnerOrderWorkspace({
           <PortalField label="Nome / razão social">
             <input name="name" required />
           </PortalField>
+          <PortalField label="Razão social (CNPJ)">
+            <input name="legalName" />
+          </PortalField>
           <PortalField label="Nome fantasia">
             <input name="tradeName" />
           </PortalField>
-          <PortalField label="CPF/CNPJ">
-            <input name="taxId" inputMode="numeric" />
+          <PortalField label="CPF/CNPJ *">
+            <input name="taxId" inputMode="numeric" required />
           </PortalField>
           <PortalField label="Segmento">
             <select name="segment" defaultValue="B2B">
@@ -316,17 +320,44 @@ export function PartnerOrderWorkspace({
           <PortalField label="Telefone internacional">
             <input name="phone" placeholder="+5543999999999" />
           </PortalField>
-          <PortalField label="CEP">
-            <input name="postalCode" inputMode="numeric" />
+          <PortalField label="CEP *">
+            <input name="postalCode" inputMode="numeric" required />
           </PortalField>
           <div className="grid grid-cols-[1fr_90px] gap-3">
             <PortalField label="Cidade">
-              <input name="city" />
+              <input name="city" required />
             </PortalField>
             <PortalField label="UF">
-              <input name="state" maxLength={2} />
+              <input name="state" maxLength={2} required />
             </PortalField>
           </div>
+          <PortalField label="Logradouro *">
+            <input name="address" required />
+          </PortalField>
+          <PortalField label="Número *">
+            <input
+              name="addressNumber"
+              placeholder="Use S/N quando necessário"
+              required
+            />
+          </PortalField>
+          <PortalField label="Complemento">
+            <input name="addressComplement" />
+          </PortalField>
+          <PortalField label="Bairro *">
+            <input name="district" required />
+          </PortalField>
+          <PortalField label="Situação da inscrição estadual">
+            <select name="stateRegistrationType" defaultValue="">
+              <option value="">Selecione para CNPJ</option>
+              <option value="NUMBER">Contribuinte com IE</option>
+              <option value="EXEMPT">Isento</option>
+              <option value="NON_TAXPAYER">Não contribuinte</option>
+            </select>
+          </PortalField>
+          <PortalField label="Inscrição estadual">
+            <input name="stateRegistration" />
+          </PortalField>
           <div className="flex justify-end gap-2 sm:col-span-2">
             <button
               type="button"
@@ -361,10 +392,17 @@ export function PartnerOrderWorkspace({
             >
               <option value="">Selecione</option>
               {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
+                <option
+                  key={customer.id}
+                  value={customer.id}
+                  disabled={customer.fiscalReadiness?.ready === false}
+                >
                   {customer.tradeName || customer.name}
                   {customer.city
                     ? ` · ${customer.city}/${customer.state || ""}`
+                    : ""}
+                  {customer.fiscalReadiness?.ready === false
+                    ? " · cadastro fiscal pendente"
                     : ""}
                 </option>
               ))}

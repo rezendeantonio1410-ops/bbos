@@ -697,8 +697,28 @@ model Customer {
   companyId           String
   company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name                String
+  legalName           String?
+  tradeName           String?
   taxId               String?
   segment             String?
+  email               String?
+  phone               String?
+  postalCode          String?
+  address             String?
+  addressNumber       String?
+  addressComplement   String?
+  district            String?
+  city                String?
+  state               String?
+  stateRegistration   String?
+  stateRegistrationType String                    @default("NOT_DECLARED")
+  paymentTerms        String?
+  active              Boolean                     @default(true)
+  creditStatus        String                      @default("NOT_ANALYZED")
+  creditLimit         Decimal                     @default(0) @db.Decimal(14, 2)
+  creditNotes         String?
+  creditReviewedAt    DateTime?
+  creditReviewedBy    String?
   salesOrders         SalesOrder[]
   accountsReceivable  AccountsReceivable[]
   reconciliationItems ReconciliationItem[]
@@ -707,6 +727,7 @@ model Customer {
   updatedAt           DateTime                    @updatedAt
 
   @@index([companyId])
+  @@index([companyId, taxId])
 }
 
 model Warehouse {

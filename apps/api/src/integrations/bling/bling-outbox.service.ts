@@ -9,6 +9,7 @@ import {
   SAMPLE_FISCAL_PACKAGE_VALUE,
   sampleFiscalPrice,
 } from "../../sales-order-sample-policy";
+import { customerFiscalReadinessMessage } from "../../customer-fiscal-readiness";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -54,7 +55,11 @@ export class BlingOutboxService {
     );
   }
 
-  private async getMap(companyId: string, resourceType: string, internalKey: string) {
+  private async getMap(
+    companyId: string,
+    resourceType: string,
+    internalKey: string,
+  ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT "externalId",metadata FROM "IntegrationResourceMap"
        WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"=$2 AND "internalKey"=$3
@@ -81,12 +86,15 @@ export class BlingOutboxService {
     ];
     for (const path of paths) {
       try {
-        const result = await this.bling.request(companyId, path, { method: "GET" });
+        const result = await this.bling.request(companyId, path, {
+          method: "GET",
+        });
         const list = Array.isArray(result?.data) ? result.data : [];
         const exact = list.find(
           (contact: any) =>
-            String(contact?.numeroDocumento ?? contact?.cnpj ?? contact?.cpf ?? "")
-              .replace(/\D/g, "") === document,
+            String(
+              contact?.numeroDocumento ?? contact?.cnpj ?? contact?.cpf ?? "",
+            ).replace(/\D/g, "") === document,
         );
         if (exact?.id) return String(exact.id);
         // Never accept the first fuzzy search result for fiscal identity.
@@ -99,14 +107,26 @@ export class BlingOutboxService {
   }
 
   private async ensureContact(companyId: string, customer: any, delivery: any) {
-    const document = String(customer?.cpf ?? customer?.taxId ?? "").replace(/\D/g, "");
-    if (!document) throw new Error("Pedido sem CPF/CNPJ para integração Bling.");
+    const document = String(customer?.cpf ?? customer?.taxId ?? "").replace(
+      /\D/g,
+      "",
+    );
+    if (!document)
+      throw new Error("Pedido sem CPF/CNPJ para integração Bling.");
 
     const existing = await this.getMap(companyId, "CONTACT_DOCUMENT", document);
     if (existing?.externalId) {
-      const detail = await this.bling.request(companyId, `/contatos/${encodeURIComponent(existing.externalId)}`, { method: "GET" }).catch(() => null);
+      const detail = await this.bling
+        .request(
+          companyId,
+          `/contatos/${encodeURIComponent(existing.externalId)}`,
+          { method: "GET" },
+        )
+        .catch(() => null);
       const remote = detail?.data ?? detail ?? {};
-      const remoteDocument = String(remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "").replace(/\D/g, "");
+      const remoteDocument = String(
+        remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "",
+      ).replace(/\D/g, "");
       if (remoteDocument === document) return existing.externalId as string;
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
@@ -118,14 +138,29 @@ export class BlingOutboxService {
     // Always resolve the contact fresh by fiscal document after a stale mapping is discarded.
     const remoteId = await this.findContactByDocument(companyId, document);
     if (remoteId) {
-      const detail = await this.bling.request(companyId, `/contatos/${encodeURIComponent(remoteId)}`, { method: "GET" }).catch(() => null);
+      const detail = await this.bling
+        .request(companyId, `/contatos/${encodeURIComponent(remoteId)}`, {
+          method: "GET",
+        })
+        .catch(() => null);
       const remote = detail?.data ?? detail ?? {};
-      const remoteDocument = String(remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "").replace(/\D/g, "");
-      if (remoteDocument !== document) throw new Error("Emissão fiscal bloqueada: o contato localizado no Bling possui CPF/CNPJ diferente do cliente do pedido.");
-      await this.mapResource(companyId, "CONTACT_DOCUMENT", document, remoteId, {
-        email: customer?.email,
-        source: "FOUND_BY_DOCUMENT_VERIFIED",
-      });
+      const remoteDocument = String(
+        remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "",
+      ).replace(/\D/g, "");
+      if (remoteDocument !== document)
+        throw new Error(
+          "Emissão fiscal bloqueada: o contato localizado no Bling possui CPF/CNPJ diferente do cliente do pedido.",
+        );
+      await this.mapResource(
+        companyId,
+        "CONTACT_DOCUMENT",
+        document,
+        remoteId,
+        {
+          email: customer?.email,
+          source: "FOUND_BY_DOCUMENT_VERIFIED",
+        },
+      );
       return remoteId;
     }
 
@@ -133,10 +168,14 @@ export class BlingOutboxService {
     const payload = await this.bling.request(companyId, "/contatos", {
       method: "POST",
       body: JSON.stringify({
-        nome: customer?.name,
+        nome:
+          document.length === 14
+            ? customer?.legalName || customer?.name
+            : customer?.name,
         tipo: document.length === 11 ? "F" : "J",
         situacao: "A",
         numeroDocumento: document,
+        ie: customer?.stateRegistration || undefined,
         email: customer?.email,
         celular: phone || undefined,
         endereco: {
@@ -153,17 +192,29 @@ export class BlingOutboxService {
       }),
     });
     const externalId = String(payload?.data?.id ?? payload?.id ?? "");
-    if (!externalId) throw new Error("Bling criou/recebeu contato sem retornar ID.");
-    await this.mapResource(companyId, "CONTACT_DOCUMENT", document, externalId, {
-      email: customer?.email,
-    });
+    if (!externalId)
+      throw new Error("Bling criou/recebeu contato sem retornar ID.");
+    await this.mapResource(
+      companyId,
+      "CONTACT_DOCUMENT",
+      document,
+      externalId,
+      {
+        email: customer?.email,
+      },
+    );
     return externalId;
   }
 
   private async productExternalId(companyId: string, item: any) {
     const internalKey = String(item?.id ?? "").trim();
-    if (!internalKey) throw new Error("Item e-commerce sem identificador interno.");
-    const mapping = await this.getMap(companyId, "STOREFRONT_PRODUCT", internalKey);
+    if (!internalKey)
+      throw new Error("Item e-commerce sem identificador interno.");
+    const mapping = await this.getMap(
+      companyId,
+      "STOREFRONT_PRODUCT",
+      internalKey,
+    );
     if (!mapping?.externalId) {
       throw new Error(
         `Produto ${internalKey} ainda não está mapeado no Bling. Sincronize o catálogo antes de processar o pedido.`,
@@ -180,9 +231,14 @@ export class BlingOutboxService {
     );
     const order = orders[0];
     if (!order) throw new Error("StorefrontOrder da fila não foi encontrado.");
-    if (order.status !== "PAID") throw new Error(`StorefrontOrder ${order.code} não está pago.`);
+    if (order.status !== "PAID")
+      throw new Error(`StorefrontOrder ${order.code} não está pago.`);
 
-    const prior = await this.getMap(row.companyId, "STOREFRONT_ORDER", order.id);
+    const prior = await this.getMap(
+      row.companyId,
+      "STOREFRONT_ORDER",
+      order.id,
+    );
     if (prior?.externalId) {
       await this.database.$executeRawUnsafe(
         `UPDATE "StorefrontOrder" SET status='PREPARING',"updatedAt"=NOW() WHERE id=$1 AND status='PAID'`,
@@ -200,7 +256,11 @@ export class BlingOutboxService {
       return { externalId: prior.externalId, idempotent: true };
     }
 
-    const contactId = await this.ensureContact(row.companyId, order.customer, order.delivery);
+    const contactId = await this.ensureContact(
+      row.companyId,
+      order.customer,
+      order.delivery,
+    );
     const items = Array.isArray(order.items) ? order.items : [];
     if (!items.length) throw new Error("StorefrontOrder pago sem itens.");
 
@@ -226,12 +286,19 @@ export class BlingOutboxService {
       }),
     });
     const externalId = String(result?.data?.id ?? result?.id ?? "");
-    if (!externalId) throw new Error("Bling não retornou o ID do pedido de venda criado.");
+    if (!externalId)
+      throw new Error("Bling não retornou o ID do pedido de venda criado.");
 
-    await this.mapResource(row.companyId, "STOREFRONT_ORDER", order.id, externalId, {
-      code: order.code,
-      origin: "ECOMMERCE",
-    });
+    await this.mapResource(
+      row.companyId,
+      "STOREFRONT_ORDER",
+      order.id,
+      externalId,
+      {
+        code: order.code,
+        origin: "ECOMMERCE",
+      },
+    );
     await this.database.$executeRawUnsafe(
       `UPDATE "StorefrontOrder" SET status='PREPARING',"updatedAt"=NOW() WHERE id=$1 AND status='PAID'`,
       order.id,
@@ -250,10 +317,14 @@ export class BlingOutboxService {
 
   private async processSalesOrderInvoice(row: any) {
     const orders = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT so.*,c.name AS "customerName",c."taxId" AS "customerTaxId",
+      `SELECT so.*,c.name AS "customerName",c."legalName" AS "customerLegalName",c."taxId" AS "customerTaxId",
               c.email AS "customerEmail",c.phone AS "customerPhone",
               c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
-              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState"
+              c."addressNumber" AS "customerAddressNumber",
+              c."addressComplement" AS "customerAddressComplement",
+              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState",
+              c."stateRegistration" AS "customerStateRegistration",
+              c."stateRegistrationType" AS "customerStateRegistrationType"
          FROM "SalesOrder" so
          JOIN "Customer" c ON c.id=so."customerId"
         WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
@@ -262,6 +333,21 @@ export class BlingOutboxService {
     );
     const order = orders[0];
     if (!order) throw new Error("SalesOrder da fila não foi encontrado.");
+    const customerFiscalError = customerFiscalReadinessMessage({
+      name: order.customerName,
+      legalName: order.customerLegalName,
+      taxId: order.customerTaxId,
+      postalCode: order.customerPostalCode,
+      address: order.customerAddress,
+      addressNumber: order.customerAddressNumber,
+      addressComplement: order.customerAddressComplement,
+      district: order.customerDistrict,
+      city: order.customerCity,
+      state: order.customerState,
+      stateRegistration: order.customerStateRegistration,
+      stateRegistrationType: order.customerStateRegistrationType,
+    });
+    if (customerFiscalError) throw new Error(customerFiscalError);
     if (!["READY_TO_SHIP", "INVOICED"].includes(String(order.status))) {
       throw new Error(
         `SalesOrder ${order.code} precisa estar pronto para expedição antes do faturamento.`,
@@ -281,23 +367,21 @@ export class BlingOutboxService {
 
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
     if (!salesMap?.externalId) {
-      const rawAddress = String(order.customerAddress || "").trim();
-      const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/);
-      const street = String(addressMatch?.[1] || rawAddress).trim();
-      const number = String(addressMatch?.[2] || "S/N").trim();
-
       const contactId = await this.ensureContact(
         row.companyId,
         {
           name: order.customerName,
+          legalName: order.customerLegalName,
           cpf: order.customerTaxId,
           email: order.customerEmail,
           phone: order.customerPhone,
+          stateRegistration: order.customerStateRegistration,
+          stateRegistrationType: order.customerStateRegistrationType,
         },
         {
-          street,
-          number,
-          complement: "",
+          street: order.customerAddress,
+          number: order.customerAddressNumber,
+          complement: order.customerAddressComplement,
           district: order.customerDistrict,
           postalCode: order.customerPostalCode,
           city: order.customerCity,
@@ -331,41 +415,59 @@ export class BlingOutboxService {
         : packagePayload
           ? 1
           : 0;
-      const grossWeight =
-        Array.isArray(packagePayload)
-          ? packagePayload.reduce(
-              (sum: number, pkg: any) =>
-                sum + Number(pkg?.weight ?? pkg?.weightGrams ?? 0) / (pkg?.weightGrams ? 1000 : 1),
-              0,
-            )
-          : Number(packagePayload?.weight ?? 0);
+      const grossWeight = Array.isArray(packagePayload)
+        ? packagePayload.reduce(
+            (sum: number, pkg: any) =>
+              sum +
+              Number(pkg?.weight ?? pkg?.weightGrams ?? 0) /
+                (pkg?.weightGrams ? 1000 : 1),
+            0,
+          )
+        : Number(packagePayload?.weight ?? 0);
 
-      const result = await this.bling.request(row.companyId, "/pedidos/vendas", {
-        method: "POST",
-        body: JSON.stringify({
-          numeroLoja: order.orderNumber ?? order.code,
-          data: toBlingDate(order.orderDate ?? order.orderedAt ?? order.createdAt),
-          contato: { id: Number(contactId) },
-          itens: blingItems,
-          observacoes: order.orderType === "SAMPLE"
-            ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | Valor simbólico para fins fiscais | Origem: BBOS AMOSTRAS | BBOS: ${order.code}`
-            : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
-          transporte: {
-            fretePorConta: order.freightResponsibility === "CUSTOMER" ? 1 : 0,
-            frete: Number(order.freight ?? 0),
-            quantidadeVolumes: packageCount || undefined,
-            pesoBruto: grossWeight || undefined,
-            prazoEntrega: Number(order.estimatedDeliveryDays ?? 0) || undefined,
-          },
-        }),
-      });
+      const result = await this.bling.request(
+        row.companyId,
+        "/pedidos/vendas",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            numeroLoja: order.orderNumber ?? order.code,
+            data: toBlingDate(
+              order.orderDate ?? order.orderedAt ?? order.createdAt,
+            ),
+            contato: { id: Number(contactId) },
+            itens: blingItems,
+            observacoes:
+              order.orderType === "SAMPLE"
+                ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | Valor simbólico para fins fiscais | Origem: BBOS AMOSTRAS | BBOS: ${order.code}`
+                : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
+            transporte: {
+              fretePorConta: order.freightResponsibility === "CUSTOMER" ? 1 : 0,
+              frete: Number(order.freight ?? 0),
+              quantidadeVolumes: packageCount || undefined,
+              pesoBruto: grossWeight || undefined,
+              prazoEntrega:
+                Number(order.estimatedDeliveryDays ?? 0) || undefined,
+            },
+          }),
+        },
+      );
       const externalId = String(result?.data?.id ?? result?.id ?? "");
       if (!externalId)
-        throw new Error("Bling não retornou o ID do pedido de venda comercial.");
-      await this.mapResource(row.companyId, "SALES_ORDER", order.id, externalId, {
-        code: order.code,
-        origin: order.orderType === "SAMPLE" ? "BBOS_SAMPLE" : "BBOS_COMERCIAL",
-      });
+        throw new Error(
+          "Bling não retornou o ID do pedido de venda comercial.",
+        );
+      await this.mapResource(
+        row.companyId,
+        "SALES_ORDER",
+        order.id,
+        externalId,
+        {
+          code: order.code,
+          origin:
+            order.orderType === "SAMPLE" ? "BBOS_SAMPLE" : "BBOS_COMERCIAL",
+        },
+      );
       salesMap = { externalId };
     }
 
@@ -376,7 +478,9 @@ export class BlingOutboxService {
       row.companyId,
       order.id,
     );
-    const priorFiscalExternalId = String(priorFiscal[0]?.externalId ?? "").trim();
+    const priorFiscalExternalId = String(
+      priorFiscal[0]?.externalId ?? "",
+    ).trim();
     if (
       priorFiscalExternalId &&
       priorFiscalExternalId !== "0" &&
@@ -390,16 +494,38 @@ export class BlingOutboxService {
       };
     }
 
-    const expectedDocument = String(order.customerTaxId ?? "").replace(/\D/g, "");
-    const salesOrderDetail = await this.bling.request(row.companyId, `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`, { method: "GET" });
+    const expectedDocument = String(order.customerTaxId ?? "").replace(
+      /\D/g,
+      "",
+    );
+    const salesOrderDetail = await this.bling.request(
+      row.companyId,
+      `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
+      { method: "GET" },
+    );
     const remoteOrder = salesOrderDetail?.data ?? salesOrderDetail ?? {};
     const remoteContactId = String(remoteOrder?.contato?.id ?? "");
-    if (!remoteContactId) throw new Error("Emissão fiscal bloqueada: pedido do Bling sem contato destinatário.");
-    const remoteContactDetail = await this.bling.request(row.companyId, `/contatos/${encodeURIComponent(remoteContactId)}`, { method: "GET" });
-    const remoteContact = remoteContactDetail?.data ?? remoteContactDetail ?? {};
-    const remoteDocument = String(remoteContact?.numeroDocumento ?? remoteContact?.cnpj ?? remoteContact?.cpf ?? "").replace(/\D/g, "");
+    if (!remoteContactId)
+      throw new Error(
+        "Emissão fiscal bloqueada: pedido do Bling sem contato destinatário.",
+      );
+    const remoteContactDetail = await this.bling.request(
+      row.companyId,
+      `/contatos/${encodeURIComponent(remoteContactId)}`,
+      { method: "GET" },
+    );
+    const remoteContact =
+      remoteContactDetail?.data ?? remoteContactDetail ?? {};
+    const remoteDocument = String(
+      remoteContact?.numeroDocumento ??
+        remoteContact?.cnpj ??
+        remoteContact?.cpf ??
+        "",
+    ).replace(/\D/g, "");
     if (!expectedDocument || remoteDocument !== expectedDocument) {
-      throw new Error(`Emissão fiscal bloqueada: CPF/CNPJ do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`);
+      throw new Error(
+        `Emissão fiscal bloqueada: CPF/CNPJ do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`,
+      );
     }
 
     const remoteSalesOrder = await this.bling
@@ -411,8 +537,8 @@ export class BlingOutboxService {
       .catch(() => null);
     let blingNfeId = String(
       remoteSalesOrder?.data?.notaFiscal?.id ??
-      remoteSalesOrder?.notaFiscal?.id ??
-      "",
+        remoteSalesOrder?.notaFiscal?.id ??
+        "",
     ).trim();
     if (blingNfeId === "0") blingNfeId = "";
     let nfeResult: any = {
@@ -435,10 +561,13 @@ export class BlingOutboxService {
     }
     if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
 
-    const reusableFiscal = priorFiscal[0] && String(priorFiscal[0].status) !== "CANCELLED"
-      ? priorFiscal[0]
-      : null;
-    const fiscalId = reusableFiscal?.id || `fiscal-${stableId(`${row.companyId}:${order.id}:NFE:${blingNfeId}`)}`;
+    const reusableFiscal =
+      priorFiscal[0] && String(priorFiscal[0].status) !== "CANCELLED"
+        ? priorFiscal[0]
+        : null;
+    const fiscalId =
+      reusableFiscal?.id ||
+      `fiscal-${stableId(`${row.companyId}:${order.id}:NFE:${blingNfeId}`)}`;
     if (reusableFiscal) {
       await this.database.$executeRawUnsafe(
         `UPDATE "FiscalDocument"
@@ -448,7 +577,10 @@ export class BlingOutboxService {
         fiscalId,
         blingNfeId,
         Number(order.totalAmount),
-        JSON.stringify({ create: nfeResult, blingOrderId: salesMap.externalId }),
+        JSON.stringify({
+          create: nfeResult,
+          blingOrderId: salesMap.externalId,
+        }),
       );
     } else {
       await this.database.$executeRawUnsafe(
@@ -462,7 +594,10 @@ export class BlingOutboxService {
         order.id,
         blingNfeId,
         Number(order.totalAmount),
-        JSON.stringify({ create: nfeResult, blingOrderId: salesMap.externalId }),
+        JSON.stringify({
+          create: nfeResult,
+          blingOrderId: salesMap.externalId,
+        }),
       );
     }
     await this.mapResource(
@@ -483,23 +618,20 @@ export class BlingOutboxService {
     let authorizedNote: any = null;
     if (sefaz.status === "AUTHORIZED") {
       authorizedNote = await this.bling
-        .request(
-          row.companyId,
-          `/nfe/${encodeURIComponent(blingNfeId)}`,
-          { method: "GET" },
-        )
+        .request(row.companyId, `/nfe/${encodeURIComponent(blingNfeId)}`, {
+          method: "GET",
+        })
         .then((detail) => detail?.data ?? detail ?? null)
         .catch(() => null);
     }
-    const accessKey = String(
-      authorizedNote?.chaveAcesso ?? authorizedNote?.chave ?? "",
-    ).trim() || null;
-    const number = authorizedNote?.numero == null
-      ? null
-      : String(authorizedNote.numero);
-    const series = authorizedNote?.serie == null
-      ? null
-      : String(authorizedNote.serie);
+    const accessKey =
+      String(
+        authorizedNote?.chaveAcesso ?? authorizedNote?.chave ?? "",
+      ).trim() || null;
+    const number =
+      authorizedNote?.numero == null ? null : String(authorizedNote.numero);
+    const series =
+      authorizedNote?.serie == null ? null : String(authorizedNote.serie);
     await this.database.$executeRawUnsafe(
       `UPDATE "FiscalDocument"
           SET status=$2,
@@ -546,7 +678,8 @@ export class BlingOutboxService {
         try {
           fulfillment = await this.shipment.createLabelForSalesOrder(order.id);
         } catch (error) {
-          fulfillmentError = error instanceof Error ? error.message : String(error);
+          fulfillmentError =
+            error instanceof Error ? error.message : String(error);
         }
       }
     }
@@ -589,19 +722,28 @@ export class BlingOutboxService {
     const count = Number(snapshot?.authorizationAttemptCount ?? 0);
     if (count >= 3) return { allowed: false, count };
     const lastAttempt = new Date(
-      String(snapshot?.authorizationRequestedAt ?? snapshot?.authorizationRetriedAt ?? ""),
+      String(
+        snapshot?.authorizationRequestedAt ??
+          snapshot?.authorizationRetriedAt ??
+          "",
+      ),
     ).getTime();
     const waitMs = count <= 1 ? 2 * 60_000 : 10 * 60_000;
     return {
-      allowed: !Number.isFinite(lastAttempt) || Date.now() - lastAttempt >= waitMs,
+      allowed:
+        !Number.isFinite(lastAttempt) || Date.now() - lastAttempt >= waitMs,
       count,
     };
   }
 
   private sefazAuthorization(response: any) {
     const xml = String(response?.data?.xml ?? response?.xml ?? "");
-    const codes = [...xml.matchAll(/<cStat>(\d+)<\/cStat>/g)].map((match) => Number(match[1]));
-    const messages = [...xml.matchAll(/<xMotivo>([^<]+)<\/xMotivo>/g)].map((match) => match[1]);
+    const codes = [...xml.matchAll(/<cStat>(\d+)<\/cStat>/g)].map((match) =>
+      Number(match[1]),
+    );
+    const messages = [...xml.matchAll(/<xMotivo>([^<]+)<\/xMotivo>/g)].map(
+      (match) => match[1],
+    );
     const code = codes.at(-1) ?? null;
     const message = messages.at(-1) ?? null;
     return {
@@ -624,11 +766,14 @@ export class BlingOutboxService {
       row.companyId,
     );
     const document = documents[0];
-    if (!document) throw new Error("FiscalDocument da fila não foi encontrado.");
+    if (!document)
+      throw new Error("FiscalDocument da fila não foi encontrado.");
 
     if (
       document.externalId ||
-      ["SENT", "AUTHORIZED", "REJECTED", "CANCELLED"].includes(String(document.status))
+      ["SENT", "AUTHORIZED", "REJECTED", "CANCELLED"].includes(
+        String(document.status),
+      )
     ) {
       return {
         fiscalId: document.id,
@@ -682,19 +827,44 @@ export class BlingOutboxService {
       );
       let note = detail?.data ?? detail ?? {};
       let status = this.fiscalStatus(note?.situacao);
-      const protocol = String(note?.protocolo ?? note?.protocoloAutorizacao ?? note?.numeroProtocolo ?? note?.protocoloUso ?? note?.protocoloNfe ?? "").trim();
-      const accessKeyFromNote = String(note?.chaveAcesso ?? note?.chave ?? "").replace(/\D/g, "");
-      const xmlUrl = String(note?.linkXml ?? note?.xml ?? note?.xmlUrl ?? "").trim();
-      const danfeUrl = String(note?.linkDanfe ?? note?.linkPDF ?? note?.danfe ?? note?.pdf ?? "").trim();
-      const statusText = String(note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "").toLowerCase();
+      const protocol = String(
+        note?.protocolo ??
+          note?.protocoloAutorizacao ??
+          note?.numeroProtocolo ??
+          note?.protocoloUso ??
+          note?.protocoloNfe ??
+          "",
+      ).trim();
+      const accessKeyFromNote = String(
+        note?.chaveAcesso ?? note?.chave ?? "",
+      ).replace(/\D/g, "");
+      const xmlUrl = String(
+        note?.linkXml ?? note?.xml ?? note?.xmlUrl ?? "",
+      ).trim();
+      const danfeUrl = String(
+        note?.linkDanfe ?? note?.linkPDF ?? note?.danfe ?? note?.pdf ?? "",
+      ).trim();
+      const statusText = String(
+        note?.situacao?.nome ??
+          note?.situacao?.descricao ??
+          note?.situacao ??
+          "",
+      ).toLowerCase();
       // Fiscal truth wins over a stale Bling status code. Bling may expose an authorized
       // DANFE/protocol while situacao is still "consultar situação".
       if (
         accessKeyFromNote.length === 44 &&
-        (protocol || xmlUrl || danfeUrl || statusText.includes("autoriz") || statusText.includes("danfe"))
-      ) status = "AUTHORIZED";
+        (protocol ||
+          xmlUrl ||
+          danfeUrl ||
+          statusText.includes("autoriz") ||
+          statusText.includes("danfe"))
+      )
+        status = "AUTHORIZED";
       let retrySnapshot: Record<string, unknown> = {};
-      const storedSefaz = this.sefazAuthorization(row.payloadSnapshot?.blingSend);
+      const storedSefaz = this.sefazAuthorization(
+        row.payloadSnapshot?.blingSend,
+      );
       if (storedSefaz.status !== "SENT") {
         status = storedSefaz.status;
         retrySnapshot = {
@@ -727,9 +897,12 @@ export class BlingOutboxService {
             );
             note = refreshed?.data ?? refreshed ?? note;
             status =
-              sefaz.status === "SENT" ? this.fiscalStatus(note?.situacao) : sefaz.status;
+              sefaz.status === "SENT"
+                ? this.fiscalStatus(note?.situacao)
+                : sefaz.status;
           } catch (error) {
-            authorizationLastError = error instanceof Error ? error.message : String(error);
+            authorizationLastError =
+              error instanceof Error ? error.message : String(error);
           }
           retrySnapshot = {
             authorizationAttemptCount: retry.count + 1,
@@ -741,7 +914,8 @@ export class BlingOutboxService {
           };
         }
       }
-      const accessKey = String(note?.chaveAcesso ?? note?.chave ?? "").trim() || null;
+      const accessKey =
+        String(note?.chaveAcesso ?? note?.chave ?? "").trim() || null;
       const number = note?.numero == null ? null : String(note.numero);
       const series = note?.serie == null ? null : String(note.serie);
 
@@ -780,7 +954,13 @@ export class BlingOutboxService {
           "A nota fiscal do seu pedido foi autorizada e a expedição será preparada.",
           "BLING",
           `sales-order:invoice-authorized:${row.salesOrderId}`,
-          { fiscalId: row.id, externalId: row.externalId, accessKey, number, series },
+          {
+            fiscalId: row.id,
+            externalId: row.externalId,
+            accessKey,
+            number,
+            series,
+          },
         );
         const shippingRows = await this.database.$queryRawUnsafe<any[]>(
           `SELECT "shippingProvider","shippingQuoteId" FROM "SalesOrder" WHERE id=$1 LIMIT 1`,
@@ -791,9 +971,12 @@ export class BlingOutboxService {
           shippingRows[0]?.shippingQuoteId
         ) {
           try {
-            fulfillment = await this.shipment.createLabelForSalesOrder(row.salesOrderId);
+            fulfillment = await this.shipment.createLabelForSalesOrder(
+              row.salesOrderId,
+            );
           } catch (error) {
-            fulfillmentError = error instanceof Error ? error.message : String(error);
+            fulfillmentError =
+              error instanceof Error ? error.message : String(error);
           }
         }
       }
@@ -821,19 +1004,26 @@ export class BlingOutboxService {
   async retrySalesOrderInvoice(companyId: string, orderId: string) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.id,so.status,c."taxId" FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId" WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
-      orderId, companyId,
+      orderId,
+      companyId,
     );
     const row = rows[0];
     if (!row) throw new Error("Pedido não encontrado.");
     const document = String(row.taxId ?? "").replace(/\D/g, "");
-    if (!document) throw new Error("Reprocessamento fiscal bloqueado: cliente sem CPF/CNPJ.");
+    if (!document)
+      throw new Error(
+        "Reprocessamento fiscal bloqueado: cliente sem CPF/CNPJ.",
+      );
     await this.database.$executeRawUnsafe(
       `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType" IN ('CONTACT_DOCUMENT','SALES_ORDER') AND ("internalKey"=$2 OR "internalKey"=$3)`,
-      companyId, document, orderId,
+      companyId,
+      document,
+      orderId,
     );
     await this.database.$executeRawUnsafe(
       `UPDATE "IntegrationOutbox" SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE "companyId"=$1 AND "aggregateId"=$2 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,
-      companyId, orderId,
+      companyId,
+      orderId,
     );
     return this.processNext(companyId);
   }
@@ -843,15 +1033,29 @@ export class BlingOutboxService {
       `SELECT so.id,so.status,so."orderType",c."taxId",f.id AS "fiscalId",f."externalId",f.number
          FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
          JOIN "FiscalDocument" f ON f."salesOrderId"=so.id AND f.direction='OUTBOUND'
-        WHERE so.id=$1 AND so."companyId"=$2 ORDER BY f."createdAt" DESC LIMIT 1`, orderId, companyId);
+        WHERE so.id=$1 AND so."companyId"=$2 ORDER BY f."createdAt" DESC LIMIT 1`,
+      orderId,
+      companyId,
+    );
     const row = rows[0];
-    if (!row?.externalId) throw new Error("Pedido sem NF-e do Bling para reconciliar.");
-    const detail = await this.bling.request(companyId, `/nfe/${encodeURIComponent(row.externalId)}`, { method: "GET" });
+    if (!row?.externalId)
+      throw new Error("Pedido sem NF-e do Bling para reconciliar.");
+    const detail = await this.bling.request(
+      companyId,
+      `/nfe/${encodeURIComponent(row.externalId)}`,
+      { method: "GET" },
+    );
     const note = detail?.data ?? detail ?? {};
     const remoteStatus = this.fiscalStatus(note?.situacao);
-    const remoteStatusText = String(note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "").toLowerCase();
-    const cancelled = remoteStatus === "CANCELLED" || remoteStatusText.includes("cancel");
-    if (!cancelled) throw new Error(`A NF-e ainda não consta como cancelada no Bling (situação retornada: ${remoteStatusText || "não informada"}).`);
+    const remoteStatusText = String(
+      note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "",
+    ).toLowerCase();
+    const cancelled =
+      remoteStatus === "CANCELLED" || remoteStatusText.includes("cancel");
+    if (!cancelled)
+      throw new Error(
+        `A NF-e ainda não consta como cancelada no Bling (situação retornada: ${remoteStatusText || "não informada"}).`,
+      );
     let sampleTotal: number | null = null;
     await this.database.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe(
@@ -861,7 +1065,10 @@ export class BlingOutboxService {
                 "updatedAt"=NOW()
           WHERE id=$1`,
         row.fiscalId,
-        JSON.stringify({ cancellationReconciledAt: new Date().toISOString(), blingNfe: note }),
+        JSON.stringify({
+          cancellationReconciledAt: new Date().toISOString(),
+          blingNfe: note,
+        }),
       );
 
       if (String(row.orderType) === "SAMPLE") {
@@ -884,7 +1091,8 @@ export class BlingOutboxService {
           companyId,
         );
         const quantity = Number(totals[0]?.quantity ?? 0);
-        if (quantity < 1) throw new Error("Pedido de amostra sem itens para reemissão fiscal.");
+        if (quantity < 1)
+          throw new Error("Pedido de amostra sem itens para reemissão fiscal.");
         sampleTotal = sampleFiscalPrice(quantity);
         await transaction.$executeRawUnsafe(
           `UPDATE "SalesOrder"
@@ -971,7 +1179,10 @@ export class BlingOutboxService {
 
     try {
       let result: any;
-      if (row.eventType === "STOREFRONT_ORDER_PAID" && row.aggregateType === "STOREFRONT_ORDER") {
+      if (
+        row.eventType === "STOREFRONT_ORDER_PAID" &&
+        row.aggregateType === "STOREFRONT_ORDER"
+      ) {
         result = await this.processStorefrontPaid(row);
       } else if (
         row.eventType === "SALES_ORDER_INVOICE_REQUESTED" &&
@@ -984,17 +1195,27 @@ export class BlingOutboxService {
       ) {
         result = await this.processLegacyFiscalReady(row);
       } else {
-        throw new Error(`Evento Bling ainda não implementado: ${row.eventType}/${row.aggregateType}`);
+        throw new Error(
+          `Evento Bling ainda não implementado: ${row.eventType}/${row.aggregateType}`,
+        );
       }
       await this.database.$executeRawUnsafe(
         `UPDATE "IntegrationOutbox" SET status='SENT',"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE id=$1`,
         row.id,
       );
-      return { processed: true, outboxId: row.id, eventType: row.eventType, result };
+      return {
+        processed: true,
+        outboxId: row.id,
+        eventType: row.eventType,
+        result,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const attempts = Number(row.attempts ?? 1);
-      const retryMinutes = Math.min(60, Math.max(2, 2 ** Math.min(attempts, 5)));
+      const retryMinutes = Math.min(
+        60,
+        Math.max(2, 2 ** Math.min(attempts, 5)),
+      );
       await this.database.$executeRawUnsafe(
         `UPDATE "IntegrationOutbox"
          SET status='FAILED',"lastError"=$2,"nextAttemptAt"=NOW() + ($3 || ' minutes')::interval,"updatedAt"=NOW()
@@ -1003,7 +1224,12 @@ export class BlingOutboxService {
         message.slice(0, 2000),
         String(retryMinutes),
       );
-      return { processed: true, outboxId: row.id, failed: true, error: message };
+      return {
+        processed: true,
+        outboxId: row.id,
+        failed: true,
+        error: message,
+      };
     }
   }
 }

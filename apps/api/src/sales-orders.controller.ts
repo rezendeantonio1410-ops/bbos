@@ -25,9 +25,12 @@ import {
   sampleFiscalSubtotalCents,
   sampleShippingPackages,
 } from "./sales-order-sample-policy";
+import { customerFiscalReadinessMessage } from "./customer-fiscal-readiness";
 
 const isCashTerm = (value: unknown) => {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return !normalized || normalized === "à vista" || normalized === "a vista";
 };
 const termDays = (value: unknown) => {
@@ -50,7 +53,12 @@ type SalesOrderCommercialTerms = {
   packageHeightCm?: number;
   packageLengthCm?: number;
   packageCount?: number;
-  packages?: Array<{ widthCm: number; heightCm: number; lengthCm: number; weightGrams?: number }>;
+  packages?: Array<{
+    widthCm: number;
+    heightCm: number;
+    lengthCm: number;
+    weightGrams?: number;
+  }>;
   brokerId?: string;
   brokerCommissionMode?: "PERCENTAGE" | "PER_PACKAGE";
   brokerCommissionPercent?: number;
@@ -92,7 +100,11 @@ export class SalesOrdersController {
     return `${prefix}${String(next).padStart(6, "0")}`;
   }
 
-  private async resolveInternalPrice(companyId: string, customerId: string, productVariantId: string) {
+  private async resolveInternalPrice(
+    companyId: string,
+    customerId: string,
+    productVariantId: string,
+  ) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT pp.id AS "productPriceId", pp.price, pp.currency,
               pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
@@ -142,8 +154,12 @@ export class SalesOrdersController {
       maxRequestDiscountPercent: Number(row.maxRequestDiscountPercent ?? 0),
       maxApprovalDiscountPercent: Number(row.maxApprovalDiscountPercent ?? 0),
       minimumPrice: row.minimumPrice == null ? null : Number(row.minimumPrice),
-      minimumMarginPercent: row.minimumMarginPercent == null ? null : Number(row.minimumMarginPercent),
-      minimumRoiPercent: row.minimumRoiPercent == null ? null : Number(row.minimumRoiPercent),
+      minimumMarginPercent:
+        row.minimumMarginPercent == null
+          ? null
+          : Number(row.minimumMarginPercent),
+      minimumRoiPercent:
+        row.minimumRoiPercent == null ? null : Number(row.minimumRoiPercent),
       unitCost: Number(row.unitCost ?? 0),
       segment: row.segment as string | null,
     };
@@ -162,7 +178,9 @@ export class SalesOrdersController {
 
   @Get("next-number")
   async nextNumber(@Req() request: any) {
-    return { number: await this.nextOrderNumber((await this.actor(request)).companyId) };
+    return {
+      number: await this.nextOrderNumber((await this.actor(request)).companyId),
+    };
   }
 
   @Get("quote")
@@ -172,11 +190,19 @@ export class SalesOrdersController {
     @Query("productVariantId") productVariantId: string,
     @Query("quantity") rawQuantity = "1",
   ) {
-    if (!customerId || !productVariantId) throw new BadRequestException("Cliente e produto são obrigatórios para cotar.");
+    if (!customerId || !productVariantId)
+      throw new BadRequestException(
+        "Cliente e produto são obrigatórios para cotar.",
+      );
     const quantity = Number(rawQuantity);
-    if (!Number.isSafeInteger(quantity) || quantity <= 0) throw new BadRequestException("Quantidade inválida.");
+    if (!Number.isSafeInteger(quantity) || quantity <= 0)
+      throw new BadRequestException("Quantidade inválida.");
     const actor = await this.actor(request);
-    const price = await this.resolveInternalPrice(actor.companyId, customerId, productVariantId);
+    const price = await this.resolveInternalPrice(
+      actor.companyId,
+      customerId,
+      productVariantId,
+    );
     return {
       ...price,
       quantity,
@@ -194,7 +220,8 @@ export class SalesOrdersController {
   @Post("shipping-quotes")
   async shippingQuotes(
     @Req() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       orderType?: string;
       customerId?: string;
       productVariantId?: string;
@@ -204,7 +231,12 @@ export class SalesOrdersController {
       packageHeightCm?: number;
       packageLengthCm?: number;
       packageCount?: number;
-      packages?: Array<{ widthCm?: number; heightCm?: number; lengthCm?: number; weightGrams?: number }>;
+      packages?: Array<{
+        widthCm?: number;
+        heightCm?: number;
+        lengthCm?: number;
+        weightGrams?: number;
+      }>;
     },
   ) {
     const actor = await this.actor(request);
@@ -215,20 +247,37 @@ export class SalesOrdersController {
           productVariantId: String(item.productVariantId ?? "").trim(),
           quantity: Number(item.quantity ?? 0),
         }))
-      : [{
-          productVariantId: String(body.productVariantId ?? "").trim(),
-          quantity: Number(body.quantity ?? 0),
-        }];
+      : [
+          {
+            productVariantId: String(body.productVariantId ?? "").trim(),
+            quantity: Number(body.quantity ?? 0),
+          },
+        ];
     if (
-      !customerId || !requestedItems.length ||
-      requestedItems.some((item) => !item.productVariantId || !Number.isSafeInteger(item.quantity) || item.quantity <= 0)
+      !customerId ||
+      !requestedItems.length ||
+      requestedItems.some(
+        (item) =>
+          !item.productVariantId ||
+          !Number.isSafeInteger(item.quantity) ||
+          item.quantity <= 0,
+      )
     ) {
-      throw new BadRequestException("Cliente, produtos e quantidades são obrigatórios para cotar o frete.");
+      throw new BadRequestException(
+        "Cliente, produtos e quantidades são obrigatórios para cotar o frete.",
+      );
     }
-    if (new Set(requestedItems.map((item) => item.productVariantId)).size !== requestedItems.length) {
-      throw new BadRequestException("Agrupe o mesmo produto em um único item antes de cotar o frete.");
+    if (
+      new Set(requestedItems.map((item) => item.productVariantId)).size !==
+      requestedItems.length
+    ) {
+      throw new BadRequestException(
+        "Agrupe o mesmo produto em um único item antes de cotar o frete.",
+      );
     }
-    const productVariantIds = requestedItems.map((item) => item.productVariantId);
+    const productVariantIds = requestedItems.map(
+      (item) => item.productVariantId,
+    );
     const [customer, variants] = await Promise.all([
       this.salesOrders.database.$queryRawUnsafe<any[]>(
         `SELECT id, "companyId", "postalCode" FROM "Customer" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
@@ -236,29 +285,46 @@ export class SalesOrdersController {
         actor.companyId,
       ),
       this.salesOrders.database.productVariant.findMany({
-        where: { id: { in: productVariantIds }, product: { productLine: { companyId: actor.companyId } } },
+        where: {
+          id: { in: productVariantIds },
+          product: { productLine: { companyId: actor.companyId } },
+        },
         select: { id: true, netWeightGrams: true },
       }),
     ]);
     const postalCode = String(customer[0]?.postalCode ?? "").replace(/\D/g, "");
     if (postalCode.length !== 8) {
-      throw new BadRequestException("Cadastre um CEP válido no cliente antes de cotar o frete.");
+      throw new BadRequestException(
+        "Cadastre um CEP válido no cliente antes de cotar o frete.",
+      );
     }
-    if (variants.length !== requestedItems.length) throw new BadRequestException("Um ou mais produtos não foram encontrados para esta empresa.");
-    const weights = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
+    if (variants.length !== requestedItems.length)
+      throw new BadRequestException(
+        "Um ou mais produtos não foram encontrados para esta empresa.",
+      );
+    const weights = new Map(
+      variants.map((variant) => [variant.id, variant.netWeightGrams]),
+    );
     let subtotalCents = 0;
     let weightGrams = 0;
     let salesChannelId = "";
     for (const item of requestedItems) {
-      const price = await this.resolveInternalPrice(actor.companyId, customerId, item.productVariantId);
+      const price = await this.resolveInternalPrice(
+        actor.companyId,
+        customerId,
+        item.productVariantId,
+      );
       if (salesChannelId && salesChannelId !== price.salesChannelId) {
-        throw new BadRequestException("Os produtos precisam usar a mesma tabela comercial.");
+        throw new BadRequestException(
+          "Os produtos precisam usar a mesma tabela comercial.",
+        );
       }
       salesChannelId = price.salesChannelId;
       subtotalCents += isSample
         ? sampleFiscalSubtotalCents(item.quantity)
         : Math.round(price.officialUnitPrice * item.quantity * 100);
-      weightGrams += Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
+      weightGrams +=
+        Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
     }
     const samplePackages = isSample
       ? sampleShippingPackages(weightGrams)
@@ -273,12 +339,15 @@ export class SalesOrdersController {
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
         packageCount: body.packageCount,
-        packages: samplePackages ?? body.packages?.map((item) => ({
-          widthCm: Number(item.widthCm),
-          heightCm: Number(item.heightCm),
-          lengthCm: Number(item.lengthCm),
-          weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
-        })),
+        packages:
+          samplePackages ??
+          body.packages?.map((item) => ({
+            widthCm: Number(item.widthCm),
+            heightCm: Number(item.heightCm),
+            lengthCm: Number(item.lengthCm),
+            weightGrams:
+              item.weightGrams == null ? undefined : Number(item.weightGrams),
+          })),
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
@@ -331,13 +400,42 @@ export class SalesOrdersController {
   }
 
   @Post(":id/requote-shipping")
-  async requoteShipping(@Param("id") id: string, @Body() body: { packages?: Array<{ weight: number; length: number; width: number; height: number }> }, @Req() request: any) {
+  async requoteShipping(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      packages?: Array<{
+        weight: number;
+        length: number;
+        width: number;
+        height: number;
+      }>;
+    },
+    @Req() request: any,
+  ) {
     await this.actorForOrder(request, id);
     return this.shipment.requoteForSalesOrder(id, body?.packages);
   }
 
   @Post(":id/requote-shipping/select")
-  async selectRequoteShipping(@Param("id") id: string, @Body() body: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }, @Req() request: any) {
+  async selectRequoteShipping(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      serviceId: string;
+      serviceName: string;
+      carrierName: string;
+      priceCents: number;
+      deliveryDays?: number;
+      packages?: Array<{
+        weight: number;
+        length: number;
+        width: number;
+        height: number;
+      }>;
+    },
+    @Req() request: any,
+  ) {
     await this.actorForOrder(request, id);
     return this.shipment.selectRequoteForSalesOrder(id, body);
   }
@@ -354,27 +452,43 @@ export class SalesOrdersController {
   }
 
   @Post()
-  async create(@Req() request: any, @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
+  async create(
+    @Req() request: any,
+    @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms,
+  ) {
     const actor = await this.actor(request);
     const orderType = resolveSalesOrderType(body.orderType);
     const isSample = orderType === "SAMPLE";
     const paymentType = isSample
       ? "SAMPLE"
       : String(body.paymentType ?? "CASH").toUpperCase();
-    if (!isSample && !["CASH", "TERM"].includes(paymentType)) throw new BadRequestException("Forma de pagamento inválida.");
+    if (!isSample && !["CASH", "TERM"].includes(paymentType))
+      throw new BadRequestException("Forma de pagamento inválida.");
     const paymentTerms = isSample
       ? "Sem cobrança · amostra"
       : paymentType === "TERM"
         ? String(body.paymentTerms ?? "").trim()
         : "À vista";
-    if (paymentType === "TERM" && !paymentTerms) throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
-    if (!body.customerId || !body.items?.length) throw new BadRequestException("Cliente e itens são obrigatórios.");
+    if (paymentType === "TERM" && !paymentTerms)
+      throw new BadRequestException(
+        "Informe a condição de pagamento da venda a prazo.",
+      );
+    if (!body.customerId || !body.items?.length)
+      throw new BadRequestException("Cliente e itens são obrigatórios.");
 
-    const freightResponsibility = String(body.freightResponsibility ?? "").trim().toUpperCase();
+    const freightResponsibility = String(body.freightResponsibility ?? "")
+      .trim()
+      .toUpperCase();
     if (!freightResponsibility) {
-      throw new BadRequestException("Selecione quem será responsável pelo frete.");
+      throw new BadRequestException(
+        "Selecione quem será responsável pelo frete.",
+      );
     }
-    if (!["BISPO", "CUSTOMER", "CUSTOMER_CARRIER", "PICKUP"].includes(freightResponsibility)) {
+    if (
+      !["BISPO", "CUSTOMER", "CUSTOMER_CARRIER", "PICKUP"].includes(
+        freightResponsibility,
+      )
+    ) {
       throw new BadRequestException("Responsabilidade do frete inválida.");
     }
     if (isSample && !["BISPO", "PICKUP"].includes(freightResponsibility)) {
@@ -388,9 +502,15 @@ export class SalesOrdersController {
     let resolvedChannelId: string | undefined;
     let resolvedChannelType: string | undefined;
     for (const item of body.items) {
-      const price = await this.resolveInternalPrice(actor.companyId, body.customerId, item.productVariantId);
+      const price = await this.resolveInternalPrice(
+        actor.companyId,
+        body.customerId,
+        item.productVariantId,
+      );
       if (resolvedChannelId && resolvedChannelId !== price.salesChannelId) {
-        throw new BadRequestException("Os itens do pedido precisam pertencer ao mesmo canal/tabela comercial.");
+        throw new BadRequestException(
+          "Os itens do pedido precisam pertencer ao mesmo canal/tabela comercial.",
+        );
       }
       resolvedChannelId = price.salesChannelId;
       resolvedChannelType = price.salesChannelType;
@@ -401,48 +521,101 @@ export class SalesOrdersController {
           : price.officialUnitPrice,
       });
     }
-    const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
-    const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
-    if (resolvedChannelType === "EXPORTACAO" && (!incoterm || !incotermLocation)) {
-      throw new BadRequestException("Pedidos de exportação exigem Incoterm e local nomeado.");
+    const incoterm =
+      resolvedChannelType === "EXPORTACAO"
+        ? String(body.incoterm ?? "")
+            .trim()
+            .toUpperCase() || null
+        : null;
+    const incotermLocation =
+      resolvedChannelType === "EXPORTACAO"
+        ? String(body.incotermLocation ?? "").trim() || null
+        : null;
+    if (
+      resolvedChannelType === "EXPORTACAO" &&
+      (!incoterm || !incotermLocation)
+    ) {
+      throw new BadRequestException(
+        "Pedidos de exportação exigem Incoterm e local nomeado.",
+      );
     }
     const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
       salesChannelType: resolvedChannelType,
       freightResponsibility,
       carrierName: body.carrierName,
     });
-    if (!deliveryPolicy.valid) throw new BadRequestException(deliveryPolicy.message);
+    if (!deliveryPolicy.valid)
+      throw new BadRequestException(deliveryPolicy.message);
     const usesPlatformShipping =
       deliveryPolicy.usesPlatformShipping ||
       (isSample && freightResponsibility === "BISPO");
 
     if (isSample && String(body.brokerId ?? "").trim()) {
-      throw new BadRequestException("Pedido de amostra não pode gerar comissão comercial.");
+      throw new BadRequestException(
+        "Pedido de amostra não pode gerar comissão comercial.",
+      );
     }
     const brokerId = isSample
       ? undefined
       : String(body.brokerId ?? "").trim() || undefined;
-    const brokerCommissionMode = brokerId ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase() : undefined;
-    if (brokerCommissionMode && !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)) {
+    const brokerCommissionMode = brokerId
+      ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase()
+      : undefined;
+    if (
+      brokerCommissionMode &&
+      !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)
+    ) {
       throw new BadRequestException("Modalidade de comissão inválida.");
     }
-    const brokerCommissionPercent = brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(body.brokerCommissionPercent ?? 0) : 0;
-    const brokerCommissionPerPackage = brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(body.brokerCommissionPerPackage ?? 0) : 0;
-    if (!Number.isFinite(brokerCommissionPercent) || brokerCommissionPercent < 0 || brokerCommissionPercent > 100) {
-      throw new BadRequestException("A comissão percentual deve estar entre 0% e 100%.");
+    const brokerCommissionPercent =
+      brokerId && brokerCommissionMode === "PERCENTAGE"
+        ? Number(body.brokerCommissionPercent ?? 0)
+        : 0;
+    const brokerCommissionPerPackage =
+      brokerId && brokerCommissionMode === "PER_PACKAGE"
+        ? Number(body.brokerCommissionPerPackage ?? 0)
+        : 0;
+    if (
+      !Number.isFinite(brokerCommissionPercent) ||
+      brokerCommissionPercent < 0 ||
+      brokerCommissionPercent > 100
+    ) {
+      throw new BadRequestException(
+        "A comissão percentual deve estar entre 0% e 100%.",
+      );
     }
-    if (!Number.isFinite(brokerCommissionPerPackage) || brokerCommissionPerPackage < 0) {
-      throw new BadRequestException("O valor da comissão por pacote não pode ser negativo.");
+    if (
+      !Number.isFinite(brokerCommissionPerPackage) ||
+      brokerCommissionPerPackage < 0
+    ) {
+      throw new BadRequestException(
+        "O valor da comissão por pacote não pode ser negativo.",
+      );
     }
-    if (!brokerId && (Number(body.brokerCommissionPercent ?? 0) > 0 || Number(body.brokerCommissionPerPackage ?? 0) > 0)) {
-      throw new BadRequestException("Selecione o corretor para registrar a comissão.");
+    if (
+      !brokerId &&
+      (Number(body.brokerCommissionPercent ?? 0) > 0 ||
+        Number(body.brokerCommissionPerPackage ?? 0) > 0)
+    ) {
+      throw new BadRequestException(
+        "Selecione o corretor para registrar a comissão.",
+      );
     }
-    const commissionBase = pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) - Number(body.discount ?? 0);
-    const commissionPackageQuantity = pricedItems.reduce((sum, item) => sum + item.quantity, 0);
+    const commissionBase =
+      pricedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0,
+      ) - Number(body.discount ?? 0);
+    const commissionPackageQuantity = pricedItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
     const brokerCommissionAmount = brokerId
-      ? roundMoney(brokerCommissionMode === "PER_PACKAGE"
-        ? commissionPackageQuantity * brokerCommissionPerPackage
-        : Math.max(0, commissionBase) * brokerCommissionPercent / 100)
+      ? roundMoney(
+          brokerCommissionMode === "PER_PACKAGE"
+            ? commissionPackageQuantity * brokerCommissionPerPackage
+            : (Math.max(0, commissionBase) * brokerCommissionPercent) / 100,
+        )
       : 0;
 
     let shippingQuote: any = null;
@@ -458,7 +631,9 @@ export class SalesOrdersController {
         where: { id: { in: pricedItems.map((item) => item.productVariantId) } },
         select: { id: true, netWeightGrams: true },
       });
-      const weightById = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
+      const weightById = new Map(
+        variants.map((variant) => [variant.id, variant.netWeightGrams]),
+      );
       const subtotalCents = isSample
         ? sampleFiscalSubtotalCents(
             pricedItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -469,25 +644,37 @@ export class SalesOrdersController {
               0,
             ) * 100,
           );
-      const weightGrams = pricedItems.reduce((sum, item) => sum + item.quantity * Number(weightById.get(item.productVariantId) ?? 0), 0);
+      const weightGrams = pricedItems.reduce(
+        (sum, item) =>
+          sum +
+          item.quantity * Number(weightById.get(item.productVariantId) ?? 0),
+        0,
+      );
       const samplePackages = isSample
         ? sampleShippingPackages(weightGrams)
         : undefined;
-      shippingQuote = await this.shipping.validateQuote(actor.companyId, body.shippingQuoteId, {
-        postalCode: body.destinationPostalCode,
-        subtotalCents,
-        weightGrams,
-        packageWidthCm: body.packageWidthCm,
-        packageHeightCm: body.packageHeightCm,
-        packageLengthCm: body.packageLengthCm,
-        packageCount: body.packageCount,
-        packages: samplePackages ?? body.packages?.map((item) => ({
-          widthCm: Number(item.widthCm),
-          heightCm: Number(item.heightCm),
-          lengthCm: Number(item.lengthCm),
-          weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
-        })),
-      });
+      shippingQuote = await this.shipping.validateQuote(
+        actor.companyId,
+        body.shippingQuoteId,
+        {
+          postalCode: body.destinationPostalCode,
+          subtotalCents,
+          weightGrams,
+          packageWidthCm: body.packageWidthCm,
+          packageHeightCm: body.packageHeightCm,
+          packageLengthCm: body.packageLengthCm,
+          packageCount: body.packageCount,
+          packages:
+            samplePackages ??
+            body.packages?.map((item) => ({
+              widthCm: Number(item.widthCm),
+              heightCm: Number(item.heightCm),
+              lengthCm: Number(item.lengthCm),
+              weightGrams:
+                item.weightGrams == null ? undefined : Number(item.weightGrams),
+            })),
+        },
+      );
       if (isSample && shippingQuote.provider !== "MELHOR_ENVIO") {
         throw new BadRequestException(
           "A amostra deve usar uma cotação válida do Melhor Envio.",
@@ -508,9 +695,17 @@ export class SalesOrdersController {
       orderType,
       salesChannelId: resolvedChannelId,
       brokerId,
-      brokerCommissionMode: brokerId ? brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE" : undefined,
-      brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : undefined,
-      brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : undefined,
+      brokerCommissionMode: brokerId
+        ? (brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE")
+        : undefined,
+      brokerCommissionPercent:
+        brokerId && brokerCommissionMode === "PERCENTAGE"
+          ? brokerCommissionPercent
+          : undefined,
+      brokerCommissionPerPackage:
+        brokerId && brokerCommissionMode === "PER_PACKAGE"
+          ? brokerCommissionPerPackage
+          : undefined,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : undefined,
       discount: isSample ? 0 : body.discount,
       items: pricedItems,
@@ -518,13 +713,14 @@ export class SalesOrdersController {
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
     });
 
-    const carrierName = shippingQuote?.carrierName
-      ?? deliveryPolicy.carrierName;
-    const shippingProvider = shippingQuote?.provider
-      ?? deliveryPolicy.shippingProvider;
-    const shippingServiceName = shippingQuote?.serviceName
-      ?? deliveryPolicy.shippingServiceName;
-    const customerReference = String(body.customerReference ?? "").trim() || null;
+    const carrierName =
+      shippingQuote?.carrierName ?? deliveryPolicy.carrierName;
+    const shippingProvider =
+      shippingQuote?.provider ?? deliveryPolicy.shippingProvider;
+    const shippingServiceName =
+      shippingQuote?.serviceName ?? deliveryPolicy.shippingServiceName;
+    const customerReference =
+      String(body.customerReference ?? "").trim() || null;
     await this.salesOrders.database.$executeRawUnsafe(
       `UPDATE "SalesOrder"
           SET "paymentType"=$2,
@@ -588,8 +784,14 @@ export class SalesOrdersController {
       estimatedDeliveryDays: shippingQuote?.deliveryDays ?? null,
       brokerId: brokerId ?? null,
       brokerCommissionMode: brokerId ? brokerCommissionMode : null,
-      brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : null,
-      brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : null,
+      brokerCommissionPercent:
+        brokerId && brokerCommissionMode === "PERCENTAGE"
+          ? brokerCommissionPercent
+          : null,
+      brokerCommissionPerPackage:
+        brokerId && brokerCommissionMode === "PER_PACKAGE"
+          ? brokerCommissionPerPackage
+          : null,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : null,
     };
   }
@@ -608,7 +810,12 @@ export class SalesOrdersController {
   async requestDiscount(
     @Param("id") id: string,
     @Req() request: any,
-    @Body() body: { salesOrderItemId: string; discountPercent: number; rationale: string },
+    @Body()
+    body: {
+      salesOrderItemId: string;
+      discountPercent: number;
+      rationale: string;
+    },
   ) {
     const actor = await this.actor(request);
     const itemRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
@@ -621,44 +828,97 @@ export class SalesOrdersController {
     );
     const item = itemRows[0];
     if (!item) throw new BadRequestException("Item do pedido não encontrado.");
-    if (item.companyId !== actor.companyId) throw new UnauthorizedException("Pedido fora da empresa do usuário.");
-    if (item.status !== "DRAFT") throw new BadRequestException("Desconto só pode ser solicitado enquanto o pedido está em rascunho.");
-    if (item.orderType === "SAMPLE") throw new BadRequestException("Pedido de amostra usa valor fiscal fixo e não aceita desconto comercial.");
+    if (item.companyId !== actor.companyId)
+      throw new UnauthorizedException("Pedido fora da empresa do usuário.");
+    if (item.status !== "DRAFT")
+      throw new BadRequestException(
+        "Desconto só pode ser solicitado enquanto o pedido está em rascunho.",
+      );
+    if (item.orderType === "SAMPLE")
+      throw new BadRequestException(
+        "Pedido de amostra usa valor fiscal fixo e não aceita desconto comercial.",
+      );
 
     const discountPercent = Number(body.discountPercent);
     const rationale = String(body.rationale ?? "").trim();
-    if (!Number.isFinite(discountPercent) || discountPercent <= 0) throw new BadRequestException("Informe um desconto maior que zero.");
-    if (!rationale) throw new BadRequestException("Justifique a solicitação de desconto.");
-    const price = await this.resolveInternalPrice(actor.companyId, item.customerId, item.productVariantId);
+    if (!Number.isFinite(discountPercent) || discountPercent <= 0)
+      throw new BadRequestException("Informe um desconto maior que zero.");
+    if (!rationale)
+      throw new BadRequestException("Justifique a solicitação de desconto.");
+    const price = await this.resolveInternalPrice(
+      actor.companyId,
+      item.customerId,
+      item.productVariantId,
+    );
     if (discountPercent > price.maxRequestDiscountPercent) {
-      throw new BadRequestException(`Desconto máximo solicitável nesta tabela: ${price.maxRequestDiscountPercent.toFixed(2)}%.`);
+      throw new BadRequestException(
+        `Desconto máximo solicitável nesta tabela: ${price.maxRequestDiscountPercent.toFixed(2)}%.`,
+      );
     }
-    const requestedUnitPrice = roundMoney(price.officialUnitPrice * (1 - discountPercent / 100));
-    if (price.minimumPrice !== null && requestedUnitPrice < price.minimumPrice) {
-      throw new BadRequestException(`Preço mínimo permitido nesta tabela: R$ ${price.minimumPrice.toFixed(2)}.`);
+    const requestedUnitPrice = roundMoney(
+      price.officialUnitPrice * (1 - discountPercent / 100),
+    );
+    if (
+      price.minimumPrice !== null &&
+      requestedUnitPrice < price.minimumPrice
+    ) {
+      throw new BadRequestException(
+        `Preço mínimo permitido nesta tabela: R$ ${price.minimumPrice.toFixed(2)}.`,
+      );
     }
-    const marginPercent = requestedUnitPrice > 0 ? ((requestedUnitPrice - price.unitCost) / requestedUnitPrice) * 100 : -Infinity;
-    const roiPercent = price.unitCost > 0 ? ((requestedUnitPrice - price.unitCost) / price.unitCost) * 100 : Infinity;
-    if (price.minimumMarginPercent !== null && marginPercent < price.minimumMarginPercent) {
-      throw new BadRequestException(`Desconto bloqueado: margem resultante ${marginPercent.toFixed(1)}% abaixo do mínimo ${price.minimumMarginPercent.toFixed(1)}%.`);
+    const marginPercent =
+      requestedUnitPrice > 0
+        ? ((requestedUnitPrice - price.unitCost) / requestedUnitPrice) * 100
+        : -Infinity;
+    const roiPercent =
+      price.unitCost > 0
+        ? ((requestedUnitPrice - price.unitCost) / price.unitCost) * 100
+        : Infinity;
+    if (
+      price.minimumMarginPercent !== null &&
+      marginPercent < price.minimumMarginPercent
+    ) {
+      throw new BadRequestException(
+        `Desconto bloqueado: margem resultante ${marginPercent.toFixed(1)}% abaixo do mínimo ${price.minimumMarginPercent.toFixed(1)}%.`,
+      );
     }
-    if (price.minimumRoiPercent !== null && roiPercent < price.minimumRoiPercent) {
-      throw new BadRequestException(`Desconto bloqueado: ROI resultante ${roiPercent.toFixed(1)}% abaixo do mínimo ${price.minimumRoiPercent.toFixed(1)}%.`);
+    if (
+      price.minimumRoiPercent !== null &&
+      roiPercent < price.minimumRoiPercent
+    ) {
+      throw new BadRequestException(
+        `Desconto bloqueado: ROI resultante ${roiPercent.toFixed(1)}% abaixo do mínimo ${price.minimumRoiPercent.toFixed(1)}%.`,
+      );
     }
     const pending = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT id FROM "SalesDiscountRequest" WHERE "salesOrderItemId"=$1 AND status='PENDING' LIMIT 1`,
       item.id,
     );
-    if (pending.length) throw new BadRequestException("Já existe uma solicitação de desconto pendente para este item.");
+    if (pending.length)
+      throw new BadRequestException(
+        "Já existe uma solicitação de desconto pendente para este item.",
+      );
 
     const requestId = randomUUID();
     await this.salesOrders.database.$executeRawUnsafe(
       `INSERT INTO "SalesDiscountRequest"
         (id,"companyId","salesOrderId","salesOrderItemId","productPriceId","officialUnitPrice","requestedUnitPrice","discountPercent","discountAmount",rationale,status,"requestedById","requestedByName","requestedByRole","createdAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING',$11,$12,$13,NOW())`,
-      requestId, actor.companyId, id, item.id, price.productPriceId, price.officialUnitPrice,
-      requestedUnitPrice, discountPercent, roundMoney((price.officialUnitPrice - requestedUnitPrice) * item.quantity),
-      rationale, actor.id, actor.name, actor.role,
+      requestId,
+      actor.companyId,
+      id,
+      item.id,
+      price.productPriceId,
+      price.officialUnitPrice,
+      requestedUnitPrice,
+      discountPercent,
+      roundMoney(
+        (price.officialUnitPrice - requestedUnitPrice) * item.quantity,
+      ),
+      rationale,
+      actor.id,
+      actor.name,
+      actor.role,
     );
     return {
       id: requestId,
@@ -681,7 +941,9 @@ export class SalesOrdersController {
   ) {
     const actor = await this.actor(request);
     if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) {
-      throw new UnauthorizedException("A aprovação de desconto é restrita à administração/diretoria.");
+      throw new UnauthorizedException(
+        "A aprovação de desconto é restrita à administração/diretoria.",
+      );
     }
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT dr.*, pp."maxApprovalDiscountPercent", so.status AS "orderStatus", soi.quantity
@@ -694,14 +956,28 @@ export class SalesOrdersController {
       id,
     );
     const discount = rows[0];
-    if (!discount) throw new BadRequestException("Solicitação de desconto não encontrada.");
-    if (discount.companyId !== actor.companyId) throw new UnauthorizedException("Solicitação fora da empresa do usuário.");
-    if (discount.status !== "PENDING") throw new BadRequestException("Esta solicitação já foi decidida.");
+    if (!discount)
+      throw new BadRequestException("Solicitação de desconto não encontrada.");
+    if (discount.companyId !== actor.companyId)
+      throw new UnauthorizedException(
+        "Solicitação fora da empresa do usuário.",
+      );
+    if (discount.status !== "PENDING")
+      throw new BadRequestException("Esta solicitação já foi decidida.");
     const approve = body.decision === "APPROVE";
-    if (approve && Number(discount.discountPercent) > Number(discount.maxApprovalDiscountPercent ?? 0)) {
-      throw new BadRequestException(`A tabela permite aprovação somente até ${Number(discount.maxApprovalDiscountPercent ?? 0).toFixed(2)}%.`);
+    if (
+      approve &&
+      Number(discount.discountPercent) >
+        Number(discount.maxApprovalDiscountPercent ?? 0)
+    ) {
+      throw new BadRequestException(
+        `A tabela permite aprovação somente até ${Number(discount.maxApprovalDiscountPercent ?? 0).toFixed(2)}%.`,
+      );
     }
-    if (approve && discount.orderStatus !== "DRAFT") throw new BadRequestException("O pedido precisa estar em rascunho para aplicar desconto.");
+    if (approve && discount.orderStatus !== "DRAFT")
+      throw new BadRequestException(
+        "O pedido precisa estar em rascunho para aplicar desconto.",
+      );
 
     await this.salesOrders.database.$transaction(async (tx) => {
       if (approve) {
@@ -728,7 +1004,11 @@ export class SalesOrdersController {
             SET status=$2, "decidedById"=$3, "decidedByName"=$4, "decidedByRole"=$5,
                 "decisionNote"=$6, "decidedAt"=NOW()
           WHERE id=$1`,
-        requestId, approve ? "APPROVED" : "REJECTED", actor.id, actor.name, actor.role,
+        requestId,
+        approve ? "APPROVED" : "REJECTED",
+        actor.id,
+        actor.name,
+        actor.role,
         String(body.note ?? "").trim() || null,
       );
     });
@@ -738,53 +1018,128 @@ export class SalesOrdersController {
   @Post(":id/confirm")
   async confirm(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
-    const pendingDiscounts = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+    const pendingDiscounts = await this.salesOrders.database.$queryRawUnsafe<
+      any[]
+    >(
       `SELECT COUNT(*)::int AS count FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='PENDING'`,
       id,
       actor.companyId,
     );
     if (Number(pendingDiscounts[0]?.count ?? 0) > 0) {
-      throw new BadRequestException("O pedido possui solicitação de desconto pendente de aprovação.");
+      throw new BadRequestException(
+        "O pedido possui solicitação de desconto pendente de aprovação.",
+      );
     }
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.id, so."totalAmount", so."paymentType", so."paymentTermsSnapshot",
               c.id AS "customerId", c.active, c."paymentTerms", c."creditStatus", c."creditLimit"
-         FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId" WHERE so.id=$1 AND so."companyId"=$2`, id, actor.companyId,
+         FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId" WHERE so.id=$1 AND so."companyId"=$2`,
+      id,
+      actor.companyId,
     );
     const context = rows[0];
     if (!context) return this.salesOrders.confirm(actor.companyId, id);
-    const saleIsTerm = context.paymentType === "TERM" || (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
+    const saleIsTerm =
+      context.paymentType === "TERM" ||
+      (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
     if (saleIsTerm) {
-      if (!context.active) throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
-      if (context.creditStatus !== "APPROVED") throw new BadRequestException("Venda a prazo bloqueada: o cliente não possui crédito vigente aprovado.");
-      const exposureRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-        `SELECT COALESCE(SUM("openAmount"),0)::numeric AS total FROM "AccountsReceivable" WHERE "customerId"=$1 AND status NOT IN ('PAID','CANCELLED')`, context.customerId,
+      if (!context.active)
+        throw new BadRequestException(
+          "Cliente inativo. O pedido não pode ser confirmado.",
+        );
+      if (context.creditStatus !== "APPROVED")
+        throw new BadRequestException(
+          "Venda a prazo bloqueada: o cliente não possui crédito vigente aprovado.",
+        );
+      const exposureRows = await this.salesOrders.database.$queryRawUnsafe<
+        any[]
+      >(
+        `SELECT COALESCE(SUM("openAmount"),0)::numeric AS total FROM "AccountsReceivable" WHERE "customerId"=$1 AND status NOT IN ('PAID','CANCELLED')`,
+        context.customerId,
       );
       const usedCredit = Number(exposureRows[0]?.total ?? 0);
       const creditLimit = Number(context.creditLimit ?? 0);
       const availableCredit = Math.max(0, creditLimit - usedCredit);
       const orderTotal = Number(context.totalAmount ?? 0);
-      if (orderTotal > availableCredit) throw new BadRequestException(`Venda a prazo bloqueada: pedido de ${orderTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} excede o crédito disponível de ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`);
+      if (orderTotal > availableCredit)
+        throw new BadRequestException(
+          `Venda a prazo bloqueada: pedido de ${orderTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} excede o crédito disponível de ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`,
+        );
     }
     return this.salesOrders.confirm(actor.companyId, id);
   }
 
   @Post(":id/reserve")
-  async reserve(@Param("id") id: string, @Body() body: { warehouseByVariant?: Record<string, string> }, @Req() request: any) { return this.salesOrders.reserve((await this.actorForOrder(request, id)).companyId, id, body.warehouseByVariant); }
+  async reserve(
+    @Param("id") id: string,
+    @Body() body: { warehouseByVariant?: Record<string, string> },
+    @Req() request: any,
+  ) {
+    return this.salesOrders.reserve(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      body.warehouseByVariant,
+    );
+  }
   @Post(":id/cancel")
-  async cancel(@Param("id") id: string, @Req() request: any) { return this.salesOrders.cancel((await this.actorForOrder(request, id)).companyId, id); }
+  async cancel(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.cancel(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+    );
+  }
   @Post(":id/ship")
-  async ship(@Param("id") id: string, @Req() request: any) { return this.salesOrders.ship((await this.actorForOrder(request, id)).companyId, id); }
+  async ship(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.ship(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+    );
+  }
   @Post(":id/picking")
-  async picking(@Param("id") id: string, @Req() request: any) { return this.salesOrders.transition((await this.actorForOrder(request, id)).companyId, id, "PICKING"); }
+  async picking(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.transition(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      "PICKING",
+    );
+  }
   @Post(":id/ready-to-ship")
-  async readyToShip(@Param("id") id: string, @Req() request: any) { return this.salesOrders.transition((await this.actorForOrder(request, id)).companyId, id, "READY_TO_SHIP"); }
+  async readyToShip(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.transition(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      "READY_TO_SHIP",
+    );
+  }
   @Post(":id/picking/confirm")
-  async confirmPicking(@Param("id") id: string, @Body() body: { pickedByItem: Record<string, number> }, @Req() request: any) { return this.salesOrders.confirmPicking((await this.actorForOrder(request, id)).companyId, id, body.pickedByItem); }
+  async confirmPicking(
+    @Param("id") id: string,
+    @Body() body: { pickedByItem: Record<string, number> },
+    @Req() request: any,
+  ) {
+    return this.salesOrders.confirmPicking(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      body.pickedByItem,
+    );
+  }
 
   @Post(":id/invoice")
   async invoice(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
+    const customerRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT c.name,c."legalName",c."taxId",c."postalCode",c.address,c."addressNumber",
+              c."addressComplement",c.district,c.city,c.state,c."stateRegistration",c."stateRegistrationType"
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
+      id,
+      actor.companyId,
+    );
+    const customerFiscalError = customerFiscalReadinessMessage(
+      customerRows[0] ?? {},
+    );
+    if (customerFiscalError) throw new BadRequestException(customerFiscalError);
     const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId"
