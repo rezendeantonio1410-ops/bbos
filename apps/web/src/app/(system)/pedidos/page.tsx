@@ -192,6 +192,9 @@ type Order = {
   brokerCommissionPercent?: string | number | null;
   brokerCommissionPerPackage?: string | number | null;
   brokerCommissionAmount?: string | number | null;
+  fiscalStatus?: string | null;
+  fiscalExternalId?: string | null;
+  fiscalNumber?: string | null;
   broker?: Broker | null;
   customer: Customer;
   items: OrderItem[];
@@ -232,6 +235,7 @@ type ShipmentInfo = {
   trackingUrl?: string | null;
   externalId?: string | null;
   fiscalStatus?: string | null;
+  fiscalExternalId?: string | null;
   fiscalNumber?: string | null;
   fiscalPdfUrl?: string | null;
   fiscalDanfeUrl?: string | null;
@@ -280,6 +284,8 @@ const statusLabel: Record<string, string> = {
   PICKING: "Separação",
   READY_TO_SHIP: "Pronto para expedição",
   INVOICED: "Faturado",
+  INVOICE_REQUESTED: "Faturamento solicitado",
+  INVOICE_ERROR: "Erro na NF-e",
   SHIPPED: "Expedido",
   DELIVERED: "Entregue",
   CANCELLED: "Cancelado",
@@ -294,6 +300,8 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
     PICKING: "warning",
     READY_TO_SHIP: "success",
     INVOICED: "success",
+    INVOICE_REQUESTED: "warning",
+    INVOICE_ERROR: "danger",
     SHIPPED: "success",
     DELIVERED: "success",
     CANCELLED: "danger",
@@ -308,18 +316,35 @@ const filters: Array<[string, string]> = [
   ["RESERVED", "Reservados"],
   ["PICKING", "Separação"],
   ["READY_TO_SHIP", "Prontos"],
+  ["INVOICE_REQUESTED", "Emissão NF-e"],
   ["INVOICED", "Faturados"],
   ["SHIPPED", "Expedidos"],
   ["DELIVERED", "Concluídos"],
 ];
 
-const displayStatus = (order: Order) =>
-  order.status === "DRAFT" &&
-  ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
-    order.payment?.status ?? "",
-  )
-    ? "AWAITING_PAYMENT"
-    : order.status;
+const displayStatus = (order: Order) => {
+  if (
+    order.status === "DRAFT" &&
+    ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
+      order.payment?.status ?? "",
+    )
+  ) {
+    return "AWAITING_PAYMENT";
+  }
+  if (
+    ["READY_TO_SHIP", "INVOICED"].includes(order.status) &&
+    ["PENDING", "READY", "SENT"].includes(order.fiscalStatus ?? "")
+  ) {
+    return "INVOICE_REQUESTED";
+  }
+  if (
+    ["READY_TO_SHIP", "INVOICED"].includes(order.status) &&
+    ["REJECTED", "ERROR"].includes(order.fiscalStatus ?? "")
+  ) {
+    return "INVOICE_ERROR";
+  }
+  return order.status;
+};
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -2536,6 +2561,39 @@ function OrderDrawer({
     }
   };
 
+  const resetMissingInvoice = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/reset-missing-invoice`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Não foi possível reconciliar a NF-e excluída.",
+        );
+      }
+      await onChanged();
+      await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível reconciliar a NF-e excluída.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const copySummary = async () => {
     try {
       await navigator.clipboard.writeText(clientSummary);
@@ -2823,7 +2881,9 @@ function OrderDrawer({
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
                           : fulfillment?.fiscalStatus === "AUTHORIZED"
                             ? "NF-e autorizada. A etiqueta já pode ser gerada."
-                            : order.status === "INVOICED"
+                            : ["INVOICED", "READY_TO_SHIP"].includes(
+                                  order.status,
+                                ) && fulfillment?.fiscalStatus === "SENT"
                               ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
                               : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
@@ -2864,6 +2924,16 @@ function OrderDrawer({
                         className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                       >
                         {busy ? "Reprocessando…" : "Reprocessar NF-e"}
+                      </button>
+                    ) : fulfillment?.fiscalStatus === "SENT" &&
+                      fulfillment?.fiscalExternalId ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void resetMissingInvoice()}
+                        className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
+                      >
+                        {busy ? "Verificando…" : "NF-e excluída no Bling"}
                       </button>
                     ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
                       <>

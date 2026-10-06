@@ -73,7 +73,7 @@ export class SalesOrdersService implements OnModuleDestroy {
       orderBy: { orderedAt: "desc" },
     });
     if (!orders.length) return orders;
-    const [shipments, payments] = await Promise.all([
+    const [shipments, payments, fiscalDocuments] = await Promise.all([
       this.database.$queryRawUnsafe<
         Array<{
           salesOrderId: string;
@@ -108,6 +108,20 @@ export class SalesOrdersService implements OnModuleDestroy {
           ORDER BY "salesOrderId","attemptNumber" DESC`,
         orders.map((order) => order.id),
       ),
+      this.database.$queryRawUnsafe<
+        Array<{
+          salesOrderId: string;
+          status: string;
+          externalId: string | null;
+          number: string | null;
+        }>
+      >(
+        `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,"externalId",number
+           FROM "FiscalDocument"
+          WHERE direction='OUTBOUND' AND "salesOrderId"=ANY($1::text[])
+          ORDER BY "salesOrderId","createdAt" DESC`,
+        orders.map((order) => order.id),
+      ),
     ]);
     const byOrder = new Map(
       shipments.map((shipment) => [shipment.salesOrderId, shipment]),
@@ -115,10 +129,16 @@ export class SalesOrdersService implements OnModuleDestroy {
     const paymentByOrder = new Map(
       payments.map((payment) => [payment.salesOrderId, payment]),
     );
+    const fiscalByOrder = new Map(
+      fiscalDocuments.map((document) => [document.salesOrderId, document]),
+    );
     return orders.map((order) => ({
       ...order,
       shipment: byOrder.get(order.id) ?? null,
       payment: paymentByOrder.get(order.id) ?? null,
+      fiscalStatus: fiscalByOrder.get(order.id)?.status ?? null,
+      fiscalExternalId: fiscalByOrder.get(order.id)?.externalId ?? null,
+      fiscalNumber: fiscalByOrder.get(order.id)?.number ?? null,
     }));
   }
 
@@ -131,13 +151,28 @@ export class SalesOrdersService implements OnModuleDestroy {
     if (typeof (this.database as any).$queryRawUnsafe !== "function") {
       return { ...order, payment: null };
     }
-    const payments = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT status,method,"amountCents","expiresAt","paidAt"
-         FROM "SalesOrderPaymentAttempt"
-        WHERE "salesOrderId"=$1 ORDER BY "attemptNumber" DESC LIMIT 1`,
-      order.id,
-    );
-    return { ...order, payment: payments[0] ?? null };
+    const [payments, fiscalDocuments] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT status,method,"amountCents","expiresAt","paidAt"
+           FROM "SalesOrderPaymentAttempt"
+          WHERE "salesOrderId"=$1 ORDER BY "attemptNumber" DESC LIMIT 1`,
+        order.id,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT status,"externalId",number
+           FROM "FiscalDocument"
+          WHERE "salesOrderId"=$1 AND direction='OUTBOUND'
+          ORDER BY "createdAt" DESC LIMIT 1`,
+        order.id,
+      ),
+    ]);
+    return {
+      ...order,
+      payment: payments[0] ?? null,
+      fiscalStatus: fiscalDocuments[0]?.status ?? null,
+      fiscalExternalId: fiscalDocuments[0]?.externalId ?? null,
+      fiscalNumber: fiscalDocuments[0]?.number ?? null,
+    };
   }
 
   async exportOverview(companyId: string) {

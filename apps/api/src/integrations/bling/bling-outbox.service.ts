@@ -21,6 +21,10 @@ function toBlingDate(value: unknown) {
   return resolved.toISOString().slice(0, 10);
 }
 
+function isBlingNotFound(error: unknown) {
+  return error instanceof Error && /Bling API 404:/.test(error.message);
+}
+
 @Injectable()
 export class BlingOutboxService {
   private readonly database = prisma;
@@ -541,6 +545,18 @@ export class BlingOutboxService {
         "",
     ).trim();
     if (blingNfeId === "0") blingNfeId = "";
+    if (blingNfeId) {
+      try {
+        await this.bling.request(
+          row.companyId,
+          `/nfe/${encodeURIComponent(blingNfeId)}`,
+          { method: "GET" },
+        );
+      } catch (error) {
+        if (!isBlingNotFound(error)) throw error;
+        blingNfeId = "";
+      }
+    }
     let nfeResult: any = {
       data: { idNotaFiscal: blingNfeId },
       recoveredFromSalesOrder: Boolean(blingNfeId),
@@ -1134,6 +1150,125 @@ export class BlingOutboxService {
     return {
       reset: true,
       fiscalStatus: "CANCELLED",
+      orderStatus: "READY_TO_SHIP",
+      customerTaxId: row.taxId,
+      sampleTotal,
+    };
+  }
+
+  async resetMissingSalesOrderInvoice(companyId: string, orderId: string) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,so.status,so."orderType",c."taxId",f.id AS "fiscalId",
+              f."externalId",f.number
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id=so."customerId"
+         JOIN "FiscalDocument" f ON f."salesOrderId"=so.id AND f.direction='OUTBOUND'
+        WHERE so.id=$1 AND so."companyId"=$2
+        ORDER BY f."createdAt" DESC LIMIT 1`,
+      orderId,
+      companyId,
+    );
+    const row = rows[0];
+    const externalId = String(row?.externalId ?? "").trim();
+    if (!row?.fiscalId || !externalId || externalId === "0") {
+      throw new Error("Pedido sem NF-e do Bling para reconciliar.");
+    }
+
+    try {
+      await this.bling.request(
+        companyId,
+        `/nfe/${encodeURIComponent(externalId)}`,
+        { method: "GET" },
+      );
+      throw new Error(
+        "A NF-e ainda existe no Bling. Exclua apenas o rascunho pendente ou use a regularização de cancelamento.",
+      );
+    } catch (error) {
+      if (!isBlingNotFound(error)) throw error;
+    }
+
+    let sampleTotal: number | null = null;
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "FiscalDocument"
+            SET status='ERROR',"externalId"=NULL,number=NULL,series=NULL,"accessKey"=NULL,
+                "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb)||$2::jsonb,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        row.fiscalId,
+        JSON.stringify({
+          remoteDeletionReconciledAt: new Date().toISOString(),
+          deletedExternalId: externalId,
+          deletedNumber: row.number ?? null,
+        }),
+      );
+
+      if (String(row.orderType) === "SAMPLE") {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderItem"
+              SET "unitPrice"=$2,"totalAmount"=ROUND(quantity * $2::numeric, 2),
+                  discount=0,"updatedAt"=NOW()
+            WHERE "salesOrderId"=$1 AND "companyId"=$3`,
+          orderId,
+          SAMPLE_FISCAL_PACKAGE_VALUE,
+          companyId,
+        );
+        const totals = await transaction.$queryRawUnsafe<any[]>(
+          `SELECT COALESCE(SUM(quantity),0)::int AS quantity
+             FROM "SalesOrderItem"
+            WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+          orderId,
+          companyId,
+        );
+        const quantity = Number(totals[0]?.quantity ?? 0);
+        if (quantity < 1)
+          throw new Error("Pedido de amostra sem itens para reemissão fiscal.");
+        sampleTotal = sampleFiscalPrice(quantity);
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET quantity=$2,"unitPrice"=$3,subtotal=$4,discount=0,"totalAmount"=$4,
+                  status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$5`,
+          orderId,
+          quantity,
+          SAMPLE_FISCAL_PACKAGE_VALUE,
+          sampleTotal,
+          companyId,
+        );
+      } else {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$2`,
+          orderId,
+          companyId,
+        );
+      }
+
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "resourceType"='FISCAL_DOCUMENT'
+            AND ("internalKey"=$2 OR "externalId"=$3)`,
+        companyId,
+        row.fiscalId,
+        externalId,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "IntegrationOutbox"
+            SET status='CANCELLED',attempts=0,
+                "lastError"='NF-e pendente excluída no Bling; aguardando nova solicitação manual.',
+                "nextAttemptAt"=NULL,"updatedAt"=NOW()
+          WHERE "companyId"=$1 AND "aggregateId"=$2
+            AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,
+        companyId,
+        orderId,
+      );
+    });
+
+    return {
+      reset: true,
+      fiscalStatus: "ERROR",
       orderStatus: "READY_TO_SHIP",
       customerTaxId: row.taxId,
       sampleTotal,

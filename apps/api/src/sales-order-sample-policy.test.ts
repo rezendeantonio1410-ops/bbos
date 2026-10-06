@@ -48,7 +48,10 @@ test("sample shipping reuses the standard Bispo box and splits weight safely", (
 });
 
 test("sample orders remain fiscal and operational without becoming revenue", () => {
-  const service = readFileSync(join(__dirname, "sales-orders.service.ts"), "utf8");
+  const service = readFileSync(
+    join(__dirname, "sales-orders.service.ts"),
+    "utf8",
+  );
   const controller = readFileSync(
     join(__dirname, "sales-orders.controller.ts"),
     "utf8",
@@ -57,7 +60,10 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
     join(__dirname, "integrations/bling/bling-outbox.service.ts"),
     "utf8",
   );
-  const dashboard = readFileSync(join(__dirname, "dashboard.service.ts"), "utf8");
+  const dashboard = readFileSync(
+    join(__dirname, "dashboard.service.ts"),
+    "utf8",
+  );
   const paymentScheduleMigration = readFileSync(
     join(
       __dirname,
@@ -66,7 +72,10 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
     "utf8",
   );
 
-  assert.match(service, /target === "INVOICED" && order\.orderType !== "SAMPLE"/);
+  assert.match(
+    service,
+    /target === "INVOICED" && order\.orderType !== "SAMPLE"/,
+  );
   assert.match(controller, /paymentType = isSample\s*\? "SAMPLE"/);
   assert.match(controller, /isSample && freightResponsibility === "BISPO"/);
   assert.match(
@@ -88,4 +97,37 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
     paymentScheduleMigration,
     /IF NEW\."orderType" = 'SAMPLE' THEN\s+RETURN NEW;/,
   );
+});
+
+test("invoice request waits for SEFAZ authorization before invoicing the order", () => {
+  const controller = readFileSync(
+    join(__dirname, "sales-orders.controller.ts"),
+    "utf8",
+  );
+  const fiscal = readFileSync(
+    join(__dirname, "integrations/bling/bling-outbox.service.ts"),
+    "utf8",
+  );
+  const financialMigration = readFileSync(
+    join(
+      __dirname,
+      "../../../packages/database/prisma/migrations/20261006170000_invoice_authorization_financials/migration.sql",
+    ),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    controller,
+    /salesOrders\.transition\(actor\.companyId, id, "INVOICED"\)/,
+  );
+  assert.match(
+    fiscal,
+    /if \(sefaz\.status === "AUTHORIZED"\)[\s\S]*SET status='INVOICED'/,
+  );
+  assert.match(fiscal, /resetMissingSalesOrderInvoice/);
+  assert.match(
+    financialMigration,
+    /OLD\.status::text = 'INVOICED'[\s\S]*NEW\."orderType" = 'SAMPLE'/,
+  );
+  assert.match(financialMigration, /ON CONFLICT \("salesOrderId"\) DO NOTHING/);
 });

@@ -33,10 +33,6 @@ const isCashTerm = (value: unknown) => {
     .toLowerCase();
   return !normalized || normalized === "à vista" || normalized === "a vista";
 };
-const termDays = (value: unknown) => {
-  const match = String(value ?? "").match(/(\d+)/);
-  return match ? Math.max(0, Number(match[1])) : 0;
-};
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
 type SalesOrderCommercialTerms = {
@@ -1153,37 +1149,51 @@ export class SalesOrdersController {
       id,
       actor.companyId,
     );
-    const rejectedRetry =
-      fiscalRows[0]?.orderStatus === "INVOICED" &&
-      fiscalRows[0]?.fiscalStatus === "REJECTED";
+    const orderStatus = String(fiscalRows[0]?.orderStatus ?? "");
+    const fiscalStatus = String(fiscalRows[0]?.fiscalStatus ?? "");
+    const fiscalExternalId = String(
+      fiscalRows[0]?.fiscalExternalId ?? "",
+    ).trim();
+    if (!fiscalRows[0]) throw new BadRequestException("Pedido não encontrado.");
+    if (fiscalStatus === "AUTHORIZED") {
+      return {
+        orderId: id,
+        idempotent: true,
+        status: "INVOICED",
+        fiscalStatus,
+        fiscalDispatch: "AUTHORIZED",
+      };
+    }
+    if (!["READY_TO_SHIP", "INVOICED"].includes(orderStatus)) {
+      throw new BadRequestException(
+        "O pedido precisa estar pronto para expedição antes do faturamento.",
+      );
+    }
+    if (fiscalStatus === "CANCELLED") {
+      throw new BadRequestException(
+        "A NF-e foi cancelada no Bling. Regularize o documento antes de solicitar nova emissão.",
+      );
+    }
+    const rejectedRetry = ["REJECTED", "ERROR"].includes(fiscalStatus);
     const invalidSentRetry =
-      fiscalRows[0]?.orderStatus === "INVOICED" &&
-      fiscalRows[0]?.fiscalStatus === "SENT" &&
-      (!String(fiscalRows[0]?.fiscalExternalId ?? "").trim() ||
-        String(fiscalRows[0]?.fiscalExternalId).trim() === "0");
+      fiscalStatus === "SENT" &&
+      (!fiscalExternalId || fiscalExternalId === "0");
     const fiscalRetry = rejectedRetry || invalidSentRetry;
-    const result = fiscalRetry
-      ? { orderId: id, idempotent: true, status: "INVOICED", fiscalRetry: true }
-      : await this.salesOrders.transition(actor.companyId, id, "INVOICED");
+    const alreadyRequested =
+      ["PENDING", "READY", "SENT"].includes(fiscalStatus) && !invalidSentRetry;
+    const result = {
+      orderId: id,
+      idempotent: alreadyRequested,
+      status: orderStatus,
+      fiscalStatus: alreadyRequested ? fiscalStatus : "PENDING",
+      fiscalRetry,
+    };
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT "companyId","paymentType","paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1 AND "companyId"=$2`,
       id,
       actor.companyId,
     );
     const payment = rows[0];
-    if (payment && ["CASH", "TERM"].includes(payment.paymentType)) {
-      const days =
-        payment.paymentType === "CASH"
-          ? 0
-          : termDays(payment.paymentTermsSnapshot);
-      await this.salesOrders.database.$executeRawUnsafe(
-        `UPDATE "AccountsReceivable"
-            SET "dueDate" = "issueDate" + ($2::int * INTERVAL '1 day'), "updatedAt"=NOW()
-          WHERE "salesOrderId"=$1`,
-        id,
-        days,
-      );
-    }
     if (payment?.companyId) {
       const idempotencyKey = `bling:sales-order-invoice:${id}`;
       await this.salesOrders.database.$executeRawUnsafe(
@@ -1202,9 +1212,12 @@ export class SalesOrdersController {
         id,
         JSON.stringify({ salesOrderId: id }),
         idempotencyKey,
-        fiscalRetry,
+        fiscalRetry || !alreadyRequested,
       );
     }
-    return { ...result, fiscalDispatch: "QUEUED" };
+    return {
+      ...result,
+      fiscalDispatch: alreadyRequested ? "ALREADY_REQUESTED" : "QUEUED",
+    };
   }
 }
