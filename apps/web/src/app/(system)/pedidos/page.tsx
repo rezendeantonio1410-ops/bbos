@@ -25,7 +25,7 @@ import { OrderCustomerApprovalActions } from "@/components/order-customer-approv
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const SAMPLE_FISCAL_UNIT_VALUE = 0.01;
+const SAMPLE_FISCAL_UNIT_VALUE = 1;
 const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
 const freightLabels: Record<string, string> = {

@@ -11,9 +11,9 @@ import {
 } from "./sales-order-sample-policy";
 
 test("sample orders use the fixed fiscal-only unit value", () => {
-  assert.equal(SAMPLE_FISCAL_UNIT_VALUE, 0.01);
-  assert.equal(sampleFiscalPrice(1), 0.01);
-  assert.equal(sampleFiscalPrice(12), 0.12);
+  assert.equal(SAMPLE_FISCAL_UNIT_VALUE, 1);
+  assert.equal(sampleFiscalPrice(1), 1);
+  assert.equal(sampleFiscalPrice(12), 12);
 });
 
 test("unknown order types cannot bypass commercial pricing", () => {

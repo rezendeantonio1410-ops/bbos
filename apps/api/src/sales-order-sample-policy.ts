@@ -1,4 +1,8 @@
-export const SAMPLE_FISCAL_UNIT_VALUE = 0.01;
+// O Melhor Envio exige que o valor segurado seja igual ao total da NF-e e
+// nunca inferior a R$ 1,00. Como toda amostra possui ao menos uma unidade,
+// R$ 1,00 por unidade mantém o valor simbólico e torna a nota compatível com
+// a contratação da etiqueta.
+export const SAMPLE_FISCAL_UNIT_VALUE = 1;
 
 export const SAMPLE_DEFAULT_SHIPPING_BOX = {
   widthCm: 35,
