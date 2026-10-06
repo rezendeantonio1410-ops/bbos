@@ -10,6 +10,12 @@ import {
   sampleFiscalPrice,
 } from "../../sales-order-sample-policy";
 import { customerFiscalReadinessMessage } from "../../customer-fiscal-readiness";
+import { BlingCatalogSyncService } from "./bling-catalog-sync.service";
+import {
+  sampleCfopIsApplied,
+  sampleNatureIsApplied,
+  type SampleFiscalRoute,
+} from "../../sample-fiscal-route";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -34,7 +40,57 @@ export class BlingOutboxService {
     private readonly lifecycle: StorefrontLifecycleService,
     private readonly shipment: MelhorEnvioShipmentService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+    private readonly blingCatalogSync: BlingCatalogSyncService,
   ) {}
+
+  private async ensureSampleNatureOnSalesOrder(
+    companyId: string,
+    salesOrderId: string,
+    route: SampleFiscalRoute,
+  ) {
+    const path = `/pedidos/vendas/${encodeURIComponent(salesOrderId)}`;
+    const readRemoteOrder = async () => {
+      const detail = await this.bling.request(companyId, path, {
+        method: "GET",
+      });
+      return detail?.data ?? detail ?? {};
+    };
+
+    let remoteOrder = await readRemoteOrder();
+    if (sampleNatureIsApplied(remoteOrder?.itens, route.natureOperationId)) {
+      return remoteOrder;
+    }
+    if (!Array.isArray(remoteOrder?.itens) || !remoteOrder.itens.length) {
+      throw new Error(
+        "Emissão de amostra bloqueada: o pedido do Bling não possui itens para aplicar a natureza fiscal.",
+      );
+    }
+
+    await this.bling.request(companyId, path, {
+      method: "PATCH",
+      body: JSON.stringify({
+        itens: remoteOrder.itens.map((item: any) => ({
+          id: item?.id == null ? undefined : Number(item.id),
+          produto:
+            item?.produto?.id == null
+              ? undefined
+              : { id: Number(item.produto.id) },
+          quantidade: Number(item?.quantidade ?? 0),
+          valor: Number(item?.valor ?? item?.valorUnitario ?? 0),
+          descricao: item?.descricao,
+          codigo: item?.codigo,
+          naturezaOperacao: { id: Number(route.natureOperationId) },
+        })),
+      }),
+    });
+    remoteOrder = await readRemoteOrder();
+    if (!sampleNatureIsApplied(remoteOrder?.itens, route.natureOperationId)) {
+      throw new Error(
+        `Emissão de amostra bloqueada: o Bling não confirmou a natureza de operação ${route.natureOperationName ?? route.natureOperationId} nos itens do pedido.`,
+      );
+    }
+    return remoteOrder;
+  }
 
   private async mapResource(
     companyId: string,
@@ -369,6 +425,14 @@ export class BlingOutboxService {
     );
     if (!items.length) throw new Error("Pedido comercial sem itens.");
 
+    const sampleFiscalRoute =
+      order.orderType === "SAMPLE"
+        ? await this.blingCatalogSync.sampleFiscalRoute(
+            row.companyId,
+            order.customerState,
+          )
+        : null;
+
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
     if (!salesMap?.externalId) {
       const contactId = await this.ensureContact(
@@ -404,6 +468,13 @@ export class BlingOutboxService {
           valor: Number(item.unitPrice),
           descricao: item.productName,
           codigo: item.sku,
+          ...(sampleFiscalRoute
+            ? {
+                naturezaOperacao: {
+                  id: Number(sampleFiscalRoute.natureOperationId),
+                },
+              }
+            : {}),
         });
       }
 
@@ -502,12 +573,19 @@ export class BlingOutboxService {
       /\D/g,
       "",
     );
-    const salesOrderDetail = await this.bling.request(
-      row.companyId,
-      `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
-      { method: "GET" },
-    );
-    const remoteOrder = salesOrderDetail?.data ?? salesOrderDetail ?? {};
+    const remoteOrder = sampleFiscalRoute
+      ? await this.ensureSampleNatureOnSalesOrder(
+          row.companyId,
+          salesMap.externalId,
+          sampleFiscalRoute,
+        )
+      : await this.bling
+          .request(
+            row.companyId,
+            `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
+            { method: "GET" },
+          )
+          .then((detail) => detail?.data ?? detail ?? {});
     const remoteContactId = String(remoteOrder?.contato?.id ?? "");
     if (!remoteContactId)
       throw new Error(
@@ -576,6 +654,20 @@ export class BlingOutboxService {
       );
     }
     if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
+
+    if (sampleFiscalRoute) {
+      const fiscalDraftDetail = await this.bling.request(
+        row.companyId,
+        `/nfe/${encodeURIComponent(blingNfeId)}`,
+        { method: "GET" },
+      );
+      const fiscalDraft = fiscalDraftDetail?.data ?? fiscalDraftDetail ?? {};
+      if (!sampleCfopIsApplied(fiscalDraft?.itens, sampleFiscalRoute.cfop)) {
+        throw new Error(
+          `Emissão de amostra bloqueada antes da SEFAZ: o rascunho da NF-e não recebeu o CFOP ${sampleFiscalRoute.cfop} (${sampleFiscalRoute.scope === "INTER" ? "operação interestadual" : "operação interna"}). Corrija a natureza de operação no Bling e tente novamente.`,
+        );
+      }
+    }
 
     const reusableFiscal =
       priorFiscal[0] && String(priorFiscal[0].status) !== "CANCELLED"
@@ -812,8 +904,11 @@ export class BlingOutboxService {
 
   private async reconcileSentInvoice() {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT f.id,f."companyId",f."externalId",f."salesOrderId",f."payloadSnapshot"
+      `SELECT f.id,f."companyId",f."externalId",f."salesOrderId",f."payloadSnapshot",
+              so."orderType"::text AS "orderType",c.state AS "customerState"
          FROM "FiscalDocument" f
+         LEFT JOIN "SalesOrder" so ON so.id=f."salesOrderId"
+         LEFT JOIN "Customer" c ON c.id=so."customerId"
         WHERE f."externalProvider"='BLING'
           AND f."externalId" IS NOT NULL
           AND (
@@ -890,6 +985,18 @@ export class BlingOutboxService {
       }
 
       if (status === "SENT" && this.fiscalStatusCode(note?.situacao) === 1) {
+        if (row.orderType === "SAMPLE") {
+          const sampleFiscalRoute =
+            await this.blingCatalogSync.sampleFiscalRoute(
+              row.companyId,
+              row.customerState,
+            );
+          if (!sampleCfopIsApplied(note?.itens, sampleFiscalRoute.cfop)) {
+            throw new Error(
+              `Reenvio de amostra bloqueado antes da SEFAZ: o rascunho da NF-e não possui o CFOP ${sampleFiscalRoute.cfop}.`,
+            );
+          }
+        }
         const retry = this.authorizationRetry(row.payloadSnapshot);
         if (retry.allowed) {
           const requestedAt = new Date().toISOString();

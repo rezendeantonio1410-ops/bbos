@@ -367,6 +367,22 @@ export class IntegrationsController {
     return this.blingCatalogSync.companyFiscalProfile(actor.companyId);
   }
 
+  @Get("bling/operation-natures")
+  async blingOperationNatures(@Req() request: any) {
+    const actor = await this.actor(request);
+    try {
+      return {
+        items: await this.blingCatalogSync.operationNatures(actor.companyId),
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error
+          ? error.message
+          : "Falha ao consultar as naturezas de operação do Bling.",
+      );
+    }
+  }
+
   @Patch("bling/fiscal-profile")
   async saveCompanyFiscalProfile(
     @Req() request: any,

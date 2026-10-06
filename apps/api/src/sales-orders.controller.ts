@@ -26,6 +26,7 @@ import {
   sampleShippingPackages,
 } from "./sales-order-sample-policy";
 import { customerFiscalReadinessMessage } from "./customer-fiscal-readiness";
+import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -68,6 +69,7 @@ export class SalesOrdersController {
     private readonly auth: AuthService,
     private readonly shipping: StorefrontShippingService,
     private readonly shipment: MelhorEnvioShipmentService,
+    private readonly blingCatalogSync: BlingCatalogSyncService,
   ) {}
 
   private async actor(request: any) {
@@ -1137,7 +1139,8 @@ export class SalesOrdersController {
     );
     if (customerFiscalError) throw new BadRequestException(customerFiscalError);
     const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus",
+      `SELECT so.status::text AS "orderStatus",so."orderType"::text AS "orderType",
+              f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId"
          FROM "SalesOrder" so
          LEFT JOIN LATERAL (
@@ -1168,6 +1171,20 @@ export class SalesOrdersController {
       throw new BadRequestException(
         "O pedido precisa estar pronto para expedição antes do faturamento.",
       );
+    }
+    if (String(fiscalRows[0]?.orderType ?? "") === "SAMPLE") {
+      try {
+        await this.blingCatalogSync.sampleFiscalRoute(
+          actor.companyId,
+          customerRows[0]?.state,
+        );
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error
+            ? error.message
+            : "Emissão de amostra bloqueada por configuração fiscal incompleta.",
+        );
+      }
     }
     if (fiscalStatus === "CANCELLED") {
       throw new BadRequestException(

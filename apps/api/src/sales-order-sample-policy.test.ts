@@ -92,6 +92,9 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
   );
   assert.match(controller, /sampleShippingPackages\(weightGrams\)/);
   assert.match(fiscal, /REMESSA DE AMOSTRA SEM VALOR COMERCIAL/);
+  assert.match(fiscal, /naturezaOperacao/);
+  assert.match(fiscal, /sampleCfopIsApplied/);
+  assert.match(controller, /sampleFiscalRoute/);
   assert.match(dashboard, /orderType: "COMMERCIAL"/);
   assert.match(
     paymentScheduleMigration,
