@@ -23,6 +23,10 @@ export function sampleFiscalPrice(quantity: number) {
   return Math.round(quantity * SAMPLE_FISCAL_UNIT_VALUE * 100) / 100;
 }
 
+export function sampleFiscalSubtotalCents(quantity: number) {
+  return Math.round(sampleFiscalPrice(quantity) * 100);
+}
+
 export function sampleShippingPackages(weightGrams: number) {
   const normalizedWeight = Math.max(1, Math.ceil(Number(weightGrams) || 0));
   const packageCount = Math.max(

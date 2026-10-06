@@ -7,6 +7,7 @@ import {
   SAMPLE_DEFAULT_SHIPPING_BOX,
   SAMPLE_FISCAL_UNIT_VALUE,
   sampleFiscalPrice,
+  sampleFiscalSubtotalCents,
   sampleShippingPackages,
 } from "./sales-order-sample-policy";
 
@@ -14,6 +15,8 @@ test("sample orders use the fixed fiscal-only unit value", () => {
   assert.equal(SAMPLE_FISCAL_UNIT_VALUE, 1);
   assert.equal(sampleFiscalPrice(1), 1);
   assert.equal(sampleFiscalPrice(12), 12);
+  assert.equal(sampleFiscalSubtotalCents(1), 100);
+  assert.equal(sampleFiscalSubtotalCents(2), 200);
 });
 
 test("unknown order types cannot bypass commercial pricing", () => {
@@ -66,6 +69,10 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
   assert.match(service, /target === "INVOICED" && order\.orderType !== "SAMPLE"/);
   assert.match(controller, /paymentType = isSample\s*\? "SAMPLE"/);
   assert.match(controller, /isSample && freightResponsibility === "BISPO"/);
+  assert.match(
+    controller,
+    /subtotalCents \+= isSample\s*\? sampleFiscalSubtotalCents\(item\.quantity\)/,
+  );
   assert.match(controller, /sampleShippingPackages\(weightGrams\)/);
   assert.match(fiscal, /REMESSA DE AMOSTRA SEM VALOR COMERCIAL/);
   assert.match(dashboard, /orderType: "COMMERCIAL"/);

@@ -22,6 +22,7 @@ import { resolveSalesOrderDeliveryPolicy } from "./sales-order-delivery-policy";
 import {
   resolveSalesOrderType,
   SAMPLE_FISCAL_UNIT_VALUE,
+  sampleFiscalSubtotalCents,
   sampleShippingPackages,
 } from "./sales-order-sample-policy";
 
@@ -255,7 +256,7 @@ export class SalesOrdersController {
       }
       salesChannelId = price.salesChannelId;
       subtotalCents += isSample
-        ? item.quantity
+        ? sampleFiscalSubtotalCents(item.quantity)
         : Math.round(price.officialUnitPrice * item.quantity * 100);
       weightGrams += Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
     }
@@ -456,7 +457,16 @@ export class SalesOrdersController {
         select: { id: true, netWeightGrams: true },
       });
       const weightById = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
-      const subtotalCents = Math.round(pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) * 100);
+      const subtotalCents = isSample
+        ? sampleFiscalSubtotalCents(
+            pricedItems.reduce((sum, item) => sum + item.quantity, 0),
+          )
+        : Math.round(
+            pricedItems.reduce(
+              (sum, item) => sum + item.quantity * item.unitPrice,
+              0,
+            ) * 100,
+          );
       const weightGrams = pricedItems.reduce((sum, item) => sum + item.quantity * Number(weightById.get(item.productVariantId) ?? 0), 0);
       const samplePackages = isSample
         ? sampleShippingPackages(weightGrams)
