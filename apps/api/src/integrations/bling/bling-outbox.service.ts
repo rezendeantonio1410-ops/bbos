@@ -5,6 +5,10 @@ import { BlingService } from "./bling.service";
 import { StorefrontLifecycleService } from "../../storefront-lifecycle.service";
 import { MelhorEnvioShipmentService } from "../../melhor-envio-shipment.service";
 import { SalesOrderCustomerLifecycleService } from "../../sales-order-customer-lifecycle.service";
+import {
+  SAMPLE_FISCAL_UNIT_VALUE,
+  sampleFiscalPrice,
+} from "../../sales-order-sample-policy";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -431,15 +435,19 @@ export class BlingOutboxService {
     }
     if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
 
-    const fiscalId = priorFiscal[0]?.id || `fiscal-${stableId(`${row.companyId}:${order.id}:NFE`)}`;
-    if (priorFiscal[0]) {
+    const reusableFiscal = priorFiscal[0] && String(priorFiscal[0].status) !== "CANCELLED"
+      ? priorFiscal[0]
+      : null;
+    const fiscalId = reusableFiscal?.id || `fiscal-${stableId(`${row.companyId}:${order.id}:NFE:${blingNfeId}`)}`;
+    if (reusableFiscal) {
       await this.database.$executeRawUnsafe(
         `UPDATE "FiscalDocument"
             SET status='SENT',"externalProvider"='BLING',"externalId"=$2,
-                "payloadSnapshot"=$3::jsonb,"updatedAt"=NOW()
+                "totalAmount"=$3,"payloadSnapshot"=$4::jsonb,"updatedAt"=NOW()
           WHERE id=$1`,
         fiscalId,
         blingNfeId,
+        Number(order.totalAmount),
         JSON.stringify({ create: nfeResult, blingOrderId: salesMap.externalId }),
       );
     } else {
@@ -797,7 +805,7 @@ export class BlingOutboxService {
 
   async resetCancelledSalesOrderInvoice(companyId: string, orderId: string) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT so.id,so.status,c."taxId",f.id AS "fiscalId",f."externalId",f.number
+      `SELECT so.id,so.status,so."orderType",c."taxId",f.id AS "fiscalId",f."externalId",f.number
          FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
          JOIN "FiscalDocument" f ON f."salesOrderId"=so.id AND f.direction='OUTBOUND'
         WHERE so.id=$1 AND so."companyId"=$2 ORDER BY f."createdAt" DESC LIMIT 1`, orderId, companyId);
@@ -809,11 +817,84 @@ export class BlingOutboxService {
     const remoteStatusText = String(note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "").toLowerCase();
     const cancelled = remoteStatus === "CANCELLED" || remoteStatusText.includes("cancel");
     if (!cancelled) throw new Error(`A NF-e ainda não consta como cancelada no Bling (situação retornada: ${remoteStatusText || "não informada"}).`);
-    await this.database.$executeRawUnsafe(`UPDATE "FiscalDocument" SET status='CANCELLED',"payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb)||$2::jsonb,"updatedAt"=NOW() WHERE id=$1`, row.fiscalId, JSON.stringify({ cancellationReconciledAt: new Date().toISOString(), blingNfe: note }));
-    await this.database.$executeRawUnsafe(`UPDATE "SalesOrder" SET status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW() WHERE id=$1`, orderId);
-    await this.database.$executeRawUnsafe(`DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`, companyId, orderId);
-    await this.database.$executeRawUnsafe(`UPDATE "IntegrationOutbox" SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE "companyId"=$1 AND "aggregateId"=$2 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`, companyId, orderId);
-    return { reset: true, fiscalStatus: "CANCELLED", orderStatus: "READY_TO_SHIP", customerTaxId: row.taxId };
+    let sampleTotal: number | null = null;
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "FiscalDocument"
+            SET status='CANCELLED',
+                "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb)||$2::jsonb,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        row.fiscalId,
+        JSON.stringify({ cancellationReconciledAt: new Date().toISOString(), blingNfe: note }),
+      );
+
+      if (String(row.orderType) === "SAMPLE") {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderItem"
+              SET "unitPrice"=$2,
+                  "totalAmount"=ROUND(quantity * $2::numeric, 2),
+                  discount=0,
+                  "updatedAt"=NOW()
+            WHERE "salesOrderId"=$1 AND "companyId"=$3`,
+          orderId,
+          SAMPLE_FISCAL_UNIT_VALUE,
+          companyId,
+        );
+        const totals = await transaction.$queryRawUnsafe<any[]>(
+          `SELECT COALESCE(SUM(quantity),0)::int AS quantity
+             FROM "SalesOrderItem"
+            WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+          orderId,
+          companyId,
+        );
+        const quantity = Number(totals[0]?.quantity ?? 0);
+        if (quantity < 1) throw new Error("Pedido de amostra sem itens para reemissão fiscal.");
+        sampleTotal = sampleFiscalPrice(quantity);
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET quantity=$2,"unitPrice"=$3,subtotal=$4,discount=0,
+                  "totalAmount"=$4,status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$5`,
+          orderId,
+          quantity,
+          SAMPLE_FISCAL_UNIT_VALUE,
+          sampleTotal,
+          companyId,
+        );
+      } else {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET status='READY_TO_SHIP',"invoicedAt"=NULL,"updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$2`,
+          orderId,
+          companyId,
+        );
+      }
+
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`,
+        companyId,
+        orderId,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "IntegrationOutbox"
+            SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW()
+          WHERE "companyId"=$1 AND "aggregateId"=$2
+            AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,
+        companyId,
+        orderId,
+      );
+    });
+    return {
+      reset: true,
+      fiscalStatus: "CANCELLED",
+      orderStatus: "READY_TO_SHIP",
+      customerTaxId: row.taxId,
+      sampleTotal,
+    };
   }
 
   async processNext(companyId?: string) {
