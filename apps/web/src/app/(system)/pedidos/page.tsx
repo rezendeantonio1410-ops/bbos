@@ -543,6 +543,19 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
   const [healthBusy, setHealthBusy] = useState(false);
   const isSample = orderType === "SAMPLE";
 
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+    };
+  }, []);
+
   const customer = customers.find((candidate) => candidate.id === customerId);
   const completeLines = useMemo(
     () => lines.filter((line) => line.variantId && Number.isSafeInteger(line.quantity) && line.quantity > 0),
@@ -797,9 +810,9 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex overflow-hidden justify-end">
       <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh w-full max-w-6xl flex-col overflow-hidden border-l bg-white shadow-2xl">
+      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh max-h-dvh min-h-0 w-full max-w-6xl flex-col overflow-hidden border-l bg-white shadow-2xl">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 id="new-order-title" className="shrink-0 text-lg font-bold">{isSample ? "Novo pedido de amostra" : "Novo pedido"}</h2>
@@ -811,7 +824,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
           <button type="button" aria-label="Fechar novo pedido" onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"><X size={19} /></button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
           {isSample && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
               <p className="text-xs font-bold uppercase tracking-wider">Amostra sem cobrança comercial</p>
@@ -1250,7 +1263,10 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
             </p>
           )}
 
-          {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
+        </div>
+
+        <footer className="shrink-0 space-y-2 border-t bg-white/95 p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-5">
+          {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
           {usesPlatformShipping && selectedShippingQuote && (
             <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
               <span className="text-stone-500">
@@ -1262,7 +1278,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
             </div>
           )}
           <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (usesPlatformShipping && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">{isSample ? "Salvar pedido de amostra" : "Salvar pedido"}</button>
-        </div>
+        </footer>
       </aside>
     </div>,
     document.body,
