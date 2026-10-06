@@ -55,6 +55,13 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
     "utf8",
   );
   const dashboard = readFileSync(join(__dirname, "dashboard.service.ts"), "utf8");
+  const paymentScheduleMigration = readFileSync(
+    join(
+      __dirname,
+      "../../../packages/database/prisma/migrations/20261006014000_skip_sample_payment_schedule/migration.sql",
+    ),
+    "utf8",
+  );
 
   assert.match(service, /target === "INVOICED" && order\.orderType !== "SAMPLE"/);
   assert.match(controller, /paymentType = isSample\s*\? "SAMPLE"/);
@@ -62,4 +69,8 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
   assert.match(controller, /sampleShippingPackages\(weightGrams\)/);
   assert.match(fiscal, /REMESSA DE AMOSTRA SEM VALOR COMERCIAL/);
   assert.match(dashboard, /orderType: "COMMERCIAL"/);
+  assert.match(
+    paymentScheduleMigration,
+    /IF NEW\."orderType" = 'SAMPLE' THEN\s+RETURN NEW;/,
+  );
 });
