@@ -339,7 +339,8 @@ const displayStatus = (order: Order) => {
   }
   if (
     ["READY_TO_SHIP", "INVOICED"].includes(order.status) &&
-    ["REJECTED", "ERROR"].includes(order.fiscalStatus ?? "")
+    (order.fiscalStatus === "REJECTED" ||
+      (order.fiscalStatus === "ERROR" && Boolean(order.fiscalExternalId)))
   ) {
     return "INVOICE_ERROR";
   }

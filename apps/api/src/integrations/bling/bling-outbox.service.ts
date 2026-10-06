@@ -1192,7 +1192,9 @@ export class BlingOutboxService {
       await transaction.$executeRawUnsafe(
         `UPDATE "FiscalDocument"
             SET status='ERROR',"externalId"=NULL,number=NULL,series=NULL,"accessKey"=NULL,
-                "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb)||$2::jsonb,
+                "payloadSnapshot"=(COALESCE("payloadSnapshot",'{}'::jsonb)
+                  - 'blingNfe' - 'blingSend' - 'create' - 'sefazStatusCode' - 'sefazMessage')
+                  || $2::jsonb,
                 "updatedAt"=NOW()
           WHERE id=$1`,
         row.fiscalId,
