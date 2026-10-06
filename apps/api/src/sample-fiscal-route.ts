@@ -1,11 +1,13 @@
-export const SAMPLE_CFOP_INTRA = "5911";
-export const SAMPLE_CFOP_INTER = "6911";
+export const SAMPLE_CFOP_INTRA = "5910";
+export const SAMPLE_CFOP_INTER = "6910";
+export const SAMPLE_FISCAL_POLICY_VERSION = "REGULAR_PACKAGE_GIFT_V1";
 
 export type SampleFiscalProfile = {
   state?: string | null;
   sampleNatureOperationId?: string | null;
   sampleNatureOperationName?: string | null;
   sampleValidatedByAccountant?: boolean;
+  sampleFiscalPolicyVersion?: string | null;
 };
 
 export type SampleFiscalRoute = {
@@ -53,6 +55,11 @@ export function resolveSampleFiscalRoute(
   if (!profile.sampleValidatedByAccountant) {
     throw new Error(
       "Emissão de amostra bloqueada: a natureza fiscal de amostra ainda não foi validada pela contabilidade.",
+    );
+  }
+  if (profile.sampleFiscalPolicyVersion !== SAMPLE_FISCAL_POLICY_VERSION) {
+    throw new Error(
+      "Emissão de amostra bloqueada: a rota fiscal mudou para embalagens comerciais e precisa ser revalidada pela contabilidade.",
     );
   }
 

@@ -68,8 +68,8 @@ type CompanyFiscalProfile = {
   cstCofins?: string | null;
   cfopIntra?: string | null;
   cfopInter?: string | null;
-  sampleCfopIntra: "5911";
-  sampleCfopInter: "6911";
+  sampleCfopIntra: "5910";
+  sampleCfopInter: "6910";
   sampleNatureOperationId?: string | null;
   sampleNatureOperationName?: string | null;
   sampleValidatedByAccountant: boolean;
@@ -537,20 +537,21 @@ export default function IntegrationsPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-sm font-bold text-emerald-950">
-                  Rota fiscal exclusiva para amostras
+                  Rota fiscal para degustação em embalagem comercial
                 </p>
                 <p className="mt-1 max-w-3xl text-xs leading-5 text-emerald-800">
-                  O BBOS aplica a natureza selecionada em cada item, usa CFOP
-                  5.911 dentro do Paraná e 6.911 para outros estados e confere o
-                  rascunho antes de transmitir à SEFAZ.
+                  O BBOS registra cada pacote real por R$ 1,00, aplica a natureza
+                  selecionada em cada item, usa CFOP 5.910 dentro do Paraná e
+                  6.910 para outros estados e confere o rascunho antes de
+                  transmitir à SEFAZ.
                 </p>
               </div>
               <div className="flex gap-2 text-[10px] font-extrabold uppercase">
                 <span className="rounded-full bg-white px-3 py-1 text-emerald-800">
-                  PR → PR · 5.911
+                  PR → PR · 5.910
                 </span>
                 <span className="rounded-full bg-white px-3 py-1 text-emerald-800">
-                  PR → outros · 6.911
+                  PR → outros · 6.910
                 </span>
               </div>
             </div>
@@ -574,7 +575,7 @@ export default function IntegrationsPage() {
                   className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-xs text-stone-800 outline-none focus:border-[#087568]"
                 >
                   <option value="">
-                    Selecione a natureza de remessa de amostra grátis
+                    Selecione a natureza de remessa gratuita sem retorno
                   </option>
                   {profiles.companyProfile.sampleNatureOperationId &&
                     !operationNatures.some(
@@ -607,13 +608,14 @@ export default function IntegrationsPage() {
                     })
                   }
                 />
-                Natureza de amostra validada pela contabilidade
+                Remessa gratuita validada pela contabilidade
               </label>
             </div>
             <p className="mt-3 text-[11px] leading-5 text-amber-800">
-              Confirme somente depois de a contabilidade validar ICMS, IPI, PIS
-              e COFINS nessa natureza. Sem essa confirmação, pedidos de amostra
-              não são enviados à SEFAZ.
+              O valor fiscal informado pelo BBOS é R$ 1,00 por pacote. Confirme
+              somente depois de a contabilidade validar ICMS, IPI, PIS, COFINS
+              e a base de cálculo dessa natureza no Bling. Sem essa confirmação,
+              pedidos de amostra não são enviados à SEFAZ.
             </p>
           </div>
 

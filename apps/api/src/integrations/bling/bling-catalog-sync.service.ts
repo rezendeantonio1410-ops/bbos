@@ -6,6 +6,7 @@ import {
   resolveSampleFiscalRoute,
   SAMPLE_CFOP_INTER,
   SAMPLE_CFOP_INTRA,
+  SAMPLE_FISCAL_POLICY_VERSION,
 } from "../../sample-fiscal-route";
 
 function stableId(value: string) {
@@ -38,6 +39,7 @@ type CompanyFiscalProfile = {
   sampleNatureOperationId?: string | null;
   sampleNatureOperationName?: string | null;
   sampleValidatedByAccountant: boolean;
+  sampleFiscalPolicyVersion: typeof SAMPLE_FISCAL_POLICY_VERSION;
   notes?: string | null;
   validatedByAccountant: boolean;
 };
@@ -155,6 +157,7 @@ export class BlingCatalogSyncService {
       sampleNatureOperationId: null,
       sampleNatureOperationName: null,
       sampleValidatedByAccountant: false,
+      sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
       notes:
         "CST, CFOP e alíquotas devem ser validados com a contabilidade antes da primeira NF-e real.",
       validatedByAccountant: false,
@@ -167,13 +170,21 @@ export class BlingCatalogSyncService {
       "COMPANY_FISCAL_PROFILE",
       "company",
     );
+    const metadata =
+      row?.metadata && typeof row.metadata === "object" ? row.metadata : {};
+    const usesCurrentSamplePolicy =
+      metadata.sampleFiscalPolicyVersion === SAMPLE_FISCAL_POLICY_VERSION;
     return {
       ...this.defaultCompanyFiscalProfile(),
-      ...(row?.metadata && typeof row.metadata === "object"
-        ? row.metadata
-        : {}),
+      ...metadata,
       taxRegime: "LUCRO_REAL",
       pisCofinsRegime: "NAO_CUMULATIVO",
+      sampleCfopIntra: SAMPLE_CFOP_INTRA,
+      sampleCfopInter: SAMPLE_CFOP_INTER,
+      sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
+      sampleValidatedByAccountant:
+        usesCurrentSamplePolicy &&
+        Boolean(metadata.sampleValidatedByAccountant),
     } as CompanyFiscalProfile;
   }
 
@@ -224,6 +235,7 @@ export class BlingCatalogSyncService {
         patch.sampleValidatedByAccountant ??
         current.sampleValidatedByAccountant,
       ),
+      sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
       notes:
         patch.notes == null
           ? (current.notes ?? null)
