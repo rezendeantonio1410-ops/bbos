@@ -246,7 +246,7 @@ export default function CouponsPage() {
               )}
             </Field>
             <Field label="Descrição">
-              <input name="description" placeholder="Parceria Felipe" />
+              <input name="description" autoComplete="off" />
             </Field>
             <Field label="Subtotal mínimo (R$)">
               <input
