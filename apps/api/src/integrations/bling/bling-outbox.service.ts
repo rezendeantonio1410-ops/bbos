@@ -6,7 +6,7 @@ import { StorefrontLifecycleService } from "../../storefront-lifecycle.service";
 import { MelhorEnvioShipmentService } from "../../melhor-envio-shipment.service";
 import { SalesOrderCustomerLifecycleService } from "../../sales-order-customer-lifecycle.service";
 import {
-  SAMPLE_FISCAL_UNIT_VALUE,
+  SAMPLE_FISCAL_PACKAGE_VALUE,
   sampleFiscalPrice,
 } from "../../sales-order-sample-policy";
 
@@ -873,7 +873,7 @@ export class BlingOutboxService {
                   "updatedAt"=NOW()
             WHERE "salesOrderId"=$1 AND "companyId"=$3`,
           orderId,
-          SAMPLE_FISCAL_UNIT_VALUE,
+          SAMPLE_FISCAL_PACKAGE_VALUE,
           companyId,
         );
         const totals = await transaction.$queryRawUnsafe<any[]>(
@@ -893,7 +893,7 @@ export class BlingOutboxService {
             WHERE id=$1 AND "companyId"=$5`,
           orderId,
           quantity,
-          SAMPLE_FISCAL_UNIT_VALUE,
+          SAMPLE_FISCAL_PACKAGE_VALUE,
           sampleTotal,
           companyId,
         );

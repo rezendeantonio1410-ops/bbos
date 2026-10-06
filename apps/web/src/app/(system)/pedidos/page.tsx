@@ -25,7 +25,7 @@ import { OrderCustomerApprovalActions } from "@/components/order-customer-approv
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const SAMPLE_FISCAL_UNIT_VALUE = 1;
+const SAMPLE_FISCAL_PACKAGE_VALUE = 1;
 const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
 const freightLabels: Record<string, string> = {
@@ -575,7 +575,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
     ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
     : 0;
   const productsTotal = completeLines.reduce(
-    (sum, line) => sum + (isSample ? line.quantity * SAMPLE_FISCAL_UNIT_VALUE : Number(quotes[line.id]?.totalAmount ?? 0)),
+    (sum, line) => sum + (isSample ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE : Number(quotes[line.id]?.totalAmount ?? 0)),
     0,
   );
   const totalWeightGrams = completeLines.reduce((sum, line) => {
@@ -798,7 +798,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
             productVariantId: variant.productVariantId,
             warehouseId: variant.warehouseId,
             quantity: line.quantity,
-            unitPrice: isSample ? SAMPLE_FISCAL_UNIT_VALUE : quotes[line.id]!.officialUnitPrice,
+            unitPrice: isSample ? SAMPLE_FISCAL_PACKAGE_VALUE : quotes[line.id]!.officialUnitPrice,
           };
         }),
       }),
@@ -828,7 +828,7 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
           {isSample && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
               <p className="text-xs font-bold uppercase tracking-wider">Amostra sem cobrança comercial</p>
-              <p className="mt-1 text-[11px] leading-5">Cada unidade será registrada por <b>{money.format(SAMPLE_FISCAL_UNIT_VALUE)}</b>, apenas como valor fiscal simbólico. Este pedido movimenta estoque, pode gerar NF-e e expedição, mas não gera cobrança, comissão nem receita comercial.</p>
+              <p className="mt-1 text-[11px] leading-5">Cada pacote será registrado por <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas como valor fiscal simbólico. Esta regra vale para todos os usuários. O pedido movimenta estoque, pode gerar NF-e e expedição, mas não gera cobrança, comissão nem receita comercial.</p>
               <p className="mt-1 text-[10px] leading-4 text-amber-800">Antes da emissão, confirme no Bling a natureza da operação, CFOP e tributação definidos pela contabilidade.</p>
             </div>
           )}
@@ -906,12 +906,12 @@ function NewOrder({ orderType, customers, variants, brokers, onClose, onCreated 
                         <input type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, quantity: Math.max(1, Number(event.target.value)) } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs" />
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
-                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(isSample ? SAMPLE_FISCAL_UNIT_VALUE : lineQuote.officialUnitPrice) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">{isSample ? "Preço / pacote" : "Preço unit."}</p>
+                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(isSample ? SAMPLE_FISCAL_PACKAGE_VALUE : lineQuote.officialUnitPrice) : "—"}</div>
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
-                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(isSample ? line.quantity * SAMPLE_FISCAL_UNIT_VALUE : lineQuote.totalAmount) : "—"}</div>
+                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(isSample ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE : lineQuote.totalAmount) : "—"}</div>
                       </div>
                       <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
                     </div>

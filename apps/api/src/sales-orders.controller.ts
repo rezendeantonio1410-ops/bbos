@@ -21,7 +21,7 @@ import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { resolveSalesOrderDeliveryPolicy } from "./sales-order-delivery-policy";
 import {
   resolveSalesOrderType,
-  SAMPLE_FISCAL_UNIT_VALUE,
+  SAMPLE_FISCAL_PACKAGE_VALUE,
   sampleFiscalSubtotalCents,
   sampleShippingPackages,
 } from "./sales-order-sample-policy";
@@ -396,7 +396,9 @@ export class SalesOrdersController {
       resolvedChannelType = price.salesChannelType;
       pricedItems.push({
         ...item,
-        unitPrice: isSample ? SAMPLE_FISCAL_UNIT_VALUE : price.officialUnitPrice,
+        unitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : price.officialUnitPrice,
       });
     }
     const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;

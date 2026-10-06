@@ -20,7 +20,7 @@ import {
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import {
   resolveSalesOrderType,
-  SAMPLE_FISCAL_UNIT_VALUE,
+  SAMPLE_FISCAL_PACKAGE_VALUE,
   type SalesOrderType,
 } from "./sales-order-sample-policy";
 
@@ -283,7 +283,9 @@ export class SalesOrdersService implements OnModuleDestroy {
     const pricedItems = input.items.map((item) => ({
       ...item,
       unitPrice:
-        orderType === "SAMPLE" ? SAMPLE_FISCAL_UNIT_VALUE : item.unitPrice,
+        orderType === "SAMPLE"
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : item.unitPrice,
     }));
     return this.database.$transaction(
       async (transaction) => {

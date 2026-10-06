@@ -5,14 +5,14 @@ import test from "node:test";
 import {
   resolveSalesOrderType,
   SAMPLE_DEFAULT_SHIPPING_BOX,
-  SAMPLE_FISCAL_UNIT_VALUE,
+  SAMPLE_FISCAL_PACKAGE_VALUE,
   sampleFiscalPrice,
   sampleFiscalSubtotalCents,
   sampleShippingPackages,
 } from "./sales-order-sample-policy";
 
-test("sample orders use the fixed fiscal-only unit value", () => {
-  assert.equal(SAMPLE_FISCAL_UNIT_VALUE, 1);
+test("sample orders use the fixed fiscal-only package value", () => {
+  assert.equal(SAMPLE_FISCAL_PACKAGE_VALUE, 1);
   assert.equal(sampleFiscalPrice(1), 1);
   assert.equal(sampleFiscalPrice(12), 12);
   assert.equal(sampleFiscalSubtotalCents(1), 100);
@@ -69,6 +69,14 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
   assert.match(service, /target === "INVOICED" && order\.orderType !== "SAMPLE"/);
   assert.match(controller, /paymentType = isSample\s*\? "SAMPLE"/);
   assert.match(controller, /isSample && freightResponsibility === "BISPO"/);
+  assert.match(
+    controller,
+    /unitPrice: isSample\s*\? SAMPLE_FISCAL_PACKAGE_VALUE/,
+  );
+  assert.match(
+    service,
+    /orderType === "SAMPLE"\s*\? SAMPLE_FISCAL_PACKAGE_VALUE/,
+  );
   assert.match(
     controller,
     /subtotalCents \+= isSample\s*\? sampleFiscalSubtotalCents\(item\.quantity\)/,
