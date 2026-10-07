@@ -118,6 +118,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     ),
     "utf8",
   );
+  const salesOrderService = readFileSync(
+    join(__dirname, "sales-orders.service.ts"),
+    "utf8",
+  );
 
   assert.doesNotMatch(
     controller,
@@ -128,6 +132,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     /if \(sefaz\.status === "AUTHORIZED"\)[\s\S]*SET status='INVOICED'/,
   );
   assert.match(fiscal, /resetMissingSalesOrderInvoice/);
+  assert.match(
+    salesOrderService,
+    /NF-e vigente precisa estar autorizada pela SEFAZ antes da expedição/,
+  );
   assert.match(
     fiscal,
     /const updatePayload = \{[\s\S]*\.\.\.remoteOrder[\s\S]*method: "PUT"/,

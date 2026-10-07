@@ -2754,7 +2754,9 @@ function OrderDrawer({
                       Próxima ação operacional
                     </p>
                     <p className="mt-1 text-[10px] text-stone-600">
-                      {order.status === "CONFIRMED"
+                      {fulfillment?.fiscalStatus === "REJECTED"
+                        ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
+                        : order.status === "CONFIRMED"
                         ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
                         : order.status === "RESERVED"
                           ? "O estoque está reservado. Inicie a separação física do pedido."
@@ -2813,9 +2815,9 @@ function OrderDrawer({
                         {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
                       </button>
                     )}
-                  {(order.status === "INVOICED" ||
-                    (order.status === "READY_TO_SHIP" &&
-                      fulfillment?.fiscalStatus === "AUTHORIZED")) &&
+                  {fulfillment?.fiscalStatus === "AUTHORIZED" &&
+                    (order.status === "INVOICED" ||
+                      order.status === "READY_TO_SHIP") &&
                     fulfillment?.labelUrl && (
                       <button
                         type="button"
@@ -2886,10 +2888,10 @@ function OrderDrawer({
                       Expedição · Melhor Envio
                     </p>
                     <p className="mt-1 text-[10px] text-emerald-800">
-                      {fulfillment?.labelUrl
-                        ? "Etiqueta pronta para impressão."
-                        : fulfillment?.fiscalStatus === "REJECTED"
+                      {fulfillment?.fiscalStatus === "REJECTED"
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
+                        : fulfillment?.labelUrl
+                          ? "Etiqueta pronta para impressão."
                           : fulfillment?.fiscalStatus === "AUTHORIZED"
                             ? "NF-e autorizada. A etiqueta já pode ser gerada."
                             : ["INVOICED", "READY_TO_SHIP"].includes(
@@ -2918,16 +2920,7 @@ function OrderDrawer({
                           : ""}
                       </a>
                     )}
-                    {fulfillment?.labelUrl ? (
-                      <a
-                        href={fulfillment.labelUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
-                      >
-                        Abrir etiqueta
-                      </a>
-                    ) : fulfillment?.fiscalStatus === "REJECTED" ? (
+                    {fulfillment?.fiscalStatus === "REJECTED" ? (
                       <button
                         type="button"
                         disabled={busy}
@@ -2936,6 +2929,15 @@ function OrderDrawer({
                       >
                         {busy ? "Reprocessando…" : "Reprocessar NF-e"}
                       </button>
+                    ) : fulfillment?.labelUrl ? (
+                      <a
+                        href={fulfillment.labelUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                      >
+                        Abrir etiqueta
+                      </a>
                     ) : fulfillment?.fiscalStatus === "SENT" &&
                       fulfillment?.fiscalExternalId ? (
                       <button

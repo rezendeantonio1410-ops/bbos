@@ -771,6 +771,17 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Somente pedidos reservados e prontos para expedição podem ser expedidos.",
           );
+        const fiscalDocuments = await transaction.$queryRawUnsafe<any[]>(
+          `SELECT status FROM "FiscalDocument"
+            WHERE "salesOrderId"=$1 AND direction='OUTBOUND'
+            ORDER BY "createdAt" DESC LIMIT 1`,
+          order.id,
+        );
+        if (String(fiscalDocuments[0]?.status) !== "AUTHORIZED") {
+          throw new BadRequestException(
+            "A NF-e vigente precisa estar autorizada pela SEFAZ antes da expedição.",
+          );
+        }
         if (order.shippingProvider === "MELHOR_ENVIO") {
           const shipments = await transaction.$queryRawUnsafe<any[]>(
             `SELECT status,"labelUrl" FROM "Shipment" WHERE "salesOrderId"=$1 LIMIT 1`,
