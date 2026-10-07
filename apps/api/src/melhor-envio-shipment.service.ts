@@ -105,7 +105,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
             `UPDATE "Shipment"
                 SET "trackingCode"=COALESCE($2,"trackingCode"),
                     "trackingUrl"=COALESCE($3,"trackingUrl"),
-                    metadata=$4::jsonb,
+                    metadata=COALESCE(metadata,'{}'::jsonb) || $4::jsonb,
                     "updatedAt"=NOW()
               WHERE id=$1`,
             shipment.id,
@@ -806,7 +806,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       (statusRank[mapping.status] ?? 0) >= (statusRank[String(shipment.status)] ?? 0);
     const nextStatus = shouldAdvanceStatus ? mapping.status : String(shipment.status);
     await this.database.$executeRawUnsafe(
-      `UPDATE "Shipment" SET status=$2,metadata=$3::jsonb,
+      `UPDATE "Shipment" SET status=$2,metadata=COALESCE(metadata,'{}'::jsonb) || $3::jsonb,
          "postedAt"=CASE WHEN $2 IN ('IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED') THEN COALESCE("postedAt",NOW()) ELSE "postedAt" END,
          "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,"updatedAt"=NOW() WHERE id=$1`,
       shipment.id, nextStatus, JSON.stringify(payload || {}),

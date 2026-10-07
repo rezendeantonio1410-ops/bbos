@@ -3192,7 +3192,7 @@ function OrderDrawer({
                                 <Icon size={15} strokeWidth={2.5} />
                               </span>
                               <span
-                                className={`mt-2 truncate text-[8px] font-bold uppercase tracking-wide sm:text-[9px] ${
+                                className={`mt-2 hidden truncate text-[9px] font-bold uppercase tracking-wide sm:block ${
                                   reached ? "text-emerald-950" : "text-stone-400"
                                 }`}
                               >
