@@ -5,8 +5,9 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { CostNavigation } from "./cost-navigation";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const API = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api"}/costing`;
+const API = `${getApiBaseUrl()}/costing`;
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -417,25 +418,37 @@ function Machines({
           <form onSubmit={submit} className="mt-4 grid gap-3 md:grid-cols-3">
             {(
               [
-                ["purchaseValue", "Aquisição"],
-                ["residualValue", "Residual"],
-                ["usefulLifeMonths", "Vida útil (meses)"],
-                ["expectedProductiveHours", "Horas produtivas/mês"],
-                ["maintenanceCostEstimate", "Manutenção/mês"],
-                ["energyConsumption", "Consumo kWh/h"],
-                ["energyRatePerKwh", "Tarifa R$/kWh"],
-                ["gasConsumption", "Consumo gás/h"],
-                ["gasRatePerUnit", "Tarifa gás"],
-                ["otherHourlyCost", "Outros/h"],
+                ["purchaseValue", "purchaseValue", "Aquisição"],
+                ["residualValue", "residualValue", "Residual"],
+                ["usefulLifeMonths", "usefulLifeMonths", "Vida útil (meses)"],
+                [
+                  "expectedProductiveHours",
+                  "expectedProductiveHoursPerMonth",
+                  "Horas produtivas/mês",
+                ],
+                [
+                  "maintenanceCostEstimate",
+                  "maintenanceCostEstimatePerMonth",
+                  "Manutenção/mês",
+                ],
+                [
+                  "energyConsumption",
+                  "energyConsumptionKwhPerHour",
+                  "Consumo kWh/h",
+                ],
+                ["energyRatePerKwh", "energyRatePerKwh", "Tarifa R$/kWh"],
+                ["gasConsumption", "gasConsumptionPerHour", "Consumo gás kg/h"],
+                ["gasRatePerUnit", "gasRatePerUnit", "Tarifa gás R$/kg"],
+                ["otherHourlyCost", "otherHourlyCosts", "Outros/h"],
               ] as const
-            ).map(([n, l]) => (
+            ).map(([n, inputKey, l]) => (
               <Input
                 key={n}
                 name={n}
                 label={l}
                 type="number"
                 step="0.0001"
-                defaultValue={selected.input[n] ?? 0}
+                defaultValue={selected.input[inputKey] ?? 0}
               />
             ))}
             <button className="rounded-xl bg-forest-900 px-4 py-2.5 text-sm font-bold text-white">

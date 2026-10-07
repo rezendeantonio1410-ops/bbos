@@ -63,6 +63,19 @@ type ProductionOptions = {
   users: Array<{ id: string; name: string }>;
 };
 
+type UtilityCostEstimate = {
+  configured: boolean;
+  resource?: { id: string; code: string; name: string };
+  batchCount?: number;
+  roastMinutesPerBatch?: number;
+  cycleMinutesPerBatch?: number;
+  energyKwh?: number;
+  gasKg?: number;
+  energyCost?: number;
+  gasCost?: number;
+  totalCost?: number;
+};
+
 const statusFromApi = (value: unknown): ProductionOrderStatus => {
   const normalized = String(value ?? "PLANNED").toUpperCase();
   const values: Record<string, ProductionOrderStatus> = {
@@ -222,6 +235,7 @@ const mapProductionOrder = (
       suppliesCost: 0,
       laborCost: 0,
       energyCost: 0,
+      gasCost: 0,
       otherIndustrialCosts: 0,
       roastedOutputKg,
       finishedOutputKg,
@@ -449,6 +463,7 @@ function NewOrderWizard({
         suppliesCost: 0,
         laborCost: 0,
         energyCost: 0,
+        gasCost: 0,
         otherIndustrialCosts: 0,
         roastedOutputKg: quantity * 0.845,
         finishedOutputKg: quantity * 0.83,
@@ -981,11 +996,14 @@ function PackagingRegistration({
   const [packagingUnitCost, setPackagingUnitCost] = useState(0);
   const [laborCost, setLaborCost] = useState(0);
   const [energyCost, setEnergyCost] = useState(0);
+  const [gasCost, setGasCost] = useState(0);
   const [suppliesCost, setSuppliesCost] = useState(0);
   const [otherIndustrialCosts, setOtherIndustrialCosts] = useState(0);
   const [standardCostPerKg, setStandardCostPerKg] = useState(0);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [utilityEstimate, setUtilityEstimate] =
+    useState<UtilityCostEstimate | null>(null);
   const [error, setError] = useState("");
   const finishedOutputKg = (producedPackages * packageWeightG) / 1000;
   useEffect(() => {
@@ -1003,8 +1021,12 @@ function PackagingRegistration({
         method: "POST",
         credentials: "include",
       }),
+      fetch(`${api}/production/orders/${order.id}/utility-costs`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
     ])
-      .then(async ([loadedOptions, transition]) => {
+      .then(async ([loadedOptions, transition, utilityResponse]) => {
         if (!transition.ok)
           throw new Error(
             await readApiError(
@@ -1014,6 +1036,15 @@ function PackagingRegistration({
           );
         setOptions(loadedOptions);
         setWarehouseId(loadedOptions.warehouses[0]?.id ?? "");
+        if (utilityResponse.ok) {
+          const estimate =
+            (await utilityResponse.json()) as UtilityCostEstimate;
+          setUtilityEstimate(estimate);
+          if (estimate.configured) {
+            setEnergyCost(Number(Number(estimate.energyCost ?? 0).toFixed(2)));
+            setGasCost(Number(Number(estimate.gasCost ?? 0).toFixed(2)));
+          }
+        }
         setReady(true);
       })
       .catch((caught) =>
@@ -1056,6 +1087,7 @@ function PackagingRegistration({
             ],
             laborCost,
             energyCost,
+            gasCost,
             suppliesCost,
             otherIndustrialCosts,
             standardCostPerKg,
@@ -1179,6 +1211,19 @@ function PackagingRegistration({
                 step="0.01"
                 value={energyCost}
                 onChange={(e) => setEnergyCost(Number(e.target.value))}
+                readOnly={utilityEstimate?.configured}
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Gás GLP
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={gasCost}
+                onChange={(e) => setGasCost(Number(e.target.value))}
+                readOnly={utilityEstimate?.configured}
                 className={field}
               />
             </label>
@@ -1217,6 +1262,22 @@ function PackagingRegistration({
                 className={field}
               />
             </label>
+            {utilityEstimate?.configured && (
+              <div className="rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs text-forest-900 sm:col-span-3">
+                <strong>
+                  Cálculo automático · {utilityEstimate.resource?.name}
+                </strong>
+                <p className="mt-1 text-forest-800">
+                  {utilityEstimate.batchCount} batelada(s) ·{" "}
+                  {utilityEstimate.roastMinutesPerBatch} min de gás e{" "}
+                  {utilityEstimate.cycleMinutesPerBatch} min de energia por
+                  ciclo ·{" "}
+                  {number.format(Number(utilityEstimate.energyKwh ?? 0))} kWh +{" "}
+                  {number.format(Number(utilityEstimate.gasKg ?? 0))} kg de GLP
+                  = {brl.format(Number(utilityEstimate.totalCost ?? 0))}.
+                </p>
+              </div>
+            )}
           </div>
         </details>
       </div>

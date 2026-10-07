@@ -25,7 +25,10 @@ import {
 import { ProductionService } from "./production.service";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
-import { calculateRoastMetrics } from "./production-planning";
+import {
+  calculateRoastMetrics,
+  calculateRoasterUtilityCost,
+} from "./production-planning";
 
 type CreateOrderBody = {
   code: string;
@@ -70,6 +73,7 @@ type CompleteOrderBody = {
   }>;
   laborCost: number;
   energyCost: number;
+  gasCost?: number;
   suppliesCost: number;
   otherIndustrialCosts: number;
   standardCostPerKg: number;
@@ -262,6 +266,52 @@ export class ProductionController {
     if (!order)
       throw new NotFoundException("Ordem de produção não encontrada.");
     return order;
+  }
+
+  @Get("orders/:id/utility-costs")
+  async getUtilityCosts(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const [order, resource] = await Promise.all([
+      this.production.database.productionOrder.findFirst({
+        where: { id, companyId: actor.companyId },
+        select: { id: true, batches: { select: { id: true } } },
+      }),
+      this.production.database.productiveResource.findFirst({
+        where: {
+          companyId: actor.companyId,
+          code: "TOR-01",
+          active: true,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          energyConsumption: true,
+          energyRatePerKwh: true,
+          gasConsumption: true,
+          gasRatePerUnit: true,
+        },
+      }),
+    ]);
+    if (!order)
+      throw new NotFoundException("Ordem de produção não encontrada.");
+    if (!resource)
+      return {
+        configured: false,
+        reason: "Configure o recurso TOR-01 para calcular energia e gás.",
+      };
+    const estimate = calculateRoasterUtilityCost({
+      batchCount: order.batches.length,
+      energyConsumptionKwhPerHour: Number(resource.energyConsumption),
+      energyRatePerKwh: Number(resource.energyRatePerKwh),
+      gasConsumptionKgPerHour: Number(resource.gasConsumption),
+      gasRatePerKg: Number(resource.gasRatePerUnit),
+    });
+    return {
+      configured: true,
+      resource: { id: resource.id, code: resource.code, name: resource.name },
+      ...estimate,
+    };
   }
 
   @Post("orders")
@@ -681,13 +731,35 @@ export class ProductionController {
             (sum, batch) => sum + Number(batch.roastedOutputKg),
             0,
           );
+        const roaster = await transaction.productiveResource.findFirst({
+          where: {
+            companyId: order.companyId,
+            code: "TOR-01",
+            active: true,
+          },
+        });
+        const automaticUtilities =
+          roaster && order.batches.length
+            ? calculateRoasterUtilityCost({
+                batchCount: order.batches.length,
+                energyConsumptionKwhPerHour: Number(roaster.energyConsumption),
+                energyRatePerKwh: Number(roaster.energyRatePerKwh),
+                gasConsumptionKgPerHour: Number(roaster.gasConsumption),
+                gasRatePerKg: Number(roaster.gasRatePerUnit),
+              })
+            : null;
+        const resolvedEnergyCost =
+          automaticUtilities?.energyCost ?? body.energyCost;
+        const resolvedGasCost =
+          automaticUtilities?.gasCost ?? body.gasCost ?? 0;
         const cost = calculateProductionCost({
           greenCoffeeConsumedCost: consumedCost - lossKg * averageCoffeeCost,
           roastLossCost: lossKg * averageCoffeeCost,
           packagingCost,
           suppliesCost: body.suppliesCost,
           laborCost: body.laborCost,
-          energyCost: body.energyCost,
+          energyCost: resolvedEnergyCost,
+          gasCost: resolvedGasCost,
           otherIndustrialCosts: body.otherIndustrialCosts,
           roastedOutputKg,
           finishedOutputKg: body.finishedOutputKg,
@@ -828,6 +900,32 @@ export class ProductionController {
           throw new BadRequestException(
             "Configure os centros IND-TOR e IND-EMP antes de concluir a OP.",
           );
+        if (roaster && automaticUtilities) {
+          await transaction.productionResourceUsage.upsert({
+            where: {
+              productionOrderId_resourceId: {
+                productionOrderId: order.id,
+                resourceId: roaster.id,
+              },
+            },
+            update: {
+              machineHours: automaticUtilities.energyRuntimeHours,
+              measuredEnergy: automaticUtilities.energyKwh,
+              measuredGas: automaticUtilities.gasKg,
+              notes:
+                "Cálculo padrão Atilla Huno 15 kg: 10 min de torra + 2 min de resfriamento por batelada.",
+            },
+            create: {
+              productionOrderId: order.id,
+              resourceId: roaster.id,
+              machineHours: automaticUtilities.energyRuntimeHours,
+              measuredEnergy: automaticUtilities.energyKwh,
+              measuredGas: automaticUtilities.gasKg,
+              notes:
+                "Cálculo padrão Atilla Huno 15 kg: 10 min de torra + 2 min de resfriamento por batelada.",
+            },
+          });
+        }
         const newCosts = [
           {
             type: CostType.PACKAGING,
@@ -843,7 +941,13 @@ export class ProductionController {
           },
           {
             type: CostType.ENERGY,
-            amount: body.energyCost,
+            amount: resolvedEnergyCost,
+            costCenterId: roastingCenter.id,
+            nature: "INDIRECT_INDUSTRIAL" as const,
+          },
+          {
+            type: CostType.GAS,
+            amount: resolvedGasCost,
             costCenterId: roastingCenter.id,
             nature: "INDIRECT_INDUSTRIAL" as const,
           },
@@ -893,6 +997,7 @@ export class ProductionController {
               updatedBalance.quantityOnHand - updatedBalance.reservedQuantity,
           },
           cost,
+          utilities: automaticUtilities,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
