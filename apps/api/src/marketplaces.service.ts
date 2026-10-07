@@ -23,7 +23,7 @@ export class MarketplacesService implements OnModuleDestroy {
              AND moa.active=true AND moa."salesChannelId"=sc.id
         )`
       : "";
-    const channels = await this.database.$queryRawUnsafe<any[]>(
+    const marketplaceChannels = await this.database.$queryRawUnsafe<any[]>(
       `SELECT sc.id,sc.code,sc.name,sc."platformCode",sc."connectionStatus",
               sc."externalAccountId",sc."lastSyncedAt",sc."commissionPercent",sc."fixedFee",
               COUNT(moi.id)::int AS orders,
@@ -42,6 +42,29 @@ export class MarketplacesService implements OnModuleDestroy {
       companyId,
       userId,
     );
+    const storeChannels = operatorOnly
+      ? []
+      : await this.database.$queryRawUnsafe<any[]>(
+          `SELECT sc.id,sc.code,sc.name,sc."platformCode",sc."connectionStatus",
+                  sc."externalAccountId",sc."lastSyncedAt",sc."commissionPercent",sc."fixedFee",
+                  COUNT(so.id) FILTER (WHERE so.status NOT IN ('DRAFT','CANCELLED'))::int AS orders,
+                  COUNT(so.id) FILTER (WHERE so.status IN ('CONFIRMED','RESERVED','PICKING','READY_TO_SHIP'))::int AS pending,
+                  COALESCE(SUM(COALESCE(so."channelGrossAmount",so."totalAmount"))
+                    FILTER (WHERE so.status NOT IN ('DRAFT','CANCELLED')),0) AS gross,
+                  COALESCE(SUM(so."channelFeeAmount")
+                    FILTER (WHERE so.status NOT IN ('DRAFT','CANCELLED')),0) AS fees,
+                  COALESCE(SUM(so."channelFreightAmount")
+                    FILTER (WHERE so.status NOT IN ('DRAFT','CANCELLED')),0) AS freight,
+                  0::int AS errors
+             FROM "SalesChannel" sc
+             LEFT JOIN "SalesOrder" so
+               ON so."salesChannelId"=sc.id AND so."companyId"=sc."companyId"
+            WHERE sc."companyId"=$1 AND sc.active=true
+              AND sc."platformCode"='BISPO_STORE'
+            GROUP BY sc.id
+            ORDER BY sc."createdAt" ASC`,
+          companyId,
+        );
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT moi.id,moi.provider,moi."externalOrderId",moi."externalStatus",moi."orderedAt",
               moi."grossAmount",moi."feeAmount",moi."freightAmount",moi."importStatus",
@@ -65,19 +88,21 @@ export class MarketplacesService implements OnModuleDestroy {
       companyId,
       userId,
     );
-    const normalized = channels.map((row) => ({
-      ...row,
-      orders: Number(row.orders ?? 0),
-      pending: Number(row.pending ?? 0),
-      errors: Number(row.errors ?? 0),
-      gross: Number(row.gross ?? 0),
-      fees: Number(row.fees ?? 0),
-      freight: Number(row.freight ?? 0),
-      net:
-        Number(row.gross ?? 0) -
-        Number(row.fees ?? 0) -
-        Number(row.freight ?? 0),
-    }));
+    const normalized = [...storeChannels, ...marketplaceChannels].map(
+      (row) => ({
+        ...row,
+        orders: Number(row.orders ?? 0),
+        pending: Number(row.pending ?? 0),
+        errors: Number(row.errors ?? 0),
+        gross: Number(row.gross ?? 0),
+        fees: Number(row.fees ?? 0),
+        freight: Number(row.freight ?? 0),
+        net:
+          Number(row.gross ?? 0) -
+          Number(row.fees ?? 0) -
+          Number(row.freight ?? 0),
+      }),
+    );
     return {
       channels: normalized,
       orders,
