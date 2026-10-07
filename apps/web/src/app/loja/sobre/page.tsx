@@ -152,8 +152,8 @@ export default function SobrePage() {
           </figure>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/founders/jose-rezende.jpg"
-              alt="José Rezende avaliando o aroma de um café em prova"
+              src="/brand/founders/jose-rezende-prova-191.jpg"
+              alt="José Rezende avaliando um café durante uma prova Bispo"
               fill
               sizes="(max-width: 560px) 82vw, 50vw"
             />
