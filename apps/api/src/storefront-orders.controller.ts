@@ -27,6 +27,7 @@ import { SalesOrdersService } from "./sales-orders.service";
 import {
   ensureBispoStoreSalesChannel,
   storefrontCustomerProfile,
+  storefrontShippingSalesOrderData,
 } from "./storefront-order-sync";
 
 const catalog: Record<
@@ -464,6 +465,7 @@ export class StorefrontOrdersController
       unitPriceCents: number;
       totalCents: number;
     }>;
+    const shippingData = storefrontShippingSalesOrderData(storefront);
 
     return this.database.$transaction(async (transaction) => {
       const channel = await ensureBispoStoreSalesChannel(
@@ -537,6 +539,15 @@ export class StorefrontOrdersController
         const data: {
           status?: SalesOrderStatus;
           salesChannelId?: string;
+          freight?: number;
+          freightResponsibility?: string | null;
+          shippingQuoteId?: string | null;
+          shippingProvider?: string | null;
+          shippingServiceId?: string | null;
+          shippingServiceName?: string | null;
+          carrierName?: string | null;
+          estimatedDeliveryDays?: number | null;
+          externalOrderId?: string;
         } = {};
         if (
           status !== existing.status &&
@@ -548,6 +559,20 @@ export class StorefrontOrdersController
         }
         if (existing.salesChannelId !== channel.id) {
           data.salesChannelId = channel.id;
+        }
+        const shippingChanged =
+          Number(existing.freight) !== shippingData.freight ||
+          existing.freightResponsibility !==
+            shippingData.freightResponsibility ||
+          existing.shippingQuoteId !== shippingData.shippingQuoteId ||
+          existing.shippingProvider !== shippingData.shippingProvider ||
+          existing.shippingServiceId !== shippingData.shippingServiceId ||
+          existing.shippingServiceName !== shippingData.shippingServiceName ||
+          existing.carrierName !== shippingData.carrierName ||
+          existing.estimatedDeliveryDays !== shippingData.estimatedDeliveryDays;
+        if (shippingChanged) Object.assign(data, shippingData);
+        if (existing.externalOrderId !== storefront.id) {
+          data.externalOrderId = storefront.id;
         }
         if (Object.keys(data).length) {
           return transaction.salesOrder.update({
@@ -588,9 +613,10 @@ export class StorefrontOrdersController
             ? storefront.subtotalCents / 100 / totalQuantity
             : 0,
           subtotal: storefront.subtotalCents / 100,
-          freight: storefront.shippingCents / 100,
+          ...shippingData,
           discount: (storefront.discountCents || 0) / 100,
           totalAmount: storefront.totalCents / 100,
+          externalOrderId: storefront.id,
           orderDate: storefront.createdAt,
           notes: [
             `Loja online · ${customerData?.email || ""} · ${customerData?.phone || ""}`,

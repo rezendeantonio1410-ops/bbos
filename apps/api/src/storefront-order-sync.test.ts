@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ensureBispoStoreSalesChannel,
   storefrontCustomerProfile,
+  storefrontShippingSalesOrderData,
 } from "./storefront-order-sync";
 
 test("pedido da Loja Bispo não reutiliza o canal Mercado Livre", async () => {
@@ -102,5 +103,28 @@ test("checkout da loja preserva o endereço fiscal no cliente", () => {
     city: "Londrina",
     state: "PR",
     stateRegistrationType: "NON_TAXPAYER",
+  });
+});
+
+test("checkout da loja preserva a cotação usada para despachar", () => {
+  const shipping = storefrontShippingSalesOrderData({
+    shippingCents: 1379,
+    shippingQuoteId: "quote-1",
+    shippingProvider: "MELHOR_ENVIO",
+    shippingServiceId: "2",
+    shippingServiceName: "SEDEX",
+    carrierName: "Correios",
+    estimatedDeliveryDays: 4,
+  });
+
+  assert.deepEqual(shipping, {
+    freight: 13.79,
+    freightResponsibility: "CUSTOMER",
+    shippingQuoteId: "quote-1",
+    shippingProvider: "MELHOR_ENVIO",
+    shippingServiceId: "2",
+    shippingServiceName: "SEDEX",
+    carrierName: "Correios",
+    estimatedDeliveryDays: 4,
   });
 });

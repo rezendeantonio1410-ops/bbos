@@ -2535,7 +2535,9 @@ function OrderDrawer({
         : "À vista";
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
-    : "A combinar";
+    : order.estimatedDeliveryDays
+      ? `Até ${order.estimatedDeliveryDays} dias úteis após a postagem`
+      : "A combinar";
   const freightLabel =
     order.freightResponsibility === "PICKUP"
       ? (freightLabels.PICKUP ?? "Retirada na Bispo Coffees")

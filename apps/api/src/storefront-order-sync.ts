@@ -19,6 +19,16 @@ type StorefrontDeliveryInput = {
   state?: string;
 };
 
+type StorefrontShippingInput = {
+  shippingCents?: number | null;
+  shippingQuoteId?: string | null;
+  shippingProvider?: string | null;
+  shippingServiceId?: string | null;
+  shippingServiceName?: string | null;
+  carrierName?: string | null;
+  estimatedDeliveryDays?: number | null;
+};
+
 const text = (value: unknown) => String(value ?? "").trim();
 const digits = (value: unknown) => text(value).replace(/\D/g, "");
 
@@ -40,9 +50,23 @@ export function storefrontCustomerProfile(
     district: text(delivery.district) || undefined,
     city: text(delivery.city) || undefined,
     state: text(delivery.state).toUpperCase() || undefined,
-    ...(taxId.length === 11
-      ? { stateRegistrationType: "NON_TAXPAYER" }
-      : {}),
+    ...(taxId.length === 11 ? { stateRegistrationType: "NON_TAXPAYER" } : {}),
+  };
+}
+
+export function storefrontShippingSalesOrderData(
+  shipping: StorefrontShippingInput,
+) {
+  const shippingQuoteId = text(shipping.shippingQuoteId) || null;
+  return {
+    freight: Number(shipping.shippingCents ?? 0) / 100,
+    freightResponsibility: shippingQuoteId ? "CUSTOMER" : null,
+    shippingQuoteId,
+    shippingProvider: text(shipping.shippingProvider) || null,
+    shippingServiceId: text(shipping.shippingServiceId) || null,
+    shippingServiceName: text(shipping.shippingServiceName) || null,
+    carrierName: text(shipping.carrierName) || null,
+    estimatedDeliveryDays: Number(shipping.estimatedDeliveryDays ?? 0) || null,
   };
 }
 

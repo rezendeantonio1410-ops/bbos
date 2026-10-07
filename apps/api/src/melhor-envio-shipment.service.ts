@@ -551,6 +551,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
               q."serviceId",q."serviceName",q."carrierName",
+              sfo.id AS "storefrontOrderId",
               c.name AS "customerName",c."taxId" AS "customerTaxId",
               c.email AS "customerEmail",c.phone AS "customerPhone",
               c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
@@ -558,6 +559,9 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
          FROM "SalesOrder" so
          JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
          JOIN "Customer" c ON c.id=so."customerId"
+         LEFT JOIN "StorefrontOrder" sfo
+           ON sfo."companyId"=so."companyId"
+          AND sfo.code=COALESCE(so."orderNumber",so.code)
         WHERE so.id=$1 LIMIT 1`,
       orderId,
     );
@@ -575,10 +579,42 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     if (!authorized[0])
       throw new BadRequestException("A etiqueta só pode ser comprada após a autorização da NF-e.");
 
+    if (order.storefrontOrderId) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder" SET status='INVOICED',"updatedAt"=NOW()
+          WHERE id=$1 AND status IN ('PAID','PREPARING','INVOICED')`,
+        order.storefrontOrderId,
+      );
+      await this.lifecycle.record(
+        order.storefrontOrderId,
+        "INVOICE_AUTHORIZED",
+        "Nota fiscal emitida",
+        "A nota fiscal do seu pedido foi autorizada e a expedição será preparada.",
+        "BLING",
+        `storefront:invoice-authorized:${order.storefrontOrderId}`,
+        { salesOrderId: order.id },
+      );
+    }
+
     const prior = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "Shipment" WHERE "salesOrderId"=$1 LIMIT 1`,
+      `SELECT * FROM "Shipment"
+        WHERE "salesOrderId"=$1 OR "storefrontOrderId"=$2
+        ORDER BY "updatedAt" DESC LIMIT 1`,
       orderId,
+      order.storefrontOrderId,
     );
+    if (prior[0]) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "Shipment"
+            SET "salesOrderId"=COALESCE("salesOrderId",$2),
+                "storefrontOrderId"=COALESCE("storefrontOrderId",$3),
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        prior[0].id,
+        order.id,
+        order.storefrontOrderId,
+      );
+    }
     if (prior[0]?.labelUrl) return { ...prior[0], idempotent: true };
 
     const items = await this.database.$queryRawUnsafe<any[]>(
@@ -595,12 +631,13 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     if (!prior[0]) {
       await this.database.$executeRawUnsafe(
         `INSERT INTO "Shipment"
-          (id,"companyId","storefrontOrderId","salesOrderId","shippingQuoteId",provider,status,
+         (id,"companyId","storefrontOrderId","salesOrderId","shippingQuoteId",provider,status,
            "serviceId","serviceName","carrierName","providerPriceCents","customerPriceCents",
            metadata,"createdAt","updatedAt")
-         VALUES ($1,$2,NULL,$3,$4,'MELHOR_ENVIO','PENDING',$5,$6,$7,$8,$9,'{}'::jsonb,NOW(),NOW())`,
+         VALUES ($1,$2,$3,$4,$5,'MELHOR_ENVIO','PENDING',$6,$7,$8,$9,$10,'{}'::jsonb,NOW(),NOW())`,
         shipmentId,
         order.companyId,
+        order.storefrontOrderId,
         order.id,
         order.shippingQuoteId,
         order.serviceId,
@@ -734,6 +771,18 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       JSON.stringify(details || {}),
     );
 
+    if (order.storefrontOrderId) {
+      await this.lifecycle.record(
+        order.storefrontOrderId,
+        "SHIPMENT_CREATED",
+        "Envio preparado",
+        "A etiqueta de transporte foi emitida e o pedido está pronto para postagem.",
+        "MELHOR_ENVIO",
+        `storefront:shipment-created:${order.storefrontOrderId}`,
+        { shipmentId, externalId, trackingCode, trackingUrl },
+      );
+    }
+
     await this.customerLifecycle.record(
       order.id,
       "SHIPMENT_CREATED",
@@ -828,7 +877,8 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
         `storefront:${mapping.event.toLowerCase()}:${shipment.storefrontOrderId}`,
         { externalId, status: statusValue },
       );
-    } else if (shipment.salesOrderId) {
+    }
+    if (shipment.salesOrderId) {
       if (mapping.order) {
         await this.database.$executeRawUnsafe(
           `UPDATE "SalesOrder"
