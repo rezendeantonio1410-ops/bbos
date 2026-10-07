@@ -136,6 +136,11 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     fiscal,
     /pedidos\/vendas[\s\S]{0,2000}method: "PATCH"/,
   );
+  assert.match(fiscal, /isBlingSalesOrderInvoiceAlreadyGenerated/);
+  assert.match(
+    fiscal,
+    /staleSalesOrderRecoveryAttempt === 0[\s\S]*DELETE FROM "IntegrationResourceMap"[\s\S]*return this\.processSalesOrderInvoice\(row, 1\)/,
+  );
   assert.match(
     fiscal,
     /if \(salesMap\?\.externalId\)[\s\S]*isBlingNotFound\(error\)[\s\S]*"resourceType"='SALES_ORDER'[\s\S]*salesMap = null/,

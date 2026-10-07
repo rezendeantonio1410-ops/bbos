@@ -34,6 +34,14 @@ function isBlingNotFound(error: unknown) {
   );
 }
 
+function isBlingSalesOrderInvoiceAlreadyGenerated(error: unknown) {
+  return (
+    error instanceof Error &&
+    (/"code":24/.test(error.message) ||
+      /nota fiscal do pedido já foi gerada/i.test(error.message))
+  );
+}
+
 @Injectable()
 export class BlingOutboxService {
   private readonly database = prisma;
@@ -384,7 +392,10 @@ export class BlingOutboxService {
     return { externalId, idempotent: false };
   }
 
-  private async processSalesOrderInvoice(row: any) {
+  private async processSalesOrderInvoice(
+    row: any,
+    staleSalesOrderRecoveryAttempt = 0,
+  ): Promise<any> {
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,c.name AS "customerName",c."legalName" AS "customerLegalName",c."taxId" AS "customerTaxId",
               c.email AS "customerEmail",c.phone AS "customerPhone",
@@ -534,7 +545,11 @@ export class BlingOutboxService {
         {
           method: "POST",
           body: JSON.stringify({
-            numeroLoja: order.orderNumber ?? order.code,
+            numeroLoja: `${order.orderNumber ?? order.code}${
+              staleSalesOrderRecoveryAttempt
+                ? `-R${staleSalesOrderRecoveryAttempt}`
+                : ""
+            }`,
             data: toBlingDate(
               order.orderDate ?? order.orderedAt ?? order.createdAt,
             ),
@@ -601,19 +616,40 @@ export class BlingOutboxService {
       /\D/g,
       "",
     );
-    const remoteOrder = sampleFiscalRoute
-      ? await this.ensureSampleNatureOnSalesOrder(
-          row.companyId,
-          salesMap.externalId,
-          sampleFiscalRoute,
-        )
-      : await this.bling
-          .request(
+    let remoteOrder: any;
+    try {
+      remoteOrder = sampleFiscalRoute
+        ? await this.ensureSampleNatureOnSalesOrder(
             row.companyId,
-            `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
-            { method: "GET" },
+            salesMap.externalId,
+            sampleFiscalRoute,
           )
-          .then((detail) => detail?.data ?? detail ?? {});
+        : await this.bling
+            .request(
+              row.companyId,
+              `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
+              { method: "GET" },
+            )
+            .then((detail) => detail?.data ?? detail ?? {});
+    } catch (error) {
+      const canRecoverStaleSalesOrder =
+        !priorFiscalExternalId &&
+        staleSalesOrderRecoveryAttempt === 0 &&
+        isBlingSalesOrderInvoiceAlreadyGenerated(error);
+      if (!canRecoverStaleSalesOrder) throw error;
+
+      // Bling keeps a deleted draft linked to its original sales order. That
+      // order can no longer be edited or invoiced, so remap this BBOS order to
+      // a fresh remote sales order and continue the same idempotent request.
+      await this.database.$executeRawUnsafe(
+        `DELETE FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`,
+        row.companyId,
+        order.id,
+      );
+      return this.processSalesOrderInvoice(row, 1);
+    }
     const remoteContactId = String(remoteOrder?.contato?.id ?? "");
     if (!remoteContactId)
       throw new Error(
@@ -1385,11 +1421,15 @@ export class BlingOutboxService {
       await transaction.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap"
           WHERE "companyId"=$1 AND provider='BLING'
-            AND "resourceType"='FISCAL_DOCUMENT'
-            AND ("internalKey"=$2 OR "externalId"=$3)`,
+            AND (
+              ("resourceType"='FISCAL_DOCUMENT'
+                AND ("internalKey"=$2 OR "externalId"=$3))
+              OR ("resourceType"='SALES_ORDER' AND "internalKey"=$4)
+            )`,
         companyId,
         row.fiscalId,
         externalId,
+        orderId,
       );
       await transaction.$executeRawUnsafe(
         `UPDATE "IntegrationOutbox"
