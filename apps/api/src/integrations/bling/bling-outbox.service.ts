@@ -38,6 +38,13 @@ function toBlingDateTime(value: unknown) {
   return `${toBlingDate(value)} 00:00:00`;
 }
 
+function currentBlingDateTime() {
+  return new Date().toLocaleString("sv-SE", {
+    timeZone: "America/Sao_Paulo",
+    hour12: false,
+  });
+}
+
 function isBlingNotFound(error: unknown) {
   return (
     error instanceof Error &&
@@ -288,13 +295,11 @@ export class BlingOutboxService {
       order?.customerStateRegistrationType ?? "NON_TAXPAYER",
     );
     const phone = this.normalizeBlingPhone(order?.customerPhone);
-    const dataOperacao = toBlingDateTime(
-      fiscalDraft?.dataOperacao ?? new Date(),
-    );
+    const originalOperationDate = fiscalDraft?.dataOperacao ?? new Date();
     const payload = {
       tipo: Number(fiscalDraft?.tipo ?? 1),
       numero: String(fiscalDraft?.numero ?? "").trim(),
-      dataOperacao,
+      dataOperacao: currentBlingDateTime(),
       contato: {
         nome:
           document.length === 14
@@ -356,14 +361,31 @@ export class BlingOutboxService {
         : [],
     };
 
-    await this.bling.request(
-      companyId,
-      `/nfe/${encodeURIComponent(blingNfeId)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      },
-    );
+    const operationDates = [
+      currentBlingDateTime(),
+      toBlingDateTime(originalOperationDate),
+      toBlingDate(new Date()),
+      toBlingDate(originalOperationDate),
+    ].filter((value, index, values) => values.indexOf(value) === index);
+    let updateError: unknown = null;
+    for (const dataOperacao of operationDates) {
+      try {
+        await this.bling.request(
+          companyId,
+          `/nfe/${encodeURIComponent(blingNfeId)}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({ ...payload, dataOperacao }),
+          },
+        );
+        updateError = null;
+        break;
+      } catch (error) {
+        updateError = error;
+        if (!/Data de operação inválida/i.test(String(error))) throw error;
+      }
+    }
+    if (updateError) throw updateError;
     const updated = await this.bling.request(
       companyId,
       `/nfe/${encodeURIComponent(blingNfeId)}`,
