@@ -2827,6 +2827,16 @@ function OrderDrawer({
                       </button>
                     )}
                 </div>
+                {error && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+                  >
+                    <p className="font-bold">Não foi possível avançar.</p>
+                    <p className="mt-1">{error}</p>
+                  </div>
+                )}
               </section>
             )}
 
@@ -3189,11 +3199,6 @@ function OrderDrawer({
           </>
         )}
 
-        {error && (
-          <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">
-            {error}
-          </div>
-        )}
       </aside>
     </div>
   );
