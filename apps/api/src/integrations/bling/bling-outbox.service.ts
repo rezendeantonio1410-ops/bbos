@@ -542,6 +542,17 @@ export class BlingOutboxService {
     const effectiveRecoveryAttempt = repairConsumerFinalRejection
       ? Math.max(staleSalesOrderRecoveryAttempt, 1)
       : staleSalesOrderRecoveryAttempt;
+    const recoveryReference = repairConsumerFinalRejection
+      ? `-R${
+          String(
+            priorFiscal[0]?.number ?? priorFiscal[0]?.externalId ?? "SEFAZ",
+          )
+            .replace(/^0+/, "")
+            .replace(/\D/g, "") || "SEFAZ"
+        }`
+      : effectiveRecoveryAttempt
+        ? `-R${effectiveRecoveryAttempt}`
+        : "";
 
     const contactId = await this.ensureContact(
       row.companyId,
@@ -645,11 +656,7 @@ export class BlingOutboxService {
         {
           method: "POST",
           body: JSON.stringify({
-            numeroLoja: `${order.orderNumber ?? order.code}${
-              effectiveRecoveryAttempt
-                ? `-R${effectiveRecoveryAttempt}`
-                : ""
-            }`,
+            numeroLoja: `${order.orderNumber ?? order.code}${recoveryReference}`,
             data: toBlingDate(
               order.orderDate ?? order.orderedAt ?? order.createdAt,
             ),
