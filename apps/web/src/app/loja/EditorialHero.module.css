@@ -353,7 +353,6 @@
     transform: none;
   }
 }
-
 /* Premium editorial scale — product remains desirable without billboard typography. */
 @media (min-width: 961px) {
   .hero {

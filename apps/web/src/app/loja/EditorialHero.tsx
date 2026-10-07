@@ -11,6 +11,7 @@ import { realProductImages } from "./real-product-images";
 
 const scenes = [
   {
+    id: "caramelo",
     line: "CLÁSSICOS",
     name: "Caramelo",
     title: "Doce. Confortável.",
@@ -23,10 +24,66 @@ const scenes = [
     notes: "Caramelo · Chocolate · Equilíbrio",
     price: "R$ 68,00",
     priceCents: 6800,
+    weightGrams: 500,
     tone: "#C86424",
     crop: "46% center",
   },
   {
+    id: "intenso",
+    line: "GOURMET",
+    name: "Intenso",
+    title: "Mais corpo.",
+    italic: "Presença limpa.",
+    copy: "Uma xícara encorpada e direta, sem amargor agressivo e sem perder a limpeza.",
+    image: "/brand/editorial/real/jose-preparo-73.jpg",
+    alt: "José Rezende preparando um café Bispo no método coado",
+    signature: "JOSÉ · PREPARO E PRECISÃO",
+    product: realProductImages.Intenso,
+    notes: "Corpo · Presença · Limpeza",
+    price: "R$ 55,00",
+    priceCents: 5500,
+    weightGrams: 500,
+    tone: "#A77924",
+    crop: "center 46%",
+  },
+  {
+    id: "doce-de-leite",
+    line: "CLÁSSICOS",
+    name: "Doce de Leite",
+    title: "Doçura que lembra",
+    italic: "casa.",
+    copy: "Açúcar mascavo, doce de leite e alfajor em uma xícara macia e prolongada.",
+    image: "/brand/editorial/real/jose-prova.jpg",
+    alt: "José Rezende avaliando uma xícara durante uma prova de cafés Bispo",
+    signature: "DOÇURA · PROVA E MEMÓRIA",
+    product: realProductImages["Doce de Leite"],
+    notes: "Mascavo · Doce de leite · Alfajor",
+    price: "R$ 68,00",
+    priceCents: 6800,
+    weightGrams: 500,
+    tone: "#B66B35",
+    crop: "center 48%",
+  },
+  {
+    id: "tangerina",
+    line: "CLÁSSICOS",
+    name: "Tangerina",
+    title: "Um café vivo.",
+    italic: "Fresco e luminoso.",
+    copy: "Cítrico, doce e alegre: uma porta de entrada para descobrir os cafés frutados.",
+    image: "/brand/editorial/real/caderno-frutos-maturacao.jpg",
+    alt: "Frutos de café em diferentes estágios de maturação",
+    signature: "CAMPO · FRUTO E FRESCOR",
+    product: realProductImages.Tangerina,
+    notes: "Cítrico · Doce · Fresco",
+    price: "R$ 68,00",
+    priceCents: 6800,
+    weightGrams: 500,
+    tone: "#E47928",
+    crop: "center 58%",
+  },
+  {
+    id: "singular",
     line: "ÉPICOS",
     name: "Singular",
     title: "Novas camadas.",
@@ -39,10 +96,12 @@ const scenes = [
     notes: "Frutado · Complexo · Evolutivo",
     price: "R$ 84,00",
     priceCents: 8400,
+    weightGrams: 500,
     tone: "#5C7D5F",
     crop: "center 50%",
   },
   {
+    id: "sublime",
     line: "ÉPICOS",
     name: "Sublime",
     title: "Escolhido por quem",
@@ -55,10 +114,12 @@ const scenes = [
     notes: "Rapadura · Caramelo · Doçura profunda",
     price: "R$ 84,00",
     priceCents: 8400,
+    weightGrams: 500,
     tone: "#5C7D5F",
     crop: "center 48%",
   },
   {
+    id: "essencial",
     line: "GOURMET",
     name: "Essencial",
     title: "O cuidado de sempre.",
@@ -71,8 +132,27 @@ const scenes = [
     notes: "Macio · Doce · Fácil",
     price: "R$ 55,00",
     priceCents: 5500,
+    weightGrams: 500,
     tone: "#C39A24",
     crop: "center 54%",
+  },
+  {
+    id: "raro",
+    line: "RAROS",
+    name: "Raro",
+    title: "Poucas sacas.",
+    italic: "Uma história inteira.",
+    copy: "O microlote de Carlos Alexandre traduz o Norte do Paraná em uma xícara limpa e viva.",
+    image: "/brand/editorial/real/caderno-carlos-alexandre-colheita.jpg",
+    alt: "Carlos Alexandre exibindo a colheita de um microlote no Norte do Paraná",
+    signature: "CARLOS ALEXANDRE · ORIGEM E SAFRA",
+    product: realProductImages.Raro,
+    notes: "86,5 pontos · Origem única · Safra limitada",
+    price: "R$ 54,00",
+    priceCents: 5400,
+    weightGrams: 250,
+    tone: "#8E2721",
+    crop: "center 72%",
   },
 ] as const;
 
@@ -93,10 +173,11 @@ export default function EditorialHero({
       productImages[selectedScene.name]?.primary ??
       selectedScene.product,
   };
+  const preparations = Math.floor(scene.weightGrams / 20);
   const pricePerPreparation =
     scene.line === "GOURMET"
       ? null
-      : (scene.priceCents / 100 / 25).toLocaleString("pt-BR", {
+      : (scene.priceCents / 100 / preparations).toLocaleString("pt-BR", {
           style: "currency",
           currency: "BRL",
         });
@@ -177,7 +258,7 @@ export default function EditorialHero({
           <div className={styles.productReading}>
             <small>LEITURA SENSORIAL</small>
             <strong>{scene.notes}</strong>
-            <span>100% Arábica · Torra própria · 500 g</span>
+            <span>100% Arábica · Torra própria · {scene.weightGrams} g</span>
           </div>
         </div>
         <div className={styles.buyRow}>
@@ -186,18 +267,18 @@ export default function EditorialHero({
             <strong>{scene.price}</strong>
             {pricePerPreparation ? (
               <span className={styles.preparationValue}>
-                25 preparos de 20 g · ≈ {pricePerPreparation} cada
+                {preparations} preparos de 20 g · ≈ {pricePerPreparation} cada
               </span>
             ) : null}
           </div>
           <AddToCartButton
             product={{
-              id: scene.name.toLowerCase(),
+              id: scene.id,
               name: scene.name,
               line: scene.line,
               notes: scene.notes,
               priceCents: scene.priceCents,
-              weightGrams: 500,
+              weightGrams: scene.weightGrams,
               image: scene.product,
             }}
           >
