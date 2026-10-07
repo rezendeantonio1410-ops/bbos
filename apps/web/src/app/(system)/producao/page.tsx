@@ -41,6 +41,18 @@ const brl = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+const decimalCurrency = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const parseBrlInput = (value: string) => {
+  const sanitized = value.replace(/[^\d,.-]/g, "");
+  const normalized = sanitized.includes(",")
+    ? sanitized.replace(/\./g, "").replace(",", ".")
+    : sanitized;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
 const status: Record<
   ProductionOrderStatus,
   { label: string; tone: "neutral" | "success" | "warning" | "danger" }
@@ -994,6 +1006,7 @@ function PackagingRegistration({
   const [producedPackages, setProducedPackages] = useState(suggestedPackages);
   const [materialName, setMaterialName] = useState(`Embalagem ${order.sku}`);
   const [packagingUnitCost, setPackagingUnitCost] = useState(0);
+  const [packagingUnitCostInput, setPackagingUnitCostInput] = useState("0,00");
   const [laborCost, setLaborCost] = useState(0);
   const [energyCost, setEnergyCost] = useState(0);
   const [gasCost, setGasCost] = useState(0);
@@ -1178,14 +1191,30 @@ function PackagingRegistration({
         </label>
         <label className="text-xs font-semibold">
           Custo unitário da embalagem
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={packagingUnitCost}
-            onChange={(e) => setPackagingUnitCost(Number(e.target.value))}
-            className={field}
-          />
+          <span className="relative block">
+            <span className="pointer-events-none absolute left-3 top-1/2 mt-1 -translate-y-1/2 text-sm font-semibold text-stone-500">
+              R$
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={packagingUnitCostInput}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => {
+                const value = event.target.value;
+                setPackagingUnitCostInput(value);
+                setPackagingUnitCost(parseBrlInput(value));
+              }}
+              onBlur={() =>
+                setPackagingUnitCostInput(
+                  decimalCurrency.format(packagingUnitCost),
+                )
+              }
+              placeholder="0,00"
+              aria-label="Custo unitário da embalagem em reais"
+              className={`${field} pl-10`}
+            />
+          </span>
         </label>
         <label className="text-xs font-semibold">
           Mão de obra
