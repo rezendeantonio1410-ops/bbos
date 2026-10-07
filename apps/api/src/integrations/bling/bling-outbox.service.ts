@@ -717,13 +717,20 @@ export class BlingOutboxService {
     const repairInvoiceDraftConsumerFinal =
       priorConsumerFinalRejection &&
       !priorFiscal[0]?.payloadSnapshot?.invoiceDraftRepairAttempted;
+    const recoverAfterNatureConsumerFinalFix =
+      priorConsumerFinalRejection &&
+      Boolean(priorFiscal[0]?.payloadSnapshot?.consumerFinalRepairAttempted) &&
+      Boolean(priorFiscal[0]?.payloadSnapshot?.invoiceDraftRepairAttempted) &&
+      !priorFiscal[0]?.payloadSnapshot?.natureConsumerFinalRecoveryAttempted;
     const regenerateForConsumerFinal =
-      repairConsumerFinalRejection || repairInvoiceDraftConsumerFinal;
+      repairConsumerFinalRejection ||
+      repairInvoiceDraftConsumerFinal ||
+      recoverAfterNatureConsumerFinalFix;
     const effectiveRecoveryAttempt = regenerateForConsumerFinal
       ? Math.max(staleSalesOrderRecoveryAttempt, 1)
       : staleSalesOrderRecoveryAttempt;
     const recoveryReference = regenerateForConsumerFinal
-      ? `-CF${
+      ? `${recoverAfterNatureConsumerFinalFix ? "-CFN" : "-CF"}${
           String(priorFiscal[0]?.externalId ?? priorFiscal[0]?.number ?? "")
             .replace(/\D/g, "")
             .slice(-6) || "SEFAZ"
@@ -1052,6 +1059,17 @@ export class BlingOutboxService {
             ? new Date().toISOString()
             : (priorFiscal[0]?.payloadSnapshot?.invoiceDraftRepairAttemptedAt ??
               null),
+          natureConsumerFinalRecoveryAttempted:
+            recoverAfterNatureConsumerFinalFix ||
+            Boolean(
+              priorFiscal[0]?.payloadSnapshot
+                ?.natureConsumerFinalRecoveryAttempted,
+            ),
+          natureConsumerFinalRecoveryAttemptedAt:
+            recoverAfterNatureConsumerFinalFix
+              ? new Date().toISOString()
+              : (priorFiscal[0]?.payloadSnapshot
+                  ?.natureConsumerFinalRecoveryAttemptedAt ?? null),
         }),
       );
     } else {
@@ -1074,6 +1092,12 @@ export class BlingOutboxService {
           invoiceDraftRepairAttemptedAt: invoiceDraftRepairApplied
             ? new Date().toISOString()
             : null,
+          natureConsumerFinalRecoveryAttempted:
+            recoverAfterNatureConsumerFinalFix,
+          natureConsumerFinalRecoveryAttemptedAt:
+            recoverAfterNatureConsumerFinalFix
+              ? new Date().toISOString()
+              : null,
         }),
       );
     }

@@ -152,6 +152,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   );
   assert.match(
     fiscal,
+    /recoverAfterNatureConsumerFinalFix[\s\S]*natureConsumerFinalRecoveryAttempted/,
+  );
+  assert.match(
+    fiscal,
     /repairSampleInvoiceConsumerFinal[\s\S]*contribuinte: this\.blingStateRegistrationIndicator/,
   );
   assert.match(
