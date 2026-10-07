@@ -761,27 +761,64 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     );
     const shipment = rows[0];
     if (!shipment) return { ignored: true };
-    const normalized = statusValue.toLowerCase();
-    const mapping = normalized.includes("deliver") && !normalized.includes("out")
-      ? { status: "DELIVERED", order: "DELIVERED", event: "DELIVERED", title: "Pedido entregue", detail: "A transportadora confirmou a entrega do seu pedido." }
-      : normalized.includes("out_for_delivery") || normalized.includes("saiu")
-        ? { status: "OUT_FOR_DELIVERY", order: "SHIPPED", event: "OUT_FOR_DELIVERY", title: "Saiu para entrega", detail: "Seu pedido saiu para entrega no endereço informado." }
-        : normalized.includes("post") || normalized.includes("transit") || normalized.includes("movimenta")
-          ? { status: "IN_TRANSIT", order: "SHIPPED", event: "SHIPPED", title: "Pedido a caminho", detail: "Seu pedido foi postado e está a caminho." }
-          : null;
+    const normalized = statusValue
+      .toLowerCase()
+      .replace(/^order\./, "")
+      .replace(/[\s-]+/g, "_");
+    const mapping = normalized.includes("out_for_delivery") || normalized.includes("saiu")
+      ? { status: "OUT_FOR_DELIVERY", order: "SHIPPED", event: "OUT_FOR_DELIVERY", title: "Saiu para entrega", detail: "A transportadora informou que o pedido saiu para entrega no endereço indicado." }
+      : normalized === "delivered" || normalized === "entregue"
+        ? { status: "DELIVERED", order: "DELIVERED", event: "DELIVERED", title: "Pedido entregue", detail: "A transportadora confirmou a entrega do pedido." }
+        : normalized === "received" || normalized.includes("recebid")
+          ? { status: "IN_TRANSIT", order: "SHIPPED", event: "RECEIVED", title: "Recebido no ponto de distribuição", detail: "O volume foi recebido pelo ponto de distribuição ou postagem." }
+          : normalized === "posted" || normalized.includes("postad") || normalized.includes("transit") || normalized.includes("movimenta")
+            ? { status: "IN_TRANSIT", order: "SHIPPED", event: "SHIPPED", title: "Pedido a caminho", detail: "O pedido foi postado e está em transporte." }
+            : normalized === "generated"
+              ? { status: "LABEL_READY", order: null, event: "LABEL_GENERATED", title: "Etiqueta gerada", detail: "A etiqueta de transporte foi gerada e está pronta para uso." }
+              : normalized === "released"
+                ? { status: "PURCHASED", order: null, event: "LABEL_RELEASED", title: "Etiqueta liberada", detail: "O Melhor Envio confirmou o pagamento e liberou a etiqueta." }
+                : normalized === "created"
+                  ? { status: "PENDING", order: null, event: "LABEL_CREATED", title: "Etiqueta criada", detail: "A solicitação da etiqueta foi criada no Melhor Envio." }
+                  : normalized === "pending"
+                    ? { status: "PENDING", order: null, event: "LABEL_PENDING", title: "Etiqueta em preparação", detail: "A etiqueta está em preparação no Melhor Envio." }
+                    : normalized === "undelivered"
+                      ? { status: "EXCEPTION", order: null, event: "UNDELIVERED", title: "Entrega não realizada", detail: "A transportadora informou que não foi possível concluir a entrega." }
+                      : normalized === "paused"
+                        ? { status: "EXCEPTION", order: null, event: "PAUSED", title: "Entrega interrompida", detail: "A entrega foi interrompida e pode exigir uma ação do destinatário." }
+                        : normalized === "suspended"
+                          ? { status: "EXCEPTION", order: null, event: "SUSPENDED", title: "Envio suspenso", detail: "O Melhor Envio informou que o envio foi suspenso." }
+                          : normalized === "cancelled" || normalized === "canceled"
+                            ? { status: "CANCELLED", order: null, event: "SHIPMENT_CANCELLED", title: "Etiqueta cancelada", detail: "A etiqueta de transporte foi cancelada." }
+                            : null;
     if (!mapping) return { ignored: true };
+    const statusRank: Record<string, number> = {
+      PENDING: 0,
+      PURCHASED: 1,
+      LABEL_READY: 2,
+      IN_TRANSIT: 3,
+      OUT_FOR_DELIVERY: 4,
+      DELIVERED: 5,
+      CANCELLED: 99,
+    };
+    const shouldAdvanceStatus =
+      mapping.status === "EXCEPTION" ||
+      mapping.status === "CANCELLED" ||
+      (statusRank[mapping.status] ?? 0) >= (statusRank[String(shipment.status)] ?? 0);
+    const nextStatus = shouldAdvanceStatus ? mapping.status : String(shipment.status);
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET status=$2,metadata=$3::jsonb,
          "postedAt"=CASE WHEN $2 IN ('IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED') THEN COALESCE("postedAt",NOW()) ELSE "postedAt" END,
          "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,"updatedAt"=NOW() WHERE id=$1`,
-      shipment.id, mapping.status, JSON.stringify(payload || {}),
+      shipment.id, nextStatus, JSON.stringify(payload || {}),
     );
     if (shipment.storefrontOrderId) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "StorefrontOrder" SET status=$2,"updatedAt"=NOW() WHERE id=$1`,
-        shipment.storefrontOrderId,
-        mapping.order,
-      );
+      if (mapping.order) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "StorefrontOrder" SET status=$2,"updatedAt"=NOW() WHERE id=$1`,
+          shipment.storefrontOrderId,
+          mapping.order,
+        );
+      }
       await this.lifecycle.record(
         shipment.storefrontOrderId,
         mapping.event,
@@ -792,28 +829,30 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
         { externalId, status: statusValue },
       );
     } else if (shipment.salesOrderId) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "SalesOrder"
-            SET status=$2::"SalesOrderStatus",
-                "updatedAt"=NOW()
-          WHERE id=$1
-            AND (
-              (status='INVOICED' AND $2::"SalesOrderStatus"='SHIPPED')
-              OR (status='SHIPPED' AND $2::"SalesOrderStatus"='DELIVERED')
-            )`,
-        shipment.salesOrderId,
-        mapping.order,
-      ).catch((error) => {
-        // O banco pode bloquear SHIPPED enquanto não houver baixa física.
-        // A remessa/rastreio continua sendo atualizada; o status comercial só
-        // avança quando as regras de estoque estiverem satisfeitas.
-        console.warn("Status comercial preservado durante sincronização de rastreio", {
-          salesOrderId: shipment.salesOrderId,
-          targetStatus: mapping.order,
-          error: error instanceof Error ? error.message : String(error),
+      if (mapping.order) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "SalesOrder"
+              SET status=$2::"SalesOrderStatus",
+                  "updatedAt"=NOW()
+            WHERE id=$1
+              AND (
+                (status='INVOICED' AND $2::"SalesOrderStatus"='SHIPPED')
+                OR (status='SHIPPED' AND $2::"SalesOrderStatus"='DELIVERED')
+              )`,
+          shipment.salesOrderId,
+          mapping.order,
+        ).catch((error) => {
+          // O banco pode bloquear SHIPPED enquanto não houver baixa física.
+          // A remessa/rastreio continua sendo atualizada; o status comercial só
+          // avança quando as regras de estoque estiverem satisfeitas.
+          console.warn("Status comercial preservado durante sincronização de rastreio", {
+            salesOrderId: shipment.salesOrderId,
+            targetStatus: mapping.order,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return 0;
         });
-        return 0;
-      });
+      }
       await this.customerLifecycle.record(
         shipment.salesOrderId,
         mapping.event,

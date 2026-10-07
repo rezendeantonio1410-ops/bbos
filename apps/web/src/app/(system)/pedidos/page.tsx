@@ -232,6 +232,7 @@ type ShipmentInfo = {
   status?: string | null;
   labelUrl?: string | null;
   trackingCode?: string | null;
+  authorizationCode?: string | null;
   trackingUrl?: string | null;
   externalId?: string | null;
   fiscalStatus?: string | null;
@@ -251,6 +252,15 @@ type ShipmentInfo = {
     occurredAt: string;
   }>;
 };
+
+function shipmentTrackingUrl(shipment?: ShipmentInfo | null) {
+  if (!shipment) return null;
+  const code = shipment.authorizationCode || shipment.trackingCode;
+  const provided = shipment.trackingUrl?.trim();
+  if (provided && !/\/rastreio\/?$/i.test(provided)) return provided;
+  if (!code) return provided || null;
+  return `https://www.melhorrastreio.com.br/rastreio/${encodeURIComponent(code)}`;
+}
 
 type PostingAgency = {
   id: string;
@@ -3027,14 +3037,22 @@ function OrderDrawer({
                     ) : null}
                   </div>
                 </div>
-                {fulfillment?.trackingCode && (
+                {(fulfillment?.authorizationCode || fulfillment?.trackingCode) && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-emerald-900">
                     <span>
-                      Rastreio: <b>{fulfillment.trackingCode}</b>
+                      Rastreio:{" "}
+                      <b>
+                        {fulfillment.authorizationCode ?? fulfillment.trackingCode}
+                        {fulfillment.authorizationCode &&
+                        fulfillment.trackingCode &&
+                        fulfillment.authorizationCode !== fulfillment.trackingCode
+                          ? ` · ${fulfillment.trackingCode}`
+                          : ""}
+                      </b>
                     </span>
-                    {fulfillment.trackingUrl && (
+                    {shipmentTrackingUrl(fulfillment) && (
                       <a
-                        href={fulfillment.trackingUrl}
+                        href={shipmentTrackingUrl(fulfillment) ?? undefined}
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 font-bold text-emerald-950"
@@ -3056,9 +3074,9 @@ function OrderDrawer({
                           Marcos oficiais recebidos pelo BBOS do Melhor Envio e da transportadora.
                         </p>
                       </div>
-                      {fulfillment.trackingUrl && (
+                      {shipmentTrackingUrl(fulfillment) && (
                         <a
-                          href={fulfillment.trackingUrl}
+                          href={shipmentTrackingUrl(fulfillment) ?? undefined}
                           target="_blank"
                           rel="noreferrer"
                           className="text-[10px] font-bold text-emerald-900 underline"
