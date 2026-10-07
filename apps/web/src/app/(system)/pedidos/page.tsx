@@ -604,85 +604,132 @@ export default function OrdersPage() {
           </span>
         </div>
         <div className="space-y-3">
-          {visible.map((order) => (
-            <Card key={order.id} className="p-4">
-              <button
-                onClick={() => setSelected(order)}
-                className="w-full text-left"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-[12rem]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <strong>{order.orderNumber ?? order.code}</strong>
-                      {order.orderType === "SAMPLE" && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">
-                          Amostra
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-stone-500">
-                      {order.customer.name}
-                    </p>
-                  </div>
-                  {order.shipment && (
-                    <div className="min-w-0 flex-1 text-xs sm:text-center">
-                      <span className="font-semibold text-forest-900">
-                        {shipmentStatusLabel[order.shipment.status] ??
-                          "Frete em acompanhamento"}
-                      </span>
-                      <span className="text-stone-500">
-                        {" "}
-                        · {order.shipment.carrierName ?? "Melhor Envio"}
-                      </span>
-                      {(order.shipment.authorizationCode ||
-                        order.shipment.trackingCode) && (
-                        <p className="mt-1 text-[11px] text-stone-600">
-                          Rastreio{" "}
-                          {order.shipment.authorizationCode ??
-                            order.shipment.trackingCode}
-                          {order.shipment.authorizationCode &&
-                          order.shipment.trackingCode &&
-                          order.shipment.authorizationCode !==
-                            order.shipment.trackingCode
-                            ? ` · ${order.shipment.trackingCode}`
-                            : ""}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-stone-400">
-                        Sincronizado{" "}
-                        {new Date(order.shipment.updatedAt).toLocaleString(
-                          "pt-BR",
+          {visible.map((order) => {
+            const compactShipmentStep = shipmentProgressIndex(
+              order.shipment,
+              order.status,
+            );
+            const compactShipmentProgress = Math.round(
+              ((compactShipmentStep + 1) / shipmentProgressSteps.length) * 100,
+            );
+            const compactShipmentCancelled =
+              order.shipment?.status === "CANCELLED";
+            const compactShipmentException =
+              order.shipment?.status === "EXCEPTION";
+
+            return (
+              <Card key={order.id} className="p-4">
+                <button
+                  onClick={() => setSelected(order)}
+                  className="w-full text-left"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-[12rem]">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong>{order.orderNumber ?? order.code}</strong>
+                        {order.orderType === "SAMPLE" && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                            Amostra
+                          </span>
                         )}
+                      </div>
+                      <p className="text-xs text-stone-500">
+                        {order.customer.name}
                       </p>
                     </div>
-                  )}
-                  <div className="ml-auto flex items-center gap-2">
-                    <Status status={displayStatus(order)} />
-                    <strong>{money.format(Number(order.totalAmount))}</strong>
-                    <ChevronRight size={16} />
+                    {order.shipment && (
+                      <div className="min-w-0 flex-1 text-xs sm:text-center">
+                        <span className="font-semibold text-forest-900">
+                          {shipmentStatusLabel[order.shipment.status] ??
+                            "Frete em acompanhamento"}
+                        </span>
+                        <span className="text-stone-500">
+                          {" "}
+                          · {order.shipment.carrierName ?? "Melhor Envio"}
+                        </span>
+                        {(order.shipment.authorizationCode ||
+                          order.shipment.trackingCode) && (
+                          <p className="mt-1 text-[11px] text-stone-600">
+                            Rastreio{" "}
+                            {order.shipment.authorizationCode ??
+                              order.shipment.trackingCode}
+                            {order.shipment.authorizationCode &&
+                            order.shipment.trackingCode &&
+                            order.shipment.authorizationCode !==
+                              order.shipment.trackingCode
+                              ? ` · ${order.shipment.trackingCode}`
+                              : ""}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-stone-400">
+                          Sincronizado{" "}
+                          {new Date(order.shipment.updatedAt).toLocaleString(
+                            "pt-BR",
+                          )}
+                        </p>
+                        <div className="mx-auto mt-2 flex max-w-[19rem] items-center gap-2">
+                          <div
+                            className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-stone-100"
+                            aria-label={`Evolução do envio: ${compactShipmentProgress}%`}
+                          >
+                            <div
+                              className={`h-full rounded-full transition-[width] duration-700 ${
+                                compactShipmentCancelled
+                                  ? "bg-red-500"
+                                  : compactShipmentException
+                                    ? "bg-amber-500"
+                                    : "bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500"
+                              }`}
+                              style={{ width: `${compactShipmentProgress}%` }}
+                            />
+                          </div>
+                          <span
+                            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wide ${
+                              compactShipmentCancelled
+                                ? "bg-red-50 text-red-700"
+                                : compactShipmentException
+                                  ? "bg-amber-50 text-amber-800"
+                                  : "bg-emerald-50 text-emerald-800"
+                            }`}
+                          >
+                            {compactShipmentCancelled
+                              ? "Cancelado"
+                              : compactShipmentException
+                                ? "Atenção"
+                                : (shipmentProgressSteps[compactShipmentStep]
+                                    ?.detail ?? "Preparando")}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="ml-auto flex items-center gap-2">
+                      <Status status={displayStatus(order)} />
+                      <strong>{money.format(Number(order.totalAmount))}</strong>
+                      <ChevronRight size={16} />
+                    </div>
                   </div>
+                </button>
+                <div className="mt-3 flex gap-2">
+                  <OrderPdfLink
+                    orderNumber={order.orderNumber ?? order.code}
+                    compact
+                    provisional={order.status === "DRAFT"}
+                  />
+                  {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
+                    order.status,
+                  ) && (
+                    <button
+                      disabled={!!busy}
+                      onClick={() => void action(order, "cancel")}
+                      className="rounded-lg border px-3 py-2 text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  )}
                 </div>
-              </button>
-              <div className="mt-3 flex gap-2">
-                <OrderPdfLink
-                  orderNumber={order.orderNumber ?? order.code}
-                  compact
-                  provisional={order.status === "DRAFT"}
-                />
-                {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
-                  order.status,
-                ) && (
-                  <button
-                    disabled={!!busy}
-                    onClick={() => void action(order, "cancel")}
-                    className="rounded-lg border px-3 py-2 text-xs"
-                  >
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
           {!visible.length && (
             <Card className="py-14 text-center">
               <PackageCheck className="mx-auto text-stone-300" />
@@ -2859,21 +2906,21 @@ function OrderDrawer({
                       {fulfillment?.fiscalStatus === "REJECTED"
                         ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
                         : order.status === "CONFIRMED"
-                        ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
-                        : order.status === "RESERVED"
-                          ? "O estoque está reservado. Inicie a separação física do pedido."
-                          : order.status === "PICKING"
-                            ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                            : order.status === "READY_TO_SHIP" &&
-                                fulfillment?.fiscalStatus === "AUTHORIZED"
-                              ? fulfillment?.labelUrl
-                                ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                                : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
-                              : order.status === "READY_TO_SHIP"
-                                ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                                : fulfillment?.labelUrl
-                                  ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                                  : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                          ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
+                          : order.status === "RESERVED"
+                            ? "O estoque está reservado. Inicie a separação física do pedido."
+                            : order.status === "PICKING"
+                              ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                              : order.status === "READY_TO_SHIP" &&
+                                  fulfillment?.fiscalStatus === "AUTHORIZED"
+                                ? fulfillment?.labelUrl
+                                  ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                  : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                                : order.status === "READY_TO_SHIP"
+                                  ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                  : fulfillment?.labelUrl
+                                    ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                    : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
                   {order.status === "CONFIRMED" && (
@@ -3001,7 +3048,7 @@ function OrderDrawer({
                     </p>
                     <p className="mt-1 text-[10px] text-emerald-800">
                       {fulfillment?.fiscalStatus === "REJECTED"
-                          ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
+                        ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
                         : fulfillment?.labelUrl
                           ? "Etiqueta pronta para impressão."
                           : fulfillment?.fiscalStatus === "AUTHORIZED"
@@ -3086,15 +3133,18 @@ function OrderDrawer({
                     ) : null}
                   </div>
                 </div>
-                {(fulfillment?.authorizationCode || fulfillment?.trackingCode) && (
+                {(fulfillment?.authorizationCode ||
+                  fulfillment?.trackingCode) && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-emerald-900">
                     <span>
                       Rastreio:{" "}
                       <b>
-                        {fulfillment.authorizationCode ?? fulfillment.trackingCode}
+                        {fulfillment.authorizationCode ??
+                          fulfillment.trackingCode}
                         {fulfillment.authorizationCode &&
                         fulfillment.trackingCode &&
-                        fulfillment.authorizationCode !== fulfillment.trackingCode
+                        fulfillment.authorizationCode !==
+                          fulfillment.trackingCode
                           ? ` · ${fulfillment.trackingCode}`
                           : ""}
                       </b>
@@ -3129,7 +3179,8 @@ function OrderDrawer({
                             ? "bg-red-100 text-red-700"
                             : shipmentHasException
                               ? "bg-amber-100 text-amber-800"
-                              : shipmentStep === shipmentProgressSteps.length - 1
+                              : shipmentStep ===
+                                  shipmentProgressSteps.length - 1
                                 ? "bg-emerald-700 text-white"
                                 : "bg-emerald-50 text-emerald-800"
                         }`}
@@ -3138,8 +3189,8 @@ function OrderDrawer({
                           ? "Envio cancelado"
                           : shipmentHasException
                             ? "Atenção necessária"
-                            : shipmentProgressSteps[shipmentStep]?.detail ??
-                              "Em preparação"}
+                            : (shipmentProgressSteps[shipmentStep]?.detail ??
+                              "Em preparação")}
                       </span>
                     </div>
 
@@ -3193,7 +3244,9 @@ function OrderDrawer({
                               </span>
                               <span
                                 className={`mt-2 hidden truncate text-[9px] font-bold uppercase tracking-wide sm:block ${
-                                  reached ? "text-emerald-950" : "text-stone-400"
+                                  reached
+                                    ? "text-emerald-950"
+                                    : "text-stone-400"
                                 }`}
                               >
                                 {step.label}
@@ -3217,7 +3270,8 @@ function OrderDrawer({
                           Histórico do transporte
                         </p>
                         <p className="mt-1 text-[10px] text-emerald-700">
-                          Marcos oficiais recebidos pelo BBOS do Melhor Envio e da transportadora.
+                          Marcos oficiais recebidos pelo BBOS do Melhor Envio e
+                          da transportadora.
                         </p>
                       </div>
                       {shipmentTrackingUrl(fulfillment) && (
@@ -3249,7 +3303,9 @@ function OrderDrawer({
                                 {event.title}
                               </p>
                               <time className="text-[9px] text-stone-500">
-                                {new Date(event.occurredAt).toLocaleString("pt-BR")}
+                                {new Date(event.occurredAt).toLocaleString(
+                                  "pt-BR",
+                                )}
                               </time>
                             </div>
                             <p className="mt-0.5 text-[10px] leading-4 text-stone-600">
@@ -3482,7 +3538,6 @@ function OrderDrawer({
             )}
           </>
         )}
-
       </aside>
     </div>
   );
