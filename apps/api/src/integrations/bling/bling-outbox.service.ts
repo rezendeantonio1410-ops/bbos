@@ -27,6 +27,17 @@ function toBlingDate(value: unknown) {
   return resolved.toISOString().slice(0, 10);
 }
 
+function toBlingDateTime(value: unknown) {
+  const raw = String(value ?? "")
+    .trim()
+    .replace("T", " ")
+    .replace(/Z$/, "")
+    .replace(/([+-]\d{2}:?\d{2})$/, "")
+    .slice(0, 19);
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+  return `${toBlingDate(value)} 00:00:00`;
+}
+
 function isBlingNotFound(error: unknown) {
   return (
     error instanceof Error &&
@@ -277,8 +288,8 @@ export class BlingOutboxService {
       order?.customerStateRegistrationType ?? "NON_TAXPAYER",
     );
     const phone = this.normalizeBlingPhone(order?.customerPhone);
-    const dataOperacao = String(
-      fiscalDraft?.dataOperacao ?? `${toBlingDate(new Date())} 00:00:00`,
+    const dataOperacao = toBlingDateTime(
+      fiscalDraft?.dataOperacao ?? new Date(),
     );
     const payload = {
       tipo: Number(fiscalDraft?.tipo ?? 1),
