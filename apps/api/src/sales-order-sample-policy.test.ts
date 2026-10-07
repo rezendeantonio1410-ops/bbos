@@ -129,6 +129,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   );
   assert.match(fiscal, /resetMissingSalesOrderInvoice/);
   assert.match(
+    fiscal,
+    /if \(salesMap\?\.externalId\)[\s\S]*isBlingNotFound\(error\)[\s\S]*"resourceType"='SALES_ORDER'[\s\S]*salesMap = null/,
+  );
+  assert.match(
     financialMigration,
     /OLD\.status::text = 'INVOICED'[\s\S]*NEW\."orderType" = 'SAMPLE'/,
   );

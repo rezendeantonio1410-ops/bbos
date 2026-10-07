@@ -28,7 +28,10 @@ function toBlingDate(value: unknown) {
 }
 
 function isBlingNotFound(error: unknown) {
-  return error instanceof Error && /Bling API 404:/.test(error.message);
+  return (
+    error instanceof Error &&
+    /Bling API 404(?:\s+\([^)]*\))?:/.test(error.message)
+  );
 }
 
 @Injectable()
@@ -434,6 +437,25 @@ export class BlingOutboxService {
         : null;
 
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
+    if (salesMap?.externalId) {
+      try {
+        await this.bling.request(
+          row.companyId,
+          `/pedidos/vendas/${encodeURIComponent(salesMap.externalId)}`,
+          { method: "GET" },
+        );
+      } catch (error) {
+        if (!isBlingNotFound(error)) throw error;
+        await this.database.$executeRawUnsafe(
+          `DELETE FROM "IntegrationResourceMap"
+            WHERE "companyId"=$1 AND provider='BLING'
+              AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`,
+          row.companyId,
+          order.id,
+        );
+        salesMap = null;
+      }
+    }
     if (!salesMap?.externalId) {
       const contactId = await this.ensureContact(
         row.companyId,
