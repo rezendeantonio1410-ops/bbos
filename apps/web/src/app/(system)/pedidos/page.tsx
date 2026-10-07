@@ -16,6 +16,7 @@ import {
   Plus,
   ShieldCheck,
   Sparkles,
+  Truck,
   X,
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
@@ -260,6 +261,48 @@ function shipmentTrackingUrl(shipment?: ShipmentInfo | null) {
   if (provided && !/\/rastreio\/?$/i.test(provided)) return provided;
   if (!code) return provided || null;
   return `https://www.melhorrastreio.com.br/rastreio/${encodeURIComponent(code)}`;
+}
+
+const shipmentProgressSteps = [
+  { label: "Etiqueta", detail: "Preparada", icon: PackagePlus },
+  { label: "Postagem", detail: "Recebida", icon: PackageCheck },
+  { label: "Trânsito", detail: "A caminho", icon: Truck },
+  { label: "Entrega", detail: "Em rota", icon: Clock3 },
+  { label: "Destino", detail: "Entregue", icon: Check },
+] as const;
+
+function shipmentProgressIndex(
+  shipment?: ShipmentInfo | null,
+  orderStatus?: string,
+) {
+  const statusIndex: Record<string, number> = {
+    PENDING: 0,
+    PURCHASED: 0,
+    LABEL_READY: 0,
+    IN_TRANSIT: 2,
+    OUT_FOR_DELIVERY: 3,
+    DELIVERED: 4,
+  };
+  const eventIndex: Record<string, number> = {
+    LABEL_CREATED: 0,
+    LABEL_PENDING: 0,
+    LABEL_RELEASED: 0,
+    LABEL_GENERATED: 0,
+    SHIPMENT_CREATED: 0,
+    RECEIVED: 1,
+    SHIPPED: 2,
+    OUT_FOR_DELIVERY: 3,
+    DELIVERED: 4,
+  };
+  const commercialIndex =
+    orderStatus === "DELIVERED" ? 4 : orderStatus === "SHIPPED" ? 2 : 0;
+  return Math.max(
+    statusIndex[String(shipment?.status ?? "")] ?? 0,
+    commercialIndex,
+    ...(shipment?.trackingEvents ?? []).map(
+      (event) => eventIndex[event.eventType] ?? 0,
+    ),
+  );
 }
 
 type PostingAgency = {
@@ -2280,6 +2323,12 @@ function OrderDrawer({
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
   const [postingBusy, setPostingBusy] = useState(false);
+  const shipmentStep = shipmentProgressIndex(fulfillment, order.status);
+  const shipmentProgress = Math.round(
+    (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
+  );
+  const shipmentHasException = fulfillment?.status === "EXCEPTION";
+  const shipmentIsCancelled = fulfillment?.status === "CANCELLED";
 
   const selectedItem =
     order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
@@ -3060,6 +3109,103 @@ function OrderDrawer({
                         Ver detalhes no Melhor Rastreio
                       </a>
                     )}
+                  </div>
+                )}
+
+                {fulfillment && (
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_14px_35px_-28px_rgba(6,78,59,0.7)]">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-950">
+                          Evolução do envio
+                        </p>
+                        <p className="mt-1 text-[10px] text-stone-500">
+                          Acompanhe cada etapa até a entrega no destino.
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider ${
+                          shipmentIsCancelled
+                            ? "bg-red-100 text-red-700"
+                            : shipmentHasException
+                              ? "bg-amber-100 text-amber-800"
+                              : shipmentStep === shipmentProgressSteps.length - 1
+                                ? "bg-emerald-700 text-white"
+                                : "bg-emerald-50 text-emerald-800"
+                        }`}
+                      >
+                        {shipmentIsCancelled
+                          ? "Envio cancelado"
+                          : shipmentHasException
+                            ? "Atenção necessária"
+                            : shipmentProgressSteps[shipmentStep]?.detail ??
+                              "Em preparação"}
+                      </span>
+                    </div>
+
+                    <div
+                      className="relative mt-5"
+                      aria-label={`Progresso do envio: ${shipmentProgress}%`}
+                    >
+                      <div className="absolute left-[10%] right-[10%] top-[17px] h-1 overflow-hidden rounded-full bg-stone-100">
+                        <div
+                          className={`h-full rounded-full transition-[width] duration-700 ${
+                            shipmentIsCancelled
+                              ? "bg-red-500"
+                              : shipmentHasException
+                                ? "bg-amber-500"
+                                : "bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500"
+                          }`}
+                          style={{ width: `${shipmentProgress}%` }}
+                        />
+                      </div>
+
+                      <div className="relative grid grid-cols-5 gap-1">
+                        {shipmentProgressSteps.map((step, index) => {
+                          const Icon = step.icon;
+                          const reached = index <= shipmentStep;
+                          const active = index === shipmentStep;
+                          return (
+                            <div
+                              key={step.label}
+                              className="flex min-w-0 flex-col items-center text-center"
+                            >
+                              <span
+                                className={`relative z-10 flex size-9 items-center justify-center rounded-full border-2 transition-colors ${
+                                  reached
+                                    ? shipmentIsCancelled
+                                      ? "border-red-500 bg-red-500 text-white"
+                                      : shipmentHasException
+                                        ? "border-amber-500 bg-amber-500 text-white"
+                                        : "border-emerald-600 bg-emerald-600 text-white"
+                                    : "border-stone-200 bg-white text-stone-300"
+                                } ${
+                                  active
+                                    ? shipmentIsCancelled
+                                      ? "ring-4 ring-red-100"
+                                      : shipmentHasException
+                                        ? "ring-4 ring-amber-100"
+                                        : "ring-4 ring-emerald-100"
+                                    : ""
+                                }`}
+                              >
+                                <Icon size={15} strokeWidth={2.5} />
+                              </span>
+                              <span
+                                className={`mt-2 truncate text-[8px] font-bold uppercase tracking-wide sm:text-[9px] ${
+                                  reached ? "text-emerald-950" : "text-stone-400"
+                                }`}
+                              >
+                                {step.label}
+                              </span>
+                              <span className="mt-0.5 hidden text-[8px] text-stone-400 sm:block">
+                                {step.detail}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
 
