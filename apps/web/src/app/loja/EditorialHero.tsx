@@ -11,6 +11,7 @@ import type { StorefrontMediaAsset } from "@/lib/storefront-media";
 
 const scenes = [
   {
+    id: "caramelo",
     line: "CLÁSSICOS",
     name: "Caramelo",
     title: "Doce. Confortável.",
@@ -21,11 +22,13 @@ const scenes = [
     notes: "Caramelo · Chocolate · Equilíbrio",
     price: "R$ 68,00",
     priceCents: 6800,
+    weightGrams: 500,
     tone: "#F96D01",
     crop: "center",
     mediaSlot: "home.hero.caramelo",
   },
   {
+    id: "essencial",
     line: "GOURMET",
     name: "Essencial",
     title: "Todo dia pode ter",
@@ -36,11 +39,64 @@ const scenes = [
     notes: "Macio · Doce · Fácil",
     price: "R$ 55,00",
     priceCents: 5500,
+    weightGrams: 500,
     tone: "#E9BB00",
     crop: "center 56%",
     mediaSlot: "home.hero.essencial",
   },
   {
+    id: "intenso",
+    line: "GOURMET",
+    name: "Intenso",
+    title: "Mais corpo.",
+    italic: "Presença limpa.",
+    copy: "Uma xícara encorpada e direta, sem amargor agressivo e sem perder a limpeza.",
+    image: "/brand/products/intenso-treated.webp",
+    product: "/brand/products/intenso-treated.webp",
+    notes: "Corpo · Presença · Limpeza",
+    price: "R$ 55,00",
+    priceCents: 5500,
+    weightGrams: 500,
+    tone: "#D3A600",
+    crop: "center 48%",
+    mediaSlot: "home.hero.intenso",
+  },
+  {
+    id: "doce-de-leite",
+    line: "CLÁSSICOS",
+    name: "Doce de Leite",
+    title: "Doçura que lembra",
+    italic: "casa.",
+    copy: "Açúcar mascavo, doce de leite e alfajor em uma xícara macia e prolongada.",
+    image: "/brand/products/doce-de-leite-treated.webp",
+    product: "/brand/products/doce-de-leite-treated.webp",
+    notes: "Mascavo · Doce de leite · Alfajor",
+    price: "R$ 68,00",
+    priceCents: 6800,
+    weightGrams: 500,
+    tone: "#C66E2E",
+    crop: "center 48%",
+    mediaSlot: "home.hero.doce-de-leite",
+  },
+  {
+    id: "tangerina",
+    line: "CLÁSSICOS",
+    name: "Tangerina",
+    title: "Um café vivo.",
+    italic: "Fresco e luminoso.",
+    copy: "Cítrico, doce e alegre: uma porta de entrada para descobrir os cafés frutados.",
+    image: "/brand/story/parana-dia-amanhecer.webp",
+    product: null,
+    notes: "Cítrico · Doce · Fresco",
+    price: "R$ 68,00",
+    priceCents: 6800,
+    weightGrams: 500,
+    tone: "#E47928",
+    crop: "center",
+    mediaSlot: "home.hero.tangerina",
+  },
+  {
+    id: "singular",
     line: "ÉPICOS",
     name: "Singular",
     title: "Novas camadas.",
@@ -51,11 +107,13 @@ const scenes = [
     notes: "Frutado · Complexo · Evolutivo",
     price: "R$ 84,00",
     priceCents: 8400,
+    weightGrams: 500,
     tone: "#5C7D5F",
     crop: "center 42%",
     mediaSlot: "home.hero.singular",
   },
   {
+    id: "sublime",
     line: "CURADORIA BISPO",
     name: "Sublime",
     title: "Escolhido por quem",
@@ -66,9 +124,27 @@ const scenes = [
     notes: "Rapadura · Caramelo · Doçura profunda",
     price: "R$ 84,00",
     priceCents: 8400,
+    weightGrams: 500,
     tone: "#0E191D",
     crop: "center 35%",
     mediaSlot: "home.hero.sublime",
+  },
+  {
+    id: "raros",
+    line: "RAROS",
+    name: "Raro",
+    title: "Poucas sacas.",
+    italic: "Uma história inteira.",
+    copy: "O microlote de Carlos Alexandre traduz o Norte do Paraná em uma xícara limpa e viva.",
+    image: "/brand/products/raros/alexandre-colheita.webp",
+    product: "/brand/products/raros/alexandre-colheita.webp",
+    notes: "86,5 pontos · Origem única · Safra limitada",
+    price: "R$ 54,00",
+    priceCents: 5400,
+    weightGrams: 250,
+    tone: "#8E2721",
+    crop: "center 72%",
+    mediaSlot: "home.hero.raro",
   },
 ] as const;
 
@@ -166,12 +242,20 @@ export default function EditorialHero({
         <p className={styles.intro}>{scene.copy}</p>
         <div className={styles.productStage}>
           <div className={styles.productImage}>
-            <img src={scene.product} alt={`Café ${scene.name}`} />
+            {scene.product ? (
+              <img src={scene.product} alt={`Café ${scene.name}`} />
+            ) : (
+              <div className={styles.productPlaceholder}>
+                <small>BISPO COFFEES</small>
+                <strong>{scene.name}</strong>
+                <span>Café especial · {scene.weightGrams} g</span>
+              </div>
+            )}
           </div>
           <div className={styles.productReading}>
             <small>LEITURA SENSORIAL</small>
             <strong>{scene.notes}</strong>
-            <span>100% Arábica · Torra própria · 500 g</span>
+            <span>100% Arábica · Torra própria · {scene.weightGrams} g</span>
           </div>
         </div>
         <div className={styles.buyRow}>
@@ -181,13 +265,13 @@ export default function EditorialHero({
           </div>
           <AddToCartButton
             product={{
-              id: scene.name.toLowerCase(),
+              id: scene.id,
               name: scene.name,
               line: scene.line,
               notes: scene.notes,
               priceCents: scene.priceCents,
-              weightGrams: 500,
-              image: scene.product,
+              weightGrams: scene.weightGrams,
+              image: scene.product ?? scene.image,
             }}
           >
             Quero este café <span>→</span>
