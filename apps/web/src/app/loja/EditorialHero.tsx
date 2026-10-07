@@ -17,8 +17,9 @@ const scenes = [
     title: "Doce. Confortável.",
     italic: "Equilibrado.",
     copy: "Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem outra xícara.",
-    image: "/brand/editorial/real/banner-caramelo-84.jpg",
-    alt: "Café Caramelo Bispo preparado no método coado",
+    // Regra de marca: a abertura deve sempre manter a foto de José e Suzi.
+    image: "/brand/editorial/real/suzi-jose-conversa-118.jpg",
+    alt: "Suzi Ninov e José Rezende conversando durante uma prova de cafés Bispo",
     signature: "SUZI + JOSÉ · ESCOLHA E PROVA",
     product: realProductImages.Caramelo,
     notes: "Caramelo · Chocolate · Equilíbrio",
