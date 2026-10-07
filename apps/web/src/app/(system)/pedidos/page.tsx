@@ -2562,6 +2562,41 @@ function OrderDrawer({
     }
   };
 
+  const retryRejectedInvoice = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/retry-invoice`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.processed === false) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : typeof payload.error === "string"
+              ? payload.error
+              : "Não foi possível reprocessar a NF-e rejeitada.",
+        );
+      }
+      await onChanged();
+      await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível reprocessar a NF-e rejeitada.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const resetMissingInvoice = async () => {
     setBusy(true);
     setError("");
@@ -2809,10 +2844,20 @@ function OrderDrawer({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void operationalAction("invoice")}
+                        onClick={() =>
+                          void (fulfillment?.fiscalStatus === "REJECTED"
+                            ? retryRejectedInvoice()
+                            : operationalAction("invoice"))
+                        }
                         className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
                       >
-                        {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
+                        {busy
+                          ? fulfillment?.fiscalStatus === "REJECTED"
+                            ? "Reprocessando…"
+                            : "Enviando ao Bling…"
+                          : fulfillment?.fiscalStatus === "REJECTED"
+                            ? "Reprocessar NF-e"
+                            : "Faturar no Bling"}
                       </button>
                     )}
                   {fulfillment?.fiscalStatus === "AUTHORIZED" &&
@@ -2924,7 +2969,7 @@ function OrderDrawer({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void operationalAction("invoice")}
+                        onClick={() => void retryRejectedInvoice()}
                         className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                       >
                         {busy ? "Reprocessando…" : "Reprocessar NF-e"}

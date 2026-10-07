@@ -107,6 +107,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     join(__dirname, "sales-orders.controller.ts"),
     "utf8",
   );
+  const ordersPage = readFileSync(
+    join(__dirname, "../../web/src/app/(system)/pedidos/page.tsx"),
+    "utf8",
+  );
   const fiscal = readFileSync(
     join(__dirname, "integrations/bling/bling-outbox.service.ts"),
     "utf8",
@@ -153,6 +157,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   assert.match(
     fiscal,
     /recoverAfterNatureConsumerFinalFix[\s\S]*natureConsumerFinalRecoveryAttempted/,
+  );
+  assert.match(
+    ordersPage,
+    /retryRejectedInvoice[\s\S]*integrations\/bling\/sales-orders\/\$\{order\.id\}\/retry-invoice/,
   );
   assert.match(
     fiscal,
