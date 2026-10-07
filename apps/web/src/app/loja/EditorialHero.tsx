@@ -54,9 +54,10 @@ const scenes = [
     title: "Doçura que lembra",
     italic: "casa.",
     copy: "Açúcar mascavo, doce de leite e alfajor em uma xícara macia e prolongada.",
-    image: "/brand/editorial/real/banner-tangerina-70.jpg",
-    alt: "José Rezende preparando café com embalagens Bispo",
-    signature: "DOÇURA · PROVA E MEMÓRIA",
+    // Regra de marca: preservar esta foto de Suzi e José, salvo ordem expressa.
+    image: "/brand/editorial/real/suzi-jose-servir-60.jpg",
+    alt: "José Rezende servindo café para Suzi Ninov durante uma prova Bispo",
+    signature: "SUZI + JOSÉ · PROVA E RITUAL",
     product: realProductImages["Doce de Leite"],
     notes: "Mascavo · Doce de leite · Alfajor",
     price: "R$ 68,00",
