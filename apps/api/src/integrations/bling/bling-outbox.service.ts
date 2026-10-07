@@ -675,10 +675,10 @@ export class BlingOutboxService {
       Number(priorFiscal[0]?.payloadSnapshot?.sefazStatusCode) === 696;
     const repairConsumerFinalRejection =
       priorConsumerFinalRejection &&
-      !Boolean(priorFiscal[0]?.payloadSnapshot?.consumerFinalRepairAttempted);
+      !priorFiscal[0]?.payloadSnapshot?.consumerFinalRepairAttempted;
     const repairInvoiceDraftConsumerFinal =
       priorConsumerFinalRejection &&
-      !Boolean(priorFiscal[0]?.payloadSnapshot?.invoiceDraftRepairAttempted);
+      !priorFiscal[0]?.payloadSnapshot?.invoiceDraftRepairAttempted;
     const effectiveRecoveryAttempt = repairConsumerFinalRejection
       ? Math.max(staleSalesOrderRecoveryAttempt, 1)
       : staleSalesOrderRecoveryAttempt;
