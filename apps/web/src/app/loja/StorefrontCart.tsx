@@ -133,7 +133,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     name: "Essencial",
     line: "GOURMET",
     notes: "Macio · Doce · Fácil",
-    priceCents: 5200,
+    priceCents: 5500,
     weightGrams: 500,
     image: "/brand/products/real/essencial-frontal.jpg",
     story: cartProductStories.essencial,

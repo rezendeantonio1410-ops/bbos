@@ -29,8 +29,8 @@ const catalog: Record<
   string,
   { name: string; unitPriceCents: number; weightGrams: number }
 > = {
-  essencial: { name: "Essencial", unitPriceCents: 5200, weightGrams: 500 },
-  intenso: { name: "Intenso", unitPriceCents: 5200, weightGrams: 500 },
+  essencial: { name: "Essencial", unitPriceCents: 5500, weightGrams: 500 },
+  intenso: { name: "Intenso", unitPriceCents: 5500, weightGrams: 500 },
   caramelo: { name: "Caramelo", unitPriceCents: 6800, weightGrams: 500 },
   "doce-de-leite": {
     name: "Doce de Leite",
