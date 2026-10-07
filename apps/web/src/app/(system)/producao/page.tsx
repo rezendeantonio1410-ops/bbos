@@ -1005,8 +1005,8 @@ function PackagingRegistration({
   const [warehouseId, setWarehouseId] = useState("");
   const [producedPackages, setProducedPackages] = useState(suggestedPackages);
   const [materialName, setMaterialName] = useState(`Embalagem ${order.sku}`);
-  const [packagingUnitCost, setPackagingUnitCost] = useState(0);
-  const [packagingUnitCostInput, setPackagingUnitCostInput] = useState("0,00");
+  const [packagingUnitCost, setPackagingUnitCost] = useState(2.8);
+  const [packagingUnitCostInput, setPackagingUnitCostInput] = useState("2,80");
   const [laborCost, setLaborCost] = useState(0);
   const [energyCost, setEnergyCost] = useState(0);
   const [gasCost, setGasCost] = useState(0);
