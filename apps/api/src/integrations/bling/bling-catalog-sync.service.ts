@@ -15,8 +15,8 @@ function stableId(value: string) {
 
 const DEFAULT_NCM = "09012100";
 const PRICE_BY_SLUG: Record<string, number> = {
-  essencial: 52,
-  intenso: 52,
+  essencial: 55,
+  intenso: 55,
   caramelo: 68,
   "doce-de-leite": 68,
   tangerina: 68,
