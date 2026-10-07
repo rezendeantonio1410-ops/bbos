@@ -376,6 +376,7 @@ export class SalesOrdersController {
     const [rows, trackingEvents] = await Promise.all([
       this.salesOrders.database.$queryRawUnsafe<any[]>(
         `SELECT s.*,
+              s.metadata->>'authorization_code' AS "authorizationCode",
               f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId",
               f.number AS "fiscalNumber",
