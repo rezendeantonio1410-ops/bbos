@@ -156,6 +156,7 @@ export default function SobrePage() {
               alt="José Rezende avaliando um café durante uma prova Bispo"
               fill
               sizes="(max-width: 560px) 82vw, 50vw"
+              style={{ objectPosition: "center 22%" }}
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
