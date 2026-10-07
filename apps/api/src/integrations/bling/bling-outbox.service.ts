@@ -156,6 +156,80 @@ export class BlingOutboxService {
     return normalized;
   }
 
+  private blingStateRegistrationIndicator(customer: any) {
+    if (customer?.stateRegistrationType === "NUMBER") return 1;
+    if (customer?.stateRegistrationType === "EXEMPT") return 2;
+    return 9;
+  }
+
+  private blingContactPayload(
+    remote: any,
+    customer: any,
+    delivery: any,
+    document: string,
+  ) {
+    const phone = this.normalizeBlingPhone(customer?.phone);
+    const stateRegistrationType = String(
+      customer?.stateRegistrationType ?? "NON_TAXPAYER",
+    );
+    const payload = {
+      ...(remote && typeof remote === "object" ? remote : {}),
+      nome:
+        document.length === 14
+          ? customer?.legalName || customer?.name
+          : customer?.name,
+      tipo: document.length === 11 ? "F" : "J",
+      situacao: "A",
+      numeroDocumento: document,
+      indicadorIe: this.blingStateRegistrationIndicator(customer),
+      ie:
+        stateRegistrationType === "NUMBER"
+          ? customer?.stateRegistration || undefined
+          : stateRegistrationType === "EXEMPT"
+            ? "ISENTO"
+            : undefined,
+      email: customer?.email,
+      emailNotaFiscal: customer?.email,
+      celular: phone || undefined,
+      endereco: {
+        ...(remote?.endereco ?? {}),
+        geral: {
+          ...(remote?.endereco?.geral ?? {}),
+          endereco: delivery?.street,
+          numero: delivery?.number,
+          complemento: delivery?.complement,
+          bairro: delivery?.district,
+          cep: String(delivery?.postalCode ?? "").replace(/\D/g, ""),
+          municipio: delivery?.city,
+          uf: delivery?.state,
+        },
+      },
+    };
+    delete payload.id;
+    return payload;
+  }
+
+  private async syncBlingContact(
+    companyId: string,
+    contactId: string,
+    remote: any,
+    customer: any,
+    delivery: any,
+    document: string,
+  ) {
+    await this.bling.request(
+      companyId,
+      `/contatos/${encodeURIComponent(contactId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(
+          this.blingContactPayload(remote, customer, delivery, document),
+        ),
+      },
+    );
+    return contactId;
+  }
+
   private async findContactByDocument(companyId: string, document: string) {
     const paths = [
       `/contatos?numeroDocumento=${encodeURIComponent(document)}`,
@@ -204,7 +278,16 @@ export class BlingOutboxService {
       const remoteDocument = String(
         remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "",
       ).replace(/\D/g, "");
-      if (remoteDocument === document) return existing.externalId as string;
+      if (remoteDocument === document) {
+        return this.syncBlingContact(
+          companyId,
+          String(existing.externalId),
+          remote,
+          customer,
+          delivery,
+          document,
+        );
+      }
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
         companyId,
@@ -238,35 +321,21 @@ export class BlingOutboxService {
           source: "FOUND_BY_DOCUMENT_VERIFIED",
         },
       );
-      return remoteId;
+      return this.syncBlingContact(
+        companyId,
+        remoteId,
+        remote,
+        customer,
+        delivery,
+        document,
+      );
     }
 
-    const phone = this.normalizeBlingPhone(customer?.phone);
     const payload = await this.bling.request(companyId, "/contatos", {
       method: "POST",
-      body: JSON.stringify({
-        nome:
-          document.length === 14
-            ? customer?.legalName || customer?.name
-            : customer?.name,
-        tipo: document.length === 11 ? "F" : "J",
-        situacao: "A",
-        numeroDocumento: document,
-        ie: customer?.stateRegistration || undefined,
-        email: customer?.email,
-        celular: phone || undefined,
-        endereco: {
-          geral: {
-            endereco: delivery?.street,
-            numero: delivery?.number,
-            complemento: delivery?.complement,
-            bairro: delivery?.district,
-            cep: String(delivery?.postalCode ?? "").replace(/\D/g, ""),
-            municipio: delivery?.city,
-            uf: delivery?.state,
-          },
-        },
-      }),
+      body: JSON.stringify(
+        this.blingContactPayload({}, customer, delivery, document),
+      ),
     });
     const externalId = String(payload?.data?.id ?? payload?.id ?? "");
     if (!externalId)
@@ -453,7 +522,60 @@ export class BlingOutboxService {
           )
         : null;
 
+    const priorFiscal = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "FiscalDocument"
+        WHERE "companyId"=$1 AND "salesOrderId"=$2 AND direction='OUTBOUND'
+        ORDER BY "createdAt" DESC LIMIT 1`,
+      row.companyId,
+      order.id,
+    );
+    const priorFiscalExternalId = String(
+      priorFiscal[0]?.externalId ?? "",
+    ).trim();
+    const repairConsumerFinalRejection =
+      order.orderType === "SAMPLE" &&
+      String(priorFiscal[0]?.status) === "REJECTED" &&
+      Number(priorFiscal[0]?.payloadSnapshot?.sefazStatusCode) === 696 &&
+      !Boolean(
+        priorFiscal[0]?.payloadSnapshot?.consumerFinalRepairAttempted,
+      );
+    const effectiveRecoveryAttempt = repairConsumerFinalRejection
+      ? Math.max(staleSalesOrderRecoveryAttempt, 1)
+      : staleSalesOrderRecoveryAttempt;
+
+    const contactId = await this.ensureContact(
+      row.companyId,
+      {
+        name: order.customerName,
+        legalName: order.customerLegalName,
+        cpf: order.customerTaxId,
+        email: order.customerEmail,
+        phone: order.customerPhone,
+        stateRegistration: order.customerStateRegistration,
+        stateRegistrationType: order.customerStateRegistrationType,
+      },
+      {
+        street: order.customerAddress,
+        number: order.customerAddressNumber,
+        complement: order.customerAddressComplement,
+        district: order.customerDistrict,
+        postalCode: order.customerPostalCode,
+        city: order.customerCity,
+        state: order.customerState,
+      },
+    );
+
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
+    if (repairConsumerFinalRejection && salesMap?.externalId) {
+      await this.database.$executeRawUnsafe(
+        `DELETE FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "resourceType"='SALES_ORDER' AND "internalKey"=$2`,
+        row.companyId,
+        order.id,
+      );
+      salesMap = null;
+    }
     if (salesMap?.externalId) {
       try {
         await this.bling.request(
@@ -474,28 +596,6 @@ export class BlingOutboxService {
       }
     }
     if (!salesMap?.externalId) {
-      const contactId = await this.ensureContact(
-        row.companyId,
-        {
-          name: order.customerName,
-          legalName: order.customerLegalName,
-          cpf: order.customerTaxId,
-          email: order.customerEmail,
-          phone: order.customerPhone,
-          stateRegistration: order.customerStateRegistration,
-          stateRegistrationType: order.customerStateRegistrationType,
-        },
-        {
-          street: order.customerAddress,
-          number: order.customerAddressNumber,
-          complement: order.customerAddressComplement,
-          district: order.customerDistrict,
-          postalCode: order.customerPostalCode,
-          city: order.customerCity,
-          state: order.customerState,
-        },
-      );
-
       const blingItems = [];
       for (const item of items) {
         const productId = await this.productExternalId(row.companyId, {
@@ -546,8 +646,8 @@ export class BlingOutboxService {
           method: "POST",
           body: JSON.stringify({
             numeroLoja: `${order.orderNumber ?? order.code}${
-              staleSalesOrderRecoveryAttempt
-                ? `-R${staleSalesOrderRecoveryAttempt}`
+              effectiveRecoveryAttempt
+                ? `-R${effectiveRecoveryAttempt}`
                 : ""
             }`,
             data: toBlingDate(
@@ -588,17 +688,6 @@ export class BlingOutboxService {
       );
       salesMap = { externalId };
     }
-
-    const priorFiscal = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "FiscalDocument"
-        WHERE "companyId"=$1 AND "salesOrderId"=$2 AND direction='OUTBOUND'
-        ORDER BY "createdAt" DESC LIMIT 1`,
-      row.companyId,
-      order.id,
-    );
-    const priorFiscalExternalId = String(
-      priorFiscal[0]?.externalId ?? "",
-    ).trim();
     if (
       priorFiscalExternalId &&
       priorFiscalExternalId !== "0" &&
@@ -752,6 +841,11 @@ export class BlingOutboxService {
         JSON.stringify({
           create: nfeResult,
           blingOrderId: salesMap.externalId,
+          consumerFinalRepairAttempted:
+            repairConsumerFinalRejection ||
+            Boolean(
+              priorFiscal[0]?.payloadSnapshot?.consumerFinalRepairAttempted,
+            ),
         }),
       );
     } else {
@@ -769,6 +863,7 @@ export class BlingOutboxService {
         JSON.stringify({
           create: nfeResult,
           blingOrderId: salesMap.externalId,
+          consumerFinalRepairAttempted: repairConsumerFinalRejection,
         }),
       );
     }

@@ -137,6 +137,11 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     /pedidos\/vendas[\s\S]{0,2000}method: "PATCH"/,
   );
   assert.match(fiscal, /isBlingSalesOrderInvoiceAlreadyGenerated/);
+  assert.match(fiscal, /indicadorIe: this\.blingStateRegistrationIndicator/);
+  assert.match(
+    fiscal,
+    /sefazStatusCode\) === 696[\s\S]*consumerFinalRepairAttempted/,
+  );
   assert.match(
     fiscal,
     /staleSalesOrderRecoveryAttempt === 0[\s\S]*DELETE FROM "IntegrationResourceMap"[\s\S]*return this\.processSalesOrderInvoice\(row, 1\)/,
