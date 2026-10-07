@@ -263,8 +263,8 @@ export default function CadernoPage() {
           </div>
           <figure>
             <Image
-              src="/brand/editorial/real/suzi-jose-escolha.jpg"
-              alt="Suzi Ninov e José Rezende escolhendo cafés durante uma prova"
+              src="/brand/editorial/real/caderno-suzi-jose-216.jpg"
+              alt="José Rezende e Suzi Ninov diante do mapa de origens da Bispo Coffees"
               fill
               sizes="(max-width: 800px) 100vw, 58vw"
             />
