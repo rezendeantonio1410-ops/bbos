@@ -152,6 +152,14 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   );
   assert.match(
     fiscal,
+    /repairSampleInvoiceConsumerFinal[\s\S]*contribuinte: this\.blingStateRegistrationIndicator/,
+  );
+  assert.match(
+    fiscal,
+    /if \(sefaz\.status === "REJECTED"\)[\s\S]*SET status='READY_TO_SHIP',"invoicedAt"=NULL/,
+  );
+  assert.match(
+    fiscal,
     /staleSalesOrderRecoveryAttempt === 0[\s\S]*DELETE FROM "IntegrationResourceMap"[\s\S]*return this\.processSalesOrderInvoice\(row, 1\)/,
   );
   assert.match(
