@@ -603,7 +603,7 @@ export class BlingOutboxService {
         data: toBlingDate(order.createdAt),
         contato: { id: Number(contactId) },
         itens: blingItems,
-        observacoes: `Origem: ECOMMERCE | BBOS: ${order.code}`,
+        observacoes: `Origem: LOJA BISPO | BBOS: ${order.code}`,
       }),
     });
     const externalId = String(result?.data?.id ?? result?.id ?? "");
@@ -617,7 +617,7 @@ export class BlingOutboxService {
       externalId,
       {
         code: order.code,
-        origin: "ECOMMERCE",
+        origin: "BISPO_STORE",
       },
     );
     await this.database.$executeRawUnsafe(
@@ -648,9 +648,14 @@ export class BlingOutboxService {
               c."addressComplement" AS "customerAddressComplement",
               c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState",
               c."stateRegistration" AS "customerStateRegistration",
-              c."stateRegistrationType" AS "customerStateRegistrationType"
+              c."stateRegistrationType" AS "customerStateRegistrationType",
+              sc."platformCode" AS "salesChannelPlatformCode",
+              sfo.id AS "storefrontOrderId"
          FROM "SalesOrder" so
          JOIN "Customer" c ON c.id=so."customerId"
+         LEFT JOIN "SalesChannel" sc ON sc.id=so."salesChannelId"
+         LEFT JOIN "StorefrontOrder" sfo
+           ON sfo."companyId"=so."companyId" AND sfo.code=so.code
         WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
       row.aggregateId,
       row.companyId,
@@ -762,6 +767,27 @@ export class BlingOutboxService {
     );
 
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
+    if (!salesMap?.externalId && order.storefrontOrderId) {
+      const storefrontMap = await this.getMap(
+        row.companyId,
+        "STOREFRONT_ORDER",
+        order.storefrontOrderId,
+      );
+      if (storefrontMap?.externalId) {
+        await this.mapResource(
+          row.companyId,
+          "SALES_ORDER",
+          order.id,
+          storefrontMap.externalId,
+          {
+            code: order.code,
+            origin: "BISPO_STORE",
+            storefrontOrderId: order.storefrontOrderId,
+          },
+        );
+        salesMap = { externalId: storefrontMap.externalId };
+      }
+    }
     if (regenerateForConsumerFinal && salesMap?.externalId) {
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap"
@@ -850,7 +876,10 @@ export class BlingOutboxService {
             observacoes:
               order.orderType === "SAMPLE"
                 ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | Valor simbólico para fins fiscais | Origem: BBOS AMOSTRAS | BBOS: ${order.code}`
-                : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
+                : order.salesChannelPlatformCode === "BISPO_STORE" ||
+                    order.storefrontOrderId
+                  ? `Origem: LOJA BISPO | BBOS: ${order.code}`
+                  : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
             transporte: {
               fretePorConta: order.freightResponsibility === "CUSTOMER" ? 1 : 0,
               frete: Number(order.freight ?? 0),
@@ -875,7 +904,12 @@ export class BlingOutboxService {
         {
           code: order.code,
           origin:
-            order.orderType === "SAMPLE" ? "BBOS_SAMPLE" : "BBOS_COMERCIAL",
+            order.orderType === "SAMPLE"
+              ? "BBOS_SAMPLE"
+              : order.salesChannelPlatformCode === "BISPO_STORE" ||
+                  order.storefrontOrderId
+                ? "BISPO_STORE"
+                : "BBOS_COMERCIAL",
         },
       );
       salesMap = { externalId };

@@ -196,6 +196,13 @@ type Order = {
   fiscalStatus?: string | null;
   fiscalExternalId?: string | null;
   fiscalNumber?: string | null;
+  salesChannel?: {
+    id: string;
+    code: string;
+    name: string;
+    type: string;
+    platformCode?: string | null;
+  } | null;
   broker?: Broker | null;
   customer: Customer;
   items: OrderItem[];
@@ -630,6 +637,11 @@ export default function OrdersPage() {
                         {order.orderType === "SAMPLE" && (
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">
                             Amostra
+                          </span>
+                        )}
+                        {order.salesChannel?.name && (
+                          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-stone-600">
+                            {order.salesChannel.name}
                           </span>
                         )}
                       </div>
@@ -2771,6 +2783,11 @@ function OrderDrawer({
               {order.orderType === "SAMPLE" && (
                 <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-900">
                   Pedido de amostra
+                </span>
+              )}
+              {order.salesChannel?.name && (
+                <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-stone-600">
+                  Origem · {order.salesChannel.name}
                 </span>
               )}
             </div>

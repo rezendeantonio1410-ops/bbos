@@ -24,6 +24,10 @@ import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontCustomerService } from "./storefront-customer.service";
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
 import { SalesOrdersService } from "./sales-orders.service";
+import {
+  ensureBispoStoreSalesChannel,
+  storefrontCustomerProfile,
+} from "./storefront-order-sync";
 
 const catalog: Record<
   string,
@@ -462,35 +466,16 @@ export class StorefrontOrdersController
     }>;
 
     return this.database.$transaction(async (transaction) => {
-      const channel =
-        (await transaction.salesChannel.findFirst({
-          where: {
-            companyId: storefront.companyId,
-            type: "ECOMMERCE",
-            active: true,
-          },
-          orderBy: { createdAt: "asc" },
-        })) ??
-        (await transaction.salesChannel.upsert({
-          where: {
-            companyId_code: {
-              companyId: storefront.companyId,
-              code: "ECOMMERCE",
-            },
-          },
-          update: { active: true, name: "Loja online", currency: "BRL" },
-          create: {
-            companyId: storefront.companyId,
-            code: "ECOMMERCE",
-            name: "Loja online",
-            type: "ECOMMERCE",
-            active: true,
-            country: "BR",
-            currency: "BRL",
-          },
-        }));
+      const channel = await ensureBispoStoreSalesChannel(
+        transaction,
+        storefront.companyId,
+      );
 
       const cpf = digits(customerData?.cpf);
+      const customerProfile = storefrontCustomerProfile(
+        customerData ?? {},
+        delivery ?? {},
+      );
       let customer = cpf
         ? await transaction.customer.findFirst({
             where: { companyId: storefront.companyId, taxId: cpf },
@@ -499,15 +484,13 @@ export class StorefrontOrdersController
       if (customer) {
         customer = await transaction.customer.update({
           where: { id: customer.id },
-          data: { name: customerData?.name?.trim() || customer.name },
+          data: customerProfile,
         });
       } else {
         customer = await transaction.customer.create({
           data: {
             companyId: storefront.companyId,
-            name: customerData?.name?.trim() || "Cliente da loja",
-            taxId: cpf || null,
-            segment: "E-commerce",
+            ...customerProfile,
           },
         });
       }
@@ -551,15 +534,25 @@ export class StorefrontOrdersController
         },
       });
       if (existing) {
+        const data: {
+          status?: SalesOrderStatus;
+          salesChannelId?: string;
+        } = {};
         if (
           status !== existing.status &&
           (existing.status === SalesOrderStatus.DRAFT ||
             (existing.status === SalesOrderStatus.CANCELLED &&
               status === SalesOrderStatus.CONFIRMED))
         ) {
+          data.status = status;
+        }
+        if (existing.salesChannelId !== channel.id) {
+          data.salesChannelId = channel.id;
+        }
+        if (Object.keys(data).length) {
           return transaction.salesOrder.update({
             where: { id: existing.id },
-            data: { status },
+            data,
           });
         }
         return existing;
