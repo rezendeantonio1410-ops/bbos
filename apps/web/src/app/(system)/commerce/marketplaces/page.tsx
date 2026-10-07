@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -345,10 +346,17 @@ export default function MarketplacesPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <span
-                    className={`grid size-11 place-items-center rounded-2xl ${isBispoStore ? "bg-[#14201D] text-white" : channel.platformCode === "MERCADO_LIVRE" ? "bg-[#FFE600] text-[#2D3277]" : "bg-[#F0F2F1] text-[#315D55]"}`}
+                    className={`grid size-11 place-items-center overflow-hidden rounded-2xl ${isBispoStore ? "relative bg-[#14201D] text-white" : channel.platformCode === "MERCADO_LIVRE" ? "bg-[#FFE600] text-[#2D3277]" : "bg-[#F0F2F1] text-[#315D55]"}`}
                   >
                     {isBispoStore ? (
-                      <ShoppingBag size={19} />
+                      <Image
+                        src="/brand/logo/bispo-seal-black.jpg"
+                        alt=""
+                        width={613}
+                        height={613}
+                        aria-hidden="true"
+                        className="absolute left-1/2 top-1/2 size-[76px] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover brightness-0 invert mix-blend-screen"
+                      />
                     ) : (
                       <Store size={19} />
                     )}
@@ -363,7 +371,9 @@ export default function MarketplacesPage() {
                     {statusLabel(channel.connectionStatus)}
                   </Badge>
                 </div>
-                <h3 className="mt-4 text-base font-bold">{channel.name}</h3>
+                <h3 className="mt-4 text-base font-bold">
+                  {isBispoStore ? "Loja Bispo" : channel.name}
+                </h3>
                 <p className="mt-1 min-h-8 text-[10px] leading-4 text-[#7A8381]">
                   {isBispoStore
                     ? "Canal próprio · integrado diretamente ao BBOS"
