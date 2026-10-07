@@ -69,22 +69,28 @@ export class BlingOutboxService {
       );
     }
 
+    // Bling's sales-order endpoint only supports full updates through PUT.
+    // Start from the remote representation so fiscal routing does not erase
+    // contact, shipping, installments, dates, or any operator-entered detail.
+    const updatePayload = {
+      ...remoteOrder,
+      dataSaida: remoteOrder?.dataSaida ?? remoteOrder?.data,
+      dataPrevista: remoteOrder?.dataPrevista ?? remoteOrder?.data,
+      parcelas: Array.isArray(remoteOrder?.parcelas)
+        ? remoteOrder.parcelas
+        : [],
+      itens: remoteOrder.itens.map((item: any) => ({
+        ...item,
+        naturezaOperacao: { id: Number(route.natureOperationId) },
+      })),
+    };
+    delete updatePayload.id;
+    delete updatePayload.total;
+    delete updatePayload.totalProdutos;
+
     await this.bling.request(companyId, path, {
-      method: "PATCH",
-      body: JSON.stringify({
-        itens: remoteOrder.itens.map((item: any) => ({
-          id: item?.id == null ? undefined : Number(item.id),
-          produto:
-            item?.produto?.id == null
-              ? undefined
-              : { id: Number(item.produto.id) },
-          quantidade: Number(item?.quantidade ?? 0),
-          valor: Number(item?.valor ?? item?.valorUnitario ?? 0),
-          descricao: item?.descricao,
-          codigo: item?.codigo,
-          naturezaOperacao: { id: Number(route.natureOperationId) },
-        })),
-      }),
+      method: "PUT",
+      body: JSON.stringify(updatePayload),
     });
     remoteOrder = await readRemoteOrder();
     if (!sampleNatureIsApplied(remoteOrder?.itens, route.natureOperationId)) {

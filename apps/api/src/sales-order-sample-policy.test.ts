@@ -130,6 +130,14 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   assert.match(fiscal, /resetMissingSalesOrderInvoice/);
   assert.match(
     fiscal,
+    /const updatePayload = \{[\s\S]*\.\.\.remoteOrder[\s\S]*method: "PUT"/,
+  );
+  assert.doesNotMatch(
+    fiscal,
+    /pedidos\/vendas[\s\S]{0,2000}method: "PATCH"/,
+  );
+  assert.match(
+    fiscal,
     /if \(salesMap\?\.externalId\)[\s\S]*isBlingNotFound\(error\)[\s\S]*"resourceType"='SALES_ORDER'[\s\S]*salesMap = null/,
   );
   assert.match(
