@@ -273,10 +273,18 @@ export const bbosNavigation: BbosNavGroup[] = [
       {
         href: "/integracoes",
         label: "Integrações",
-        description: "Bling, fiscal, filas e webhooks",
+        description: "Bling, marketplaces, pagamentos e fretes",
         icon: PlugZap,
         roles: LEADERSHIP,
-        keywords: ["bling", "fiscal", "nfe", "webhook"],
+        keywords: [
+          "bling",
+          "fiscal",
+          "nfe",
+          "webhook",
+          "mercado livre",
+          "melhor envio",
+          "mercado pago",
+        ],
       },
       {
         href: "/usuarios",

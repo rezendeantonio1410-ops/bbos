@@ -22,6 +22,8 @@ import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
+import { MercadoPagoService } from "./mercado-pago.service";
+import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -38,7 +40,138 @@ export class IntegrationsController {
     private readonly blingCatalogSync: BlingCatalogSyncService,
     private readonly melhorEnvioAuth: MelhorEnvioAuthService,
     private readonly mercadoLivre: MercadoLivreService,
+    private readonly mercadoPago: MercadoPagoService,
   ) {}
+
+  @Get("overview")
+  async overview(@Req() request: any) {
+    const actor = await this.actor(request);
+    const [integrations, queueRows, webhookRows, customers] =
+      await Promise.all([
+        this.database
+          .$queryRawUnsafe<any[]>(
+            `SELECT provider,status,"providerAccountId","connectedAt","lastSyncAt","lastError","tokenExpiresAt"
+               FROM "ExternalIntegration"
+              WHERE "companyId"=$1`,
+            actor.companyId,
+          )
+          .catch(() => []),
+        this.database
+          .$queryRawUnsafe<any[]>(
+            `SELECT provider,
+                    COUNT(*) FILTER (WHERE status IN ('PENDING','PROCESSING'))::int AS pending,
+                    COUNT(*) FILTER (WHERE status='FAILED')::int AS failed
+               FROM "IntegrationOutbox"
+              WHERE "companyId"=$1
+              GROUP BY provider`,
+            actor.companyId,
+          )
+          .catch(() => []),
+        this.database
+          .$queryRawUnsafe<any[]>(
+            `SELECT provider,
+                    COUNT(*) FILTER (WHERE status='ERROR')::int AS errors,
+                    MAX("receivedAt") AS "lastReceivedAt"
+               FROM "IntegrationWebhookEvent"
+              WHERE "companyId"=$1
+              GROUP BY provider`,
+            actor.companyId,
+          )
+          .catch(() => []),
+        this.database.$queryRawUnsafe<any[]>(
+          `SELECT id,name,"legalName","taxId","postalCode",address,"addressNumber",
+                  "addressComplement",district,city,state,"stateRegistration","stateRegistrationType"
+             FROM "Customer"
+            WHERE "companyId"=$1 AND active=TRUE
+            ORDER BY name ASC`,
+          actor.companyId,
+        ),
+      ]);
+
+    const integrationByProvider = new Map(
+      integrations.map((item) => [String(item.provider), item]),
+    );
+    const queueByProvider = new Map(
+      queueRows.map((item) => [String(item.provider), item]),
+    );
+    const webhooksByProvider = new Map(
+      webhookRows.map((item) => [String(item.provider), item]),
+    );
+    const bling = blingReadiness();
+    const mercadoLivre = this.mercadoLivre.readiness();
+    const melhorEnvio = this.melhorEnvioAuth.readiness();
+
+    const provider = (
+      code: string,
+      configured: boolean,
+      missingEnvironment: string[] = [],
+      forcedStatus?: string,
+    ) => {
+      const connection = integrationByProvider.get(code) ?? {};
+      const queue = queueByProvider.get(code) ?? {};
+      const webhooks = webhooksByProvider.get(code) ?? {};
+      return {
+        provider: code,
+        configured,
+        missingEnvironment,
+        connection: {
+          status:
+            forcedStatus ??
+            connection.status ??
+            (configured ? "DISCONNECTED" : "NOT_CONFIGURED"),
+          providerAccountId: connection.providerAccountId ?? null,
+          connectedAt: connection.connectedAt ?? null,
+          lastSyncAt: connection.lastSyncAt ?? null,
+          lastError: connection.lastError ?? null,
+          tokenExpiresAt: connection.tokenExpiresAt ?? null,
+        },
+        activity: {
+          pending: Number(queue.pending ?? 0),
+          failed: Number(queue.failed ?? 0),
+          webhookErrors: Number(webhooks.errors ?? 0),
+          lastWebhookAt: webhooks.lastReceivedAt ?? null,
+        },
+      };
+    };
+
+    const fiscalItems = customers.map((customer) => {
+      const readiness = assessCustomerFiscalReadiness(customer);
+      return {
+        id: customer.id,
+        name: customer.name,
+        taxId: customer.taxId,
+        ready: readiness.ready,
+        issues: readiness.issues,
+      };
+    });
+    const pendingCustomers = fiscalItems.filter((item) => !item.ready);
+
+    return {
+      providers: [
+        provider("BLING", bling.configured, bling.missingEnvironment),
+        provider("MERCADO_LIVRE", mercadoLivre.configured),
+        provider(
+          "MELHOR_ENVIO",
+          melhorEnvio.configured,
+          melhorEnvio.missingEnvironment,
+          melhorEnvio.usingStaticToken ? "CONNECTED" : undefined,
+        ),
+        provider(
+          "MERCADO_PAGO",
+          this.mercadoPago.configured(),
+          [],
+          this.mercadoPago.configured() ? "CONNECTED" : "NOT_CONFIGURED",
+        ),
+      ],
+      customerFiscalReadiness: {
+        total: fiscalItems.length,
+        ready: fiscalItems.length - pendingCustomers.length,
+        pending: pendingCustomers.length,
+        items: pendingCustomers,
+      },
+      checkedAt: new Date().toISOString(),
+    };
+  }
 
   @Get("mercado-livre/status")
   async mercadoLivreStatus(@Req() request: any) {
@@ -183,6 +316,7 @@ export class IntegrationsController {
   @Public()
   @Get("melhor-envio/callback")
   async melhorEnvioCallback(
+    @Res() response: any,
     @Query("code") code?: string,
     @Query("state") state?: string,
   ) {
@@ -191,7 +325,13 @@ export class IntegrationsController {
         "Callback OAuth do Melhor Envio incompleto.",
       );
     try {
-      return await this.melhorEnvioAuth.completeAuthorization(code, state);
+      await this.melhorEnvioAuth.completeAuthorization(code, state);
+      const webUrl = process.env.WEB_URL?.split(",")[0]?.trim();
+      return response.redirect(
+        webUrl
+          ? `${webUrl.replace(/\/$/, "")}/integracoes?connected=melhor-envio`
+          : "/integracoes?connected=melhor-envio",
+      );
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error
@@ -295,13 +435,20 @@ export class IntegrationsController {
   @Public()
   @Get("bling/callback")
   async blingCallback(
+    @Res() response: any,
     @Query("code") code?: string,
     @Query("state") state?: string,
   ) {
     if (!code || !state)
       throw new BadRequestException("Callback OAuth do Bling incompleto.");
     try {
-      return await this.blingService.completeAuthorization(code, state);
+      await this.blingService.completeAuthorization(code, state);
+      const webUrl = process.env.WEB_URL?.split(",")[0]?.trim();
+      return response.redirect(
+        webUrl
+          ? `${webUrl.replace(/\/$/, "")}/integracoes?connected=bling`
+          : "/integracoes?connected=bling",
+      );
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error

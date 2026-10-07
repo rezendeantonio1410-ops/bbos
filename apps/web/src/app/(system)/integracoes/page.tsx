@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  CreditCard,
+  ExternalLink,
   Link2,
   LoaderCircle,
   PackagePlus,
@@ -13,6 +17,9 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  Store,
+  Truck,
+  UsersRound,
   Webhook,
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
@@ -96,12 +103,44 @@ type ProfilesResponse = {
   }>;
 };
 
+type IntegrationOverview = {
+  providers: Array<{
+    provider: "BLING" | "MERCADO_LIVRE" | "MELHOR_ENVIO" | "MERCADO_PAGO";
+    configured: boolean;
+    connection: {
+      status: string;
+      connectedAt?: string | null;
+      lastSyncAt?: string | null;
+      lastError?: string | null;
+    };
+    activity: {
+      pending: number;
+      failed: number;
+      webhookErrors: number;
+      lastWebhookAt?: string | null;
+    };
+  }>;
+  customerFiscalReadiness: {
+    total: number;
+    ready: number;
+    pending: number;
+    items: Array<{
+      id: string;
+      name: string;
+      taxId?: string | null;
+      issues: string[];
+    }>;
+  };
+  checkedAt: string;
+};
+
 export default function IntegrationsPage() {
   const root = getApiBaseUrl();
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [catalog, setCatalog] = useState<CatalogStatus | null>(null);
   const [profiles, setProfiles] = useState<ProfilesResponse | null>(null);
+  const [overview, setOverview] = useState<IntegrationOverview | null>(null);
   const [operationNatures, setOperationNatures] = useState<OperationNature[]>(
     [],
   );
@@ -114,11 +153,15 @@ export default function IntegrationsPage() {
   const [lastAction, setLastAction] = useState("");
   const [error, setError] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [r, s, c, p] = await Promise.all([
+      const [o, r, s, c, p] = await Promise.all([
+        fetch(`${root}/integrations/overview`, {
+          credentials: "include",
+          cache: "no-store",
+        }),
         fetch(`${root}/integrations/bling/readiness`, {
           credentials: "include",
           cache: "no-store",
@@ -136,8 +179,9 @@ export default function IntegrationsPage() {
           cache: "no-store",
         }),
       ]);
-      if (!r.ok || !s.ok || !c.ok || !p.ok)
+      if (!o.ok || !r.ok || !s.ok || !c.ok || !p.ok)
         throw new Error("Não foi possível consultar a integração.");
+      setOverview(await o.json());
       setReadiness(await r.json());
       setSummary(await s.json());
       setCatalog(await c.json());
@@ -160,11 +204,11 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [root]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const reconcile = async () => {
     setReconciling(true);
@@ -372,11 +416,11 @@ export default function IntegrationsPage() {
             Gestão · Integrações
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            Bling e operação fiscal
+            Central de integrações
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            O BBOS governa cadastro, parametrização fiscal e integração; o Bling
-            reconhece e executa a camada ERP/fiscal.
+            Conexões, sincronizações e impedimentos operacionais em uma só
+            tela — antes que o pedido pare no faturamento ou na expedição.
           </p>
         </div>
         <button
@@ -398,6 +442,155 @@ export default function IntegrationsPage() {
           {lastAction}
         </div>
       )}
+
+      <section>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-stone-900">
+              Sistemas conectados ao BBOS
+            </p>
+            <p className="mt-1 text-xs text-stone-400">
+              O status abaixo confirma configuração, autorização e atividade
+              recente sem expor nenhuma credencial.
+            </p>
+          </div>
+          <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-stone-400">
+            {overview?.checkedAt
+              ? `Conferido ${new Date(overview.checkedAt).toLocaleString("pt-BR")}`
+              : "Conferindo conexões"}
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <ConnectorCard
+            name="Bling"
+            description="ERP, clientes, produtos e NF-e"
+            icon={<PlugZap size={19} />}
+            tone="violet"
+            data={overview?.providers.find(
+              (item) => item.provider === "BLING",
+            )}
+            connectHref={`${root}/integrations/bling/connect`}
+            actionLabel="Conectar Bling"
+          />
+          <ConnectorCard
+            name="Mercado Livre"
+            description="Pedidos, anúncios e repasses"
+            icon={<Store size={19} />}
+            tone="yellow"
+            data={overview?.providers.find(
+              (item) => item.provider === "MERCADO_LIVRE",
+            )}
+            connectHref={`${root}/integrations/mercado-livre/connect`}
+            actionLabel="Conectar Mercado Livre"
+            detailsHref="/commerce/marketplaces"
+          />
+          <ConnectorCard
+            name="Melhor Envio"
+            description="Frete, etiqueta e rastreio"
+            icon={<Truck size={19} />}
+            tone="green"
+            data={overview?.providers.find(
+              (item) => item.provider === "MELHOR_ENVIO",
+            )}
+            connectHref={`${root}/integrations/melhor-envio/connect`}
+            actionLabel="Conectar Melhor Envio"
+          />
+          <ConnectorCard
+            name="Mercado Pago"
+            description="PIX, cartão e confirmação de pagamento"
+            icon={<CreditCard size={19} />}
+            tone="blue"
+            data={overview?.providers.find(
+              (item) => item.provider === "MERCADO_PAGO",
+            )}
+          />
+        </div>
+      </section>
+
+      <section
+        className={`rounded-[24px] border p-5 shadow-sm ${
+          overview?.customerFiscalReadiness.pending
+            ? "border-amber-200 bg-amber-50/40"
+            : "border-emerald-100 bg-emerald-50/40"
+        }`}
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span
+              className={`grid size-11 shrink-0 place-items-center rounded-2xl ${
+                overview?.customerFiscalReadiness.pending
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-emerald-100 text-emerald-700"
+              }`}
+            >
+              <UsersRound size={20} />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-stone-900">
+                Clientes prontos para faturar no Bling
+              </p>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">
+                O BBOS confere documento e endereço fiscal antes da NF-e. Assim,
+                o erro aparece no cadastro — não depois de o pedido estar pronto.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/clientes"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-xs font-bold text-white"
+          >
+            Corrigir cadastros <ExternalLink size={13} />
+          </Link>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <Metric
+            label="Clientes ativos"
+            value={String(overview?.customerFiscalReadiness.total ?? "—")}
+          />
+          <Metric
+            label="Prontos para NF-e"
+            value={String(overview?.customerFiscalReadiness.ready ?? "—")}
+          />
+          <Metric
+            label="Precisam de correção"
+            value={String(overview?.customerFiscalReadiness.pending ?? "—")}
+          />
+        </div>
+
+        {overview?.customerFiscalReadiness.items.length ? (
+          <div className="mt-4 grid gap-2 lg:grid-cols-2">
+            {overview.customerFiscalReadiness.items.slice(0, 8).map((item) => (
+              <div
+                key={item.id}
+                className="rounded-2xl border border-amber-100 bg-white px-4 py-3"
+              >
+                <p className="text-xs font-bold text-stone-900">{item.name}</p>
+                <p className="mt-1 text-[11px] leading-5 text-amber-800">
+                  Falta: {item.issues.join(", ")}.
+                </p>
+              </div>
+            ))}
+            {overview.customerFiscalReadiness.items.length > 8 && (
+              <p className="px-1 text-xs font-semibold text-amber-800">
+                + {overview.customerFiscalReadiness.items.length - 8} cliente(s)
+                com pendências na tela Clientes.
+              </p>
+            )}
+          </div>
+        ) : overview ? (
+          <p className="mt-4 flex items-center gap-2 text-sm font-semibold text-emerald-800">
+            <CheckCircle2 size={16} /> Todos os clientes ativos estão completos
+            para faturamento.
+          </p>
+        ) : null}
+      </section>
+
+      <div className="pt-2">
+        <p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-[#6D4FA3]">
+          Operação fiscal e catálogo Bling
+        </p>
+      </div>
 
       <section className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
         <div className="rounded-[24px] border border-stone-200 bg-white p-5 shadow-sm">
@@ -805,6 +998,128 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-stone-100 p-3">
       <p className="text-[10px] text-stone-400">{label}</p>
       <p className="mt-1 text-lg font-bold text-stone-900">{value}</p>
+    </div>
+  );
+}
+
+function ConnectorCard({
+  name,
+  description,
+  icon,
+  tone,
+  data,
+  connectHref,
+  actionLabel,
+  detailsHref,
+}: {
+  name: string;
+  description: string;
+  icon: ReactNode;
+  tone: "violet" | "yellow" | "green" | "blue";
+  data?: IntegrationOverview["providers"][number];
+  connectHref?: string;
+  actionLabel?: string;
+  detailsHref?: string;
+}) {
+  const connected = data?.connection.status === "CONNECTED";
+  const attention = Boolean(
+    data?.connection.lastError ||
+      data?.activity.failed ||
+      data?.activity.webhookErrors,
+  );
+  const signalAt =
+    data?.connection.lastSyncAt ??
+    data?.activity.lastWebhookAt ??
+    data?.connection.connectedAt;
+  const colors = {
+    violet: "bg-violet-50 text-violet-700",
+    yellow: "bg-[#FFF7CC] text-[#665600]",
+    green: "bg-emerald-50 text-emerald-700",
+    blue: "bg-blue-50 text-blue-700",
+  }[tone];
+  const status = !data
+    ? "Verificando"
+    : !data.configured
+      ? "Configuração pendente"
+      : connected
+        ? attention
+          ? "Conectado · atenção"
+          : "Conectado"
+        : data.connection.status === "CONNECTING"
+          ? "Conectando"
+          : "Não conectado";
+
+  return (
+    <div
+      className={`flex min-h-64 flex-col rounded-[24px] border bg-white p-5 shadow-sm ${
+        attention ? "border-red-200" : "border-stone-200"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className={`grid size-10 place-items-center rounded-2xl ${colors}`}>
+          {icon}
+        </span>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[.06em] ${
+            attention
+              ? "bg-red-50 text-red-700"
+              : connected
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {status}
+        </span>
+      </div>
+      <p className="mt-4 text-sm font-bold text-stone-900">{name}</p>
+      <p className="mt-1 text-xs leading-5 text-stone-400">{description}</p>
+
+      <div className="mt-4 space-y-2 text-[11px] text-stone-500">
+        <div className="flex items-center justify-between gap-3">
+          <span>Último sinal</span>
+          <span className="text-right font-semibold text-stone-700">
+            {signalAt ? new Date(signalAt).toLocaleString("pt-BR") : "—"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span>Fila / falhas</span>
+          <span className="font-semibold text-stone-700">
+            {data ? `${data.activity.pending} / ${data.activity.failed}` : "—"}
+          </span>
+        </div>
+      </div>
+
+      {data?.connection.lastError && (
+        <p className="mt-3 line-clamp-3 rounded-xl bg-red-50 p-3 text-[10px] leading-4 text-red-700">
+          {data.connection.lastError}
+        </p>
+      )}
+
+      <div className="mt-auto pt-4">
+        {connected && detailsHref ? (
+          <Link
+            href={detailsHref}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-stone-200 px-3 py-2.5 text-xs font-bold text-stone-700"
+          >
+            Abrir operação <ExternalLink size={13} />
+          </Link>
+        ) : !connected && data?.configured && connectHref ? (
+          <a
+            href={connectHref}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-3 py-2.5 text-xs font-bold text-white"
+          >
+            {actionLabel ?? "Conectar"} <ExternalLink size={13} />
+          </a>
+        ) : !data?.configured && data ? (
+          <p className="rounded-xl bg-stone-50 px-3 py-2.5 text-center text-[10px] font-semibold text-stone-500">
+            Credenciais do ambiente ainda não configuradas.
+          </p>
+        ) : (
+          <p className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-[10px] font-bold text-emerald-700">
+            <CheckCircle2 size={13} /> Operação disponível
+          </p>
+        )}
+      </div>
     </div>
   );
 }
