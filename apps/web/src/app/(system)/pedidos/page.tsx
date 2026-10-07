@@ -242,6 +242,14 @@ type ShipmentInfo = {
   fiscalXmlUrl?: string | null;
   sefazStatusCode?: string | null;
   sefazMessage?: string | null;
+  trackingEvents?: Array<{
+    eventType: string;
+    title: string;
+    detail: string;
+    source: string;
+    metadata?: Record<string, unknown> | null;
+    occurredAt: string;
+  }>;
 };
 
 type PostingAgency = {
@@ -3020,9 +3028,74 @@ function OrderDrawer({
                   </div>
                 </div>
                 {fulfillment?.trackingCode && (
-                  <p className="mt-3 text-[11px] text-emerald-900">
-                    Rastreio: <b>{fulfillment.trackingCode}</b>
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-emerald-900">
+                    <span>
+                      Rastreio: <b>{fulfillment.trackingCode}</b>
+                    </span>
+                    {fulfillment.trackingUrl && (
+                      <a
+                        href={fulfillment.trackingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 font-bold text-emerald-950"
+                      >
+                        Ver detalhes no Melhor Rastreio
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {!!fulfillment?.trackingEvents?.length && (
+                  <div className="mt-4 border-t border-emerald-100 pt-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">
+                          Histórico do transporte
+                        </p>
+                        <p className="mt-1 text-[10px] text-emerald-700">
+                          Marcos oficiais recebidos pelo BBOS do Melhor Envio e da transportadora.
+                        </p>
+                      </div>
+                      {fulfillment.trackingUrl && (
+                        <a
+                          href={fulfillment.trackingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-bold text-emerald-900 underline"
+                        >
+                          Abrir histórico completo
+                        </a>
+                      )}
+                    </div>
+                    <ol className="mt-3 space-y-3">
+                      {fulfillment.trackingEvents.map((event, index) => (
+                        <li
+                          key={`${event.eventType}-${event.occurredAt}-${index}`}
+                          className="grid grid-cols-[18px_1fr] gap-2"
+                        >
+                          <div className="flex flex-col items-center">
+                            <span className="mt-1 size-2.5 rounded-full bg-emerald-700 ring-4 ring-emerald-100" />
+                            {index < fulfillment.trackingEvents!.length - 1 && (
+                              <span className="mt-1 min-h-8 w-px flex-1 bg-emerald-200" />
+                            )}
+                          </div>
+                          <div className="pb-1">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                              <p className="text-[11px] font-bold text-stone-900">
+                                {event.title}
+                              </p>
+                              <time className="text-[9px] text-stone-500">
+                                {new Date(event.occurredAt).toLocaleString("pt-BR")}
+                              </time>
+                            </div>
+                            <p className="mt-0.5 text-[10px] leading-4 text-stone-600">
+                              {event.detail}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 )}
 
                 <div className="mt-4 border-t border-emerald-100 pt-4">

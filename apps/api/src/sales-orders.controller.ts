@@ -373,8 +373,9 @@ export class SalesOrdersController {
   @Get(":id/fulfillment")
   async fulfillment(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
-    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT s.*,
+    const [rows, trackingEvents] = await Promise.all([
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT s.*,
               f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId",
               f.number AS "fiscalNumber",
@@ -391,10 +392,21 @@ export class SalesOrdersController {
          ) f ON TRUE
          LEFT JOIN "Shipment" s ON s."salesOrderId"=so.id
         WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
-      id,
-      actor.companyId,
-    );
-    return rows[0] ?? null;
+        id,
+        actor.companyId,
+      ),
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT "eventType",title,detail,source,metadata,"occurredAt"
+           FROM "SalesOrderCustomerEvent"
+          WHERE "salesOrderId"=$1
+            AND "companyId"=$2
+            AND source IN ('MELHOR_ENVIO','CARRIER')
+          ORDER BY "occurredAt" DESC`,
+        id,
+        actor.companyId,
+      ),
+    ]);
+    return rows[0] ? { ...rows[0], trackingEvents } : null;
   }
 
   @Post(":id/requote-shipping")
