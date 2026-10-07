@@ -355,7 +355,7 @@ export default function MarketplacesPage() {
                         width={613}
                         height={613}
                         aria-hidden="true"
-                        className="absolute left-1/2 top-1/2 size-[76px] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover brightness-0 invert"
+                        className="absolute left-1/2 top-1/2 size-[76px] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover invert"
                       />
                     ) : (
                       <Store size={19} />
