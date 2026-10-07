@@ -362,11 +362,16 @@ export class BlingOutboxService {
     };
 
     const operationDates = [
+      String(originalOperationDate ?? "").trim(),
       currentBlingDateTime(),
       toBlingDateTime(originalOperationDate),
+      new Date().toISOString(),
       toBlingDate(new Date()),
       toBlingDate(originalOperationDate),
-    ].filter((value, index, values) => values.indexOf(value) === index);
+    ].filter(
+      (value, index, values) =>
+        Boolean(value) && values.indexOf(value) === index,
+    );
     let updateError: unknown = null;
     for (const dataOperacao of operationDates) {
       try {
@@ -712,16 +717,16 @@ export class BlingOutboxService {
     const repairInvoiceDraftConsumerFinal =
       priorConsumerFinalRejection &&
       !priorFiscal[0]?.payloadSnapshot?.invoiceDraftRepairAttempted;
-    const effectiveRecoveryAttempt = repairConsumerFinalRejection
+    const regenerateForConsumerFinal =
+      repairConsumerFinalRejection || repairInvoiceDraftConsumerFinal;
+    const effectiveRecoveryAttempt = regenerateForConsumerFinal
       ? Math.max(staleSalesOrderRecoveryAttempt, 1)
       : staleSalesOrderRecoveryAttempt;
-    const recoveryReference = repairConsumerFinalRejection
-      ? `-R${
-          String(
-            priorFiscal[0]?.number ?? priorFiscal[0]?.externalId ?? "SEFAZ",
-          )
-            .replace(/^0+/, "")
-            .replace(/\D/g, "") || "SEFAZ"
+    const recoveryReference = regenerateForConsumerFinal
+      ? `-CF${
+          String(priorFiscal[0]?.externalId ?? priorFiscal[0]?.number ?? "")
+            .replace(/\D/g, "")
+            .slice(-6) || "SEFAZ"
         }`
       : effectiveRecoveryAttempt
         ? `-R${effectiveRecoveryAttempt}`
@@ -750,7 +755,7 @@ export class BlingOutboxService {
     );
 
     let salesMap = await this.getMap(row.companyId, "SALES_ORDER", order.id);
-    if (repairConsumerFinalRejection && salesMap?.externalId) {
+    if (regenerateForConsumerFinal && salesMap?.externalId) {
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap"
           WHERE "companyId"=$1 AND provider='BLING'
@@ -1001,10 +1006,7 @@ export class BlingOutboxService {
           `Emissão de amostra bloqueada antes da SEFAZ: o rascunho da NF-e não recebeu o CFOP ${sampleFiscalRoute.cfop} (${sampleFiscalRoute.scope === "INTER" ? "operação interestadual" : "operação interna"}). Corrija a natureza de operação no Bling e tente novamente.`,
         );
       }
-      if (
-        repairInvoiceDraftConsumerFinal &&
-        priorFiscalExternalId === blingNfeId
-      ) {
+      if (repairInvoiceDraftConsumerFinal) {
         fiscalDraft = await this.repairSampleInvoiceConsumerFinal(
           row.companyId,
           blingNfeId,
