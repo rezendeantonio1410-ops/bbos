@@ -8,6 +8,39 @@ import { settleMelhorEnvioFreight } from "./storefront-shipping-finance";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
+export function melhorEnvioSenderFiscalFields(input: {
+  companyDocument?: unknown;
+  personalDocument?: unknown;
+  stateRegister?: unknown;
+}) {
+  const companyDocument = digits(input.companyDocument);
+  if (companyDocument) {
+    if (companyDocument.length !== 14) {
+      throw new ServiceUnavailableException(
+        "SHIPPING_SENDER_DOCUMENT deve conter um CNPJ válido com 14 dígitos.",
+      );
+    }
+    const stateRegister = digits(input.stateRegister);
+    if (!stateRegister) {
+      throw new ServiceUnavailableException(
+        "SHIPPING_SENDER_STATE_REGISTER não configurado.",
+      );
+    }
+    return {
+      company_document: companyDocument,
+      state_register: stateRegister,
+    };
+  }
+
+  const personalDocument = digits(input.personalDocument);
+  if (personalDocument.length !== 11) {
+    throw new ServiceUnavailableException(
+      "Configure o CNPJ ou um CPF válido para o remetente do Melhor Envio.",
+    );
+  }
+  return { document: personalDocument };
+}
+
 @Injectable()
 export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy {
   private readonly database = prisma;
@@ -229,20 +262,18 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
   }
 
   private sender() {
-    const document = digits(this.required("SHIPPING_SENDER_CPF"));
-    const companyDocument = digits(process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112");
-    if (document.length !== 11)
-      throw new ServiceUnavailableException("SHIPPING_SENDER_CPF deve conter um CPF válido com 11 dígitos.");
-    if (companyDocument.length !== 14)
-      throw new ServiceUnavailableException("SHIPPING_SENDER_DOCUMENT deve conter um CNPJ válido com 14 dígitos.");
+    const fiscalFields = melhorEnvioSenderFiscalFields({
+      companyDocument:
+        process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112",
+      personalDocument: process.env.SHIPPING_SENDER_CPF,
+      stateRegister: process.env.SHIPPING_SENDER_STATE_REGISTER,
+    });
 
     return {
       name: process.env.SHIPPING_SENDER_NAME?.trim() || "Bispo Coffees Ltda",
       phone: digits(this.required("SHIPPING_SENDER_PHONE")),
       email: this.required("SHIPPING_SENDER_EMAIL"),
-      document,
-      company_document: companyDocument,
-      state_register: digits(this.required("SHIPPING_SENDER_STATE_REGISTER")),
+      ...fiscalFields,
       address: this.required("SHIPPING_SENDER_ADDRESS"),
       complement: process.env.SHIPPING_SENDER_COMPLEMENT?.trim() || "",
       number: this.required("SHIPPING_SENDER_NUMBER"),
