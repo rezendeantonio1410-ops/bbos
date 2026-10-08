@@ -211,18 +211,17 @@ export default function EditorialHero({
       aria-label="Cafés escolhidos pela Bispo"
     >
       <div className={styles.media} data-photo-slot={`hero-${active + 1}`}>
-        {scenes.map((item, index) => (
-          <Image
-            key={item.name}
-            className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
-            src={item.image}
-            alt={index === active ? item.alt : ""}
-            fill
-            priority={index === 0}
-            sizes="(max-width: 960px) 100vw, 54vw"
-            style={{ objectPosition: item.crop }}
-          />
-        ))}
+        <Image
+          key={scene.id}
+          className={`${styles.sceneImage} ${styles.activeImage}`}
+          src={scene.image}
+          alt={scene.alt}
+          fill
+          priority={active === 0}
+          sizes="(max-width: 960px) 100vw, 54vw"
+          style={{ objectPosition: scene.crop }}
+          unoptimized
+        />
         <div className={styles.mediaShade} />
         <div className={styles.mediaSignature}>
           <span>{scene.signature}</span>

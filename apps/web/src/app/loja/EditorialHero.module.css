@@ -25,6 +25,15 @@
 .activeImage {
   opacity: 1;
   transform: scale(1.075);
+  animation: sceneFadeIn 0.8s ease both;
+}
+@keyframes sceneFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .mediaShade {
   position: absolute;
@@ -351,6 +360,7 @@
   }
   .activeImage {
     transform: none;
+    animation: none;
   }
 }
 /* Premium editorial scale — product remains desirable without billboard typography. */
