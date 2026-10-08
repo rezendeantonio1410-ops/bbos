@@ -183,7 +183,18 @@ export class MercadoLivreService {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.access_token || !payload.refresh_token) {
-      throw new Error(`Falha OAuth Mercado Livre (${response.status}).`);
+      const errorCode =
+        typeof payload?.error === "string" && payload.error.trim()
+          ? payload.error.trim()
+          : "oauth_error";
+      const errorDescription =
+        typeof payload?.error_description === "string" &&
+        payload.error_description.trim()
+          ? payload.error_description.trim().slice(0, 320)
+          : "O Mercado Livre recusou a troca do código por tokens.";
+      throw new Error(
+        `Falha OAuth Mercado Livre (${response.status}): ${errorCode} — ${errorDescription}`,
+      );
     }
     return payload as MercadoLivreToken;
   }
