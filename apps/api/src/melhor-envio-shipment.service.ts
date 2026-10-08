@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
+import { settleMelhorEnvioFreight } from "./storefront-shipping-finance";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -367,6 +368,19 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
 
     await this.request(order.companyId, "/me/shipment/checkout", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
     await this.database.$executeRawUnsafe(`UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`, shipmentId);
+    await this.database.$transaction((transaction) =>
+      settleMelhorEnvioFreight(transaction, {
+        id: order.id,
+        companyId: order.companyId,
+        code: order.code,
+        shippingProvider: order.shippingProvider,
+        shippingCents: Number(order.customerPriceCents ?? order.shippingCents ?? 0),
+        providerPriceCents: Number(order.providerPriceCents ?? 0),
+        paidAt: order.paidAt,
+        shipmentId,
+        externalId,
+      }),
+    );
     await this.request(order.companyId, "/me/shipment/generate", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
     const labelUrl = await this.printWhenReady(order.companyId, externalId);
     const details = await this.request(order.companyId, `/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => ({}));
@@ -744,6 +758,21 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
       shipmentId,
     );
+    if (order.storefrontOrderId) {
+      await this.database.$transaction((transaction) =>
+        settleMelhorEnvioFreight(transaction, {
+          id: order.storefrontOrderId,
+          companyId: order.companyId,
+          code: order.orderNumber || order.code,
+          shippingProvider: order.shippingProvider,
+          shippingCents: Number(order.customerPriceCents ?? order.freight ?? 0),
+          providerPriceCents: Number(order.providerPriceCents ?? 0),
+          paidAt: order.paidAt,
+          shipmentId,
+          externalId,
+        }),
+      );
+    }
     await this.request(order.companyId, "/me/shipment/generate", {
       method: "POST",
       body: JSON.stringify({ orders: [externalId] }),

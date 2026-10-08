@@ -29,6 +29,7 @@ import {
   storefrontCustomerProfile,
   storefrontShippingSalesOrderData,
 } from "./storefront-order-sync";
+import { reserveMelhorEnvioFreight } from "./storefront-shipping-finance";
 
 const catalog: Record<
   string,
@@ -858,6 +859,25 @@ export class StorefrontOrdersController
           `coupon:${redemption[0].id}`,
         );
       }
+      const freightQuote = order.shippingQuoteId
+        ? await transaction.$queryRawUnsafe<
+            Array<{ providerPriceCents: number }>
+          >(
+            `SELECT "providerPriceCents" FROM "ShippingQuote" WHERE id=$1 LIMIT 1`,
+            order.shippingQuoteId,
+          )
+        : [];
+      await reserveMelhorEnvioFreight(transaction, {
+        id: order.id,
+        companyId: order.companyId,
+        code: order.code,
+        shippingProvider: order.shippingProvider,
+        shippingCents: Number(order.shippingCents ?? 0),
+        providerPriceCents: Number(
+          freightQuote[0]?.providerPriceCents ?? order.shippingCents ?? 0,
+        ),
+        paidAt: new Date(),
+      });
       return { id: order.id, code: order.code, status: "PAID" };
     });
     if ((result as any).duplicatePayment) {
