@@ -35,7 +35,7 @@ export function middleware(request: NextRequest) {
   });
 
   if (domainRedirect) {
-    return NextResponse.redirect(new URL(domainRedirect, request.url));
+    return NextResponse.redirect(new URL(domainRedirect, request.url), 308);
   }
 
   // Session validity belongs to the API. This middleware only prevents a
