@@ -30,6 +30,10 @@ const payableKey = (orderId: string) =>
   `shipping-payable:storefront:${orderId}`;
 const allocationKey = (orderId: string) =>
   `shipping-allocation:storefront:${orderId}`;
+const brl = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
 function cents(value: unknown) {
   const parsed = Math.round(Number(value ?? 0));
@@ -114,6 +118,8 @@ export async function reserveMelhorEnvioFreight(
     order.companyId,
   );
   const occurredAt = order.paidAt ? new Date(order.paidAt) : new Date();
+  const dueAt = new Date(occurredAt);
+  dueAt.setUTCDate(dueAt.getUTCDate() + 1);
   const payableAmount = amounts.providerCents / 100;
   const collectedAmount = amounts.collectedCents / 100;
   const resultAmount = amounts.logisticsResultCents / 100;
@@ -124,6 +130,7 @@ export async function reserveMelhorEnvioFreight(
       supplierId: supplier.id,
       description: `Frete Melhor Envio · pedido ${order.code}`,
       category: MELHOR_ENVIO_FREIGHT_CATEGORY,
+      dueDate: dueAt,
     },
     create: {
       id: payableKey(order.id),
@@ -131,12 +138,12 @@ export async function reserveMelhorEnvioFreight(
       supplierId: supplier.id,
       description: `Frete Melhor Envio · pedido ${order.code}`,
       issueDate: occurredAt,
-      dueDate: occurredAt,
+      dueDate: dueAt,
       amount: payableAmount,
       openAmount: payableAmount,
       status: PayableStatus.OPEN,
       category: MELHOR_ENVIO_FREIGHT_CATEGORY,
-      notes: `Reserva automática do frete. Recebido do cliente: R$ ${collectedAmount.toFixed(2)}. Custo do provedor: R$ ${payableAmount.toFixed(2)}. Resultado logístico: R$ ${resultAmount.toFixed(2)}.`,
+      notes: `Reserva automática do frete. Recebido do cliente: ${brl.format(collectedAmount)}. Custo do provedor: ${brl.format(payableAmount)}. Resultado logístico: ${brl.format(resultAmount)}.`,
     },
   });
 

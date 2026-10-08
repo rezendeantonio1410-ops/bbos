@@ -153,6 +153,13 @@ test("a reserva e a baixa são idempotentes", async () => {
   assert.equal(state.accounts.size, 1);
   assert.equal(state.payables.size, 1);
   assert.equal(state.transactions.size, 1);
+  const reserved = [...state.payables.values()][0];
+  assert.equal(
+    new Date(reserved.dueDate).getTime() -
+      new Date(reserved.issueDate).getTime(),
+    24 * 60 * 60 * 1000,
+  );
+  assert.match(reserved.notes, /R\$\s13,79/);
 
   const settlement = {
     ...order,
