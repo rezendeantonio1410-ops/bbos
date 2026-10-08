@@ -14,9 +14,10 @@ import './sidebar-vnext.css';
 import './order-drawer-vnext.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
 import { BbosAssistant } from '@/components/bbos-assistant';
+import { getStorefrontOrigin } from '@/lib/storefront-url';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://loja.bispocoffees.com.br'),
+  metadataBase: new URL(getStorefrontOrigin()),
   title: 'BBOS — Bispo Coffees',
   description: SYSTEM_NAME,
   creator: SYSTEM_CREATOR,

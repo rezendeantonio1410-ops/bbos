@@ -4,6 +4,7 @@ import { navigationForRole } from "../components/bbos-navigation";
 import {
   normalizeHostname,
   resolveDomainRedirect,
+  resolveLegacyStorefrontRedirect,
 } from "./domain-routing";
 import { isProtectedSystemPath } from "./system-routes";
 
@@ -110,6 +111,96 @@ test("storefront and management paths remain on their canonical domains", () => 
       hasSession: false,
     }),
     null,
+  );
+});
+
+test("legacy Nuvemshop URLs preserve product intent on the new storefront", () => {
+  const cases: ReadonlyArray<readonly [string, string]> = [
+    [
+      "/produtos/essencial-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#essencial",
+    ],
+    [
+      "/produtos/intenso-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#intenso",
+    ],
+    [
+      "/produtos/caramelo-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#caramelo",
+    ],
+    [
+      "/produtos/doce-de-leite-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#doce-de-leite",
+    ],
+    [
+      "/produtos/tangerina-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#tangerina",
+    ],
+    [
+      "/produtos/singular-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#singular",
+    ],
+    [
+      "/produtos/sublime-500g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#sublime",
+    ],
+    [
+      "/produtos/raro-250g/",
+      "https://www.bispocoffees.com.br/loja?utm_source=legacy#raro",
+    ],
+  ];
+
+  for (const [pathname, expected] of cases) {
+    assert.equal(
+      resolveLegacyStorefrontRedirect({
+        hostname: "www.bispocoffees.com.br",
+        pathname,
+        search: "?utm_source=legacy",
+        storefrontOrigin: "https://www.bispocoffees.com.br",
+      }),
+      expected,
+    );
+  }
+});
+
+test("legacy institutional and account URLs have safe destinations", () => {
+  const cases: ReadonlyArray<readonly [string, string]> = [
+    ["/produtos/", "/loja#cafes"],
+    ["/contato/", "/loja/entrega-e-devolucoes"],
+    ["/quem-somos/", "/loja/sobre"],
+    ["/account/login/", "/loja/conta"],
+    ["/account/register/", "/loja/conta"],
+  ];
+
+  for (const [pathname, destination] of cases) {
+    assert.equal(
+      resolveLegacyStorefrontRedirect({
+        hostname: "www.bispocoffees.com.br",
+        pathname,
+        search: "",
+        storefrontOrigin: "https://www.bispocoffees.com.br",
+      }),
+      `https://www.bispocoffees.com.br${destination}`,
+    );
+  }
+});
+
+test("canonical storefront host enforcement is opt-in for a safe DNS cutover", () => {
+  const input = {
+    hostname: "loja.bispocoffees.com.br",
+    pathname: "/loja/sobre",
+    search: "?origem=legado",
+    hasSession: false,
+    storefrontOrigin: "https://www.bispocoffees.com.br",
+  };
+
+  assert.equal(resolveDomainRedirect(input), null);
+  assert.equal(
+    resolveDomainRedirect({
+      ...input,
+      enforceStorefrontCanonicalHost: true,
+    }),
+    "https://www.bispocoffees.com.br/loja/sobre?origem=legado",
   );
 });
 

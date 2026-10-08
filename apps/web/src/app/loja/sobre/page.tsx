@@ -8,6 +8,7 @@ import storyBrand from "./brand.module.css";
 import storyNav from "../story-navigation.module.css";
 import premium from "../premium-overrides.module.css";
 import MobileStoreMenu from "../MobileStoreMenu";
+import { getStorefrontOrigin } from "@/lib/storefront-url";
 
 export const metadata: Metadata = {
   title: "Suzi Ninov e José Rezende — fundadores da Bispo Coffees",
@@ -22,7 +23,7 @@ const founderStructuredData = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Bispo Coffees",
-  url: "https://loja.bispocoffees.com.br",
+  url: getStorefrontOrigin(),
   founder: [
     {
       "@type": "Person",

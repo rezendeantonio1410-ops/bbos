@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
+import { getStorefrontOrigin } from "@/lib/storefront-url";
 import { microlots } from "./loja/microlots";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = "https://loja.bispocoffees.com.br";
+  const base = getStorefrontOrigin();
   const now = new Date();
   const pages = [
     "/loja",
