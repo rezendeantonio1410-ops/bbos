@@ -602,6 +602,8 @@ export type ProductionOrderView = {
   batches: ProductionBatchRecord[];
   packaging?: PackagingRecord;
   costs: ProductionCostInput;
+  wipAvailableKg?: number;
+  wipAvailableCost?: number;
   resourceUsages?: ProductionResourceUsageRecord[];
   traceability: Array<{
     id: string;

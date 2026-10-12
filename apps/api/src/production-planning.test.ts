@@ -5,6 +5,7 @@ import {
   calculateRoastCycleCount,
   calculateRoastMetrics,
   calculateRoasterUtilityCost,
+  calculateWipPackagingPlan,
   validateBlendComponents,
   validateRoastBatchCapacity,
 } from "./production-planning";
@@ -93,5 +94,16 @@ test("uma batelada não aceita mais de 17 kg de café verde", () => {
   assert.throws(
     () => validateRoastBatchCapacity(17.001),
     /até 17 kg de café verde/,
+  );
+});
+
+test("saldo WIP é convertido em quantidade inteira de pacotes", () => {
+  assert.deepEqual(calculateWipPackagingPlan(10.5, 500), {
+    producedPackages: 21,
+    finishedOutputKg: 10.5,
+  });
+  assert.throws(
+    () => calculateWipPackagingPlan(10.55, 500),
+    /quantidade inteira de pacotes/,
   );
 });

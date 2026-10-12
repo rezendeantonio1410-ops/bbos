@@ -258,6 +258,8 @@ const mapProductionOrder = (
       otherSuppliesCost: 0,
     },
     costs,
+    wipAvailableKg: Number(row.wipAvailableKg ?? 0),
+    wipAvailableCost: Number(row.wipAvailableCost ?? 0),
     resourceUsages: resourceUsages.map((item) => {
       const resource = item.resource as Record<string, unknown> | undefined;
       return {
@@ -1369,6 +1371,127 @@ function PackagingRegistration({
   );
 }
 
+function RemainingWipPackaging({
+  order,
+  onDone,
+  onCancel,
+}: {
+  order: ProductionOrderView;
+  onDone: (message: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const packageWeightG = order.packaging?.packageWeightG ?? 500;
+  const remainingWipKg = Math.max(
+    0,
+    order.wipAvailableKg ??
+      order.costs.roastedOutputKg - order.costs.finishedOutputKg,
+  );
+  const exactPackages = (remainingWipKg * 1000) / packageWeightG;
+  const producedPackages = Math.round(exactPackages);
+  const packagingUnitCost = order.packaging?.packagingUnitCost ?? 0;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const isPackable =
+    producedPackages > 0 && Math.abs(exactPackages - producedPackages) <= 0.001;
+
+  const submit = async () => {
+    setError("");
+    if (!isPackable)
+      return setError(
+        "O saldo WIP não corresponde a uma quantidade inteira de pacotes.",
+      );
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/production/orders/${order.id}/packaging/complete-wip`,
+        { method: "POST", credentials: "include" },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiError(
+            response,
+            "Não foi possível empacotar o saldo WIP.",
+          ),
+        );
+      const result = (await response.json()) as {
+        producedPackages?: number;
+        finishedOutputKg?: number;
+      };
+      await onDone(
+        `Saldo WIP empacotado: ${Number(result.finishedOutputKg ?? remainingWipKg).toLocaleString("pt-BR")} kg em ${Number(result.producedPackages ?? producedPackages).toLocaleString("pt-BR")} pacotes de ${packageWeightG} g.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível empacotar o saldo WIP.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-emerald-700">
+            Continuação do empacotamento
+          </p>
+          <h3 className="mt-1 text-lg font-bold">Empacotar saldo WIP</h3>
+          <p className="mt-1 text-xs text-stone-600">
+            A torra já foi concluída. Confirme esta etapa somente depois de
+            empacotar fisicamente o saldo abaixo.
+          </p>
+        </div>
+        <button onClick={onCancel} className="rounded-xl border bg-white p-2">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <SummaryCard
+          label="Saldo torrado"
+          value={`${number.format(remainingWipKg)} kg`}
+          icon={Flame}
+        />
+        <SummaryCard
+          label="Nova entrada"
+          value={`${producedPackages} pacotes`}
+          icon={PackageOpen}
+        />
+        <SummaryCard
+          label="Embalagem estimada"
+          value={brl.format(producedPackages * packagingUnitCost)}
+          icon={CircleDollarSign}
+        />
+      </div>
+      <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
+        O BBOS reutilizará o SKU, a embalagem de {packageWeightG} g, o custo
+        unitário e o armazém da primeira entrada. Energia, gás e café não serão
+        lançados novamente.
+      </p>
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-semibold text-stone-500"
+        >
+          Cancelar
+        </button>
+        <Button disabled={busy || !isPackable} onClick={() => void submit()}>
+          {busy
+            ? "Confirmando…"
+            : `Confirmar ${producedPackages} pacotes`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function OrderDrawer({
   order,
   alert,
@@ -1381,7 +1504,9 @@ function OrderDrawer({
   onChanged: (message: string) => Promise<void>;
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
-  const [action, setAction] = useState<"roast" | "pack" | null>(null);
+  const [action, setAction] = useState<
+    "roast" | "pack" | "pack-wip" | null
+  >(null);
   const reservedKg = order.allocations.reduce(
     (sum, item) => sum + item.reservedKg,
     0,
@@ -1391,6 +1516,11 @@ function OrderDrawer({
     0,
   );
   const remainingRoastKg = Math.max(0, reservedKg - roastedInputKg);
+  const remainingWipKg = Math.max(
+    0,
+    order.wipAvailableKg ??
+      order.costs.roastedOutputKg - order.costs.finishedOutputKg,
+  );
   const canRoast =
     ["reserved", "in-production", "roasted"].includes(order.status) &&
     remainingRoastKg > 0.001;
@@ -1398,6 +1528,8 @@ function OrderDrawer({
     ["roasted", "packaging"].includes(order.status) &&
     order.batches.length > 0 &&
     remainingRoastKg <= 0.001;
+  const canPackWip =
+    order.status === "completed" && remainingWipKg > 0.001;
   const cost =
     order.costs.roastedOutputKg > 0 &&
     order.costs.finishedOutputKg > 0 &&
@@ -1421,17 +1553,14 @@ function OrderDrawer({
       ? order.costs.finishedOutputKg / order.costs.roastedOutputKg
       : 1;
   const finishedSharePercent = finishedShareRatio * 100;
-  const remainingWipKg = Math.max(
-    0,
-    order.costs.roastedOutputKg - order.costs.finishedOutputKg,
-  );
   const allocatedRoastStageCost =
     greenCoffeeCost + order.costs.energyCost + order.costs.gasCost;
   const roastCostPerKg =
     order.costs.finishedOutputKg > 0
       ? allocatedRoastStageCost / order.costs.finishedOutputKg
       : 0;
-  const remainingWipCost = remainingWipKg * roastCostPerKg;
+  const remainingWipCost =
+    order.wipAvailableCost ?? remainingWipKg * roastCostPerKg;
   const roastLossKg = order.batches.reduce(
     (sum, batch) => sum + batch.lossKg,
     0,
@@ -1572,11 +1701,15 @@ function OrderDrawer({
               {
                 label: "3. Empacotar",
                 detail:
-                  order.status === "completed"
-                    ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos`
+                  canPackWip
+                    ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos · ${number.format(remainingWipKg)} kg WIP pendentes`
+                    : order.status === "completed"
+                      ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos`
                     : "Entrada no produto acabado",
-                complete: order.status === "completed",
-                current: canPack || order.status === "packaging",
+                complete:
+                  order.status === "completed" && remainingWipKg <= 0.001,
+                current:
+                  canPack || canPackWip || order.status === "packaging",
                 icon: PackageOpen,
               },
             ].map((item) => {
@@ -1606,14 +1739,22 @@ function OrderDrawer({
               );
             })}
           </div>
-          {!action && (canRoast || canPack) && (
+          {!action && (canRoast || canPack || canPackWip) && (
             <div className="mt-4 flex justify-end">
               <Button
-                onClick={() => setAction(canRoast ? "roast" : "pack")}
+                onClick={() =>
+                  setAction(
+                    canRoast ? "roast" : canPackWip ? "pack-wip" : "pack",
+                  )
+                }
                 className="flex items-center gap-2"
               >
                 {canRoast ? <Flame size={15} /> : <PackageOpen size={15} />}
-                {canRoast ? "Registrar torra" : "Empacotar"}
+                {canRoast
+                  ? "Registrar torra"
+                  : canPackWip
+                    ? `Empacotar saldo WIP · ${number.format(remainingWipKg)} kg`
+                    : "Empacotar"}
               </Button>
             </div>
           )}
@@ -1633,6 +1774,18 @@ function OrderDrawer({
         {action === "pack" && (
           <div className="mt-5">
             <PackagingRegistration
+              order={order}
+              onCancel={() => setAction(null)}
+              onDone={async (successMessage) => {
+                await onChanged(successMessage);
+                setAction(null);
+              }}
+            />
+          </div>
+        )}
+        {action === "pack-wip" && (
+          <div className="mt-5">
+            <RemainingWipPackaging
               order={order}
               onCancel={() => setAction(null)}
               onDone={async (successMessage) => {

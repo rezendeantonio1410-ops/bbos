@@ -109,6 +109,31 @@ export function validateRoastBatchCapacity(
   return greenInputKg;
 }
 
+export function calculateWipPackagingPlan(
+  availableWipKg: number,
+  packageWeightGrams: number,
+) {
+  if (!Number.isFinite(availableWipKg) || availableWipKg <= 0)
+    throw new Error("O saldo de café torrado deve ser maior que zero.");
+  if (
+    !Number.isSafeInteger(packageWeightGrams) ||
+    packageWeightGrams <= 0
+  )
+    throw new Error("O peso da apresentação deve ser um inteiro positivo.");
+
+  const exactPackages = (availableWipKg * 1000) / packageWeightGrams;
+  const producedPackages = Math.round(exactPackages);
+  if (Math.abs(exactPackages - producedPackages) > 0.001)
+    throw new Error(
+      "O saldo WIP não corresponde a uma quantidade inteira de pacotes.",
+    );
+
+  return {
+    producedPackages,
+    finishedOutputKg: (producedPackages * packageWeightGrams) / 1000,
+  };
+}
+
 /**
  * Atilla Huno: a referência operacional adotada é de até 17 kg de café verde.
  * A ficha técnica vigente informa 10 min de torra e 2 min de resfriamento. O
