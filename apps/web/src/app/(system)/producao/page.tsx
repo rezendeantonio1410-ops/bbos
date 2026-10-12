@@ -1408,10 +1408,30 @@ function OrderDrawer({
     (sum, item) => sum + item.reservedKg,
     0,
   );
+  const totalGreenCoffeeCost = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg * item.realCostPerKg,
+    0,
+  );
   const greenCoffeeCost =
     order.costs.greenCoffeeConsumedCost + order.costs.roastLossCost;
   const averageGreenCoffeeCost =
-    greenCoffeeInputKg > 0 ? greenCoffeeCost / greenCoffeeInputKg : 0;
+    greenCoffeeInputKg > 0 ? totalGreenCoffeeCost / greenCoffeeInputKg : 0;
+  const finishedShareRatio =
+    order.costs.roastedOutputKg > 0
+      ? order.costs.finishedOutputKg / order.costs.roastedOutputKg
+      : 1;
+  const finishedSharePercent = finishedShareRatio * 100;
+  const remainingWipKg = Math.max(
+    0,
+    order.costs.roastedOutputKg - order.costs.finishedOutputKg,
+  );
+  const allocatedRoastStageCost =
+    greenCoffeeCost + order.costs.energyCost + order.costs.gasCost;
+  const roastCostPerKg =
+    order.costs.finishedOutputKg > 0
+      ? allocatedRoastStageCost / order.costs.finishedOutputKg
+      : 0;
+  const remainingWipCost = remainingWipKg * roastCostPerKg;
   const roastLossKg = order.batches.reduce(
     (sum, batch) => sum + batch.lossKg,
     0,
@@ -1428,8 +1448,8 @@ function OrderDrawer({
   const costComponents = cost
     ? [
         {
-          label: "Café verde consumido",
-          detail: `${number.format(greenCoffeeInputKg)} kg × ${brl.format(averageGreenCoffeeCost)}/kg`,
+          label: "Café verde alocado ao produto acabado",
+          detail: `${number.format(finishedSharePercent)}% do custo de ${number.format(greenCoffeeInputKg)} kg × ${brl.format(averageGreenCoffeeCost)}/kg`,
           source: "Lotes da OP",
           amount: greenCoffeeCost,
         },
@@ -1449,7 +1469,7 @@ function OrderDrawer({
           label: "Energia",
           detail:
             energyUsage > 0
-              ? `${preciseNumber.format(energyUsage)} kWh × ${brl.format(primaryResource?.energyRatePerKwh ?? 0)}/kWh`
+              ? `${preciseNumber.format(energyUsage)} kWh × ${brl.format(primaryResource?.energyRatePerKwh ?? 0)}/kWh · ${number.format(finishedSharePercent)}% alocado`
               : "Consumo do recurso produtivo",
           source: primaryResource?.resourceName ?? "Custos industriais",
           amount: order.costs.energyCost,
@@ -1458,7 +1478,7 @@ function OrderDrawer({
           label: "Gás",
           detail:
             gasUsage > 0
-              ? `${preciseNumber.format(gasUsage)} kg × ${brl.format(primaryResource?.gasRatePerKg ?? 0)}/kg`
+              ? `${preciseNumber.format(gasUsage)} kg × ${brl.format(primaryResource?.gasRatePerKg ?? 0)}/kg · ${number.format(finishedSharePercent)}% alocado`
               : "Consumo do recurso produtivo",
           source: primaryResource?.resourceName ?? "Custos industriais",
           amount: order.costs.gasCost,
@@ -1767,7 +1787,9 @@ function OrderDrawer({
             {cost ? (
               <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
                 <div className="bg-forest-950 p-5 text-white">
-                  <p className="text-xs text-white/60">Custo total apurado</p>
+                  <p className="text-xs text-white/60">
+                    Custo do produto acabado
+                  </p>
                   <p className="mt-1 text-3xl font-bold tracking-tight">
                     {brl.format(cost.totalCost)}
                   </p>
@@ -1808,7 +1830,7 @@ function OrderDrawer({
                         Memória de cálculo
                       </h4>
                       <p className="mt-1 text-xs text-stone-500">
-                        Valores efetivamente incorporados ao custo desta OP.
+                        Valores incorporados aos pacotes concluídos nesta OP.
                       </p>
                     </div>
                     <Badge tone="success">
@@ -1838,12 +1860,28 @@ function OrderDrawer({
                       </div>
                     ))}
                   </div>
+                  {remainingWipKg > 0.001 && (
+                    <div className="mt-3 flex items-start justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-950">
+                      <div>
+                        <strong>Café torrado em processo (WIP)</strong>
+                        <p className="mt-1 text-emerald-800">
+                          {number.format(remainingWipKg)} kg ×{" "}
+                          {brl.format(roastCostPerKg)}/kg. Este saldo não está
+                          incluído no custo do produto acabado acima.
+                        </p>
+                      </div>
+                      <strong className="shrink-0 text-sm">
+                        {brl.format(remainingWipCost)}
+                      </strong>
+                    </div>
+                  )}
                   {roastLossKg > 0 && (
                     <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-900">
                       <strong>Perda real de torra:</strong>{" "}
-                      {number.format(roastLossKg)} kg, equivalentes a{" "}
-                      {brl.format(order.costs.roastLossCost)}. Esse valor já
-                      está incluído em “Café verde consumido”.
+                      {number.format(roastLossKg)} kg. A parcela de{" "}
+                      {brl.format(order.costs.roastLossCost)} atribuída aos
+                      pacotes já está incluída em “Café verde alocado ao
+                      produto acabado”.
                     </div>
                   )}
                   {missingCostComponents.length > 0 && (

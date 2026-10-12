@@ -1,4 +1,7 @@
-import type { ProductionCostInput } from "@bbos/shared";
+import {
+  allocateRoastStageCosts,
+  type ProductionCostInput,
+} from "@bbos/shared";
 
 type ProductionCostSource = {
   consumptions: Array<Record<string, unknown>>;
@@ -52,17 +55,42 @@ export function buildProductionCostInput({
     (sum, item) => sum + Number(item.totalCost ?? 0),
     0,
   );
+  const greenCoffeeConsumedCost = Math.max(
+    0,
+    totalGreenCoffeeCost - roastLossCost,
+  );
+  const energyCost = eventAmount(["ENERGY"]);
+  const gasCost = eventAmount(["GAS"]);
+  const roastStageAllocation =
+    roastedOutputKg > 0 &&
+    finishedOutputKg > 0 &&
+    finishedOutputKg <= roastedOutputKg
+      ? allocateRoastStageCosts({
+          greenCoffeeConsumedCost,
+          roastLossCost,
+          energyCost,
+          gasCost,
+          roastedOutputKg,
+          finishedOutputKg,
+        })
+      : {
+          allocatedGreenCoffeeConsumedCost: greenCoffeeConsumedCost,
+          allocatedRoastLossCost: roastLossCost,
+          allocatedEnergyCost: energyCost,
+          allocatedGasCost: gasCost,
+        };
 
   return {
-    greenCoffeeConsumedCost: Math.max(0, totalGreenCoffeeCost - roastLossCost),
-    roastLossCost,
+    greenCoffeeConsumedCost:
+      roastStageAllocation.allocatedGreenCoffeeConsumedCost,
+    roastLossCost: roastStageAllocation.allocatedRoastLossCost,
     packagingCost: packagingConsumptions.length
       ? packagingConsumptionCost
       : eventAmount(["PACKAGING", "LABEL", "VALVE", "BOX"]),
     suppliesCost: eventAmount(["SUPPLIES"]),
     laborCost: eventAmount(["LABOR"]),
-    energyCost: eventAmount(["ENERGY"]),
-    gasCost: eventAmount(["GAS"]),
+    energyCost: roastStageAllocation.allocatedEnergyCost,
+    gasCost: roastStageAllocation.allocatedGasCost,
     otherIndustrialCosts: eventAmount([
       "DEPRECIATION",
       "MAINTENANCE",

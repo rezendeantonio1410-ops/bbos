@@ -18,6 +18,7 @@ import {
   ProductionStatus,
 } from "@bbos/database";
 import {
+  allocateRoastStageCosts,
   calculateProductionCost,
   calculateRealProductionCost,
   ROASTER_OPERATIONAL_USAGE_NOTE,
@@ -785,14 +786,24 @@ export class ProductionController {
           automaticUtilities?.energyCost ?? body.energyCost;
         const resolvedGasCost =
           automaticUtilities?.gasCost ?? body.gasCost ?? 0;
-        const cost = calculateProductionCost({
-          greenCoffeeConsumedCost: consumedCost - lossKg * averageCoffeeCost,
+        const roastStageAllocation = allocateRoastStageCosts({
+          greenCoffeeConsumedCost:
+            consumedCost - lossKg * averageCoffeeCost,
           roastLossCost: lossKg * averageCoffeeCost,
+          energyCost: resolvedEnergyCost,
+          gasCost: resolvedGasCost,
+          roastedOutputKg,
+          finishedOutputKg: body.finishedOutputKg,
+        });
+        const cost = calculateProductionCost({
+          greenCoffeeConsumedCost:
+            roastStageAllocation.allocatedGreenCoffeeConsumedCost,
+          roastLossCost: roastStageAllocation.allocatedRoastLossCost,
           packagingCost,
           suppliesCost: body.suppliesCost,
           laborCost: body.laborCost,
-          energyCost: resolvedEnergyCost,
-          gasCost: resolvedGasCost,
+          energyCost: roastStageAllocation.allocatedEnergyCost,
+          gasCost: roastStageAllocation.allocatedGasCost,
           otherIndustrialCosts: body.otherIndustrialCosts,
           roastedOutputKg,
           finishedOutputKg: body.finishedOutputKg,
@@ -913,6 +924,18 @@ export class ProductionController {
             reason: `Conclusão da ${order.code}`,
           },
         });
+        const roastCostPerKg = new Prisma.Decimal(
+          roastStageAllocation.roastCostPerKg,
+        );
+        await transaction.$executeRaw`
+          UPDATE "RoastedWipLot"
+          SET
+            "costPerKg" = ${roastCostPerKg},
+            "producedCost" = ROUND("producedKg" * ${roastCostPerKg}, 2),
+            "availableCost" = ROUND("availableKg" * ${roastCostPerKg}, 2),
+            "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "productionOrderId" = ${order.id}
+        `;
         const existingTypes = new Set(
           order.costEvents.map((item) => item.type),
         );

@@ -23,6 +23,82 @@ export class ProductionCostRuleError extends Error {
   }
 }
 
+export type RoastStageCostAllocationInput = {
+  greenCoffeeConsumedCost: number;
+  roastLossCost: number;
+  energyCost: number;
+  gasCost: number;
+  roastedOutputKg: number;
+  finishedOutputKg: number;
+};
+
+export type RoastStageCostAllocationResult = {
+  finishedShareRatio: number;
+  remainingWipKg: number;
+  roastCostPerKg: number;
+  allocatedGreenCoffeeConsumedCost: number;
+  allocatedRoastLossCost: number;
+  allocatedEnergyCost: number;
+  allocatedGasCost: number;
+  allocatedRoastStageCost: number;
+  remainingWipCost: number;
+};
+
+/**
+ * Rateia os custos já incorridos na torra entre o produto que seguiu para
+ * embalagem e o café torrado que permanece em processo (WIP).
+ */
+export function allocateRoastStageCosts(
+  input: RoastStageCostAllocationInput,
+): RoastStageCostAllocationResult {
+  const monetaryValues = [
+    input.greenCoffeeConsumedCost,
+    input.roastLossCost,
+    input.energyCost,
+    input.gasCost,
+  ];
+  if (monetaryValues.some((value) => !Number.isFinite(value) || value < 0))
+    throw new ProductionCostRuleError(
+      "Os custos da torra devem ser valores não negativos.",
+    );
+  if (!Number.isFinite(input.roastedOutputKg) || input.roastedOutputKg <= 0)
+    throw new ProductionCostRuleError(
+      "O peso torrado deve ser maior que zero para ratear o custo da torra.",
+    );
+  if (
+    !Number.isFinite(input.finishedOutputKg) ||
+    input.finishedOutputKg <= 0 ||
+    input.finishedOutputKg > input.roastedOutputKg
+  )
+    throw new ProductionCostRuleError(
+      "O peso acabado deve estar entre zero e o peso torrado.",
+    );
+
+  const finishedShareRatio =
+    input.finishedOutputKg / input.roastedOutputKg;
+  const remainingWipKg = input.roastedOutputKg - input.finishedOutputKg;
+  const totalRoastStageCost = monetaryValues.reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const roastCostPerKg = totalRoastStageCost / input.roastedOutputKg;
+  const allocate = (value: number) => value * finishedShareRatio;
+
+  return {
+    finishedShareRatio,
+    remainingWipKg,
+    roastCostPerKg,
+    allocatedGreenCoffeeConsumedCost: allocate(
+      input.greenCoffeeConsumedCost,
+    ),
+    allocatedRoastLossCost: allocate(input.roastLossCost),
+    allocatedEnergyCost: allocate(input.energyCost),
+    allocatedGasCost: allocate(input.gasCost),
+    allocatedRoastStageCost: totalRoastStageCost * finishedShareRatio,
+    remainingWipCost: roastCostPerKg * remainingWipKg,
+  };
+}
+
 export function calculateRoastLoss(
   greenInputKg: number,
   roastedOutputKg: number,
