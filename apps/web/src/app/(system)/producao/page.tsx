@@ -34,6 +34,7 @@ import {
 } from "@bbos/shared/product-presentation";
 import { loadProductCatalog } from "@/lib/product-catalog-api";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { buildProductionCostInput } from "@/lib/production-cost-input";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -41,6 +42,9 @@ const brl = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+const preciseNumber = new Intl.NumberFormat("pt-BR", {
+  maximumFractionDigits: 4,
+});
 const decimalCurrency = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -146,6 +150,12 @@ const mapProductionOrder = (
   const packagingConsumptions = Array.isArray(row.packagingConsumptions)
     ? (row.packagingConsumptions as Array<Record<string, unknown>>)
     : [];
+  const costEvents = Array.isArray(row.costEvents)
+    ? (row.costEvents as Array<Record<string, unknown>>)
+    : [];
+  const resourceUsages = Array.isArray(row.resourceUsages)
+    ? (row.resourceUsages as Array<Record<string, unknown>>)
+    : [];
   const finishedMovements = Array.isArray(row.finishedGoodsMovements)
     ? (row.finishedGoodsMovements as Array<Record<string, unknown>>)
     : [];
@@ -166,15 +176,16 @@ const mapProductionOrder = (
     (sum, batch) => sum + Number(batch.roastedOutputKg ?? 0),
     0,
   );
-  const greenCoffeeConsumedCost = consumptions.reduce(
-    (sum, item) =>
-      sum + Number(item.reservedKg ?? 0) * Number(item.realCostPerKg ?? 0),
-    0,
-  );
-  const packagingCost = packagingConsumptions.reduce(
-    (sum, item) => sum + Number(item.totalCost ?? 0),
-    0,
-  );
+  const costs = buildProductionCostInput({
+    consumptions,
+    batches,
+    packagingConsumptions,
+    costEvents,
+    roastedOutputKg,
+    finishedOutputKg,
+    producedPackages,
+    sku: String(row.sku ?? "—"),
+  });
   return {
     id: String(row.id),
     code: String(row.code),
@@ -240,22 +251,20 @@ const mapProductionOrder = (
       boxesCost: 0,
       otherSuppliesCost: 0,
     },
-    costs: {
-      greenCoffeeConsumedCost,
-      roastLossCost: 0,
-      packagingCost,
-      suppliesCost: 0,
-      laborCost: 0,
-      energyCost: 0,
-      gasCost: 0,
-      otherIndustrialCosts: 0,
-      roastedOutputKg,
-      finishedOutputKg,
-      producedPackages,
-      standardCostPerKg: 0,
-      sku: String(row.sku ?? "—"),
-      sourceCostEventIds: [],
-    },
+    costs,
+    resourceUsages: resourceUsages.map((item) => {
+      const resource = item.resource as Record<string, unknown> | undefined;
+      return {
+        resourceCode: String(resource?.code ?? "—"),
+        resourceName: String(resource?.name ?? "Recurso produtivo"),
+        machineHours: Number(item.machineHours ?? 0),
+        measuredEnergyKwh: Number(item.measuredEnergy ?? 0),
+        measuredGasKg: Number(item.measuredGas ?? 0),
+        energyRatePerKwh: Number(resource?.energyRatePerKwh ?? 0),
+        gasRatePerKg: Number(resource?.gasRatePerUnit ?? 0),
+        notes: item.notes ? String(item.notes) : undefined,
+      };
+    }),
     traceability: traceabilityForStatus(currentStatus),
   };
 };
@@ -1369,6 +1378,85 @@ function OrderDrawer({
     order.costs.producedPackages > 0
       ? calculateProductionCost(order.costs)
       : null;
+  const greenCoffeeInputKg = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg,
+    0,
+  );
+  const greenCoffeeCost =
+    order.costs.greenCoffeeConsumedCost + order.costs.roastLossCost;
+  const averageGreenCoffeeCost =
+    greenCoffeeInputKg > 0 ? greenCoffeeCost / greenCoffeeInputKg : 0;
+  const roastLossKg = order.batches.reduce(
+    (sum, batch) => sum + batch.lossKg,
+    0,
+  );
+  const energyUsage = (order.resourceUsages ?? []).reduce(
+    (sum, item) => sum + item.measuredEnergyKwh,
+    0,
+  );
+  const gasUsage = (order.resourceUsages ?? []).reduce(
+    (sum, item) => sum + item.measuredGasKg,
+    0,
+  );
+  const primaryResource = order.resourceUsages?.[0];
+  const costComponents = cost
+    ? [
+        {
+          label: "Café verde consumido",
+          detail: `${number.format(greenCoffeeInputKg)} kg × ${brl.format(averageGreenCoffeeCost)}/kg`,
+          source: "Lotes da OP",
+          amount: greenCoffeeCost,
+        },
+        {
+          label: "Embalagens",
+          detail: `${order.packaging?.producedPackages ?? 0} un. × ${brl.format(order.packaging?.packagingUnitCost ?? 0)}`,
+          source: "Empacotamento",
+          amount: order.costs.packagingCost,
+        },
+        {
+          label: "Mão de obra",
+          detail: "Valor informado no fechamento da OP",
+          source: "Empacotamento",
+          amount: order.costs.laborCost,
+        },
+        {
+          label: "Energia",
+          detail:
+            energyUsage > 0
+              ? `${preciseNumber.format(energyUsage)} kWh × ${brl.format(primaryResource?.energyRatePerKwh ?? 0)}/kWh`
+              : "Consumo do recurso produtivo",
+          source: primaryResource?.resourceName ?? "Custos industriais",
+          amount: order.costs.energyCost,
+        },
+        {
+          label: "Gás",
+          detail:
+            gasUsage > 0
+              ? `${preciseNumber.format(gasUsage)} kg × ${brl.format(primaryResource?.gasRatePerKg ?? 0)}/kg`
+              : "Consumo do recurso produtivo",
+          source: primaryResource?.resourceName ?? "Custos industriais",
+          amount: order.costs.gasCost,
+        },
+        {
+          label: "Insumos",
+          detail: "Materiais adicionais da produção",
+          source: "Empacotamento",
+          amount: order.costs.suppliesCost,
+        },
+        {
+          label: "Outros custos industriais",
+          detail: "Custos complementares vinculados à OP",
+          source: "Custos industriais",
+          amount: order.costs.otherIndustrialCosts,
+        },
+      ]
+    : [];
+  const activeCostComponents = costComponents.filter(
+    (component) => component.amount > 0.004,
+  );
+  const missingCostComponents = costComponents
+    .filter((component) => component.amount <= 0.004)
+    .map((component) => component.label.toLocaleLowerCase("pt-BR"));
   const sections = [
     "Resumo",
     "Produção",
@@ -1632,11 +1720,18 @@ function OrderDrawer({
                   icon={PackageCheck}
                 />
                 <SummaryCard
-                  label="Perdas"
+                  label="Diferença do plano"
                   value={`${order.packaging.lossPackages} un.`}
                   icon={AlertTriangle}
+                  tone={order.packaging.lossPackages > 0 ? "warning" : "normal"}
                 />
               </div>
+            )}
+            {order.packaging && order.packaging.lossPackages > 0 && (
+              <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                Esta diferença compara o planejado com o produzido. Não
+                representa, por si só, embalagens descartadas.
+              </p>
             )}
           </section>
           <section id="op-Custos">
@@ -1644,29 +1739,106 @@ function OrderDrawer({
               Custo real da OP
             </h3>
             {cost ? (
-              <div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white">
-                <p className="text-xs text-white/50">Custo total</p>
-                <p className="mt-1 text-2xl font-bold">
-                  {brl.format(cost.totalCost)}
-                </p>
-                <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
-                  <span>
-                    Custo/kg acabado
-                    <br />
-                    <strong>{brl.format(cost.costPerFinishedKg)}</strong>
-                  </span>
-                  <span>
-                    Custo/pacote
-                    <br />
-                    <strong>{brl.format(cost.costPerPackage)}</strong>
-                  </span>
-                  <span>
-                    Desvio padrão
-                    <br />
-                    <strong>
-                      {number.format(cost.standardCostDeviationPercent)}%
-                    </strong>
-                  </span>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                <div className="bg-forest-950 p-5 text-white">
+                  <p className="text-xs text-white/60">Custo total apurado</p>
+                  <p className="mt-1 text-3xl font-bold tracking-tight">
+                    {brl.format(cost.totalCost)}
+                  </p>
+                  <div className="mt-5 grid gap-4 text-xs sm:grid-cols-3">
+                    <span>
+                      <span className="text-white/60">Custo/kg acabado</span>
+                      <br />
+                      <strong className="text-sm">
+                        {brl.format(cost.costPerFinishedKg)}
+                      </strong>
+                    </span>
+                    <span>
+                      <span className="text-white/60">Custo/pacote</span>
+                      <br />
+                      <strong className="text-sm">
+                        {brl.format(cost.costPerPackage)}
+                      </strong>
+                    </span>
+                    <span>
+                      <span className="text-white/60">
+                        {order.costs.standardCostPerKg > 0
+                          ? "Desvio do padrão"
+                          : "Custo padrão"}
+                      </span>
+                      <br />
+                      <strong className="text-sm">
+                        {order.costs.standardCostPerKg > 0
+                          ? `${number.format(cost.standardCostDeviationPercent)}%`
+                          : "Não configurado"}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-stone-900">
+                        Memória de cálculo
+                      </h4>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Valores efetivamente incorporados ao custo desta OP.
+                      </p>
+                    </div>
+                    <Badge tone="success">
+                      {activeCostComponents.length} componentes
+                    </Badge>
+                  </div>
+                  <div className="mt-4 divide-y divide-stone-100">
+                    {activeCostComponents.map((component) => (
+                      <div
+                        key={component.label}
+                        className="flex items-start justify-between gap-4 py-3 first:pt-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-stone-800">
+                            {component.label}
+                          </p>
+                          <p className="mt-0.5 text-xs text-stone-500">
+                            {component.detail}
+                          </p>
+                          <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-forest-700">
+                            Origem: {component.source}
+                          </p>
+                        </div>
+                        <strong className="shrink-0 text-sm text-stone-900">
+                          {brl.format(component.amount)}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                  {roastLossKg > 0 && (
+                    <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                      <strong>Perda real de torra:</strong>{" "}
+                      {number.format(roastLossKg)} kg, equivalentes a{" "}
+                      {brl.format(order.costs.roastLossCost)}. Esse valor já
+                      está incluído em “Café verde consumido”.
+                    </div>
+                  )}
+                  {missingCostComponents.length > 0 && (
+                    <p className="mt-3 text-[11px] text-stone-500">
+                      Sem valor lançado: {missingCostComponents.join(", ")}.
+                    </p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-4 border-t pt-4 text-xs font-semibold text-forest-700">
+                    <Link
+                      href="/custos/lancamentos"
+                      className="inline-flex items-center gap-1"
+                    >
+                      Ver lançamentos <ChevronRight size={13} />
+                    </Link>
+                    <Link
+                      href="/custos/maquinas"
+                      className="inline-flex items-center gap-1"
+                    >
+                      Ver máquinas e tarifas <ChevronRight size={13} />
+                    </Link>
+                  </div>
                 </div>
               </div>
             ) : (

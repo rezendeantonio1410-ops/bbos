@@ -186,6 +186,28 @@ export class ProductionController {
         batches: true,
         packagingConsumptions: true,
         finishedGoodsMovements: true,
+        resourceUsages: {
+          include: {
+            resource: {
+              select: {
+                code: true,
+                name: true,
+                energyRatePerKwh: true,
+                gasRatePerUnit: true,
+              },
+            },
+          },
+        },
+        costEvents: {
+          orderBy: { occurredAt: "asc" },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            description: true,
+            costCenter: { select: { code: true, name: true } },
+          },
+        },
       },
       orderBy: { plannedAt: "desc" },
     });

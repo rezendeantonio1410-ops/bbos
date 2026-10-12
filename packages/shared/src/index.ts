@@ -554,6 +554,17 @@ export type ProductionCostResult = {
   sourceCostEventIds: string[];
 };
 
+export type ProductionResourceUsageRecord = {
+  resourceCode: string;
+  resourceName: string;
+  machineHours: number;
+  measuredEnergyKwh: number;
+  measuredGasKg: number;
+  energyRatePerKwh: number;
+  gasRatePerKg: number;
+  notes?: string;
+};
+
 export type ProductionAlert = {
   id: string;
   orderId: string;
@@ -591,6 +602,7 @@ export type ProductionOrderView = {
   batches: ProductionBatchRecord[];
   packaging?: PackagingRecord;
   costs: ProductionCostInput;
+  resourceUsages?: ProductionResourceUsageRecord[];
   traceability: Array<{
     id: string;
     label: string;
