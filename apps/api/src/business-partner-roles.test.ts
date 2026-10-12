@@ -32,4 +32,5 @@ test("partner writes keep the compatibility broker profile synchronized", () => 
   assert.match(partners, /syncBrokerProfile/);
   assert.match(partners, /Habilite ao menos uma função/);
   assert.match(partners, /businessPartnerId:\s*partner\.id/);
+  assert.match(partners, /broker\.id AS "brokerId"/);
 });

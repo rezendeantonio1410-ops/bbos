@@ -107,10 +107,12 @@ export class StorefrontPartnersController {
     return this.database.$queryRawUnsafe<any[]>(
       `SELECT partner.*, portal.id AS "portalUserId", portal.email AS "portalEmail",
               portal.active AS "portalActive",
+              broker.id AS "brokerId", broker.active AS "brokerActive",
               (SELECT COUNT(*)::int FROM "StorefrontPartnerCustomer" link
                 WHERE link."partnerId"=partner.id) AS "customerCount"
          FROM "StorefrontPartner" partner
          LEFT JOIN "User" portal ON portal."storefrontPartnerId"=partner.id
+         LEFT JOIN "Broker" broker ON broker."businessPartnerId"=partner.id
         WHERE partner."companyId"=$1
         ORDER BY partner.name ASC`,
       actor.companyId,

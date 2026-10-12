@@ -75,6 +75,15 @@ type Customer = {
 
 type Broker = { id: string; name: string; tradeName?: string | null };
 
+type BusinessPartnerBroker = {
+  name: string;
+  tradeName?: string | null;
+  active: boolean;
+  isSalesBroker: boolean;
+  brokerId?: string | null;
+  brokerActive?: boolean | null;
+};
+
 type CustomerHealth = {
   creditStatus?: string;
   creditReviewPending?: boolean;
@@ -429,15 +438,36 @@ export default function OrdersPage() {
   const [message, setMessage] = useState("");
 
   const refreshOptions = async () => {
-    const response = await fetch(`${salesOrdersApi()}/options`, {
-      credentials: "include",
-      cache: "no-store",
-    });
+    const [response, partnersResponse] = await Promise.all([
+      fetch(`${salesOrdersApi()}/options`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`${getApiBaseUrl()}/storefront/partners`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+    ]);
     if (!response.ok) return;
     const options = await response.json();
+    const partnerBrokers: Broker[] = partnersResponse.ok
+      ? ((await partnersResponse.json()) as BusinessPartnerBroker[])
+          .filter(
+            (partner) =>
+              partner.active &&
+              partner.isSalesBroker &&
+              partner.brokerActive &&
+              partner.brokerId,
+          )
+          .map((partner) => ({
+            id: partner.brokerId!,
+            name: partner.name,
+            tradeName: partner.tradeName,
+          }))
+      : [];
     setCustomers(options.customers);
     setVariants(options.variants);
-    setBrokers(options.brokers ?? []);
+    setBrokers(partnerBrokers.length ? partnerBrokers : (options.brokers ?? []));
   };
 
   const refresh = async () => {
