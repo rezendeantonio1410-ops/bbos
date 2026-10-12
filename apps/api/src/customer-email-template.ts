@@ -34,6 +34,19 @@ export type CustomerEmailPayload = {
   estimatedDeliveryDays?: number;
 };
 
+export type PartnerOrderConfirmedEmailPayload = {
+  partnerName?: string;
+  orderCode?: string;
+  customerName?: string;
+  packageQuantity?: number;
+  commissionMode?: "PERCENTAGE" | "PER_PACKAGE";
+  commissionPercent?: number;
+  commissionPerPackageCents?: number;
+  commissionAmountCents?: number;
+  totalCents?: number;
+  items?: EmailItem[];
+};
+
 const escapeHtml = (value: unknown) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -238,5 +251,36 @@ export function renderCustomerAccessEmail(
     <tr><td style="padding:42px"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#626B69">Seu código de acesso</div><div style="margin:18px 0 22px;padding:24px 18px;background:#0E191D;color:#FFFFFF;text-align:center;font:500 34px/42px Arial,sans-serif;letter-spacing:10px">${escapeHtml(payload.code)}</div><div style="font:13px/21px Arial,sans-serif;color:#626B69">Este código vale por ${escapeHtml(payload.expiresInMinutes)} minutos e só pode ser usado uma vez. Se você não solicitou o acesso, ignore esta mensagem.</div></td></tr>
     <tr><td style="padding:0 42px 32px;text-align:center;font:11px/18px Arial,sans-serif;color:#626B69">Nunca compartilhe este código.<br>Se precisar, responda a este e-mail.</td></tr>
     <tr><td style="padding:25px 42px;background:#E0EAE9"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:500 13px Arial,sans-serif;letter-spacing:2px;color:#0E191D">BISPO</td><td align="right" style="font:9px/15px Arial,sans-serif;letter-spacing:.4px;text-transform:uppercase;color:#52605D">José &amp; Suzi · Bispo Coffees<br>True Coffee · Londrina, Paraná</td></tr></table></td></tr>
+  </table></td></tr></table></body></html>`;
+}
+
+export function renderPartnerOrderConfirmedEmail(
+  payload: PartnerOrderConfirmedEmailPayload,
+  assets: { logoUrl: string; sealUrl: string },
+) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const rows = items.length
+    ? itemRows(items)
+    : `<tr><td style="padding:18px 0;border-top:1px solid #E0EAE9;font:14px Arial,sans-serif;color:#626B69">Itens não informados</td></tr>`;
+  const firstName =
+    String(payload.partnerName || "Parceiro")
+      .trim()
+      .split(/\s+/)[0] || "Parceiro";
+  const packageQuantity = Number(payload.packageQuantity || 0);
+  const commissionRule =
+    payload.commissionMode === "PER_PACKAGE"
+      ? `${packageQuantity} pacote${packageQuantity === 1 ? "" : "s"} × ${money(payload.commissionPerPackageCents)} por pacote`
+      : `${Number(payload.commissionPercent || 0).toLocaleString("pt-BR", {
+          maximumFractionDigits: 4,
+        })}% sobre os produtos`;
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pedido confirmado · ${escapeHtml(payload.orderCode)}</title></head><body style="margin:0;padding:0;background:#F1EEE8;color:#0E191D"><div style="display:none;max-height:0;overflow:hidden;opacity:0">Pedido confirmado com comissão registrada.&nbsp;&zwnj;&nbsp;&zwnj;</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F1EEE8"><tr><td align="center" style="padding:24px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#FFFFFF">
+    <tr><td style="height:4px;background:#0E191D;font-size:0;line-height:0">&nbsp;</td></tr>
+    <tr><td style="padding:25px 38px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="72"><img src="${escapeHtml(assets.sealUrl)}" width="62" height="62" alt="Selo Bispo True Coffee" style="display:block;border:0;border-radius:50%"></td><td valign="middle"><img src="${escapeHtml(assets.logoUrl)}" width="168" alt="Bispo True Coffee" style="display:block;border:0;width:168px;max-width:100%;height:auto"></td><td align="right" valign="middle" style="font:9px/15px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Aviso ao<br>parceiro</td></tr></table></td></tr>
+    <tr><td style="padding:43px 42px 38px;background:#0A0A0A;color:#FFFFFF"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#E0EAE9">Pedido confirmado</div><h1 style="margin:18px 0 17px;font-family:Georgia,'Times New Roman',serif;font-size:36px;line-height:42px;font-weight:400;color:#FFFFFF">Sua intermediação<br>foi registrada.</h1><div style="font:14px/23px Arial,sans-serif;color:#E0EAE9">${escapeHtml(firstName)}, o pedido abaixo foi confirmado e a comissão ficou vinculada à operação.</div><div style="margin-top:25px;padding-top:16px;border-top:1px solid #3E484B;font:700 12px/17px Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;color:#FFFFFF">${escapeHtml(payload.orderCode)}</div></td></tr>
+    <tr><td style="padding:38px 42px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="50%" valign="top"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Cliente</div><div style="padding-top:8px;font:16px/22px Arial,sans-serif;color:#0E191D">${escapeHtml(payload.customerName || "Não informado")}</div></td><td width="50%" valign="top" align="right"><div style="font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Pacotes</div><div style="padding-top:8px;font:16px/22px Arial,sans-serif;color:#0E191D">${escapeHtml(packageQuantity)}</div></td></tr></table></td></tr>
+    <tr><td style="padding:30px 42px 0"><div style="font:10px/14px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#0E191D">Itens do pedido</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px">${rows}<tr><td colspan="2" style="border-top:1px solid #E0EAE9"></td></tr></table></td></tr>
+    <tr><td style="padding:30px 42px 38px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:5px 0;font:13px Arial,sans-serif;color:#626B69">Valor do pedido</td><td align="right" style="padding:5px 0;font:13px Arial,sans-serif;color:#0E191D">${escapeHtml(money(payload.totalCents))}</td></tr><tr><td colspan="2" style="padding:18px 0 7px;border-top:1px solid #E0EAE9;font:10px Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#626B69">Regra da comissão</td></tr><tr><td colspan="2" style="padding:0 0 16px;font:14px/22px Arial,sans-serif;color:#0E191D">${escapeHtml(commissionRule)}</td></tr><tr><td style="padding:17px 0 5px;border-top:1px solid #E0EAE9;font:20px Georgia,'Times New Roman',serif;color:#0E191D">Comissão total</td><td align="right" style="padding:17px 0 5px;border-top:1px solid #E0EAE9;font:20px Georgia,'Times New Roman',serif;color:#0E191D">${escapeHtml(money(payload.commissionAmountCents))}</td></tr></table><div style="padding-top:18px;font:12px/19px Arial,sans-serif;color:#626B69">A comissão seguirá para o financeiro conforme o avanço fiscal do pedido.</div></td></tr>
+    <tr><td style="padding:25px 42px;background:#E0EAE9"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:500 13px Arial,sans-serif;letter-spacing:2px;color:#0E191D">BISPO</td><td align="right" style="font:9px/15px Arial,sans-serif;letter-spacing:.4px;text-transform:uppercase;color:#52605D">Equipe Bispo Coffees<br>True Coffee · Londrina, Paraná</td></tr></table></td></tr>
   </table></td></tr></table></body></html>`;
 }

@@ -4,6 +4,7 @@ import {
   renderCustomerAccessEmail,
   renderCustomerEmail,
   renderOperationsOrderEmail,
+  renderPartnerOrderConfirmedEmail,
 } from "./customer-email-template";
 
 test("renders the approved Bispo transactional email with escaped order data", () => {
@@ -130,5 +131,41 @@ test("renders the paid order preparation email for the Bispo team", () => {
   assert.match(html, /José Rezende/);
   assert.match(html, /jose@example\.com/);
   assert.match(html, /Abrir pedido/);
+  assert.doesNotMatch(html, /undefined/);
+});
+
+test("renders the confirmed order and commission for the sales partner", () => {
+  const html = renderPartnerOrderConfirmedEmail(
+    {
+      partnerName: "Gustavo <Nivov>",
+      orderCode: "B-2026-000123",
+      customerName: "Cliente & Companhia",
+      packageQuantity: 37,
+      commissionMode: "PER_PACKAGE",
+      commissionPerPackageCents: 250,
+      commissionAmountCents: 9250,
+      totalCents: 172200,
+      items: [
+        {
+          name: "Café Gourmet White Label",
+          quantity: 37,
+          totalCents: 172200,
+        },
+      ],
+    },
+    {
+      logoUrl: "https://cdn.example/logo.png",
+      sealUrl: "https://cdn.example/seal.jpg",
+    },
+  );
+
+  assert.match(html, /Pedido confirmado/);
+  assert.match(html, /B-2026-000123/);
+  assert.match(html, /37 pacotes/);
+  assert.match(html, /R\$&nbsp;2,50|R\$\s2,50/);
+  assert.match(html, /R\$&nbsp;92,50|R\$\s92,50/);
+  assert.match(html, /Cliente &amp; Companhia/);
+  assert.match(html, /Gustavo/);
+  assert.doesNotMatch(html, /<Nivov>/);
   assert.doesNotMatch(html, /undefined/);
 });

@@ -4,6 +4,7 @@ import {
   renderCustomerAccessEmail,
   renderCustomerEmail,
   renderOperationsOrderEmail,
+  renderPartnerOrderConfirmedEmail,
 } from "./customer-email-template";
 
 type TransactionalEmail = {
@@ -65,6 +66,13 @@ export class CustomerNotificationService {
         destination: row.destination,
         subject: `Pedido pago · preparar ${payload.orderCode}`,
         html: renderOperationsOrderEmail(payload, this.emailAssets()),
+      });
+    }
+    if (row.template === "PARTNER_ORDER_CONFIRMED") {
+      return this.sendTransactionalEmail({
+        destination: row.destination,
+        subject: `Pedido confirmado · ${payload.orderCode}`,
+        html: renderPartnerOrderConfirmedEmail(payload, this.emailAssets()),
       });
     }
     return this.sendTransactionalEmail({

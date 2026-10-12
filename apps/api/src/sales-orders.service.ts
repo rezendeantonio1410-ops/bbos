@@ -479,7 +479,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async confirm(companyId: string, id: string) {
-    return this.database.$transaction(async (transaction) => {
+    const result = await this.database.$transaction(async (transaction) => {
       const order = await transaction.salesOrder.findFirst({
         where: { id, companyId },
         include: { items: true },
@@ -505,6 +505,17 @@ export class SalesOrdersService implements OnModuleDestroy {
         status: SalesOrderStatus.CONFIRMED,
       };
     });
+    await this.customerLifecycle.record(
+      id,
+      "ORDER_CONFIRMED",
+      "Pedido confirmado",
+      "O pedido foi confirmado pela equipe Bispo Coffees.",
+      "BBOS",
+      `sales-order:confirmed:${id}`,
+      {},
+      false,
+    );
+    return result;
   }
 
   async reserve(

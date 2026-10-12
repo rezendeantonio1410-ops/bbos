@@ -9,14 +9,85 @@ type EventSource = "BBOS" | "BLING" | "MELHOR_ENVIO" | "CARRIER" | "ADMIN";
 export class SalesOrderCustomerLifecycleService {
   private readonly database = prisma;
 
+  private async enqueuePartnerConfirmation(
+    transaction: {
+      $executeRawUnsafe: (
+        query: string,
+        ...values: unknown[]
+      ) => Promise<unknown>;
+    },
+    order: any,
+    items: any[],
+  ) {
+    const brokerId = String(order.brokerId || "").trim();
+    const destination = String(order.partnerEmail || order.brokerEmail || "")
+      .trim()
+      .toLowerCase();
+    if (
+      !brokerId ||
+      order.brokerActive === false ||
+      order.partnerActive === false ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)
+    ) {
+      return;
+    }
+
+    const partnerId = String(order.partnerId || brokerId);
+    const packageQuantity = items.reduce(
+      (total, item) => total + Number(item.quantity || 0),
+      0,
+    );
+    const payload = {
+      partnerName: order.partnerName || order.brokerName || "Parceiro",
+      orderCode: order.code,
+      customerName: order.customerName,
+      packageQuantity,
+      commissionMode: order.brokerCommissionMode,
+      commissionPercent: Number(order.brokerCommissionPercent || 0),
+      commissionPerPackageCents: Math.round(
+        Number(order.brokerCommissionPerPackage || 0) * 100,
+      ),
+      commissionAmountCents: Math.round(
+        Number(order.brokerCommissionAmount || 0) * 100,
+      ),
+      totalCents: Math.round(Number(order.totalAmount || 0) * 100),
+      items: items.map((item) => ({
+        name: item.name,
+        quantity: Number(item.quantity),
+        unitPriceCents: Math.round(Number(item.unitPrice) * 100),
+        totalCents: Math.round(Number(item.totalAmount) * 100),
+      })),
+    };
+
+    await transaction.$executeRawUnsafe(
+      `INSERT INTO "CustomerNotificationOutbox"
+        (id,"companyId","storefrontOrderId","orderEventId","salesOrderId","salesOrderEventId",
+         channel,destination,template,payload,status,attempts,"idempotencyKey","createdAt","updatedAt")
+       VALUES ($1,$2,NULL,NULL,$3,NULL,'EMAIL',$4,'PARTNER_ORDER_CONFIRMED',$5::jsonb,'PENDING',0,$6,NOW(),NOW())
+       ON CONFLICT ("idempotencyKey") DO NOTHING`,
+      randomUUID(),
+      order.companyId,
+      order.id,
+      destination,
+      JSON.stringify(payload),
+      `notify:email:sales-order:${order.id}:partner-confirmed:${partnerId}`,
+    );
+  }
+
   private trackingSecret() {
-    return process.env.ORDER_TRACKING_SECRET?.trim() || process.env.PAYMENT_WEBHOOK_SECRET?.trim() || "";
+    return (
+      process.env.ORDER_TRACKING_SECRET?.trim() ||
+      process.env.PAYMENT_WEBHOOK_SECRET?.trim() ||
+      ""
+    );
   }
 
   trackingToken(orderId: string) {
     const secret = this.trackingSecret();
     if (!secret) return "";
-    return createHmac("sha256", secret).update(`sales-order:${orderId}`).digest("base64url");
+    return createHmac("sha256", secret)
+      .update(`sales-order:${orderId}`)
+      .digest("base64url");
   }
 
   validTrackingToken(orderId: string, supplied: string) {
@@ -41,9 +112,15 @@ export class SalesOrderCustomerLifecycleService {
       const orders = await transaction.$queryRawUnsafe<any[]>(
         `SELECT so.id,so."companyId",COALESCE(so."orderNumber",so.code) AS code,so.status,
                 so.subtotal,so.discount,so.freight,so."totalAmount",so."freightResponsibility",so."shippingServiceName",
-                so."carrierName",so."estimatedDeliveryDays",c.name AS "customerName",c.email,
-                c.phone,c.address,c.district,c.city,c.state,c."postalCode",sfo.id AS "storefrontOrderId"
+                so."carrierName",so."estimatedDeliveryDays",so."brokerId",so."brokerCommissionMode",
+                so."brokerCommissionPercent",so."brokerCommissionPerPackage",so."brokerCommissionAmount",
+                c.name AS "customerName",c.email,c.phone,c.address,c.district,c.city,c.state,c."postalCode",
+                broker.name AS "brokerName",broker.email AS "brokerEmail",broker.active AS "brokerActive",
+                partner.id AS "partnerId",partner.name AS "partnerName",partner.email AS "partnerEmail",
+                partner.active AS "partnerActive",sfo.id AS "storefrontOrderId"
            FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
+           LEFT JOIN "Broker" broker ON broker.id=so."brokerId"
+           LEFT JOIN "StorefrontPartner" partner ON partner.id=broker."businessPartnerId"
            LEFT JOIN "StorefrontOrder" sfo ON sfo."companyId"=so."companyId"
             AND sfo.code=COALESCE(so."orderNumber",so.code)
           WHERE so.id=$1 LIMIT 1`,
@@ -74,13 +151,23 @@ export class SalesOrderCustomerLifecycleService {
         JSON.stringify(metadata),
         idempotencyKey,
       );
+      if (
+        ["ORDER_CONFIRMED", "PAYMENT_CONFIRMED"].includes(eventType) &&
+        order.status === "CONFIRMED"
+      ) {
+        await this.enqueuePartnerConfirmation(transaction, order, items);
+      }
       if (!inserted[0]) return null;
 
-      const email = String(order.email || "").trim().toLowerCase();
+      const email = String(order.email || "")
+        .trim()
+        .toLowerCase();
       if (notify && email) {
         const token = this.trackingToken(order.id);
         const address = String(order.address || "").trim();
-        const addressMatch = address.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/);
+        const addressMatch = address.match(
+          /^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/,
+        );
         await transaction.$executeRawUnsafe(
           `INSERT INTO "CustomerNotificationOutbox"
             (id,"companyId","storefrontOrderId","orderEventId","salesOrderId","salesOrderEventId",
@@ -97,8 +184,13 @@ export class SalesOrderCustomerLifecycleService {
             eventType,
             title,
             detail,
-            paymentUrl: typeof metadata.paymentUrl === "string" ? metadata.paymentUrl : null,
-            trackingUrl: token ? `${publicAppUrl()}/pedido/acompanhar/${order.id}?token=${encodeURIComponent(token)}` : null,
+            paymentUrl:
+              typeof metadata.paymentUrl === "string"
+                ? metadata.paymentUrl
+                : null,
+            trackingUrl: token
+              ? `${publicAppUrl()}/pedido/acompanhar/${order.id}?token=${encodeURIComponent(token)}`
+              : null,
             customer: { name: order.customerName, phone: order.phone },
             delivery: {
               street: String(addressMatch?.[1] || address),
