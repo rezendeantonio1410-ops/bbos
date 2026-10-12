@@ -160,6 +160,9 @@ test("renders the confirmed order and commission for the sales partner", () => {
   );
 
   assert.match(html, /Pedido confirmado/);
+  assert.match(html, /Prezado\(a\) Gustavo &lt;Nivov&gt;/);
+  assert.match(html, /Critério de cálculo da comissão/);
+  assert.match(html, /Atenciosamente/);
   assert.match(html, /B-2026-000123/);
   assert.match(html, /37 pacotes/);
   assert.match(html, /R\$&nbsp;2,50|R\$\s2,50/);

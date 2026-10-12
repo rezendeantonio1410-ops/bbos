@@ -71,7 +71,7 @@ export class CustomerNotificationService {
     if (row.template === "PARTNER_ORDER_CONFIRMED") {
       return this.sendTransactionalEmail({
         destination: row.destination,
-        subject: `Pedido confirmado · ${payload.orderCode}`,
+        subject: `Confirmação do pedido ${payload.orderCode} | Comissão registrada`,
         html: renderPartnerOrderConfirmedEmail(payload, this.emailAssets()),
       });
     }
