@@ -1,7 +1,20 @@
 import type { ProductionCostInput, ProductionCostResult } from "./index";
 
-/** Limite operacional definido para cada ciclo do Torrador 01. */
-export const ROASTER_OPERATIONAL_GREEN_LOAD_KG = 17;
+/** Fonte única da referência operacional adotada para o Torrador 01. */
+export const ROASTER_OPERATIONAL_PROFILE = {
+  greenLoadKg: 17,
+  roastMinutesPerBatch: 10,
+  coolingMinutesPerBatch: 2,
+  cycleMinutesPerBatch: 12,
+} as const;
+
+export const ROASTER_OPERATIONAL_GREEN_LOAD_KG =
+  ROASTER_OPERATIONAL_PROFILE.greenLoadKg;
+
+export const ROASTER_OPERATIONAL_USAGE_NOTE =
+  `Carga operacional de até ${ROASTER_OPERATIONAL_PROFILE.greenLoadKg} kg: ` +
+  `${ROASTER_OPERATIONAL_PROFILE.roastMinutesPerBatch} min de torra + ` +
+  `${ROASTER_OPERATIONAL_PROFILE.coolingMinutesPerBatch} min de resfriamento por batelada.`;
 
 export class ProductionCostRuleError extends Error {
   constructor(message: string) {

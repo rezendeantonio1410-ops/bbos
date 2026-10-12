@@ -20,6 +20,7 @@ import {
 import {
   calculateProductionCost,
   calculateRealProductionCost,
+  ROASTER_OPERATIONAL_USAGE_NOTE,
   type RealProductionCostInput,
 } from "@bbos/shared";
 import { ProductionService } from "./production.service";
@@ -944,8 +945,7 @@ export class ProductionController {
               machineHours: automaticUtilities.energyRuntimeHours,
               measuredEnergy: automaticUtilities.energyKwh,
               measuredGas: automaticUtilities.gasKg,
-              notes:
-                "Carga operacional de até 17 kg: 10 min de torra + 2 min de resfriamento por batelada.",
+              notes: ROASTER_OPERATIONAL_USAGE_NOTE,
             },
             create: {
               productionOrderId: order.id,
@@ -953,8 +953,7 @@ export class ProductionController {
               machineHours: automaticUtilities.energyRuntimeHours,
               measuredEnergy: automaticUtilities.energyKwh,
               measuredGas: automaticUtilities.gasKg,
-              notes:
-                "Carga operacional de até 17 kg: 10 min de torra + 2 min de resfriamento por batelada.",
+              notes: ROASTER_OPERATIONAL_USAGE_NOTE,
             },
           });
         }

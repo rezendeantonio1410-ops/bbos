@@ -1,4 +1,7 @@
-import { ROASTER_OPERATIONAL_GREEN_LOAD_KG } from "@bbos/shared";
+import {
+  ROASTER_OPERATIONAL_GREEN_LOAD_KG,
+  ROASTER_OPERATIONAL_PROFILE,
+} from "@bbos/shared";
 
 export type BlendComponentPlan = {
   coffeeLotId: string;
@@ -112,8 +115,12 @@ export function validateRoastBatchCapacity(
  * gás é consumido durante a torra; a energia, durante o ciclo.
  */
 export function calculateRoasterUtilityCost(input: RoasterUtilityCostInput) {
-  const roastMinutesPerBatch = input.roastMinutesPerBatch ?? 10;
-  const cycleMinutesPerBatch = input.cycleMinutesPerBatch ?? 12;
+  const roastMinutesPerBatch =
+    input.roastMinutesPerBatch ??
+    ROASTER_OPERATIONAL_PROFILE.roastMinutesPerBatch;
+  const cycleMinutesPerBatch =
+    input.cycleMinutesPerBatch ??
+    ROASTER_OPERATIONAL_PROFILE.cycleMinutesPerBatch;
   const values = [
     input.batchCount,
     input.energyConsumptionKwhPerHour,
@@ -130,16 +137,30 @@ export function calculateRoasterUtilityCost(input: RoasterUtilityCostInput) {
   if (cycleMinutesPerBatch < roastMinutesPerBatch)
     throw new Error("O ciclo não pode ser menor que o tempo de torra.");
 
-  const energyRuntimeHours = (input.batchCount * cycleMinutesPerBatch) / 60;
-  const gasRuntimeHours = (input.batchCount * roastMinutesPerBatch) / 60;
-  const energyKwh = energyRuntimeHours * input.energyConsumptionKwhPerHour;
-  const gasKg = gasRuntimeHours * input.gasConsumptionKgPerHour;
-  const energyCost = energyKwh * input.energyRatePerKwh;
-  const gasCost = gasKg * input.gasRatePerKg;
+  const energyRuntimeHoursPerBatch = cycleMinutesPerBatch / 60;
+  const gasRuntimeHoursPerBatch = roastMinutesPerBatch / 60;
+  const energyKwhPerBatch =
+    energyRuntimeHoursPerBatch * input.energyConsumptionKwhPerHour;
+  const gasKgPerBatch = gasRuntimeHoursPerBatch * input.gasConsumptionKgPerHour;
+  const energyCostPerBatch = energyKwhPerBatch * input.energyRatePerKwh;
+  const gasCostPerBatch = gasKgPerBatch * input.gasRatePerKg;
+  const energyRuntimeHours = input.batchCount * energyRuntimeHoursPerBatch;
+  const gasRuntimeHours = input.batchCount * gasRuntimeHoursPerBatch;
+  const energyKwh = input.batchCount * energyKwhPerBatch;
+  const gasKg = input.batchCount * gasKgPerBatch;
+  const energyCost = input.batchCount * energyCostPerBatch;
+  const gasCost = input.batchCount * gasCostPerBatch;
   return {
     batchCount: input.batchCount,
+    operationalLoadKg: ROASTER_OPERATIONAL_PROFILE.greenLoadKg,
     roastMinutesPerBatch,
+    coolingMinutesPerBatch: cycleMinutesPerBatch - roastMinutesPerBatch,
     cycleMinutesPerBatch,
+    energyKwhPerBatch,
+    gasKgPerBatch,
+    energyCostPerBatch,
+    gasCostPerBatch,
+    totalCostPerBatch: energyCostPerBatch + gasCostPerBatch,
     energyRuntimeHours,
     gasRuntimeHours,
     energyKwh,

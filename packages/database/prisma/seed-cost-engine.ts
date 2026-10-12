@@ -4,6 +4,9 @@ import {
   PrismaClient,
 } from "@prisma/client";
 
+const ROASTER_OPERATIONAL_NAME =
+  "Torrador Atilla Huno 15 kg • carga operacional 17 kg";
+
 const centers = [
   [
     "IND-TOR",
@@ -116,9 +119,7 @@ export async function seedCostEngine(prisma: PrismaClient) {
     await prisma.productiveResource.upsert({
       where: { companyId_code: { companyId: company.id, code } },
       update: {
-        name: isAtilla
-          ? "Torrador Atilla Huno 15 kg • carga operacional 17 kg"
-          : name,
+        name: isAtilla ? ROASTER_OPERATIONAL_NAME : name,
         costCenterId: persisted.get(centerCode)!,
         ...(isAtilla
           ? {
@@ -134,9 +135,7 @@ export async function seedCostEngine(prisma: PrismaClient) {
         companyId: company.id,
         costCenterId: persisted.get(centerCode)!,
         code,
-        name: isAtilla
-          ? "Torrador Atilla Huno 15 kg • carga operacional 17 kg"
-          : name,
+        name: isAtilla ? ROASTER_OPERATIONAL_NAME : name,
         purchaseValue: 0,
         residualValue: 0,
         usefulLifeMonths: 120,

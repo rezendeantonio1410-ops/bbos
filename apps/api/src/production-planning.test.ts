@@ -60,6 +60,25 @@ test("custo por ciclo mantém energia e GLP com carga operacional de 17 kg", () 
   assert.ok(Math.abs(result.energyCost - 0.28222) < 0.000001);
   assert.ok(Math.abs(result.gasCost - 5.1851851852) < 0.000001);
   assert.ok(Math.abs(result.totalCost - 5.4674051852) < 0.000001);
+  assert.equal(result.operationalLoadKg, 17);
+  assert.equal(result.roastMinutesPerBatch, 10);
+  assert.equal(result.coolingMinutesPerBatch, 2);
+  assert.equal(result.cycleMinutesPerBatch, 12);
+  assert.ok(Math.abs(result.energyCostPerBatch - 0.28222) < 0.000001);
+  assert.ok(Math.abs(result.gasCostPerBatch - 5.1851851852) < 0.000001);
+});
+
+test("custos totais escalam a partir da mesma referência por batelada", () => {
+  const result = calculateRoasterUtilityCost({
+    batchCount: 2,
+    energyConsumptionKwhPerHour: 1.37,
+    energyRatePerKwh: 1.03,
+    gasConsumptionKgPerHour: 3.5,
+    gasRatePerKg: 400 / 45,
+  });
+  assert.ok(Math.abs(result.energyCost - result.energyCostPerBatch * 2) < 1e-9);
+  assert.ok(Math.abs(result.gasCost - result.gasCostPerBatch * 2) < 1e-9);
+  assert.ok(Math.abs(result.totalCost - result.totalCostPerBatch * 2) < 1e-9);
 });
 
 test("quantidade de ciclos respeita a referência operacional de 17 kg", () => {

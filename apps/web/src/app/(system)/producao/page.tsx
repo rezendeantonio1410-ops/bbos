@@ -84,8 +84,13 @@ type UtilityCostEstimate = {
   configured: boolean;
   resource?: { id: string; code: string; name: string };
   batchCount?: number;
+  operationalLoadKg?: number;
   roastMinutesPerBatch?: number;
+  coolingMinutesPerBatch?: number;
   cycleMinutesPerBatch?: number;
+  energyCostPerBatch?: number;
+  gasCostPerBatch?: number;
+  totalCostPerBatch?: number;
   energyKwh?: number;
   gasKg?: number;
   energyCost?: number;
@@ -1315,11 +1320,22 @@ function PackagingRegistration({
                 </strong>
                 <p className="mt-1 text-forest-800">
                   Referência operacional: até{" "}
-                  {ROASTER_OPERATIONAL_GREEN_LOAD_KG} kg de café verde por
-                  batelada. {utilityEstimate.batchCount} batelada(s) ·{" "}
-                  {utilityEstimate.roastMinutesPerBatch} min de gás e{" "}
-                  {utilityEstimate.cycleMinutesPerBatch} min de energia por
-                  ciclo ·{" "}
+                  {utilityEstimate.operationalLoadKg ??
+                    ROASTER_OPERATIONAL_GREEN_LOAD_KG}{" "}
+                  kg de café verde por batelada ·{" "}
+                  {utilityEstimate.roastMinutesPerBatch} min de torra +{" "}
+                  {utilityEstimate.coolingMinutesPerBatch} min de resfriamento.
+                </p>
+                <p className="mt-1 text-forest-800">
+                  Custo por batelada: energia{" "}
+                  {brl.format(Number(utilityEstimate.energyCostPerBatch ?? 0))}{" "}
+                  + gás{" "}
+                  {brl.format(Number(utilityEstimate.gasCostPerBatch ?? 0))} ={" "}
+                  {brl.format(Number(utilityEstimate.totalCostPerBatch ?? 0))}.
+                </p>
+                <p className="mt-1 text-forest-800">
+                  Esta OP: {utilityEstimate.batchCount} batelada(s) · consumo
+                  total de{" "}
                   {number.format(Number(utilityEstimate.energyKwh ?? 0))} kWh +{" "}
                   {number.format(Number(utilityEstimate.gasKg ?? 0))} kg de GLP
                   = {brl.format(Number(utilityEstimate.totalCost ?? 0))}.
