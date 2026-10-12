@@ -689,6 +689,9 @@ export class ProductionController {
           return {
             orderId: id,
             movementId: existingMovement.id,
+            productVariantId: existingMovement.productVariantId,
+            sku: existingMovement.finishedProduct.sku,
+            packageWeightG: existingMovement.finishedProduct.packageWeightG,
             idempotent: true,
             balance: {
               physicalUnits: existingMovement.finishedProduct.quantityOnHand,
@@ -817,8 +820,7 @@ export class ProductionController {
         const resolvedGasCost =
           automaticUtilities?.gasCost ?? body.gasCost ?? 0;
         const roastStageAllocation = allocateRoastStageCosts({
-          greenCoffeeConsumedCost:
-            consumedCost - lossKg * averageCoffeeCost,
+          greenCoffeeConsumedCost: consumedCost - lossKg * averageCoffeeCost,
           roastLossCost: lossKg * averageCoffeeCost,
           energyCost: resolvedEnergyCost,
           gasCost: resolvedGasCost,
@@ -1091,6 +1093,7 @@ export class ProductionController {
   @Post("orders/:id/packaging/complete-wip")
   async completeWipPackaging(
     @Param("id") id: string,
+    @Body() body: { productVariantId?: string },
     @Req() req: Request,
   ) {
     const actor = await requireSession(req, this.auth);
@@ -1110,10 +1113,8 @@ export class ProductionController {
             finishedOutputKg: Number(existingMovement.totalWeightKg),
             producedPackages: existingMovement.packageQuantity,
             balance: {
-              physicalUnits:
-                existingMovement.finishedProduct.quantityOnHand,
-              reservedUnits:
-                existingMovement.finishedProduct.reservedQuantity,
+              physicalUnits: existingMovement.finishedProduct.quantityOnHand,
+              reservedUnits: existingMovement.finishedProduct.reservedQuantity,
               availableUnits:
                 existingMovement.finishedProduct.quantityOnHand -
                 existingMovement.finishedProduct.reservedQuantity,
@@ -1123,7 +1124,9 @@ export class ProductionController {
         const order = await transaction.productionOrder.findFirst({
           where: { id, companyId: actor.companyId },
           include: {
-            productVariant: true,
+            productVariant: {
+              include: { product: { include: { productLine: true } } },
+            },
             packagingConsumptions: { orderBy: { createdAt: "asc" } },
           },
         });
@@ -1137,11 +1140,19 @@ export class ProductionController {
           throw new BadRequestException(
             "A OP não possui uma apresentação de produto válida.",
           );
+        const targetVariant = await this.production.requireActiveVariant(
+          transaction,
+          String(body?.productVariantId ?? order.productVariant.id).trim(),
+        );
+        if (targetVariant.productId !== order.productVariant.productId)
+          throw new BadRequestException(
+            "Escolha uma apresentação do mesmo produto da OP.",
+          );
 
         const wipLots = await transaction.$queryRaw<
-          Array<{ availableKg: Prisma.Decimal }>
+          Array<{ id: string; availableKg: Prisma.Decimal }>
         >`
-          SELECT "availableKg"
+          SELECT id, "availableKg"
           FROM "RoastedWipLot"
           WHERE "productionOrderId" = ${order.id}
             AND status IN ('AVAILABLE', 'PARTIALLY_PACKED')
@@ -1162,7 +1173,7 @@ export class ProductionController {
         try {
           packagingPlan = calculateWipPackagingPlan(
             availableWipKg,
-            order.productVariant.netWeightGrams,
+            targetVariant.netWeightGrams,
           );
         } catch (error) {
           throw new BadRequestException(
@@ -1172,8 +1183,8 @@ export class ProductionController {
           );
         }
 
-        const priorMovements =
-          await transaction.finishedGoodsMovement.findMany({
+        const priorMovements = await transaction.finishedGoodsMovement.findMany(
+          {
             where: {
               productionOrderId: order.id,
               companyId: actor.companyId,
@@ -1181,7 +1192,8 @@ export class ProductionController {
             },
             include: { finishedProduct: true },
             orderBy: { occurredAt: "asc" },
-          });
+          },
+        );
         const sourceMovement = priorMovements[0];
         if (!sourceMovement)
           throw new BadRequestException(
@@ -1201,12 +1213,15 @@ export class ProductionController {
             (Number(item.quantity) / previousPackages) *
             packagingPlan.producedPackages;
           const unitCost = Number(item.unitCost);
+          const isPrimaryPackage = item.materialType === "PACKAGE";
           return {
             companyId: order.companyId,
             productionOrderId: order.id,
             materialType: item.materialType,
-            materialName: item.materialName,
-            sku: item.sku,
+            materialName: isPrimaryPackage
+              ? `Embalagem ${targetVariant.sku}`
+              : item.materialName,
+            sku: isPrimaryPackage ? targetVariant.sku : item.sku,
             quantity,
             unit: item.unit,
             unitCost,
@@ -1233,7 +1248,7 @@ export class ProductionController {
             data: {
               companyId: order.companyId,
               productionOrderId: order.id,
-              productVariantId: order.productVariantId,
+              productVariantId: targetVariant.id,
               costCenterId: packagingCenter?.id,
               type: CostType.PACKAGING,
               nature: "DIRECT",
@@ -1243,8 +1258,34 @@ export class ProductionController {
           });
         }
 
+        let targetFinishedProduct = await transaction.finishedProduct.findFirst(
+          {
+            where: {
+              productVariantId: targetVariant.id,
+              warehouseId: sourceMovement.warehouseId,
+            },
+          },
+        );
+        if (!targetFinishedProduct) {
+          targetFinishedProduct = await transaction.finishedProduct.create({
+            data: {
+              companyId: order.companyId,
+              blendId: order.blendId,
+              productionOrderId: order.id,
+              productVariantId: targetVariant.id,
+              warehouseId: sourceMovement.warehouseId,
+              sku: targetVariant.sku,
+              name: targetVariant.product.name,
+              line: targetVariant.product.productLine.code,
+              packageWeightG: targetVariant.netWeightGrams,
+              quantityOnHand: 0,
+              reservedQuantity: 0,
+              standardPrice: 0,
+            },
+          });
+        }
         const updatedBalance = await transaction.finishedProduct.update({
-          where: { id: sourceMovement.finishedProductId },
+          where: { id: targetFinishedProduct.id },
           data: {
             quantityOnHand: {
               increment: packagingPlan.producedPackages,
@@ -1255,8 +1296,8 @@ export class ProductionController {
           data: {
             companyId: order.companyId,
             productionOrderId: order.id,
-            productVariantId: order.productVariantId,
-            finishedProductId: sourceMovement.finishedProductId,
+            productVariantId: targetVariant.id,
+            finishedProductId: targetFinishedProduct.id,
             warehouseId: sourceMovement.warehouseId,
             type: "PRODUCTION_IN",
             packageQuantity: packagingPlan.producedPackages,
@@ -1265,9 +1306,33 @@ export class ProductionController {
             sourceType: "PRODUCTION_ORDER_WIP",
             sourceId: order.id,
             idempotencyKey,
-            reason: `Empacotamento do saldo WIP da ${order.code}`,
+            reason: `Empacotamento do saldo WIP da ${order.code} em ${targetVariant.netWeightGrams} g`,
           },
         });
+
+        for (const lot of wipLots) {
+          const consumedKg = Number(lot.availableKg);
+          await transaction.$executeRaw`
+            INSERT INTO "RoastedWipMovement" (
+              id, "companyId", "wipLotId", "productionOrderId", type,
+              "quantityKg", reason, metadata, "occurredAt"
+            ) VALUES (
+              ${randomUUID()}, ${order.companyId}, ${lot.id}, ${order.id},
+              'PACKAGING_OUT', ${consumedKg},
+              ${`Empacotamento em ${targetVariant.sku}`},
+              ${JSON.stringify({ productVariantId: targetVariant.id, sku: targetVariant.sku, packageWeightG: targetVariant.netWeightGrams })}::jsonb,
+              CURRENT_TIMESTAMP
+            )
+          `;
+          await transaction.$executeRaw`
+            UPDATE "RoastedWipLot"
+            SET "availableKg" = 0,
+                "availableCost" = 0,
+                status = 'CONSUMED',
+                "updatedAt" = CURRENT_TIMESTAMP
+            WHERE id = ${lot.id}
+          `;
+        }
 
         const totalFinishedOutputKg =
           priorMovements.reduce(
@@ -1282,6 +1347,9 @@ export class ProductionController {
         return {
           orderId: order.id,
           movementId: movement.id,
+          productVariantId: targetVariant.id,
+          sku: targetVariant.sku,
+          packageWeightG: targetVariant.netWeightGrams,
           idempotent: false,
           finishedOutputKg: packagingPlan.finishedOutputKg,
           producedPackages: packagingPlan.producedPackages,

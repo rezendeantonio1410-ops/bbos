@@ -102,6 +102,10 @@ test("saldo WIP é convertido em quantidade inteira de pacotes", () => {
     producedPackages: 21,
     finishedOutputKg: 10.5,
   });
+  assert.deepEqual(calculateWipPackagingPlan(15, 1000), {
+    producedPackages: 15,
+    finishedOutputKg: 15,
+  });
   assert.throws(
     () => calculateWipPackagingPlan(10.55, 500),
     /quantidade inteira de pacotes/,

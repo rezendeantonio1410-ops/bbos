@@ -1380,7 +1380,56 @@ function RemainingWipPackaging({
   onDone: (message: string) => Promise<void>;
   onCancel: () => void;
 }) {
-  const packageWeightG = order.packaging?.packageWeightG ?? 500;
+  const [packagingOptions, setPackagingOptions] = useState<
+    Array<{ id: string; sku: string; packageWeightG: number }>
+  >([
+    {
+      id: order.productVariantId ?? "",
+      sku: order.sku,
+      packageWeightG: order.packaging?.packageWeightG ?? 500,
+    },
+  ]);
+  const [selectedVariantId, setSelectedVariantId] = useState(
+    order.productVariantId ?? "",
+  );
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void loadProductCatalog()
+      .then(({ products }) => {
+        if (!active) return;
+        const product = products.find((item) =>
+          item.skus.some((sku) => sku.id === order.productVariantId),
+        );
+        const options =
+          product?.skus
+            .filter((sku) => sku.active)
+            .map((sku) => ({
+              id: sku.id,
+              sku: sku.sku,
+              packageWeightG: sku.packageWeightG,
+            })) ?? [];
+        if (options.length) {
+          setPackagingOptions(options);
+          setSelectedVariantId((current) =>
+            options.some((item) => item.id === current)
+              ? current
+              : options[0]!.id,
+          );
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoadingOptions(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [order.productVariantId]);
+  const selectedVariant =
+    packagingOptions.find((item) => item.id === selectedVariantId) ??
+    packagingOptions[0]!;
+  const packageWeightG = selectedVariant.packageWeightG;
   const remainingWipKg = Math.max(
     0,
     order.wipAvailableKg ??
@@ -1404,7 +1453,12 @@ function RemainingWipPackaging({
     try {
       const response = await fetch(
         `${getApiBaseUrl()}/production/orders/${order.id}/packaging/complete-wip`,
-        { method: "POST", credentials: "include" },
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ productVariantId: selectedVariant.id }),
+        },
       );
       if (!response.ok)
         throw new Error(
@@ -1416,9 +1470,11 @@ function RemainingWipPackaging({
       const result = (await response.json()) as {
         producedPackages?: number;
         finishedOutputKg?: number;
+        sku?: string;
+        packageWeightG?: number;
       };
       await onDone(
-        `Saldo WIP empacotado: ${Number(result.finishedOutputKg ?? remainingWipKg).toLocaleString("pt-BR")} kg em ${Number(result.producedPackages ?? producedPackages).toLocaleString("pt-BR")} pacotes de ${packageWeightG} g.`,
+        `Saldo WIP empacotado: ${Number(result.finishedOutputKg ?? remainingWipKg).toLocaleString("pt-BR")} kg em ${Number(result.producedPackages ?? producedPackages).toLocaleString("pt-BR")} pacotes de ${Number(result.packageWeightG ?? packageWeightG).toLocaleString("pt-BR")} g (${result.sku ?? selectedVariant.sku}).`,
       );
     } catch (caught) {
       setError(
@@ -1448,6 +1504,24 @@ function RemainingWipPackaging({
           <X size={16} />
         </button>
       </div>
+      <label className="mt-5 block text-xs font-semibold text-stone-700">
+        Formato do pacote
+        <select
+          className={field}
+          value={selectedVariant.id}
+          disabled={busy || loadingOptions}
+          onChange={(event) => setSelectedVariantId(event.target.value)}
+        >
+          {packagingOptions.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.packageWeightG === 1000
+                ? "1 kg"
+                : `${item.packageWeightG} g`}{" "}
+              · {item.sku}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <SummaryCard
           label="Saldo torrado"
@@ -1466,9 +1540,10 @@ function RemainingWipPackaging({
         />
       </div>
       <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
-        O BBOS reutilizará o SKU, a embalagem de {packageWeightG} g, o custo
-        unitário e o armazém da primeira entrada. Energia, gás e café não serão
-        lançados novamente.
+        O BBOS dará entrada no SKU {selectedVariant.sku}, em pacotes de{" "}
+        {packageWeightG === 1000 ? "1 kg" : `${packageWeightG} g`}, usando o
+        custo unitário de embalagem e o armazém da primeira entrada. Energia,
+        gás e café não serão lançados novamente.
       </p>
       {error && (
         <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
@@ -1483,9 +1558,7 @@ function RemainingWipPackaging({
           Cancelar
         </button>
         <Button disabled={busy || !isPackable} onClick={() => void submit()}>
-          {busy
-            ? "Confirmando…"
-            : `Confirmar ${producedPackages} pacotes`}
+          {busy ? "Confirmando…" : `Confirmar ${producedPackages} pacotes`}
         </Button>
       </div>
     </div>
@@ -1504,9 +1577,9 @@ function OrderDrawer({
   onChanged: (message: string) => Promise<void>;
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
-  const [action, setAction] = useState<
-    "roast" | "pack" | "pack-wip" | null
-  >(null);
+  const [action, setAction] = useState<"roast" | "pack" | "pack-wip" | null>(
+    null,
+  );
   const reservedKg = order.allocations.reduce(
     (sum, item) => sum + item.reservedKg,
     0,
@@ -1528,8 +1601,7 @@ function OrderDrawer({
     ["roasted", "packaging"].includes(order.status) &&
     order.batches.length > 0 &&
     remainingRoastKg <= 0.001;
-  const canPackWip =
-    order.status === "completed" && remainingWipKg > 0.001;
+  const canPackWip = order.status === "completed" && remainingWipKg > 0.001;
   const cost =
     order.costs.roastedOutputKg > 0 &&
     order.costs.finishedOutputKg > 0 &&
@@ -1700,16 +1772,14 @@ function OrderDrawer({
               },
               {
                 label: "3. Empacotar",
-                detail:
-                  canPackWip
-                    ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos · ${number.format(remainingWipKg)} kg WIP pendentes`
-                    : order.status === "completed"
-                      ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos`
+                detail: canPackWip
+                  ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos · ${number.format(remainingWipKg)} kg WIP pendentes`
+                  : order.status === "completed"
+                    ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos`
                     : "Entrada no produto acabado",
                 complete:
                   order.status === "completed" && remainingWipKg <= 0.001,
-                current:
-                  canPack || canPackWip || order.status === "packaging",
+                current: canPack || canPackWip || order.status === "packaging",
                 icon: PackageOpen,
               },
             ].map((item) => {
@@ -2033,8 +2103,8 @@ function OrderDrawer({
                       <strong>Perda real de torra:</strong>{" "}
                       {number.format(roastLossKg)} kg. A parcela de{" "}
                       {brl.format(order.costs.roastLossCost)} atribuída aos
-                      pacotes já está incluída em “Café verde alocado ao
-                      produto acabado”.
+                      pacotes já está incluída em “Café verde alocado ao produto
+                      acabado”.
                     </div>
                   )}
                   {missingCostComponents.length > 0 && (
