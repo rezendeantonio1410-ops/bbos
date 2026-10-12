@@ -19,9 +19,8 @@ test("business partners are the master record for sales and coffee brokers", () 
 test("sales and green-coffee flows enforce the matching partner role", () => {
   const salesOrders = read("sales-orders.service.ts");
   const greenCoffee = read("green-coffee-purchases.controller.ts");
-  assert.match(salesOrders, /businessPartner\?\.isSalesBroker/);
-  assert.match(salesOrders, /filter\(isEligibleSalesBroker\)/);
-  assert.match(salesOrders, /include:\s*\{ businessPartner:\s*true \}/);
+  assert.match(salesOrders, /JOIN "StorefrontPartner" partner/);
+  assert.equal(salesOrders.match(/partner\."isSalesBroker" = TRUE/g)?.length, 2);
   assert.equal(
     greenCoffee.match(/isGreenCoffeeBroker:\s*true/g)?.length,
     2,

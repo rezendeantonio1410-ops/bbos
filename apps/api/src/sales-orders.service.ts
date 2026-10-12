@@ -51,18 +51,12 @@ export type CreateSalesOrderInput = {
   }>;
 };
 
-type BrokerWithBusinessPartner = {
+type SalesBrokerOption = {
+  id: string;
+  name: string;
+  tradeName: string | null;
   active: boolean;
-  businessPartner: {
-    active: boolean;
-    isSalesBroker: boolean;
-  } | null;
 };
-
-const isEligibleSalesBroker = (broker: BrokerWithBusinessPartner) =>
-  broker.active &&
-  Boolean(broker.businessPartner?.active) &&
-  Boolean(broker.businessPartner?.isSalesBroker);
 
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
@@ -266,7 +260,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async options(companyId: string) {
-    const [customers, balances, brokerProfiles] = await Promise.all([
+    const [customers, balances, brokers] = await Promise.all([
       this.database.customer.findMany({
         where: { companyId },
         orderBy: { name: "asc" },
@@ -283,23 +277,21 @@ export class SalesOrdersService implements OnModuleDestroy {
           },
         },
       }),
-      this.database.broker.findMany({
-        where: {
-          companyId,
-          active: true,
-        },
-        include: { businessPartner: true },
-        orderBy: { name: "asc" },
-      }),
+      this.database.$queryRaw<SalesBrokerOption[]>(Prisma.sql`
+        SELECT broker.id,
+               partner.name,
+               partner."tradeName",
+               broker.active
+          FROM "Broker" broker
+          JOIN "StorefrontPartner" partner
+            ON partner.id = broker."businessPartnerId"
+         WHERE broker."companyId" = ${companyId}
+           AND broker.active = TRUE
+           AND partner.active = TRUE
+           AND partner."isSalesBroker" = TRUE
+         ORDER BY partner.name ASC
+      `),
     ]);
-    const brokers = brokerProfiles
-      .filter(isEligibleSalesBroker)
-      .map(({ businessPartner, ...broker }) => ({
-        ...broker,
-        name: businessPartner?.name ?? broker.name,
-        legalName: businessPartner?.legalName ?? broker.legalName,
-        tradeName: businessPartner?.tradeName ?? broker.tradeName,
-      }));
     return {
       customers: customers.map((customer) => ({
         ...customer,
@@ -361,15 +353,21 @@ export class SalesOrdersService implements OnModuleDestroy {
         const fiscalError = customerFiscalReadinessMessage(customer);
         if (fiscalError) throw new BadRequestException(fiscalError);
         if (input.brokerId) {
-          const broker = await transaction.broker.findFirst({
-            where: {
-              id: input.brokerId,
-              companyId: customer.companyId,
-              active: true,
-            },
-            include: { businessPartner: true },
-          });
-          if (!broker || !isEligibleSalesBroker(broker))
+          const brokers = await transaction.$queryRaw<Array<{ id: string }>>(
+            Prisma.sql`
+              SELECT broker.id
+                FROM "Broker" broker
+                JOIN "StorefrontPartner" partner
+                  ON partner.id = broker."businessPartnerId"
+               WHERE broker.id = ${input.brokerId}
+                 AND broker."companyId" = ${customer.companyId}
+                 AND broker.active = TRUE
+                 AND partner.active = TRUE
+                 AND partner."isSalesBroker" = TRUE
+               LIMIT 1
+            `,
+          );
+          if (!brokers.length)
             throw new BadRequestException(
               "Corretor inválido ou inativo para esta empresa.",
             );
