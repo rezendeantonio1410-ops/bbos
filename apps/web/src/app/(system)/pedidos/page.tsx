@@ -428,20 +428,31 @@ export default function OrdersPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
+  const refreshOptions = async () => {
+    const response = await fetch(`${salesOrdersApi()}/options`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    const options = await response.json();
+    setCustomers(options.customers);
+    setVariants(options.variants);
+    setBrokers(options.brokers ?? []);
+  };
+
   const refresh = async () => {
     const API = salesOrdersApi();
-    const [ordersResponse, optionsResponse] = await Promise.all([
+    const [ordersResponse] = await Promise.all([
       fetch(API, { credentials: "include", cache: "no-store" }),
-      fetch(`${API}/options`, { credentials: "include", cache: "no-store" }),
+      refreshOptions(),
     ]);
 
     if (ordersResponse.ok) setOrders(await ordersResponse.json());
-    if (optionsResponse.ok) {
-      const options = await optionsResponse.json();
-      setCustomers(options.customers);
-      setVariants(options.variants);
-      setBrokers(options.brokers ?? []);
-    }
+  };
+
+  const openNewOrder = (type: "COMMERCIAL" | "SAMPLE") => {
+    setCreating(type);
+    void refreshOptions();
   };
 
   useEffect(() => {
@@ -526,13 +537,13 @@ export default function OrdersPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setCreating("SAMPLE")}
+            onClick={() => openNewOrder("SAMPLE")}
             className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950"
           >
             <PackagePlus size={15} /> Novo pedido de amostra
           </button>
           <button
-            onClick={() => setCreating("COMMERCIAL")}
+            onClick={() => openNewOrder("COMMERCIAL")}
             className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white"
           >
             <Plus size={15} /> Novo pedido

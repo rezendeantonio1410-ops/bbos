@@ -51,6 +51,19 @@ export type CreateSalesOrderInput = {
   }>;
 };
 
+type BrokerWithBusinessPartner = {
+  active: boolean;
+  businessPartner: {
+    active: boolean;
+    isSalesBroker: boolean;
+  } | null;
+};
+
+const isEligibleSalesBroker = (broker: BrokerWithBusinessPartner) =>
+  broker.active &&
+  Boolean(broker.businessPartner?.active) &&
+  Boolean(broker.businessPartner?.isSalesBroker);
+
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
   readonly database = prisma;
@@ -253,7 +266,7 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   async options(companyId: string) {
-    const [customers, balances, brokers] = await Promise.all([
+    const [customers, balances, brokerProfiles] = await Promise.all([
       this.database.customer.findMany({
         where: { companyId },
         orderBy: { name: "asc" },
@@ -274,13 +287,19 @@ export class SalesOrdersService implements OnModuleDestroy {
         where: {
           companyId,
           active: true,
-          businessPartner: {
-            is: { active: true, isSalesBroker: true },
-          },
         },
+        include: { businessPartner: true },
         orderBy: { name: "asc" },
       }),
     ]);
+    const brokers = brokerProfiles
+      .filter(isEligibleSalesBroker)
+      .map(({ businessPartner, ...broker }) => ({
+        ...broker,
+        name: businessPartner?.name ?? broker.name,
+        legalName: businessPartner?.legalName ?? broker.legalName,
+        tradeName: businessPartner?.tradeName ?? broker.tradeName,
+      }));
     return {
       customers: customers.map((customer) => ({
         ...customer,
@@ -347,12 +366,10 @@ export class SalesOrdersService implements OnModuleDestroy {
               id: input.brokerId,
               companyId: customer.companyId,
               active: true,
-              businessPartner: {
-                is: { active: true, isSalesBroker: true },
-              },
             },
+            include: { businessPartner: true },
           });
-          if (!broker)
+          if (!broker || !isEligibleSalesBroker(broker))
             throw new BadRequestException(
               "Corretor inválido ou inativo para esta empresa.",
             );
