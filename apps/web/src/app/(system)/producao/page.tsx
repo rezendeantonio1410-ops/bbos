@@ -1392,6 +1392,8 @@ function RemainingWipPackaging({
   const [selectedVariantId, setSelectedVariantId] = useState(
     order.productVariantId ?? "",
   );
+  const [packageQuantityInput, setPackageQuantityInput] = useState("");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [loadingOptions, setLoadingOptions] = useState(true);
   useEffect(() => {
     let active = true;
@@ -1435,19 +1437,32 @@ function RemainingWipPackaging({
     order.wipAvailableKg ??
       order.costs.roastedOutputKg - order.costs.finishedOutputKg,
   );
-  const exactPackages = (remainingWipKg * 1000) / packageWeightG;
-  const producedPackages = Math.round(exactPackages);
+  const maxProducedPackages = Math.floor(
+    (remainingWipKg * 1000 + 0.001) / packageWeightG,
+  );
+  const producedPackages = Number(packageQuantityInput);
+  const finishedOutputKg =
+    Number.isFinite(producedPackages) && producedPackages > 0
+      ? (producedPackages * packageWeightG) / 1000
+      : 0;
+  const remainingAfterKg = Math.max(0, remainingWipKg - finishedOutputKg);
   const packagingUnitCost = order.packaging?.packagingUnitCost ?? 0;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const isPackable =
-    producedPackages > 0 && Math.abs(exactPackages - producedPackages) <= 0.001;
+    Number.isSafeInteger(producedPackages) &&
+    producedPackages > 0 &&
+    producedPackages <= maxProducedPackages;
+
+  useEffect(() => {
+    setPackageQuantityInput(String(maxProducedPackages));
+  }, [maxProducedPackages, selectedVariantId]);
 
   const submit = async () => {
     setError("");
     if (!isPackable)
       return setError(
-        "O saldo WIP não corresponde a uma quantidade inteira de pacotes.",
+        "Informe uma quantidade inteira de pacotes dentro do saldo WIP disponível.",
       );
     setBusy(true);
     try {
@@ -1457,7 +1472,11 @@ function RemainingWipPackaging({
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ productVariantId: selectedVariant.id }),
+          body: JSON.stringify({
+            productVariantId: selectedVariant.id,
+            producedPackages,
+            idempotencyKey,
+          }),
         },
       );
       if (!response.ok)
@@ -1474,7 +1493,7 @@ function RemainingWipPackaging({
         packageWeightG?: number;
       };
       await onDone(
-        `Saldo WIP empacotado: ${Number(result.finishedOutputKg ?? remainingWipKg).toLocaleString("pt-BR")} kg em ${Number(result.producedPackages ?? producedPackages).toLocaleString("pt-BR")} pacotes de ${Number(result.packageWeightG ?? packageWeightG).toLocaleString("pt-BR")} g (${result.sku ?? selectedVariant.sku}).`,
+        `Empacotamento registrado: ${Number(result.finishedOutputKg ?? finishedOutputKg).toLocaleString("pt-BR")} kg em ${Number(result.producedPackages ?? producedPackages).toLocaleString("pt-BR")} pacotes de ${Number(result.packageWeightG ?? packageWeightG).toLocaleString("pt-BR")} g (${result.sku ?? selectedVariant.sku}). O saldo WIP restante continua disponível para outro formato.`,
       );
     } catch (caught) {
       setError(
@@ -1504,46 +1523,72 @@ function RemainingWipPackaging({
           <X size={16} />
         </button>
       </div>
-      <label className="mt-5 block text-xs font-semibold text-stone-700">
-        Formato do pacote
-        <select
-          className={field}
-          value={selectedVariant.id}
-          disabled={busy || loadingOptions}
-          onChange={(event) => setSelectedVariantId(event.target.value)}
-        >
-          {packagingOptions.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.packageWeightG === 1000
-                ? "1 kg"
-                : `${item.packageWeightG} g`}{" "}
-              · {item.sku}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="block text-xs font-semibold text-stone-700">
+          Formato do pacote
+          <select
+            className={field}
+            value={selectedVariant.id}
+            disabled={busy || loadingOptions}
+            onChange={(event) => setSelectedVariantId(event.target.value)}
+          >
+            {packagingOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.packageWeightG === 1000
+                  ? "1 kg"
+                  : `${item.packageWeightG} g`}{" "}
+                · {item.sku}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-stone-700">
+          Quantidade de pacotes
+          <input
+            className={field}
+            type="number"
+            min="1"
+            max={maxProducedPackages}
+            step="1"
+            value={packageQuantityInput}
+            disabled={busy || loadingOptions}
+            onChange={(event) => setPackageQuantityInput(event.target.value)}
+          />
+          <span className="mt-1 block font-normal text-stone-500">
+            Máximo neste formato: {number.format(maxProducedPackages)} pacotes.
+          </span>
+        </label>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-4">
         <SummaryCard
           label="Saldo torrado"
           value={`${number.format(remainingWipKg)} kg`}
           icon={Flame}
         />
         <SummaryCard
-          label="Nova entrada"
-          value={`${producedPackages} pacotes`}
+          label="Entrada escolhida"
+          value={`${number.format(finishedOutputKg)} kg`}
           icon={PackageOpen}
         />
         <SummaryCard
+          label="Saldo após entrada"
+          value={`${number.format(remainingAfterKg)} kg`}
+          icon={Scale}
+        />
+        <SummaryCard
           label="Embalagem estimada"
-          value={brl.format(producedPackages * packagingUnitCost)}
+          value={brl.format(
+            (Number.isFinite(producedPackages) ? producedPackages : 0) *
+              packagingUnitCost,
+          )}
           icon={CircleDollarSign}
         />
       </div>
       <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
-        O BBOS dará entrada no SKU {selectedVariant.sku}, em pacotes de{" "}
-        {packageWeightG === 1000 ? "1 kg" : `${packageWeightG} g`}, usando o
-        custo unitário de embalagem e o armazém da primeira entrada. Energia,
-        gás e café não serão lançados novamente.
+        Esta entrada gerará {number.format(producedPackages || 0)} pacotes no
+        SKU {selectedVariant.sku}, totalizando {number.format(finishedOutputKg)}
+        {" kg"}. O saldo não selecionado continuará no WIP para ser empacotado
+        em outro formato. Energia, gás e café não serão lançados novamente.
       </p>
       {error && (
         <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
@@ -1558,7 +1603,9 @@ function RemainingWipPackaging({
           Cancelar
         </button>
         <Button disabled={busy || !isPackable} onClick={() => void submit()}>
-          {busy ? "Confirmando…" : `Confirmar ${producedPackages} pacotes`}
+          {busy
+            ? "Confirmando…"
+            : `Confirmar ${number.format(producedPackages || 0)} pacotes · ${number.format(finishedOutputKg)} kg`}
         </Button>
       </div>
     </div>

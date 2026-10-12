@@ -112,25 +112,37 @@ export function validateRoastBatchCapacity(
 export function calculateWipPackagingPlan(
   availableWipKg: number,
   packageWeightGrams: number,
+  requestedPackages?: number,
 ) {
   if (!Number.isFinite(availableWipKg) || availableWipKg <= 0)
     throw new Error("O saldo de café torrado deve ser maior que zero.");
-  if (
-    !Number.isSafeInteger(packageWeightGrams) ||
-    packageWeightGrams <= 0
-  )
+  if (!Number.isSafeInteger(packageWeightGrams) || packageWeightGrams <= 0)
     throw new Error("O peso da apresentação deve ser um inteiro positivo.");
 
-  const exactPackages = (availableWipKg * 1000) / packageWeightGrams;
-  const producedPackages = Math.round(exactPackages);
-  if (Math.abs(exactPackages - producedPackages) > 0.001)
+  const exactAvailablePackages = (availableWipKg * 1000) / packageWeightGrams;
+  const producedPackages =
+    requestedPackages === undefined
+      ? Math.round(exactAvailablePackages)
+      : requestedPackages;
+  if (!Number.isSafeInteger(producedPackages) || producedPackages <= 0)
+    throw new Error("A quantidade de pacotes deve ser um inteiro positivo.");
+  if (
+    requestedPackages === undefined &&
+    Math.abs(exactAvailablePackages - producedPackages) > 0.001
+  )
     throw new Error(
       "O saldo WIP não corresponde a uma quantidade inteira de pacotes.",
     );
 
+  const finishedOutputKg = (producedPackages * packageWeightGrams) / 1000;
+  if (finishedOutputKg - availableWipKg > 0.001)
+    throw new Error(
+      "A quantidade informada é maior que o saldo WIP disponível.",
+    );
+
   return {
     producedPackages,
-    finishedOutputKg: (producedPackages * packageWeightGrams) / 1000,
+    finishedOutputKg,
   };
 }
 

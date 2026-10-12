@@ -83,6 +83,11 @@ type CompleteOrderBody = {
   otherIndustrialCosts: number;
   standardCostPerKg: number;
 };
+type CompleteWipPackagingBody = {
+  idempotencyKey?: string;
+  productVariantId?: string;
+  producedPackages?: number;
+};
 type CalculateV2Body = RealProductionCostInput & {
   periodCode: string;
   productVariantId?: string;
@@ -1093,13 +1098,18 @@ export class ProductionController {
   @Post("orders/:id/packaging/complete-wip")
   async completeWipPackaging(
     @Param("id") id: string,
-    @Body() body: { productVariantId?: string },
+    @Body() body: CompleteWipPackagingBody,
     @Req() req: Request,
   ) {
     const actor = await requireSession(req, this.auth);
+    const requestToken = String(body?.idempotencyKey ?? "").trim();
+    if (!/^[A-Za-z0-9:_-]{8,128}$/.test(requestToken))
+      throw new BadRequestException(
+        "Informe uma chave de idempotência válida para o empacotamento.",
+      );
     return this.production.database.$transaction(
       async (transaction) => {
-        const idempotencyKey = `PRODUCTION_WIP_PACK:${id}`;
+        const idempotencyKey = `PRODUCTION_WIP_PACK:${id}:${requestToken}`;
         const existingMovement =
           await transaction.finishedGoodsMovement.findFirst({
             where: { idempotencyKey, companyId: actor.companyId },
@@ -1110,6 +1120,9 @@ export class ProductionController {
             orderId: id,
             movementId: existingMovement.id,
             idempotent: true,
+            productVariantId: existingMovement.productVariantId,
+            sku: existingMovement.finishedProduct.sku,
+            packageWeightG: existingMovement.finishedProduct.packageWeightG,
             finishedOutputKg: Number(existingMovement.totalWeightKg),
             producedPackages: existingMovement.packageQuantity,
             balance: {
@@ -1174,6 +1187,7 @@ export class ProductionController {
           packagingPlan = calculateWipPackagingPlan(
             availableWipKg,
             targetVariant.netWeightGrams,
+            Number(body.producedPackages),
           );
         } catch (error) {
           throw new BadRequestException(
@@ -1309,30 +1323,6 @@ export class ProductionController {
             reason: `Empacotamento do saldo WIP da ${order.code} em ${targetVariant.netWeightGrams} g`,
           },
         });
-
-        for (const lot of wipLots) {
-          const consumedKg = Number(lot.availableKg);
-          await transaction.$executeRaw`
-            INSERT INTO "RoastedWipMovement" (
-              id, "companyId", "wipLotId", "productionOrderId", type,
-              "quantityKg", reason, metadata, "occurredAt"
-            ) VALUES (
-              ${randomUUID()}, ${order.companyId}, ${lot.id}, ${order.id},
-              'PACKAGING_OUT', ${consumedKg},
-              ${`Empacotamento em ${targetVariant.sku}`},
-              ${JSON.stringify({ productVariantId: targetVariant.id, sku: targetVariant.sku, packageWeightG: targetVariant.netWeightGrams })}::jsonb,
-              CURRENT_TIMESTAMP
-            )
-          `;
-          await transaction.$executeRaw`
-            UPDATE "RoastedWipLot"
-            SET "availableKg" = 0,
-                "availableCost" = 0,
-                status = 'CONSUMED',
-                "updatedAt" = CURRENT_TIMESTAMP
-            WHERE id = ${lot.id}
-          `;
-        }
 
         const totalFinishedOutputKg =
           priorMovements.reduce(
