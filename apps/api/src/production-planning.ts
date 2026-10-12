@@ -1,3 +1,5 @@
+import { ROASTER_OPERATIONAL_GREEN_LOAD_KG } from "@bbos/shared";
+
 export type BlendComponentPlan = {
   coffeeLotId: string;
   percentage: number;
@@ -70,9 +72,44 @@ export type RoasterUtilityCostInput = {
   cycleMinutesPerBatch?: number;
 };
 
+export function calculateRoastCycleCount(
+  greenInputsKg: number[],
+  operationalLoadKg = ROASTER_OPERATIONAL_GREEN_LOAD_KG,
+) {
+  if (!Number.isFinite(operationalLoadKg) || operationalLoadKg <= 0)
+    throw new Error("A carga operacional deve ser maior que zero.");
+  if (
+    greenInputsKg.some(
+      (greenInputKg) => !Number.isFinite(greenInputKg) || greenInputKg <= 0,
+    )
+  )
+    throw new Error("O peso verde deve ser maior que zero.");
+  return greenInputsKg.reduce(
+    (cycles, greenInputKg) =>
+      cycles + Math.ceil(greenInputKg / operationalLoadKg),
+    0,
+  );
+}
+
+export function validateRoastBatchCapacity(
+  greenInputKg: number,
+  operationalLoadKg = ROASTER_OPERATIONAL_GREEN_LOAD_KG,
+) {
+  if (!Number.isFinite(greenInputKg) || greenInputKg <= 0)
+    throw new Error("O peso verde deve ser maior que zero.");
+  if (!Number.isFinite(operationalLoadKg) || operationalLoadKg <= 0)
+    throw new Error("A carga operacional deve ser maior que zero.");
+  if (greenInputKg > operationalLoadKg)
+    throw new Error(
+      `Cada batelada aceita até ${operationalLoadKg} kg de café verde. Registre uma nova batelada para o restante.`,
+    );
+  return greenInputKg;
+}
+
 /**
- * Huno 15 kg: a ficha técnica vigente informa 10 min de torra e 2 min de
- * resfriamento. O gás é consumido durante a torra; a energia, durante o ciclo.
+ * Atilla Huno: a referência operacional adotada é de até 17 kg de café verde.
+ * A ficha técnica vigente informa 10 min de torra e 2 min de resfriamento. O
+ * gás é consumido durante a torra; a energia, durante o ciclo.
  */
 export function calculateRoasterUtilityCost(input: RoasterUtilityCostInput) {
   const roastMinutesPerBatch = input.roastMinutesPerBatch ?? 10;

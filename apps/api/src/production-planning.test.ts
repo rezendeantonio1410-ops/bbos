@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calculateComponentRequirements,
+  calculateRoastCycleCount,
   calculateRoastMetrics,
   calculateRoasterUtilityCost,
   validateBlendComponents,
+  validateRoastBatchCapacity,
 } from "./production-planning";
 
 test("receita soma 100% e calcula necessidade por componente", () => {
@@ -45,7 +47,7 @@ test("perda e rendimento são calculados sem valores fictícios", () => {
   assert.throws(() => calculateRoastMetrics(100, 101));
 });
 
-test("custo do Atilla separa energia do ciclo e GLP da torra", () => {
+test("custo por ciclo mantém energia e GLP com carga operacional de 17 kg", () => {
   const result = calculateRoasterUtilityCost({
     batchCount: 1,
     energyConsumptionKwhPerHour: 1.37,
@@ -58,4 +60,19 @@ test("custo do Atilla separa energia do ciclo e GLP da torra", () => {
   assert.ok(Math.abs(result.energyCost - 0.28222) < 0.000001);
   assert.ok(Math.abs(result.gasCost - 5.1851851852) < 0.000001);
   assert.ok(Math.abs(result.totalCost - 5.4674051852) < 0.000001);
+});
+
+test("quantidade de ciclos respeita a referência operacional de 17 kg", () => {
+  assert.equal(calculateRoastCycleCount([17]), 1);
+  assert.equal(calculateRoastCycleCount([17, 13]), 2);
+  assert.equal(calculateRoastCycleCount([30]), 2);
+  assert.equal(calculateRoastCycleCount([8, 8]), 2);
+});
+
+test("uma batelada não aceita mais de 17 kg de café verde", () => {
+  assert.equal(validateRoastBatchCapacity(17), 17);
+  assert.throws(
+    () => validateRoastBatchCapacity(17.001),
+    /até 17 kg de café verde/,
+  );
 });

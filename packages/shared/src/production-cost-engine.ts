@@ -1,5 +1,8 @@
 import type { ProductionCostInput, ProductionCostResult } from "./index";
 
+/** Limite operacional definido para cada ciclo do Torrador 01. */
+export const ROASTER_OPERATIONAL_GREEN_LOAD_KG = 17;
+
 export class ProductionCostRuleError extends Error {
   constructor(message: string) {
     super(message);

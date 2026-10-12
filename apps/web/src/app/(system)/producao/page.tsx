@@ -22,6 +22,7 @@ import {
 import { Badge, Button, Card } from "@bbos/ui";
 import {
   calculateProductionCost,
+  ROASTER_OPERATIONAL_GREEN_LOAD_KG,
   type ProductionAlert,
   type ProductionOrderStatus,
   type ProductionOrderView,
@@ -800,15 +801,19 @@ function RoastRegistration({
     0,
   );
   const remainingKg = Math.max(0, reservedKg - alreadyRoastedKg);
+  const suggestedGreenInputKg = Math.min(
+    remainingKg,
+    ROASTER_OPERATIONAL_GREEN_LOAD_KG,
+  );
   const now = new Date();
   const [code, setCode] = useState(
     `TOR-${order.code.replace(/^OP-/, "")}-${String(order.batches.length + 1).padStart(2, "0")}`,
   );
   const [machine, setMachine] = useState("Torrador 01");
   const [operator, setOperator] = useState(order.responsible);
-  const [greenInputKg, setGreenInputKg] = useState(remainingKg);
+  const [greenInputKg, setGreenInputKg] = useState(suggestedGreenInputKg);
   const [roastedOutputKg, setRoastedOutputKg] = useState(
-    Number((remainingKg * 0.85).toFixed(3)),
+    Number((suggestedGreenInputKg * 0.85).toFixed(3)),
   );
   const [startedAt, setStartedAt] = useState(
     localDateTimeValue(new Date(now.getTime() - 60 * 60_000)),
@@ -827,6 +832,7 @@ function RoastRegistration({
       return setError("Informe batch, torrador e operador.");
     if (
       greenInputKg <= 0 ||
+      greenInputKg > ROASTER_OPERATIONAL_GREEN_LOAD_KG ||
       greenInputKg > remainingKg + 0.001 ||
       roastedOutputKg <= 0 ||
       roastedOutputKg > greenInputKg
@@ -881,7 +887,9 @@ function RoastRegistration({
             Registrar resultado da torra
           </h3>
           <p className="mt-1 text-xs text-stone-500">
-            Restam {number.format(remainingKg)} kg reservados nesta OP.
+            Restam {number.format(remainingKg)} kg reservados nesta OP. Carga
+            operacional: até {ROASTER_OPERATIONAL_GREEN_LOAD_KG} kg de café
+            verde por batelada.
           </p>
         </div>
         <button onClick={onCancel} className="rounded-xl border bg-white p-2">
@@ -918,7 +926,7 @@ function RoastRegistration({
           <input
             type="number"
             min="0.001"
-            max={remainingKg}
+            max={Math.min(remainingKg, ROASTER_OPERATIONAL_GREEN_LOAD_KG)}
             step="0.001"
             value={greenInputKg}
             onChange={(e) => setGreenInputKg(Number(e.target.value))}
@@ -1306,7 +1314,9 @@ function PackagingRegistration({
                   Cálculo automático · {utilityEstimate.resource?.name}
                 </strong>
                 <p className="mt-1 text-forest-800">
-                  {utilityEstimate.batchCount} batelada(s) ·{" "}
+                  Referência operacional: até{" "}
+                  {ROASTER_OPERATIONAL_GREEN_LOAD_KG} kg de café verde por
+                  batelada. {utilityEstimate.batchCount} batelada(s) ·{" "}
                   {utilityEstimate.roastMinutesPerBatch} min de gás e{" "}
                   {utilityEstimate.cycleMinutesPerBatch} min de energia por
                   ciclo ·{" "}

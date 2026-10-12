@@ -26,8 +26,10 @@ import { ProductionService } from "./production.service";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import {
+  calculateRoastCycleCount,
   calculateRoastMetrics,
   calculateRoasterUtilityCost,
+  validateRoastBatchCapacity,
 } from "./production-planning";
 
 type CreateOrderBody = {
@@ -296,7 +298,10 @@ export class ProductionController {
     const [order, resource] = await Promise.all([
       this.production.database.productionOrder.findFirst({
         where: { id, companyId: actor.companyId },
-        select: { id: true, batches: { select: { id: true } } },
+        select: {
+          id: true,
+          batches: { select: { greenInputKg: true } },
+        },
       }),
       this.production.database.productiveResource.findFirst({
         where: {
@@ -323,7 +328,9 @@ export class ProductionController {
         reason: "Configure o recurso TOR-01 para calcular energia e gás.",
       };
     const estimate = calculateRoasterUtilityCost({
-      batchCount: order.batches.length,
+      batchCount: calculateRoastCycleCount(
+        order.batches.map((batch) => Number(batch.greenInputKg)),
+      ),
       energyConsumptionKwhPerHour: Number(resource.energyConsumption),
       energyRatePerKwh: Number(resource.energyRatePerKwh),
       gasConsumptionKgPerHour: Number(resource.gasConsumption),
@@ -471,6 +478,7 @@ export class ProductionController {
       );
     let loss;
     try {
+      validateRoastBatchCapacity(body.greenInputKg);
       loss = calculateRoastMetrics(body.greenInputKg, body.roastedOutputKg);
     } catch (error) {
       throw new BadRequestException(
@@ -763,7 +771,9 @@ export class ProductionController {
         const automaticUtilities =
           roaster && order.batches.length
             ? calculateRoasterUtilityCost({
-                batchCount: order.batches.length,
+                batchCount: calculateRoastCycleCount(
+                  order.batches.map((batch) => Number(batch.greenInputKg)),
+                ),
                 energyConsumptionKwhPerHour: Number(roaster.energyConsumption),
                 energyRatePerKwh: Number(roaster.energyRatePerKwh),
                 gasConsumptionKgPerHour: Number(roaster.gasConsumption),
@@ -935,7 +945,7 @@ export class ProductionController {
               measuredEnergy: automaticUtilities.energyKwh,
               measuredGas: automaticUtilities.gasKg,
               notes:
-                "Cálculo padrão Atilla Huno 15 kg: 10 min de torra + 2 min de resfriamento por batelada.",
+                "Carga operacional de até 17 kg: 10 min de torra + 2 min de resfriamento por batelada.",
             },
             create: {
               productionOrderId: order.id,
@@ -944,7 +954,7 @@ export class ProductionController {
               measuredEnergy: automaticUtilities.energyKwh,
               measuredGas: automaticUtilities.gasKg,
               notes:
-                "Cálculo padrão Atilla Huno 15 kg: 10 min de torra + 2 min de resfriamento por batelada.",
+                "Carga operacional de até 17 kg: 10 min de torra + 2 min de resfriamento por batelada.",
             },
           });
         }

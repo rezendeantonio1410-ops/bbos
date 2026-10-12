@@ -116,7 +116,9 @@ export async function seedCostEngine(prisma: PrismaClient) {
     await prisma.productiveResource.upsert({
       where: { companyId_code: { companyId: company.id, code } },
       update: {
-        name: isAtilla ? "Torrador Atilla Huno 15 kg" : name,
+        name: isAtilla
+          ? "Torrador Atilla Huno 15 kg • carga operacional 17 kg"
+          : name,
         costCenterId: persisted.get(centerCode)!,
         ...(isAtilla
           ? {
@@ -132,7 +134,9 @@ export async function seedCostEngine(prisma: PrismaClient) {
         companyId: company.id,
         costCenterId: persisted.get(centerCode)!,
         code,
-        name: isAtilla ? "Torrador Atilla Huno 15 kg" : name,
+        name: isAtilla
+          ? "Torrador Atilla Huno 15 kg • carga operacional 17 kg"
+          : name,
         purchaseValue: 0,
         residualValue: 0,
         usefulLifeMonths: 120,
