@@ -6,11 +6,17 @@ import {
   renderOperationsOrderEmail,
   renderPartnerOrderConfirmedEmail,
 } from "./customer-email-template";
+import { buildCustomerOrderPdf } from "./customer-order-pdf";
 
 type TransactionalEmail = {
   destination: string;
   subject: string;
   html: string;
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    content_type?: string;
+  }>;
 };
 
 @Injectable()
@@ -51,6 +57,9 @@ export class CustomerNotificationService {
         ...(replyTo ? { reply_to: replyTo } : {}),
         subject: message.subject,
         html: message.html,
+        ...(message.attachments?.length
+          ? { attachments: message.attachments }
+          : {}),
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -69,10 +78,19 @@ export class CustomerNotificationService {
       });
     }
     if (row.template === "PARTNER_ORDER_CONFIRMED") {
+      const orderCode = String(payload.orderCode || "pedido");
+      const safeOrderCode = orderCode.replace(/[^a-zA-Z0-9._-]/g, "-");
       return this.sendTransactionalEmail({
         destination: row.destination,
-        subject: `Confirmação do pedido ${payload.orderCode} | Comissão registrada`,
+        subject: `Confirmação do pedido ${orderCode} | Comissão registrada`,
         html: renderPartnerOrderConfirmedEmail(payload, this.emailAssets()),
+        attachments: [
+          {
+            filename: `Pedido-${safeOrderCode}.pdf`,
+            content: buildCustomerOrderPdf(payload).toString("base64"),
+            content_type: "application/pdf",
+          },
+        ],
       });
     }
     return this.sendTransactionalEmail({

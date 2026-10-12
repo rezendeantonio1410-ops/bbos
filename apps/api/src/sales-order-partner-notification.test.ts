@@ -15,7 +15,17 @@ test("confirmed order queues one idempotent email for the linked partner", async
             code: "B-2026-000123",
             status: "CONFIRMED",
             customerName: "Cliente Exemplo",
+            customerTaxId: "12.345.678/0001-90",
             email: null,
+            orderedAt: new Date("2026-10-12T15:00:00.000Z"),
+            orderDate: new Date("2026-10-12T15:00:00.000Z"),
+            expectedDeliveryDate: new Date("2026-10-13T15:00:00.000Z"),
+            paymentType: "CASH",
+            paymentTermsSnapshot: "À vista",
+            freightResponsibility: "PICKUP",
+            subtotal: 1722,
+            discount: 0,
+            freight: 0,
             totalAmount: 1722,
             brokerId: "broker-1",
             brokerName: "Gustavo Nivov",
@@ -37,12 +47,14 @@ test("confirmed order queues one idempotent email for the linked partner", async
         return [
           {
             name: "Café Gourmet White Label · 500 g",
+            sku: "GOU-ESS-500",
             quantity: 33,
             unitPrice: 42,
             totalAmount: 1386,
           },
           {
             name: "Café Gourmet White Label · 1 kg",
+            sku: "GOU-ESS-1KG",
             quantity: 4,
             unitPrice: 84,
             totalAmount: 336,
@@ -105,6 +117,11 @@ test("confirmed order queues one idempotent email for the linked partner", async
   const payload = JSON.parse(String(write[5]));
   assert.equal(payload.partnerName, "Gustavo Nivov");
   assert.equal(payload.customerName, "Cliente Exemplo");
+  assert.equal(payload.customerTaxId, "12.345.678/0001-90");
+  assert.equal(payload.paymentTerms, "À vista");
+  assert.equal(payload.freightResponsibility, "PICKUP");
+  assert.equal(payload.subtotalCents, 172200);
+  assert.equal(payload.items[0].sku, "GOU-ESS-500");
   assert.equal(payload.packageQuantity, 37);
   assert.equal(payload.commissionMode, "PER_PACKAGE");
   assert.equal(payload.commissionPerPackageCents, 250);

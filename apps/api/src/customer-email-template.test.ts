@@ -140,11 +140,17 @@ test("renders the confirmed order and commission for the sales partner", () => {
       partnerName: "Gustavo <Nivov>",
       orderCode: "B-2026-000123",
       customerName: "Cliente & Companhia",
+      orderDate: "2026-10-12T15:00:00.000Z",
+      paymentTerms: "À vista",
+      freightResponsibility: "PICKUP",
       packageQuantity: 37,
       commissionMode: "PER_PACKAGE",
       commissionPerPackageCents: 250,
       commissionAmountCents: 9250,
       totalCents: 172200,
+      subtotalCents: 172200,
+      discountCents: 0,
+      freightCents: 0,
       items: [
         {
           name: "Café Gourmet White Label",
@@ -161,7 +167,9 @@ test("renders the confirmed order and commission for the sales partner", () => {
 
   assert.match(html, /Pedido confirmado/);
   assert.match(html, /Prezado\(a\) Gustavo &lt;Nivov&gt;/);
-  assert.match(html, /Critério de cálculo da comissão/);
+  assert.match(html, /Comissão referente a este pedido/);
+  assert.match(html, /Cópia do pedido do cliente/);
+  assert.match(html, /Pedido-B-2026-000123\.pdf/);
   assert.match(html, /Atenciosamente/);
   assert.match(html, /B-2026-000123/);
   assert.match(html, /37 pacotes/);

@@ -41,6 +41,19 @@ export class SalesOrderCustomerLifecycleService {
       partnerName: order.partnerName || order.brokerName || "Parceiro",
       orderCode: order.code,
       customerName: order.customerName,
+      customerTaxId: order.customerTaxId,
+      customerEmail: order.email,
+      customerPhone: order.phone,
+      customerAddress: [
+        order.address,
+        order.addressNumber,
+        order.addressComplement,
+        order.district,
+        order.city && order.state ? `${order.city}/${order.state}` : order.city,
+        order.postalCode ? `CEP ${order.postalCode}` : null,
+      ]
+        .filter(Boolean)
+        .join(", "),
       packageQuantity,
       commissionMode: order.brokerCommissionMode,
       commissionPercent: Number(order.brokerCommissionPercent || 0),
@@ -51,8 +64,20 @@ export class SalesOrderCustomerLifecycleService {
         Number(order.brokerCommissionAmount || 0) * 100,
       ),
       totalCents: Math.round(Number(order.totalAmount || 0) * 100),
+      subtotalCents: Math.round(Number(order.subtotal || 0) * 100),
+      discountCents: Math.round(Number(order.discount || 0) * 100),
+      freightCents: Math.round(Number(order.freight || 0) * 100),
+      orderDate: order.orderDate || order.orderedAt,
+      expectedDeliveryDate: order.expectedDeliveryDate,
+      paymentType: order.paymentType,
+      paymentTerms: order.paymentTermsSnapshot,
+      freightResponsibility: order.freightResponsibility,
+      shippingServiceName: order.shippingServiceName,
+      carrierName: order.carrierName,
+      customerReference: order.customerReference,
       items: items.map((item) => ({
         name: item.name,
+        sku: item.sku,
         quantity: Number(item.quantity),
         unitPriceCents: Math.round(Number(item.unitPrice) * 100),
         totalCents: Math.round(Number(item.totalAmount) * 100),
@@ -111,10 +136,13 @@ export class SalesOrderCustomerLifecycleService {
     return this.database.$transaction(async (transaction) => {
       const orders = await transaction.$queryRawUnsafe<any[]>(
         `SELECT so.id,so."companyId",COALESCE(so."orderNumber",so.code) AS code,so.status,
-                so.subtotal,so.discount,so.freight,so."totalAmount",so."freightResponsibility",so."shippingServiceName",
+                so.subtotal,so.discount,so.freight,so."totalAmount",so."orderedAt",so."orderDate",
+                so."expectedDeliveryDate",so."paymentType",so."paymentTermsSnapshot",so."customerReference",
+                so."freightResponsibility",so."shippingServiceName",
                 so."carrierName",so."estimatedDeliveryDays",so."brokerId",so."brokerCommissionMode",
                 so."brokerCommissionPercent",so."brokerCommissionPerPackage",so."brokerCommissionAmount",
-                c.name AS "customerName",c.email,c.phone,c.address,c.district,c.city,c.state,c."postalCode",
+                c.name AS "customerName",c."taxId" AS "customerTaxId",c.email,c.phone,c.address,
+                c."addressNumber",c."addressComplement",c.district,c.city,c.state,c."postalCode",
                 broker.name AS "brokerName",broker.email AS "brokerEmail",broker.active AS "brokerActive",
                 partner.id AS "partnerId",partner.name AS "partnerName",partner.email AS "partnerEmail",
                 partner.active AS "partnerActive",sfo.id AS "storefrontOrderId"
@@ -130,7 +158,7 @@ export class SalesOrderCustomerLifecycleService {
       if (!order) return null;
       if (order.storefrontOrderId) return null;
       const items = await transaction.$queryRawUnsafe<any[]>(
-        `SELECT "productName" AS name,quantity,"unitPrice","totalAmount"
+        `SELECT "productName" AS name,sku,quantity,"unitPrice","totalAmount"
            FROM "SalesOrderItem" WHERE "salesOrderId"=$1 ORDER BY "createdAt" ASC`,
         orderId,
       );
