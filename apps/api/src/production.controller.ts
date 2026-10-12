@@ -66,6 +66,7 @@ type CreateBatchBody = {
 type CompleteOrderBody = {
   warehouseId?: string;
   finishedProductId?: string;
+  productVariantId?: string;
   finishedOutputKg: number;
   producedPackages: number;
   packaging: Array<{
@@ -763,12 +764,21 @@ export class ProductionController {
             },
           });
         }
-        const officialVariant = order.productVariantId
+        const targetVariantId = body.productVariantId ?? order.productVariantId;
+        const officialVariant = targetVariantId
           ? await this.production.requireActiveVariant(
               transaction,
-              order.productVariantId,
+              targetVariantId,
             )
           : null;
+        if (
+          officialVariant &&
+          order.productVariant &&
+          officialVariant.productId !== order.productVariant.productId
+        )
+          throw new BadRequestException(
+            "Escolha uma apresentação do mesmo produto da OP.",
+          );
         if (officialVariant) {
           const packedWeightKg =
             (body.producedPackages * officialVariant.netWeightGrams) / 1000;
@@ -925,13 +935,13 @@ export class ProductionController {
           });
         if (!finishedProduct)
           throw new BadRequestException(
-            order.productVariantId
+            officialVariant
               ? "Não foi possível criar o saldo do SKU no armazém informado."
               : "Produto acabado legado não encontrado.",
           );
         if (
-          order.productVariantId &&
-          finishedProduct.productVariantId !== order.productVariantId
+          officialVariant &&
+          finishedProduct.productVariantId !== officialVariant.id
         )
           throw new BadRequestException(
             "O saldo de produto acabado não corresponde ao SKU da OP.",
@@ -941,17 +951,17 @@ export class ProductionController {
           data: {
             quantityOnHand: { increment: body.producedPackages },
             productVariantId:
-              finishedProduct.productVariantId ?? order.productVariantId,
+              finishedProduct.productVariantId ?? officialVariant?.id,
           },
         });
         const movement = await transaction.finishedGoodsMovement.create({
           data: {
             companyId: order.companyId,
             productionOrderId: id,
-            productVariantId: order.productVariantId,
+            productVariantId: officialVariant?.id,
             finishedProductId: finishedProduct.id,
             warehouseId: warehouse.id,
-            type: order.productVariantId ? "PRODUCTION_IN" : "ENTRY",
+            type: officialVariant ? "PRODUCTION_IN" : "ENTRY",
             packageQuantity: body.producedPackages,
             unit: "UN",
             totalWeightKg: body.finishedOutputKg,
@@ -1060,7 +1070,7 @@ export class ProductionController {
             data: newCosts.map((item) => ({
               companyId: order.companyId,
               productionOrderId: id,
-              productVariantId: order.productVariantId,
+              productVariantId: officialVariant?.id,
               costCenterId: item.costCenterId,
               type: item.type,
               nature: item.nature,
@@ -1079,7 +1089,7 @@ export class ProductionController {
         return {
           orderId: id,
           movementId: movement.id,
-          productVariantId: order.productVariantId,
+          productVariantId: officialVariant?.id,
           idempotent: false,
           balance: {
             physicalUnits: updatedBalance.quantityOnHand,

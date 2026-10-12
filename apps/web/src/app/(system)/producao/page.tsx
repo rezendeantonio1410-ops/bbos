@@ -1015,7 +1015,22 @@ function PackagingRegistration({
   onDone: (message: string) => Promise<void>;
   onCancel: () => void;
 }) {
-  const packageWeightG = order.packaging?.packageWeightG ?? 500;
+  const [packagingOptions, setPackagingOptions] = useState<
+    Array<{ id: string; sku: string; packageWeightG: number }>
+  >([
+    {
+      id: order.productVariantId ?? "",
+      sku: order.sku,
+      packageWeightG: order.packaging?.packageWeightG ?? 500,
+    },
+  ]);
+  const [selectedVariantId, setSelectedVariantId] = useState(
+    order.productVariantId ?? "",
+  );
+  const selectedVariant =
+    packagingOptions.find((item) => item.id === selectedVariantId) ??
+    packagingOptions[0]!;
+  const packageWeightG = selectedVariant.packageWeightG;
   const roastedKg = order.batches.reduce(
     (sum, item) => sum + item.roastedOutputKg,
     0,
@@ -1043,6 +1058,40 @@ function PackagingRegistration({
     useState<UtilityCostEstimate | null>(null);
   const [error, setError] = useState("");
   const finishedOutputKg = (producedPackages * packageWeightG) / 1000;
+  useEffect(() => {
+    let active = true;
+    void loadProductCatalog()
+      .then(({ products }) => {
+        if (!active) return;
+        const product = products.find((item) =>
+          item.skus.some((sku) => sku.id === order.productVariantId),
+        );
+        const availableFormats =
+          product?.skus
+            .filter((sku) => sku.active)
+            .map((sku) => ({
+              id: sku.id,
+              sku: sku.sku,
+              packageWeightG: sku.packageWeightG,
+            })) ?? [];
+        if (availableFormats.length) {
+          setPackagingOptions(availableFormats);
+          setSelectedVariantId((current) =>
+            availableFormats.some((item) => item.id === current)
+              ? current
+              : availableFormats[0]!.id,
+          );
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [order.productVariantId]);
+  useEffect(() => {
+    setProducedPackages(suggestedPackages);
+    setMaterialName(`Embalagem ${selectedVariant.sku}`);
+  }, [selectedVariant.sku, suggestedPackages]);
   useEffect(() => {
     const api = getApiBaseUrl();
     void Promise.all([
@@ -1110,13 +1159,15 @@ function PackagingRegistration({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             warehouseId: warehouseId || undefined,
+            productVariantId: selectedVariant.id,
             finishedOutputKg,
             producedPackages,
             packaging: [
               {
                 materialType: "PACKAGE",
-                materialName: materialName.trim() || `Embalagem ${order.sku}`,
-                sku: order.sku,
+                materialName:
+                  materialName.trim() || `Embalagem ${selectedVariant.sku}`,
+                sku: selectedVariant.sku,
                 quantity: producedPackages,
                 unit: "UN",
                 unitCost: packagingUnitCost,
@@ -1139,7 +1190,7 @@ function PackagingRegistration({
           ),
         );
       await onDone(
-        `Empacotamento concluído: ${producedPackages.toLocaleString("pt-BR")} pacotes de ${packageWeightG} g adicionados ao estoque.`,
+        `Empacotamento concluído: ${producedPackages.toLocaleString("pt-BR")} pacotes de ${packageWeightG} g (${selectedVariant.sku}) adicionados ao estoque. O saldo torrado restante continua disponível para outros formatos.`,
       );
     } catch (caught) {
       setError(
@@ -1171,6 +1222,23 @@ function PackagingRegistration({
         </button>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold">
+          Formato do pacote
+          <select
+            value={selectedVariant.id}
+            onChange={(event) => setSelectedVariantId(event.target.value)}
+            className={field}
+          >
+            {packagingOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.packageWeightG === 1000
+                  ? "1 kg"
+                  : `${item.packageWeightG} g`}{" "}
+                · {item.sku}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="text-xs font-semibold">
           Quantidade de pacotes
           <input
@@ -1352,6 +1420,11 @@ function PackagingRegistration({
           {error}
         </p>
       )}
+      <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
+        O café torrado será baixado do WIP somente pelo peso desta entrada. O
+        saldo restante continuará disponível e poderá ser empacotado em outra
+        apresentação do mesmo produto.
+      </p>
       <div className="mt-5 flex justify-end gap-3">
         <button
           onClick={onCancel}
@@ -1360,11 +1433,7 @@ function PackagingRegistration({
           Cancelar
         </button>
         <Button disabled={busy || !ready} onClick={() => void submit()}>
-          {busy
-            ? "Concluindo…"
-            : ready
-              ? "Concluir e dar entrada"
-              : "Preparando…"}
+          {busy ? "Concluindo…" : ready ? "Registrar entrada" : "Preparando…"}
         </Button>
       </div>
     </div>
