@@ -565,23 +565,25 @@ model Supplier {
 }
 
 model Broker {
-  id              String                @id @default(cuid())
-  companyId       String
-  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name            String
-  legalName       String?
-  tradeName       String?
-  taxId           String?
-  contactName     String?
-  phone           String?
-  email           String?
-  bankDetails     Json?
-  active          Boolean               @default(true)
-  purchases       GreenCoffeePurchase[]
-  salesOrders     SalesOrder[]
-  accountsPayable AccountsPayable[]
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id                String                @id @default(cuid())
+  companyId         String
+  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  businessPartnerId String?               @unique
+  businessPartner   StorefrontPartner?    @relation("BusinessPartnerBrokerProfile", fields: [businessPartnerId], references: [id], onDelete: Cascade)
+  name              String
+  legalName         String?
+  tradeName         String?
+  taxId             String?
+  contactName       String?
+  phone             String?
+  email             String?
+  bankDetails       Json?
+  active            Boolean               @default(true)
+  purchases         GreenCoffeePurchase[]
+  salesOrders       SalesOrder[]
+  accountsPayable   AccountsPayable[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
@@ -592,6 +594,8 @@ model StorefrontPartner {
   companyId         String
   company           Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name              String
+  legalName         String?
+  tradeName         String?
   taxId             String?
   contactName       String?
   phone             String?
@@ -599,7 +603,11 @@ model StorefrontPartner {
   pixKey            String?
   bankDetails       Json?
   active            Boolean                      @default(true)
+  isSalesPartner    Boolean                      @default(true)
+  isSalesBroker     Boolean                      @default(false)
+  isGreenCoffeeBroker Boolean                    @default(false)
   portalAccessLevel StorefrontPartnerAccessLevel @default(VIEWER)
+  brokerProfile     Broker?                      @relation("BusinessPartnerBrokerProfile")
   accountsPayable   AccountsPayable[]
   portalUser        User?
   customers         StorefrontPartnerCustomer[]
@@ -609,6 +617,7 @@ model StorefrontPartner {
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
+  @@index([companyId, isSalesPartner, isSalesBroker, isGreenCoffeeBroker, active], map: "StorefrontPartner_companyId_roles_idx")
 }
 
 model StorefrontPartnerCustomer {

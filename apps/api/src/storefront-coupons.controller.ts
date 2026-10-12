@@ -132,7 +132,7 @@ export class StorefrontCouponsController {
         "A comissão percentual do parceiro deve estar entre 0% e 100%.",
       );
     const partners = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 AND active=true LIMIT 1`,
+      `SELECT id FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 AND active=true AND "isSalesPartner"=true LIMIT 1`,
       body.partnerId,
       actor.companyId,
     );
@@ -241,7 +241,7 @@ export class StorefrontCouponsController {
         "A comissão percentual do parceiro deve estar entre 0% e 100%.",
       );
     const partners = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 AND active=true LIMIT 1`,
+      `SELECT id FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 AND active=true AND "isSalesPartner"=true LIMIT 1`,
       partnerId,
       actor.companyId,
     );

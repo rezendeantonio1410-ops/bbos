@@ -1706,14 +1706,14 @@ function NewOrder({
                 {!isSample && (
                   <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">
-                      Corretor e comissão · opcional
+                      Parceiro/corretor e comissão · opcional
                     </p>
                     <p className="mt-1 text-[10px] text-stone-500">
-                      Escolha percentual sobre os produtos ou valor fixo por
-                      pacote. O frete nunca entra na comissão.
+                      Selecione um parceiro habilitado como corretor comercial.
+                      O frete nunca entra na comissão.
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
-                      <Field label="Corretor">
+                      <Field label="Parceiro/corretor">
                         <select
                           value={brokerId}
                           onChange={(event) => {
@@ -1724,7 +1724,7 @@ function NewOrder({
                             }
                           }}
                         >
-                          <option value="">Sem corretor</option>
+                          <option value="">Sem parceiro/corretor</option>
                           {brokers.map((broker) => (
                             <option key={broker.id} value={broker.id}>
                               {broker.tradeName || broker.name}

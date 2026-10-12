@@ -37,6 +37,70 @@ export class StorefrontPartnersController {
     return actor;
   }
 
+  private ensureOperationalRole(roles: {
+    isSalesPartner: boolean;
+    isSalesBroker: boolean;
+    isGreenCoffeeBroker: boolean;
+  }) {
+    if (
+      !roles.isSalesPartner &&
+      !roles.isSalesBroker &&
+      !roles.isGreenCoffeeBroker
+    ) {
+      throw new BadRequestException(
+        "Habilite ao menos uma função para o parceiro de negócios.",
+      );
+    }
+  }
+
+  private async syncBrokerProfile(transaction: any, partner: any) {
+    const shouldHaveBrokerProfile =
+      partner.isSalesBroker || partner.isGreenCoffeeBroker;
+    const brokerData = {
+      companyId: partner.companyId,
+      name: partner.name,
+      legalName: partner.legalName,
+      tradeName: partner.tradeName,
+      taxId: partner.taxId,
+      contactName: partner.contactName,
+      phone: partner.phone,
+      email: partner.email,
+      bankDetails: partner.bankDetails ?? undefined,
+      active: partner.active && shouldHaveBrokerProfile,
+    };
+    const current = await transaction.broker.findUnique({
+      where: { businessPartnerId: partner.id },
+    });
+    if (current) {
+      await transaction.broker.update({
+        where: { id: current.id },
+        data: brokerData,
+      });
+    } else if (shouldHaveBrokerProfile) {
+      await transaction.broker.create({
+        data: { ...brokerData, businessPartnerId: partner.id },
+      });
+    }
+
+    if (!partner.active || !partner.isSalesPartner) {
+      const portalUsers = await transaction.user.findMany({
+        where: { storefrontPartnerId: partner.id, active: true },
+        select: { id: true },
+      });
+      if (portalUsers.length) {
+        const userIds = portalUsers.map((user: { id: string }) => user.id);
+        await transaction.user.updateMany({
+          where: { id: { in: userIds } },
+          data: { active: false },
+        });
+        await transaction.authSession.updateMany({
+          where: { userId: { in: userIds }, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+    }
+  }
+
   @Get()
   async list(@Req() request: any) {
     const actor = await this.actor(request);
@@ -78,9 +142,14 @@ export class StorefrontPartnersController {
     ];
     const partner = await this.database.storefrontPartner.findFirst({
       where: { id, companyId: actor.companyId },
-      select: { id: true },
+      select: { id: true, active: true, isSalesPartner: true },
     });
     if (!partner) throw new BadRequestException("Parceiro não encontrado.");
+    if (!partner.active || !partner.isSalesPartner) {
+      throw new BadRequestException(
+        "Habilite a função Parceiro comercial antes de configurar o portal.",
+      );
+    }
     if (customerIds.length) {
       const countRows = await this.database.$queryRawUnsafe<any[]>(
         `SELECT COUNT(*)::int AS count FROM "Customer"
@@ -163,6 +232,10 @@ export class StorefrontPartnersController {
       throw new BadRequestException(
         "Ative o parceiro antes de liberar o portal.",
       );
+    if (!partner.isSalesPartner)
+      throw new BadRequestException(
+        "Habilite a função Parceiro comercial antes de liberar o portal.",
+      );
 
     const email = String(body.email ?? partner.email ?? "")
       .trim()
@@ -243,32 +316,42 @@ export class StorefrontPartnersController {
     const name = String(body.name ?? "").trim();
     if (!name) throw new BadRequestException("Nome do parceiro é obrigatório.");
     const taxId = String(body.taxId ?? "").replace(/\D/g, "") || null;
+    const roles = {
+      isSalesPartner: body.isSalesPartner !== false,
+      isSalesBroker: body.isSalesBroker === true,
+      isGreenCoffeeBroker: body.isGreenCoffeeBroker === true,
+    };
+    this.ensureOperationalRole(roles);
     if (taxId) {
-      const duplicate = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT id FROM "StorefrontPartner" WHERE "companyId"=$1 AND "taxId"=$2 LIMIT 1`,
-        actor.companyId,
-        taxId,
-      );
-      if (duplicate[0])
+      const duplicate = await this.database.storefrontPartner.findFirst({
+        where: { companyId: actor.companyId, taxId },
+        select: { id: true },
+      });
+      if (duplicate)
         throw new BadRequestException(
           "CPF/CNPJ já cadastrado para outro parceiro.",
         );
     }
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `INSERT INTO "StorefrontPartner"
-        (id,"companyId",name,"taxId","contactName",phone,email,"pixKey",active,"createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW()) RETURNING *`,
-      randomUUID(),
-      actor.companyId,
-      name,
-      taxId,
-      String(body.contactName ?? "").trim() || null,
-      internationalPhone(body.phone),
-      String(body.email ?? "").trim() || null,
-      String(body.pixKey ?? "").trim() || null,
-      body.active !== false,
-    );
-    return rows[0];
+    return this.database.$transaction(async (transaction) => {
+      const partner = await transaction.storefrontPartner.create({
+        data: {
+          id: randomUUID(),
+          companyId: actor.companyId,
+          name,
+          legalName: String(body.legalName ?? "").trim() || null,
+          tradeName: String(body.tradeName ?? "").trim() || null,
+          taxId,
+          contactName: String(body.contactName ?? "").trim() || null,
+          phone: internationalPhone(body.phone),
+          email: String(body.email ?? "").trim() || null,
+          pixKey: String(body.pixKey ?? "").trim() || null,
+          active: body.active !== false,
+          ...roles,
+        },
+      });
+      await this.syncBrokerProfile(transaction, partner);
+      return partner;
+    });
   }
 
   @Patch(":id")
@@ -278,29 +361,52 @@ export class StorefrontPartnersController {
     @Body() body: Record<string, any>,
   ) {
     const actor = await this.actor(request);
-    const current = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
-      id,
-      actor.companyId,
-    );
-    if (!current[0]) throw new BadRequestException("Parceiro não encontrado.");
-    const value = { ...current[0], ...body };
+    const current = await this.database.storefrontPartner.findFirst({
+      where: { id, companyId: actor.companyId },
+    });
+    if (!current) throw new BadRequestException("Parceiro não encontrado.");
+    const value = { ...current, ...body };
     const name = String(value.name ?? "").trim();
     if (!name) throw new BadRequestException("Nome do parceiro é obrigatório.");
     const taxId = String(value.taxId ?? "").replace(/\D/g, "") || null;
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `UPDATE "StorefrontPartner" SET name=$3,"taxId"=$4,"contactName"=$5,phone=$6,email=$7,"pixKey"=$8,active=$9,"updatedAt"=NOW()
-        WHERE id=$1 AND "companyId"=$2 RETURNING *`,
-      id,
-      actor.companyId,
-      name,
-      taxId,
-      String(value.contactName ?? "").trim() || null,
-      internationalPhone(value.phone),
-      String(value.email ?? "").trim() || null,
-      String(value.pixKey ?? "").trim() || null,
-      value.active !== false,
-    );
-    return rows[0];
+    const roles = {
+      isSalesPartner: value.isSalesPartner !== false,
+      isSalesBroker: value.isSalesBroker === true,
+      isGreenCoffeeBroker: value.isGreenCoffeeBroker === true,
+    };
+    this.ensureOperationalRole(roles);
+    if (taxId) {
+      const duplicate = await this.database.storefrontPartner.findFirst({
+        where: {
+          companyId: actor.companyId,
+          taxId,
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+      if (duplicate)
+        throw new BadRequestException(
+          "CPF/CNPJ já cadastrado para outro parceiro.",
+        );
+    }
+    return this.database.$transaction(async (transaction) => {
+      const partner = await transaction.storefrontPartner.update({
+        where: { id },
+        data: {
+          name,
+          legalName: String(value.legalName ?? "").trim() || null,
+          tradeName: String(value.tradeName ?? "").trim() || null,
+          taxId,
+          contactName: String(value.contactName ?? "").trim() || null,
+          phone: internationalPhone(value.phone),
+          email: String(value.email ?? "").trim() || null,
+          pixKey: String(value.pixKey ?? "").trim() || null,
+          active: value.active !== false,
+          ...roles,
+        },
+      });
+      await this.syncBrokerProfile(transaction, partner);
+      return partner;
+    });
   }
 }

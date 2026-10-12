@@ -271,7 +271,13 @@ export class SalesOrdersService implements OnModuleDestroy {
         },
       }),
       this.database.broker.findMany({
-        where: { companyId, active: true },
+        where: {
+          companyId,
+          active: true,
+          businessPartner: {
+            is: { active: true, isSalesBroker: true },
+          },
+        },
         orderBy: { name: "asc" },
       }),
     ]);
@@ -341,6 +347,9 @@ export class SalesOrdersService implements OnModuleDestroy {
               id: input.brokerId,
               companyId: customer.companyId,
               active: true,
+              businessPartner: {
+                is: { active: true, isSalesBroker: true },
+              },
             },
           });
           if (!broker)

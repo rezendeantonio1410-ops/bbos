@@ -865,6 +865,9 @@ export class GreenCoffeePurchasesController {
               id: body.brokerId,
               companyId: actor.companyId,
               active: true,
+              businessPartner: {
+                is: { active: true, isGreenCoffeeBroker: true },
+              },
             },
           });
           if (!broker)
@@ -1487,6 +1490,9 @@ export class GreenCoffeePurchasesController {
               id: body.brokerId,
               companyId: body.companyId,
               active: true,
+              businessPartner: {
+                is: { active: true, isGreenCoffeeBroker: true },
+              },
             },
             select: { id: true },
           });

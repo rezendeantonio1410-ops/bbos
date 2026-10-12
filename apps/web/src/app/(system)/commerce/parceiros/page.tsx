@@ -18,12 +18,17 @@ const API = getApiBaseUrl();
 type Partner = {
   id: string;
   name: string;
+  legalName?: string;
+  tradeName?: string;
   taxId?: string;
   contactName?: string;
   phone?: string;
   email?: string;
   pixKey?: string;
   active: boolean;
+  isSalesPartner: boolean;
+  isSalesBroker: boolean;
+  isGreenCoffeeBroker: boolean;
   portalUserId?: string | null;
   portalEmail?: string | null;
   portalActive?: boolean | null;
@@ -89,12 +94,17 @@ export default function StorefrontPartnersPage() {
           method: selected ? "PATCH" : "POST",
           body: JSON.stringify({
             name: data.get("name"),
+            legalName: data.get("legalName"),
+            tradeName: data.get("tradeName"),
             taxId: data.get("taxId"),
             contactName: data.get("contactName"),
             phone: data.get("phone"),
             email: data.get("email"),
             pixKey: data.get("pixKey"),
             active: data.get("active") === "true",
+            isSalesPartner: data.get("isSalesPartner") === "true",
+            isSalesBroker: data.get("isSalesBroker") === "true",
+            isGreenCoffeeBroker: data.get("isGreenCoffeeBroker") === "true",
           }),
         },
       );
@@ -215,14 +225,14 @@ export default function StorefrontPartnersPage() {
             <ArrowLeft size={14} /> Commerce
           </Link>
           <p className="mt-5 text-[10px] font-bold uppercase tracking-[.16em] text-[#087568]">
-            Café torrado · loja
+            Cadastro mestre · operação integrada
           </p>
           <h1 className="mt-1 text-3xl font-semibold text-[#14201d]">
-            Parceiros de venda
+            Parceiros de negócios
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            Proprietários de cupons e beneficiários de comissões da loja. Este
-            cadastro é separado dos corretores de café verde.
+            Um cadastro por pessoa ou empresa. Habilite as funções comerciais e
+            de corretagem necessárias em cada parceiro.
           </p>
         </div>
         <button
@@ -232,7 +242,7 @@ export default function StorefrontPartnersPage() {
           }}
           className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white"
         >
-          <Plus size={15} /> Novo parceiro
+          <Plus size={15} /> Novo parceiro de negócios
         </button>
       </header>
       {message && (
@@ -245,9 +255,12 @@ export default function StorefrontPartnersPage() {
           <Card key={partner.id} className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="font-bold text-[#14201d]">{partner.name}</h2>
+                <h2 className="font-bold text-[#14201d]">
+                  {partner.tradeName || partner.name}
+                </h2>
                 <p className="mt-1 text-xs text-stone-500">
-                  {partner.contactName || "Sem contato informado"}
+                  {partner.legalName || partner.name}
+                  {partner.contactName ? ` · ${partner.contactName}` : ""}
                 </p>
               </div>
               <span
@@ -259,6 +272,23 @@ export default function StorefrontPartnersPage() {
             <p className="mt-4 text-xs text-stone-500">
               {partner.email || partner.phone || "Dados de contato pendentes"}
             </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {partner.isSalesPartner && (
+                <span className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700">
+                  Parceiro comercial
+                </span>
+              )}
+              {partner.isSalesBroker && (
+                <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700">
+                  Corretor comercial
+                </span>
+              )}
+              {partner.isGreenCoffeeBroker && (
+                <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">
+                  Corretor de café verde
+                </span>
+              )}
+            </div>
             {partner.portalUserId && (
               <p
                 className={`mt-3 text-[10px] font-bold uppercase tracking-wider ${partner.portalActive ? "text-emerald-700" : "text-stone-400"}`}
@@ -285,7 +315,7 @@ export default function StorefrontPartnersPage() {
               >
                 <Pencil size={13} /> Editar
               </button>
-              {actorRole === "ADMIN" && (
+              {actorRole === "ADMIN" && partner.isSalesPartner && (
                 <button
                   onClick={() => void openPermissions(partner)}
                   className="inline-flex items-center gap-2 text-xs font-bold text-[#087568]"
@@ -293,7 +323,7 @@ export default function StorefrontPartnersPage() {
                   <ShieldCheck size={13} /> Permissões
                 </button>
               )}
-              {actorRole === "ADMIN" && (
+              {actorRole === "ADMIN" && partner.isSalesPartner && (
                 <button
                   onClick={() => setAccessPartner(partner)}
                   className="inline-flex items-center gap-2 text-xs font-bold text-violet-700"
@@ -302,40 +332,51 @@ export default function StorefrontPartnersPage() {
                   {partner.portalUserId ? "Redefinir acesso" : "Criar acesso"}
                 </button>
               )}
-              {actorRole === "ADMIN" && partner.portalUserId && (
-                <button
-                  onClick={() => void toggleAccess(partner)}
-                  className="inline-flex items-center gap-2 text-xs font-bold text-stone-600"
-                >
-                  <Power size={13} />{" "}
-                  {partner.portalActive
-                    ? "Desativar portal"
-                    : "Reativar portal"}
-                </button>
-              )}
+              {actorRole === "ADMIN" &&
+                partner.isSalesPartner &&
+                partner.portalUserId && (
+                  <button
+                    onClick={() => void toggleAccess(partner)}
+                    className="inline-flex items-center gap-2 text-xs font-bold text-stone-600"
+                  >
+                    <Power size={13} />{" "}
+                    {partner.portalActive
+                      ? "Desativar portal"
+                      : "Reativar portal"}
+                  </button>
+                )}
             </div>
           </Card>
         ))}
       </section>
       {partners.length === 0 && (
         <Card className="p-8 text-center text-sm text-stone-500">
-          Nenhum parceiro de venda cadastrado.
+          Nenhum parceiro de negócios cadastrado.
         </Card>
       )}
       {open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <header className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="font-bold">
-                {selected ? "Editar parceiro" : "Novo parceiro de venda"}
+                {selected ? "Editar parceiro" : "Novo parceiro de negócios"}
               </h2>
               <button aria-label="Fechar" onClick={() => setOpen(false)}>
                 <X size={18} />
               </button>
             </header>
-            <form onSubmit={save} className="grid gap-4 p-6 md:grid-cols-2">
-              <Field label="Nome completo">
+            <form
+              onSubmit={save}
+              className="grid min-h-0 gap-4 overflow-y-auto p-6 md:grid-cols-2"
+            >
+              <Field label="Nome/Razão social">
                 <input name="name" required defaultValue={selected?.name} />
+              </Field>
+              <Field label="Nome fantasia">
+                <input name="tradeName" defaultValue={selected?.tradeName} />
+              </Field>
+              <Field label="Razão social complementar">
+                <input name="legalName" defaultValue={selected?.legalName} />
               </Field>
               <Field label="CPF/CNPJ">
                 <input name="taxId" defaultValue={selected?.taxId} />
@@ -376,6 +417,35 @@ export default function StorefrontPartnersPage() {
                   <option value="false">Inativo</option>
                 </select>
               </Field>
+              <fieldset className="rounded-xl border border-stone-200 p-4 md:col-span-2">
+                <legend className="px-1 text-xs font-bold text-stone-700">
+                  Funções habilitadas
+                </legend>
+                <p className="mb-3 text-[11px] leading-5 text-stone-500">
+                  Selecione uma ou mais funções. O mesmo cadastro será usado em
+                  todos os fluxos correspondentes.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <RoleCheckbox
+                    name="isSalesPartner"
+                    label="Parceiro comercial"
+                    description="Portal, clientes e cupons"
+                    defaultChecked={selected?.isSalesPartner ?? true}
+                  />
+                  <RoleCheckbox
+                    name="isSalesBroker"
+                    label="Corretor comercial"
+                    description="Comissão em pedidos"
+                    defaultChecked={selected?.isSalesBroker ?? false}
+                  />
+                  <RoleCheckbox
+                    name="isGreenCoffeeBroker"
+                    label="Corretor de café verde"
+                    description="Comissão em compras"
+                    defaultChecked={selected?.isGreenCoffeeBroker ?? false}
+                  />
+                </div>
+              </fieldset>
               <div className="flex items-end justify-end gap-2 md:col-span-2">
                 <button
                   type="button"
@@ -576,6 +646,36 @@ function Field({
       <div className="mt-1 [&_input]:w-full [&_input]:rounded-xl [&_input]:border [&_input]:border-stone-200 [&_input]:px-3 [&_input]:py-2.5 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-200 [&_select]:bg-white [&_select]:px-3 [&_select]:py-2.5">
         {children}
       </div>
+    </label>
+  );
+}
+
+function RoleCheckbox({
+  name,
+  label,
+  description,
+  defaultChecked,
+}: {
+  name: string;
+  label: string;
+  description: string;
+  defaultChecked: boolean;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2 rounded-xl bg-stone-50 p-3 text-xs">
+      <input
+        type="checkbox"
+        name={name}
+        value="true"
+        defaultChecked={defaultChecked}
+        className="mt-0.5"
+      />
+      <span>
+        <strong className="block text-stone-800">{label}</strong>
+        <span className="mt-0.5 block text-[10px] font-normal text-stone-500">
+          {description}
+        </span>
+      </span>
     </label>
   );
 }

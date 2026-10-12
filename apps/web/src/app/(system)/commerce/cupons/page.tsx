@@ -19,7 +19,12 @@ const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
-type Partner = { id: string; name: string; active: boolean };
+type Partner = {
+  id: string;
+  name: string;
+  active: boolean;
+  isSalesPartner: boolean;
+};
 type Coupon = {
   id: string;
   partnerId: string;
@@ -66,7 +71,9 @@ export default function CouponsPage() {
       api<Partner[]>("/storefront/partners"),
     ]);
     setCoupons(couponRows);
-    setPartners(partnerRows.filter((item) => item.active));
+    setPartners(
+      partnerRows.filter((item) => item.active && item.isSalesPartner),
+    );
     setLoaded(true);
   };
   useEffect(() => {
@@ -203,7 +210,7 @@ export default function CouponsPage() {
             href="/commerce/parceiros"
             className="inline-flex items-center rounded-xl border border-[#087568] px-4 py-3 text-xs font-bold text-[#087568]"
           >
-            Parceiros de venda
+            Parceiros de negócios
           </Link>
           <button
             onClick={() => setOpen(!open)}
@@ -241,7 +248,7 @@ export default function CouponsPage() {
                   href="/commerce/parceiros"
                   className="mt-2 inline-block text-[11px] font-bold text-[#087568]"
                 >
-                  Cadastrar parceiro de venda
+                  Cadastrar parceiro comercial
                 </Link>
               )}
             </Field>

@@ -284,7 +284,7 @@ export default function CommercePage() {
             href="/commerce/parceiros"
             className="rounded-xl border border-[#087568] px-4 py-2.5 text-xs font-bold text-[#087568]"
           >
-            Parceiros de venda
+            Parceiros de negócios
           </Link>
           <Link
             href="/commerce/cupons"
