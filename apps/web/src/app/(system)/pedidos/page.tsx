@@ -234,6 +234,38 @@ type Order = {
   } | null;
 };
 
+type ManualPixInfo = {
+  eligible: boolean;
+  paid: boolean;
+  orderStatus: string;
+  amount: number;
+  accounts: Array<{
+    id: string;
+    name: string;
+    type: string;
+    currency: string;
+    financialInstitution?: { name: string } | null;
+  }>;
+  approval?: {
+    source: string;
+    method: string;
+    amount: number;
+    paidAt: string;
+    reference?: string | null;
+    recordedByName?: string | null;
+    recordedByRole?: string | null;
+    financialAccountName?: string | null;
+    manual: boolean;
+  } | null;
+};
+
+const localDateTimeValue = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+};
+
 const shipmentStatusLabel: Record<string, string> = {
   PENDING: "Frete em preparação",
   LABEL_READY: "Etiqueta pronta",
@@ -471,7 +503,9 @@ export default function OrdersPage() {
       : [];
     setCustomers(options.customers);
     setVariants(options.variants);
-    setBrokers(partnerBrokers.length ? partnerBrokers : (options.brokers ?? []));
+    setBrokers(
+      partnerBrokers.length ? partnerBrokers : (options.brokers ?? []),
+    );
   };
 
   const refresh = async () => {
@@ -2427,6 +2461,13 @@ function OrderDrawer({
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
   const [postingBusy, setPostingBusy] = useState(false);
+  const [manualPix, setManualPix] = useState<ManualPixInfo | null>(null);
+  const [manualPixOpen, setManualPixOpen] = useState(false);
+  const [manualPixBusy, setManualPixBusy] = useState(false);
+  const [manualPixError, setManualPixError] = useState("");
+  const [manualPixAccountId, setManualPixAccountId] = useState("");
+  const [manualPixReference, setManualPixReference] = useState("");
+  const [manualPixPaidAt, setManualPixPaidAt] = useState(localDateTimeValue);
   const shipmentStep = shipmentProgressIndex(fulfillment, order.status);
   const shipmentProgress = Math.round(
     (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
@@ -2499,6 +2540,37 @@ function OrderDrawer({
   useEffect(() => {
     void loadPostingAgencies();
   }, [order.id, order.shippingProvider]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`${salesOrdersApi()}/${order.id}/manual-pix`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!active) return;
+        if (!response.ok) {
+          setManualPix(null);
+          return;
+        }
+        const payload = (await response.json()) as ManualPixInfo;
+        setManualPix(payload);
+        setManualPixAccountId((current) => {
+          if (current && payload.accounts.some((item) => item.id === current))
+            return current;
+          const preferred =
+            payload.accounts.find((item) => /ita[uú]/i.test(item.name)) ??
+            payload.accounts[0];
+          return preferred?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (active) setManualPix(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [order.id]);
 
   useEffect(() => {
     if (!selectedItem?.productVariantId) {
@@ -2815,6 +2887,48 @@ function OrderDrawer({
     }
   };
 
+  const confirmManualPix = async () => {
+    setManualPixBusy(true);
+    setManualPixError("");
+    try {
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/manual-pix/confirm`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            financialAccountId: manualPixAccountId,
+            reference: manualPixReference,
+            paidAt: manualPixPaidAt
+              ? new Date(manualPixPaidAt).toISOString()
+              : undefined,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Não foi possível confirmar o Pix.",
+        );
+      }
+      setManualPix(payload as ManualPixInfo);
+      setManualPixOpen(false);
+      setManualPixReference("");
+      await onChanged();
+    } catch (cause) {
+      setManualPixError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível confirmar o Pix.",
+      );
+    } finally {
+      setManualPixBusy(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
@@ -2933,13 +3047,174 @@ function OrderDrawer({
                 <p className="mt-1 text-[11px] leading-5 text-amber-800">
                   O pedido permanece protegido em rascunho e só avança para
                   estoque e faturamento depois que o Mercado Pago confirmar o
-                  crédito.
+                  crédito ou um administrador aprovar o recebimento direto.
                 </p>
                 {order.payment?.expiresAt && (
                   <p className="mt-2 text-[10px] text-amber-700">
                     Expira em{" "}
                     {new Date(order.payment.expiresAt).toLocaleString("pt-BR")}
                   </p>
+                )}
+              </section>
+            )}
+
+            {manualPix && manualPix.paid && (
+              <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-full bg-emerald-100 p-2 text-emerald-800">
+                    <ShieldCheck size={17} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-emerald-950">
+                      Pagamento confirmado
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-emerald-800">
+                      {money.format(
+                        manualPix.approval?.amount ?? manualPix.amount,
+                      )}
+                      {manualPix.approval?.method
+                        ? ` via ${manualPix.approval.method}`
+                        : ""}
+                      {manualPix.approval?.financialAccountName
+                        ? ` · ${manualPix.approval.financialAccountName}`
+                        : ""}
+                    </p>
+                    {manualPix.approval?.manual && (
+                      <p className="text-[10px] leading-4 text-emerald-700">
+                        Aprovado manualmente por{" "}
+                        {manualPix.approval.recordedByName}
+                        {manualPix.approval.paidAt
+                          ? ` em ${new Date(manualPix.approval.paidAt).toLocaleString("pt-BR")}`
+                          : ""}
+                        {manualPix.approval.reference
+                          ? ` · Ref. ${manualPix.approval.reference}`
+                          : ""}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {manualPix && manualPix.eligible && !manualPix.paid && (
+              <section className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-2 text-xs font-bold text-violet-950">
+                      <BadgeDollarSign size={16} /> Pagamento direto via Pix
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-violet-800">
+                      Confirmação manual restrita a José e Suzi no nível
+                      administrativo. Valor em aberto:{" "}
+                      {money.format(manualPix.amount)}.
+                    </p>
+                  </div>
+                  {!manualPixOpen && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualPixError("");
+                        setManualPixOpen(true);
+                      }}
+                      className="rounded-xl bg-violet-950 px-4 py-2.5 text-[11px] font-bold text-white"
+                    >
+                      Confirmar PIX recebido
+                    </button>
+                  )}
+                </div>
+
+                {manualPixOpen && (
+                  <div className="mt-4 rounded-2xl border border-violet-200 bg-white p-4">
+                    <p className="text-xs font-bold text-stone-900">
+                      Aprovar recebimento de {money.format(manualPix.amount)}
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-stone-500">
+                      Esta ação dá baixa no financeiro, registra o aprovador e,
+                      quando necessário, libera o pedido para reserva de
+                      estoque.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                        Conta que recebeu
+                        <select
+                          value={manualPixAccountId}
+                          onChange={(event) =>
+                            setManualPixAccountId(event.target.value)
+                          }
+                          className="mt-1.5 w-full rounded-xl border bg-white px-3 py-2.5 text-xs font-semibold normal-case text-stone-800"
+                        >
+                          <option value="">Selecione</option>
+                          {manualPix.accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                              {account.financialInstitution?.name
+                                ? ` · ${account.financialInstitution.name}`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                        Data do recebimento
+                        <input
+                          type="datetime-local"
+                          value={manualPixPaidAt}
+                          max={localDateTimeValue()}
+                          onChange={(event) =>
+                            setManualPixPaidAt(event.target.value)
+                          }
+                          className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-xs font-semibold normal-case text-stone-800"
+                        />
+                      </label>
+                    </div>
+                    <label className="mt-3 block text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                      Identificador ou referência do comprovante
+                      <input
+                        value={manualPixReference}
+                        maxLength={180}
+                        onChange={(event) =>
+                          setManualPixReference(event.target.value)
+                        }
+                        placeholder="Ex.: E2E do Pix ou comprovante bancário"
+                        className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-xs font-medium normal-case text-stone-800"
+                      />
+                    </label>
+                    {manualPixError && (
+                      <p
+                        role="alert"
+                        className="mt-3 rounded-xl bg-red-50 p-3 text-[11px] text-red-700"
+                      >
+                        {manualPixError}
+                      </p>
+                    )}
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        disabled={manualPixBusy}
+                        onClick={() => {
+                          setManualPixOpen(false);
+                          setManualPixError("");
+                        }}
+                        className="rounded-xl border px-4 py-2.5 text-[11px] font-bold text-stone-600"
+                      >
+                        Voltar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          manualPixBusy ||
+                          !manualPixAccountId ||
+                          !manualPixReference.trim()
+                        }
+                        onClick={() => void confirmManualPix()}
+                        className="rounded-xl bg-violet-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
+                      >
+                        {manualPixBusy
+                          ? "Confirmando…"
+                          : `Aprovar ${money.format(manualPix.amount)}`}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </section>
             )}
@@ -2993,22 +3268,22 @@ function OrderDrawer({
                             ? fulfillment?.labelUrl
                               ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
                               : "NF-e autorizada. Pedido faturado e pronto para a expedição ou retirada."
-                          : order.status === "CONFIRMED"
-                            ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
-                            : order.status === "RESERVED"
-                              ? "O estoque está reservado. Inicie a separação física do pedido."
-                              : order.status === "PICKING"
-                                ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                                : order.status === "READY_TO_SHIP" &&
-                                    fulfillment?.fiscalStatus === "AUTHORIZED"
-                                  ? fulfillment?.labelUrl
-                                    ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                                    : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
-                                  : order.status === "READY_TO_SHIP"
-                                    ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                                    : fulfillment?.labelUrl
-                                      ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                                      : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                            : order.status === "CONFIRMED"
+                              ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
+                              : order.status === "RESERVED"
+                                ? "O estoque está reservado. Inicie a separação física do pedido."
+                                : order.status === "PICKING"
+                                  ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                                  : order.status === "READY_TO_SHIP" &&
+                                      fulfillment?.fiscalStatus === "AUTHORIZED"
+                                    ? fulfillment?.labelUrl
+                                      ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                      : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                                    : order.status === "READY_TO_SHIP"
+                                      ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                      : fulfillment?.labelUrl
+                                        ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                        : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
                   {order.status === "CONFIRMED" && (

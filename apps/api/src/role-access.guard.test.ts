@@ -47,6 +47,34 @@ test("finance access is enforced by the API, not only hidden in navigation", () 
   );
 });
 
+test("manual Pix approval is restricted to administrators", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "SalesOrderManualPaymentsController",
+        handler: "confirm",
+        role: "ADMIN",
+      }),
+    ),
+    true,
+  );
+  for (const role of ["EXECUTIVE", "FINANCE", "SALES"]) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({
+            controller: "SalesOrderManualPaymentsController",
+            handler: "confirm",
+            role,
+          }),
+        ),
+      ForbiddenException,
+    );
+  }
+});
+
 test("dashboard endpoints honor their narrower executive and industrial scopes", () => {
   const guard = new RoleAccessGuard(privateReflector);
 

@@ -2050,11 +2050,17 @@ model Payment {
   paidAt               DateTime
   method               String
   notes                String?
+  source               String                @default("FINANCE") @db.VarChar(40)
+  reference            String?               @db.VarChar(180)
+  recordedById         String?
+  recordedByName       String?               @db.VarChar(120)
+  recordedByRole       String?               @db.VarChar(40)
   idempotencyKey       String                @unique
   transaction          FinancialTransaction?
   createdAt            DateTime              @default(now())
 
   @@index([companyId, paidAt])
+  @@index([companyId, source, paidAt])
 }
 
 model FinancialTransaction {

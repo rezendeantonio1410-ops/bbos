@@ -737,6 +737,18 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Pedido expedido não pode ser cancelado por este fluxo.",
           );
+        const receivable = await transaction.accountsReceivable.findUnique({
+          where: { salesOrderId: order.id },
+          select: { status: true, openAmount: true },
+        });
+        if (
+          receivable?.status === "PAID" ||
+          (receivable && Number(receivable.openAmount) <= 0)
+        ) {
+          throw new BadRequestException(
+            "Pedido com pagamento confirmado não pode ser cancelado sem estorno financeiro.",
+          );
+        }
         for (const reservation of activeReservations.sort((a, b) =>
           a.finishedProductId.localeCompare(b.finishedProductId),
         )) {

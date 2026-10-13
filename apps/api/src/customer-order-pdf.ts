@@ -149,7 +149,7 @@ const wrap = (value: unknown, maxCharacters: number) => {
   return lines.length ? lines : ["—"];
 };
 
-function pageHeader(page: PdfPage, payload: PartnerOrderConfirmedEmailPayload) {
+function pageHeader(page: PdfPage) {
   page.push(
     `q ${logoWidth} 0 0 ${logoHeight.toFixed(2)} ${left} 754 cm /Logo Do Q`,
   );
@@ -172,7 +172,7 @@ function firstPage(
   items: NonNullable<PartnerOrderConfirmedEmailPayload["items"]>,
 ) {
   const page: PdfPage = [];
-  pageHeader(page, payload);
+  pageHeader(page);
   const orderCode = textValue(payload.orderCode, "Pedido Bispo");
   const customerName = textValue(payload.customerName, "Cliente");
 
@@ -412,7 +412,7 @@ function continuationPage(
   pageNumber: number,
 ) {
   const page: PdfPage = [];
-  pageHeader(page, payload);
+  pageHeader(page);
   text(page, "ITENS DO PEDIDO · CONTINUAÇÃO", left, 720, 8, {
     bold: true,
     color: "#087568",

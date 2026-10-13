@@ -65,6 +65,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   SalesOrderCatalogOptionsController: CORE,
   SalesOrdersController: CORE,
   SalesOrderApprovalsController: CORE,
+  SalesOrderManualPaymentsController: ["ADMIN"],
   FinanceController: ["ADMIN", "EXECUTIVE", "FINANCE"],
   FinanceSalesScheduleController: ["ADMIN", "EXECUTIVE", "FINANCE"],
   FinanceAssistedReconciliationController: ["ADMIN", "EXECUTIVE", "FINANCE"],

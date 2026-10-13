@@ -17,6 +17,7 @@ import { ProductionService } from "./production.service";
 import { SalesOrderCatalogOptionsController } from "./sales-order-catalog-options.controller";
 import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
+import { SalesOrderManualPaymentsController } from "./sales-order-manual-payments.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
 import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
@@ -100,6 +101,7 @@ import { IntelligenceService } from "./intelligence.service";
     SalesOrderCatalogOptionsController,
     SalesOrdersController,
     SalesOrderApprovalsController,
+    SalesOrderManualPaymentsController,
     FinanceController,
     FinanceSalesScheduleController,
     FinanceAssistedReconciliationController,
