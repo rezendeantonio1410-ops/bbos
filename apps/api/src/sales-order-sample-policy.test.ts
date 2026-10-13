@@ -175,6 +175,14 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     fiscal,
     /sefazStatusCode\) === 232[\s\S]*recoverRecipientOnFreshDraft[\s\S]*recipientRecoveryAttempted/,
   );
+  assert.match(
+    fiscal,
+    /currentRecipientRegistrationSignature[\s\S]*recipientRegistrationChangedAfterRecovery[\s\S]*recoverRecipientOnFreshDraft/,
+  );
+  assert.match(
+    fiscal,
+    /recipientRecoveryStateRegistrationSignature:[\s\S]*currentRecipientRegistrationSignature/,
+  );
   assert.match(fiscal, /`-IE\$\{rejectedFiscalReference\}`/);
   assert.match(
     fiscal,

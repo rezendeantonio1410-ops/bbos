@@ -775,12 +775,31 @@ export class BlingOutboxService {
     const priorRecipientRejection =
       String(priorFiscal[0]?.status) === "REJECTED" &&
       Number(priorFiscal[0]?.payloadSnapshot?.sefazStatusCode) === 232;
+    const currentRecipientRegistrationSignature = [
+      String(order.customerStateRegistrationType ?? "NON_TAXPAYER"),
+      String(order.customerStateRegistration ?? "")
+        .replace(/[^A-Z0-9]/gi, "")
+        .toUpperCase(),
+    ].join(":");
+    const priorRecipientRegistrationSignature = String(
+      priorFiscal[0]?.payloadSnapshot
+        ?.recipientRecoveryStateRegistrationSignature ?? "",
+    );
+    const recipientRegistrationChangedAfterRecovery =
+      Boolean(priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted) &&
+      currentRecipientRegistrationSignature !==
+        priorRecipientRegistrationSignature &&
+      (Boolean(priorRecipientRegistrationSignature) ||
+        (String(order.customerStateRegistrationType) === "NUMBER" &&
+          Boolean(String(order.customerStateRegistration ?? "").trim())));
     const recoverRecipientOnFreshDraft =
       priorRecipientRejection &&
-      !priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted;
+      (!priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted ||
+        recipientRegistrationChangedAfterRecovery);
     if (
       priorRecipientRejection &&
-      priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted
+      priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted &&
+      !recipientRegistrationChangedAfterRecovery
     ) {
       throw new Error(
         "Reprocessamento fiscal bloqueado: a rejeição 232 persistiu após gerar um novo rascunho com o destinatário corrigido. Revise a classificação estadual do cliente antes de tentar novamente.",
@@ -1255,6 +1274,11 @@ export class BlingOutboxService {
             ? new Date().toISOString()
             : (priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttemptedAt ??
               null),
+          recipientRecoveryStateRegistrationSignature:
+            recoverRecipientOnFreshDraft
+              ? currentRecipientRegistrationSignature
+              : (priorFiscal[0]?.payloadSnapshot
+                  ?.recipientRecoveryStateRegistrationSignature ?? null),
           replacedRejectedNfeId: recoverRecipientOnFreshDraft
             ? priorFiscalExternalId
             : (priorFiscal[0]?.payloadSnapshot?.replacedRejectedNfeId ?? null),
@@ -1290,6 +1314,10 @@ export class BlingOutboxService {
           recipientRecoveryAttemptedAt: recoverRecipientOnFreshDraft
             ? new Date().toISOString()
             : null,
+          recipientRecoveryStateRegistrationSignature:
+            recoverRecipientOnFreshDraft
+              ? currentRecipientRegistrationSignature
+              : null,
           replacedRejectedNfeId: recoverRecipientOnFreshDraft
             ? priorFiscalExternalId
             : null,
