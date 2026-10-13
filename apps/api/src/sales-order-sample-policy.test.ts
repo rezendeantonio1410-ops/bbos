@@ -144,10 +144,7 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     fiscal,
     /const updatePayload = \{[\s\S]*\.\.\.remoteOrder[\s\S]*method: "PUT"/,
   );
-  assert.doesNotMatch(
-    fiscal,
-    /pedidos\/vendas[\s\S]{0,2000}method: "PATCH"/,
-  );
+  assert.doesNotMatch(fiscal, /pedidos\/vendas[\s\S]{0,2000}method: "PATCH"/);
   assert.match(fiscal, /isBlingSalesOrderInvoiceAlreadyGenerated/);
   assert.match(fiscal, /indicadorIe: this\.blingStateRegistrationIndicator/);
   assert.match(
@@ -164,7 +161,15 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   );
   assert.match(
     fiscal,
-    /repairSampleInvoiceConsumerFinal[\s\S]*contribuinte: this\.blingStateRegistrationIndicator/,
+    /repairInvoiceRecipient[\s\S]*contribuinte: this\.blingStateRegistrationIndicator/,
+  );
+  assert.match(
+    fiscal,
+    /const recipientNeedsRepair =[^;]+;[\s\S]*repairInvoiceDraftConsumerFinal \|\| recipientNeedsRepair/,
+  );
+  assert.match(
+    fiscal,
+    /expectedStateRegistrationType === "EXEMPT"[\s\S]*draftStateRegistration\.toUpperCase\(\) !== "ISENTO"/,
   );
   assert.match(
     fiscal,

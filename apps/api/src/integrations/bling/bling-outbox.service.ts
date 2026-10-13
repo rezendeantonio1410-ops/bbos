@@ -272,12 +272,12 @@ export class BlingOutboxService {
     };
   }
 
-  private async repairSampleInvoiceConsumerFinal(
+  private async repairInvoiceRecipient(
     companyId: string,
     blingNfeId: string,
     fiscalDraft: any,
     order: any,
-    route: SampleFiscalRoute,
+    route?: SampleFiscalRoute | null,
   ) {
     const document = String(order?.customerTaxId ?? "").replace(/\D/g, "");
     const items = Array.isArray(fiscalDraft?.itens)
@@ -287,7 +287,7 @@ export class BlingOutboxService {
       : [];
     if (!items.length || items.some((item: any) => !item.codigo)) {
       throw new Error(
-        "Emissão de amostra bloqueada: o rascunho da NF-e não possui itens válidos para corrigir consumidor final.",
+        "Emissão fiscal bloqueada: o rascunho da NF-e não possui itens válidos para corrigir o destinatário.",
       );
     }
 
@@ -328,7 +328,15 @@ export class BlingOutboxService {
           uf: order?.customerState,
         },
       },
-      naturezaOperacao: { id: Number(route.natureOperationId) },
+      ...(route?.natureOperationId
+        ? { naturezaOperacao: { id: Number(route.natureOperationId) } }
+        : Number(fiscalDraft?.naturezaOperacao?.id ?? 0) > 0
+          ? {
+              naturezaOperacao: {
+                id: Number(fiscalDraft.naturezaOperacao.id),
+              },
+            }
+          : {}),
       ...(Number(fiscalDraft?.loja?.id ?? 0) > 0
         ? { loja: { id: Number(fiscalDraft.loja.id) } }
         : {}),
@@ -345,7 +353,9 @@ export class BlingOutboxService {
           : Number(fiscalDraft.desconto),
       observacoes:
         String(fiscalDraft?.observacoes ?? "").trim() ||
-        `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | BBOS: ${order.code}`,
+        (route
+          ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | BBOS: ${order.code}`
+          : `PEDIDO COMERCIAL | BBOS: ${order.code}`),
       itens: items,
       parcelas: Array.isArray(fiscalDraft?.parcelas)
         ? fiscalDraft.parcelas.map((installment: any) => ({
@@ -397,7 +407,7 @@ export class BlingOutboxService {
       { method: "GET" },
     );
     const updatedDraft = updated?.data ?? updated ?? {};
-    if (!sampleCfopIsApplied(updatedDraft?.itens, route.cfop)) {
+    if (route && !sampleCfopIsApplied(updatedDraft?.itens, route.cfop)) {
       throw new Error(
         `Emissão de amostra bloqueada: ao corrigir consumidor final, o Bling não preservou o CFOP ${route.cfop}.`,
       );
@@ -1063,28 +1073,54 @@ export class BlingOutboxService {
     if (!blingNfeId) throw new Error("Bling não retornou o ID da NF-e criada.");
 
     let invoiceDraftRepairApplied = false;
-    if (sampleFiscalRoute) {
-      const fiscalDraftDetail = await this.bling.request(
-        row.companyId,
-        `/nfe/${encodeURIComponent(blingNfeId)}`,
-        { method: "GET" },
+    const fiscalDraftDetail = await this.bling.request(
+      row.companyId,
+      `/nfe/${encodeURIComponent(blingNfeId)}`,
+      { method: "GET" },
+    );
+    const fiscalDraft = fiscalDraftDetail?.data ?? fiscalDraftDetail ?? {};
+    if (
+      sampleFiscalRoute &&
+      !sampleCfopIsApplied(fiscalDraft?.itens, sampleFiscalRoute.cfop)
+    ) {
+      throw new Error(
+        `Emissão de amostra bloqueada antes da SEFAZ: o rascunho da NF-e não recebeu o CFOP ${sampleFiscalRoute.cfop} (${sampleFiscalRoute.scope === "INTER" ? "operação interestadual" : "operação interna"}). Corrija a natureza de operação no Bling e tente novamente.`,
       );
-      let fiscalDraft = fiscalDraftDetail?.data ?? fiscalDraftDetail ?? {};
-      if (!sampleCfopIsApplied(fiscalDraft?.itens, sampleFiscalRoute.cfop)) {
-        throw new Error(
-          `Emissão de amostra bloqueada antes da SEFAZ: o rascunho da NF-e não recebeu o CFOP ${sampleFiscalRoute.cfop} (${sampleFiscalRoute.scope === "INTER" ? "operação interestadual" : "operação interna"}). Corrija a natureza de operação no Bling e tente novamente.`,
-        );
-      }
-      if (repairInvoiceDraftConsumerFinal) {
-        fiscalDraft = await this.repairSampleInvoiceConsumerFinal(
-          row.companyId,
-          blingNfeId,
-          fiscalDraft,
-          order,
-          sampleFiscalRoute,
-        );
-        invoiceDraftRepairApplied = true;
-      }
+    }
+    const expectedStateRegistrationType = String(
+      order.customerStateRegistrationType ?? "NON_TAXPAYER",
+    );
+    const expectedStateRegistrationIndicator =
+      this.blingStateRegistrationIndicator({
+        stateRegistrationType: expectedStateRegistrationType,
+      });
+    const draftStateRegistrationIndicator = Number(
+      fiscalDraft?.contato?.contribuinte ??
+        fiscalDraft?.contato?.indicadorIe ??
+        fiscalDraft?.destinatario?.contribuinte ??
+        fiscalDraft?.destinatario?.indicadorIe,
+    );
+    const draftStateRegistration = String(
+      fiscalDraft?.contato?.ie ?? fiscalDraft?.destinatario?.ie ?? "",
+    ).trim();
+    const expectedStateRegistration = String(
+      order.customerStateRegistration ?? "",
+    ).trim();
+    const recipientNeedsRepair =
+      draftStateRegistrationIndicator !== expectedStateRegistrationIndicator ||
+      (expectedStateRegistrationType === "NUMBER" &&
+        draftStateRegistration !== expectedStateRegistration) ||
+      (expectedStateRegistrationType === "EXEMPT" &&
+        draftStateRegistration.toUpperCase() !== "ISENTO");
+    if (repairInvoiceDraftConsumerFinal || recipientNeedsRepair) {
+      await this.repairInvoiceRecipient(
+        row.companyId,
+        blingNfeId,
+        fiscalDraft,
+        order,
+        sampleFiscalRoute,
+      );
+      invoiceDraftRepairApplied = true;
     }
 
     const reusableFiscal =
