@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -27,6 +28,10 @@ import {
 } from "./sales-order-sample-policy";
 import { customerFiscalReadinessMessage } from "./customer-fiscal-readiness";
 import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
+import {
+  buildSalesOrderPdfDownload,
+  pdfContentDisposition,
+} from "./sales-order-pdf-download";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -470,6 +475,36 @@ export class SalesOrdersController {
   @Get(":id")
   async get(@Param("id") id: string, @Req() request: any) {
     return this.salesOrders.get((await this.actor(request)).companyId, id);
+  }
+
+  @Get(":id/pdf")
+  async pdf(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Res() response: any,
+  ) {
+    const actor = await this.actor(request);
+    const order: any = await this.salesOrders.get(actor.companyId, id);
+    const approvals = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT "acceptedByName","acceptedAt"
+         FROM "SalesOrderCustomerApproval"
+        WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='APPROVED'
+        ORDER BY "acceptedAt" DESC NULLS LAST,"createdAt" DESC
+        LIMIT 1`,
+      order.id,
+      actor.companyId,
+    );
+    const { body: pdf, fileName } = buildSalesOrderPdfDownload(
+      order,
+      approvals[0],
+    );
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": pdfContentDisposition(fileName),
+      "Content-Length": pdf.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(pdf);
   }
 
   @Post()

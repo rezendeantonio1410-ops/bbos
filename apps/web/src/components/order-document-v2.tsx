@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Download } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
 
 type Customer = {
@@ -61,7 +61,10 @@ type CustomerApproval = {
   acceptedAt?: string | null;
 };
 
-const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const money = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 const date = new Intl.DateTimeFormat("pt-BR");
 const statusLabel: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -77,16 +80,29 @@ const statusLabel: Record<string, string> = {
 const freightLabel: Record<string, string> = {
   BISPO: "Frete negociado pela Bispo",
   CUSTOMER: "Frete cotado pela plataforma Bispo",
-  CUSTOMER_CARRIER: "Transportadora indicada pelo distribuidor · por sua conta e risco",
+  CUSTOMER_CARRIER:
+    "Transportadora indicada pelo distribuidor · por sua conta e risco",
   PICKUP: "Retirada na Bispo Coffees",
 };
+const safeFilePart = (value: unknown, fallback: string) =>
+  String(value ?? "")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .slice(0, 80) || fallback;
 
-async function resolveOrder(reference: string, signal: AbortSignal): Promise<Order> {
-  const direct = await fetch(`/api/sales-orders/${encodeURIComponent(reference)}`, {
-    credentials: "include",
-    cache: "no-store",
-    signal,
-  });
+async function resolveOrder(
+  reference: string,
+  signal: AbortSignal,
+): Promise<Order> {
+  const direct = await fetch(
+    `/api/sales-orders/${encodeURIComponent(reference)}`,
+    {
+      credentials: "include",
+      cache: "no-store",
+      signal,
+    },
+  );
   if (direct.ok) return direct.json() as Promise<Order>;
 
   const list = await fetch("/api/sales-orders", {
@@ -119,25 +135,41 @@ export default function OrderDocumentV2() {
     const controller = new AbortController();
     Promise.all([
       resolveOrder(id, controller.signal),
-      fetch("/api/customers", { credentials: "include", cache: "no-store", signal: controller.signal }),
+      fetch("/api/customers", {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      }),
     ])
       .then(async ([nextOrder, customerResponse]) => {
         const [customers, approvalResponse] = await Promise.all([
-          customerResponse.ok ? (customerResponse.json() as Promise<Customer[]>) : Promise.resolve([]),
-          fetch(`${getApiBaseUrl()}/sales-order-approvals/${encodeURIComponent(nextOrder.id)}/history`, {
-            credentials: "include",
-            cache: "no-store",
-            signal: controller.signal,
-          }),
+          customerResponse.ok
+            ? (customerResponse.json() as Promise<Customer[]>)
+            : Promise.resolve([]),
+          fetch(
+            `${getApiBaseUrl()}/sales-order-approvals/${encodeURIComponent(nextOrder.id)}/history`,
+            {
+              credentials: "include",
+              cache: "no-store",
+              signal: controller.signal,
+            },
+          ),
         ]);
-        const approvals = approvalResponse.ok ? ((await approvalResponse.json()) as CustomerApproval[]) : [];
+        const approvals = approvalResponse.ok
+          ? ((await approvalResponse.json()) as CustomerApproval[])
+          : [];
         setOrder(nextOrder);
-        setCustomer(customers.find((item) => item.id === nextOrder.customer.id) ?? null);
-        setApproval(approvals.find((item) => item.status === "APPROVED") ?? null);
+        setCustomer(
+          customers.find((item) => item.id === nextOrder.customer.id) ?? null,
+        );
+        setApproval(
+          approvals.find((item) => item.status === "APPROVED") ?? null,
+        );
         setState("ready");
       })
       .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
         setState("error");
       });
     return () => controller.abort();
@@ -146,7 +178,11 @@ export default function OrderDocumentV2() {
   const businessNumber = order?.orderNumber ?? order?.code ?? "Pedido-Bispo";
   const provisional = order?.status === "DRAFT";
   const sample = order?.orderType === "SAMPLE";
-  const fileName = `${businessNumber}${sample ? "-AMOSTRA" : ""}${provisional ? "-PROVISORIO" : ""}.pdf`;
+  const customerFileName = safeFilePart(
+    customer?.legalName || customer?.name || order?.customer.name,
+    "Cliente",
+  );
+  const fileName = `Pedido - ${customerFileName} - ${safeFilePart(businessNumber, "Pedido")}${sample ? " - AMOSTRA" : ""}${provisional ? " - PROVISORIO" : ""}.pdf`;
   const acceptanceText = useMemo(() => {
     if (!approval?.acceptedByName || !approval.acceptedAt) return null;
     const acceptedAt = new Date(approval.acceptedAt);
@@ -156,41 +192,68 @@ export default function OrderDocumentV2() {
   useEffect(() => {
     if (!order) return;
     const previousTitle = document.title;
-    const applyBusinessNumber = () => { document.title = businessNumber; };
+    const applyBusinessNumber = () => {
+      document.title = fileName.replace(/\.pdf$/i, "");
+    };
     applyBusinessNumber();
     window.addEventListener("beforeprint", applyBusinessNumber);
     return () => {
       window.removeEventListener("beforeprint", applyBusinessNumber);
       document.title = previousTitle;
     };
-  }, [order, businessNumber]);
+  }, [order, fileName]);
 
   const payment = sample
     ? "Sem cobrança · amostra"
     : order?.paymentType === "TERM"
       ? order.paymentTermsSnapshot || "A prazo"
       : "À vista";
-  const delivery = order?.expectedDeliveryDate ? date.format(new Date(order.expectedDeliveryDate)) : "A combinar";
+  const delivery = order?.expectedDeliveryDate
+    ? date.format(new Date(order.expectedDeliveryDate))
+    : "A combinar";
   const address = useMemo(() => {
     if (!customer) return "—";
-    return [
-      customer.address,
-      customer.district,
-      customer.city && customer.state ? `${customer.city}/${customer.state}` : customer.city || customer.state,
-      customer.postalCode,
-    ].filter(Boolean).join(" · ") || "—";
+    return (
+      [
+        customer.address,
+        customer.district,
+        customer.city && customer.state
+          ? `${customer.city}/${customer.state}`
+          : customer.city || customer.state,
+        customer.postalCode,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "—"
+    );
   }, [customer]);
 
-  if (state === "loading") return <main className="grid min-h-screen place-items-center bg-stone-100 text-sm text-stone-500">Preparando documento do pedido…</main>;
-  if (state === "error" || !order) return <main className="grid min-h-screen place-items-center bg-stone-100 p-6 text-center text-sm text-red-700">Não foi possível preparar o documento deste pedido.</main>;
+  if (state === "loading")
+    return (
+      <main className="grid min-h-screen place-items-center bg-stone-100 text-sm text-stone-500">
+        Preparando documento do pedido…
+      </main>
+    );
+  if (state === "error" || !order)
+    return (
+      <main className="grid min-h-screen place-items-center bg-stone-100 p-6 text-center text-sm text-red-700">
+        Não foi possível preparar o documento deste pedido.
+      </main>
+    );
 
   return (
     <main className="min-h-screen bg-[#EEEDEA] py-8 print:bg-white print:py-0">
       <div className="screen-only mx-auto mb-4 flex max-w-[210mm] items-center justify-between px-4">
-        <p className="text-xs font-semibold text-stone-500">Nome do arquivo: <strong className="text-stone-800">{fileName}</strong></p>
-        <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-[#0E191D] px-4 py-3 text-sm font-bold text-white shadow-lg">
-          <Printer size={16} /> Gerar / salvar PDF
-        </button>
+        <p className="text-xs font-semibold text-stone-500">
+          Nome do arquivo:{" "}
+          <strong className="text-stone-800">{fileName}</strong>
+        </p>
+        <a
+          href={`/api/sales-orders/${encodeURIComponent(order.id)}/pdf`}
+          download={fileName}
+          className="inline-flex items-center gap-2 rounded-xl bg-[#0E191D] px-4 py-3 text-sm font-bold text-white shadow-lg"
+        >
+          <Download size={16} /> Gerar / salvar PDF
+        </a>
       </div>
 
       <article className="order-sheet mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white px-[14mm] py-[12mm] text-[#111715] shadow-xl print:min-h-0 print:shadow-none">
@@ -205,59 +268,129 @@ export default function OrderDocumentV2() {
               className="h-auto w-[230px] object-contain"
             />
             <div className="mt-4">
-              <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#087568]">Bispo Coffees</p>
-              <p className="mt-1 text-[10px] font-medium text-stone-500">Sourcing Brazilian Coffees for the World.</p>
-              <h1 className="mt-4 text-xl font-bold tracking-tight">{sample ? "Pedido de Amostra" : provisional ? "Proposta Comercial Provisória" : "Confirmação de Pedido"}</h1>
-              <p className="mt-1 text-[10px] text-stone-500">{sample ? "Documento operacional com valor fiscal simbólico" : "Documento comercial para conferência do cliente"}</p>
+              <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#087568]">
+                Bispo Coffees
+              </p>
+              <p className="mt-1 text-[10px] font-medium text-stone-500">
+                Sourcing Brazilian Coffees for the World.
+              </p>
+              <h1 className="mt-4 text-xl font-bold tracking-tight">
+                {sample
+                  ? "Pedido de Amostra"
+                  : provisional
+                    ? "Proposta Comercial Provisória"
+                    : "Confirmação de Pedido"}
+              </h1>
+              <p className="mt-1 text-[10px] text-stone-500">
+                {sample
+                  ? "Documento operacional com valor fiscal simbólico"
+                  : "Documento comercial para conferência do cliente"}
+              </p>
             </div>
           </div>
           <div className="rounded-2xl bg-[#F6F7F4] p-5 text-right">
-            <p className="text-[9px] font-extrabold uppercase tracking-[.16em] text-stone-400">Pedido</p>
-            <p className="mt-1 text-[26px] font-black tracking-tight text-[#0E191D]">{businessNumber}</p>
-            <p className="mt-2 text-[10px] text-stone-500">Emitido em {date.format(new Date(order.orderedAt))}</p>
-            <span className={`mt-4 inline-flex rounded-full px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-wide ${provisional ? "bg-amber-100 text-amber-900" : "bg-[#EAF6F2] text-[#087568]"}`}>{provisional ? "Provisório" : (statusLabel[order.status] ?? order.status)}</span>
-            {acceptanceText && <p className="mt-3 text-[10px] font-semibold leading-4 text-[#087568]">{acceptanceText}</p>}
+            <p className="text-[9px] font-extrabold uppercase tracking-[.16em] text-stone-400">
+              Pedido
+            </p>
+            <p className="mt-1 text-[26px] font-black tracking-tight text-[#0E191D]">
+              {businessNumber}
+            </p>
+            <p className="mt-2 text-[10px] text-stone-500">
+              Emitido em {date.format(new Date(order.orderedAt))}
+            </p>
+            <span
+              className={`mt-4 inline-flex rounded-full px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-wide ${provisional ? "bg-amber-100 text-amber-900" : "bg-[#EAF6F2] text-[#087568]"}`}
+            >
+              {provisional
+                ? "Provisório"
+                : (statusLabel[order.status] ?? order.status)}
+            </span>
+            {acceptanceText && (
+              <p className="mt-3 text-[10px] font-semibold leading-4 text-[#087568]">
+                {acceptanceText}
+              </p>
+            )}
           </div>
         </header>
 
         {sample && (
           <section className="mt-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950">
-            <p className="text-[10px] font-black uppercase tracking-[.14em]">Remessa de amostra sem valor comercial</p>
-            <p className="mt-1 text-[10px] leading-4">Os itens estão registrados por valor fiscal simbólico. Este pedido não gera cobrança nem comissão. A natureza da operação, o CFOP e a tributação devem seguir a configuração fiscal validada no Bling.</p>
+            <p className="text-[10px] font-black uppercase tracking-[.14em]">
+              Remessa de amostra sem valor comercial
+            </p>
+            <p className="mt-1 text-[10px] leading-4">
+              Os itens estão registrados por valor fiscal simbólico. Este pedido
+              não gera cobrança nem comissão. A natureza da operação, o CFOP e a
+              tributação devem seguir a configuração fiscal validada no Bling.
+            </p>
           </section>
         )}
 
         {provisional && !sample && (
           <section className="mt-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950">
-            <p className="text-[10px] font-black uppercase tracking-[.14em]">Documento provisório — aguardando confirmação do cliente</p>
-            <p className="mt-1 text-[10px] leading-4">Esta proposta serve somente para conferência. Não confirma a venda, não reserva estoque, não gera cobrança e não constitui documento fiscal.</p>
+            <p className="text-[10px] font-black uppercase tracking-[.14em]">
+              Documento provisório — aguardando confirmação do cliente
+            </p>
+            <p className="mt-1 text-[10px] leading-4">
+              Esta proposta serve somente para conferência. Não confirma a
+              venda, não reserva estoque, não gera cobrança e não constitui
+              documento fiscal.
+            </p>
           </section>
         )}
 
         <section className="mt-6 grid grid-cols-2 gap-4">
           <Block title="Cliente / faturamento">
-            <Value label="Cliente" value={customer?.name ?? order.customer.name} strong />
+            <Value
+              label="Cliente"
+              value={customer?.name ?? order.customer.name}
+              strong
+            />
             <Value label="Razão social" value={customer?.legalName || "—"} />
             <Value label="Nome fantasia" value={customer?.tradeName || "—"} />
-            <div className="grid grid-cols-2 gap-3"><Value label="CPF / CNPJ" value={customer?.taxId || "—"} /><Value label="Segmento" value={customer?.segment || "—"} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <Value label="CPF / CNPJ" value={customer?.taxId || "—"} />
+              <Value label="Segmento" value={customer?.segment || "—"} />
+            </div>
           </Block>
           <Block title="Contato / entrega">
-            <div className="grid grid-cols-2 gap-3"><Value label="Telefone" value={customer?.phone || "—"} /><Value label="E-mail" value={customer?.email || "—"} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <Value label="Telefone" value={customer?.phone || "—"} />
+              <Value label="E-mail" value={customer?.email || "—"} />
+            </div>
             <Value label="Endereço cadastrado" value={address} />
-            <Value label="Referência / PO" value={order.customerReference || "—"} />
+            <Value
+              label="Referência / PO"
+              value={order.customerReference || "—"}
+            />
           </Block>
         </section>
 
         <section className="mt-5 overflow-hidden rounded-2xl border border-stone-200">
           <div className="grid grid-cols-[1fr_60px_110px_120px] bg-[#F6F7F4] px-4 py-3 text-[9px] font-extrabold uppercase tracking-[.12em] text-stone-500">
-            <span>Produto / SKU</span><span className="text-center">{sample ? "Pacotes" : "Qtd."}</span><span className="text-right">{sample ? "Preço/pacote" : "Preço unit."}</span><span className="text-right">Total</span>
+            <span>Produto / SKU</span>
+            <span className="text-center">{sample ? "Pacotes" : "Qtd."}</span>
+            <span className="text-right">
+              {sample ? "Preço/pacote" : "Preço unit."}
+            </span>
+            <span className="text-right">Total</span>
           </div>
           {order.items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr_60px_110px_120px] items-center border-t border-stone-100 px-4 py-4 text-xs">
-              <div><p className="font-bold">{item.productName}</p><p className="mt-1 text-[10px] text-stone-400">{item.sku}</p></div>
+            <div
+              key={item.id}
+              className="grid grid-cols-[1fr_60px_110px_120px] items-center border-t border-stone-100 px-4 py-4 text-xs"
+            >
+              <div>
+                <p className="font-bold">{item.productName}</p>
+                <p className="mt-1 text-[10px] text-stone-400">{item.sku}</p>
+              </div>
               <span className="text-center">{item.quantity}</span>
-              <span className="text-right">{money.format(Number(item.unitPrice ?? 0))}</span>
-              <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
+              <span className="text-right">
+                {money.format(Number(item.unitPrice ?? 0))}
+              </span>
+              <strong className="text-right">
+                {money.format(Number(item.totalAmount))}
+              </strong>
             </div>
           ))}
         </section>
@@ -266,45 +399,97 @@ export default function OrderDocumentV2() {
           <Block title="Condições comerciais">
             <div className="grid grid-cols-2 gap-3">
               <Value label="Pagamento" value={payment} strong />
-              <Value label="Frete" value={freightLabel[order.freightResponsibility ?? ""] ?? "A combinar"} strong />
+              <Value
+                label="Frete"
+                value={
+                  freightLabel[order.freightResponsibility ?? ""] ??
+                  "A combinar"
+                }
+                strong
+              />
               <Value label="Entrega prevista" value={delivery} />
-              {order.freightResponsibility === "PICKUP"
-                ? <Value label="Local" value="Bispo Coffees · retirada agendada" />
-                : <Value label="Transportadora" value={order.carrierName || "A definir"} />}
-              {order.incoterm && <Value label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
+              {order.freightResponsibility === "PICKUP" ? (
+                <Value
+                  label="Local"
+                  value="Bispo Coffees · retirada agendada"
+                />
+              ) : (
+                <Value
+                  label="Transportadora"
+                  value={order.carrierName || "A definir"}
+                />
+              )}
+              {order.incoterm && (
+                <Value
+                  label="Incoterm"
+                  value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`}
+                />
+              )}
             </div>
           </Block>
 
           <div className="rounded-2xl bg-[#0E191D] p-5 text-white">
-            <p className="text-[9px] font-bold uppercase tracking-[.14em] text-stone-400">Resumo financeiro</p>
+            <p className="text-[9px] font-bold uppercase tracking-[.14em] text-stone-400">
+              Resumo financeiro
+            </p>
             <div className="mt-4 space-y-2 text-xs">
-              <MoneyLine label="Subtotal" value={Number(order.subtotal ?? order.totalAmount)} />
-              {Number(order.discount ?? 0) > 0 && <MoneyLine label="Desconto" value={-Number(order.discount)} />}
-              {Number(order.freight ?? 0) > 0 && <MoneyLine label="Frete" value={Number(order.freight)} />}
+              <MoneyLine
+                label="Subtotal"
+                value={Number(order.subtotal ?? order.totalAmount)}
+              />
+              {Number(order.discount ?? 0) > 0 && (
+                <MoneyLine label="Desconto" value={-Number(order.discount)} />
+              )}
+              {Number(order.freight ?? 0) > 0 && (
+                <MoneyLine label="Frete" value={Number(order.freight)} />
+              )}
             </div>
             <div className="mt-4 border-t border-white/20 pt-4">
               <p className="text-[10px] text-stone-400">Total do pedido</p>
-              <p className="mt-1 text-2xl font-bold">{money.format(Number(order.totalAmount))}</p>
+              <p className="mt-1 text-2xl font-bold">
+                {money.format(Number(order.totalAmount))}
+              </p>
             </div>
           </div>
         </section>
 
         {order.notes && (
           <section className="mt-5 rounded-2xl border border-stone-200 p-4">
-            <p className="text-[9px] font-extrabold uppercase tracking-[.12em] text-stone-400">Observações comerciais</p>
-            <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-stone-700">{order.notes}</p>
+            <p className="text-[9px] font-extrabold uppercase tracking-[.12em] text-stone-400">
+              Observações comerciais
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-stone-700">
+              {order.notes}
+            </p>
           </section>
         )}
 
         <section className="mt-7 rounded-2xl border border-stone-200 p-5">
-          <p className="text-[9px] font-extrabold uppercase tracking-[.14em] text-[#087568]">Conferência do cliente</p>
-          <p className="mt-2 text-[10px] leading-4 text-stone-500">Ao conferir este documento, o cliente valida produtos, quantidades, valores e condições comerciais apresentadas.</p>
+          <p className="text-[9px] font-extrabold uppercase tracking-[.14em] text-[#087568]">
+            Conferência do cliente
+          </p>
+          <p className="mt-2 text-[10px] leading-4 text-stone-500">
+            Ao conferir este documento, o cliente valida produtos, quantidades,
+            valores e condições comerciais apresentadas.
+          </p>
           {acceptanceText ? (
-            <div className="mt-4 rounded-xl bg-[#EAF6F2] px-4 py-3 text-[11px] font-bold text-[#087568]">{acceptanceText} · aceite eletrônico registrado pelo BBOS.</div>
+            <div className="mt-4 rounded-xl bg-[#EAF6F2] px-4 py-3 text-[11px] font-bold text-[#087568]">
+              {acceptanceText} · aceite eletrônico registrado pelo BBOS.
+            </div>
           ) : (
             <div className="mt-6 grid grid-cols-2 gap-8">
-              <div><div className="border-b border-stone-300"/><p className="mt-2 text-[10px] text-stone-500">Nome / assinatura ou aceite eletrônico</p></div>
-              <div><div className="border-b border-stone-300"/><p className="mt-2 text-[10px] text-stone-500">Data da conferência</p></div>
+              <div>
+                <div className="border-b border-stone-300" />
+                <p className="mt-2 text-[10px] text-stone-500">
+                  Nome / assinatura ou aceite eletrônico
+                </p>
+              </div>
+              <div>
+                <div className="border-b border-stone-300" />
+                <p className="mt-2 text-[10px] text-stone-500">
+                  Data da conferência
+                </p>
+              </div>
             </div>
           )}
         </section>
@@ -315,32 +500,92 @@ export default function OrderDocumentV2() {
             <p className="mt-1">Sourcing Brazilian Coffees for the World.</p>
           </div>
           <div className="text-right">
-            <p>{provisional ? "Documento comercial provisório" : "Documento comercial"} · {businessNumber}</p>
-            <p className="mt-1 font-semibold text-stone-600">Arquivo: {fileName}</p>
+            <p>
+              {provisional
+                ? "Documento comercial provisório"
+                : "Documento comercial"}{" "}
+              · {businessNumber}
+            </p>
+            <p className="mt-1 font-semibold text-stone-600">
+              Arquivo: {fileName}
+            </p>
           </div>
         </footer>
       </article>
 
       <style jsx global>{`
-        @page { size: A4; margin: 0; }
+        @page {
+          size: A4;
+          margin: 0;
+        }
         @media print {
-          html, body { background: #fff !important; }
-          .screen-only { display: none !important; }
-          .order-sheet { width: 210mm !important; max-width: 210mm !important; margin: 0 !important; }
-          body > button, body > div[style*="position: fixed"] { display: none !important; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          html,
+          body {
+            background: #fff !important;
+          }
+          .screen-only {
+            display: none !important;
+          }
+          .order-sheet {
+            width: 210mm !important;
+            max-width: 210mm !important;
+            margin: 0 !important;
+          }
+          body > button,
+          body > div[style*="position: fixed"] {
+            display: none !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
       `}</style>
     </main>
   );
 }
 
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-stone-200 p-4"><p className="mb-3 text-[9px] font-extrabold uppercase tracking-[.12em] text-stone-400">{title}</p><div className="space-y-3">{children}</div></div>;
+function Block({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-stone-200 p-4">
+      <p className="mb-3 text-[9px] font-extrabold uppercase tracking-[.12em] text-stone-400">
+        {title}
+      </p>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
 }
-function Value({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return <div><p className="text-[9px] uppercase tracking-wide text-stone-400">{label}</p><p className={`mt-1 text-xs ${strong ? "font-bold" : "font-medium"}`}>{value}</p></div>;
+function Value({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[9px] uppercase tracking-wide text-stone-400">
+        {label}
+      </p>
+      <p className={`mt-1 text-xs ${strong ? "font-bold" : "font-medium"}`}>
+        {value}
+      </p>
+    </div>
+  );
 }
 function MoneyLine({ label, value }: { label: string; value: number }) {
-  return <div className="flex items-center justify-between"><span className="text-stone-400">{label}</span><span>{money.format(value)}</span></div>;
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-stone-400">{label}</span>
+      <span>{money.format(value)}</span>
+    </div>
+  );
 }

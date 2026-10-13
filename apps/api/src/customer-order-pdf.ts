@@ -18,9 +18,9 @@ const date = (value: unknown) => {
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime())
     ? String(value)
-    : new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(
-        parsed,
-      );
+    : new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      }).format(parsed);
 };
 
 const textValue = (value: unknown, fallback = "—") => {
@@ -38,6 +38,24 @@ const freightDescription = (payload: PartnerOrderConfirmedEmailPayload) => {
       : "Transportadora por conta do cliente";
   }
   return payload.shippingServiceName || payload.carrierName || "Entrega Bispo";
+};
+
+const statusDescription = (value: unknown) => {
+  const labels: Record<string, string> = {
+    DRAFT: "PROVISÓRIO",
+    CONFIRMED: "CONFIRMADO",
+    RESERVED: "RESERVADO",
+    PICKING: "EM SEPARAÇÃO",
+    READY_TO_SHIP: "PRONTO PARA EXPEDIÇÃO",
+    INVOICED: "FATURADO",
+    SHIPPED: "EXPEDIDO",
+    DELIVERED: "ENTREGUE",
+    CANCELLED: "CANCELADO",
+  };
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return labels[normalized] || normalized || "PEDIDO";
 };
 
 const pdfEscape = (value: unknown) =>
@@ -77,9 +95,7 @@ const line = (
   color = "#D8DFDC",
   width = 0.7,
 ) => {
-  page.push(
-    `${rgb(color)} RG ${width} w ${x1} ${y1} m ${x2} ${y2} l S`,
-  );
+  page.push(`${rgb(color)} RG ${width} w ${x1} ${y1} m ${x2} ${y2} l S`);
 };
 
 const text = (
@@ -124,17 +140,19 @@ const wrap = (value: unknown, maxCharacters: number) => {
 };
 
 function pageHeader(page: PdfPage, payload: PartnerOrderConfirmedEmailPayload) {
-  rect(page, 0, pageHeight - 8, pageWidth, 8, "#0E191D");
-  text(page, "BISPO", left, 785, 24, { bold: true, color: "#0E191D" });
-  text(page, "TRUE COFFEE", left + 2, 770, 7, { color: "#52605D" });
-  rightText(page, "PEDIDO CONFIRMADO", right, 784, 8, {
-    bold: true,
-    color: "#087568",
+  text(page, "BISPO", left, 785, 30, { bold: true, color: "#0E191D" });
+  text(page, "True Coffee", left + 3, 770, 7, { color: "#52605D" });
+  rightText(page, "BISPO COFFEES LTDA", right, 792, 10, { bold: true });
+  rightText(page, "CNPJ 13.008.726/0001-12", right, 776, 8, {
+    color: "#52605D",
   });
-  rightText(page, textValue(payload.orderCode), right, 768, 11, {
-    bold: true,
+  rightText(page, "Av. Theodoro Victorelli, 800 - Helena", right, 761, 8, {
+    color: "#52605D",
   });
-  line(page, left, 752, right, 752, "#0E191D", 1);
+  rightText(page, "Londrina - PR | CEP 86027-750", right, 746, 8, {
+    color: "#52605D",
+  });
+  line(page, left, 730, right, 730, "#D8DFDC", 0.8);
 }
 
 function firstPage(
@@ -143,98 +161,218 @@ function firstPage(
 ) {
   const page: PdfPage = [];
   pageHeader(page, payload);
+  const orderCode = textValue(payload.orderCode, "Pedido Bispo");
+  const customerName = textValue(payload.customerName, "Cliente");
 
-  text(page, "CÓPIA DO PEDIDO DO CLIENTE", left, 724, 8, {
-    bold: true,
-    color: "#087568",
+  text(
+    page,
+    payload.orderType === "SAMPLE"
+      ? "PEDIDO DE AMOSTRA"
+      : "CONFIRMAÇÃO DE PEDIDO",
+    left,
+    696,
+    24,
+    { bold: true },
+  );
+  rightText(page, `Emissão: ${date(payload.orderDate)}`, right, 699, 9, {
+    color: "#52605D",
   });
-  text(page, "Resumo comercial", left, 700, 23, { bold: true });
-  text(page, "Documento gerado pelo BBOS após a confirmação do pedido.", left, 681, 9, {
+  text(page, `Cliente: ${customerName}`, left, 674, 11, { bold: true });
+  rightText(page, orderCode, right, 674, 12, { bold: true, color: "#087568" });
+  text(page, "Documento comercial para conferência do cliente", left, 657, 8, {
     color: "#626B69",
   });
 
-  rect(page, left, 601, right - left, 58, "#E7F3EF");
-  text(page, "CLIENTE", left + 16, 638, 7, { bold: true, color: "#087568" });
-  text(page, textValue(payload.customerName), left + 16, 620, 12, { bold: true });
-  if (payload.customerTaxId) {
-    text(page, `CNPJ/CPF ${payload.customerTaxId}`, left + 16, 607, 8, {
-      color: "#52605D",
-    });
-  }
-  text(page, "DATA DO PEDIDO", 360, 638, 7, { bold: true, color: "#087568" });
-  text(page, date(payload.orderDate), 360, 620, 10, { bold: true });
-
-  text(page, "DADOS COMERCIAIS", left, 572, 8, {
+  rect(page, left, 580, right - left, 60, "#E7EFED");
+  text(page, "CLIENTE / FATURAMENTO", left + 12, 625, 7, {
     bold: true,
     color: "#087568",
   });
-  text(page, "Pagamento", left, 550, 8, { color: "#626B69" });
+  text(
+    page,
+    textValue(payload.customerLegalName || payload.customerName),
+    left + 12,
+    608,
+    10,
+    { bold: true },
+  );
+  text(
+    page,
+    `CNPJ/CPF ${textValue(payload.customerTaxId)}`,
+    left + 12,
+    596,
+    7,
+    {
+      color: "#52605D",
+    },
+  );
+  text(page, "CONTATO / ENTREGA", 332, 625, 7, {
+    bold: true,
+    color: "#087568",
+  });
+  const contact = [payload.customerPhone, payload.customerEmail]
+    .filter(Boolean)
+    .join(" | ");
+  text(page, textValue(contact), 332, 610, 8, { bold: true });
+  const addressLines = wrap(payload.customerAddress, 48).slice(0, 2);
+  text(page, addressLines[0], 332, 597, 7, { color: "#52605D" });
+  if (addressLines[1])
+    text(page, addressLines[1], 332, 587, 7, { color: "#52605D" });
+
+  text(page, "CONDIÇÕES COMERCIAIS", left, 566, 7, {
+    bold: true,
+    color: "#087568",
+  });
+  text(page, "Pagamento", left, 548, 7, { color: "#626B69" });
   text(
     page,
     textValue(payload.paymentTerms || payload.paymentType),
     left,
-    534,
-    10,
+    535,
+    9,
     { bold: true },
   );
-  text(page, "Entrega", 230, 550, 8, { color: "#626B69" });
-  text(page, freightDescription(payload), 230, 534, 10, { bold: true });
-  text(page, "Previsão", 430, 550, 8, { color: "#626B69" });
-  text(page, date(payload.expectedDeliveryDate), 430, 534, 10, { bold: true });
+  text(page, "Frete", 218, 548, 7, { color: "#626B69" });
+  text(page, freightDescription(payload), 218, 535, 9, { bold: true });
+  text(page, "Entrega prevista", 418, 548, 7, { color: "#626B69" });
+  text(page, date(payload.expectedDeliveryDate), 418, 535, 9, { bold: true });
   if (payload.customerReference) {
-    text(page, "Referência do cliente", left, 511, 8, { color: "#626B69" });
-    text(page, payload.customerReference, left, 495, 10, { bold: true });
+    text(page, `Referência / PO: ${payload.customerReference}`, left, 518, 8, {
+      color: "#52605D",
+    });
   }
 
-  text(page, "ITENS DO PEDIDO", left, 461, 8, {
-    bold: true,
-    color: "#087568",
-  });
-  rect(page, left, 426, right - left, 24, "#0E191D");
-  text(page, "PRODUTO / APRESENTAÇÃO", left + 10, 434, 7, {
+  rect(page, left, 475, right - left, 25, "#0E191D");
+  text(page, "PRODUTO / APRESENTAÇÃO", left + 10, 483, 7, {
     bold: true,
     color: "#FFFFFF",
   });
-  rightText(page, "QTD.", 350, 434, 7, { bold: true, color: "#FFFFFF" });
-  rightText(page, "PREÇO UNIT.", 442, 434, 7, {
+  rightText(page, "QTD.", 350, 483, 7, { bold: true, color: "#FFFFFF" });
+  rightText(page, "PREÇO UNIT.", 442, 483, 7, {
     bold: true,
     color: "#FFFFFF",
   });
-  rightText(page, "SUBTOTAL", right - 8, 434, 7, {
+  rightText(page, "TOTAL", right - 8, 483, 7, {
     bold: true,
     color: "#FFFFFF",
   });
 
-  let y = 400;
+  let y = 450;
   for (const item of items.slice(0, 6)) {
     const nameLines = wrap(item.name || "Produto Bispo", 39).slice(0, 2);
     text(page, nameLines[0], left + 10, y, 9, { bold: true });
     if (nameLines[1]) text(page, nameLines[1], left + 10, y - 11, 8);
-    if (item.sku) text(page, item.sku, left + 10, y - (nameLines[1] ? 22 : 13), 7, { color: "#626B69" });
+    if (item.sku)
+      text(page, item.sku, left + 10, y - (nameLines[1] ? 22 : 13), 7, {
+        color: "#626B69",
+      });
     rightText(page, Number(item.quantity || 0), 350, y, 9);
     rightText(page, money(item.unitPriceCents), 442, y, 9);
     rightText(page, money(item.totalCents), right - 8, y, 9, { bold: true });
     line(page, left, y - 27, right, y - 27);
-    y -= 43;
+    y -= 40;
   }
 
-  const totalsY = Math.min(120, y - 10);
-  text(page, "Subtotal", 350, totalsY + 72, 9, { color: "#626B69" });
-  rightText(page, money(payload.subtotalCents), right, totalsY + 72, 9);
-  text(page, "Desconto", 350, totalsY + 53, 9, { color: "#626B69" });
-  rightText(page, `- ${money(payload.discountCents)}`, right, totalsY + 53, 9);
-  text(page, "Frete", 350, totalsY + 34, 9, { color: "#626B69" });
-  rightText(page, money(payload.freightCents), right, totalsY + 34, 9);
-  line(page, 350, totalsY + 23, right, totalsY + 23, "#0E191D", 1);
-  text(page, "TOTAL", 350, totalsY, 11, { bold: true });
-  rightText(page, money(payload.totalCents), right, totalsY, 13, { bold: true });
+  const summaryTop = Math.max(220, y - 4);
+  rect(page, left, summaryTop - 35, right - left, 35, "#EEF2F0");
+  text(page, "SUBTOTAL DOS PRODUTOS", left + 12, summaryTop - 14, 8, {
+    bold: true,
+  });
+  rightText(
+    page,
+    money(payload.subtotalCents),
+    right - 12,
+    summaryTop - 17,
+    14,
+    { bold: true },
+  );
+  text(
+    page,
+    `Desconto: ${money(payload.discountCents)}  |  Frete: ${money(payload.freightCents)}`,
+    left + 12,
+    summaryTop - 51,
+    8,
+    { color: "#52605D" },
+  );
 
-  text(page, "Bispo Coffees · True Coffee · Londrina, Paraná", left, 42, 7, {
-    color: "#626B69",
+  rect(page, left, summaryTop - 113, right - left, 50, "#0E191D");
+  text(page, "TOTAL DO PEDIDO", left + 14, summaryTop - 84, 10, {
+    bold: true,
+    color: "#FFFFFF",
   });
-  rightText(page, "Documento eletrônico gerado pelo BBOS", right, 42, 7, {
-    color: "#626B69",
+  text(
+    page,
+    `${items.reduce((total, item) => total + Number(item.quantity || 0), 0)} pacotes`,
+    left + 14,
+    summaryTop - 99,
+    7,
+    { color: "#D8DFDC" },
+  );
+  rightText(page, money(payload.totalCents), right - 14, summaryTop - 96, 23, {
+    bold: true,
+    color: "#FFFFFF",
   });
+
+  const statusY = summaryTop - 137;
+  text(
+    page,
+    `Status: ${statusDescription(payload.orderStatus)}`,
+    left,
+    statusY,
+    8,
+    { bold: true, color: "#087568" },
+  );
+  if (payload.acceptedByName && payload.acceptedAt) {
+    text(
+      page,
+      `Confirmado por ${payload.acceptedByName} em ${date(payload.acceptedAt)}`,
+      left,
+      statusY - 16,
+      8,
+      { color: "#52605D" },
+    );
+  } else {
+    text(
+      page,
+      "Conferência: produtos, quantidades, valores e condições comerciais.",
+      left,
+      statusY - 16,
+      8,
+      { color: "#52605D" },
+    );
+  }
+
+  if (payload.notes) {
+    const noteLines = wrap(payload.notes, 95).slice(0, 2);
+    text(page, `Observações: ${noteLines[0]}`, left, statusY - 34, 7, {
+      color: "#52605D",
+    });
+    if (noteLines[1])
+      text(page, noteLines[1], left + 57, statusY - 45, 7, {
+        color: "#52605D",
+      });
+  }
+
+  text(
+    page,
+    "Bispo Coffees | True Coffee | www.bispocoffees.com.br",
+    left,
+    42,
+    7,
+    {
+      color: "#626B69",
+    },
+  );
+  rightText(
+    page,
+    `Documento comercial | ${orderCode} | 1 / ${items.length > 6 ? Math.ceil((items.length - 6) / 15) + 1 : 1}`,
+    right,
+    42,
+    7,
+    {
+      color: "#626B69",
+    },
+  );
   return page;
 }
 
@@ -251,7 +389,9 @@ function continuationPage(
   });
   let y = 685;
   for (const item of items) {
-    text(page, textValue(item.name, "Produto Bispo"), left, y, 9, { bold: true });
+    text(page, textValue(item.name, "Produto Bispo"), left, y, 9, {
+      bold: true,
+    });
     text(
       page,
       `${Number(item.quantity || 0)} × ${money(item.unitPriceCents)}`,
@@ -332,7 +472,9 @@ function assemblePdf(pages: PdfPage[]) {
       `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
         .slice(1)
         .map((offset) => `${String(offset).padStart(10, "0")} 00000 n `)
-        .join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`,
+        .join(
+          "\n",
+        )}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`,
       "latin1",
     ),
   );
@@ -345,7 +487,13 @@ export function buildCustomerOrderPdf(
   const items = Array.isArray(payload.items) ? payload.items : [];
   const pages: PdfPage[] = [firstPage(payload, items)];
   for (let index = 6; index < items.length; index += 15) {
-    pages.push(continuationPage(payload, items.slice(index, index + 15), pages.length + 1));
+    pages.push(
+      continuationPage(
+        payload,
+        items.slice(index, index + 15),
+        pages.length + 1,
+      ),
+    );
   }
   return assemblePdf(pages);
 }

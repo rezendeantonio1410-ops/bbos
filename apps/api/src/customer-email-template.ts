@@ -38,7 +38,12 @@ export type CustomerEmailPayload = {
 export type PartnerOrderConfirmedEmailPayload = {
   partnerName?: string;
   orderCode?: string;
+  orderStatus?: string;
+  orderType?: string;
   customerName?: string;
+  customerLegalName?: string;
+  customerTradeName?: string;
+  customerSegment?: string;
   customerTaxId?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -60,6 +65,9 @@ export type PartnerOrderConfirmedEmailPayload = {
   shippingServiceName?: string;
   carrierName?: string;
   customerReference?: string;
+  notes?: string;
+  acceptedByName?: string;
+  acceptedAt?: string;
   items?: EmailItem[];
 };
 
@@ -299,11 +307,12 @@ export function renderPartnerOrderConfirmedEmail(
           maximumFractionDigits: 4,
         })}% sobre os produtos`;
   const orderDate = payload.orderDate
-    ? new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(
-        new Date(payload.orderDate),
-      )
+    ? new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      }).format(new Date(payload.orderDate))
     : "—";
-  const payment = payload.paymentTerms || payload.paymentType || "Não informado";
+  const payment =
+    payload.paymentTerms || payload.paymentType || "Não informado";
   const freight =
     payload.freightResponsibility === "PICKUP"
       ? "Retirada na Bispo Coffees"
