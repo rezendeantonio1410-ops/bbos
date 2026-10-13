@@ -6,6 +6,9 @@ const pageWidth = 595;
 const pageHeight = 842;
 const left = 48;
 const right = pageWidth - 48;
+const companyTaxId = "13.008.726/0001-12";
+const companyPixKey = companyTaxId;
+const firstPageItemLimit = 4;
 
 const money = (cents: unknown) =>
   new Intl.NumberFormat("pt-BR", {
@@ -143,7 +146,7 @@ function pageHeader(page: PdfPage, payload: PartnerOrderConfirmedEmailPayload) {
   text(page, "BISPO", left, 785, 30, { bold: true, color: "#0E191D" });
   text(page, "True Coffee", left + 3, 770, 7, { color: "#52605D" });
   rightText(page, "BISPO COFFEES LTDA", right, 792, 10, { bold: true });
-  rightText(page, "CNPJ 13.008.726/0001-12", right, 776, 8, {
+  rightText(page, `CNPJ ${companyTaxId}`, right, 776, 8, {
     color: "#52605D",
   });
   rightText(page, "Av. Theodoro Victorelli, 800 - Helena", right, 761, 8, {
@@ -258,7 +261,7 @@ function firstPage(
   });
 
   let y = 450;
-  for (const item of items.slice(0, 6)) {
+  for (const item of items.slice(0, firstPageItemLimit)) {
     const nameLines = wrap(item.name || "Produto Bispo", 39).slice(0, 2);
     text(page, nameLines[0], left + 10, y, 9, { bold: true });
     if (nameLines[1]) text(page, nameLines[1], left + 10, y - 11, 8);
@@ -353,6 +356,24 @@ function firstPage(
       });
   }
 
+  const pixY = Math.max(70, statusY - (payload.notes ? 88 : 58));
+  rect(page, left, pixY, right - left, 40, "#E7EFED");
+  text(page, "PAGAMENTO VIA PIX", left + 12, pixY + 26, 7, {
+    bold: true,
+    color: "#087568",
+  });
+  text(page, `Chave PIX (CNPJ): ${companyPixKey}`, left + 12, pixY + 11, 10, {
+    bold: true,
+  });
+  rightText(
+    page,
+    `Identifique o pagamento com o pedido ${orderCode}`,
+    right - 12,
+    pixY + 11,
+    7,
+    { color: "#52605D" },
+  );
+
   text(
     page,
     "Bispo Coffees | True Coffee | www.bispocoffees.com.br",
@@ -365,7 +386,7 @@ function firstPage(
   );
   rightText(
     page,
-    `Documento comercial | ${orderCode} | 1 / ${items.length > 6 ? Math.ceil((items.length - 6) / 15) + 1 : 1}`,
+    `Documento comercial | ${orderCode} | 1 / ${items.length > firstPageItemLimit ? Math.ceil((items.length - firstPageItemLimit) / 15) + 1 : 1}`,
     right,
     42,
     7,
@@ -486,7 +507,7 @@ export function buildCustomerOrderPdf(
 ) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   const pages: PdfPage[] = [firstPage(payload, items)];
-  for (let index = 6; index < items.length; index += 15) {
+  for (let index = firstPageItemLimit; index < items.length; index += 15) {
     pages.push(
       continuationPage(
         payload,

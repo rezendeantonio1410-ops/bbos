@@ -65,4 +65,6 @@ test("downloads a populated order PDF with a readable customer filename", async 
   const source = body.toString("latin1");
   assert.match(source, /HUIOS BARBEARIA LTDA/);
   assert.match(source, /GOU ESS 500/);
+  assert.match(source, /Chave PIX/);
+  assert.match(source, /13\.008\.726\/0001-12/);
 });
