@@ -173,6 +173,15 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   );
   assert.match(
     fiscal,
+    /sefazStatusCode\) === 232[\s\S]*recoverRecipientOnFreshDraft[\s\S]*recipientRecoveryAttempted/,
+  );
+  assert.match(fiscal, /`-IE\$\{rejectedFiscalReference\}`/);
+  assert.match(
+    fiscal,
+    /stateRegistrationType === "EXEMPT"[\s\S]*updatedStateRegistration\.toUpperCase\(\) !== "ISENTO"/,
+  );
+  assert.match(
+    fiscal,
     /if \(sefaz\.status === "REJECTED"\)[\s\S]*SET status='READY_TO_SHIP',"invoicedAt"=NULL/,
   );
   assert.match(

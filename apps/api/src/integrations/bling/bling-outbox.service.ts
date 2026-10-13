@@ -412,6 +412,26 @@ export class BlingOutboxService {
         `Emissão de amostra bloqueada: ao corrigir consumidor final, o Bling não preservou o CFOP ${route.cfop}.`,
       );
     }
+    const updatedStateRegistration = String(
+      updatedDraft?.contato?.ie ?? updatedDraft?.destinatario?.ie ?? "",
+    ).trim();
+    if (
+      stateRegistrationType === "NUMBER" &&
+      updatedStateRegistration !==
+        String(order?.customerStateRegistration ?? "").trim()
+    ) {
+      throw new Error(
+        "Emissão fiscal bloqueada: o Bling não confirmou a inscrição estadual do destinatário no rascunho da NF-e.",
+      );
+    }
+    if (
+      stateRegistrationType === "EXEMPT" &&
+      updatedStateRegistration.toUpperCase() !== "ISENTO"
+    ) {
+      throw new Error(
+        "Emissão fiscal bloqueada: o Bling não confirmou o destinatário como isento de inscrição estadual no rascunho da NF-e.",
+      );
+    }
     return updatedDraft;
   }
 
@@ -752,6 +772,20 @@ export class BlingOutboxService {
       order.orderType === "SAMPLE" &&
       String(priorFiscal[0]?.status) === "REJECTED" &&
       Number(priorFiscal[0]?.payloadSnapshot?.sefazStatusCode) === 696;
+    const priorRecipientRejection =
+      String(priorFiscal[0]?.status) === "REJECTED" &&
+      Number(priorFiscal[0]?.payloadSnapshot?.sefazStatusCode) === 232;
+    const recoverRecipientOnFreshDraft =
+      priorRecipientRejection &&
+      !priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted;
+    if (
+      priorRecipientRejection &&
+      priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted
+    ) {
+      throw new Error(
+        "Reprocessamento fiscal bloqueado: a rejeição 232 persistiu após gerar um novo rascunho com o destinatário corrigido. Revise a classificação estadual do cliente antes de tentar novamente.",
+      );
+    }
     const repairConsumerFinalRejection =
       priorConsumerFinalRejection &&
       !priorFiscal[0]?.payloadSnapshot?.consumerFinalRepairAttempted;
@@ -767,18 +801,24 @@ export class BlingOutboxService {
       repairConsumerFinalRejection ||
       repairInvoiceDraftConsumerFinal ||
       recoverAfterNatureConsumerFinalFix;
-    const effectiveRecoveryAttempt = regenerateForConsumerFinal
+    const regenerateSalesOrder =
+      regenerateForConsumerFinal || recoverRecipientOnFreshDraft;
+    const effectiveRecoveryAttempt = regenerateSalesOrder
       ? Math.max(staleSalesOrderRecoveryAttempt, 1)
       : staleSalesOrderRecoveryAttempt;
-    const recoveryReference = regenerateForConsumerFinal
-      ? `${recoverAfterNatureConsumerFinalFix ? "-CFN" : "-CF"}${
-          String(priorFiscal[0]?.externalId ?? priorFiscal[0]?.number ?? "")
-            .replace(/\D/g, "")
-            .slice(-6) || "SEFAZ"
-        }`
-      : effectiveRecoveryAttempt
-        ? `-R${effectiveRecoveryAttempt}`
-        : "";
+    const rejectedFiscalReference =
+      String(priorFiscal[0]?.externalId ?? priorFiscal[0]?.number ?? "")
+        .replace(/\D/g, "")
+        .slice(-6) || "SEFAZ";
+    const recoveryReference = recoverRecipientOnFreshDraft
+      ? `-IE${rejectedFiscalReference}`
+      : regenerateForConsumerFinal
+        ? `${recoverAfterNatureConsumerFinalFix ? "-CFN" : "-CF"}${
+            rejectedFiscalReference
+          }`
+        : effectiveRecoveryAttempt
+          ? `-R${effectiveRecoveryAttempt}`
+          : "";
 
     const contactId = await this.ensureContact(
       row.companyId,
@@ -862,7 +902,7 @@ export class BlingOutboxService {
         }
       }
     }
-    if (regenerateForConsumerFinal && salesMap?.externalId) {
+    if (regenerateSalesOrder && salesMap?.externalId) {
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap"
           WHERE "companyId"=$1 AND provider='BLING'
@@ -1206,6 +1246,18 @@ export class BlingOutboxService {
               ? new Date().toISOString()
               : (priorFiscal[0]?.payloadSnapshot
                   ?.natureConsumerFinalRecoveryAttemptedAt ?? null),
+          recipientRecoveryAttempted:
+            recoverRecipientOnFreshDraft ||
+            Boolean(
+              priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttempted,
+            ),
+          recipientRecoveryAttemptedAt: recoverRecipientOnFreshDraft
+            ? new Date().toISOString()
+            : (priorFiscal[0]?.payloadSnapshot?.recipientRecoveryAttemptedAt ??
+              null),
+          replacedRejectedNfeId: recoverRecipientOnFreshDraft
+            ? priorFiscalExternalId
+            : (priorFiscal[0]?.payloadSnapshot?.replacedRejectedNfeId ?? null),
         }),
       );
     } else {
@@ -1234,6 +1286,13 @@ export class BlingOutboxService {
             recoverAfterNatureConsumerFinalFix
               ? new Date().toISOString()
               : null,
+          recipientRecoveryAttempted: recoverRecipientOnFreshDraft,
+          recipientRecoveryAttemptedAt: recoverRecipientOnFreshDraft
+            ? new Date().toISOString()
+            : null,
+          replacedRejectedNfeId: recoverRecipientOnFreshDraft
+            ? priorFiscalExternalId
+            : null,
         }),
       );
     }
