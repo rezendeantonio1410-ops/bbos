@@ -824,6 +824,44 @@ export class BlingOutboxService {
         salesMap = { externalId: storefrontMap.externalId };
       }
     }
+    if (!salesMap?.externalId && priorFiscal[0]) {
+      const fiscalMapRows = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT metadata FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "resourceType"='FISCAL_DOCUMENT' AND "internalKey"=$2
+          LIMIT 1`,
+        row.companyId,
+        priorFiscal[0].id,
+      );
+      const recoverableSalesOrderId = String(
+        priorFiscal[0]?.payloadSnapshot?.blingOrderId ??
+          fiscalMapRows[0]?.metadata?.blingOrderId ??
+          "",
+      ).trim();
+      if (recoverableSalesOrderId) {
+        try {
+          await this.bling.request(
+            row.companyId,
+            `/pedidos/vendas/${encodeURIComponent(recoverableSalesOrderId)}`,
+            { method: "GET" },
+          );
+          await this.mapResource(
+            row.companyId,
+            "SALES_ORDER",
+            order.id,
+            recoverableSalesOrderId,
+            {
+              code: order.code,
+              origin: "RECOVERED_FROM_FISCAL_DOCUMENT",
+              fiscalDocumentId: priorFiscal[0].id,
+            },
+          );
+          salesMap = { externalId: recoverableSalesOrderId };
+        } catch (error) {
+          if (!isBlingNotFound(error)) throw error;
+        }
+      }
+    }
     if (regenerateForConsumerFinal && salesMap?.externalId) {
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap"
@@ -1638,10 +1676,9 @@ export class BlingOutboxService {
         "Reprocessamento fiscal bloqueado: cliente sem CPF/CNPJ.",
       );
     await this.database.$executeRawUnsafe(
-      `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType" IN ('CONTACT_DOCUMENT','SALES_ORDER') AND ("internalKey"=$2 OR "internalKey"=$3)`,
+      `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
       companyId,
       document,
-      orderId,
     );
     await this.database.$executeRawUnsafe(
       `UPDATE "IntegrationOutbox" SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE "companyId"=$1 AND "aggregateId"=$2 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,

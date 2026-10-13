@@ -184,6 +184,16 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     /if \(salesMap\?\.externalId\)[\s\S]*isBlingNotFound\(error\)[\s\S]*"resourceType"='SALES_ORDER'[\s\S]*salesMap = null/,
   );
   assert.match(
+    fiscal,
+    /payloadSnapshot\?\.blingOrderId[\s\S]*RECOVERED_FROM_FISCAL_DOCUMENT/,
+  );
+  const retryInvoice = fiscal.match(
+    /async retrySalesOrderInvoice[\s\S]*?(?=\n\s{2}async resetCancelledSalesOrderInvoice)/,
+  )?.[0];
+  assert.ok(retryInvoice);
+  assert.match(retryInvoice, /"resourceType"='CONTACT_DOCUMENT'/);
+  assert.doesNotMatch(retryInvoice, /'SALES_ORDER'/);
+  assert.match(
     financialMigration,
     /OLD\.status::text = 'INVOICED'[\s\S]*NEW\."orderType" = 'SAMPLE'/,
   );
