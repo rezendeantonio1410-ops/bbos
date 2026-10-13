@@ -2971,6 +2971,10 @@ function OrderDrawer({
                         ? `Falha no faturamento: ${fulfillment.invoiceQueueError}`
                         : fulfillment?.fiscalStatus === "REJECTED"
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
+                          : order.status === "INVOICED"
+                            ? fulfillment?.labelUrl
+                              ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                              : "NF-e autorizada. Pedido faturado e pronto para a expedição ou retirada."
                           : order.status === "CONFIRMED"
                             ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
                             : order.status === "RESERVED"
