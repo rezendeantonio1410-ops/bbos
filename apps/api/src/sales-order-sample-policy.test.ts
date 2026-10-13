@@ -164,6 +164,10 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     /order\.status === "INVOICED"[\s\S]*NF-e autorizada\. Pedido faturado e pronto para a expedição ou retirada\./,
   );
   assert.match(
+    ordersPage,
+    /fiscalStatus === "AUTHORIZED"[\s\S]*Imprimir NF-e/,
+  );
+  assert.match(
     fiscal,
     /repairInvoiceRecipient[\s\S]*contribuinte: this\.blingStateRegistrationIndicator/,
   );

@@ -14,6 +14,7 @@ import {
   PackageCheck,
   PackagePlus,
   Plus,
+  Printer,
   ShieldCheck,
   Sparkles,
   Truck,
@@ -2432,6 +2433,8 @@ function OrderDrawer({
   );
   const shipmentHasException = fulfillment?.status === "EXCEPTION";
   const shipmentIsCancelled = fulfillment?.status === "CANCELLED";
+  const fiscalDocumentUrl =
+    fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl || null;
 
   const selectedItem =
     order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
@@ -2840,6 +2843,21 @@ function OrderDrawer({
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
           <div className="flex items-center gap-2">
+            {fulfillment?.fiscalStatus === "AUTHORIZED" &&
+              fiscalDocumentUrl && (
+                <a
+                  href={fiscalDocumentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-950 px-4 py-2.5 text-xs font-bold text-white"
+                >
+                  <Printer size={14} />
+                  Imprimir NF-e
+                  {fulfillment.fiscalNumber
+                    ? ` ${fulfillment.fiscalNumber}`
+                    : ""}
+                </a>
+              )}
             <OrderPdfLink
               orderNumber={order.orderNumber ?? order.code}
               provisional={order.status === "DRAFT"}
@@ -3133,20 +3151,15 @@ function OrderDrawer({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {(fulfillment?.fiscalPdfUrl ||
-                      fulfillment?.fiscalDanfeUrl) && (
+                    {fiscalDocumentUrl && (
                       <a
-                        href={
-                          fulfillment.fiscalPdfUrl ||
-                          fulfillment.fiscalDanfeUrl ||
-                          "#"
-                        }
+                        href={fiscalDocumentUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
                       >
                         Ver NF-e
-                        {fulfillment.fiscalNumber
+                        {fulfillment?.fiscalNumber
                           ? ` nº ${fulfillment.fiscalNumber}`
                           : ""}
                       </a>
