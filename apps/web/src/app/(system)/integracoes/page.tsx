@@ -46,6 +46,8 @@ type CatalogStatus = {
   missing: string[];
   ready: boolean;
   items: Array<{
+    catalogKey: string;
+    variantId: string;
     slug: string;
     name: string;
     sku: string;
@@ -94,6 +96,8 @@ type ProfilesResponse = {
   defaultNcm: string;
   companyProfile: CompanyFiscalProfile;
   items: Array<{
+    catalogKey: string;
+    variantId: string;
     slug: string;
     name: string;
     sku: string;
@@ -307,14 +311,16 @@ export default function IntegrationsPage() {
     }
   };
 
-  const saveProductProfile = async (slug: string) => {
-    const item = profiles?.items.find((entry) => entry.slug === slug);
+  const saveProductProfile = async (catalogKey: string) => {
+    const item = profiles?.items.find(
+      (entry) => entry.catalogKey === catalogKey,
+    );
     if (!item) return;
-    setSavingSlug(slug);
+    setSavingSlug(catalogKey);
     setError("");
     try {
       const response = await fetch(
-        `${root}/integrations/bling/catalog/profiles/${encodeURIComponent(slug)}`,
+        `${root}/integrations/bling/catalog/profiles/${encodeURIComponent(catalogKey)}`,
         {
           method: "PATCH",
           credentials: "include",
@@ -377,13 +383,13 @@ export default function IntegrationsPage() {
     );
   };
 
-  const updateProduct = (slug: string, patch: Partial<FiscalProfile>) => {
+  const updateProduct = (catalogKey: string, patch: Partial<FiscalProfile>) => {
     setProfiles((current) =>
       current
         ? {
             ...current,
             items: current.items.map((item) =>
-              item.slug === slug
+              item.catalogKey === catalogKey
                 ? { ...item, profile: { ...item.profile, ...patch } }
                 : item,
             ),
@@ -899,7 +905,7 @@ export default function IntegrationsPage() {
         <div className="mt-5 space-y-3">
           {profiles?.items.map((item) => (
             <div
-              key={item.slug}
+              key={item.catalogKey}
               className="rounded-2xl border border-stone-100 p-4"
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -918,25 +924,27 @@ export default function IntegrationsPage() {
                   <Field
                     label="NCM"
                     value={item.profile.ncm}
-                    onChange={(v) => updateProduct(item.slug, { ncm: v })}
+                    onChange={(v) => updateProduct(item.catalogKey, { ncm: v })}
                   />
                   <Field
                     label="Origem"
                     value={String(item.profile.origem)}
                     onChange={(v) =>
-                      updateProduct(item.slug, { origem: Number(v) })
+                      updateProduct(item.catalogKey, { origem: Number(v) })
                     }
                   />
                   <Field
                     label="CEST"
                     value={item.profile.cest ?? ""}
-                    onChange={(v) => updateProduct(item.slug, { cest: v })}
+                    onChange={(v) =>
+                      updateProduct(item.catalogKey, { cest: v })
+                    }
                   />
                   <Field
                     label="Preço R$"
                     value={String(item.profile.preco)}
                     onChange={(v) =>
-                      updateProduct(item.slug, {
+                      updateProduct(item.catalogKey, {
                         preco: Number(v.replace(",", ".")),
                       })
                     }
@@ -945,7 +953,7 @@ export default function IntegrationsPage() {
                     label="Peso kg"
                     value={String(item.profile.pesoLiquido)}
                     onChange={(v) =>
-                      updateProduct(item.slug, {
+                      updateProduct(item.catalogKey, {
                         pesoLiquido: Number(v.replace(",", ".")),
                         pesoBruto: Number(v.replace(",", ".")),
                       })
@@ -954,11 +962,11 @@ export default function IntegrationsPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => void saveProductProfile(item.slug)}
-                  disabled={savingSlug === item.slug}
+                  onClick={() => void saveProductProfile(item.catalogKey)}
+                  disabled={savingSlug === item.catalogKey}
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 px-3 py-2.5 text-xs font-bold text-stone-700"
                 >
-                  {savingSlug === item.slug ? (
+                  {savingSlug === item.catalogKey ? (
                     <LoaderCircle size={14} className="animate-spin" />
                   ) : (
                     <Save size={14} />

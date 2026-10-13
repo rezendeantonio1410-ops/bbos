@@ -384,13 +384,23 @@ export class SalesOrdersController {
               f."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "fiscalDanfeUrl",
               f."payloadSnapshot"#>>'{blingNfe,xml}' AS "fiscalXmlUrl",
               f."payloadSnapshot"->>'sefazStatusCode' AS "sefazStatusCode",
-              f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage"
+              f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage",
+              o.status::text AS "invoiceQueueStatus",
+              o."lastError" AS "invoiceQueueError",
+              o."updatedAt" AS "invoiceQueueUpdatedAt"
          FROM "SalesOrder" so
          LEFT JOIN LATERAL (
            SELECT * FROM "FiscalDocument"
             WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
             ORDER BY "createdAt" DESC LIMIT 1
          ) f ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT status,"lastError","updatedAt"
+             FROM "IntegrationOutbox"
+            WHERE "aggregateId"=so.id
+              AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'
+            ORDER BY "createdAt" DESC LIMIT 1
+         ) o ON TRUE
          LEFT JOIN "Shipment" s ON s."salesOrderId"=so.id
         WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
         id,

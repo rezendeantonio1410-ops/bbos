@@ -26,6 +26,7 @@
     "test:sales-order-partner-notification": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-partner-notification.test.ts ../../apps/api/src/customer-email-template.test.ts ../../apps/api/src/customer-order-pdf.test.ts ../../apps/api/src/customer-notification-attachment.test.ts",
     "test:purchase-confirmation-pdf": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-confirmation-pdf.test.ts",
     "test:white-label-naming": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/white-label-naming.test.ts",
+    "test:bling-catalog-variants": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/bling-catalog-variant-policy.test.ts",
     "test:nfe-inbound": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/nfe-inbound.test.ts",
     "test:storefront-customer-auth": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/storefront-customer.service.test.ts",
     "test:storefront-coupons": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/storefront-coupons.service.test.ts",

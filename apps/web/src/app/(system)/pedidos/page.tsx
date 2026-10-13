@@ -260,6 +260,9 @@ type ShipmentInfo = {
   fiscalXmlUrl?: string | null;
   sefazStatusCode?: string | null;
   sefazMessage?: string | null;
+  invoiceQueueStatus?: string | null;
+  invoiceQueueError?: string | null;
+  invoiceQueueUpdatedAt?: string | null;
   trackingEvents?: Array<{
     eventType: string;
     title: string;
@@ -2461,7 +2464,7 @@ function OrderDrawer({
 
   useEffect(() => {
     void loadFulfillment();
-    if (order.status !== "INVOICED") return;
+    if (!["INVOICED", "READY_TO_SHIP"].includes(order.status)) return;
 
     const refreshTimer = window.setInterval(() => {
       void loadFulfillment();
@@ -2963,24 +2966,27 @@ function OrderDrawer({
                       Próxima ação operacional
                     </p>
                     <p className="mt-1 text-[10px] text-stone-600">
-                      {fulfillment?.fiscalStatus === "REJECTED"
-                        ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
-                        : order.status === "CONFIRMED"
-                          ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
-                          : order.status === "RESERVED"
-                            ? "O estoque está reservado. Inicie a separação física do pedido."
-                            : order.status === "PICKING"
-                              ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                              : order.status === "READY_TO_SHIP" &&
-                                  fulfillment?.fiscalStatus === "AUTHORIZED"
-                                ? fulfillment?.labelUrl
-                                  ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                                  : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
-                                : order.status === "READY_TO_SHIP"
-                                  ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                                  : fulfillment?.labelUrl
-                                    ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                                    : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                      {fulfillment?.invoiceQueueStatus === "FAILED" &&
+                      fulfillment?.invoiceQueueError
+                        ? `Falha no faturamento: ${fulfillment.invoiceQueueError}`
+                        : fulfillment?.fiscalStatus === "REJECTED"
+                          ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
+                          : order.status === "CONFIRMED"
+                            ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
+                            : order.status === "RESERVED"
+                              ? "O estoque está reservado. Inicie a separação física do pedido."
+                              : order.status === "PICKING"
+                                ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                                : order.status === "READY_TO_SHIP" &&
+                                    fulfillment?.fiscalStatus === "AUTHORIZED"
+                                  ? fulfillment?.labelUrl
+                                    ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                    : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                                  : order.status === "READY_TO_SHIP"
+                                    ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                    : fulfillment?.labelUrl
+                                      ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                      : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
                   {order.status === "CONFIRMED" && (
@@ -3029,9 +3035,11 @@ function OrderDrawer({
                           ? fulfillment?.fiscalStatus === "REJECTED"
                             ? "Reprocessando…"
                             : "Enviando ao Bling…"
-                          : fulfillment?.fiscalStatus === "REJECTED"
-                            ? "Reprocessar NF-e"
-                            : "Faturar no Bling"}
+                          : fulfillment?.invoiceQueueStatus === "FAILED"
+                            ? "Tentar faturar novamente"
+                            : fulfillment?.fiscalStatus === "REJECTED"
+                              ? "Reprocessar NF-e"
+                              : "Faturar no Bling"}
                       </button>
                     )}
                   {fulfillment?.fiscalStatus === "AUTHORIZED" &&

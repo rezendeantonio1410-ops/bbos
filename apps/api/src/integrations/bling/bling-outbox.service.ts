@@ -528,17 +528,43 @@ export class BlingOutboxService {
   }
 
   private async productExternalId(companyId: string, item: any) {
-    const internalKey = String(item?.id ?? "").trim();
-    if (!internalKey)
+    const variantId = String(item?.variantId ?? item?.id ?? "").trim();
+    const slug = String(item?.slug ?? item?.legacyId ?? "").trim();
+    const sku = String(item?.sku ?? "")
+      .trim()
+      .toUpperCase();
+    if (!variantId)
       throw new Error("Item e-commerce sem identificador interno.");
-    const mapping = await this.getMap(
+    const mappings = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT "externalId",metadata
+         FROM "IntegrationResourceMap"
+        WHERE "companyId"=$1 AND provider='BLING'
+          AND "resourceType"='STOREFRONT_PRODUCT'
+          AND (
+            "internalKey"=$2
+            OR metadata->>'productVariantId'=$2
+            OR ($3 <> '' AND UPPER(COALESCE(metadata->>'sku',''))=$3)
+            OR (
+              $4 <> '' AND "internalKey"=$4
+              AND (metadata->>'sku' IS NULL OR UPPER(metadata->>'sku')=$3)
+            )
+          )
+        ORDER BY CASE
+          WHEN "internalKey"=$2 THEN 0
+          WHEN metadata->>'productVariantId'=$2 THEN 1
+          WHEN UPPER(COALESCE(metadata->>'sku',''))=$3 THEN 2
+          ELSE 3
+        END
+        LIMIT 1`,
       companyId,
-      "STOREFRONT_PRODUCT",
-      internalKey,
+      variantId,
+      sku,
+      slug,
     );
+    const mapping = mappings[0];
     if (!mapping?.externalId) {
       throw new Error(
-        `Produto ${internalKey} ainda não está mapeado no Bling. Sincronize o catálogo antes de processar o pedido.`,
+        `SKU ${sku || variantId} ainda não está mapeado no Bling. Sincronize o catálogo antes de processar o pedido.`,
       );
     }
     return mapping.externalId as string;
@@ -821,7 +847,9 @@ export class BlingOutboxService {
       const blingItems = [];
       for (const item of items) {
         const productId = await this.productExternalId(row.companyId, {
-          id: item.slug,
+          variantId: item.variantId,
+          slug: item.slug,
+          sku: item.sku,
         });
         blingItems.push({
           produto: { id: Number(productId) },

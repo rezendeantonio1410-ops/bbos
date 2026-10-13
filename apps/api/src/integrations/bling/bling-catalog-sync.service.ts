@@ -65,14 +65,58 @@ export class BlingCatalogSyncService {
 
   constructor(private readonly bling: BlingService) {}
 
-  private async localCatalog() {
+  private async localCatalog(companyId: string) {
     return this.database.$queryRawUnsafe<any[]>(
-      `SELECT p.slug,p.name,pv.id AS "variantId",pv.sku,pv."netWeightGrams"
+      `SELECT p.slug,p.name,pv.id AS "variantId",pv.sku,pv."netWeightGrams",
+              COALESCE((
+                SELECT pp.price
+                  FROM "ProductPrice" pp
+                 WHERE pp."companyId"=$1
+                   AND pp."productVariantId"=pv.id
+                   AND pp.active=true
+                   AND pp."validFrom" <= NOW()
+                   AND (pp."validUntil" IS NULL OR pp."validUntil" > NOW())
+                 ORDER BY pp."validFrom" DESC,pp."updatedAt" DESC
+                 LIMIT 1
+              ),0) AS "catalogPrice"
          FROM "Product" p
          JOIN "ProductVariant" pv ON pv."productId"=p.id
         WHERE p.active=true AND pv.active=true
-          AND p.slug IN ('essencial','intenso','caramelo','doce-de-leite','tangerina','singular','sublime','raros')
+          AND NULLIF(TRIM(pv.sku),'') IS NOT NULL
         ORDER BY p.slug,pv."netWeightGrams"`,
+      companyId,
+    );
+  }
+
+  private catalogKey(row: any) {
+    return String(row?.variantId ?? "").trim();
+  }
+
+  private mapForCatalogRow(maps: any[], row: any) {
+    const variantId = this.catalogKey(row);
+    const sku = String(row?.sku ?? "")
+      .trim()
+      .toUpperCase();
+    const slug = String(row?.slug ?? "").trim();
+    return (
+      maps.find((map) => String(map.internalKey) === variantId) ??
+      maps.find(
+        (map) => String(map?.metadata?.productVariantId ?? "") === variantId,
+      ) ??
+      maps.find(
+        (map) =>
+          sku &&
+          String(map?.metadata?.sku ?? "")
+            .trim()
+            .toUpperCase() === sku,
+      ) ??
+      maps.find(
+        (map) =>
+          String(map.internalKey) === slug &&
+          (!map?.metadata?.sku ||
+            String(map.metadata.sku).trim().toUpperCase() === sku),
+      ) ??
+      null
     );
   }
 
@@ -129,14 +173,14 @@ export class BlingCatalogSyncService {
 
   private async saveMap(
     companyId: string,
-    slug: string,
+    row: any,
     externalId: string,
     metadata: unknown,
   ) {
     return this.saveResourceMap(
       companyId,
       "STOREFRONT_PRODUCT",
-      slug,
+      this.catalogKey(row),
       externalId,
       metadata,
     );
@@ -294,11 +338,15 @@ export class BlingCatalogSyncService {
 
   private defaultProfile(row: any): FiscalProfile {
     const kg = Math.max(0.001, Number(row.netWeightGrams ?? 0) / 1000);
+    const governedPrice = Number(row.catalogPrice ?? 0);
     return {
       ncm: DEFAULT_NCM,
       origem: 0,
       unidade: "UN",
-      preco: PRICE_BY_SLUG[String(row.slug)] ?? 0,
+      preco:
+        governedPrice > 0
+          ? governedPrice
+          : (PRICE_BY_SLUG[String(row.slug)] ?? 0),
       pesoLiquido: kg,
       pesoBruto: kg,
       tipo: "P",
@@ -413,18 +461,22 @@ export class BlingCatalogSyncService {
 
   async status(companyId: string) {
     const [local, maps] = await Promise.all([
-      this.localCatalog(),
+      this.localCatalog(companyId),
       this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
     ]);
-    const bySlug = new Map(maps.map((row) => [String(row.internalKey), row]));
-    const items = local.map((row) => ({
-      slug: row.slug,
-      name: row.name,
-      sku: row.sku,
-      weightGrams: Number(row.netWeightGrams),
-      mapped: Boolean(bySlug.get(String(row.slug))?.externalId),
-      blingProductId: bySlug.get(String(row.slug))?.externalId ?? null,
-    }));
+    const items = local.map((row) => {
+      const mapping = this.mapForCatalogRow(maps, row);
+      return {
+        catalogKey: this.catalogKey(row),
+        variantId: row.variantId,
+        slug: row.slug,
+        name: row.name,
+        sku: row.sku,
+        weightGrams: Number(row.netWeightGrams),
+        mapped: Boolean(mapping?.externalId),
+        blingProductId: mapping?.externalId ?? null,
+      };
+    });
     return {
       total: items.length,
       mapped: items.filter((item) => item.mapped).length,
@@ -437,50 +489,53 @@ export class BlingCatalogSyncService {
   async profiles(companyId: string) {
     const [local, profileMaps, productMaps, companyProfile] = await Promise.all(
       [
-        this.localCatalog(),
+        this.localCatalog(companyId),
         this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE"),
         this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
         this.companyFiscalProfile(companyId),
       ],
     );
-    const profiles = new Map(
-      profileMaps.map((row) => [String(row.internalKey), row]),
-    );
-    const products = new Map(
-      productMaps.map((row) => [String(row.internalKey), row]),
-    );
-
     return {
       defaultNcm: DEFAULT_NCM,
       companyProfile,
-      items: local.map((row) => ({
-        slug: row.slug,
-        name: row.name,
-        sku: row.sku,
-        mapped: Boolean(products.get(String(row.slug))?.externalId),
-        blingProductId: products.get(String(row.slug))?.externalId ?? null,
-        profile: this.normalizeProfile(
-          row,
-          profiles.get(String(row.slug))?.metadata,
-        ),
-      })),
+      items: local.map((row) => {
+        const productMap = this.mapForCatalogRow(productMaps, row);
+        const profileMap = this.mapForCatalogRow(profileMaps, row);
+        return {
+          catalogKey: this.catalogKey(row),
+          variantId: row.variantId,
+          slug: row.slug,
+          name: row.name,
+          sku: row.sku,
+          mapped: Boolean(productMap?.externalId),
+          blingProductId: productMap?.externalId ?? null,
+          profile: this.normalizeProfile(row, profileMap?.metadata),
+        };
+      }),
     };
   }
 
   async saveProfile(
     companyId: string,
-    slug: string,
+    catalogKey: string,
     patch: Record<string, unknown>,
   ) {
-    const local = await this.localCatalog();
-    const row = local.find((item) => String(item.slug) === slug);
+    const local = await this.localCatalog(companyId);
+    const direct = local.find(
+      (item) => this.catalogKey(item) === String(catalogKey),
+    );
+    const legacyMatches = local.filter(
+      (item) => String(item.slug) === String(catalogKey),
+    );
+    const row =
+      direct ?? (legacyMatches.length === 1 ? legacyMatches[0] : null);
     if (!row) throw new Error("Produto BBOS não encontrado.");
 
-    const current = await this.getResourceMap(
+    const profileMaps = await this.resourceMaps(
       companyId,
       "STOREFRONT_PRODUCT_PROFILE",
-      slug,
     );
+    const current = this.mapForCatalogRow(profileMaps, row);
     const next = this.normalizeProfile(row, {
       ...(current?.metadata ?? {}),
       ...patch,
@@ -490,16 +545,16 @@ export class BlingCatalogSyncService {
     await this.saveResourceMap(
       companyId,
       "STOREFRONT_PRODUCT_PROFILE",
-      slug,
-      slug,
+      this.catalogKey(row),
+      this.catalogKey(row),
       next,
     );
 
-    const productMap = await this.getResourceMap(
+    const productMaps = await this.resourceMaps(
       companyId,
       "STOREFRONT_PRODUCT",
-      slug,
     );
+    const productMap = this.mapForCatalogRow(productMaps, row);
     if (productMap?.externalId) {
       const currentRemote = await this.bling.request(
         companyId,
@@ -528,7 +583,8 @@ export class BlingCatalogSyncService {
     }
 
     return {
-      slug,
+      catalogKey: this.catalogKey(row),
+      slug: row.slug,
       profile: next,
       syncedToBling: Boolean(productMap?.externalId),
       blingProductId: productMap?.externalId ?? null,
@@ -536,7 +592,7 @@ export class BlingCatalogSyncService {
   }
 
   async reconcile(companyId: string) {
-    const local = await this.localCatalog();
+    const local = await this.localCatalog(companyId);
     const remote = await this.fetchBlingProducts(companyId);
 
     const remoteBySku = new Map<string, any>();
@@ -587,7 +643,7 @@ export class BlingCatalogSyncService {
         });
         continue;
       }
-      await this.saveMap(companyId, String(row.slug), externalId, {
+      await this.saveMap(companyId, row, externalId, {
         sku,
         productVariantId: row.variantId,
         blingName: product?.nome ?? null,
@@ -616,7 +672,7 @@ export class BlingCatalogSyncService {
   }
 
   async createMissing(companyId: string) {
-    const local = await this.localCatalog();
+    const local = await this.localCatalog(companyId);
     const remote = await this.fetchBlingProducts(companyId);
     const remoteBySku = new Map<string, any>();
 
@@ -631,10 +687,11 @@ export class BlingCatalogSyncService {
       companyId,
       "STOREFRONT_PRODUCT_PROFILE",
     );
-    const profiles = new Map(
-      profileMaps.map((row) => [String(row.internalKey), row]),
-    );
     const companyProfile = await this.companyFiscalProfile(companyId);
+    const productMaps = await this.resourceMaps(
+      companyId,
+      "STOREFRONT_PRODUCT",
+    );
 
     const created: any[] = [];
     const linkedExisting: any[] = [];
@@ -650,17 +707,13 @@ export class BlingCatalogSyncService {
         continue;
       }
 
-      const alreadyMapped = await this.getResourceMap(
-        companyId,
-        "STOREFRONT_PRODUCT",
-        slug,
-      );
+      const alreadyMapped = this.mapForCatalogRow(productMaps, row);
       if (alreadyMapped?.externalId) continue;
 
       const existing = remoteBySku.get(sku);
       if (existing?.id) {
         const externalId = String(existing.id);
-        await this.saveMap(companyId, slug, externalId, {
+        await this.saveMap(companyId, row, externalId, {
           sku,
           productVariantId: row.variantId,
           blingName: existing.nome ?? null,
@@ -678,14 +731,14 @@ export class BlingCatalogSyncService {
       try {
         const profile = this.normalizeProfile(
           row,
-          profiles.get(slug)?.metadata,
+          this.mapForCatalogRow(profileMaps, row)?.metadata,
         );
         this.validateProfile(profile);
         await this.saveResourceMap(
           companyId,
           "STOREFRONT_PRODUCT_PROFILE",
-          slug,
-          slug,
+          this.catalogKey(row),
+          this.catalogKey(row),
           profile,
         );
 
@@ -697,7 +750,7 @@ export class BlingCatalogSyncService {
         if (!externalId)
           throw new Error("Bling criou o produto sem retornar ID.");
 
-        await this.saveMap(companyId, slug, externalId, {
+        await this.saveMap(companyId, row, externalId, {
           sku,
           productVariantId: row.variantId,
           blingName: row.name,
