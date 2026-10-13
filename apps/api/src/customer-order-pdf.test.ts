@@ -46,6 +46,8 @@ test("builds the customer order copy as a valid PDF without commission data", ()
   assert.match(source, /B-2026-000123/);
   assert.match(source, /Cliente Exemplo Ltda\./);
   assert.match(source, /CONFIRMA/);
+  assert.match(source, /\/Subtype \/Image/);
+  assert.match(source, /\/Logo Do/);
   assert.match(source, /TOTAL DO PEDIDO/);
   assert.match(source, /PAGAMENTO VIA PIX/);
   assert.match(source, /Chave PIX/);

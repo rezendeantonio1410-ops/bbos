@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { PartnerOrderConfirmedEmailPayload } from "./customer-email-template";
 
 type PdfPage = string[];
@@ -9,6 +11,11 @@ const right = pageWidth - 48;
 const companyTaxId = "13.008.726/0001-12";
 const companyPixKey = companyTaxId;
 const firstPageItemLimit = 4;
+const logoWidth = 138;
+const logoHeight = (logoWidth * 240) / 860;
+const logoJpeg = readFileSync(
+  join(__dirname, "../../web/public/brand/logo/bispo-logo-official.jpg"),
+);
 
 const money = (cents: unknown) =>
   new Intl.NumberFormat("pt-BR", {
@@ -143,16 +150,18 @@ const wrap = (value: unknown, maxCharacters: number) => {
 };
 
 function pageHeader(page: PdfPage, payload: PartnerOrderConfirmedEmailPayload) {
-  text(page, "BISPO", left, 785, 30, { bold: true, color: "#0E191D" });
-  text(page, "True Coffee", left + 3, 770, 7, { color: "#52605D" });
-  rightText(page, "BISPO COFFEES LTDA", right, 792, 10, { bold: true });
-  rightText(page, `CNPJ ${companyTaxId}`, right, 776, 8, {
+  page.push(
+    `q ${logoWidth} 0 0 ${logoHeight.toFixed(2)} ${left} 754 cm /Logo Do Q`,
+  );
+  const institutionalX = 382;
+  text(page, "BISPO COFFEES LTDA", institutionalX, 792, 10, { bold: true });
+  text(page, `CNPJ ${companyTaxId}`, institutionalX, 776, 8, {
     color: "#52605D",
   });
-  rightText(page, "Av. Theodoro Victorelli, 800 - Helena", right, 761, 8, {
+  text(page, "Av. Theodoro Victorelli, 800 - Helena", institutionalX, 761, 8, {
     color: "#52605D",
   });
-  rightText(page, "Londrina - PR | CEP 86027-750", right, 746, 8, {
+  text(page, "Londrina - PR | CEP 86027-750", institutionalX, 746, 8, {
     color: "#52605D",
   });
   line(page, left, 730, right, 730, "#D8DFDC", 0.8);
@@ -434,6 +443,7 @@ function assemblePdf(pages: PdfPage[]) {
   const contentObjectStart = pageObjectStart + pages.length;
   const fontRegularObject = contentObjectStart + pages.length;
   const fontBoldObject = fontRegularObject + 1;
+  const logoObject = fontBoldObject + 1;
   const objects: Buffer[] = [];
   const pageReferences = pages
     .map((_, index) => `${pageObjectStart + index} 0 R`)
@@ -449,7 +459,7 @@ function assemblePdf(pages: PdfPage[]) {
   for (let index = 0; index < pages.length; index += 1) {
     objects.push(
       Buffer.from(
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontRegularObject} 0 R /F2 ${fontBoldObject} 0 R >> >> /Contents ${contentObjectStart + index} 0 R >>`,
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontRegularObject} 0 R /F2 ${fontBoldObject} 0 R >> /XObject << /Logo ${logoObject} 0 R >> >> /Contents ${contentObjectStart + index} 0 R >>`,
         "latin1",
       ),
     );
@@ -475,6 +485,16 @@ function assemblePdf(pages: PdfPage[]) {
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
       "latin1",
     ),
+  );
+  objects.push(
+    Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width 860 /Height 240 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.length} >>\nstream\n`,
+        "latin1",
+      ),
+      logoJpeg,
+      Buffer.from("\nendstream", "latin1"),
+    ]),
   );
 
   const chunks: Buffer[] = [Buffer.from("%PDF-1.4\n%âãÏÓ\n", "latin1")];
