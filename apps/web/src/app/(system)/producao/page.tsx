@@ -372,6 +372,7 @@ function NewOrderWizard({
   const [mode, setMode] = useState<"single" | "blend">("single");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
   const [available, setAvailable] = useState<
     Array<{
       id: string;
@@ -428,7 +429,9 @@ function NewOrderWizard({
     else setSelected((current) => ({ ...current, [lotId]: value }));
     setError("");
   };
-  const confirm = () => {
+  const confirm = async () => {
+    if (creating) return;
+    setError("");
     if (Math.abs(allocated - quantity) > 0.001)
       return setError(
         "A soma das reservas deve ser igual à quantidade planejada.",
@@ -450,78 +453,89 @@ function NewOrderWizard({
       ) > 0.01
     )
       return setError("A participação dos lotes deve somar 100%.");
-    void onCreate({
-      id: `op-${Date.now()}`,
-      code: "OP-NOVA",
-      productVariantId: selectedVariant?.id,
-      product,
-      sku,
-      plannedQuantity: quantity,
-      producedQuantity: 0,
-      unit: "kg",
-      plannedAt: date,
-      responsible: responsible.trim(),
-      priority: "normal",
-      status: "reserved",
-      blendName:
-        mode === "single"
-          ? `Café único — ${allocations[0]?.origin}`
-          : "Blend operacional",
-      allocations,
-      batches: [],
-      packaging: {
-        packageWeightG: selectedVariant?.packageWeightG ?? 500,
-        plannedPackages: Math.round(
-          (quantity * 1000) / (selectedVariant?.packageWeightG ?? 500),
-        ),
-        producedPackages: 0,
-        lossPackages: 0,
-        packagingName: `Embalagem ${sku}`,
-        packagingUnitCost: 2.75,
-        labelsCost: 0,
-        boxesCost: 0,
-        otherSuppliesCost: 0,
-      },
-      costs: {
-        greenCoffeeConsumedCost: allocations.reduce(
-          (sum, item) => sum + item.reservedKg * item.realCostPerKg,
-          0,
-        ),
-        roastLossCost: 0,
-        packagingCost: 0,
-        suppliesCost: 0,
-        laborCost: 0,
-        energyCost: 0,
-        gasCost: 0,
-        otherIndustrialCosts: 0,
-        roastedOutputKg: quantity * 0.845,
-        finishedOutputKg: quantity * 0.83,
-        producedPackages: Math.max(1, Math.round(quantity * 2 * 0.83)),
-        standardCostPerKg: 58,
+    setCreating(true);
+    try {
+      await onCreate({
+        id: `op-${Date.now()}`,
+        code: "OP-NOVA",
+        productVariantId: selectedVariant?.id,
+        product,
         sku,
-        sourceCostEventIds: [],
-      },
-      traceability: [
-        "Fornecedor",
-        "Recebimento",
-        "Lote verde",
-        "OP",
-        "Torra",
-        "Blend",
-        "Embalagem",
-        "Produto acabado",
-      ].map((label, index) => ({
-        id: `${Date.now()}-${index}`,
-        label,
-        detail:
-          index < 3
-            ? "Concluído"
-            : index === 3
-              ? "Etapa atual"
-              : "Próxima etapa",
-        status: index < 3 ? "complete" : index === 3 ? "current" : "future",
-      })),
-    });
+        plannedQuantity: quantity,
+        producedQuantity: 0,
+        unit: "kg",
+        plannedAt: date,
+        responsible: responsible.trim(),
+        priority: "normal",
+        status: "reserved",
+        blendName:
+          mode === "single"
+            ? `Café único — ${allocations[0]?.origin}`
+            : "Blend operacional",
+        allocations,
+        batches: [],
+        packaging: {
+          packageWeightG: selectedVariant?.packageWeightG ?? 500,
+          plannedPackages: Math.round(
+            (quantity * 1000) / (selectedVariant?.packageWeightG ?? 500),
+          ),
+          producedPackages: 0,
+          lossPackages: 0,
+          packagingName: `Embalagem ${sku}`,
+          packagingUnitCost: 2.75,
+          labelsCost: 0,
+          boxesCost: 0,
+          otherSuppliesCost: 0,
+        },
+        costs: {
+          greenCoffeeConsumedCost: allocations.reduce(
+            (sum, item) => sum + item.reservedKg * item.realCostPerKg,
+            0,
+          ),
+          roastLossCost: 0,
+          packagingCost: 0,
+          suppliesCost: 0,
+          laborCost: 0,
+          energyCost: 0,
+          gasCost: 0,
+          otherIndustrialCosts: 0,
+          roastedOutputKg: quantity * 0.845,
+          finishedOutputKg: quantity * 0.83,
+          producedPackages: Math.max(1, Math.round(quantity * 2 * 0.83)),
+          standardCostPerKg: 58,
+          sku,
+          sourceCostEventIds: [],
+        },
+        traceability: [
+          "Fornecedor",
+          "Recebimento",
+          "Lote verde",
+          "OP",
+          "Torra",
+          "Blend",
+          "Embalagem",
+          "Produto acabado",
+        ].map((label, index) => ({
+          id: `${Date.now()}-${index}`,
+          label,
+          detail:
+            index < 3
+              ? "Concluído"
+              : index === 3
+                ? "Etapa atual"
+                : "Próxima etapa",
+          status: index < 3 ? "complete" : index === 3 ? "current" : "future",
+        })),
+      });
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível criar e reservar a ordem de produção.",
+      );
+    } finally {
+      setCreating(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-4 backdrop-blur-sm">
@@ -769,7 +783,10 @@ function NewOrderWizard({
             </div>
           )}
           {error && (
-            <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+            <p
+              role="alert"
+              className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700"
+            >
               {error}
             </p>
           )}
@@ -781,8 +798,17 @@ function NewOrderWizard({
           >
             {step ? "Voltar" : "Cancelar"}
           </button>
-          <Button onClick={step === 5 ? confirm : next}>
-            {step === 5 ? "Confirmar e reservar" : "Continuar"}
+          <Button
+            type="button"
+            aria-busy={creating}
+            disabled={creating}
+            onClick={step === 5 ? () => void confirm() : next}
+          >
+            {step === 5
+              ? creating
+                ? "Criando e reservando…"
+                : "Confirmar e reservar"
+              : "Continuar"}
           </Button>
         </div>
       </div>
@@ -2460,6 +2486,7 @@ export default function ProductionPage() {
     }
   };
   const create = async (order: ProductionOrderView) => {
+    setMessage("");
     const response = await fetch(`${getApiBaseUrl()}/production/orders`, {
       method: "POST",
       credentials: "include",
@@ -2481,13 +2508,12 @@ export default function ProductionPage() {
       }),
     });
     if (!response.ok) {
-      setMessage(
+      throw new Error(
         await readApiError(
           response,
           "Não foi possível criar a ordem. Verifique os lotes e o saldo disponível.",
         ),
       );
-      return;
     }
     const created = (await response.json()) as Record<string, unknown>;
     await refreshOrders();
