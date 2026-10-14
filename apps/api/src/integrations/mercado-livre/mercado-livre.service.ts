@@ -16,6 +16,11 @@ const sha256 = (value: string) =>
 const base64UrlSha256 = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
 
+export const isMercadoLivreAuthorizationFailure = (message: unknown) =>
+  /PA_UNAUTHORIZED_RESULT_FROM_POLICIES|Mercado Livre API (401|403)/i.test(
+    String(message ?? ""),
+  );
+
 type MercadoLivreToken = {
   access_token: string;
   refresh_token: string;
@@ -158,10 +163,14 @@ export class MercadoLivreService {
           .filter(Boolean),
       ),
     );
+    const initialSync = await this.syncOrders(
+      integration.companyId,
+      "OAUTH",
+    ).catch(() => null);
     return {
       companyId: integration.companyId,
       channelId: channel.id,
-      status: "CONNECTED",
+      status: initialSync ? "CONNECTED" : "ERROR",
     };
   }
 
@@ -203,7 +212,7 @@ export class MercadoLivreService {
     await this.database.$executeRawUnsafe(
       `UPDATE "ExternalIntegration" SET "accessTokenCiphertext"=$2,
        "refreshTokenCiphertext"=$3,"tokenExpiresAt"=NOW()+($4||' seconds')::interval,
-       "lastSyncAt"=NOW(),"updatedAt"=NOW()
+       "updatedAt"=NOW()
        WHERE "companyId"=$1 AND provider='MERCADO_LIVRE'`,
       companyId,
       this.encrypt(token.access_token),
@@ -308,18 +317,44 @@ export class MercadoLivreService {
   async status(companyId: string) {
     const channel = await this.ensureChannel(companyId);
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT status,"providerAccountId","connectedAt","lastSyncAt","lastError","tokenExpiresAt"
+      `SELECT status,"providerAccountId","connectedAt","lastSyncAt","lastError","tokenExpiresAt",scopes
          FROM "ExternalIntegration"
         WHERE "companyId"=$1 AND provider='MERCADO_LIVRE' LIMIT 1`,
       companyId,
+    );
+    const connection = rows[0] ?? { status: "DISCONNECTED" };
+    const authorizationRequired = isMercadoLivreAuthorizationFailure(
+      connection.lastError,
     );
     return {
       provider: "MERCADO_LIVRE",
       ...this.readiness(),
       channel,
-      connection: rows[0] ?? { status: "DISCONNECTED" },
+      connection,
+      actionRequired: authorizationRequired
+        ? {
+            code: "ORDERS_PERMISSION_REQUIRED",
+            message:
+              "Habilite a permissão funcional Usuários/Vendas no aplicativo Mercado Livre e reconecte a conta.",
+          }
+        : null,
       credentialsExposed: false,
     };
+  }
+
+  private async recordFailure(companyId: string, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const authorizationFailure = isMercadoLivreAuthorizationFailure(message);
+    await this.database.$executeRawUnsafe(
+      `UPDATE "ExternalIntegration"
+          SET status=CASE WHEN $3 THEN 'ERROR' ELSE status END,
+              "lastError"=$2,"updatedAt"=NOW()
+        WHERE "companyId"=$1 AND provider='MERCADO_LIVRE'`,
+      companyId,
+      message,
+      authorizationFailure,
+    );
+    return { message, authorizationFailure };
   }
 
   async ingestOrder(companyId: string, payload: any) {
@@ -360,13 +395,29 @@ export class MercadoLivreService {
       feeAmount,
       JSON.stringify(payload),
     );
+    await this.database.$executeRawUnsafe(
+      `UPDATE "IntegrationWebhookEvent"
+          SET status='PROCESSED',"processedAt"=NOW(),"lastError"=NULL
+        WHERE "companyId"=$1 AND provider='MERCADO_LIVRE'
+          AND payload->>'resource'=$2 AND status IN ('RECEIVED','ERROR')`,
+      companyId,
+      `/orders/${externalOrderId}`,
+    );
     return inserted[0];
   }
 
   async ingestOrderResource(companyId: string, resource: string) {
     if (!/^\/orders\/\d+$/.test(resource))
       throw new Error("Recurso Mercado Livre não permitido.");
-    return this.ingestOrder(companyId, await this.request(companyId, resource));
+    try {
+      return await this.ingestOrder(
+        companyId,
+        await this.request(companyId, resource),
+      );
+    } catch (error) {
+      await this.recordFailure(companyId, error);
+      throw error;
+    }
   }
 
   async syncOrders(companyId: string, trigger = "MANUAL") {
@@ -407,13 +458,14 @@ export class MercadoLivreService {
         data: { lastSyncedAt: new Date(), connectionStatus: "CONNECTED" },
       });
       await this.database.$executeRawUnsafe(
-        `UPDATE "ExternalIntegration" SET "lastSyncAt"=NOW(),"lastError"=NULL,"updatedAt"=NOW()
+        `UPDATE "ExternalIntegration" SET status='CONNECTED',"lastSyncAt"=NOW(),
+          "lastError"=NULL,"updatedAt"=NOW()
           WHERE "companyId"=$1 AND provider='MERCADO_LIVRE'`,
         companyId,
       );
       return { runId, recordsRead: results.length };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const { message } = await this.recordFailure(companyId, error);
       await this.database.$executeRawUnsafe(
         `UPDATE "MarketplaceSyncRun" SET status='FAILED',"lastError"=$2,"finishedAt"=NOW() WHERE id=$1`,
         runId,
@@ -429,17 +481,11 @@ export class MercadoLivreService {
     >(
       `SELECT "companyId" FROM "ExternalIntegration"
         WHERE provider='MERCADO_LIVRE' AND status='CONNECTED'
-          AND ("lastSyncAt" IS NULL OR "lastSyncAt" < NOW() - INTERVAL '5 minutes')`,
+          AND ("lastSyncAt" IS NULL OR "lastSyncAt" < NOW() - INTERVAL '5 minutes')
+          AND "updatedAt" < NOW() - INTERVAL '5 minutes'`,
     );
     for (const row of rows) {
-      await this.syncOrders(row.companyId, "SCHEDULED").catch(async (error) => {
-        await this.database.$executeRawUnsafe(
-          `UPDATE "ExternalIntegration" SET "lastError"=$2,"updatedAt"=NOW()
-            WHERE "companyId"=$1 AND provider='MERCADO_LIVRE'`,
-          row.companyId,
-          error instanceof Error ? error.message : String(error),
-        );
-      });
+      await this.syncOrders(row.companyId, "SCHEDULED").catch(() => undefined);
     }
   }
 

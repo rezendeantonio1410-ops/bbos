@@ -260,7 +260,8 @@ export class IntegrationsController {
       Array<{ companyId: string }>
     >(
       `SELECT "companyId" FROM "ExternalIntegration"
-        WHERE provider='MERCADO_LIVRE' AND status='CONNECTED' AND "providerAccountId"=$1 LIMIT 1`,
+        WHERE provider='MERCADO_LIVRE' AND status IN ('CONNECTED','ERROR')
+          AND "providerAccountId"=$1 LIMIT 1`,
       userId,
     );
     const companyId = rows[0]?.companyId;
@@ -287,12 +288,24 @@ export class IntegrationsController {
       JSON.stringify(payload),
     );
     if (inserted > 0) {
-      await this.mercadoLivre.ingestOrderResource(companyId, resource);
-      await this.database.$executeRawUnsafe(
-        `UPDATE "IntegrationWebhookEvent" SET status='PROCESSED',"processedAt"=NOW()
-          WHERE provider='MERCADO_LIVRE' AND "providerEventId"=$1`,
-        providerEventId,
-      );
+      try {
+        await this.mercadoLivre.ingestOrderResource(companyId, resource);
+        await this.database.$executeRawUnsafe(
+          `UPDATE "IntegrationWebhookEvent" SET status='PROCESSED',
+            "processedAt"=NOW(),"lastError"=NULL
+            WHERE provider='MERCADO_LIVRE' AND "providerEventId"=$1`,
+          providerEventId,
+        );
+      } catch (error) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "IntegrationWebhookEvent" SET status='ERROR',
+            "processedAt"=NOW(),"lastError"=$2
+            WHERE provider='MERCADO_LIVRE' AND "providerEventId"=$1`,
+          providerEventId,
+          error instanceof Error ? error.message : String(error),
+        );
+        return { accepted: true, duplicate: false, processing: "ERROR" };
+      }
     }
     return { accepted: true, duplicate: inserted === 0 };
   }

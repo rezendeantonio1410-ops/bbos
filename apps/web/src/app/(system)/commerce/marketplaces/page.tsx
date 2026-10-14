@@ -78,6 +78,10 @@ type IntegrationStatus = {
     connectedAt?: string | null;
     lastError?: string | null;
   };
+  actionRequired?: {
+    code: string;
+    message: string;
+  } | null;
 };
 type Session = { user?: { role?: string } };
 type Operator = {
@@ -153,7 +157,10 @@ export default function MarketplacesPage() {
     void load();
   }, [load]);
 
-  const connected = integration?.connection.status === "CONNECTED";
+  const requiresAuthorization =
+    integration?.actionRequired?.code === "ORDERS_PERMISSION_REQUIRED";
+  const connected =
+    integration?.connection.status === "CONNECTED" && !requiresAuthorization;
   const management = ["ADMIN", "EXECUTIVE"].includes(role);
   const connectedChannelCount = dashboard.channels.filter(
     (channel) => channel.connectionStatus === "CONNECTED",
@@ -251,7 +258,10 @@ export default function MarketplacesPage() {
               disabled={!integration?.configured}
               className="inline-flex items-center gap-2 rounded-xl bg-[#FFE600] px-4 py-3 text-xs font-extrabold text-[#2D3277] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Conectar Mercado Livre <ExternalLink size={14} />
+              {requiresAuthorization
+                ? "Reconectar Mercado Livre"
+                : "Conectar Mercado Livre"} {" "}
+              <ExternalLink size={14} />
             </button>
           ) : null}
         </div>
@@ -269,6 +279,16 @@ export default function MarketplacesPage() {
             O conector está pronto. Falta cadastrar no ambiente as credenciais
             do aplicativo Mercado Livre e a URL de retorno para liberar a
             autorização.
+          </span>
+        </div>
+      )}
+      {requiresAuthorization && (
+        <div className="mt-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
+          <AlertTriangle size={18} className="shrink-0" />
+          <span>
+            <strong>Mercado Livre exige nova autorização.</strong> {" "}
+            {integration?.actionRequired?.message} As vendas já notificadas
+            serão recuperadas automaticamente depois da reconexão.
           </span>
         </div>
       )}
@@ -297,8 +317,10 @@ export default function MarketplacesPage() {
         <Metric
           icon={AlertTriangle}
           label="Erros de sincronização"
-          value={String(dashboard.summary.errors)}
-          attention={dashboard.summary.errors > 0}
+          value={String(
+            dashboard.summary.errors + (requiresAuthorization ? 1 : 0),
+          )}
+          attention={dashboard.summary.errors > 0 || requiresAuthorization}
         />
       </section>
 
@@ -336,6 +358,9 @@ export default function MarketplacesPage() {
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {dashboard.channels.map((channel) => {
             const isBispoStore = channel.platformCode === "BISPO_STORE";
+            const channelNeedsAuthorization =
+              channel.platformCode === "MERCADO_LIVRE" &&
+              requiresAuthorization;
 
             return (
               <Card
@@ -363,12 +388,16 @@ export default function MarketplacesPage() {
                   </span>
                   <Badge
                     tone={
-                      channel.connectionStatus === "CONNECTED"
+                      channelNeedsAuthorization
+                        ? "warning"
+                        : channel.connectionStatus === "CONNECTED"
                         ? "success"
                         : "neutral"
                     }
                   >
-                    {statusLabel(channel.connectionStatus)}
+                    {channelNeedsAuthorization
+                      ? "Ação necessária"
+                      : statusLabel(channel.connectionStatus)}
                   </Badge>
                 </div>
                 <h3 className="mt-4 text-base font-bold">
@@ -377,6 +406,8 @@ export default function MarketplacesPage() {
                 <p className="mt-1 min-h-8 text-[10px] leading-4 text-[#7A8381]">
                   {isBispoStore
                     ? "Canal próprio · integrado diretamente ao BBOS"
+                    : channelNeedsAuthorization
+                      ? "Reconecte para liberar a leitura das vendas"
                     : channel.lastSyncedAt
                       ? `Atualizado ${dateTime(channel.lastSyncedAt)}`
                       : "Ainda sem sincronização"}
