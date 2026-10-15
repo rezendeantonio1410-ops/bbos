@@ -857,6 +857,15 @@ export class SalesOrdersService implements OnModuleDestroy {
           );
         if (!active.length)
           throw new BadRequestException("Pedido não possui reservas ativas.");
+        if (order.status !== SalesOrderStatus.INVOICED) {
+          await transaction.salesOrder.update({
+            where: { id },
+            data: {
+              status: SalesOrderStatus.INVOICED,
+              invoicedAt: order.invoicedAt ?? new Date(),
+            },
+          });
+        }
         const movementIds: string[] = [];
         for (const reservation of active) {
           await transaction.$queryRaw`SELECT id FROM "FinishedProduct" WHERE id = ${reservation.finishedProductId} FOR UPDATE`;

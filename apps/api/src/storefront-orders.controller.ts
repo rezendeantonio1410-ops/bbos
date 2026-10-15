@@ -30,6 +30,7 @@ import {
   storefrontShippingSalesOrderData,
 } from "./storefront-order-sync";
 import { reserveMelhorEnvioFreight } from "./storefront-shipping-finance";
+import { recordPaidStorefrontOrder } from "./storefront-payment-finance";
 
 const catalog: Record<
   string,
@@ -540,6 +541,8 @@ export class StorefrontOrdersController
         const data: {
           status?: SalesOrderStatus;
           salesChannelId?: string;
+          paymentType?: string;
+          paymentTermsSnapshot?: string;
           freight?: number;
           freightResponsibility?: string | null;
           shippingQuoteId?: string | null;
@@ -560,6 +563,10 @@ export class StorefrontOrdersController
         }
         if (existing.salesChannelId !== channel.id) {
           data.salesChannelId = channel.id;
+        }
+        if (existing.paymentType === "LEGACY") {
+          data.paymentType = "CASH";
+          data.paymentTermsSnapshot = `${storefront.requestedPaymentMethod === "CARD" ? "Cartão" : "Pix"} · Loja Bispo`;
         }
         const shippingChanged =
           Number(existing.freight) !== shippingData.freight ||
@@ -617,6 +624,8 @@ export class StorefrontOrdersController
           ...shippingData,
           discount: (storefront.discountCents || 0) / 100,
           totalAmount: storefront.totalCents / 100,
+          paymentType: "CASH",
+          paymentTermsSnapshot: `${storefront.requestedPaymentMethod === "CARD" ? "Cartão" : "Pix"} · Loja Bispo`,
           externalOrderId: storefront.id,
           orderDate: storefront.createdAt,
           notes: [
@@ -907,8 +916,58 @@ export class StorefrontOrdersController
       `storefront:payment-confirmed:${orderId}`,
       { externalId, provider },
     );
-    await this.syncSalesOrder(orderId);
+    const salesOrder = await this.syncSalesOrder(orderId);
+    await this.recordStorefrontPaymentInFinance(orderId, salesOrder.id);
     return result;
+  }
+
+  private async recordStorefrontPaymentInFinance(
+    storefrontOrderId: string,
+    salesOrderId: string,
+  ) {
+    return this.database.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT so.id AS "salesOrderId",so."companyId",so."customerId",so."totalAmount",
+                sfo.code,sfo."paymentProvider",sfo."paidAt",
+                attempt.id AS "paymentAttemptId",attempt.method,attempt."amountCents",attempt."externalId"
+           FROM "SalesOrder" so
+           JOIN "StorefrontOrder" sfo ON sfo.id=$1 AND sfo."companyId"=so."companyId"
+           JOIN LATERAL (
+             SELECT p.id,p.method,p."amountCents",p."externalId"
+               FROM "StorefrontPaymentAttempt" p
+              WHERE p."storefrontOrderId"=sfo.id AND p.status='PAID'
+              ORDER BY p."paidAt" DESC NULLS LAST,p."createdAt" DESC
+              LIMIT 1
+           ) attempt ON TRUE
+          WHERE so.id=$2 AND sfo."paidAt" IS NOT NULL
+          LIMIT 1`,
+        storefrontOrderId,
+        salesOrderId,
+      );
+      const payment = rows[0];
+      if (!payment) return null;
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder"
+            SET "salesOrderId"=COALESCE("salesOrderId",$2),"updatedAt"=NOW()
+          WHERE id=$1`,
+        storefrontOrderId,
+        salesOrderId,
+      );
+      return recordPaidStorefrontOrder(transaction, {
+        salesOrderId,
+        storefrontOrderId,
+        paymentAttemptId: payment.paymentAttemptId,
+        companyId: payment.companyId,
+        customerId: payment.customerId,
+        orderCode: payment.code,
+        provider: payment.paymentProvider,
+        method: payment.method,
+        externalId: payment.externalId,
+        amountCents: Number(payment.amountCents),
+        orderTotal: Number(payment.totalAmount),
+        paidAt: payment.paidAt,
+      });
+    });
   }
 
   private async reconcileMercadoPago(order: {
