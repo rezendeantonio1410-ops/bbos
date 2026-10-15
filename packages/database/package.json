@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate resolve --rolled-back 20261015124500_storefront_payment_fiscal_recovery || true; prisma migrate deploy",
+    "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed-product-catalog-runner.ts",
     "seed:coffee-references": "tsx prisma/seed-coffee-references-runner.ts",
     "seed:demo": "tsx prisma/seed.ts",
