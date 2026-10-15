@@ -46,7 +46,7 @@ SELECT DISTINCT
   'payment-account:mercado-pago:' || storefront_order."companyId",
   storefront_order."companyId",
   'payment-provider:mercado-pago:' || storefront_order."companyId",
-  'Recebimentos · Mercado Pago','DIGITAL_ACCOUNT','BRL','BR',0,true,NOW(),NOW()
+  'Recebimentos · Mercado Pago','DIGITAL_ACCOUNT'::"FinancialAccountType",'BRL','BR',0,true,NOW(),NOW()
   FROM "StorefrontOrder" storefront_order
   JOIN "StorefrontPaymentAttempt" attempt
     ON attempt."storefrontOrderId" = storefront_order.id
@@ -72,7 +72,7 @@ INSERT INTO "AccountsReceivable" (
 SELECT 'ar-' || md5(sales_order.id),sales_order."companyId",sales_order."customerId",sales_order.id,
        COALESCE(latest_paid."paidAt",latest_paid."orderPaidAt",NOW()),
        COALESCE(latest_paid."paidAt",latest_paid."orderPaidAt",NOW()),
-       sales_order."totalAmount",sales_order."totalAmount",'OPEN',NULL,
+       sales_order."totalAmount",sales_order."totalAmount",'OPEN'::"ReceivableStatus",NULL,
        'Pagamento online da Loja Bispo · pedido ' || sales_order.code || '.',NOW(),NOW()
   FROM latest_paid
   JOIN "SalesOrder" sales_order ON sales_order.id=latest_paid."salesOrderId"
@@ -110,7 +110,7 @@ INSERT INTO "FinancialTransaction" (
   "occurredAt","createdAt"
 )
 SELECT 'storefront-receipt-' || md5(payment.id),payment."companyId",payment."financialAccountId",
-       payment.id,'RECEIPT',payment.amount,'Venda online · Loja Bispo',
+       payment.id,'RECEIPT'::"FinancialTransactionType",payment.amount,'Venda online · Loja Bispo',
        'Recebimento da Loja Bispo via Mercado Pago',payment."paidAt",NOW()
   FROM "Payment" payment
  WHERE payment.source='STOREFRONT_MERCADO_PAGO'
