@@ -12,7 +12,6 @@ import brand from "./brand-review.module.css";
 import storyNav from "./story-navigation.module.css";
 import premium from "./premium-overrides.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
-import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
 import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { alexandreMicrolot } from "./microlots";
@@ -678,8 +677,6 @@ export default async function LojaPage() {
             </div>
           </div>
         </section>
-
-        <SensoryConcierge />
 
         <section className={styles.valueStrip}>
           <span>Perfis claros.</span>

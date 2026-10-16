@@ -228,78 +228,6 @@
   opacity: 0.94;
 }
 
-.floatingGuide {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 24;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-height: 54px;
-  padding: 7px 16px 7px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(13, 29, 23, 0.96);
-  box-shadow: 0 12px 30px rgba(13, 29, 23, 0.2);
-  backdrop-filter: blur(12px);
-  text-decoration: none;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(12px);
-  transition: opacity 240ms ease, visibility 240ms ease, transform 240ms ease, box-shadow 180ms ease;
-}
-
-.floatingGuideVisible {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-.floatingGuide:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 44px rgba(13, 29, 23, 0.3);
-}
-
-.floatingGuide > span {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 50%;
-  background: #ebebeb;
-  box-sizing: border-box;
-}
-
-.floatingGuide > span::before,
-.floatingGuide > span::after {
-  content: "";
-  position: absolute;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #0a0a0a;
-}
-
-.floatingGuide > span::before { transform: translateX(-13px); }
-.floatingGuide > span::after { transform: translateX(13px); }
-.floatingGuide > span i { color: #0a0a0a; font: 800 18px/1 Arial, sans-serif; font-style: normal; }
-
-.floatingGuide b {
-  display: grid;
-  gap: 2px;
-  font-size: 11px;
-  letter-spacing: 0.015em;
-  white-space: nowrap;
-}
-.floatingGuide b strong { font: inherit; }
-.floatingGuide b small { font-size: 8px; font-weight: 600; opacity: .64; }
-
 @media (max-width: 600px) {
   .header {
     height: 62px !important;
@@ -353,32 +281,4 @@
   .internationalProof {
     padding: 12px 13px;
   }
-
-  .floatingGuide {
-    right: 14px;
-    bottom: 14px;
-    width: auto;
-    max-width: calc(100vw - 28px);
-    min-height: 54px;
-    padding: 7px 14px 7px 8px;
-    justify-content: flex-start;
-  }
-
-  .floatingGuide > span {
-    width: 38px;
-    height: 38px;
-  }
-
-  .floatingGuide b { display: grid; font-size: 10px; }
-  .floatingGuide b small { font-size: 7px; }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .floatingGuide {
-    transition: none;
-  }
-}
-
-.floatingGuide{min-height:50px;padding:6px 14px 6px 7px;gap:10px;border-color:rgba(255,255,255,.14);box-shadow:0 10px 26px rgba(13,29,23,.16)}
-.floatingGuide>span{width:34px;height:34px;flex-basis:34px}
-@media(max-width:600px){.floatingGuide{width:48px;min-height:48px;padding:6px}.floatingGuide>span{width:34px;height:34px}}
