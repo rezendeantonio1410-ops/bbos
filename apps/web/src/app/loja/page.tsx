@@ -13,7 +13,6 @@ import storyNav from "./story-navigation.module.css";
 import premium from "./premium-overrides.module.css";
 import caderno from "./caderno-teaser.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
-import SensoryConcierge from "./SensoryConcierge";
 import EditorialHero from "./EditorialHero";
 import CoffeeLineExplorer from "./CoffeeLineExplorer";
 import MobileStoreMenu from "./MobileStoreMenu";
@@ -805,8 +804,6 @@ export default async function LojaPage() {
             <Link href="/loja/caderno">Abrir o Caderno →</Link>
           </div>
         </section>
-
-        <SensoryConcierge />
 
         <section className={styles.valueStrip}>
           <span>Perfis claros.</span>

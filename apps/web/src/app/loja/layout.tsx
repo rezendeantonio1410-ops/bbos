@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import SensoryConcierge from "./SensoryConcierge";
 
 export const metadata: Metadata = {
   title: {
@@ -50,5 +51,10 @@ export default function StoreLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <>
+      {children}
+      <SensoryConcierge />
+    </>
+  );
 }
