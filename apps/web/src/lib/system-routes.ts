@@ -1,5 +1,6 @@
 export const protectedSystemPrefixes = [
   "/home",
+  "/aplicativo",
   "/dashboard",
   "/dashboard-industrial",
   "/blends",

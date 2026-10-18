@@ -453,6 +453,8 @@ model Company {
   greenCoffeePurchases      GreenCoffeePurchase[]
   greenCoffeeApprovals      GreenCoffeeApprovalRequest[]
   operationalNotifications  OperationalNotification[]
+  mobileNotifications       MobileNotification[]
+  pushSubscriptions         PushSubscription[]
   greenCoffeeAuditEvents    GreenCoffeeAuditEvent[]
   coffeeSpecies             CoffeeSpecies[]
   coffeeRegions             CoffeeRegion[]
@@ -495,6 +497,8 @@ model User {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   sessions            AuthSession[]
+  mobileNotifications MobileNotification[]
+  pushSubscriptions   PushSubscription[]
 
   @@index([companyId])
 }
@@ -1429,19 +1433,71 @@ model GreenCoffeeApprovalRequest {
 }
 
 model OperationalNotification {
-  id         String               @id @default(cuid())
-  companyId  String
-  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  purchaseId String?
-  purchase   GreenCoffeePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  type       String
-  title      String
-  message    String
-  targetRole String
-  readAt     DateTime?
-  createdAt  DateTime             @default(now())
+  id                  String               @id @default(cuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseId          String?
+  purchase            GreenCoffeePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  type                String
+  title               String
+  message             String
+  targetRole          String
+  readAt              DateTime?
+  mobilePushBridgedAt DateTime?
+  createdAt           DateTime             @default(now())
+  mobileNotifications MobileNotification[]
 
   @@index([companyId, readAt])
+  @@index([companyId, mobilePushBridgedAt, createdAt])
+}
+
+model PushSubscription {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint         String    @unique
+  p256dh           String
+  auth             String
+  userAgent        String?
+  enabled          Boolean   @default(true)
+  failureCount     Int       @default(0)
+  lastSuccessfulAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([companyId, enabled])
+  @@index([userId, enabled])
+}
+
+model MobileNotification {
+  id                              String                   @id @default(cuid())
+  companyId                       String
+  company                         Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId                          String
+  user                            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceOperationalNotificationId String?
+  sourceOperationalNotification   OperationalNotification? @relation(fields: [sourceOperationalNotificationId], references: [id], onDelete: SetNull)
+  idempotencyKey                  String
+  type                            String
+  title                           String
+  message                         String
+  href                            String
+  entityType                      String?
+  entityId                        String?
+  readAt                          DateTime?
+  pushSentAt                      DateTime?
+  pushAttempts                    Int                      @default(0)
+  pushError                       String?
+  createdAt                       DateTime                 @default(now())
+  updatedAt                       DateTime                 @updatedAt
+
+  @@unique([userId, idempotencyKey])
+  @@index([companyId, createdAt])
+  @@index([userId, readAt, createdAt])
+  @@index([pushSentAt, pushAttempts, createdAt])
+  @@index([sourceOperationalNotificationId])
 }
 
 model GreenCoffeeAuditEvent {

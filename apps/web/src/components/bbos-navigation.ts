@@ -19,6 +19,7 @@ import {
   Settings,
   Ship,
   ShoppingBag,
+  Smartphone,
   UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -85,6 +86,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: House,
         roles: ALL,
         keywords: ["inicio", "hoje", "atenção"],
+      },
+      {
+        href: "/aplicativo",
+        label: "Aplicativo",
+        description: "Alertas de provas e atenções no iPhone",
+        icon: Smartphone,
+        roles: LEADERSHIP,
+        keywords: ["iphone", "aplicativo", "notificacao", "push"],
       },
       {
         href: "/dashboard",

@@ -34,7 +34,8 @@
     "test:sales-order-payment-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-payment-policy.test.ts",
     "test:sales-order-delivery-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-delivery-policy.test.ts",
     "test:sales-order-sample-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-order-sample-policy.test.ts",
-    "test:sample-fiscal-route": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sample-fiscal-route.test.ts"
+    "test:sample-fiscal-route": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sample-fiscal-route.test.ts",
+    "test:mobile-push": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/mobile-push.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",
@@ -44,7 +45,8 @@
     "@nestjs/platform-express": "^11.1.6",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -53,6 +55,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^24.3.0",
     "@types/qrcode": "^1.5.6",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9.34.0",
     "globals": "^16.3.0",
     "typescript": "^5.9.2",

@@ -7,6 +7,7 @@ import { isProtectedSystemPath } from "./system-routes";
 test("all internal management roots require a session", () => {
   for (const path of [
     "/home",
+    "/aplicativo",
     "/clientes",
     "/fornecedores",
     "/corretores",

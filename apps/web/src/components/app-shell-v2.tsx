@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Smartphone,
   UserRound,
   X,
 } from "lucide-react";
@@ -614,6 +615,18 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                           <UserRound size={15} />
                           Meu perfil
                         </Link>
+                        {(["ADMIN", "EXECUTIVE"] as string[]).includes(
+                          user.role,
+                        ) && (
+                          <Link
+                            href="/aplicativo"
+                            onClick={() => setProfileOpen(false)}
+                            className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
+                          >
+                            <Smartphone size={15} />
+                            Aplicativo no iPhone
+                          </Link>
+                        )}
                         {user.role === "ADMIN" && (
                           <Link
                             href="/usuarios"

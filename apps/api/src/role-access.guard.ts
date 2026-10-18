@@ -53,6 +53,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
 > = {
   AuthController: AUTHENTICATED,
   NotificationsController: ALL,
+  MobileNotificationsController: ALL,
   IntelligenceController: CORE,
   DashboardController: CORE,
   BlendsController: OPERATIONS,

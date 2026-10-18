@@ -1,17 +1,10 @@
 import { Controller, Get, NotFoundException, Param, Patch, Req } from "@nestjs/common";
 import { prisma } from "@bbos/database";
+import { notificationHref } from "./notification-links";
 
 type AuthenticatedRequest = {
   user: { companyId: string; role: string };
 };
-
-function notificationHref(type: string, purchaseId: string | null) {
-  if (type.startsWith("GREEN_COFFEE")) return purchaseId ? `/compras-cafe-verde/${purchaseId}` : "/recebimento";
-  if (type.startsWith("FINANCE")) return "/financeiro";
-  if (type.startsWith("FISCAL")) return "/notas-entrada";
-  if (type.startsWith("SALES") || type.startsWith("ORDER")) return "/pedidos";
-  return "/home";
-}
 
 @Controller("notifications")
 export class NotificationsController {
