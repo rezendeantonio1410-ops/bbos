@@ -8,6 +8,7 @@ import trailStyles from "./journey-trail.module.css";
 import sensoryStyles from "./sensory-system.module.css";
 import brand from "./brand.module.css";
 import { AddToCartButton, StorefrontCartProvider } from "../StorefrontCart";
+import { storefrontCommerce } from "../storefront-catalog";
 
 const styles = {
   ...baseStyles,
@@ -149,62 +150,50 @@ const products = {
   essencial: {
     name: "Essencial",
     line: "GOURMET",
-    price: "R$ 55",
+    ...storefrontCommerce("essencial"),
     profile: "Macio · Doce · Fácil",
     image: "/brand/products/essencial-treated.webp",
     copy: "Uma xícara tranquila e versátil para fazer parte da rotina.",
-    id: "essencial",
-    priceCents: 5500,
   },
   intenso: {
     name: "Intenso",
     line: "GOURMET",
-    price: "R$ 55",
+    ...storefrontCommerce("intenso"),
     profile: "Corpo · Presença · Limpeza",
     image: "/brand/products/intenso-treated.webp",
     copy: "Mais intensidade, sem esconder a limpeza e o equilíbrio.",
-    id: "intenso",
-    priceCents: 5500,
   },
   caramelo: {
     name: "Caramelo",
     line: "CLÁSSICOS",
-    price: "R$ 68",
+    ...storefrontCommerce("caramelo"),
     profile: "Caramelo · Chocolate · Equilíbrio",
     image: "/brand/products/caramelo-treated.webp",
     copy: "Doçura reconhecível e conforto desde o primeiro gole.",
-    id: "caramelo",
-    priceCents: 6800,
   },
   doce: {
     name: "Doce de Leite",
     line: "CLÁSSICOS",
-    price: "R$ 68",
+    ...storefrontCommerce("doce-de-leite"),
     profile: "Mascavo · Doce de leite · Alfajor",
     image: "/brand/products/doce-de-leite-treated.webp",
     copy: "Uma xícara gulosa, macia e cheia de referências afetivas.",
-    id: "doce-de-leite",
-    priceCents: 6800,
   },
   singular: {
     name: "Singular",
     line: "ÉPICOS",
-    price: "R$ 84",
+    ...storefrontCommerce("singular"),
     profile: "Frutado · Complexo · Evolutivo",
     image: "/brand/products/singular-treated.webp",
     copy: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
-    id: "singular",
-    priceCents: 8400,
   },
   sublime: {
     name: "Sublime",
     line: "ÉPICOS",
-    price: "R$ 84",
+    ...storefrontCommerce("sublime"),
     profile: "Rapadura · Caramelo · Doçura profunda",
     image: "/brand/products/sublime-treated.webp",
     copy: "Doçura profunda e corpo envolvente para um ritual sem pressa.",
-    id: "sublime",
-    priceCents: 8400,
   },
 };
 
@@ -313,7 +302,7 @@ export default function Page() {
                 </div>
               )}
               <b>
-                {recommendation.price} <small>· 500 g</small>
+                {recommendation.price} <small>· {recommendation.weight}</small>
               </b>
               <div className={styles.resultActions}>
                 <AddToCartButton
@@ -323,7 +312,7 @@ export default function Page() {
                     line: recommendation.line,
                     notes: recommendation.profile,
                     priceCents: recommendation.priceCents,
-                    weightGrams: 500,
+                    weightGrams: recommendation.weightGrams,
                     image: recommendation.image,
                   }}
                   style={{
