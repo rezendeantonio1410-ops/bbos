@@ -40,7 +40,7 @@ const catalog: Record<
   tangerina: { name: "Tangerina", unitPriceCents: 6800, weightGrams: 500 },
   singular: { name: "Singular", unitPriceCents: 8400, weightGrams: 500 },
   sublime: { name: "Sublime", unitPriceCents: 8400, weightGrams: 500 },
-  raros: { name: "Raro", unitPriceCents: 5200, weightGrams: 250 },
+  raros: { name: "Raro", unitPriceCents: 5400, weightGrams: 250 },
 };
 const groundProductIds = new Set(["essencial", "intenso"]);
 const preparationFor = (id: string) =>
