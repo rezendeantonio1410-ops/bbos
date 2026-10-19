@@ -47,7 +47,7 @@ export default async function MicrolotPage({ params }: PageProps) {
   const farmPhoto = details.gallery[1];
   if (!producerPhoto || !farmPhoto) notFound();
   const cartProduct = {
-    id: "raros",
+    id: product.id,
     name: product.name,
     line: product.line,
     notes: product.notes,

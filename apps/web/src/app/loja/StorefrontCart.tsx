@@ -11,8 +11,10 @@ import {
   useState,
 } from "react";
 import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { resolveStorefrontProduct } from "@bbos/shared";
 import styles from "./storefront-cart.module.css";
 import SensorySignature from "./SensorySignature";
+import { storefrontCommerce } from "./storefront-catalog";
 
 export type StoreProductStory = {
   promise: string;
@@ -58,6 +60,18 @@ const money = (v: number) =>
 const groundProductIds = new Set(["essencial", "intenso"]);
 const preparationFor = (product: Pick<StoreProduct, "id">): Preparation =>
   groundProductIds.has(product.id) ? "Moído" : "Grãos";
+const normalizeCartProduct = (product: StoreProduct): StoreProduct | null => {
+  const catalogProduct = resolveStorefrontProduct(product.id);
+  return catalogProduct
+    ? {
+        ...product,
+        id: catalogProduct.id,
+        name: catalogProduct.name,
+        priceCents: catalogProduct.unitPriceCents,
+        weightGrams: catalogProduct.weightGrams,
+      }
+    : null;
+};
 
 const cartProductStories: Record<string, StoreProductStory> = {
   essencial: {
@@ -129,42 +143,34 @@ const cartProductStories: Record<string, StoreProductStory> = {
 
 const cartRecommendationProducts: Record<string, StoreProduct> = {
   essencial: {
-    id: "essencial",
     name: "Essencial",
     line: "GOURMET",
     notes: "Macio · Doce · Fácil",
-    priceCents: 5500,
-    weightGrams: 500,
+    ...storefrontCommerce("essencial"),
     image: "/brand/products/real/essencial-frontal.jpg",
     story: cartProductStories.essencial,
   },
   caramelo: {
-    id: "caramelo",
     name: "Caramelo",
     line: "CLÁSSICOS",
     notes: "Caramelo · Chocolate · Equilíbrio",
-    priceCents: 6800,
-    weightGrams: 500,
+    ...storefrontCommerce("caramelo"),
     image: "/brand/products/real/caramelo-frontal.jpg",
     story: cartProductStories.caramelo,
   },
   singular: {
-    id: "singular",
     name: "Singular",
     line: "ÉPICOS",
     notes: "Frutado · Complexo · Evolutivo",
-    priceCents: 8400,
-    weightGrams: 500,
+    ...storefrontCommerce("singular"),
     image: "/brand/products/real/singular-frontal.jpg",
     story: cartProductStories.singular,
   },
   sublime: {
-    id: "sublime",
     name: "Sublime",
     line: "ÉPICOS",
     notes: "Rapadura · Caramelo · Doçura profunda",
-    priceCents: 8400,
-    weightGrams: 500,
+    ...storefrontCommerce("sublime"),
     image: "/brand/products/real/sublime-frontal.jpg",
     story: cartProductStories.sublime,
   },
@@ -240,7 +246,16 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
       const stored = JSON.parse(localStorage.getItem("bispo-cart-v2") || "[]");
       setItems(
         Array.isArray(stored)
-          ? stored.map((item) => ({ ...item, grind: preparationFor(item) }))
+          ? stored.flatMap((item) => {
+              const product = normalizeCartProduct(item);
+              const quantity = Math.min(
+                20,
+                Math.max(1, Number(item?.quantity) || 1),
+              );
+              return product
+                ? [{ ...product, quantity, grind: preparationFor(product) }]
+                : [];
+            })
           : [],
       );
       if (localStorage.getItem("bispo-open-cart") === "1") {
@@ -286,17 +301,23 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
           .slice(0, 2)
       : [];
   const add = (product: StoreProduct) => {
+    const normalizedProduct = normalizeCartProduct(product);
+    if (!normalizedProduct) return;
     setItems((current) => {
-      const found = current.find((item) => item.id === product.id);
+      const found = current.find((item) => item.id === normalizedProduct.id);
       return found
         ? current.map((item) =>
-            item.id === product.id
+            item.id === normalizedProduct.id
               ? { ...item, quantity: item.quantity + 1 }
               : item,
           )
         : [
             ...current,
-            { ...product, grind: preparationFor(product), quantity: 1 },
+            {
+              ...normalizedProduct,
+              grind: preparationFor(normalizedProduct),
+              quantity: 1,
+            },
           ];
     });
     setQuote(null);

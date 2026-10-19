@@ -15,6 +15,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { prisma, SalesOrderStatus } from "@bbos/database";
+import { resolveStorefrontProduct } from "@bbos/shared";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Public } from "./auth.guard";
 import { MercadoPagoService } from "./mercado-pago.service";
@@ -25,23 +26,6 @@ import { StorefrontCustomerService } from "./storefront-customer.service";
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
 import { SalesOrdersService } from "./sales-orders.service";
 
-const catalog: Record<
-  string,
-  { name: string; unitPriceCents: number; weightGrams: number }
-> = {
-  essencial: { name: "Essencial", unitPriceCents: 5500, weightGrams: 500 },
-  intenso: { name: "Intenso", unitPriceCents: 5500, weightGrams: 500 },
-  caramelo: { name: "Caramelo", unitPriceCents: 6800, weightGrams: 500 },
-  "doce-de-leite": {
-    name: "Doce de Leite",
-    unitPriceCents: 6800,
-    weightGrams: 500,
-  },
-  tangerina: { name: "Tangerina", unitPriceCents: 6800, weightGrams: 500 },
-  singular: { name: "Singular", unitPriceCents: 8400, weightGrams: 500 },
-  sublime: { name: "Sublime", unitPriceCents: 8400, weightGrams: 500 },
-  raros: { name: "Raro", unitPriceCents: 5400, weightGrams: 250 },
-};
 const groundProductIds = new Set(["essencial", "intenso"]);
 const preparationFor = (id: string) =>
   groundProductIds.has(id) ? "Moído" : "Grãos";
@@ -1269,7 +1253,7 @@ export class StorefrontOrdersController
       throw new BadRequestException("Forma de pagamento inválida.");
 
     const items = body.items.map((item) => {
-      const product = catalog[item.id ?? ""];
+      const product = resolveStorefrontProduct(item.id);
       const quantity = Number(item.quantity);
       if (
         !product ||
@@ -1279,10 +1263,10 @@ export class StorefrontOrdersController
       )
         throw new BadRequestException("Produto ou quantidade inválidos.");
       return {
-        id: item.id,
+        id: product.id,
         name: product.name,
         quantity,
-        grind: preparationFor(String(item.id)),
+        grind: preparationFor(product.id),
         unitPriceCents: product.unitPriceCents,
         totalCents: product.unitPriceCents * quantity,
         weightGrams: product.weightGrams * quantity,
@@ -1610,9 +1594,9 @@ export class StorefrontOrdersController
     );
     const previousItems = Array.isArray(rows[0]?.items) ? rows[0].items : [];
     const items = previousItems.flatMap((item: any) => {
-      const id = String(item?.id || "");
-      const product = catalog[id];
+      const product = resolveStorefrontProduct(item?.id);
       if (!product) return [];
+      const id = product.id;
       const quantity = Math.min(20, Math.max(1, Number(item.quantity) || 1));
       const grind = preparationFor(id);
       const line = new Set(["essencial", "intenso"]).has(id)

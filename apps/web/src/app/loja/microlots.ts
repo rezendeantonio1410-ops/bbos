@@ -1,9 +1,11 @@
 import type { ProductStory } from "./ProductDetails";
+import { storefrontCommerce } from "./storefront-catalog";
 
 export type Microlot = {
   slug: string;
   harvest: string;
   product: {
+    id: string;
     name: string;
     line: string;
     notes: string;
@@ -28,10 +30,7 @@ export const alexandreMicrolot: Microlot = {
     name: "Raro",
     line: "RAROS",
     notes: "86,5 pontos · Origem única · Safra limitada",
-    price: "R$ 54",
-    priceCents: 5400,
-    weight: "250 g",
-    weightGrams: 250,
+    ...storefrontCommerce("raros"),
     tone: "#8C3E37",
     image: "/brand/products/real/raro-frontal.jpg",
     tag: "poucas unidades",

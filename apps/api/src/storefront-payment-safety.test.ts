@@ -111,14 +111,12 @@ test("fluxo da loja reutiliza cobrança e exige cancelamento antes de uma nova",
   );
 });
 
-test("catálogo do checkout mantém Raro 250 g no preço oficial", () => {
+test("checkout usa o catálogo compartilhado sem preços duplicados", () => {
   const source = readFileSync(
     join(__dirname, "storefront-orders.controller.ts"),
     "utf8",
   );
 
-  assert.match(
-    source,
-    /raros:\s*\{[\s\S]*?name:\s*"Raro",[\s\S]*?unitPriceCents:\s*5400,[\s\S]*?weightGrams:\s*250[\s\S]*?\}/,
-  );
+  assert.match(source, /resolveStorefrontProduct\(item\.id\)/);
+  assert.doesNotMatch(source, /unitPriceCents:\s*\d+/);
 });

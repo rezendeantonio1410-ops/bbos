@@ -19,6 +19,7 @@ import MobileStoreMenu from "./MobileStoreMenu";
 import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { alexandreMicrolot } from "./microlots";
 import { realProductImages } from "./real-product-images";
+import { storefrontCommerce } from "./storefront-catalog";
 import { loadStorefrontImages } from "@/lib/storefront-images";
 import { loadStorefrontMedia } from "@/lib/storefront-media";
 import {
@@ -32,9 +33,7 @@ const products = [
     name: "Essencial",
     line: "GOURMET",
     notes: "Macio · Doce · Fácil",
-    price: "R$ 55",
-    priceCents: 5500,
-    weight: "500 g",
+    ...storefrontCommerce("essencial"),
     tone: "#C39A24",
     image: realProductImages.Essencial,
     tag: "preparo simples",
@@ -59,9 +58,7 @@ const products = [
     name: "Intenso",
     line: "GOURMET",
     notes: "Corpo · Presença · Limpeza",
-    price: "R$ 55",
-    priceCents: 5500,
-    weight: "500 g",
+    ...storefrontCommerce("intenso"),
     tone: "#C39A24",
     image: realProductImages.Intenso,
     tag: "mais corpo",
@@ -86,9 +83,7 @@ const products = [
     name: "Caramelo",
     line: "CLÁSSICOS",
     notes: "Caramelo · Chocolate · Equilíbrio",
-    price: "R$ 68",
-    priceCents: 6800,
-    weight: "500 g",
+    ...storefrontCommerce("caramelo"),
     tone: "#C86424",
     image: realProductImages.Caramelo,
     tag: "conforto",
@@ -113,9 +108,7 @@ const products = [
     name: "Doce de Leite",
     line: "CLÁSSICOS",
     notes: "Mascavo · Doce de leite · Alfajor",
-    price: "R$ 68",
-    priceCents: 6800,
-    weight: "500 g",
+    ...storefrontCommerce("doce-de-leite"),
     tone: "#C86424",
     image: realProductImages["Doce de Leite"],
     tag: "doçura",
@@ -140,9 +133,7 @@ const products = [
     name: "Tangerina",
     line: "CLÁSSICOS",
     notes: "Cítrico · Doce · Fresco",
-    price: "R$ 68",
-    priceCents: 6800,
-    weight: "500 g",
+    ...storefrontCommerce("tangerina"),
     tone: "#C86424",
     image: realProductImages.Tangerina,
     tag: "frescor",
@@ -167,9 +158,7 @@ const products = [
     name: "Singular",
     line: "ÉPICOS",
     notes: "Frutado · Complexo · Evolutivo",
-    price: "R$ 84",
-    priceCents: 8400,
-    weight: "500 g",
+    ...storefrontCommerce("singular"),
     tone: "#5C7D5F",
     image: realProductImages.Singular,
     tag: "descoberta",
@@ -194,9 +183,7 @@ const products = [
     name: "Sublime",
     line: "ÉPICOS",
     notes: "Rapadura · Caramelo · Doçura profunda",
-    price: "R$ 84",
-    priceCents: 8400,
-    weight: "500 g",
+    ...storefrontCommerce("sublime"),
     tone: "#5C7D5F",
     image: realProductImages.Sublime,
     tag: "experiência",
@@ -456,12 +443,12 @@ export default async function LojaPage() {
                       </strong>
                       <AddToCartButton
                         product={{
-                          id: product.name.toLowerCase().replaceAll(" ", "-"),
+                          id: product.id,
                           name: product.name,
                           line: product.line,
                           notes: product.notes,
                           priceCents: product.priceCents,
-                          weightGrams: Number.parseInt(product.weight, 10),
+                          weightGrams: product.weightGrams,
                           image: product.image,
                           story: product.story,
                         }}
@@ -639,17 +626,12 @@ export default async function LojaPage() {
                                 )}
                                 <ProductDetails
                                   product={{
-                                    id:
-                                      p.name === "Raro"
-                                        ? "raros"
-                                        : p.name
-                                            .toLowerCase()
-                                            .replaceAll(" ", "-"),
+                                    id: p.id,
                                     name: p.name,
                                     line: p.line,
                                     notes: p.notes,
                                     priceCents: p.priceCents,
-                                    weightGrams: Number.parseInt(p.weight, 10),
+                                    weightGrams: p.weightGrams,
                                     image: p.image,
                                     priceLabel: p.price,
                                     weightLabel: p.weight,
@@ -696,20 +678,12 @@ export default async function LojaPage() {
                                   </strong>
                                   <AddToCartButton
                                     product={{
-                                      id:
-                                        p.name === "Raro"
-                                          ? "raros"
-                                          : p.name
-                                              .toLowerCase()
-                                              .replaceAll(" ", "-"),
+                                      id: p.id,
                                       name: p.name,
                                       line: p.line,
                                       notes: p.notes,
                                       priceCents: p.priceCents,
-                                      weightGrams: Number.parseInt(
-                                        p.weight,
-                                        10,
-                                      ),
+                                      weightGrams: p.weightGrams,
                                       image: p.image,
                                       story: p.story,
                                     }}
