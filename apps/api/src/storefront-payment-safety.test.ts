@@ -110,3 +110,15 @@ test("fluxo da loja reutiliza cobrança e exige cancelamento antes de uma nova",
     /retry-\$\{existing\[0\]\.id\}-\$\{Date\.now\(\)\}/,
   );
 });
+
+test("catálogo do checkout mantém Raro 250 g no preço oficial", () => {
+  const source = readFileSync(
+    join(__dirname, "storefront-orders.controller.ts"),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /raros:\s*\{[\s\S]*?name:\s*"Raro",[\s\S]*?unitPriceCents:\s*5400,[\s\S]*?weightGrams:\s*250[\s\S]*?\}/,
+  );
+});
