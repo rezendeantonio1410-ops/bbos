@@ -2,13 +2,13 @@ export const STOREFRONT_PRODUCT_CATALOG = {
   essencial: {
     id: "essencial",
     name: "Essencial",
-    unitPriceCents: 5500,
+    unitPriceCents: 5200,
     weightGrams: 500,
   },
   intenso: {
     id: "intenso",
     name: "Intenso",
-    unitPriceCents: 5500,
+    unitPriceCents: 5200,
     weightGrams: 500,
   },
   caramelo: {
