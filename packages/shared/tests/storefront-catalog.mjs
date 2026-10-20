@@ -7,6 +7,12 @@ import {
   STOREFRONT_PRODUCT_CATALOG,
 } from "../dist/storefront-catalog.js";
 
+test("Essencial e Intenso mantêm o preço oficial de R$ 52,00", () => {
+  assert.equal(STOREFRONT_PRODUCT_CATALOG.essencial.unitPriceCents, 5200);
+  assert.equal(STOREFRONT_PRODUCT_CATALOG.intenso.unitPriceCents, 5200);
+  assert.equal(formatStorefrontPrice(5200, true), "R$ 52,00");
+});
+
 test("Raro mantém o preço oficial e a apresentação de 250 g", () => {
   assert.deepEqual(STOREFRONT_PRODUCT_CATALOG.raros, {
     id: "raros",
