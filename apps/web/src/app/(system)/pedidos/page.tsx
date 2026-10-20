@@ -21,6 +21,10 @@ import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
+import {
+  filterCustomersByOrderPurpose,
+  listOrderPurposes,
+} from "@/lib/order-purpose-filter";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -48,6 +52,8 @@ type StockOption = {
 type Customer = {
   id: string;
   name: string;
+  segment?: string | null;
+  active?: boolean;
   paymentTerms?: string | null;
   creditStatus?: "NOT_ANALYZED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
   creditLimit?: string | number;
@@ -490,6 +496,7 @@ export default function OrdersPage() {
 
 function NewOrder({ customers, variants, brokers, onClose, onCreated }: { customers: Customer[]; variants: StockOption[]; brokers: Broker[]; onClose: () => void; onCreated: () => Promise<void> }) {
   const [orderNumber, setOrderNumber] = useState("Gerando…");
+  const [orderPurpose, setOrderPurpose] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
@@ -523,7 +530,17 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
 
-  const customer = customers.find((candidate) => candidate.id === customerId);
+  const orderPurposes = useMemo(
+    () => listOrderPurposes(customers),
+    [customers],
+  );
+  const filteredCustomers = useMemo(
+    () => filterCustomersByOrderPurpose(customers, orderPurpose),
+    [customers, orderPurpose],
+  );
+  const customer = filteredCustomers.find(
+    (candidate) => candidate.id === customerId,
+  );
   const completeLines = useMemo(
     () => lines.filter((line) => line.variantId && Number.isSafeInteger(line.quantity) && line.quantity > 0),
     [lines],
@@ -568,6 +585,15 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       })
       .catch(() => setOrderNumber("—"));
   }, []);
+
+  useEffect(() => {
+    if (
+      customerId &&
+      !filteredCustomers.some((candidate) => candidate.id === customerId)
+    ) {
+      setCustomerId("");
+    }
+  }, [customerId, filteredCustomers]);
 
   useEffect(() => {
     if (!customerId || !isTerm) {
@@ -710,6 +736,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
 
   const submit = async () => {
     setError("");
+    if (!orderPurpose) return setError("Selecione a finalidade do pedido.");
     if (!customerId || !completeLines.length) return setError("Selecione o cliente e ao menos um produto.");
     if (completeLines.length !== lines.length || completeLines.some((line) => !quotes[line.id])) return setError("Todos os itens precisam de produto, quantidade e preço vigente.");
     if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
@@ -772,6 +799,8 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
             <h2 id="new-order-title" className="shrink-0 text-lg font-bold">Novo pedido</h2>
             <span className="shrink-0 text-xs font-semibold text-stone-500">{orderNumber}</span>
             <span className="min-w-0 truncate text-xs text-stone-500">
+              <b className="text-stone-800">Finalidade:</b> {orderPurpose || "selecione"}
+              <span className="mx-2 text-stone-300">·</span>
               <b className="text-stone-800">Comprador:</b> {customer?.name ?? "selecione o cliente"}
             </span>
           </div>
@@ -779,12 +808,44 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
         </header>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
-          <Field label="Cliente">
-            <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-              <option value="">Selecione</option>
-              {customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          <section className="rounded-2xl border border-forest-100 bg-forest-50/60 p-3">
+            <p className="text-xs font-bold text-forest-950">1 · Finalidade do pedido</p>
+            <p className="mt-1 text-[10px] text-stone-500">A finalidade define quais clientes e qual tabela comercial poderão ser utilizados.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {orderPurposes.map((purpose) => {
+                const total = filterCustomersByOrderPurpose(customers, purpose).length;
+                const selected = orderPurpose === purpose;
+                return (
+                  <button
+                    key={purpose}
+                    type="button"
+                    onClick={() => {
+                      if (purpose !== orderPurpose) setCustomerId("");
+                      setOrderPurpose(purpose);
+                      setError("");
+                    }}
+                    className={`rounded-xl border px-3 py-3 text-left transition ${selected ? "border-forest-700 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-forest-300"}`}
+                  >
+                    <strong className="block text-xs">{purpose}</strong>
+                    <span className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}>{total} cliente{total === 1 ? "" : "s"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <div>
+            <label htmlFor="new-order-customer" className="block text-xs font-semibold">2 · Cliente</label>
+            <select id="new-order-customer" disabled={!orderPurpose} value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400">
+              <option value="">{orderPurpose ? `Selecione um cliente de ${orderPurpose}` : "Selecione primeiro a finalidade"}</option>
+              {filteredCustomers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
-          </Field>
+            {orderPurpose && (
+              <span className="mt-1 block text-[10px] text-stone-400">
+                Exibindo somente clientes ativos de {orderPurpose}.
+              </span>
+            )}
+          </div>
 
           <div>
             <p className="text-xs font-semibold">Forma de pagamento</p>
@@ -822,11 +883,11 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
-                <p className="mt-0.5 text-[10px] text-stone-400">Adicione quantos produtos o distribuidor desejar.</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">{orderPurpose ? `Produtos para o pedido de ${orderPurpose}.` : "Selecione a finalidade e o cliente antes dos produtos."}</p>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setLines(variants.map((variant) => ({ ...newDraftLine(), variantId: variant.productVariantId })))} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600">Adicionar todos</button>
-                <button type="button" onClick={() => setLines((current) => [...current, newDraftLine()])} className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"><Plus size={12} className="mr-1 inline" /> Produto</button>
+                <button type="button" disabled={!customerId} onClick={() => setLines(variants.map((variant) => ({ ...newDraftLine(), variantId: variant.productVariantId })))} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600 disabled:cursor-not-allowed disabled:opacity-40">Adicionar todos</button>
+                <button type="button" disabled={!customerId} onClick={() => setLines((current) => [...current, newDraftLine()])} className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"><Plus size={12} className="mr-1 inline" /> Produto</button>
               </div>
             </div>
 
@@ -839,7 +900,7 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                     <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_30px]">
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
-                        <select value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs">
+                        <select disabled={!customerId} value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400">
                           <option value="">Selecione</option>
                           {variants.map((variant) => (
                             <option key={variant.productVariantId} value={variant.productVariantId} disabled={lines.some((item) => item.id !== line.id && item.variantId === variant.productVariantId)}>
