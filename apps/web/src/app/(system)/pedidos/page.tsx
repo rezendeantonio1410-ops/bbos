@@ -24,6 +24,10 @@ import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
+import {
+  filterCustomersByOrderPurpose,
+  listOrderPurposes,
+} from "@/lib/order-purpose-filter";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", {
@@ -68,6 +72,8 @@ type StockOption = {
 type Customer = {
   id: string;
   name: string;
+  segment?: string | null;
+  active?: boolean;
   paymentTerms?: string | null;
   creditStatus?: "NOT_ANALYZED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
   creditLimit?: string | number;
@@ -873,6 +879,7 @@ function NewOrder({
   onCreated: () => Promise<void>;
 }) {
   const [orderNumber, setOrderNumber] = useState("Gerando…");
+  const [orderPurpose, setOrderPurpose] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
@@ -932,7 +939,17 @@ function NewOrder({
     };
   }, []);
 
-  const customer = customers.find((candidate) => candidate.id === customerId);
+  const orderPurposes = useMemo(
+    () => listOrderPurposes(customers),
+    [customers],
+  );
+  const filteredCustomers = useMemo(
+    () => filterCustomersByOrderPurpose(customers, orderPurpose),
+    [customers, orderPurpose],
+  );
+  const customer = filteredCustomers.find(
+    (candidate) => candidate.id === customerId,
+  );
   const completeLines = useMemo(
     () =>
       lines.filter(
@@ -1015,6 +1032,15 @@ function NewOrder({
       })
       .catch(() => setOrderNumber("—"));
   }, []);
+
+  useEffect(() => {
+    if (
+      customerId &&
+      !filteredCustomers.some((candidate) => candidate.id === customerId)
+    ) {
+      setCustomerId("");
+    }
+  }, [customerId, filteredCustomers]);
 
   useEffect(() => {
     if (!customerId || !isTerm) {
@@ -1232,6 +1258,7 @@ function NewOrder({
 
   const submit = async () => {
     setError("");
+    if (!orderPurpose) return setError("Selecione a finalidade do pedido.");
     if (!customerId || !completeLines.length)
       return setError("Selecione o cliente e ao menos um produto.");
     if (
@@ -1348,6 +1375,9 @@ function NewOrder({
               {orderNumber}
             </span>
             <span className="min-w-0 truncate text-xs text-stone-500">
+              <b className="text-stone-800">Finalidade:</b>{" "}
+              {orderPurpose || "selecione"}
+              <span className="mx-2 text-stone-300">·</span>
               <b className="text-stone-800">Comprador:</b>{" "}
               {customer?.name ?? "selecione o cliente"}
             </span>
@@ -1381,13 +1411,65 @@ function NewOrder({
               </p>
             </div>
           )}
-          <Field label="Cliente">
+
+          <section className="rounded-2xl border border-forest-100 bg-forest-50/60 p-3">
+            <p className="text-xs font-bold text-forest-950">
+              1 · Finalidade do pedido
+            </p>
+            <p className="mt-1 text-[10px] text-stone-500">
+              A finalidade define quais clientes e qual tabela comercial poderão
+              ser utilizados.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {orderPurposes.map((purpose) => {
+                const total = filterCustomersByOrderPurpose(
+                  customers,
+                  purpose,
+                ).length;
+                const selected = orderPurpose === purpose;
+                return (
+                  <button
+                    key={purpose}
+                    type="button"
+                    onClick={() => {
+                      if (purpose !== orderPurpose) setCustomerId("");
+                      setOrderPurpose(purpose);
+                      setError("");
+                    }}
+                    className={`rounded-xl border px-3 py-3 text-left transition ${selected ? "border-forest-700 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-forest-300"}`}
+                  >
+                    <strong className="block text-xs">{purpose}</strong>
+                    <span
+                      className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}
+                    >
+                      {total} cliente{total === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <div>
+            <label
+              htmlFor="new-order-customer"
+              className="block text-xs font-semibold"
+            >
+              2 · Cliente
+            </label>
             <select
+              id="new-order-customer"
+              disabled={!orderPurpose}
               value={customerId}
               onChange={(event) => setCustomerId(event.target.value)}
+              className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
             >
-              <option value="">Selecione</option>
-              {customers.map((item) => (
+              <option value="">
+                {orderPurpose
+                  ? `Selecione um cliente de ${orderPurpose}`
+                  : "Selecione primeiro a finalidade"}
+              </option>
+              {filteredCustomers.map((item) => (
                 <option
                   key={item.id}
                   value={item.id}
@@ -1400,7 +1482,13 @@ function NewOrder({
                 </option>
               ))}
             </select>
-          </Field>
+            {orderPurpose && (
+              <span className="mt-1 block text-[10px] text-stone-400">
+                Exibindo somente clientes ativos de {orderPurpose}.
+              </span>
+            )}
+          </div>
+
           {customer?.fiscalReadiness?.ready === false && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
               <b>Cliente ainda não está pronto para NF-e.</b>
@@ -1467,14 +1555,17 @@ function NewOrder({
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
                 <p className="mt-0.5 text-[10px] text-stone-400">
-                  {isSample
-                    ? "Selecione os produtos e quantidades enviados como amostra."
-                    : "Adicione quantos produtos o distribuidor desejar."}
+                  {!customerId
+                    ? "Selecione a finalidade e o cliente antes dos produtos."
+                    : isSample
+                      ? "Selecione os produtos e quantidades enviados como amostra."
+                      : `Produtos para o pedido de ${orderPurpose}.`}
                 </p>
               </div>
               <div className="flex gap-2">
                 <button
                   type="button"
+                  disabled={!customerId}
                   onClick={() =>
                     setLines(
                       variants.map((variant) => ({
@@ -1483,16 +1574,17 @@ function NewOrder({
                       })),
                     )
                   }
-                  className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600"
+                  className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Adicionar todos
                 </button>
                 <button
                   type="button"
+                  disabled={!customerId}
                   onClick={() =>
                     setLines((current) => [...current, newDraftLine()])
                   }
-                  className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"
+                  className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Plus size={12} className="mr-1 inline" /> Produto
                 </button>
@@ -1516,6 +1608,7 @@ function NewOrder({
                           Produto / apresentação
                         </p>
                         <select
+                          disabled={!customerId}
                           value={line.variantId}
                           onChange={(event) =>
                             setLines((current) =>
@@ -1526,7 +1619,7 @@ function NewOrder({
                               ),
                             )
                           }
-                          className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs"
+                          className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
                         >
                           <option value="">Selecione</option>
                           {variants.map((variant) => (
