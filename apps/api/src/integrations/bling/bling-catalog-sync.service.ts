@@ -8,7 +8,7 @@ function stableId(value: string) {
 }
 
 const DEFAULT_NCM = "09012100";
-const PRICE_BY_SLUG: Record<string, number> = {
+export const BLING_CATALOG_PRICE_BY_SLUG: Readonly<Record<string, number>> = {
   essencial: 52,
   intenso: 52,
   caramelo: 68,
@@ -17,7 +17,12 @@ const PRICE_BY_SLUG: Record<string, number> = {
   singular: 84,
   sublime: 84,
   raros: 54,
+  "white-label-essencial": 19.5,
+  "white-label-classico": 22,
+  "white-label-frutado": 27.5,
+  "white-label-raro": 38,
 };
+const BLING_CATALOG_SLUGS = Object.keys(BLING_CATALOG_PRICE_BY_SLUG);
 
 type CompanyFiscalProfile = {
   taxRegime: "LUCRO_REAL";
@@ -54,13 +59,15 @@ export class BlingCatalogSyncService {
   constructor(private readonly bling: BlingService) {}
 
   private async localCatalog() {
+    const placeholders = BLING_CATALOG_SLUGS.map((_, index) => `$${index + 1}`).join(",");
     return this.database.$queryRawUnsafe<any[]>(
       `SELECT p.slug,p.name,pv.id AS "variantId",pv.sku,pv."netWeightGrams"
          FROM "Product" p
          JOIN "ProductVariant" pv ON pv."productId"=p.id
         WHERE p.active=true AND pv.active=true
-          AND p.slug IN ('essencial','intenso','caramelo','doce-de-leite','tangerina','singular','sublime','raros')
+          AND p.slug IN (${placeholders})
         ORDER BY p.slug,pv."netWeightGrams"`,
+      ...BLING_CATALOG_SLUGS,
     );
   }
 
@@ -176,7 +183,7 @@ export class BlingCatalogSyncService {
       ncm: DEFAULT_NCM,
       origem: 0,
       unidade: "UN",
-      preco: PRICE_BY_SLUG[String(row.slug)] ?? 0,
+      preco: BLING_CATALOG_PRICE_BY_SLUG[String(row.slug)] ?? 0,
       pesoLiquido: kg,
       pesoBruto: kg,
       tipo: "P",
