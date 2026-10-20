@@ -14,7 +14,7 @@ function stableId(value: string) {
 }
 
 const DEFAULT_NCM = "09012100";
-const PRICE_BY_SLUG: Record<string, number> = {
+export const BLING_CATALOG_PRICE_BY_SLUG: Readonly<Record<string, number>> = {
   essencial: 52,
   intenso: 52,
   caramelo: 68,
@@ -23,6 +23,10 @@ const PRICE_BY_SLUG: Record<string, number> = {
   singular: 84,
   sublime: 84,
   raros: 54,
+  "white-label-essencial": 19.5,
+  "white-label-classico": 22,
+  "white-label-frutado": 27.5,
+  "white-label-raro": 38,
 };
 
 type CompanyFiscalProfile = {
@@ -346,7 +350,7 @@ export class BlingCatalogSyncService {
       preco:
         governedPrice > 0
           ? governedPrice
-          : (PRICE_BY_SLUG[String(row.slug)] ?? 0),
+          : (BLING_CATALOG_PRICE_BY_SLUG[String(row.slug)] ?? 0),
       pesoLiquido: kg,
       pesoBruto: kg,
       tipo: "P",
