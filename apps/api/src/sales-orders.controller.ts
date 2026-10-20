@@ -103,12 +103,18 @@ export class SalesOrdersController {
           AND pp.active = true
           AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
           AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+          AND (
+            c.segment IS NULL
+            OR c.segment NOT ILIKE '%varejo%'
+            OR sc.code = 'VAREJO'
+          )
         ORDER BY CASE
           WHEN c.segment ILIKE '%distrib%' AND sc.type = 'DISTRIBUIDOR' THEN 0
           WHEN c.segment ILIKE '%cafeter%' AND sc.type = 'CAFETERIA' THEN 0
           WHEN c.segment ILIKE '%escrit%' AND sc.type = 'ESCRITORIO' THEN 0
           WHEN c.segment ILIKE '%export%' AND sc.type = 'EXPORTACAO' THEN 0
-          WHEN (c.segment ILIKE '%consum%' OR c.segment ILIKE '%varejo%') AND sc.type = 'ECOMMERCE' THEN 0
+          WHEN c.segment ILIKE '%consum%' AND sc.code = 'CONSUMIDOR_FINAL' THEN 0
+          WHEN c.segment ILIKE '%varejo%' AND sc.code = 'VAREJO' THEN 0
           WHEN sc.type = 'B2B' THEN 1
           ELSE 5
         END,
