@@ -11,8 +11,10 @@ import {
 const allowed = [
   ["RAROS", 250],
   ["EPICOS", 250],
+  ["CLASSICOS", 250],
   ["CLASSICOS", 500],
   ["CLASSICOS", 1000],
+  ["GOURMET", 250],
   ["GOURMET", 500],
   ["GOURMET", 1000],
 ];
@@ -36,8 +38,6 @@ const forbidden = [
   ["RAROS", 1000],
   ["EPICOS", 500],
   ["EPICOS", 1000],
-  ["CLASSICOS", 250],
-  ["GOURMET", 250],
 ];
 
 for (const [line, packageWeightG] of forbidden) {

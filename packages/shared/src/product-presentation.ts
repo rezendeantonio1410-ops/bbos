@@ -47,8 +47,8 @@ export const PRODUCT_PRESENTATION_RULES: Readonly<
 > = {
   RAROS: [250],
   EPICOS: [250],
-  CLASSICOS: [500, 1000],
-  GOURMET: [500, 1000],
+  CLASSICOS: [250, 500, 1000],
+  GOURMET: [250, 500, 1000],
 };
 export type CreateProductSkuInput = {
   line: ProductLine;
