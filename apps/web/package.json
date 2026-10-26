@@ -12,6 +12,7 @@
     "test:system-routes": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/system-routes.test.ts",
     "test:production-cost-input": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/production-cost-input.test.ts",
     "test:production-order-submit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/web/src/lib/production-order-submit.test.ts",
+    "test:order-draft-lines": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/order-draft-lines.test.ts",
     "test:order-purpose-filter": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/order-purpose-filter.test.ts"
   },
   "dependencies": {

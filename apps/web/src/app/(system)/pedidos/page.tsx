@@ -28,6 +28,10 @@ import {
   filterCustomersByOrderPurpose,
   listOrderPurposes,
 } from "@/lib/order-purpose-filter";
+import {
+  hasInvalidSelectedOrderDraftLine,
+  isCompleteOrderDraftLine,
+} from "@/lib/order-draft-lines";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", {
@@ -951,15 +955,10 @@ function NewOrder({
     (candidate) => candidate.id === customerId,
   );
   const completeLines = useMemo(
-    () =>
-      lines.filter(
-        (line) =>
-          line.variantId &&
-          Number.isSafeInteger(line.quantity) &&
-          line.quantity > 0,
-      ),
+    () => lines.filter(isCompleteOrderDraftLine),
     [lines],
   );
+  const hasInvalidSelectedLine = hasInvalidSelectedOrderDraftLine(lines);
   const firstQuote = completeLines.length
     ? quotes[completeLines[0]!.id]
     : undefined;
@@ -1019,6 +1018,27 @@ function NewOrder({
   const exceeds = isTerm && orderTotal > available;
   const usesPixFallback =
     isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
+  const saveBlockedReason = !completeLines.length
+    ? "Adicione ao menos um produto ao pedido."
+    : hasInvalidSelectedLine
+      ? "Revise a quantidade dos produtos selecionados."
+      : quoteBusy
+        ? "Aguarde a consulta dos preços."
+        : completeLines.some((line) => !quotes[line.id])
+          ? "Há produto sem preço vigente. Revise os itens destacados."
+          : isTerm && !paymentTerms
+            ? "Informe a condição da venda a prazo."
+            : !freightResponsibility
+              ? "Selecione quem será responsável pelo frete."
+              : usesPlatformShipping && !selectedShippingQuote
+                ? isSample
+                  ? "Pesquise e selecione o envio da amostra."
+                  : "Calcule e selecione uma opção de frete."
+                : isDistributor &&
+                    freightResponsibility === "CUSTOMER_CARRIER" &&
+                    !carrierName.trim()
+                  ? "Informe a transportadora indicada pelo distribuidor."
+                  : "";
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, {
@@ -1262,7 +1282,7 @@ function NewOrder({
     if (!customerId || !completeLines.length)
       return setError("Selecione o cliente e ao menos um produto.");
     if (
-      completeLines.length !== lines.length ||
+      hasInvalidSelectedLine ||
       completeLines.some((line) => !quotes[line.id])
     )
       return setError(
@@ -2408,18 +2428,13 @@ function NewOrder({
               </b>
             </div>
           )}
+          {saveBlockedReason && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+              {saveBlockedReason}
+            </p>
+          )}
           <button
-            disabled={
-              !completeLines.length ||
-              completeLines.length !== lines.length ||
-              quoteBusy ||
-              completeLines.some((line) => !quotes[line.id]) ||
-              !freightResponsibility ||
-              (usesPlatformShipping && !selectedShippingQuote) ||
-              (isDistributor &&
-                freightResponsibility === "CUSTOMER_CARRIER" &&
-                !carrierName.trim())
-            }
+            disabled={Boolean(saveBlockedReason)}
             onClick={() => void submit()}
             className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40"
           >
