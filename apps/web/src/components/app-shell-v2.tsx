@@ -286,7 +286,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
   };
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className="flex h-full flex-col">
+    <div
+      className={`flex h-full flex-col ${mobile ? "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]" : ""}`}
+    >
       <div className="flex items-center justify-between px-5 py-5">
         <Logo />
         {mobile && (
@@ -432,7 +434,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
         </div>
       )}
       <div className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <button
