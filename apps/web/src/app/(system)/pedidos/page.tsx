@@ -208,6 +208,8 @@ type Order = {
   customerReference?: string | null;
   incoterm?: string | null;
   incotermLocation?: string | null;
+  currency?: string | null;
+  customsDeclaredValue?: string | number | null;
   notes?: string | null;
   brokerId?: string | null;
   brokerCommissionMode?: string | null;
@@ -920,6 +922,7 @@ function NewOrder({
   const [incotermLocation, setIncotermLocation] = useState("");
   const [exchangeRateToBrl, setExchangeRateToBrl] = useState("");
   const [exchangeRateDate, setExchangeRateDate] = useState("");
+  const [customsDeclaredValue, setCustomsDeclaredValue] = useState("");
   const [brokerId, setBrokerId] = useState("");
   const [brokerCommissionMode, setBrokerCommissionMode] = useState<
     "PERCENTAGE" | "PER_PACKAGE"
@@ -966,8 +969,9 @@ function NewOrder({
     ? quotes[completeLines[0]!.id]
     : undefined;
   const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
+  const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const usesPlatformShipping =
-    (isSample && freightResponsibility === "BISPO") ||
+    (isSample && !isExport && freightResponsibility === "BISPO") ||
     (!isSample && isDistributor && freightResponsibility === "CUSTOMER");
   const selectedShippingQuote = shippingQuotes.find(
     (option) => option.id === shippingQuoteId,
@@ -1010,7 +1014,6 @@ function NewOrder({
       : (productsTotal * Number(brokerCommissionPercent || 0)) / 100
     : 0;
   const isTerm = !isSample && paymentType === "TERM";
-  const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const orderCurrency = firstQuote?.currency?.toUpperCase() || "BRL";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
@@ -1044,13 +1047,18 @@ function NewOrder({
                   ? "Informe a transportadora indicada pelo distribuidor."
                   : isExport && (!incoterm.trim() || !incotermLocation.trim())
                     ? "Informe o Incoterm e o local nomeado da exportação."
-                    : isExport &&
-                        orderCurrency !== "BRL" &&
-                        (!exchangeRateToBrl ||
-                          Number(exchangeRateToBrl) <= 0 ||
-                          !exchangeRateDate)
-                      ? "Informe a cotação da moeda para BRL e a data da cotação."
-                      : "";
+                    : isSample &&
+                        isExport &&
+                        (!customsDeclaredValue ||
+                          Number(customsDeclaredValue) <= 0)
+                      ? "Informe o valor aduaneiro declarado da amostra."
+                      : isExport &&
+                          orderCurrency !== "BRL" &&
+                          (!exchangeRateToBrl ||
+                            Number(exchangeRateToBrl) <= 0 ||
+                            !exchangeRateDate)
+                        ? "Informe a cotação da moeda para BRL e a data da cotação."
+                        : "";
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, {
@@ -1322,6 +1330,15 @@ function NewOrder({
       return setError("Informe o Incoterm e o local nomeado da exportação.");
     }
     if (
+      isSample &&
+      isExport &&
+      (!customsDeclaredValue || Number(customsDeclaredValue) <= 0)
+    ) {
+      return setError(
+        "Informe um valor aduaneiro declarado positivo para a amostra.",
+      );
+    }
+    if (
       isExport &&
       orderCurrency !== "BRL" &&
       (!exchangeRateToBrl ||
@@ -1374,6 +1391,8 @@ function NewOrder({
               ? 1
               : undefined,
         exchangeRateDate: isExport ? exchangeRateDate : undefined,
+        customsDeclaredValue:
+          isSample && isExport ? Number(customsDeclaredValue) : undefined,
         brokerId: !isSample && brokerId ? brokerId : undefined,
         brokerCommissionMode:
           !isSample && brokerId ? brokerCommissionMode : undefined,
@@ -1453,11 +1472,23 @@ function NewOrder({
                 Amostra sem cobrança comercial
               </p>
               <p className="mt-1 text-[11px] leading-5">
-                Cada pacote será registrado por{" "}
-                <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas como
-                valor fiscal simbólico. Esta regra vale para todos os usuários.
-                O pedido movimenta estoque, pode gerar NF-e e expedição, mas não
-                gera cobrança, comissão nem receita comercial.
+                {isExport ? (
+                  <>
+                    A amostra internacional não gera cobrança, comissão nem
+                    receita. O valor aduaneiro informado abaixo será usado
+                    somente na NF-e e nos documentos de exportação, convertido
+                    para BRL pela cotação registrada.
+                  </>
+                ) : (
+                  <>
+                    Cada pacote será registrado por{" "}
+                    <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas
+                    como valor fiscal simbólico. Esta regra vale para todos os
+                    usuários. O pedido movimenta estoque, pode gerar NF-e e
+                    expedição, mas não gera cobrança, comissão nem receita
+                    comercial.
+                  </>
+                )}
               </p>
               <p className="mt-1 text-[10px] leading-4 text-amber-800">
                 Antes da emissão, confirme no Bling a natureza da operação, CFOP
@@ -1876,7 +1907,7 @@ function NewOrder({
                       }
                     >
                       <option value="">Selecione</option>
-                      {!isSample && (
+                      {(!isSample || isExport) && (
                         <option value="CUSTOMER">Por conta do cliente</option>
                       )}
                       <option value="BISPO">Por conta da Bispo</option>
@@ -2417,6 +2448,26 @@ function NewOrder({
                     <Field label="Moeda da tabela">
                       <input value={orderCurrency} readOnly />
                     </Field>
+                    {isSample && (
+                      <Field
+                        label={`Valor aduaneiro declarado (${orderCurrency})`}
+                      >
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={customsDeclaredValue}
+                          onChange={(event) =>
+                            setCustomsDeclaredValue(event.target.value)
+                          }
+                          placeholder="Ex.: 10,00"
+                        />
+                        <small className="mt-1 block text-[9px] font-normal leading-4 text-stone-500">
+                          Sem cobrança comercial. Usado somente para alfândega e
+                          NF-e.
+                        </small>
+                      </Field>
+                    )}
                     {orderCurrency !== "BRL" && (
                       <>
                         <Field label={`Cotação 1 ${orderCurrency} em BRL`}>
@@ -2863,6 +2914,9 @@ function OrderDrawer({
     order.customerReference ? `Referência: ${order.customerReference}` : "",
     order.incoterm
       ? `Incoterm: ${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`
+      : "",
+    order.customsDeclaredValue
+      ? `Valor aduaneiro declarado: ${order.currency || "USD"} ${Number(order.customsDeclaredValue).toFixed(2)} · sem cobrança comercial`
       : "",
     order.notes ? `Observações: ${order.notes}` : "",
   ]

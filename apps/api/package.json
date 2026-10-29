@@ -38,6 +38,7 @@
     "test:sample-fiscal-route": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sample-fiscal-route.test.ts",
     "test:export-fiscal-route": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/export-fiscal-route.test.ts",
     "test:sales-order-export-fiscal-policy": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-export-fiscal-policy.test.ts",
+    "test:international-sample-policy": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/international-sample-policy.test.ts ../../apps/api/src/sales-order-export-fiscal-policy.test.ts",
     "test:mobile-push": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/mobile-push.test.ts"
   },
   "dependencies": {

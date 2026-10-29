@@ -17,6 +17,7 @@ import {
   type SampleFiscalRoute,
 } from "../../sample-fiscal-route";
 import type { ExportFiscalRoute } from "../../export-fiscal-route";
+import { internationalSampleFiscalValues } from "../../international-sample-policy";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -892,6 +893,7 @@ export class BlingOutboxService {
     const exportFiscalRoute = isExport
       ? await this.blingCatalogSync.exportFiscalRoute(row.companyId)
       : null;
+    const isInternationalSample = isExport && order.orderType === "SAMPLE";
     const orderCurrency = String(
       order.currency ?? order.salesChannelCurrency ?? "BRL",
     )
@@ -910,12 +912,22 @@ export class BlingOutboxService {
         "Emissão de exportação bloqueada: cotação para BRL e data da cotação são obrigatórias.",
       );
     }
-    const fiscalTotalBrl = roundCurrency(
-      Number(order.totalAmount) * exchangeRateToBrl,
-    );
+    const internationalSampleFiscal = isInternationalSample
+      ? internationalSampleFiscalValues({
+          customsDeclaredValue: Number(order.customsDeclaredValue),
+          exchangeRateToBrl,
+          totalQuantity: items.reduce(
+            (sum, item) => sum + Number(item.quantity),
+            0,
+          ),
+        })
+      : null;
+    const fiscalTotalBrl = internationalSampleFiscal
+      ? internationalSampleFiscal.totalBrl
+      : roundCurrency(Number(order.totalAmount) * exchangeRateToBrl);
 
     const sampleFiscalRoute =
-      order.orderType === "SAMPLE"
+      order.orderType === "SAMPLE" && !isExport
         ? await this.blingCatalogSync.sampleFiscalRoute(
             row.companyId,
             order.customerState,
@@ -934,6 +946,7 @@ export class BlingOutboxService {
     ).trim();
     const priorConsumerFinalRejection =
       order.orderType === "SAMPLE" &&
+      !isExport &&
       String(priorFiscal[0]?.status) === "REJECTED" &&
       Number(priorFiscal[0]?.payloadSnapshot?.sefazStatusCode) === 696;
     const priorRecipientRejection =
@@ -1128,7 +1141,9 @@ export class BlingOutboxService {
         blingItems.push({
           produto: { id: Number(productId) },
           quantidade: Number(item.quantity),
-          valor: roundCurrency(Number(item.unitPrice) * exchangeRateToBrl),
+          valor: internationalSampleFiscal
+            ? internationalSampleFiscal.unitValueBrl
+            : roundCurrency(Number(item.unitPrice) * exchangeRateToBrl),
           descricao: item.productName,
           codigo: item.sku,
           ...(sampleFiscalRoute || exportFiscalRoute
@@ -1178,8 +1193,9 @@ export class BlingOutboxService {
             ),
             contato: { id: Number(contactId) },
             itens: blingItems,
-            observacoes:
-              order.orderType === "SAMPLE"
+            observacoes: isInternationalSample
+              ? `AMOSTRA INTERNACIONAL SEM VALOR COMERCIAL | Valor aduaneiro declarado: ${orderCurrency} ${Number(order.customsDeclaredValue).toFixed(2)} | EXPORTAÇÃO SEM COBERTURA CAMBIAL | ${orderCurrency} 1 = BRL ${exchangeRateToBrl.toFixed(6)} | Câmbio: ${toBlingDate(order.exchangeRateDate)} | ${order.incoterm} ${order.incotermLocation} | BBOS: ${order.code}`
+              : order.orderType === "SAMPLE"
                 ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | Valor simbólico para fins fiscais | Origem: BBOS AMOSTRAS | BBOS: ${order.code}`
                 : isExport
                   ? `EXPORTAÇÃO | ${orderCurrency} 1 = BRL ${exchangeRateToBrl.toFixed(6)} | Câmbio: ${toBlingDate(order.exchangeRateDate)} | ${order.incoterm} ${order.incotermLocation} | BBOS: ${order.code}`
@@ -1716,10 +1732,12 @@ export class BlingOutboxService {
   private async reconcileSentInvoice() {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT f.id,f."companyId",f."externalId",f."salesOrderId",f."payloadSnapshot",
-              so."orderType"::text AS "orderType",c.state AS "customerState"
+              so."orderType"::text AS "orderType",c.state AS "customerState",
+              sc.type::text AS "salesChannelType"
          FROM "FiscalDocument" f
          LEFT JOIN "SalesOrder" so ON so.id=f."salesOrderId"
          LEFT JOIN "Customer" c ON c.id=so."customerId"
+         LEFT JOIN "SalesChannel" sc ON sc.id=so."salesChannelId"
         WHERE f."externalProvider"='BLING'
           AND f."externalId" IS NOT NULL
           AND (
@@ -1796,7 +1814,10 @@ export class BlingOutboxService {
       }
 
       if (status === "SENT" && this.fiscalStatusCode(note?.situacao) === 1) {
-        if (row.orderType === "SAMPLE") {
+        if (
+          row.orderType === "SAMPLE" &&
+          row.salesChannelType !== "EXPORTACAO"
+        ) {
           const sampleFiscalRoute =
             await this.blingCatalogSync.sampleFiscalRoute(
               row.companyId,

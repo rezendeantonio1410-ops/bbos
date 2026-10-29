@@ -77,7 +77,10 @@ test("sample orders remain fiscal and operational without becoming revenue", () 
     /target === "INVOICED" && order\.orderType !== "SAMPLE"/,
   );
   assert.match(controller, /paymentType = isSample\s*\? "SAMPLE"/);
-  assert.match(controller, /isSample && freightResponsibility === "BISPO"/);
+  assert.match(
+    controller,
+    /isSample && !isExport && freightResponsibility === "BISPO"/,
+  );
   assert.match(
     controller,
     /unitPrice: isSample\s*\? SAMPLE_FISCAL_PACKAGE_VALUE/,

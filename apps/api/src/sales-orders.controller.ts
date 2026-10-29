@@ -52,6 +52,7 @@ type SalesOrderCommercialTerms = {
   currency?: string;
   exchangeRateToBrl?: number;
   exchangeRateDate?: string;
+  customsDeclaredValue?: number;
   shippingQuoteId?: string;
   destinationPostalCode?: string;
   packageWidthCm?: number;
@@ -556,11 +557,6 @@ export class SalesOrdersController {
     ) {
       throw new BadRequestException("Responsabilidade do frete inválida.");
     }
-    if (isSample && !["BISPO", "PICKUP"].includes(freightResponsibility)) {
-      throw new BadRequestException(
-        "Pedido de amostra deve ter frete por conta da Bispo ou retirada na empresa.",
-      );
-    }
     if (isSample) body.freight = 0;
 
     const pricedItems = [] as CreateSalesOrderInput["items"];
@@ -612,6 +608,28 @@ export class SalesOrdersController {
     ) {
       throw new BadRequestException(
         "Pedidos de exportação exigem Incoterm e local nomeado.",
+      );
+    }
+    const isExport = resolvedChannelType === "EXPORTACAO";
+    if (
+      isSample &&
+      !isExport &&
+      !["BISPO", "PICKUP"].includes(freightResponsibility)
+    ) {
+      throw new BadRequestException(
+        "Pedido de amostra nacional deve ter frete por conta da Bispo ou retirada na empresa.",
+      );
+    }
+    const customsDeclaredValue =
+      isSample && isExport ? Number(body.customsDeclaredValue) : undefined;
+    if (
+      isSample &&
+      isExport &&
+      (!Number.isFinite(customsDeclaredValue) ||
+        Number(customsDeclaredValue) <= 0)
+    ) {
+      throw new BadRequestException(
+        "A amostra internacional exige valor aduaneiro declarado positivo.",
       );
     }
     let exportRoute:
@@ -668,7 +686,7 @@ export class SalesOrdersController {
       throw new BadRequestException(deliveryPolicy.message);
     const usesPlatformShipping =
       deliveryPolicy.usesPlatformShipping ||
-      (isSample && freightResponsibility === "BISPO");
+      (isSample && !isExport && freightResponsibility === "BISPO");
 
     if (isSample && String(body.brokerId ?? "").trim()) {
       throw new BadRequestException(
@@ -817,6 +835,7 @@ export class SalesOrdersController {
       currency: resolvedCurrency ?? "BRL",
       exchangeRateToBrl,
       exchangeRateDate,
+      customsDeclaredValue,
       exportDepartureLocation: exportRoute?.departureLocation,
       exportDepartureState: exportRoute?.departureState,
       brokerId,
@@ -1253,7 +1272,8 @@ export class SalesOrdersController {
   async invoice(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
     const customerRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT c.name,c."legalName",c."taxId",c."postalCode",c.address,c."addressNumber",
+      `SELECT c.name,c."legalName",c."taxId",c."countryCode",c."countryName",c."foreignTaxId",
+              c."postalCode",c.address,c."addressNumber",
               c."addressComplement",c.district,c.city,c.state,c."stateRegistration",c."stateRegistrationType"
          FROM "SalesOrder" so
          JOIN "Customer" c ON c.id=so."customerId"
@@ -1267,9 +1287,11 @@ export class SalesOrdersController {
     if (customerFiscalError) throw new BadRequestException(customerFiscalError);
     const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.status::text AS "orderStatus",so."orderType"::text AS "orderType",
+              sc.type::text AS "salesChannelType",
               f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId"
          FROM "SalesOrder" so
+         LEFT JOIN "SalesChannel" sc ON sc.id=so."salesChannelId"
          LEFT JOIN LATERAL (
            SELECT status, "externalId" FROM "FiscalDocument"
             WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
@@ -1299,7 +1321,10 @@ export class SalesOrdersController {
         "O pedido precisa estar pronto para expedição antes do faturamento.",
       );
     }
-    if (String(fiscalRows[0]?.orderType ?? "") === "SAMPLE") {
+    if (
+      String(fiscalRows[0]?.orderType ?? "") === "SAMPLE" &&
+      String(fiscalRows[0]?.salesChannelType ?? "") !== "EXPORTACAO"
+    ) {
       try {
         await this.blingCatalogSync.sampleFiscalRoute(
           actor.companyId,

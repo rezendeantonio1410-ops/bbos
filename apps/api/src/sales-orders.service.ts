@@ -37,6 +37,7 @@ export type CreateSalesOrderInput = {
   currency?: string;
   exchangeRateToBrl?: number;
   exchangeRateDate?: string;
+  customsDeclaredValue?: number;
   exportDepartureLocation?: string;
   exportDepartureState?: string;
   expectedDeliveryDate?: string;
@@ -390,6 +391,17 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Canal de venda inválido para a empresa.",
           );
+        const isInternationalSample =
+          orderType === "SAMPLE" && salesChannel?.type === "EXPORTACAO";
+        const customsDeclaredValue = Number(input.customsDeclaredValue);
+        if (
+          isInternationalSample &&
+          (!Number.isFinite(customsDeclaredValue) || customsDeclaredValue <= 0)
+        ) {
+          throw new BadRequestException(
+            "A amostra internacional exige valor aduaneiro declarado positivo.",
+          );
+        }
         const variants = await transaction.productVariant.findMany({
           where: {
             id: { in: pricedItems.map((item) => item.productVariantId) },
@@ -451,6 +463,9 @@ export class SalesOrdersService implements OnModuleDestroy {
             exchangeRateToBrl: input.exchangeRateToBrl,
             exchangeRateDate: input.exchangeRateDate
               ? new Date(input.exchangeRateDate)
+              : undefined,
+            customsDeclaredValue: isInternationalSample
+              ? customsDeclaredValue
               : undefined,
             exportDepartureLocation: input.exportDepartureLocation,
             exportDepartureState: input.exportDepartureState,

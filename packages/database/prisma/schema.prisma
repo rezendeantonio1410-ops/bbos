@@ -1958,6 +1958,7 @@ model SalesOrder {
   currency                     String                  @default("BRL") @db.VarChar(3)
   exchangeRateToBrl            Decimal?                @db.Decimal(14, 6)
   exchangeRateDate             DateTime?
+  customsDeclaredValue         Decimal?                @db.Decimal(14, 2)
   exportDepartureLocation      String?
   exportDepartureState         String?                 @db.VarChar(2)
   shippingQuoteId              String?

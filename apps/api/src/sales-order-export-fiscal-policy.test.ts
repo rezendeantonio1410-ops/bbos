@@ -17,13 +17,20 @@ test("international orders require foreign customer, fiscal route and exchange a
   assert.match(controllerSource, /exportFiscalRoute\(/);
   assert.match(controllerSource, /exchangeRateToBrl/);
   assert.match(controllerSource, /exchangeRateDate/);
+  assert.match(
+    controllerSource,
+    /SELECT c\.name,c\."legalName",c\."taxId",c\."countryCode",c\."countryName",c\."foreignTaxId"/,
+  );
 });
 
 test("Bling export draft is repaired and checked before SEFAZ transmission", () => {
   assert.match(outboxSource, /operacaoComExterior: true/);
   assert.match(outboxSource, /localEmbarque: route\.departureLocation/);
   assert.match(outboxSource, /tipoPessoa: "E"/);
-  assert.match(outboxSource, /sampleCfopIsApplied\(updatedDraft\?\.itens, route\.cfop\)/);
+  assert.match(
+    outboxSource,
+    /sampleCfopIsApplied\(updatedDraft\?\.itens, route\.cfop\)/,
+  );
   assert.match(
     outboxSource,
     /repairExportInvoice[\s\S]*\/nfe\/\$\{encodeURIComponent\(blingNfeId\)\}\/enviar/,
@@ -33,10 +40,27 @@ test("Bling export draft is repaired and checked before SEFAZ transmission", () 
 test("foreign-priced orders are converted to BRL before the fiscal draft", () => {
   assert.match(
     outboxSource,
-    /valor: roundCurrency\(Number\(item\.unitPrice\) \* exchangeRateToBrl\)/,
+    /valor: internationalSampleFiscal[\s\S]*roundCurrency\(Number\(item\.unitPrice\) \* exchangeRateToBrl\)/,
   );
   assert.match(
     outboxSource,
-    /fiscalTotalBrl = roundCurrency\([\s\S]*Number\(order\.totalAmount\) \* exchangeRateToBrl/,
+    /fiscalTotalBrl = internationalSampleFiscal[\s\S]*roundCurrency\(Number\(order\.totalAmount\) \* exchangeRateToBrl/,
   );
+});
+
+test("international samples use export CFOP and a separate customs value", () => {
+  assert.match(
+    controllerSource,
+    /isSample &&[\s\S]*isExport &&[\s\S]*customsDeclaredValue/,
+  );
+  assert.match(
+    controllerSource,
+    /isSample && !isExport && freightResponsibility === "BISPO"/,
+  );
+  assert.match(
+    outboxSource,
+    /order\.orderType === "SAMPLE" && !isExport[\s\S]*sampleFiscalRoute/,
+  );
+  assert.match(outboxSource, /internationalSampleFiscalValues/);
+  assert.match(outboxSource, /AMOSTRA INTERNACIONAL SEM VALOR COMERCIAL/);
 });
