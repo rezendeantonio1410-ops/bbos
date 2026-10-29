@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 const controllerSource = readFileSync(
-  new URL("./sales-orders.controller.ts", import.meta.url),
+  resolve(__dirname, "sales-orders.controller.ts"),
   "utf8",
 );
 const outboxSource = readFileSync(
-  new URL("./integrations/bling/bling-outbox.service.ts", import.meta.url),
+  resolve(__dirname, "integrations/bling/bling-outbox.service.ts"),
   "utf8",
 );
 
