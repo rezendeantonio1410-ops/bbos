@@ -34,6 +34,11 @@ export type CreateSalesOrderInput = {
   orderType?: SalesOrderType;
   customerId: string;
   salesChannelId?: string;
+  currency?: string;
+  exchangeRateToBrl?: number;
+  exchangeRateDate?: string;
+  exportDepartureLocation?: string;
+  exportDepartureState?: string;
   expectedDeliveryDate?: string;
   discount?: number;
   freight?: number;
@@ -439,6 +444,16 @@ export class SalesOrdersService implements OnModuleDestroy {
             brokerCommissionAmount:
               orderType === "SAMPLE" ? undefined : input.brokerCommissionAmount,
             salesChannelId: salesChannel?.id,
+            currency:
+              String(input.currency ?? salesChannel?.currency ?? "BRL")
+                .trim()
+                .toUpperCase() || "BRL",
+            exchangeRateToBrl: input.exchangeRateToBrl,
+            exchangeRateDate: input.exchangeRateDate
+              ? new Date(input.exchangeRateDate)
+              : undefined,
+            exportDepartureLocation: input.exportDepartureLocation,
+            exportDepartureState: input.exportDepartureState,
             code: input.code,
             orderNumber: input.orderNumber ?? input.code,
             orderType,

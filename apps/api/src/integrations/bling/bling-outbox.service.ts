@@ -16,9 +16,14 @@ import {
   sampleNatureIsApplied,
   type SampleFiscalRoute,
 } from "../../sample-fiscal-route";
+import type { ExportFiscalRoute } from "../../export-fiscal-route";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 function toBlingDate(value: unknown) {
@@ -174,6 +179,12 @@ export class BlingOutboxService {
     return normalized;
   }
 
+  private normalizeFiscalIdentity(value: unknown) {
+    return String(value ?? "")
+      .replace(/[^A-Z0-9]/gi, "")
+      .toUpperCase();
+  }
+
   private blingStateRegistrationIndicator(customer: any) {
     if (customer?.stateRegistrationType === "NUMBER") return 1;
     if (customer?.stateRegistrationType === "EXEMPT") return 2;
@@ -186,6 +197,8 @@ export class BlingOutboxService {
     delivery: any,
     document: string,
   ) {
+    const isForeign =
+      String(customer?.countryCode ?? "BR").toUpperCase() !== "BR";
     const phone = this.normalizeBlingPhone(customer?.phone);
     const stateRegistrationType = String(
       customer?.stateRegistrationType ?? "NON_TAXPAYER",
@@ -193,15 +206,18 @@ export class BlingOutboxService {
     const payload = {
       ...(remote && typeof remote === "object" ? remote : {}),
       nome:
-        document.length === 14
+        !isForeign && document.length === 14
           ? customer?.legalName || customer?.name
           : customer?.name,
-      tipo: document.length === 11 ? "F" : "J",
+      tipo: isForeign ? "E" : document.length === 11 ? "F" : "J",
       situacao: "A",
       numeroDocumento: document,
-      indicadorIe: this.blingStateRegistrationIndicator(customer),
-      ie:
-        stateRegistrationType === "NUMBER"
+      indicadorIe: this.blingStateRegistrationIndicator(
+        isForeign ? { stateRegistrationType: "NON_TAXPAYER" } : customer,
+      ),
+      ie: isForeign
+        ? undefined
+        : stateRegistrationType === "NUMBER"
           ? customer?.stateRegistration || undefined
           : stateRegistrationType === "EXEMPT"
             ? "ISENTO"
@@ -217,11 +233,14 @@ export class BlingOutboxService {
           numero: delivery?.number,
           complemento: delivery?.complement,
           bairro: delivery?.district,
-          cep: String(delivery?.postalCode ?? "").replace(/\D/g, ""),
+          cep: isForeign
+            ? String(delivery?.postalCode ?? "").trim()
+            : String(delivery?.postalCode ?? "").replace(/\D/g, ""),
           municipio: delivery?.city,
-          uf: delivery?.state,
+          uf: isForeign ? "EX" : delivery?.state,
         },
       },
+      ...(isForeign ? { pais: { nome: customer?.countryName } } : {}),
     };
     delete payload.id;
     return payload;
@@ -435,7 +454,112 @@ export class BlingOutboxService {
     return updatedDraft;
   }
 
+  private async repairExportInvoice(
+    companyId: string,
+    blingNfeId: string,
+    fiscalDraft: any,
+    order: any,
+    route: ExportFiscalRoute,
+  ) {
+    const items = Array.isArray(fiscalDraft?.itens)
+      ? fiscalDraft.itens.map((item: any) =>
+          this.sampleInvoiceItemPayload(item),
+        )
+      : [];
+    if (!items.length || items.some((item: any) => !item.codigo)) {
+      throw new Error(
+        "Emissão de exportação bloqueada: o rascunho da NF-e não possui itens válidos.",
+      );
+    }
+    const foreignTaxId = String(order.customerForeignTaxId ?? "").trim();
+    if (!foreignTaxId) {
+      throw new Error(
+        "Emissão de exportação bloqueada: identificação fiscal estrangeira ausente.",
+      );
+    }
+    const payload = {
+      tipo: 1,
+      numero: String(fiscalDraft?.numero ?? "").trim(),
+      dataOperacao: currentBlingDateTime(),
+      operacaoComExterior: true,
+      exportacao: {
+        localEmbarque: route.departureLocation,
+        ufEmbarque: route.departureState,
+      },
+      contato: {
+        nome: order.customerLegalName || order.customerName,
+        tipoPessoa: "E",
+        numeroDocumento: foreignTaxId,
+        contribuinte: 9,
+        telefone: order.customerPhone || undefined,
+        email: order.customerEmail || undefined,
+        endereco: {
+          endereco: order.customerAddress,
+          numero: order.customerAddressNumber || undefined,
+          complemento: order.customerAddressComplement || undefined,
+          bairro: order.customerDistrict,
+          cep: String(order.customerPostalCode ?? "").trim() || undefined,
+          municipio: order.customerCity,
+          uf: "EX",
+          pais: order.customerCountryName,
+        },
+      },
+      naturezaOperacao: { id: Number(route.natureOperationId) },
+      ...(Number(fiscalDraft?.loja?.id ?? 0) > 0
+        ? { loja: { id: Number(fiscalDraft.loja.id) } }
+        : {}),
+      finalidade: Number(fiscalDraft?.finalidade ?? 1),
+      seguro:
+        fiscalDraft?.seguro == null ? undefined : Number(fiscalDraft.seguro),
+      despesas:
+        fiscalDraft?.despesas == null
+          ? undefined
+          : Number(fiscalDraft.despesas),
+      desconto:
+        fiscalDraft?.desconto == null
+          ? undefined
+          : Number(fiscalDraft.desconto),
+      observacoes: [
+        String(fiscalDraft?.observacoes ?? "").trim(),
+        `EXPORTAÇÃO | ${order.currency} 1 = BRL ${Number(order.exchangeRateToBrl).toFixed(6)} | Câmbio: ${toBlingDate(order.exchangeRateDate)} | ${order.incoterm} ${order.incotermLocation} | BBOS: ${order.code}`,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      itens: items,
+      parcelas: Array.isArray(fiscalDraft?.parcelas)
+        ? fiscalDraft.parcelas.map((installment: any) => ({
+            data: installment?.data,
+            valor: Number(installment?.valor ?? 0),
+            observacoes: installment?.observacoes || undefined,
+            caut: installment?.caut || undefined,
+            formaPagamento:
+              Number(installment?.formaPagamento?.id ?? 0) > 0
+                ? { id: Number(installment.formaPagamento.id) }
+                : undefined,
+          }))
+        : [],
+    };
+    await this.bling.request(
+      companyId,
+      `/nfe/${encodeURIComponent(blingNfeId)}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    );
+    const updated = await this.bling.request(
+      companyId,
+      `/nfe/${encodeURIComponent(blingNfeId)}`,
+      { method: "GET" },
+    );
+    const updatedDraft = updated?.data ?? updated ?? {};
+    if (!sampleCfopIsApplied(updatedDraft?.itens, route.cfop)) {
+      throw new Error(
+        `Emissão de exportação bloqueada antes da SEFAZ: o rascunho não recebeu o CFOP ${route.cfop}. Revise a natureza de exportação no Bling.`,
+      );
+    }
+    return updatedDraft;
+  }
+
   private async findContactByDocument(companyId: string, document: string) {
+    const expected = this.normalizeFiscalIdentity(document);
     const paths = [
       `/contatos?numeroDocumento=${encodeURIComponent(document)}`,
       `/contatos?criterio=${encodeURIComponent(document)}`,
@@ -450,7 +574,10 @@ export class BlingOutboxService {
           (contact: any) =>
             String(
               contact?.numeroDocumento ?? contact?.cnpj ?? contact?.cpf ?? "",
-            ).replace(/\D/g, "") === document,
+            ) &&
+            this.normalizeFiscalIdentity(
+              contact?.numeroDocumento ?? contact?.cnpj ?? contact?.cpf ?? "",
+            ) === expected,
         );
         if (exact?.id) return String(exact.id);
         // Never accept the first fuzzy search result for fiscal identity.
@@ -463,14 +590,23 @@ export class BlingOutboxService {
   }
 
   private async ensureContact(companyId: string, customer: any, delivery: any) {
-    const document = String(customer?.cpf ?? customer?.taxId ?? "").replace(
-      /\D/g,
-      "",
-    );
+    const isForeign =
+      String(customer?.countryCode ?? "BR").toUpperCase() !== "BR";
+    const document = isForeign
+      ? String(customer?.foreignTaxId ?? "").trim()
+      : String(customer?.cpf ?? customer?.taxId ?? "").replace(/\D/g, "");
     if (!document)
-      throw new Error("Pedido sem CPF/CNPJ para integração Bling.");
+      throw new Error(
+        isForeign
+          ? "Pedido internacional sem identificação fiscal estrangeira para integração Bling."
+          : "Pedido sem CPF/CNPJ para integração Bling.",
+      );
+    const fiscalIdentity = this.normalizeFiscalIdentity(document);
+    const mapKey = isForeign
+      ? `${String(customer.countryCode).toUpperCase()}:${fiscalIdentity}`
+      : fiscalIdentity;
 
-    const existing = await this.getMap(companyId, "CONTACT_DOCUMENT", document);
+    const existing = await this.getMap(companyId, "CONTACT_DOCUMENT", mapKey);
     if (existing?.externalId) {
       const detail = await this.bling
         .request(
@@ -480,10 +616,10 @@ export class BlingOutboxService {
         )
         .catch(() => null);
       const remote = detail?.data ?? detail ?? {};
-      const remoteDocument = String(
+      const remoteDocument = this.normalizeFiscalIdentity(
         remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "",
-      ).replace(/\D/g, "");
-      if (remoteDocument === document) {
+      );
+      if (remoteDocument === fiscalIdentity) {
         return this.syncBlingContact(
           companyId,
           String(existing.externalId),
@@ -496,7 +632,7 @@ export class BlingOutboxService {
       await this.database.$executeRawUnsafe(
         `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
         companyId,
-        document,
+        mapKey,
       );
     }
 
@@ -509,23 +645,17 @@ export class BlingOutboxService {
         })
         .catch(() => null);
       const remote = detail?.data ?? detail ?? {};
-      const remoteDocument = String(
+      const remoteDocument = this.normalizeFiscalIdentity(
         remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "",
-      ).replace(/\D/g, "");
-      if (remoteDocument !== document)
+      );
+      if (remoteDocument !== fiscalIdentity)
         throw new Error(
           "Emissão fiscal bloqueada: o contato localizado no Bling possui CPF/CNPJ diferente do cliente do pedido.",
         );
-      await this.mapResource(
-        companyId,
-        "CONTACT_DOCUMENT",
-        document,
-        remoteId,
-        {
-          email: customer?.email,
-          source: "FOUND_BY_DOCUMENT_VERIFIED",
-        },
-      );
+      await this.mapResource(companyId, "CONTACT_DOCUMENT", mapKey, remoteId, {
+        email: customer?.email,
+        source: "FOUND_BY_DOCUMENT_VERIFIED",
+      });
       return this.syncBlingContact(
         companyId,
         remoteId,
@@ -545,15 +675,9 @@ export class BlingOutboxService {
     const externalId = String(payload?.data?.id ?? payload?.id ?? "");
     if (!externalId)
       throw new Error("Bling criou/recebeu contato sem retornar ID.");
-    await this.mapResource(
-      companyId,
-      "CONTACT_DOCUMENT",
-      document,
-      externalId,
-      {
-        email: customer?.email,
-      },
-    );
+    await this.mapResource(companyId, "CONTACT_DOCUMENT", mapKey, externalId, {
+      email: customer?.email,
+    });
     return externalId;
   }
 
@@ -698,6 +822,8 @@ export class BlingOutboxService {
   ): Promise<any> {
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,c.name AS "customerName",c."legalName" AS "customerLegalName",c."taxId" AS "customerTaxId",
+              c."countryCode" AS "customerCountryCode",c."countryName" AS "customerCountryName",
+              c."foreignTaxId" AS "customerForeignTaxId",
               c.email AS "customerEmail",c.phone AS "customerPhone",
               c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
               c."addressNumber" AS "customerAddressNumber",
@@ -705,7 +831,8 @@ export class BlingOutboxService {
               c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState",
               c."stateRegistration" AS "customerStateRegistration",
               c."stateRegistrationType" AS "customerStateRegistrationType",
-              sc."platformCode" AS "salesChannelPlatformCode",
+              sc."platformCode" AS "salesChannelPlatformCode",sc.type AS "salesChannelType",
+              sc.currency AS "salesChannelCurrency",
               sfo.id AS "storefrontOrderId"
          FROM "SalesOrder" so
          JOIN "Customer" c ON c.id=so."customerId"
@@ -722,6 +849,9 @@ export class BlingOutboxService {
       name: order.customerName,
       legalName: order.customerLegalName,
       taxId: order.customerTaxId,
+      countryCode: order.customerCountryCode,
+      countryName: order.customerCountryName,
+      foreignTaxId: order.customerForeignTaxId,
       postalCode: order.customerPostalCode,
       address: order.customerAddress,
       addressNumber: order.customerAddressNumber,
@@ -749,6 +879,40 @@ export class BlingOutboxService {
       order.id,
     );
     if (!items.length) throw new Error("Pedido comercial sem itens.");
+
+    const isExport = String(order.salesChannelType) === "EXPORTACAO";
+    if (
+      isExport !==
+      (String(order.customerCountryCode ?? "BR").toUpperCase() !== "BR")
+    ) {
+      throw new Error(
+        "Emissão fiscal bloqueada: cliente estrangeiro e tabela de exportação precisam estar alinhados.",
+      );
+    }
+    const exportFiscalRoute = isExport
+      ? await this.blingCatalogSync.exportFiscalRoute(row.companyId)
+      : null;
+    const orderCurrency = String(
+      order.currency ?? order.salesChannelCurrency ?? "BRL",
+    )
+      .trim()
+      .toUpperCase();
+    const exchangeRateToBrl = isExport
+      ? Number(order.exchangeRateToBrl ?? (orderCurrency === "BRL" ? 1 : 0))
+      : 1;
+    if (
+      isExport &&
+      (!Number.isFinite(exchangeRateToBrl) ||
+        exchangeRateToBrl <= 0 ||
+        !order.exchangeRateDate)
+    ) {
+      throw new Error(
+        "Emissão de exportação bloqueada: cotação para BRL e data da cotação são obrigatórias.",
+      );
+    }
+    const fiscalTotalBrl = roundCurrency(
+      Number(order.totalAmount) * exchangeRateToBrl,
+    );
 
     const sampleFiscalRoute =
       order.orderType === "SAMPLE"
@@ -845,6 +1009,9 @@ export class BlingOutboxService {
         name: order.customerName,
         legalName: order.customerLegalName,
         cpf: order.customerTaxId,
+        countryCode: order.customerCountryCode,
+        countryName: order.customerCountryName,
+        foreignTaxId: order.customerForeignTaxId,
         email: order.customerEmail,
         phone: order.customerPhone,
         stateRegistration: order.customerStateRegistration,
@@ -961,13 +1128,16 @@ export class BlingOutboxService {
         blingItems.push({
           produto: { id: Number(productId) },
           quantidade: Number(item.quantity),
-          valor: Number(item.unitPrice),
+          valor: roundCurrency(Number(item.unitPrice) * exchangeRateToBrl),
           descricao: item.productName,
           codigo: item.sku,
-          ...(sampleFiscalRoute
+          ...(sampleFiscalRoute || exportFiscalRoute
             ? {
                 naturezaOperacao: {
-                  id: Number(sampleFiscalRoute.natureOperationId),
+                  id: Number(
+                    sampleFiscalRoute?.natureOperationId ??
+                      exportFiscalRoute?.natureOperationId,
+                  ),
                 },
               }
             : {}),
@@ -1011,13 +1181,17 @@ export class BlingOutboxService {
             observacoes:
               order.orderType === "SAMPLE"
                 ? `REMESSA DE AMOSTRA SEM VALOR COMERCIAL | Valor simbólico para fins fiscais | Origem: BBOS AMOSTRAS | BBOS: ${order.code}`
-                : order.salesChannelPlatformCode === "BISPO_STORE" ||
-                    order.storefrontOrderId
-                  ? `Origem: LOJA BISPO | BBOS: ${order.code}`
-                  : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
+                : isExport
+                  ? `EXPORTAÇÃO | ${orderCurrency} 1 = BRL ${exchangeRateToBrl.toFixed(6)} | Câmbio: ${toBlingDate(order.exchangeRateDate)} | ${order.incoterm} ${order.incotermLocation} | BBOS: ${order.code}`
+                  : order.salesChannelPlatformCode === "BISPO_STORE" ||
+                      order.storefrontOrderId
+                    ? `Origem: LOJA BISPO | BBOS: ${order.code}`
+                    : `Origem: BBOS COMERCIAL | BBOS: ${order.code}`,
             transporte: {
               fretePorConta: order.freightResponsibility === "CUSTOMER" ? 1 : 0,
-              frete: Number(order.freight ?? 0),
+              frete: roundCurrency(
+                Number(order.freight ?? 0) * exchangeRateToBrl,
+              ),
               quantidadeVolumes: packageCount || undefined,
               pesoBruto: grossWeight || undefined,
               prazoEntrega:
@@ -1062,9 +1236,8 @@ export class BlingOutboxService {
       };
     }
 
-    const expectedDocument = String(order.customerTaxId ?? "").replace(
-      /\D/g,
-      "",
+    const expectedDocument = this.normalizeFiscalIdentity(
+      isExport ? order.customerForeignTaxId : order.customerTaxId,
     );
     let remoteOrder: any;
     try {
@@ -1112,15 +1285,15 @@ export class BlingOutboxService {
     );
     const remoteContact =
       remoteContactDetail?.data ?? remoteContactDetail ?? {};
-    const remoteDocument = String(
+    const remoteDocument = this.normalizeFiscalIdentity(
       remoteContact?.numeroDocumento ??
         remoteContact?.cnpj ??
         remoteContact?.cpf ??
         "",
-    ).replace(/\D/g, "");
+    );
     if (!expectedDocument || remoteDocument !== expectedDocument) {
       throw new Error(
-        `Emissão fiscal bloqueada: CPF/CNPJ do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`,
+        `Emissão fiscal bloqueada: identificação fiscal do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`,
       );
     }
 
@@ -1175,7 +1348,17 @@ export class BlingOutboxService {
       `/nfe/${encodeURIComponent(blingNfeId)}`,
       { method: "GET" },
     );
-    const fiscalDraft = fiscalDraftDetail?.data ?? fiscalDraftDetail ?? {};
+    let fiscalDraft = fiscalDraftDetail?.data ?? fiscalDraftDetail ?? {};
+    if (exportFiscalRoute) {
+      fiscalDraft = await this.repairExportInvoice(
+        row.companyId,
+        blingNfeId,
+        fiscalDraft,
+        order,
+        exportFiscalRoute,
+      );
+      invoiceDraftRepairApplied = true;
+    }
     if (
       sampleFiscalRoute &&
       !sampleCfopIsApplied(fiscalDraft?.itens, sampleFiscalRoute.cfop)
@@ -1209,7 +1392,10 @@ export class BlingOutboxService {
         draftStateRegistration !== expectedStateRegistration) ||
       (expectedStateRegistrationType === "EXEMPT" &&
         draftStateRegistration.toUpperCase() !== "ISENTO");
-    if (repairInvoiceDraftConsumerFinal || recipientNeedsRepair) {
+    if (
+      !isExport &&
+      (repairInvoiceDraftConsumerFinal || recipientNeedsRepair)
+    ) {
       await this.repairInvoiceRecipient(
         row.companyId,
         blingNfeId,
@@ -1236,7 +1422,7 @@ export class BlingOutboxService {
           WHERE id=$1`,
         fiscalId,
         blingNfeId,
-        Number(order.totalAmount),
+        fiscalTotalBrl,
         JSON.stringify({
           create: nfeResult,
           blingOrderId: salesMap.externalId,
@@ -1295,7 +1481,7 @@ export class BlingOutboxService {
         order.customerId,
         order.id,
         blingNfeId,
-        Number(order.totalAmount),
+        fiscalTotalBrl,
         JSON.stringify({
           create: nfeResult,
           blingOrderId: salesMap.externalId,

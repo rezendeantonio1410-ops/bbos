@@ -146,7 +146,8 @@ export class CustomersController {
     const actor = await this.actor(request);
     const [customers, health] = await Promise.all([
       this.db.$queryRawUnsafe<any[]>(
-        `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId", c.segment,
+        `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId",
+                c."countryCode", c."countryName", c."foreignTaxId", c.segment,
                 c.email, c.phone, c."postalCode", c.address, c."addressNumber", c."addressComplement",
                 c.district, c.city, c.state, c."stateRegistration", c."stateRegistrationType",
                 c."paymentTerms", c.active, c."creditStatus", c."creditLimit", c."creditNotes",
@@ -184,7 +185,8 @@ export class CustomersController {
     const actor = await this.actor(request);
     const customer = (
       await this.db.$queryRawUnsafe<any[]>(
-        `SELECT c.id, c.name, c."legalName", c."tradeName", c."taxId", c."postalCode", c.address,
+        `SELECT c.id, c.name, c."legalName", c."tradeName", c."taxId",
+              c."countryCode", c."countryName", c."foreignTaxId", c."postalCode", c.address,
               c."addressNumber", c."addressComplement", c.district, c.city, c.state,
               c."stateRegistration", c."stateRegistrationType",
               c.active, c."creditStatus", c."creditLimit", c."paymentTerms",
@@ -226,6 +228,29 @@ export class CustomersController {
     );
   }
 
+  @Get(":id/visits")
+  async visitHistory(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT v.id,v."recordedByName",v."visitAt",v."contactName",v.purpose,v.outcome,
+              v.facts,v."nextAction",v."nextActionAt",v."createdAt",
+              partner.name AS "partnerName"
+         FROM "CustomerVisit" v
+         LEFT JOIN "StorefrontPartner" partner ON partner.id=v."storefrontPartnerId"
+        WHERE v."companyId"=$1 AND v."customerId"=$2
+        ORDER BY v."visitAt" DESC,v."createdAt" DESC
+        LIMIT 200`,
+      actor.companyId,
+      id,
+    );
+  }
+
   @Post()
   async create(@Req() request: any, @Body() body: Record<string, any>) {
     const actor = await this.actor(request);
@@ -255,6 +280,22 @@ export class CustomersController {
           "CPF/CNPJ já cadastrado para esta empresa.",
         );
     }
+    if (fiscal.isForeign && fiscal.foreignTaxId) {
+      const duplicate = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1 AND UPPER("countryCode")=$2
+            AND UPPER(COALESCE("foreignTaxId",''))=UPPER($3)
+          LIMIT 1`,
+        actor.companyId,
+        fiscal.countryCode,
+        fiscal.foreignTaxId,
+      );
+      if (duplicate[0]) {
+        throw new BadRequestException(
+          "Identificação fiscal estrangeira já cadastrada para este país.",
+        );
+      }
+    }
     const paymentTerms = body.paymentTerms?.trim() || "À vista";
     const initialCreditStatus = isCashTerm(paymentTerms)
       ? "NOT_ANALYZED"
@@ -262,18 +303,21 @@ export class CustomersController {
     const id = randomUUID();
     const rows = await this.db.$queryRawUnsafe<any[]>(
       `INSERT INTO "Customer"
-        (id, "companyId", name, "legalName", "tradeName", "taxId", segment,
+        (id, "companyId", name, "legalName", "tradeName", "taxId", "countryCode", "countryName", "foreignTaxId", segment,
          email, phone, "postalCode", address, "addressNumber", "addressComplement", district, city, state,
          "stateRegistration", "stateRegistrationType",
          "paymentTerms", active, "creditStatus", "creditLimit", "createdAt", "updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,0,NOW(),NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,0,NOW(),NOW())
        RETURNING *`,
       id,
       actor.companyId,
       name,
       fiscal.legalName || null,
       body.tradeName?.trim() || null,
-      taxId,
+      taxId || null,
+      fiscal.countryCode,
+      fiscal.countryName,
+      fiscal.foreignTaxId || null,
       optionalText(body.segment),
       optionalText(body.email),
       internationalPhone(body.phone),
@@ -414,6 +458,14 @@ export class CustomersController {
       legalName:
         body.legalName === undefined ? current.legalName : body.legalName,
       taxId: body.taxId === undefined ? current.taxId : body.taxId,
+      countryCode:
+        body.countryCode === undefined ? current.countryCode : body.countryCode,
+      countryName:
+        body.countryName === undefined ? current.countryName : body.countryName,
+      foreignTaxId:
+        body.foreignTaxId === undefined
+          ? current.foreignTaxId
+          : body.foreignTaxId,
       postalCode:
         body.postalCode === undefined ? current.postalCode : body.postalCode,
       address: body.address === undefined ? current.address : body.address,
@@ -460,6 +512,23 @@ export class CustomersController {
           "CPF/CNPJ já cadastrado para esta empresa.",
         );
     }
+    if (fiscal.isForeign && fiscal.foreignTaxId) {
+      const duplicate = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1 AND id<>$2 AND UPPER("countryCode")=$3
+            AND UPPER(COALESCE("foreignTaxId",''))=UPPER($4)
+          LIMIT 1`,
+        actor.companyId,
+        id,
+        fiscal.countryCode,
+        fiscal.foreignTaxId,
+      );
+      if (duplicate[0]) {
+        throw new BadRequestException(
+          "Identificação fiscal estrangeira já cadastrada para este país.",
+        );
+      }
+    }
     const paymentTerms =
       body.paymentTerms === undefined
         ? current.paymentTerms
@@ -470,11 +539,12 @@ export class CustomersController {
         ? "UNDER_REVIEW"
         : current.creditStatus;
     const rows = await this.db.$queryRawUnsafe<any[]>(
-      `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6, segment=$7,
-         email=$8, phone=$9, "postalCode"=$10, address=$11, "addressNumber"=$12,
-         "addressComplement"=$13, district=$14, city=$15, state=$16,
-         "stateRegistration"=$17, "stateRegistrationType"=$18,
-         "paymentTerms"=$19, active=$20, "creditStatus"=$21, "updatedAt"=NOW()
+      `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6,
+         "countryCode"=$7, "countryName"=$8, "foreignTaxId"=$9, segment=$10,
+         email=$11, phone=$12, "postalCode"=$13, address=$14, "addressNumber"=$15,
+         "addressComplement"=$16, district=$17, city=$18, state=$19,
+         "stateRegistration"=$20, "stateRegistrationType"=$21,
+         "paymentTerms"=$22, active=$23, "creditStatus"=$24, "updatedAt"=NOW()
        WHERE id=$1 AND "companyId"=$2 RETURNING *`,
       id,
       actor.companyId,
@@ -483,7 +553,10 @@ export class CustomersController {
       body.tradeName === undefined
         ? current.tradeName
         : body.tradeName?.trim() || null,
-      taxId,
+      taxId || null,
+      fiscal.countryCode,
+      fiscal.countryName,
+      fiscal.foreignTaxId || null,
       body.segment === undefined
         ? current.segment
         : body.segment?.trim() || null,

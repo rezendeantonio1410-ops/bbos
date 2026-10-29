@@ -21,7 +21,7 @@ type PortalData = {
     name: string;
     contactName?: string | null;
     email?: string | null;
-    portalAccessLevel: "VIEWER" | "SELLER" | "DISTRIBUTOR";
+    portalAccessLevel: "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
   };
   capabilities: {
     canCreateCustomers: boolean;
@@ -281,7 +281,9 @@ export default function PartnerPortalPage() {
                 <p className="mt-2 text-sm text-stone-500">
                   {data.partner.portalAccessLevel === "VIEWER"
                     ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
-                    : "Acompanhe seus negócios e monte pedidos para os clientes liberados."}
+                    : data.partner.portalAccessLevel === "SALES_MANAGER"
+                      ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
+                      : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
                 </p>
               </div>
               <p className="text-xs text-stone-400">

@@ -8,6 +8,7 @@ import {
   SAMPLE_CFOP_INTRA,
   SAMPLE_FISCAL_POLICY_VERSION,
 } from "../../sample-fiscal-route";
+import { resolveExportFiscalRoute } from "../../export-fiscal-route";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -44,6 +45,12 @@ type CompanyFiscalProfile = {
   sampleNatureOperationName?: string | null;
   sampleValidatedByAccountant: boolean;
   sampleFiscalPolicyVersion: typeof SAMPLE_FISCAL_POLICY_VERSION;
+  exportCfop?: string | null;
+  exportNatureOperationId?: string | null;
+  exportNatureOperationName?: string | null;
+  exportDepartureLocation?: string | null;
+  exportDepartureState?: string | null;
+  exportValidatedByAccountant: boolean;
   notes?: string | null;
   validatedByAccountant: boolean;
 };
@@ -206,6 +213,12 @@ export class BlingCatalogSyncService {
       sampleNatureOperationName: null,
       sampleValidatedByAccountant: false,
       sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
+      exportCfop: null,
+      exportNatureOperationId: null,
+      exportNatureOperationName: null,
+      exportDepartureLocation: null,
+      exportDepartureState: "PR",
+      exportValidatedByAccountant: false,
       notes:
         "CST, CFOP e alíquotas devem ser validados com a contabilidade antes da primeira NF-e real.",
       validatedByAccountant: false,
@@ -284,6 +297,31 @@ export class BlingCatalogSyncService {
         current.sampleValidatedByAccountant,
       ),
       sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
+      exportCfop:
+        patch.exportCfop == null
+          ? (current.exportCfop ?? null)
+          : String(patch.exportCfop).replace(/\D/g, "") || null,
+      exportNatureOperationId:
+        patch.exportNatureOperationId == null
+          ? (current.exportNatureOperationId ?? null)
+          : String(patch.exportNatureOperationId).replace(/\D/g, "") || null,
+      exportNatureOperationName:
+        patch.exportNatureOperationName == null
+          ? (current.exportNatureOperationName ?? null)
+          : String(patch.exportNatureOperationName).trim() || null,
+      exportDepartureLocation:
+        patch.exportDepartureLocation == null
+          ? (current.exportDepartureLocation ?? null)
+          : String(patch.exportDepartureLocation).trim() || null,
+      exportDepartureState: String(
+        patch.exportDepartureState ?? current.exportDepartureState ?? "PR",
+      )
+        .trim()
+        .toUpperCase(),
+      exportValidatedByAccountant: Boolean(
+        patch.exportValidatedByAccountant ??
+        current.exportValidatedByAccountant,
+      ),
       notes:
         patch.notes == null
           ? (current.notes ?? null)
@@ -302,6 +340,16 @@ export class BlingCatalogSyncService {
         "Selecione a natureza de operação de amostra do Bling antes de confirmar a validação contábil.",
       );
     }
+    if (next.exportCfop && !/^7\d{3}$/.test(next.exportCfop)) {
+      throw new Error("CFOP de exportação deve ter 4 dígitos e iniciar por 7.");
+    }
+    if (
+      next.exportDepartureState &&
+      !/^[A-Z]{2}$/.test(next.exportDepartureState)
+    ) {
+      throw new Error("UF de embarque inválida.");
+    }
+    if (next.exportValidatedByAccountant) resolveExportFiscalRoute(next);
     await this.saveResourceMap(
       companyId,
       "COMPANY_FISCAL_PROFILE",
@@ -317,6 +365,10 @@ export class BlingCatalogSyncService {
       await this.companyFiscalProfile(companyId),
       destinationState,
     );
+  }
+
+  async exportFiscalRoute(companyId: string) {
+    return resolveExportFiscalRoute(await this.companyFiscalProfile(companyId));
   }
 
   async operationNatures(companyId: string) {

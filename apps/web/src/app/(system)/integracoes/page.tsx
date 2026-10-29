@@ -82,6 +82,12 @@ type CompanyFiscalProfile = {
   sampleNatureOperationId?: string | null;
   sampleNatureOperationName?: string | null;
   sampleValidatedByAccountant: boolean;
+  exportCfop?: string | null;
+  exportNatureOperationId?: string | null;
+  exportNatureOperationName?: string | null;
+  exportDepartureLocation?: string | null;
+  exportDepartureState?: string | null;
+  exportValidatedByAccountant: boolean;
   notes?: string | null;
   validatedByAccountant: boolean;
 };
@@ -425,8 +431,8 @@ export default function IntegrationsPage() {
             Central de integrações
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            Conexões, sincronizações e impedimentos operacionais em uma só
-            tela — antes que o pedido pare no faturamento ou na expedição.
+            Conexões, sincronizações e impedimentos operacionais em uma só tela
+            — antes que o pedido pare no faturamento ou na expedição.
           </p>
         </div>
         <button
@@ -472,9 +478,7 @@ export default function IntegrationsPage() {
             description="ERP, clientes, produtos e NF-e"
             icon={<PlugZap size={19} />}
             tone="violet"
-            data={overview?.providers.find(
-              (item) => item.provider === "BLING",
-            )}
+            data={overview?.providers.find((item) => item.provider === "BLING")}
             connectHref={`${root}/integrations/bling/connect`}
             actionLabel="Conectar Bling"
           />
@@ -537,7 +541,8 @@ export default function IntegrationsPage() {
               </p>
               <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">
                 O BBOS confere documento e endereço fiscal antes da NF-e. Assim,
-                o erro aparece no cadastro — não depois de o pedido estar pronto.
+                o erro aparece no cadastro — não depois de o pedido estar
+                pronto.
               </p>
             </div>
           </div>
@@ -739,10 +744,10 @@ export default function IntegrationsPage() {
                   Rota fiscal para degustação em embalagem comercial
                 </p>
                 <p className="mt-1 max-w-3xl text-xs leading-5 text-emerald-800">
-                  O BBOS registra cada pacote real por R$ 1,00, aplica a natureza
-                  selecionada em cada item, usa CFOP 5.910 dentro do Paraná e
-                  6.910 para outros estados e confere o rascunho antes de
-                  transmitir à SEFAZ.
+                  O BBOS registra cada pacote real por R$ 1,00, aplica a
+                  natureza selecionada em cada item, usa CFOP 5.910 dentro do
+                  Paraná e 6.910 para outros estados e confere o rascunho antes
+                  de transmitir à SEFAZ.
                 </p>
               </div>
               <div className="flex gap-2 text-[10px] font-extrabold uppercase">
@@ -812,10 +817,115 @@ export default function IntegrationsPage() {
             </div>
             <p className="mt-3 text-[11px] leading-5 text-amber-800">
               O valor fiscal informado pelo BBOS é R$ 1,00 por pacote. Confirme
-              somente depois de a contabilidade validar ICMS, IPI, PIS, COFINS
-              e a base de cálculo dessa natureza no Bling. Sem essa confirmação,
+              somente depois de a contabilidade validar ICMS, IPI, PIS, COFINS e
+              a base de cálculo dessa natureza no Bling. Sem essa confirmação,
               pedidos de amostra não são enviados à SEFAZ.
             </p>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+            <div>
+              <p className="text-sm font-bold text-blue-950">
+                Rota fiscal para vendas internacionais
+              </p>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-blue-800">
+                O BBOS exige natureza de operação, CFOP iniciado por 7 e local
+                de embarque antes de preparar uma NF-e para o exterior. A
+                transmissão permanece bloqueada enquanto a contabilidade não
+                confirmar esta rota.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-[9px] font-bold uppercase tracking-[.08em] text-blue-800">
+                  Natureza de operação no Bling
+                </span>
+                <select
+                  value={profiles.companyProfile.exportNatureOperationId ?? ""}
+                  onChange={(event) => {
+                    const selected = operationNatures.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    updateCompany({
+                      exportNatureOperationId: event.target.value || null,
+                      exportNatureOperationName: selected?.name ?? null,
+                      exportValidatedByAccountant: false,
+                    });
+                  }}
+                  className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-xs text-stone-800 outline-none focus:border-blue-600"
+                >
+                  <option value="">Selecione a natureza de exportação</option>
+                  {profiles.companyProfile.exportNatureOperationId &&
+                    !operationNatures.some(
+                      (item) =>
+                        item.id ===
+                        profiles.companyProfile.exportNatureOperationId,
+                    ) && (
+                      <option
+                        value={profiles.companyProfile.exportNatureOperationId}
+                      >
+                        {profiles.companyProfile.exportNatureOperationName ??
+                          `Natureza #${profiles.companyProfile.exportNatureOperationId}`}
+                      </option>
+                    )}
+                  {operationNatures.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="CFOP exportação"
+                value={profiles.companyProfile.exportCfop ?? ""}
+                onChange={(value) =>
+                  updateCompany({
+                    exportCfop: value,
+                    exportValidatedByAccountant: false,
+                  })
+                }
+              />
+              <Field
+                label="UF de embarque"
+                value={profiles.companyProfile.exportDepartureState ?? "PR"}
+                onChange={(value) =>
+                  updateCompany({
+                    exportDepartureState: value.toUpperCase(),
+                    exportValidatedByAccountant: false,
+                  })
+                }
+              />
+              <div className="md:col-span-2 lg:col-span-3">
+                <Field
+                  label="Local de embarque"
+                  value={profiles.companyProfile.exportDepartureLocation ?? ""}
+                  onChange={(value) =>
+                    updateCompany({
+                      exportDepartureLocation: value,
+                      exportValidatedByAccountant: false,
+                    })
+                  }
+                />
+              </div>
+              <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-blue-950">
+                <input
+                  type="checkbox"
+                  checked={profiles.companyProfile.exportValidatedByAccountant}
+                  disabled={
+                    !profiles.companyProfile.exportNatureOperationId ||
+                    !profiles.companyProfile.exportCfop ||
+                    !profiles.companyProfile.exportDepartureLocation ||
+                    !profiles.companyProfile.exportDepartureState
+                  }
+                  onChange={(event) =>
+                    updateCompany({
+                      exportValidatedByAccountant: event.target.checked,
+                    })
+                  }
+                />
+                Rota de exportação validada pela contabilidade
+              </label>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1032,8 +1142,8 @@ function ConnectorCard({
   const connected = data?.connection.status === "CONNECTED";
   const attention = Boolean(
     data?.connection.lastError ||
-      data?.activity.failed ||
-      data?.activity.webhookErrors,
+    data?.activity.failed ||
+    data?.activity.webhookErrors,
   );
   const signalAt =
     data?.connection.lastSyncAt ??
@@ -1064,7 +1174,9 @@ function ConnectorCard({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className={`grid size-10 place-items-center rounded-2xl ${colors}`}>
+        <span
+          className={`grid size-10 place-items-center rounded-2xl ${colors}`}
+        >
           {icon}
         </span>
         <span

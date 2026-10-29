@@ -132,7 +132,11 @@ export class StorefrontPartnersController {
       );
     }
     const accessLevel = String(body.accessLevel ?? "VIEWER").toUpperCase();
-    if (!["VIEWER", "SELLER", "DISTRIBUTOR"].includes(accessLevel)) {
+    if (
+      !["VIEWER", "SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+        accessLevel,
+      )
+    ) {
       throw new BadRequestException("Nível de acesso inválido.");
     }
     const customerIds = [

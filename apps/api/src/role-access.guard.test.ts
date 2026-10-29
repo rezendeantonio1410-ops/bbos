@@ -239,7 +239,8 @@ test("partner portal data queries are always scoped to the signed partner and co
   assert.match(source, /c\."companyId"=\$1 AND c\."partnerId"=\$2/);
   assert.match(source, /FROM "StorefrontPartnerCustomer" link/);
   assert.match(source, /so\."createdByStorefrontPartnerId"=\$2/);
-  assert.match(source, /\["SELLER", "DISTRIBUTOR"\]/);
+  assert.match(source, /"SELLER", "SALES_MANAGER", "DISTRIBUTOR"/);
+  assert.match(source, /partner\.portalAccessLevel === "SALES_MANAGER"/);
   assert.doesNotMatch(source, /salesOrders\.confirm\(/);
 });
 

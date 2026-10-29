@@ -36,6 +36,9 @@ type Customer = {
   legalName?: string | null;
   tradeName?: string | null;
   taxId?: string | null;
+  countryCode?: string | null;
+  countryName?: string | null;
+  foreignTaxId?: string | null;
   segment?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -77,6 +80,19 @@ type CreditEvent = {
   actorName: string;
   actorRole?: string | null;
   createdAt: string;
+};
+
+type CustomerVisit = {
+  id: string;
+  recordedByName: string;
+  partnerName?: string | null;
+  visitAt: string;
+  contactName?: string | null;
+  purpose: string;
+  outcome: string;
+  facts: string;
+  nextAction?: string | null;
+  nextActionAt?: string | null;
 };
 
 const segments = [
@@ -130,11 +146,28 @@ const paymentOptions = [
   "60 dias",
   "Personalizada",
 ];
+const countries = [
+  { code: "BR", name: "Brasil" },
+  { code: "CN", name: "China" },
+  { code: "US", name: "Estados Unidos" },
+  { code: "DE", name: "Alemanha" },
+  { code: "ES", name: "Espanha" },
+  { code: "FR", name: "França" },
+  { code: "GB", name: "Reino Unido" },
+  { code: "IT", name: "Itália" },
+  { code: "JP", name: "Japão" },
+  { code: "PT", name: "Portugal" },
+  { code: "SG", name: "Singapura" },
+  { code: "AE", name: "Emirados Árabes Unidos" },
+];
 const emptyCustomer = {
   name: "",
   legalName: "",
   tradeName: "",
   taxId: "",
+  countryCode: "BR",
+  countryName: "Brasil",
+  foreignTaxId: "",
   segment: "",
   email: "",
   phone: "",
@@ -155,6 +188,22 @@ const creditLabel = {
   APPROVED: "Aprovado",
   REJECTED: "Reprovado",
 };
+const visitPurposeLabel: Record<string, string> = {
+  PROSPECCAO: "Prospecção",
+  APRESENTACAO: "Apresentação de produtos",
+  NEGOCIACAO: "Negociação",
+  POS_VENDA: "Pós-venda",
+  COBRANCA: "Cobrança",
+  OUTRO: "Outro",
+};
+const visitOutcomeLabel: Record<string, string> = {
+  ACOMPANHAR: "Acompanhar",
+  INTERESSADO: "Cliente interessado",
+  COTACAO: "Solicitou cotação",
+  PEDIDO: "Pedido encaminhado",
+  SEM_INTERESSE: "Sem interesse agora",
+  NAO_LOCALIZADO: "Contato não localizado",
+};
 const money = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateTime = (value: string) =>
@@ -164,20 +213,29 @@ const dateTime = (value: string) =>
   }).format(new Date(value));
 const customerFormError = (form: typeof emptyCustomer) => {
   const document = form.taxId.replace(/\D/g, "");
+  const isForeign = form.countryCode !== "BR";
   const missing: string[] = [];
   if (!form.name.trim()) missing.push("nome");
-  if (![11, 14].includes(document.length)) missing.push("CPF/CNPJ válido");
-  if (document.length === 14 && !form.legalName.trim())
+  if (isForeign && !/^[A-Z]{2}$/.test(form.countryCode))
+    missing.push("código do país");
+  if (isForeign && !form.countryName.trim()) missing.push("país");
+  if (isForeign && !form.foreignTaxId.trim())
+    missing.push("identificação fiscal estrangeira");
+  if (!isForeign && ![11, 14].includes(document.length))
+    missing.push("CPF/CNPJ válido");
+  if (!isForeign && document.length === 14 && !form.legalName.trim())
     missing.push("razão social");
-  if (form.postalCode.replace(/\D/g, "").length !== 8) missing.push("CEP");
+  if (!isForeign && form.postalCode.replace(/\D/g, "").length !== 8)
+    missing.push("CEP");
   if (!form.address.trim()) missing.push("logradouro");
-  if (!form.addressNumber.trim()) missing.push("número");
+  if (!isForeign && !form.addressNumber.trim()) missing.push("número");
   if (!form.district.trim()) missing.push("bairro");
   if (!form.city.trim()) missing.push("cidade");
-  if (!form.state.trim()) missing.push("UF");
-  if (document.length === 14 && !form.stateRegistrationType)
+  if (!isForeign && !form.state.trim()) missing.push("UF");
+  if (!isForeign && document.length === 14 && !form.stateRegistrationType)
     missing.push("situação da inscrição estadual");
   if (
+    !isForeign &&
     document.length === 14 &&
     form.stateRegistrationType === "NUMBER" &&
     !form.stateRegistration.trim()
@@ -213,6 +271,9 @@ export default function CustomersPage() {
   const [creditNotes, setCreditNotes] = useState("");
   const [creditHistory, setCreditHistory] = useState<CreditEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [visitCustomer, setVisitCustomer] = useState<Customer | null>(null);
+  const [visitHistory, setVisitHistory] = useState<CustomerVisit[]>([]);
+  const [visitHistoryLoading, setVisitHistoryLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -246,7 +307,17 @@ export default function CustomersPage() {
     const term = search.trim().toLowerCase();
     if (!term) return customers;
     return customers.filter((c) =>
-      [c.name, c.legalName, c.tradeName, c.taxId, c.city, c.state, c.segment]
+      [
+        c.name,
+        c.legalName,
+        c.tradeName,
+        c.taxId,
+        c.foreignTaxId,
+        c.countryName,
+        c.city,
+        c.state,
+        c.segment,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(term)),
     );
@@ -291,6 +362,9 @@ export default function CustomersPage() {
       legalName: customer.legalName ?? "",
       tradeName: customer.tradeName ?? "",
       taxId: customer.taxId ?? "",
+      countryCode: customer.countryCode ?? "BR",
+      countryName: customer.countryName ?? "Brasil",
+      foreignTaxId: customer.foreignTaxId ?? "",
       segment: customer.segment ?? "",
       email: customer.email ?? "",
       phone: customer.phone ?? "",
@@ -460,6 +534,34 @@ export default function CustomersPage() {
     void fetchHistory(customer.id);
   };
 
+  const openVisits = async (customer: Customer) => {
+    setError("");
+    setVisitCustomer(customer);
+    setVisitHistory([]);
+    setVisitHistoryLoading(true);
+    try {
+      const response = await fetch(`/api/customers/${customer.id}/visits`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(
+          payload?.message ?? "Não foi possível carregar as visitas.",
+        );
+      }
+      setVisitHistory(payload);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível carregar as visitas.",
+      );
+    } finally {
+      setVisitHistoryLoading(false);
+    }
+  };
+
   const saveCredit = async () => {
     if (!creditCustomer) return;
     setSaving(true);
@@ -596,6 +698,7 @@ export default function CustomersPage() {
                 onEdit={() => openEdit(customer)}
                 onRequest={() => openRequest(customer)}
                 onCredit={() => openCredit(customer)}
+                onVisits={() => void openVisits(customer)}
               />
             ))}
           </div>
@@ -636,6 +739,32 @@ export default function CustomersPage() {
               </div>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Field label="País fiscal *" wide>
+                <select
+                  value={form.countryCode}
+                  onChange={(e) => {
+                    const selected = countries.find(
+                      (country) => country.code === e.target.value,
+                    );
+                    setForm({
+                      ...form,
+                      countryCode: e.target.value,
+                      countryName: selected?.name ?? "",
+                      taxId: e.target.value === "BR" ? form.taxId : "",
+                      foreignTaxId:
+                        e.target.value === "BR" ? "" : form.foreignTaxId,
+                      stateRegistration: "",
+                      stateRegistrationType: "",
+                    });
+                  }}
+                >
+                  {countries.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field
                 label="Como você chama este cliente?"
                 help="Nome que a equipe reconhecerá rapidamente."
@@ -655,13 +784,29 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              <Field label="CPF / CNPJ *">
-                <input
-                  value={form.taxId}
-                  onChange={(e) => setForm({ ...form, taxId: e.target.value })}
-                  placeholder="Somente números ou documento formatado"
-                />
-              </Field>
+              {form.countryCode === "BR" ? (
+                <Field label="CPF / CNPJ *">
+                  <input
+                    value={form.taxId}
+                    onChange={(e) =>
+                      setForm({ ...form, taxId: e.target.value })
+                    }
+                    placeholder="Somente números ou documento formatado"
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label="Identificação fiscal estrangeira *"
+                  help="Informe o número fiscal ou registro empresarial usado no país do cliente."
+                >
+                  <input
+                    value={form.foreignTaxId}
+                    onChange={(e) =>
+                      setForm({ ...form, foreignTaxId: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
               <Field label="Segmento">
                 <select
                   value={form.segment}
@@ -689,8 +834,12 @@ export default function CustomersPage() {
                 />
               </Field>
               <Field
-                label="CEP *"
-                help="O BBOS completa o endereço e você confirma os dados."
+                label={form.countryCode === "BR" ? "CEP *" : "Código postal"}
+                help={
+                  form.countryCode === "BR"
+                    ? "O BBOS completa o endereço e você confirma os dados."
+                    : "Informe o código postal no formato do país."
+                }
               >
                 <div className="flex gap-2">
                   <input
@@ -700,28 +849,43 @@ export default function CustomersPage() {
                       setForm({ ...form, postalCode: e.target.value })
                     }
                   />
-                  <button
-                    type="button"
-                    onClick={() => void findCep()}
-                    disabled={cepBusy}
-                    className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
-                  >
-                    {cepBusy ? "Buscando…" : "Buscar"}
-                  </button>
+                  {form.countryCode === "BR" && (
+                    <button
+                      type="button"
+                      onClick={() => void findCep()}
+                      disabled={cepBusy}
+                      className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
+                    >
+                      {cepBusy ? "Buscando…" : "Buscar"}
+                    </button>
+                  )}
                 </div>
               </Field>
-              <Field label="UF *">
-                <select
-                  value={form.state}
-                  onChange={(e) =>
-                    setForm({ ...form, state: e.target.value, city: "" })
-                  }
-                >
-                  <option value="">Estado</option>
-                  {states.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
+              <Field
+                label={
+                  form.countryCode === "BR" ? "UF *" : "Província / região"
+                }
+              >
+                {form.countryCode === "BR" ? (
+                  <select
+                    value={form.state}
+                    onChange={(e) =>
+                      setForm({ ...form, state: e.target.value, city: "" })
+                    }
+                  >
+                    <option value="">Estado</option>
+                    {states.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={form.state}
+                    onChange={(e) =>
+                      setForm({ ...form, state: e.target.value })
+                    }
+                  />
+                )}
               </Field>
               <Field label="Cidade *">
                 <input
@@ -769,43 +933,44 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              {form.taxId.replace(/\D/g, "").length === 14 && (
-                <>
-                  <Field label="Situação da inscrição estadual *" wide>
-                    <select
-                      value={form.stateRegistrationType}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          stateRegistrationType: e.target.value,
-                          stateRegistration:
-                            e.target.value === "NUMBER"
-                              ? form.stateRegistration
-                              : "",
-                        })
-                      }
-                    >
-                      <option value="">Selecione</option>
-                      <option value="NUMBER">Contribuinte com IE</option>
-                      <option value="EXEMPT">Isento</option>
-                      <option value="NON_TAXPAYER">Não contribuinte</option>
-                    </select>
-                  </Field>
-                  {form.stateRegistrationType === "NUMBER" && (
-                    <Field label="Inscrição estadual *" wide>
-                      <input
-                        value={form.stateRegistration}
+              {form.countryCode === "BR" &&
+                form.taxId.replace(/\D/g, "").length === 14 && (
+                  <>
+                    <Field label="Situação da inscrição estadual *" wide>
+                      <select
+                        value={form.stateRegistrationType}
                         onChange={(e) =>
                           setForm({
                             ...form,
-                            stateRegistration: e.target.value,
+                            stateRegistrationType: e.target.value,
+                            stateRegistration:
+                              e.target.value === "NUMBER"
+                                ? form.stateRegistration
+                                : "",
                           })
                         }
-                      />
+                      >
+                        <option value="">Selecione</option>
+                        <option value="NUMBER">Contribuinte com IE</option>
+                        <option value="EXEMPT">Isento</option>
+                        <option value="NON_TAXPAYER">Não contribuinte</option>
+                      </select>
                     </Field>
-                  )}
-                </>
-              )}
+                    {form.stateRegistrationType === "NUMBER" && (
+                      <Field label="Inscrição estadual *" wide>
+                        <input
+                          value={form.stateRegistration}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              stateRegistration: e.target.value,
+                            })
+                          }
+                        />
+                      </Field>
+                    )}
+                  </>
+                )}
               <Field
                 label="Condição de pagamento"
                 help="Pode ser alterada depois conforme a análise de crédito."
@@ -873,6 +1038,32 @@ export default function CustomersPage() {
               </button>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Field label="País fiscal *" wide>
+                <select
+                  value={form.countryCode}
+                  onChange={(e) => {
+                    const selected = countries.find(
+                      (country) => country.code === e.target.value,
+                    );
+                    setForm({
+                      ...form,
+                      countryCode: e.target.value,
+                      countryName: selected?.name ?? "",
+                      taxId: e.target.value === "BR" ? form.taxId : "",
+                      foreignTaxId:
+                        e.target.value === "BR" ? "" : form.foreignTaxId,
+                      stateRegistration: "",
+                      stateRegistrationType: "",
+                    });
+                  }}
+                >
+                  {countries.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Nome do cliente" wide>
                 <input
                   value={form.name}
@@ -895,12 +1086,28 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              <Field label="CPF / CNPJ *">
-                <input
-                  value={form.taxId}
-                  onChange={(e) => setForm({ ...form, taxId: e.target.value })}
-                />
-              </Field>
+              {form.countryCode === "BR" ? (
+                <Field label="CPF / CNPJ *">
+                  <input
+                    value={form.taxId}
+                    onChange={(e) =>
+                      setForm({ ...form, taxId: e.target.value })
+                    }
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label="Identificação fiscal estrangeira *"
+                  help="Número fiscal ou registro empresarial do país do cliente."
+                >
+                  <input
+                    value={form.foreignTaxId}
+                    onChange={(e) =>
+                      setForm({ ...form, foreignTaxId: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
               <Field label="Segmento">
                 <select
                   value={form.segment}
@@ -931,7 +1138,9 @@ export default function CustomersPage() {
                   placeholder="+5543999999999"
                 />
               </Field>
-              <Field label="CEP *">
+              <Field
+                label={form.countryCode === "BR" ? "CEP *" : "Código postal"}
+              >
                 <div className="flex gap-2">
                   <input
                     className="flex-1"
@@ -940,28 +1149,43 @@ export default function CustomersPage() {
                       setForm({ ...form, postalCode: e.target.value })
                     }
                   />
-                  <button
-                    type="button"
-                    onClick={() => void findCep()}
-                    disabled={cepBusy}
-                    className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
-                  >
-                    {cepBusy ? "Buscando…" : "Buscar"}
-                  </button>
+                  {form.countryCode === "BR" && (
+                    <button
+                      type="button"
+                      onClick={() => void findCep()}
+                      disabled={cepBusy}
+                      className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
+                    >
+                      {cepBusy ? "Buscando…" : "Buscar"}
+                    </button>
+                  )}
                 </div>
               </Field>
-              <Field label="UF *">
-                <select
-                  value={form.state}
-                  onChange={(e) =>
-                    setForm({ ...form, state: e.target.value, city: "" })
-                  }
-                >
-                  <option value="">Estado</option>
-                  {states.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
+              <Field
+                label={
+                  form.countryCode === "BR" ? "UF *" : "Província / região"
+                }
+              >
+                {form.countryCode === "BR" ? (
+                  <select
+                    value={form.state}
+                    onChange={(e) =>
+                      setForm({ ...form, state: e.target.value, city: "" })
+                    }
+                  >
+                    <option value="">Estado</option>
+                    {states.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={form.state}
+                    onChange={(e) =>
+                      setForm({ ...form, state: e.target.value })
+                    }
+                  />
+                )}
               </Field>
               <Field label="Cidade *">
                 <input
@@ -1001,43 +1225,44 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              {form.taxId.replace(/\D/g, "").length === 14 && (
-                <>
-                  <Field label="Situação da inscrição estadual *" wide>
-                    <select
-                      value={form.stateRegistrationType}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          stateRegistrationType: e.target.value,
-                          stateRegistration:
-                            e.target.value === "NUMBER"
-                              ? form.stateRegistration
-                              : "",
-                        })
-                      }
-                    >
-                      <option value="">Selecione</option>
-                      <option value="NUMBER">Contribuinte com IE</option>
-                      <option value="EXEMPT">Isento</option>
-                      <option value="NON_TAXPAYER">Não contribuinte</option>
-                    </select>
-                  </Field>
-                  {form.stateRegistrationType === "NUMBER" && (
-                    <Field label="Inscrição estadual *" wide>
-                      <input
-                        value={form.stateRegistration}
+              {form.countryCode === "BR" &&
+                form.taxId.replace(/\D/g, "").length === 14 && (
+                  <>
+                    <Field label="Situação da inscrição estadual *" wide>
+                      <select
+                        value={form.stateRegistrationType}
                         onChange={(e) =>
                           setForm({
                             ...form,
-                            stateRegistration: e.target.value,
+                            stateRegistrationType: e.target.value,
+                            stateRegistration:
+                              e.target.value === "NUMBER"
+                                ? form.stateRegistration
+                                : "",
                           })
                         }
-                      />
+                      >
+                        <option value="">Selecione</option>
+                        <option value="NUMBER">Contribuinte com IE</option>
+                        <option value="EXEMPT">Isento</option>
+                        <option value="NON_TAXPAYER">Não contribuinte</option>
+                      </select>
                     </Field>
-                  )}
-                </>
-              )}
+                    {form.stateRegistrationType === "NUMBER" && (
+                      <Field label="Inscrição estadual *" wide>
+                        <input
+                          value={form.stateRegistration}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              stateRegistration: e.target.value,
+                            })
+                          }
+                        />
+                      </Field>
+                    )}
+                  </>
+                )}
               <Field label="Condição de pagamento" wide>
                 <select
                   value={form.paymentTerms}
@@ -1271,6 +1496,88 @@ export default function CustomersPage() {
           </div>
         </div>
       )}
+
+      {visitCustomer && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
+          <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[.18em] text-emerald-700">
+                  Relacionamento comercial
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Histórico de visitas
+                </h2>
+                <p className="mt-1 text-sm text-stone-500">
+                  {visitCustomer.tradeName || visitCustomer.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setVisitCustomer(null)}
+                className="rounded-xl border p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {visitHistoryLoading ? (
+              <p className="mt-6 rounded-2xl bg-stone-50 p-5 text-sm text-stone-500">
+                Carregando visitas…
+              </p>
+            ) : visitHistory.length === 0 ? (
+              <div className="mt-6 rounded-2xl border border-dashed p-8 text-center">
+                <History className="mx-auto text-stone-300" />
+                <p className="mt-3 font-semibold">Nenhuma visita registrada</p>
+                <p className="mt-1 text-sm text-stone-500">
+                  O histórico aparecerá aqui quando o vendedor registrar a
+                  primeira visita no aplicativo.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-3">
+                {visitHistory.map((visit) => (
+                  <article
+                    key={visit.id}
+                    className="rounded-2xl border border-stone-200 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {visitPurposeLabel[visit.purpose] || visit.purpose} ·{" "}
+                          {visitOutcomeLabel[visit.outcome] || visit.outcome}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {dateTime(visit.visitAt)} · {visit.recordedByName}
+                          {visit.partnerName &&
+                          visit.partnerName !== visit.recordedByName
+                            ? ` (${visit.partnerName})`
+                            : ""}
+                        </p>
+                      </div>
+                      {visit.contactName && (
+                        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-600">
+                          Contato: {visit.contactName}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+                      {visit.facts}
+                    </p>
+                    {visit.nextAction && (
+                      <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
+                        <strong>Próxima ação:</strong> {visit.nextAction}
+                        {visit.nextActionAt
+                          ? ` · ${dateTime(visit.nextActionAt)}`
+                          : ""}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
@@ -1280,11 +1587,13 @@ function CustomerRow({
   onEdit,
   onRequest,
   onCredit,
+  onVisits,
 }: {
   customer: Customer;
   onEdit: () => void;
   onRequest: () => void;
   onCredit: () => void;
+  onVisits: () => void;
 }) {
   const h = customer.financialHealth;
   const style =
@@ -1379,6 +1688,12 @@ function CustomerRow({
             className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
           >
             <Pencil size={14} /> Editar
+          </button>
+          <button
+            onClick={onVisits}
+            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
+          >
+            <History size={14} /> Visitas
           </button>
           {customer.creditStatus !== "UNDER_REVIEW" && (
             <button

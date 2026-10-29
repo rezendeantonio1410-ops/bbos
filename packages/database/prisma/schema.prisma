@@ -20,6 +20,7 @@ enum UserRole {
 enum StorefrontPartnerAccessLevel {
   VIEWER
   SELLER
+  SALES_MANAGER
   DISTRIBUTOR
 }
 
@@ -468,6 +469,7 @@ model Company {
   professionalCoffeeSamples ProfessionalCoffeeSample[]
   cuppingPublicSessions     CuppingPublicSession[]
   storefrontMediaAssets     StorefrontMediaAsset[]
+  customerVisits            CustomerVisit[]
 }
 
 /// Recoverable archive for narrowly scoped production data cleanups.
@@ -483,22 +485,23 @@ model DataCleanupArchive {
 }
 
 model User {
-  id                  String             @id @default(cuid())
+  id                  String               @id @default(cuid())
   companyId           String
-  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name                String
-  email               String             @unique
+  email               String               @unique
   avatarUrl           String?
-  storefrontPartnerId String?            @unique
-  storefrontPartner   StorefrontPartner? @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
+  storefrontPartnerId String?              @unique
+  storefrontPartner   StorefrontPartner?   @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
   passwordHash        String
-  role                UserRole           @default(INDUSTRIAL)
-  active              Boolean            @default(true)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  role                UserRole             @default(INDUSTRIAL)
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   sessions            AuthSession[]
   mobileNotifications MobileNotification[]
   pushSubscriptions   PushSubscription[]
+  customerVisits      CustomerVisit[]
 
   @@index([companyId])
 }
@@ -594,30 +597,31 @@ model Broker {
 }
 
 model StorefrontPartner {
-  id                String                       @id @default(cuid())
-  companyId         String
-  company           Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name              String
-  legalName         String?
-  tradeName         String?
-  taxId             String?
-  contactName       String?
-  phone             String?
-  email             String?
-  pixKey            String?
-  bankDetails       Json?
-  active            Boolean                      @default(true)
-  isSalesPartner    Boolean                      @default(true)
-  isSalesBroker     Boolean                      @default(false)
-  isGreenCoffeeBroker Boolean                    @default(false)
-  portalAccessLevel StorefrontPartnerAccessLevel @default(VIEWER)
-  brokerProfile     Broker?                      @relation("BusinessPartnerBrokerProfile")
-  accountsPayable   AccountsPayable[]
-  portalUser        User?
-  customers         StorefrontPartnerCustomer[]
-  salesOrders       SalesOrder[]
-  createdAt         DateTime                     @default(now())
-  updatedAt         DateTime                     @updatedAt
+  id                  String                       @id @default(cuid())
+  companyId           String
+  company             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  legalName           String?
+  tradeName           String?
+  taxId               String?
+  contactName         String?
+  phone               String?
+  email               String?
+  pixKey              String?
+  bankDetails         Json?
+  active              Boolean                      @default(true)
+  isSalesPartner      Boolean                      @default(true)
+  isSalesBroker       Boolean                      @default(false)
+  isGreenCoffeeBroker Boolean                      @default(false)
+  portalAccessLevel   StorefrontPartnerAccessLevel @default(VIEWER)
+  brokerProfile       Broker?                      @relation("BusinessPartnerBrokerProfile")
+  accountsPayable     AccountsPayable[]
+  portalUser          User?
+  customers           StorefrontPartnerCustomer[]
+  salesOrders         SalesOrder[]
+  customerVisits      CustomerVisit[]
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
@@ -706,41 +710,71 @@ model SupplierOriginProduction {
 }
 
 model Customer {
-  id                  String                      @id @default(cuid())
-  companyId           String
-  company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                String
-  legalName           String?
-  tradeName           String?
-  taxId               String?
-  segment             String?
-  email               String?
-  phone               String?
-  postalCode          String?
-  address             String?
-  addressNumber       String?
-  addressComplement   String?
-  district            String?
-  city                String?
-  state               String?
-  stateRegistration   String?
-  stateRegistrationType String                    @default("NOT_DECLARED")
-  paymentTerms        String?
-  active              Boolean                     @default(true)
-  creditStatus        String                      @default("NOT_ANALYZED")
-  creditLimit         Decimal                     @default(0) @db.Decimal(14, 2)
-  creditNotes         String?
-  creditReviewedAt    DateTime?
-  creditReviewedBy    String?
-  salesOrders         SalesOrder[]
-  accountsReceivable  AccountsReceivable[]
-  reconciliationItems ReconciliationItem[]
-  storefrontPartners  StorefrontPartnerCustomer[]
-  createdAt           DateTime                    @default(now())
-  updatedAt           DateTime                    @updatedAt
+  id                    String                      @id @default(cuid())
+  companyId             String
+  company               Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                  String
+  legalName             String?
+  tradeName             String?
+  taxId                 String?
+  countryCode           String                      @default("BR") @db.VarChar(2)
+  countryName           String                      @default("Brasil")
+  foreignTaxId          String?
+  segment               String?
+  email                 String?
+  phone                 String?
+  postalCode            String?
+  address               String?
+  addressNumber         String?
+  addressComplement     String?
+  district              String?
+  city                  String?
+  state                 String?
+  stateRegistration     String?
+  stateRegistrationType String                      @default("NOT_DECLARED")
+  paymentTerms          String?
+  active                Boolean                     @default(true)
+  creditStatus          String                      @default("NOT_ANALYZED")
+  creditLimit           Decimal                     @default(0) @db.Decimal(14, 2)
+  creditNotes           String?
+  creditReviewedAt      DateTime?
+  creditReviewedBy      String?
+  salesOrders           SalesOrder[]
+  accountsReceivable    AccountsReceivable[]
+  reconciliationItems   ReconciliationItem[]
+  storefrontPartners    StorefrontPartnerCustomer[]
+  visits                CustomerVisit[]
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
 
   @@index([companyId])
   @@index([companyId, taxId])
+}
+
+model CustomerVisit {
+  id                  String             @id @default(cuid())
+  companyId           String
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId          String
+  customer            Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  storefrontPartnerId String?
+  storefrontPartner   StorefrontPartner? @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
+  recordedByUserId    String?
+  recordedByUser      User?              @relation(fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  recordedByName      String
+  visitAt             DateTime
+  contactName         String?
+  purpose             String
+  outcome             String
+  facts               String
+  nextAction          String?
+  nextActionAt        DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([companyId, customerId, visitAt])
+  @@index([storefrontPartnerId, visitAt])
+  @@index([companyId, nextActionAt])
 }
 
 model Warehouse {
@@ -1921,6 +1955,11 @@ model SalesOrder {
   customerReference            String?
   incoterm                     String?
   incotermLocation             String?
+  currency                     String                  @default("BRL") @db.VarChar(3)
+  exchangeRateToBrl            Decimal?                @db.Decimal(14, 6)
+  exchangeRateDate             DateTime?
+  exportDepartureLocation      String?
+  exportDepartureState         String?                 @db.VarChar(2)
   shippingQuoteId              String?
   shippingProvider             String?
   shippingServiceId            String?

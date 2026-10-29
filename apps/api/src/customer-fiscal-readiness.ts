@@ -17,6 +17,9 @@ export type CustomerFiscalInput = {
   name?: unknown;
   legalName?: unknown;
   taxId?: unknown;
+  countryCode?: unknown;
+  countryName?: unknown;
+  foreignTaxId?: unknown;
   postalCode?: unknown;
   address?: unknown;
   addressNumber?: unknown;
@@ -31,13 +34,15 @@ export type CustomerFiscalInput = {
 const text = (value: unknown) => String(value ?? "").trim();
 
 export function normalizeCustomerFiscalData(input: CustomerFiscalInput) {
-  const taxId = onlyDigits(text(input.taxId));
-  const documentType = validateTaxId(taxId);
+  const countryCode = text(input.countryCode).toUpperCase() || "BR";
+  const isForeign = countryCode !== "BR";
+  const taxId = isForeign ? "" : onlyDigits(text(input.taxId));
+  const documentType = isForeign ? "FOREIGN" : validateTaxId(taxId);
   const requestedRegistrationType = text(
     input.stateRegistrationType,
   ).toUpperCase();
   const stateRegistrationType =
-    documentType === "CPF"
+    isForeign || documentType === "CPF"
       ? "NON_TAXPAYER"
       : CUSTOMER_STATE_REGISTRATION_TYPES.includes(
             requestedRegistrationType as CustomerStateRegistrationType,
@@ -50,7 +55,14 @@ export function normalizeCustomerFiscalData(input: CustomerFiscalInput) {
     legalName: text(input.legalName),
     taxId,
     documentType,
-    postalCode: onlyDigits(text(input.postalCode)),
+    isForeign,
+    countryCode,
+    countryName:
+      text(input.countryName) || (countryCode === "BR" ? "Brasil" : ""),
+    foreignTaxId: isForeign ? text(input.foreignTaxId) : "",
+    postalCode: isForeign
+      ? text(input.postalCode)
+      : onlyDigits(text(input.postalCode)),
     address: text(input.address),
     addressNumber: text(input.addressNumber),
     addressComplement: text(input.addressComplement),
@@ -70,16 +82,32 @@ export function assessCustomerFiscalReadiness(input: CustomerFiscalInput) {
   const issues: string[] = [];
 
   if (!normalized.name) issues.push("nome do cliente");
-  if (!normalized.documentType) issues.push("CPF/CNPJ válido");
+  if (normalized.isForeign) {
+    if (!/^[A-Z]{2}$/.test(normalized.countryCode)) {
+      issues.push("código do país");
+    }
+    if (!normalized.countryName) issues.push("país");
+    if (!normalized.foreignTaxId) {
+      issues.push("identificação fiscal estrangeira");
+    }
+  } else if (!normalized.documentType) {
+    issues.push("CPF/CNPJ válido");
+  }
   if (normalized.documentType === "CNPJ" && !normalized.legalName) {
     issues.push("razão social");
   }
-  if (normalized.postalCode.length !== 8) issues.push("CEP com 8 dígitos");
+  if (!normalized.isForeign && normalized.postalCode.length !== 8) {
+    issues.push("CEP com 8 dígitos");
+  }
   if (!normalized.address) issues.push("logradouro");
-  if (!normalized.addressNumber) issues.push("número do endereço ou S/N");
+  if (!normalized.isForeign && !normalized.addressNumber) {
+    issues.push("número do endereço ou S/N");
+  }
   if (!normalized.district) issues.push("bairro");
   if (!normalized.city) issues.push("cidade");
-  if (!/^[A-Z]{2}$/.test(normalized.state)) issues.push("UF");
+  if (!normalized.isForeign && !/^[A-Z]{2}$/.test(normalized.state)) {
+    issues.push("UF");
+  }
 
   if (normalized.documentType === "CNPJ") {
     if (!normalized.stateRegistrationType) {
@@ -102,6 +130,7 @@ export function assessCustomerFiscalReadiness(input: CustomerFiscalInput) {
     ready: issues.length === 0,
     issues,
     documentType: normalized.documentType,
+    isForeign: normalized.isForeign,
     normalized,
   };
 }

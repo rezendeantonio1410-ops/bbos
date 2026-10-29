@@ -62,3 +62,36 @@ test("normaliza cadastro empresarial isento", () => {
   assert.equal(normalized.state, "PR");
   assert.equal(normalized.stateRegistration, "");
 });
+
+test("aceita destinatário estrangeiro sem CPF, CNPJ, CEP brasileiro ou UF", () => {
+  const result = assessCustomerFiscalReadiness({
+    name: "Shanghai Coffee Trading Co.",
+    countryCode: "CN",
+    countryName: "China",
+    foreignTaxId: "91310000MA1K12345X",
+    postalCode: "200120",
+    address: "Century Avenue",
+    district: "Pudong",
+    city: "Shanghai",
+    state: "Shanghai",
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.documentType, "FOREIGN");
+  assert.equal(result.isForeign, true);
+  assert.equal(result.normalized.taxId, "");
+  assert.equal(result.normalized.foreignTaxId, "91310000MA1K12345X");
+});
+
+test("bloqueia destinatário estrangeiro sem país e identificação fiscal", () => {
+  const result = assessCustomerFiscalReadiness({
+    name: "Importador",
+    countryCode: "CN",
+    address: "Century Avenue",
+    district: "Pudong",
+    city: "Shanghai",
+  });
+
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.issues, ["país", "identificação fiscal estrangeira"]);
+});

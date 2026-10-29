@@ -4,6 +4,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Param,
   Post,
   Req,
 } from "@nestjs/common";
@@ -13,6 +14,8 @@ import { SalesOrdersService } from "./sales-orders.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 
 type PartnerActor = {
+  id?: string | null;
+  name?: string | null;
   companyId: string;
   role: string;
   storefrontPartnerId?: string | null;
@@ -45,7 +48,11 @@ export class PartnerPortalController {
   }
 
   private assertCanCreateOrders(partner: any) {
-    if (!["SELLER", "DISTRIBUTOR"].includes(partner.portalAccessLevel)) {
+    if (
+      !["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+        partner.portalAccessLevel,
+      )
+    ) {
       throw new ForbiddenException(
         "Seu nível de acesso permite apenas consultar negócios e comissões.",
       );
@@ -53,19 +60,23 @@ export class PartnerPortalController {
   }
 
   private async assertCustomer(
-    partnerId: string,
+    partner: any,
     companyId: string,
     customerId: string,
   ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT c.id,c.name,c."tradeName",c.segment,c.active,c."postalCode"
-         FROM "StorefrontPartnerCustomer" link
-         JOIN "Customer" c ON c.id=link."customerId"
-        WHERE link."partnerId"=$1 AND c.id=$2 AND c."companyId"=$3
+      `SELECT c.id,c.name,c."tradeName",c.segment,c.active,c."postalCode",c."creditStatus",c."creditLimit",c."paymentTerms"
+         FROM "Customer" c
+        WHERE c.id=$2 AND c."companyId"=$3
+          AND ($4::boolean OR EXISTS (
+            SELECT 1 FROM "StorefrontPartnerCustomer" link
+             WHERE link."partnerId"=$1 AND link."customerId"=c.id
+          ))
         LIMIT 1`,
-      partnerId,
+      partner.id,
       customerId,
       companyId,
+      partner.portalAccessLevel === "SALES_MANAGER",
     );
     if (!rows[0] || !rows[0].active) {
       throw new BadRequestException("Cliente não liberado para este parceiro.");
@@ -137,6 +148,7 @@ export class PartnerPortalController {
   @Get("summary")
   async summary(@Req() request: { user?: PartnerActor }) {
     const { actor, partner } = await this.context(request);
+    const isSalesManager = partner.portalAccessLevel === "SALES_MANAGER";
 
     const [metricsRows, coupons, businesses, partnerOrders] = await Promise.all(
       [
@@ -193,12 +205,14 @@ export class PartnerPortalController {
                 c.name AS "customerName"
            FROM "SalesOrder" so
            JOIN "Customer" c ON c.id=so."customerId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1
+            AND ($3::boolean OR so."createdByStorefrontPartnerId"=$2)
             AND so.status <> 'CANCELLED'
           ORDER BY so."orderedAt" DESC
           LIMIT 100`,
           actor.companyId,
           partner.id,
+          isSalesManager,
         ),
       ],
     );
@@ -206,10 +220,10 @@ export class PartnerPortalController {
     return {
       partner,
       capabilities: {
-        canCreateCustomers: ["SELLER", "DISTRIBUTOR"].includes(
+        canCreateCustomers: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
           partner.portalAccessLevel,
         ),
-        canCreateOrders: ["SELLER", "DISTRIBUTOR"].includes(
+        canCreateOrders: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
           partner.portalAccessLevel,
         ),
       },
@@ -235,13 +249,26 @@ export class PartnerPortalController {
       this.database.$queryRawUnsafe<any[]>(
         `SELECT c.id,c.name,c."legalName",c."tradeName",c."taxId",c.segment,c."postalCode",
                 c.address,c."addressNumber",c."addressComplement",c.district,c.city,c.state,
-                c."stateRegistration",c."stateRegistrationType"
-           FROM "StorefrontPartnerCustomer" link
-           JOIN "Customer" c ON c.id=link."customerId"
-          WHERE link."partnerId"=$1 AND c."companyId"=$2 AND c.active=true
+                c."stateRegistration",c."stateRegistrationType",c."creditStatus",c."creditLimit",c."paymentTerms",
+                EXISTS (
+                  SELECT 1 FROM "CustomerCreditEvent" req
+                   WHERE req."customerId"=c.id AND req."companyId"=c."companyId" AND req."eventType"='REQUEST'
+                     AND NOT EXISTS (
+                       SELECT 1 FROM "CustomerCreditEvent" dec
+                        WHERE dec."customerId"=c.id AND dec."companyId"=c."companyId" AND dec."eventType"='DECISION'
+                          AND dec."createdAt" > req."createdAt"
+                     )
+                ) AS "creditReviewPending"
+           FROM "Customer" c
+          WHERE c."companyId"=$2 AND c.active=true
+            AND ($3::boolean OR EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" link
+               WHERE link."partnerId"=$1 AND link."customerId"=c.id
+            ))
           ORDER BY c.name ASC`,
         partner.id,
         actor.companyId,
+        partner.portalAccessLevel === "SALES_MANAGER",
       ),
       this.salesOrders.options(actor.companyId),
     ]);
@@ -337,6 +364,181 @@ export class PartnerPortalController {
     return { id: customerId, name, tradeName: body.tradeName || null };
   }
 
+  @Get("customers/:customerId/visits")
+  async customerVisits(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    await this.assertCustomer(partner, actor.companyId, customerId);
+    return this.database.$queryRawUnsafe<any[]>(
+      `SELECT v.id,v."customerId",v."storefrontPartnerId",v."recordedByName",v."visitAt",
+              v."contactName",v.purpose,v.outcome,v.facts,v."nextAction",v."nextActionAt",
+              v."createdAt",c.name AS "customerName",c."tradeName" AS "customerTradeName"
+         FROM "CustomerVisit" v
+         JOIN "Customer" c ON c.id=v."customerId" AND c."companyId"=v."companyId"
+        WHERE v."companyId"=$1 AND v."customerId"=$2
+        ORDER BY v."visitAt" DESC,v."createdAt" DESC
+        LIMIT 100`,
+      actor.companyId,
+      customerId,
+    );
+  }
+
+  @Post("customers/:customerId/visits")
+  async createCustomerVisit(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    await this.assertCustomer(partner, actor.companyId, customerId);
+
+    const visitAt = new Date(String(body.visitAt ?? ""));
+    if (Number.isNaN(visitAt.getTime())) {
+      throw new BadRequestException("Informe a data e a hora da visita.");
+    }
+    const purpose = String(body.purpose ?? "").trim();
+    const outcome = String(body.outcome ?? "").trim();
+    const facts = String(body.facts ?? "").trim();
+    if (!purpose)
+      throw new BadRequestException("Informe o objetivo da visita.");
+    if (!outcome)
+      throw new BadRequestException("Informe o resultado da visita.");
+    if (facts.length < 3) {
+      throw new BadRequestException(
+        "Registre os principais fatos que aconteceram na visita.",
+      );
+    }
+    const nextActionAtRaw = String(body.nextActionAt ?? "").trim();
+    const nextActionAt = nextActionAtRaw ? new Date(nextActionAtRaw) : null;
+    if (nextActionAt && Number.isNaN(nextActionAt.getTime())) {
+      throw new BadRequestException("A data da próxima ação é inválida.");
+    }
+    const visitId = randomUUID();
+    const recordedByName =
+      String(actor.name ?? "").trim() ||
+      String(partner.contactName ?? partner.name).trim() ||
+      "Vendedor";
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "CustomerVisit"
+        (id,"companyId","customerId","storefrontPartnerId","recordedByUserId","recordedByName",
+         "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,
+      visitId,
+      actor.companyId,
+      customerId,
+      partner.id,
+      actor.id ?? null,
+      recordedByName,
+      visitAt,
+      String(body.contactName ?? "").trim() || null,
+      purpose,
+      outcome,
+      facts,
+      String(body.nextAction ?? "").trim() || null,
+      nextActionAt,
+    );
+    return { id: visitId, ok: true };
+  }
+
+  @Post("customers/:customerId/credit-request")
+  async requestCustomerCredit(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    const customer = await this.assertCustomer(
+      partner,
+      actor.companyId,
+      customerId,
+    );
+    const pending = (
+      await this.database.$queryRawUnsafe<any[]>(
+        `SELECT EXISTS (
+           SELECT 1 FROM "CustomerCreditEvent" req
+            WHERE req."customerId"=$1 AND req."companyId"=$2 AND req."eventType"='REQUEST'
+              AND NOT EXISTS (
+                SELECT 1 FROM "CustomerCreditEvent" dec
+                 WHERE dec."customerId"=$1 AND dec."companyId"=$2 AND dec."eventType"='DECISION'
+                   AND dec."createdAt" > req."createdAt"
+              )
+         ) AS pending`,
+        customerId,
+        actor.companyId,
+      )
+    )[0]?.pending;
+    if (pending) {
+      throw new BadRequestException(
+        "Já existe uma solicitação de crédito aguardando decisão.",
+      );
+    }
+    const requestedLimit = Number(body.requestedLimit ?? 0);
+    if (!Number.isFinite(requestedLimit) || requestedLimit <= 0) {
+      throw new BadRequestException(
+        "Informe um limite de crédito solicitado maior que zero.",
+      );
+    }
+    const requestedTerms = String(body.requestedTerms ?? "").trim();
+    if (!requestedTerms) {
+      throw new BadRequestException(
+        "Informe a condição de pagamento solicitada.",
+      );
+    }
+    const monthlyVolume =
+      body.monthlyVolume === undefined || body.monthlyVolume === ""
+        ? null
+        : Number(body.monthlyVolume);
+    if (
+      monthlyVolume !== null &&
+      (!Number.isFinite(monthlyVolume) || monthlyVolume < 0)
+    ) {
+      throw new BadRequestException("Volume mensal estimado inválido.");
+    }
+    const rationale = String(body.rationale ?? "").trim();
+    if (!rationale) {
+      throw new BadRequestException(
+        "Informe a justificativa da solicitação de crédito.",
+      );
+    }
+    const keepsCurrentApproval = customer.creditStatus === "APPROVED";
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "CustomerCreditEvent"
+          (id,"companyId","customerId","eventType","requestedLimit","requestedTerms","monthlyVolume",rationale,
+           "actorId","actorName","actorRole","createdAt")
+         VALUES ($1,$2,$3,'REQUEST',$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        randomUUID(),
+        actor.companyId,
+        customerId,
+        requestedLimit,
+        requestedTerms,
+        monthlyVolume,
+        rationale,
+        actor.id ?? null,
+        String(actor.name ?? partner.contactName ?? partner.name),
+        "VENDEDOR",
+      );
+      if (!keepsCurrentApproval) {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "Customer" SET "creditStatus"='UNDER_REVIEW',"updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$2`,
+          customerId,
+          actor.companyId,
+        );
+      }
+    });
+    return {
+      ok: true,
+      status: keepsCurrentApproval ? "APPROVED" : "UNDER_REVIEW",
+      creditReviewPending: true,
+    };
+  }
+
   @Post("quote")
   async quote(
     @Req() request: { user?: PartnerActor },
@@ -349,7 +551,7 @@ export class PartnerPortalController {
     const { actor, partner } = await this.context(request);
     this.assertCanCreateOrders(partner);
     const customerId = String(body.customerId ?? "").trim();
-    await this.assertCustomer(partner.id, actor.companyId, customerId);
+    await this.assertCustomer(partner, actor.companyId, customerId);
     const items = body.items ?? [];
     if (!items.length)
       throw new BadRequestException("Adicione ao menos um produto.");
@@ -413,7 +615,7 @@ export class PartnerPortalController {
     const { actor, partner } = await this.context(request);
     this.assertCanCreateOrders(partner);
     const customerId = String(body.customerId ?? "").trim();
-    await this.assertCustomer(partner.id, actor.companyId, customerId);
+    await this.assertCustomer(partner, actor.companyId, customerId);
     const items = body.items ?? [];
     if (!items.length)
       throw new BadRequestException("Adicione ao menos um produto.");

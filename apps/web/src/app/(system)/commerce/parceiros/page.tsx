@@ -32,7 +32,7 @@ type Partner = {
   portalUserId?: string | null;
   portalEmail?: string | null;
   portalActive?: boolean | null;
-  portalAccessLevel: "VIEWER" | "SELLER" | "DISTRIBUTOR";
+  portalAccessLevel: "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
   customerCount: number;
 };
 type CustomerOption = { id: string; name: string; tradeName?: string | null };
@@ -300,10 +300,14 @@ export default function StorefrontPartnersPage() {
             <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-stone-400">
               {partner.portalAccessLevel === "DISTRIBUTOR"
                 ? "Distribuidor"
-                : partner.portalAccessLevel === "SELLER"
-                  ? "Vendedor"
-                  : "Consulta"}
-              {` · ${partner.customerCount ?? 0} cliente(s) liberado(s)`}
+                : partner.portalAccessLevel === "SALES_MANAGER"
+                  ? "Gerente comercial"
+                  : partner.portalAccessLevel === "SELLER"
+                    ? "Vendedor"
+                    : "Consulta"}
+              {partner.portalAccessLevel === "SALES_MANAGER"
+                ? " · carteira completa"
+                : ` · ${partner.customerCount ?? 0} cliente(s) liberado(s)`}
             </p>
             <div className="mt-4 flex flex-wrap gap-4">
               <button
@@ -562,52 +566,67 @@ export default function StorefrontPartnersPage() {
                     Consulta — negócios e comissões
                   </option>
                   <option value="SELLER">Vendedor — clientes e pedidos</option>
+                  <option value="SALES_MANAGER">
+                    Gerente comercial — toda a carteira e equipe
+                  </option>
                   <option value="DISTRIBUTOR">
                     Distribuidor — clientes e pedidos
                   </option>
                 </select>
               </Field>
-              <div>
-                <p className="text-xs font-bold text-stone-700">
-                  Clientes já cadastrados liberados
-                </p>
-                <p className="mt-1 text-[11px] text-stone-500">
-                  Vendedores e distribuidores também poderão cadastrar novos
-                  clientes, que ficarão vinculados automaticamente ao acesso.
-                </p>
-                <div className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-xl border p-3">
-                  {customerOptions.map((customer) => {
-                    const checked = permissionCustomerIds.includes(customer.id);
-                    return (
-                      <label
-                        key={customer.id}
-                        className="flex items-center gap-3 rounded-lg px-2 py-2 text-xs hover:bg-stone-50"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() =>
-                            setPermissionCustomerIds((current) =>
-                              checked
-                                ? current.filter((id) => id !== customer.id)
-                                : [...current, customer.id],
-                            )
-                          }
-                        />
-                        <span>
-                          <strong>{customer.tradeName || customer.name}</strong>
-                          {customer.tradeName ? ` · ${customer.name}` : ""}
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {!customerOptions.length && (
-                    <p className="p-3 text-center text-xs text-stone-400">
-                      Nenhum cliente cadastrado.
-                    </p>
-                  )}
+              {permissionLevel === "SALES_MANAGER" ? (
+                <div className="rounded-xl border border-violet-100 bg-violet-50 p-4 text-xs leading-5 text-violet-900">
+                  O gerente comercial acessa automaticamente todos os clientes,
+                  visitas e pedidos da empresa. Não é necessário selecionar uma
+                  carteira individual.
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-bold text-stone-700">
+                    Clientes já cadastrados liberados
+                  </p>
+                  <p className="mt-1 text-[11px] text-stone-500">
+                    Vendedores e distribuidores também poderão cadastrar novos
+                    clientes, que ficarão vinculados automaticamente ao acesso.
+                  </p>
+                  <div className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-xl border p-3">
+                    {customerOptions.map((customer) => {
+                      const checked = permissionCustomerIds.includes(
+                        customer.id,
+                      );
+                      return (
+                        <label
+                          key={customer.id}
+                          className="flex items-center gap-3 rounded-lg px-2 py-2 text-xs hover:bg-stone-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setPermissionCustomerIds((current) =>
+                                checked
+                                  ? current.filter((id) => id !== customer.id)
+                                  : [...current, customer.id],
+                              )
+                            }
+                          />
+                          <span>
+                            <strong>
+                              {customer.tradeName || customer.name}
+                            </strong>
+                            {customer.tradeName ? ` · ${customer.name}` : ""}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {!customerOptions.length && (
+                      <p className="p-3 text-center text-xs text-stone-400">
+                        Nenhum cliente cadastrado.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
               <p className="rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-900">
                 Pedidos criados pelo parceiro entram como rascunho. Confirmação,
                 crédito, estoque, faturamento e expedição continuam restritos à

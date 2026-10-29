@@ -49,6 +49,9 @@ type SalesOrderCommercialTerms = {
   customerReference?: string;
   incoterm?: string;
   incotermLocation?: string;
+  currency?: string;
+  exchangeRateToBrl?: number;
+  exchangeRateDate?: string;
   shippingQuoteId?: string;
   destinationPostalCode?: string;
   packageWidthCm?: number;
@@ -563,6 +566,7 @@ export class SalesOrdersController {
     const pricedItems = [] as CreateSalesOrderInput["items"];
     let resolvedChannelId: string | undefined;
     let resolvedChannelType: string | undefined;
+    let resolvedCurrency: string | undefined;
     for (const item of body.items) {
       const price = await this.resolveInternalPrice(
         actor.companyId,
@@ -576,6 +580,15 @@ export class SalesOrdersController {
       }
       resolvedChannelId = price.salesChannelId;
       resolvedChannelType = price.salesChannelType;
+      const itemCurrency = String(price.currency ?? "BRL")
+        .trim()
+        .toUpperCase();
+      if (resolvedCurrency && resolvedCurrency !== itemCurrency) {
+        throw new BadRequestException(
+          "Os itens do pedido precisam usar a mesma moeda.",
+        );
+      }
+      resolvedCurrency = itemCurrency;
       pricedItems.push({
         ...item,
         unitPrice: isSample
@@ -600,6 +613,51 @@ export class SalesOrdersController {
       throw new BadRequestException(
         "Pedidos de exportação exigem Incoterm e local nomeado.",
       );
+    }
+    let exportRoute:
+      | Awaited<ReturnType<BlingCatalogSyncService["exportFiscalRoute"]>>
+      | undefined;
+    let exchangeRateToBrl: number | undefined;
+    let exchangeRateDate: string | undefined;
+    if (resolvedChannelType === "EXPORTACAO") {
+      const customer = await this.salesOrders.database.customer.findFirst({
+        where: { id: body.customerId, companyId: actor.companyId },
+        select: { countryCode: true },
+      });
+      if (!customer || customer.countryCode === "BR") {
+        throw new BadRequestException(
+          "Pedidos de exportação exigem um cliente cadastrado como estrangeiro.",
+        );
+      }
+      try {
+        exportRoute = await this.blingCatalogSync.exportFiscalRoute(
+          actor.companyId,
+        );
+      } catch (cause) {
+        throw new BadRequestException(
+          cause instanceof Error
+            ? cause.message
+            : "A rota fiscal de exportação não está configurada.",
+        );
+      }
+      exchangeRateToBrl = Number(
+        resolvedCurrency === "BRL" ? 1 : body.exchangeRateToBrl,
+      );
+      exchangeRateDate =
+        String(body.exchangeRateDate ?? "").trim() ||
+        (resolvedCurrency === "BRL"
+          ? new Date().toISOString().slice(0, 10)
+          : "");
+      if (
+        !Number.isFinite(exchangeRateToBrl) ||
+        exchangeRateToBrl <= 0 ||
+        !exchangeRateDate ||
+        Number.isNaN(new Date(exchangeRateDate).getTime())
+      ) {
+        throw new BadRequestException(
+          "Pedidos em moeda estrangeira exigem cotação para BRL e data da cotação.",
+        );
+      }
     }
     const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
       salesChannelType: resolvedChannelType,
@@ -756,6 +814,11 @@ export class SalesOrdersController {
       orderNumber,
       orderType,
       salesChannelId: resolvedChannelId,
+      currency: resolvedCurrency ?? "BRL",
+      exchangeRateToBrl,
+      exchangeRateDate,
+      exportDepartureLocation: exportRoute?.departureLocation,
+      exportDepartureState: exportRoute?.departureState,
       brokerId,
       brokerCommissionMode: brokerId
         ? (brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE")

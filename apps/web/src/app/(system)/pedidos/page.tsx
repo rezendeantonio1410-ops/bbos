@@ -107,6 +107,7 @@ type CustomerHealth = {
 
 type Quote = {
   officialUnitPrice: number;
+  currency: string;
   salesChannelName: string;
   salesChannelType: string;
   totalAmount: number;
@@ -917,6 +918,8 @@ function NewOrder({
   const [notes, setNotes] = useState("");
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
+  const [exchangeRateToBrl, setExchangeRateToBrl] = useState("");
+  const [exchangeRateDate, setExchangeRateDate] = useState("");
   const [brokerId, setBrokerId] = useState("");
   const [brokerCommissionMode, setBrokerCommissionMode] = useState<
     "PERCENTAGE" | "PER_PACKAGE"
@@ -1008,6 +1011,7 @@ function NewOrder({
     : 0;
   const isTerm = !isSample && paymentType === "TERM";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
+  const orderCurrency = firstQuote?.currency?.toUpperCase() || "BRL";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
   const available = Number(
@@ -1038,7 +1042,15 @@ function NewOrder({
                     freightResponsibility === "CUSTOMER_CARRIER" &&
                     !carrierName.trim()
                   ? "Informe a transportadora indicada pelo distribuidor."
-                  : "";
+                  : isExport && (!incoterm.trim() || !incotermLocation.trim())
+                    ? "Informe o Incoterm e o local nomeado da exportação."
+                    : isExport &&
+                        orderCurrency !== "BRL" &&
+                        (!exchangeRateToBrl ||
+                          Number(exchangeRateToBrl) <= 0 ||
+                          !exchangeRateDate)
+                      ? "Informe a cotação da moeda para BRL e a data da cotação."
+                      : "";
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, {
@@ -1306,6 +1318,20 @@ function NewOrder({
     ) {
       return setError("Informe a transportadora indicada pelo distribuidor.");
     }
+    if (isExport && (!incoterm.trim() || !incotermLocation.trim())) {
+      return setError("Informe o Incoterm e o local nomeado da exportação.");
+    }
+    if (
+      isExport &&
+      orderCurrency !== "BRL" &&
+      (!exchangeRateToBrl ||
+        Number(exchangeRateToBrl) <= 0 ||
+        !exchangeRateDate)
+    ) {
+      return setError(
+        "Informe a cotação da moeda para BRL e a data da cotação.",
+      );
+    }
 
     const response = await fetch(salesOrdersApi(), {
       method: "POST",
@@ -1340,6 +1366,14 @@ function NewOrder({
         notes,
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
+        currency: isExport ? orderCurrency : undefined,
+        exchangeRateToBrl:
+          isExport && orderCurrency !== "BRL"
+            ? Number(exchangeRateToBrl)
+            : isExport
+              ? 1
+              : undefined,
+        exchangeRateDate: isExport ? exchangeRateDate : undefined,
         brokerId: !isSample && brokerId ? brokerId : undefined,
         brokerCommissionMode:
           !isSample && brokerId ? brokerCommissionMode : undefined,
@@ -2380,6 +2414,34 @@ function NewOrder({
                         placeholder="Ex.: Santos, Barcelona"
                       />
                     </Field>
+                    <Field label="Moeda da tabela">
+                      <input value={orderCurrency} readOnly />
+                    </Field>
+                    {orderCurrency !== "BRL" && (
+                      <>
+                        <Field label={`Cotação 1 ${orderCurrency} em BRL`}>
+                          <input
+                            type="number"
+                            min="0.000001"
+                            step="0.000001"
+                            value={exchangeRateToBrl}
+                            onChange={(event) =>
+                              setExchangeRateToBrl(event.target.value)
+                            }
+                            placeholder="Ex.: 5,750000"
+                          />
+                        </Field>
+                        <Field label="Data da cotação">
+                          <input
+                            type="date"
+                            value={exchangeRateDate}
+                            onChange={(event) =>
+                              setExchangeRateDate(event.target.value)
+                            }
+                          />
+                        </Field>
+                      </>
+                    )}
                   </>
                 )}
                 <label className="block text-xs font-semibold sm:col-span-2">
