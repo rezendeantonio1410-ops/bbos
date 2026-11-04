@@ -647,3 +647,5 @@ export const BRL = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   maximumFractionDigits: 0,
 });
+
+export * from "./brazil-mobile.js";

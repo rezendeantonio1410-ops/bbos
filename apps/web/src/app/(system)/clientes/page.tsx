@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  brazilMobileDigits,
+  formatBrazilMobile,
+  normalizeCustomerPhone,
+  MOBILE_ERROR,
+} from "@bbos/shared";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -212,6 +218,11 @@ const dateTime = (value: string) =>
     timeStyle: "short",
   }).format(new Date(value));
 const customerFormError = (form: typeof emptyCustomer) => {
+  try {
+    normalizeCustomerPhone(form.phone);
+  } catch {
+    return MOBILE_ERROR;
+  }
   const document = form.taxId.replace(/\D/g, "");
   const isForeign = form.countryCode !== "BR";
   const missing: string[] = [];
@@ -333,7 +344,10 @@ export default function CustomersPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          phone: normalizeCustomerPhone(form.phone),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
@@ -395,7 +409,11 @@ export default function CustomersPage() {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ ...form, active: editCustomer.active }),
+        body: JSON.stringify({
+          ...form,
+          phone: normalizeCustomerPhone(form.phone),
+          active: editCustomer.active,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
@@ -827,11 +845,52 @@ export default function CustomersPage() {
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </Field>
-              <Field label="Telefone / WhatsApp">
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
+              <Field
+                label="Telefone / WhatsApp"
+                help={
+                  form.countryCode === "BR"
+                    ? "Brasil (+55): informe DDD e celular."
+                    : "Informe o número com código do país."
+                }
+              >
+                <div className="flex items-center gap-2">
+                  {form.countryCode === "BR" && (
+                    <span className="whitespace-nowrap text-sm">
+                      Brasil +55
+                    </span>
+                  )}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    aria-label="Telefone / WhatsApp"
+                    value={
+                      form.countryCode === "BR"
+                        ? formatBrazilMobile(form.phone)
+                        : form.phone
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (form.countryCode !== "BR") {
+                        setForm({ ...form, phone: value });
+                        return;
+                      }
+                      if (
+                        /[^\d\s()+.-]/.test(value) ||
+                        brazilMobileDigits(value).length > 11
+                      ) {
+                        setError(MOBILE_ERROR);
+                        return;
+                      }
+                      setForm({ ...form, phone: brazilMobileDigits(value) });
+                    }}
+                    placeholder={
+                      form.countryCode === "BR"
+                        ? "(43) 99999-9999"
+                        : "+351912345678"
+                    }
+                  />
+                </div>
               </Field>
               <Field
                 label={form.countryCode === "BR" ? "CEP *" : "Código postal"}
@@ -1130,13 +1189,50 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label="Telefone / WhatsApp"
-                help="Formato internacional: +5543999999999"
+                help={
+                  form.countryCode === "BR"
+                    ? "Brasil (+55): informe DDD e celular."
+                    : "Informe o número com código do país."
+                }
               >
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="+5543999999999"
-                />
+                <div className="flex items-center gap-2">
+                  {form.countryCode === "BR" && (
+                    <span className="whitespace-nowrap text-sm">
+                      Brasil +55
+                    </span>
+                  )}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    aria-label="Telefone / WhatsApp"
+                    value={
+                      form.countryCode === "BR"
+                        ? formatBrazilMobile(form.phone)
+                        : form.phone
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (form.countryCode !== "BR") {
+                        setForm({ ...form, phone: value });
+                        return;
+                      }
+                      if (
+                        /[^\d\s()+.-]/.test(value) ||
+                        brazilMobileDigits(value).length > 11
+                      ) {
+                        setError(MOBILE_ERROR);
+                        return;
+                      }
+                      setForm({ ...form, phone: brazilMobileDigits(value) });
+                    }}
+                    placeholder={
+                      form.countryCode === "BR"
+                        ? "(43) 99999-9999"
+                        : "+351912345678"
+                    }
+                  />
+                </div>
               </Field>
               <Field
                 label={form.countryCode === "BR" ? "CEP *" : "Código postal"}

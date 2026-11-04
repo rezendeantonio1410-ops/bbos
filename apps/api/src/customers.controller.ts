@@ -1,3 +1,4 @@
+import { normalizeCustomerPhone } from "@bbos/shared";
 import {
   BadRequestException,
   Body,
@@ -35,16 +36,11 @@ const optionalText = (value: unknown) => {
   return normalized || null;
 };
 const internationalPhone = (value: unknown) => {
-  const normalized = String(value ?? "")
-    .trim()
-    .replace(/[\s().-]/g, "");
-  if (!normalized) return null;
-  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
-    throw new BadRequestException(
-      "Telefone inválido. Use o formato internacional, por exemplo +5543999999999.",
-    );
+  try {
+    return normalizeCustomerPhone(value);
+  } catch {
+    throw new BadRequestException("Informe um celular válido com DDD.");
   }
-  return normalized;
 };
 
 @Controller("customers")
