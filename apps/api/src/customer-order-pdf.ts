@@ -538,3 +538,6 @@ export function buildCustomerOrderPdf(
   }
   return assemblePdf(pages);
 }
+
+// Shared drawing primitives; existing order PDF rendering remains unchanged.
+export const billingPdfDrawing = { text, rightText, rect, line, wrap, money, date, assemblePdf };

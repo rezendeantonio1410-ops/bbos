@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
 import {
@@ -814,6 +815,13 @@ export default function OrdersPage() {
                   </div>
                 </button>
                 <div className="mt-3 flex gap-2">
+                  {order.paymentType === "TERM" &&
+                    !["DRAFT", "CANCELLED"].includes(order.status) && (
+                      <OrderBillingPdfButton
+                        orderId={order.id}
+                        orderNumber={order.orderNumber ?? order.code}
+                      />
+                    )}
                   <OrderPdfLink
                     orderNumber={order.orderNumber ?? order.code}
                     compact
@@ -3195,6 +3203,13 @@ function OrderDrawer({
                     ? ` ${fulfillment.fiscalNumber}`
                     : ""}
                 </a>
+              )}
+            {order.paymentType === "TERM" &&
+              !["DRAFT", "CANCELLED"].includes(order.status) && (
+                <OrderBillingPdfButton
+                  orderId={order.id}
+                  orderNumber={order.orderNumber ?? order.code}
+                />
               )}
             <OrderPdfLink
               orderNumber={order.orderNumber ?? order.code}

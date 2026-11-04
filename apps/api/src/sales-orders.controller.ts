@@ -33,6 +33,9 @@ import {
   pdfContentDisposition,
 } from "./sales-order-pdf-download";
 
+import { loadSalesOrderBillingData } from "./sales-order-billing-data";
+import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
+
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "")
     .trim()
@@ -511,6 +514,33 @@ export class SalesOrdersController {
     response.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": pdfContentDisposition(fileName),
+      "Content-Length": pdf.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(pdf);
+  }
+
+  @Get(":id/billing/pdf")
+  async billingPdf(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Res() response: any,
+  ) {
+    const actor = await this.actor(request);
+    const order = await this.salesOrders.get(actor.companyId, id);
+    const data = await loadSalesOrderBillingData(
+      this.salesOrders.database,
+      order,
+      actor.companyId,
+    );
+    const pdf = buildSalesOrderBillingPdf(data);
+    const orderCode = String(order.orderNumber ?? order.code).replace(
+      /[^A-Za-z0-9_-]/g,
+      "-",
+    );
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": pdfContentDisposition(`Cobranca-${orderCode}.pdf`),
       "Content-Length": pdf.length,
       "Cache-Control": "private, no-store",
     });
