@@ -18,6 +18,7 @@ import {
 } from "../../sample-fiscal-route";
 import type { ExportFiscalRoute } from "../../export-fiscal-route";
 import { internationalSampleFiscalValues } from "../../international-sample-policy";
+import { ensureSalesOrderReceivable } from "../../sales-order-receivable";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -1600,6 +1601,7 @@ export class BlingOutboxService {
           WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
         order.id,
       );
+      await ensureSalesOrderReceivable(this.database, order.id, number);
       await this.customerLifecycle.record(
         order.id,
         "INVOICE_AUTHORIZED",
@@ -1901,6 +1903,11 @@ export class BlingOutboxService {
               SET status='INVOICED',"invoicedAt"=COALESCE("invoicedAt",NOW()),"updatedAt"=NOW()
             WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
           row.salesOrderId,
+        );
+        await ensureSalesOrderReceivable(
+          this.database,
+          row.salesOrderId,
+          number,
         );
         await this.customerLifecycle.record(
           row.salesOrderId,

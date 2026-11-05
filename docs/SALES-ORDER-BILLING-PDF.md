@@ -3,7 +3,7 @@
 Na lista e no detalhe de um pedido a prazo confirmado, usar **PDF de cobrança**.
 O arquivo pode ser baixado e encaminhado manualmente ao cliente. Não há envio automático.
 
-O documento consulta o título existente no contas a receber, usa seu saldo em aberto e vencimento, e inclui a NF-e de saída autorizada mais recente (número, série e chave), itens e total do pedido. Não cria títulos, não registra pagamentos e não altera vencimentos.
+O documento consulta o título existente no contas a receber, usa seu saldo em aberto e vencimento, e inclui a NF-e de saída autorizada mais recente (número, série e chave), itens e total do pedido. A autorização da NF-e cria o título de forma idempotente; uma migração faz o mesmo para vendas a prazo já faturadas. A geração do PDF não registra pagamentos nem altera vencimentos.
 
 Não é gerado para pedidos cancelados, rascunhos, amostras, vendas à vista, moeda estrangeira, títulos quitados ou cancelados, saldo inválido, ausência de vencimento ou NF-e não autorizada/incompleta.
 

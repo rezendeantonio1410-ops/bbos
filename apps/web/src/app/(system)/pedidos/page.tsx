@@ -816,14 +816,15 @@ export default function OrdersPage() {
                 </button>
                 <div className="mt-3 flex gap-2">
                   {order.paymentType === "TERM" &&
-                    !["DRAFT", "CANCELLED"].includes(order.status) && (
+                    order.orderType !== "SAMPLE" &&
+                    order.fiscalStatus === "AUTHORIZED" && (
                       <OrderBillingPdfButton
                         orderId={order.id}
                         orderNumber={order.orderNumber ?? order.code}
                       />
                     )}
                   <OrderPdfLink
-                    orderNumber={order.orderNumber ?? order.code}
+                    orderId={order.id}
                     compact
                     provisional={order.status === "DRAFT"}
                   />
@@ -3205,14 +3206,15 @@ function OrderDrawer({
                 </a>
               )}
             {order.paymentType === "TERM" &&
-              !["DRAFT", "CANCELLED"].includes(order.status) && (
+              order.orderType !== "SAMPLE" &&
+              fulfillment?.fiscalStatus === "AUTHORIZED" && (
                 <OrderBillingPdfButton
                   orderId={order.id}
                   orderNumber={order.orderNumber ?? order.code}
                 />
               )}
             <OrderPdfLink
-              orderNumber={order.orderNumber ?? order.code}
+              orderId={order.id}
               provisional={order.status === "DRAFT"}
             />
             <button onClick={onClose}>
