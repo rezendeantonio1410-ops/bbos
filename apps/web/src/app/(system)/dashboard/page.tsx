@@ -1113,10 +1113,12 @@ export default function DashboardPage() {
   const [v3] = useState<ExecutiveV3Data>(emptyV3);
   useEffect(() => {
     const root = getApiBaseUrl();
+    const controller = new AbortController();
     setDataState("loading");
     void fetch(`${root}/dashboard/executive?period=${period}`, {
       credentials: "include",
       cache: "no-store",
+      signal: controller.signal,
     })
       .then(async (response) => {
         if (!response.ok) throw new Error("dashboard unavailable");
@@ -1126,7 +1128,11 @@ export default function DashboardPage() {
         setData(payload);
         setDataState("available");
       })
-      .catch(() => setDataState("unavailable"));
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setDataState("unavailable");
+      });
+    return () => controller.abort();
   }, [period]);
   useEffect(() => {
     const saved = window.localStorage.getItem(
@@ -1138,7 +1144,8 @@ export default function DashboardPage() {
     setPeriod(next);
     window.localStorage.setItem("bbos-executive-period", next);
   };
-  const metrics = data.metricsByPeriod[period];
+  const metrics = data.metricsByPeriod?.[period] ?? [];
+  const metricAt = (index: number) => metrics[index] ?? emptyMetric;
   const openDiagnostic = (sourceId: string) =>
     setDiagnostic(
       data.diagnostics.find((item) => item.sourceId === sourceId) ??
@@ -1147,25 +1154,25 @@ export default function DashboardPage() {
   const kpis = [
     {
       label: "Vendas",
-      value: metrics[0]!.value,
+      value: metricAt(0).value,
       supporting: "94,6% da meta",
-      change: metrics[0]!.change,
+      change: metricAt(0).change,
       icon: Banknote,
       href: "/vendas",
     },
     {
       label: "Receita",
-      value: metrics[0]!.value,
-      supporting: metrics[0]!.supportingText,
-      change: metrics[0]!.change,
+      value: metricAt(0).value,
+      supporting: metricAt(0).supportingText,
+      change: metricAt(0).change,
       icon: CircleDollarSign,
       onClick: () => setCommercialOpen(true),
     },
     {
       label: "Lucro líquido",
-      value: metrics[1]!.value,
-      supporting: metrics[1]!.supportingText,
-      change: metrics[1]!.change,
+      value: metricAt(1).value,
+      supporting: metricAt(1).supportingText,
+      change: metricAt(1).change,
       icon: CircleDollarSign,
       onClick: () => openDiagnostic("roi"),
     },
@@ -1179,25 +1186,25 @@ export default function DashboardPage() {
     },
     {
       label: "Margem líquida",
-      value: metrics[2]!.value,
-      supporting: metrics[2]!.supportingText,
-      change: metrics[2]!.change,
+      value: metricAt(2).value,
+      supporting: metricAt(2).supportingText,
+      change: metricAt(2).change,
       icon: Gauge,
       onClick: () => openDiagnostic("roi"),
     },
     {
       label: "Pedidos em aberto",
       value: "27",
-      supporting: `${metrics[6]!.value} no período`,
-      change: metrics[6]!.change,
+      supporting: `${metricAt(6).value} no período`,
+      change: metricAt(6).change,
       icon: ShoppingBag,
       href: "/pedidos",
     },
     {
       label: "Produção",
-      value: metrics[4]!.value,
-      supporting: metrics[4]!.supportingText,
-      change: metrics[4]!.change,
+      value: metricAt(4).value,
+      supporting: metricAt(4).supportingText,
+      change: metricAt(4).change,
       icon: Factory,
       href: "/producao",
     },

@@ -4,7 +4,6 @@ import { useEffect } from "react";
 
 export default function SystemError({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
@@ -28,10 +27,10 @@ export default function SystemError({
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={reset}
+            onClick={() => window.location.reload()}
             className="rounded-xl bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
           >
-            Tentar novamente
+            Recarregar tela
           </button>
           <button
             type="button"
