@@ -12,6 +12,7 @@ import {
   Factory,
   Gauge,
   Lightbulb,
+  MapPinned,
   Package,
   Percent,
   ShoppingBag,
@@ -28,6 +29,7 @@ import type {
   PerformanceDiagnostic,
   PerformanceStatus,
   Period,
+  SalesMapNode,
 } from "@bbos/shared";
 import {
   CommercialDetailDrawer,
@@ -182,14 +184,63 @@ function RevenueChart({
   onOpen: () => void;
   dashboard: ExecutiveDashboard;
 }) {
-  const goal = dashboard.goals.find((item) => item.period === period) ?? { actual: 0, target: 0, difference: 0, closingProjection: 0, attainment: 0, status: "attention" as const };
-  if (dashboard.goals.length < 2) return <Card className="border p-5 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-secondary)]">Receita × meta</p><p className="mt-3 text-sm text-[var(--bbos-text-secondary)]">Assim que houver vendas no período, a evolução da receita aparecerá aqui.</p><button type="button" onClick={onOpen} className="mt-4 text-xs font-bold text-[var(--bbos-action-primary)]">Ver detalhes <ChevronRight size={12} className="inline" /></button></Card>;
+  const goal = dashboard.goals.find((item) => item.period === period) ?? {
+    actual: 0,
+    target: 0,
+    difference: 0,
+    closingProjection: 0,
+    attainment: 0,
+    status: "attention" as const,
+  };
+  if (dashboard.goals.length < 2)
+    return (
+      <Card className="border p-5 shadow-sm">
+        <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-secondary)]">
+          Receita × meta
+        </p>
+        <p className="mt-3 text-sm text-[var(--bbos-text-secondary)]">
+          Assim que houver vendas no período, a evolução da receita aparecerá
+          aqui.
+        </p>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="mt-4 text-xs font-bold text-[var(--bbos-action-primary)]"
+        >
+          Ver detalhes <ChevronRight size={12} className="inline" />
+        </button>
+      </Card>
+    );
   const previous = goal.actual;
   const sets: Record<Period, number[]> = {
     day: [previous, previous, previous, previous, previous, previous, previous],
-    week: [previous, previous, previous, previous, previous, previous, previous],
-    month: [previous, previous, previous, previous, previous, previous, previous],
-    year: [previous, previous, previous, previous, previous, previous, previous],
+    week: [
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+    ],
+    month: [
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+    ],
+    year: [
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+      previous,
+    ],
   };
   const values = sets[period];
   const min = Math.min(...values) * 0.92;
@@ -331,8 +382,84 @@ function RevenueChart({
   );
 }
 
-function SalesMapCard({ onOpen }: { onOpen: () => void }) {
-  return <Card className="border p-5 shadow-sm"><div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-muted)]"><Users size={15} /></span><div><p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">Vendas por região</p><p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">Aguardando dados regionais reais.</p></div></div><button type="button" onClick={onOpen} className="mt-4 text-xs font-bold text-[var(--bbos-action-primary)]">Ver detalhes <ChevronRight size={12} className="inline" /></button></Card>;
+function SalesMapCard({
+  root,
+  onOpen,
+}: {
+  root: SalesMapNode;
+  onOpen: () => void;
+}) {
+  const countries = root.children ?? [];
+  const rows =
+    countries.length === 1 && countries[0]?.code === "BR"
+      ? (countries[0].children ?? [])
+      : countries;
+  return (
+    <button type="button" onClick={onOpen} className="h-full w-full text-left">
+      <Card className="group h-full min-h-[300px] border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-[var(--bbos-surface-subtle)] text-[var(--bbos-action-primary)]">
+              <MapPinned size={15} />
+            </span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">
+                Mapa de vendas
+              </p>
+              <p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">
+                Dados reais por{" "}
+                {countries.length === 1 && countries[0]?.code === "BR"
+                  ? "região"
+                  : "país"}
+              </p>
+            </div>
+          </div>
+          <ChevronRight
+            size={16}
+            className="text-[var(--bbos-text-muted)] transition group-hover:translate-x-1"
+          />
+        </div>
+        {rows.length ? (
+          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+            {rows.slice(0, 6).map((node) => (
+              <div
+                key={node.id}
+                className="rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs font-bold">{node.name}</p>
+                  <span className="text-[9px] font-semibold text-[var(--bbos-text-muted)]">
+                    {number.format(node.salesShare)}%
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-bold">
+                  {currency.format(node.revenue)}
+                </p>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-stone-200">
+                  <div
+                    className="h-full rounded-full bg-[var(--bbos-action-primary)]"
+                    style={{ width: `${Math.min(100, node.salesShare)}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-[9px] text-[var(--bbos-text-muted)]">
+                  {node.orderCount ?? 0} pedido(s) ·{" "}
+                  {number.format(node.volumeKg)} kg
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed bg-[var(--bbos-surface-subtle)] p-8 text-center text-xs text-[var(--bbos-text-muted)]">
+            Nenhuma venda comercial no período selecionado.
+          </div>
+        )}
+        <p className="mt-4 text-[10px] text-[var(--bbos-text-muted)]">
+          Clique para explorar país, região, estado, cidade, cliente, produto e
+          pedido.
+        </p>
+      </Card>
+    </button>
+  );
   /* Legacy regional card retained temporarily for reference; replaced by the vector map.
   const regions: Array<{
     id: string;
@@ -742,7 +869,30 @@ function LegacyCashFlowChart() {
 }
 
 function CashFlowChart() {
-  return <Card className="border p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-secondary)]">Fluxo de caixa</p><h2 className="mt-1 text-lg font-bold">Aguardando movimentações reais</h2></div><Link href="/financeiro/fluxo-caixa" className="text-xs font-bold text-[var(--bbos-action-primary)]">Abrir Financeiro <ChevronRight size={12} className="inline" /></Link></div><p className="mt-4 rounded-xl bg-[var(--bbos-surface-subtle)] p-4 text-sm text-[var(--bbos-text-secondary)]">Resultado disponível após os primeiros lançamentos financeiros confiáveis.</p></Card>;
+  return (
+    <Card className="border p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--bbos-text-secondary)]">
+            Fluxo de caixa
+          </p>
+          <h2 className="mt-1 text-lg font-bold">
+            Aguardando movimentações reais
+          </h2>
+        </div>
+        <Link
+          href="/financeiro/fluxo-caixa"
+          className="text-xs font-bold text-[var(--bbos-action-primary)]"
+        >
+          Abrir Financeiro <ChevronRight size={12} className="inline" />
+        </Link>
+      </div>
+      <p className="mt-4 rounded-xl bg-[var(--bbos-surface-subtle)] p-4 text-sm text-[var(--bbos-text-secondary)]">
+        Resultado disponível após os primeiros lançamentos financeiros
+        confiáveis.
+      </p>
+    </Card>
+  );
 }
 
 void LegacyCashFlowChart;
@@ -858,22 +1008,116 @@ function Ranking({
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("month");
-  const [dataState, setDataState] = useState<"loading" | "available" | "unavailable">("loading");
+  const [dataState, setDataState] = useState<
+    "loading" | "available" | "unavailable"
+  >("loading");
   const [roiOpen, setRoiOpen] = useState(false);
   const [commercialOpen, setCommercialOpen] = useState(false);
   const [salesMapOpen, setSalesMapOpen] = useState(false);
   const [diagnostic, setDiagnostic] = useState<PerformanceDiagnostic | null>(
     null,
   );
-  const emptyMetric = { label: "Sem dados", value: "Sem dados", change: 0, supportingText: "Nenhum registro no período" };
-  const emptyData = { updatedAt: new Date().toISOString(), metricsByPeriod: { day: [emptyMetric], week: [emptyMetric], month: [emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric, emptyMetric], year: [emptyMetric] }, roi: { current: 0, target: 0, difference: 0, trend: 0, status: "attention" as const }, goals: [], projections: [], diagnostics: [], salesMap: { id: "company", level: "country" as const, name: "Empresa", revenue: 0, volumeKg: 0, marginPercent: 0, growthPercent: 0, target: 0, attainment: 0, salesShare: 0, status: "attention" as const }, alerts: [] } as unknown as ExecutiveDashboard;
-  const emptyV3 = { industrial: { productionTodayKg: 0, targetTodayKg: 0, efficiencyPercent: 0, capacityUsedPercent: 0, roastLossPercent: 0, realCostPerKg: 0, workOrdersInProgress: 0, delayedWorkOrders: 0 }, inventory: { greenCoffeeAvailableKg: 0, stockValue: 0, coverageDays: 0, coverageTargetDays: 0, finishedGoodsUnits: 0, attentionLots: 0, criticalItems: 0 }, topCustomers: [], topProducts: [], logistics: { containersInTransit: 0, nextArrivals: 0, openPurchases: 0, ordersAwaitingShipment: 0, criticalSupplies: 0, criticalPackaging: 0, isMock: true }, finance: { cash: 0, receivables: 0, payables: 0, marginPercent: 0, projectedProfit: 0, projectedRoiPercent: 0, cashTrend: [0] }, attention: [], aiInsights: [], meta: { generatedAt: "", source: "database" } } as unknown as ExecutiveV3Data;
+  const emptyMetric = {
+    label: "Sem dados",
+    value: "Sem dados",
+    change: 0,
+    supportingText: "Nenhum registro no período",
+  };
+  const emptyData = {
+    updatedAt: new Date().toISOString(),
+    metricsByPeriod: {
+      day: [emptyMetric],
+      week: [emptyMetric],
+      month: [
+        emptyMetric,
+        emptyMetric,
+        emptyMetric,
+        emptyMetric,
+        emptyMetric,
+        emptyMetric,
+        emptyMetric,
+        emptyMetric,
+      ],
+      year: [emptyMetric],
+    },
+    roi: {
+      current: 0,
+      target: 0,
+      difference: 0,
+      trend: 0,
+      status: "attention" as const,
+    },
+    goals: [],
+    projections: [],
+    diagnostics: [],
+    salesMap: {
+      id: "company",
+      level: "country" as const,
+      name: "Empresa",
+      revenue: 0,
+      volumeKg: 0,
+      marginPercent: 0,
+      growthPercent: 0,
+      target: 0,
+      attainment: 0,
+      salesShare: 0,
+      status: "attention" as const,
+    },
+    alerts: [],
+  } as unknown as ExecutiveDashboard;
+  const emptyV3 = {
+    industrial: {
+      productionTodayKg: 0,
+      targetTodayKg: 0,
+      efficiencyPercent: 0,
+      capacityUsedPercent: 0,
+      roastLossPercent: 0,
+      realCostPerKg: 0,
+      workOrdersInProgress: 0,
+      delayedWorkOrders: 0,
+    },
+    inventory: {
+      greenCoffeeAvailableKg: 0,
+      stockValue: 0,
+      coverageDays: 0,
+      coverageTargetDays: 0,
+      finishedGoodsUnits: 0,
+      attentionLots: 0,
+      criticalItems: 0,
+    },
+    topCustomers: [],
+    topProducts: [],
+    logistics: {
+      containersInTransit: 0,
+      nextArrivals: 0,
+      openPurchases: 0,
+      ordersAwaitingShipment: 0,
+      criticalSupplies: 0,
+      criticalPackaging: 0,
+      isMock: true,
+    },
+    finance: {
+      cash: 0,
+      receivables: 0,
+      payables: 0,
+      marginPercent: 0,
+      projectedProfit: 0,
+      projectedRoiPercent: 0,
+      cashTrend: [0],
+    },
+    attention: [],
+    aiInsights: [],
+    meta: { generatedAt: "", source: "database" },
+  } as unknown as ExecutiveV3Data;
   const [data, setData] = useState<ExecutiveDashboard>(emptyData);
   const [v3] = useState<ExecutiveV3Data>(emptyV3);
   useEffect(() => {
     const root = getApiBaseUrl();
     setDataState("loading");
-    void fetch(`${root}/dashboard/executive?period=${period}`, { credentials: "include", cache: "no-store" })
+    void fetch(`${root}/dashboard/executive?period=${period}`, {
+      credentials: "include",
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error("dashboard unavailable");
         return response.json() as Promise<ExecutiveDashboard>;
@@ -970,7 +1214,10 @@ export default function DashboardPage() {
             Dashboard Executivo
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            Visão consolidada da Bispo Coffees • {data.updatedAt ? `atualizado em ${new Date(data.updatedAt).toLocaleString("pt-BR")}` : "aguardando atualização"}
+            Visão consolidada da Bispo Coffees •{" "}
+            {data.updatedAt
+              ? `atualizado em ${new Date(data.updatedAt).toLocaleString("pt-BR")}`
+              : "aguardando atualização"}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1006,293 +1253,494 @@ export default function DashboardPage() {
         </div>
       </header>
       {dataState !== "available" && (
-        <div role="status" className={`order-2 mt-4 rounded-xl border px-4 py-3 text-xs ${dataState === "unavailable" ? "border-red-200 bg-red-50 text-red-800" : "border-stone-200 bg-white text-stone-600"}`}>
+        <div
+          role="status"
+          className={`order-2 mt-4 rounded-xl border px-4 py-3 text-xs ${dataState === "unavailable" ? "border-red-200 bg-red-50 text-red-800" : "border-stone-200 bg-white text-stone-600"}`}
+        >
           {dataState === "unavailable"
             ? "A visão executiva está temporariamente indisponível. Nenhum valor zerado deve ser interpretado como ausência de movimento."
             : "Atualizando a visão executiva a partir da base operacional…"}
         </div>
       )}
-      {false && <>
-      <section className="order-2 mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        {kpis.map((item) => (
-          <KpiCard key={item.label} {...item} />
-        ))}
-      </section>
-      <section className="order-4 mt-4 grid gap-4 xl:grid-cols-[3fr_2fr]">
-        <RevenueChart period={period} dashboard={data} onOpen={() => setCommercialOpen(true)} />
-        <SalesMapCard onOpen={() => setSalesMapOpen(true)} />
-      </section>
-      <section className="order-5 mt-5">
-        <CashFlowChart />
-      </section>
-      <section className="order-3 mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Link href="/estoque">
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <span className="grid size-9 place-items-center rounded-xl bg-coffee-50 text-coffee-700">
-                <Warehouse size={17} />
-              </span>
-              <span
-                className="grid size-11 place-items-center rounded-full text-[10px] font-bold text-coffee-700"
-                style={{
-                  background:
-                    "radial-gradient(closest-side, white 76%, transparent 78% 99%), conic-gradient(#8b6f47 72%, #f4eee7 0)",
-                }}
-              >
-                72%
-              </span>
-            </div>
-            <p className="mt-4 text-sm font-semibold text-stone-800">
-              Estoque de café verde
-            </p>
-            <p className="mt-1 text-2xl font-bold">42.180 kg</p>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100">
-              <div className="h-full w-[72%] rounded-full bg-coffee-500" />
-            </div>
-            <p className="mt-2 text-[10px] text-stone-400">
-              {currency.format(v3.inventory.stockValue)} • 703 sacas
-              equivalentes
-            </p>
-          </Card>
-        </Link>
-        <Link href="/estoque">
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <span className="grid size-9 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                <Gauge size={17} />
-              </span>
-              <span
-                className="grid size-11 place-items-center rounded-full text-[10px] font-bold text-amber-700"
-                style={{
-                  background:
-                    "radial-gradient(closest-side, white 76%, transparent 78% 99%), conic-gradient(#d97706 63%, #fef3c7 0)",
-                }}
-              >
-                38d
-              </span>
-            </div>
-            <p className="mt-4 text-sm font-semibold text-stone-800">
-              Cobertura de estoque
-            </p>
-            <p className="mt-1 text-2xl font-bold">38 dias</p>
-            <div className="mt-3 flex items-end justify-between">
-              <p className="text-[10px] text-stone-500">
-                Meta 60 dias • 63% da cobertura ideal
-              </p>
-              <ChevronRight size={14} className="text-stone-300" />
-            </div>
-          </Card>
-        </Link>
-        <Link href="/pedidos" className="h-full text-left">
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <span className="grid size-9 place-items-center rounded-xl bg-[#F0F0ED] text-[#4d7b82]">
-                <ShoppingBag size={17} />
-              </span>
-              <MiniTrend
-                values={[18, 20, 17, 23, 21, 25, 27]}
-                color="text-[#4d7b82]"
-              />
-            </div>
-            <p className="mt-4 text-sm font-semibold text-stone-800">
-              Backlog de pedidos
-            </p>
-            <p className="mt-1 text-2xl font-bold">27 pedidos</p>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-[10px]">
-              <span className="text-stone-500">
-                Valor
-                <br />
-                <strong className="text-xs text-stone-900">R$ 184.600</strong>
-              </span>
-              <span className="text-stone-500">
-                Entrega média
-                <br />
-                <strong className="text-xs text-stone-900">3,4 dias</strong>
-              </span>
-            </div>
-          </Card>
-        </Link>
-        <Card
-          id="atencao-gestor"
-          role="button"
-          tabIndex={0}
-          onClick={() =>
-            document
-              .getElementById("atencao-executiva")
-              ?.scrollIntoView({ behavior: "smooth" })
-          }
-          onKeyDown={(event) => {
-            if (event.key === "Enter")
-              document
-                .getElementById("atencao-executiva")
-                ?.scrollIntoView({ behavior: "smooth" });
-          }}
-          className="cursor-pointer border-0 bg-white p-5 text-[#111514] transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-center gap-2">
-            <Lightbulb size={16} className="text-coffee-300" />
-            <p className="text-sm font-semibold">Alertas críticos</p>
-            <Badge tone="danger">{data.alerts.length}</Badge>
-          </div>
-          <div className="mt-4 space-y-3">
-            {data.alerts.slice(0, 3).map((alert, index) => (
-              <div
-                key={alert.id}
-                className="flex gap-3 border-t border-[#E7E7E3] pt-3 first:border-0 first:pt-0"
-              >
-                <span className="text-[10px] font-bold text-[#7A8381]">
-                  0{index + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[11px] font-semibold">
-                    {alert.title}
+      {false && (
+        <>
+          <section className="order-2 mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {kpis.map((item) => (
+              <KpiCard key={item.label} {...item} />
+            ))}
+          </section>
+          <section className="order-4 mt-4 grid gap-4 xl:grid-cols-[3fr_2fr]">
+            <RevenueChart
+              period={period}
+              dashboard={data}
+              onOpen={() => setCommercialOpen(true)}
+            />
+            <SalesMapCard
+              root={data.salesMap}
+              onOpen={() => setSalesMapOpen(true)}
+            />
+          </section>
+          <section className="order-5 mt-5">
+            <CashFlowChart />
+          </section>
+          <section className="order-3 mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Link href="/estoque">
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="grid size-9 place-items-center rounded-xl bg-coffee-50 text-coffee-700">
+                    <Warehouse size={17} />
+                  </span>
+                  <span
+                    className="grid size-11 place-items-center rounded-full text-[10px] font-bold text-coffee-700"
+                    style={{
+                      background:
+                        "radial-gradient(closest-side, white 76%, transparent 78% 99%), conic-gradient(#8b6f47 72%, #f4eee7 0)",
+                    }}
+                  >
+                    72%
+                  </span>
+                </div>
+                <p className="mt-4 text-sm font-semibold text-stone-800">
+                  Estoque de café verde
+                </p>
+                <p className="mt-1 text-2xl font-bold">42.180 kg</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100">
+                  <div className="h-full w-[72%] rounded-full bg-coffee-500" />
+                </div>
+                <p className="mt-2 text-[10px] text-stone-400">
+                  {currency.format(v3.inventory.stockValue)} • 703 sacas
+                  equivalentes
+                </p>
+              </Card>
+            </Link>
+            <Link href="/estoque">
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="grid size-9 place-items-center rounded-xl bg-amber-50 text-amber-700">
+                    <Gauge size={17} />
+                  </span>
+                  <span
+                    className="grid size-11 place-items-center rounded-full text-[10px] font-bold text-amber-700"
+                    style={{
+                      background:
+                        "radial-gradient(closest-side, white 76%, transparent 78% 99%), conic-gradient(#d97706 63%, #fef3c7 0)",
+                    }}
+                  >
+                    38d
+                  </span>
+                </div>
+                <p className="mt-4 text-sm font-semibold text-stone-800">
+                  Cobertura de estoque
+                </p>
+                <p className="mt-1 text-2xl font-bold">38 dias</p>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-[10px] text-stone-500">
+                    Meta 60 dias • 63% da cobertura ideal
                   </p>
+                  <ChevronRight size={14} className="text-stone-300" />
+                </div>
+              </Card>
+            </Link>
+            <Link href="/pedidos" className="h-full text-left">
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="grid size-9 place-items-center rounded-xl bg-[#F0F0ED] text-[#4d7b82]">
+                    <ShoppingBag size={17} />
+                  </span>
+                  <MiniTrend
+                    values={[18, 20, 17, 23, 21, 25, 27]}
+                    color="text-[#4d7b82]"
+                  />
+                </div>
+                <p className="mt-4 text-sm font-semibold text-stone-800">
+                  Backlog de pedidos
+                </p>
+                <p className="mt-1 text-2xl font-bold">27 pedidos</p>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-[10px]">
+                  <span className="text-stone-500">
+                    Valor
+                    <br />
+                    <strong className="text-xs text-stone-900">
+                      R$ 184.600
+                    </strong>
+                  </span>
+                  <span className="text-stone-500">
+                    Entrega média
+                    <br />
+                    <strong className="text-xs text-stone-900">3,4 dias</strong>
+                  </span>
+                </div>
+              </Card>
+            </Link>
+            <Card
+              id="atencao-gestor"
+              role="button"
+              tabIndex={0}
+              onClick={() =>
+                document
+                  .getElementById("atencao-executiva")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter")
+                  document
+                    .getElementById("atencao-executiva")
+                    ?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="cursor-pointer border-0 bg-white p-5 text-[#111514] transition hover:-translate-y-0.5"
+            >
+              <div className="flex items-center gap-2">
+                <Lightbulb size={16} className="text-coffee-300" />
+                <p className="text-sm font-semibold">Alertas críticos</p>
+                <Badge tone="danger">{data.alerts.length}</Badge>
+              </div>
+              <div className="mt-4 space-y-3">
+                {data.alerts.slice(0, 3).map((alert, index) => (
+                  <div
+                    key={alert.id}
+                    className="flex gap-3 border-t border-[#E7E7E3] pt-3 first:border-0 first:pt-0"
+                  >
+                    <span className="text-[10px] font-bold text-[#7A8381]">
+                      0{index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-semibold">
+                        {alert.title}
+                      </p>
+                      <Link
+                        href={
+                          alert.area === "Estoque"
+                            ? "/estoque"
+                            : alert.area === "Produção"
+                              ? "/producao"
+                              : "/recebimento"
+                        }
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-coffee-300"
+                      >
+                        {alert.area === "Estoque"
+                          ? "Ver estoque"
+                          : alert.area === "Produção"
+                            ? "Ver produção"
+                            : "Analisar"}
+                        <ChevronRight size={10} />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </section>
+          <section className="order-5 mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Link href="/producao">
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Factory size={16} className="text-[#7065a8]" />
+                    <h2 className="text-sm font-bold">
+                      Performance Industrial
+                    </h2>
+                  </div>
+                  <ChevronRight size={14} className="text-stone-300" />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <CompactStat
+                    label="Eficiência"
+                    value={`${number.format(v3.industrial.efficiencyPercent)}%`}
+                    status="on-track"
+                  />
+                  <CompactStat
+                    label="Perda de torra"
+                    value={`${number.format(v3.industrial.roastLossPercent)}%`}
+                    status="attention"
+                  />
+                  <CompactStat
+                    label="Custo real/kg"
+                    value={currency.format(v3.industrial.realCostPerKg)}
+                  />
+                  <CompactStat
+                    label="OPs em andamento"
+                    value={String(v3.industrial.workOrdersInProgress)}
+                  />
+                </div>
+                <p className="mt-3 text-[10px] font-semibold text-red-700">
+                  {v3.industrial.delayedWorkOrders} OP atrasada
+                </p>
+              </Card>
+            </Link>
+            <Link href="/estoque">
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Warehouse size={16} className="text-coffee-700" />
+                    <h2 className="text-sm font-bold">Estoque / Suprimentos</h2>
+                  </div>
+                  <ChevronRight size={14} className="text-stone-300" />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <CompactStat
+                    label="Café verde"
+                    value={`${number.format(v3.inventory.greenCoffeeAvailableKg)} kg`}
+                  />
+                  <CompactStat
+                    label="Produto acabado"
+                    value={`${number.format(v3.inventory.finishedGoodsUnits)} kg`}
+                  />
+                  <CompactStat
+                    label="Cobertura total"
+                    value={`${v3.inventory.coverageDays} dias`}
+                    status="attention"
+                  />
+                  <CompactStat
+                    label="Embalagens críticas"
+                    value={String(v3.logistics.criticalPackaging)}
+                    status="off-track"
+                  />
+                </div>
+              </Card>
+            </Link>
+            <Link href="/recebimento">
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Truck size={16} className="text-[#4d7b82]" />
+                    <h2 className="text-sm font-bold">Logística</h2>
+                  </div>
+                  <Badge tone="neutral">Demo</Badge>
+                </div>
+                <div className="mt-4 space-y-3">
+                  <CompactStat
+                    label="Containers em trânsito"
+                    value={String(v3.logistics.containersInTransit)}
+                  />
+                  <CompactStat
+                    label="Próximas chegadas"
+                    value={`${v3.logistics.nextArrivals} dias`}
+                  />
+                  <CompactStat
+                    label="Compras em aberto"
+                    value={currency.format(v3.logistics.openPurchases)}
+                  />
+                </div>
+                <p className="mt-3 text-[9px] text-stone-400">
+                  Dados mock preparados para futura API.
+                </p>
+              </Card>
+            </Link>
+            <button
+              onClick={() => setSalesMapOpen(true)}
+              className="h-full text-left"
+            >
+              <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-forest-700" />
+                    <h2 className="text-sm font-bold">Top Clientes</h2>
+                  </div>
+                  <ChevronRight size={14} className="text-stone-300" />
+                </div>
+                <Ranking items={v3.topCustomers.slice(0, 3)} kind="customer" />
+                <span className="mt-3 inline-flex items-center gap-1 text-[10px] font-bold text-forest-700">
+                  Abrir ranking <ChevronRight size={10} />
+                </span>
+              </Card>
+            </button>
+          </section>
+        </>
+      )}
+      <section className="order-2 mt-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Receita",
+              value: metrics[0]?.value ?? "Sem dados",
+              supporting:
+                metrics[0]?.supportingText ?? "Aguardando dados do período",
+              icon: CircleDollarSign,
+            },
+            {
+              label: "Lucro líquido",
+              value: metrics[1]?.value ?? "Sem dados",
+              supporting:
+                metrics[2]?.value && metrics[2].value !== "Sem dados"
+                  ? `Margem ${metrics[2].value}`
+                  : "Resultado disponível após os primeiros custos",
+              icon: Banknote,
+            },
+            {
+              label: "ROI",
+              value: data.roi.current
+                ? `${number.format(data.roi.current)}%`
+                : "Sem dados",
+              supporting: data.roi.current
+                ? `Meta ${number.format(data.roi.target)}%`
+                : "Aguardando base real para comparação",
+              icon: Percent,
+            },
+            {
+              label: metrics[3]?.label ?? "Financeiro",
+              value: metrics[3]?.value ?? "Sem dados",
+              supporting:
+                metrics[3]?.supportingText ?? "Aguardando movimentações reais",
+              icon: CircleDollarSign,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Card
+                key={item.label}
+                className="min-h-[142px] border p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">
+                      {item.label}
+                    </p>
+                    <p className="mt-3 text-3xl font-bold tracking-tight text-[var(--bbos-text-primary)]">
+                      {item.value}
+                    </p>
+                    <p className="mt-2 text-xs text-[var(--bbos-text-secondary)]">
+                      {item.supporting}
+                    </p>
+                  </div>
+                  <span className="grid size-9 place-items-center rounded-xl bg-[var(--bbos-surface-subtle)] text-[var(--bbos-action-primary)]">
+                    <Icon size={17} aria-hidden="true" />
+                  </span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+      <section className="order-3 mt-4 rounded-2xl border border-[var(--bbos-info-border)] bg-[var(--bbos-info-soft)]/50 p-4">
+        <div className="flex items-center gap-2">
+          <Gauge size={16} className="text-[var(--bbos-state-information)]" />
+          <h2 className="text-sm font-bold">Pulso da operação</h2>
+          <span className="text-xs text-[var(--bbos-text-muted)]">
+            dados do período selecionado
+          </span>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link
+            href="/vendas"
+            className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"
+          >
+            <p className="text-xs text-[var(--bbos-text-secondary)]">Vendas</p>
+            <p className="mt-1 text-lg font-bold">
+              {metrics[0]?.value ?? "Sem dados"}
+            </p>
+          </Link>
+          <Link
+            href="/pedidos"
+            className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"
+          >
+            <p className="text-xs text-[var(--bbos-text-secondary)]">Pedidos</p>
+            <p className="mt-1 text-lg font-bold">
+              {metrics[6]?.value ?? "Sem dados"}
+            </p>
+          </Link>
+          <Link
+            href="/producao"
+            className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"
+          >
+            <p className="text-xs text-[var(--bbos-text-secondary)]">
+              Produção
+            </p>
+            <p className="mt-1 text-lg font-bold">
+              {metrics[4]?.value ?? "Sem dados"}
+            </p>
+          </Link>
+          <Link
+            href="/estoque"
+            className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"
+          >
+            <p className="text-xs text-[var(--bbos-text-secondary)]">
+              Estoque + cobertura
+            </p>
+            <p className="mt-1 text-lg font-bold">
+              {metrics[5]?.value ?? "Sem dados"}
+            </p>
+            <p className="text-[11px] text-[var(--bbos-text-muted)]">
+              Cobertura: aguardando dados reais
+            </p>
+          </Link>
+        </div>
+      </section>
+      <section id="atencao-executiva" className="order-4 mt-4">
+        <div className="flex items-center gap-2">
+          <Lightbulb size={16} className="text-[var(--bbos-state-attention)]" />
+          <h2 className="text-sm font-bold">O que merece sua atenção</h2>
+          <Badge
+            tone={
+              dataState === "unavailable" || data.alerts.length
+                ? "warning"
+                : "success"
+            }
+          >
+            {dataState === "unavailable"
+              ? "!"
+              : data.alerts.length
+                ? data.alerts.length
+                : "✓"}
+          </Badge>
+        </div>
+        <Card className="mt-3 border p-4 shadow-sm">
+          {dataState === "unavailable" ? (
+            <p className="text-sm text-red-700">
+              Não foi possível confirmar o estado atual da operação. Tente
+              novamente antes de tomar uma decisão.
+            </p>
+          ) : data.alerts.length === 0 ? (
+            <p className="text-sm text-[var(--bbos-state-success)]">
+              Nenhuma exceção foi identificada pelos indicadores disponíveis
+              neste período.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {data.alerts.slice(0, 3).map((alert) => (
+                <div
+                  key={alert.id}
+                  className="flex items-center justify-between gap-3 border-b border-[var(--bbos-border)] pb-3 last:border-0 last:pb-0"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">{alert.title}</p>
+                    <p className="mt-1 text-xs text-[var(--bbos-text-secondary)]">
+                      {alert.description}
+                    </p>
+                  </div>
                   <Link
                     href={
-                      alert.area === "Estoque"
-                        ? "/estoque"
-                        : alert.area === "Produção"
-                          ? "/producao"
-                          : "/recebimento"
+                      alert.area === "Financeiro"
+                        ? "/financeiro/receber"
+                        : alert.area === "Estoque"
+                          ? "/estoque"
+                          : alert.area === "Produção"
+                            ? "/producao"
+                            : "/recebimento"
                     }
-                    className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-coffee-300"
+                    className="text-xs font-bold text-[var(--bbos-action-primary)]"
                   >
-                    {alert.area === "Estoque"
-                      ? "Ver estoque"
-                      : alert.area === "Produção"
-                        ? "Ver produção"
-                        : "Analisar"}
-                    <ChevronRight size={10} />
+                    Analisar <ChevronRight size={12} className="inline" />
                   </Link>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
       </section>
-      <section className="order-5 mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Link href="/producao">
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Factory size={16} className="text-[#7065a8]" />
-                <h2 className="text-sm font-bold">Performance Industrial</h2>
-              </div>
-              <ChevronRight size={14} className="text-stone-300" />
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <CompactStat
-                label="Eficiência"
-                value={`${number.format(v3.industrial.efficiencyPercent)}%`}
-                status="on-track"
-              />
-              <CompactStat
-                label="Perda de torra"
-                value={`${number.format(v3.industrial.roastLossPercent)}%`}
-                status="attention"
-              />
-              <CompactStat
-                label="Custo real/kg"
-                value={currency.format(v3.industrial.realCostPerKg)}
-              />
-              <CompactStat
-                label="OPs em andamento"
-                value={String(v3.industrial.workOrdersInProgress)}
-              />
-            </div>
-            <p className="mt-3 text-[10px] font-semibold text-red-700">
-              {v3.industrial.delayedWorkOrders} OP atrasada
-            </p>
-          </Card>
-        </Link>
-        <Link href="/estoque">
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Warehouse size={16} className="text-coffee-700" />
-                <h2 className="text-sm font-bold">Estoque / Suprimentos</h2>
-              </div>
-              <ChevronRight size={14} className="text-stone-300" />
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <CompactStat
-                label="Café verde"
-                value={`${number.format(v3.inventory.greenCoffeeAvailableKg)} kg`}
-              />
-              <CompactStat
-                label="Produto acabado"
-                value={`${number.format(v3.inventory.finishedGoodsUnits)} kg`}
-              />
-              <CompactStat
-                label="Cobertura total"
-                value={`${v3.inventory.coverageDays} dias`}
-                status="attention"
-              />
-              <CompactStat
-                label="Embalagens críticas"
-                value={String(v3.logistics.criticalPackaging)}
-                status="off-track"
-              />
-            </div>
-          </Card>
-        </Link>
-        <Link href="/recebimento">
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Truck size={16} className="text-[#4d7b82]" />
-                <h2 className="text-sm font-bold">Logística</h2>
-              </div>
-              <Badge tone="neutral">Demo</Badge>
-            </div>
-            <div className="mt-4 space-y-3">
-              <CompactStat
-                label="Containers em trânsito"
-                value={String(v3.logistics.containersInTransit)}
-              />
-              <CompactStat
-                label="Próximas chegadas"
-                value={`${v3.logistics.nextArrivals} dias`}
-              />
-              <CompactStat
-                label="Compras em aberto"
-                value={currency.format(v3.logistics.openPurchases)}
-              />
-            </div>
-            <p className="mt-3 text-[9px] text-stone-400">
-              Dados mock preparados para futura API.
-            </p>
-          </Card>
-        </Link>
-        <button
-          onClick={() => setSalesMapOpen(true)}
-          className="h-full text-left"
-        >
-          <Card className="group h-full border-0 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users size={16} className="text-forest-700" />
-                <h2 className="text-sm font-bold">Top Clientes</h2>
-              </div>
-              <ChevronRight size={14} className="text-stone-300" />
-            </div>
-            <Ranking items={v3.topCustomers.slice(0, 3)} kind="customer" />
-            <span className="mt-3 inline-flex items-center gap-1 text-[10px] font-bold text-forest-700">
-              Abrir ranking <ChevronRight size={10} />
-            </span>
-          </Card>
-        </button>
+      <section className="order-5 mt-5 grid gap-4 lg:grid-cols-2">
+        <RevenueChart
+          period={period}
+          dashboard={data}
+          onOpen={() => setCommercialOpen(true)}
+        />
+        <SalesMapCard
+          root={data.salesMap}
+          onOpen={() => setSalesMapOpen(true)}
+        />
       </section>
-      </>}
-      <section className="order-2 mt-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
-        { label: "Receita", value: metrics[0]?.value ?? "Sem dados", supporting: metrics[0]?.supportingText ?? "Aguardando dados do período", icon: CircleDollarSign },
-        { label: "Lucro líquido", value: metrics[1]?.value ?? "Sem dados", supporting: metrics[2]?.value && metrics[2].value !== "Sem dados" ? `Margem ${metrics[2].value}` : "Resultado disponível após os primeiros custos", icon: Banknote },
-        { label: "ROI", value: data.roi.current ? `${number.format(data.roi.current)}%` : "Sem dados", supporting: data.roi.current ? `Meta ${number.format(data.roi.target)}%` : "Aguardando base real para comparação", icon: Percent },
-        { label: metrics[3]?.label ?? "Financeiro", value: metrics[3]?.value ?? "Sem dados", supporting: metrics[3]?.supportingText ?? "Aguardando movimentações reais", icon: CircleDollarSign },
-      ].map((item) => { const Icon = item.icon; return <Card key={item.label} className="min-h-[142px] border p-5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-[var(--bbos-text-secondary)]">{item.label}</p><p className="mt-3 text-3xl font-bold tracking-tight text-[var(--bbos-text-primary)]">{item.value}</p><p className="mt-2 text-xs text-[var(--bbos-text-secondary)]">{item.supporting}</p></div><span className="grid size-9 place-items-center rounded-xl bg-[var(--bbos-surface-subtle)] text-[var(--bbos-action-primary)]"><Icon size={17} aria-hidden="true" /></span></div></Card>; })}</div></section>
-      <section className="order-3 mt-4 rounded-2xl border border-[var(--bbos-info-border)] bg-[var(--bbos-info-soft)]/50 p-4"><div className="flex items-center gap-2"><Gauge size={16} className="text-[var(--bbos-state-information)]" /><h2 className="text-sm font-bold">Pulso da operação</h2><span className="text-xs text-[var(--bbos-text-muted)]">dados do período selecionado</span></div><div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Link href="/vendas" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Vendas</p><p className="mt-1 text-lg font-bold">{metrics[0]?.value ?? "Sem dados"}</p></Link><Link href="/pedidos" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Pedidos</p><p className="mt-1 text-lg font-bold">{metrics[6]?.value ?? "Sem dados"}</p></Link><Link href="/producao" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Produção</p><p className="mt-1 text-lg font-bold">{metrics[4]?.value ?? "Sem dados"}</p></Link><Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-elevated)] p-3"><p className="text-xs text-[var(--bbos-text-secondary)]">Estoque + cobertura</p><p className="mt-1 text-lg font-bold">{metrics[5]?.value ?? "Sem dados"}</p><p className="text-[11px] text-[var(--bbos-text-muted)]">Cobertura: aguardando dados reais</p></Link></div></section>
-      <section id="atencao-executiva" className="order-4 mt-4"><div className="flex items-center gap-2"><Lightbulb size={16} className="text-[var(--bbos-state-attention)]" /><h2 className="text-sm font-bold">O que merece sua atenção</h2><Badge tone={dataState === "unavailable" || data.alerts.length ? "warning" : "success"}>{dataState === "unavailable" ? "!" : data.alerts.length ? data.alerts.length : "✓"}</Badge></div><Card className="mt-3 border p-4 shadow-sm">{dataState === "unavailable" ? <p className="text-sm text-red-700">Não foi possível confirmar o estado atual da operação. Tente novamente antes de tomar uma decisão.</p> : data.alerts.length === 0 ? <p className="text-sm text-[var(--bbos-state-success)]">Nenhuma exceção foi identificada pelos indicadores disponíveis neste período.</p> : <div className="space-y-3">{data.alerts.slice(0, 3).map((alert) => <div key={alert.id} className="flex items-center justify-between gap-3 border-b border-[var(--bbos-border)] pb-3 last:border-0 last:pb-0"><div><p className="text-sm font-semibold">{alert.title}</p><p className="mt-1 text-xs text-[var(--bbos-text-secondary)]">{alert.description}</p></div><Link href={alert.area === "Financeiro" ? "/financeiro/receber" : alert.area === "Estoque" ? "/estoque" : alert.area === "Produção" ? "/producao" : "/recebimento"} className="text-xs font-bold text-[var(--bbos-action-primary)]">Analisar <ChevronRight size={12} className="inline" /></Link></div>)}</div>}</Card></section>
-      <section className="order-5 mt-5 grid gap-4 lg:grid-cols-2"><RevenueChart period={period} dashboard={data} onOpen={() => setCommercialOpen(true)} /><SalesMapCard onOpen={() => setSalesMapOpen(true)} /></section><section className="order-6 mt-4"><CashFlowChart /></section>
+      <section className="order-6 mt-4">
+        <CashFlowChart />
+      </section>
       <section className="hidden" aria-hidden="true">
         <SectionHeading
           eyebrow="Performance Industrial"
@@ -1667,7 +2115,9 @@ export default function DashboardPage() {
                         {insight.impact}
                       </p>
                       <p className="mt-1 text-[10px] leading-4 text-[#626B69]">
-                        <strong className="text-[#111514]">Recomendação:</strong>{" "}
+                        <strong className="text-[#111514]">
+                          Recomendação:
+                        </strong>{" "}
                         {insight.recommendation}
                       </p>
                       <Link

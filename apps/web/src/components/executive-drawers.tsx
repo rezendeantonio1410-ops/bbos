@@ -23,7 +23,11 @@ import type {
   ResultProjection,
   SalesMapNode,
 } from "@bbos/shared";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  BrazilSalesPanel,
+  type BrazilStateSalesInput,
+} from "./brazil-sales-map";
 
 const currency = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -610,16 +614,56 @@ export function CommercialDetailDrawer({
   );
 }
 
-function StatusPill({ status }: { status: PerformanceStatus }) {
+function StatusPill({
+  status,
+  hasTarget = true,
+}: {
+  status: PerformanceStatus;
+  hasTarget?: boolean;
+}) {
   const style = statusStyle[status];
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${style.bg} ${style.text}`}
     >
-      {style.label}
+      {hasTarget
+        ? style.label
+        : status === "on-track"
+          ? "Dados reais"
+          : "Sem dados"}
     </span>
   );
 }
+
+const normalizeGeography = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+const findSalesMapTrail = (
+  root: SalesMapNode,
+  predicate: (node: SalesMapNode) => boolean,
+  trail: SalesMapNode[] = [],
+): SalesMapNode[] | null => {
+  const nextTrail = [...trail, root];
+  if (predicate(root)) return nextTrail;
+  for (const child of root.children ?? []) {
+    const match = findSalesMapTrail(child, predicate, nextTrail);
+    if (match) return match;
+  }
+  return null;
+};
+
+const collectSalesMapNodes = (
+  root: SalesMapNode,
+  level: SalesMapNode["level"],
+): SalesMapNode[] => [
+  ...(root.level === level ? [root] : []),
+  ...(root.children ?? []).flatMap((child) =>
+    collectSalesMapNodes(child, level),
+  ),
+];
 
 export function SalesMapDrawer({
   root,
@@ -630,10 +674,50 @@ export function SalesMapDrawer({
 }) {
   const [trail, setTrail] = useState<SalesMapNode[]>([root]);
   const current = trail[trail.length - 1]!;
+  useEffect(() => setTrail([root]), [root]);
   const openNode = (node: SalesMapNode) =>
     setTrail((previous) => [...previous, node]);
   const goTo = (index: number) =>
     setTrail((previous) => previous.slice(0, index + 1));
+  const brazilTrail = useMemo(
+    () =>
+      findSalesMapTrail(
+        root,
+        (node) => node.level === "country" && node.code === "BR",
+      ),
+    [root],
+  );
+  const brazil = brazilTrail?.[brazilTrail.length - 1];
+  const brazilStates = useMemo<BrazilStateSalesInput[]>(
+    () =>
+      brazil
+        ? collectSalesMapNodes(brazil, "state")
+            .filter((node) => node.code && node.code !== "NI")
+            .map((node) => ({
+              stateCode: node.code!,
+              revenue: node.revenue,
+              volumeKg: node.volumeKg,
+              target: node.target,
+              achievement: node.attainment,
+              marginPercent: node.marginPercent,
+              growthPercent: node.growthPercent,
+              customers: node.customerCount ?? 0,
+              status: node.status,
+              hasMargin: node.hasMargin,
+              hasTarget: node.hasTarget,
+              hasPreviousPeriod: node.hasPreviousPeriod,
+            }))
+        : [],
+    [brazil],
+  );
+  const showBrazilMap =
+    Boolean(brazil) &&
+    (current.level === "world" ||
+      (current.level === "country" && current.code === "BR"));
+  const goToNode = (predicate: (node: SalesMapNode) => boolean) => {
+    const nextTrail = findSalesMapTrail(root, predicate);
+    if (nextTrail) setTrail(nextTrail);
+  };
   return (
     <DrawerFrame
       title="Mapa de Vendas"
@@ -660,8 +744,31 @@ export function SalesMapDrawer({
             </span>
           ))}
         </div>
+        {showBrazilMap && (
+          <div className="mt-5 overflow-hidden rounded-2xl border bg-white">
+            <BrazilSalesPanel
+              stateSales={brazilStates}
+              detailsHref={false}
+              compact
+              onStateClick={(state) =>
+                goToNode(
+                  (node) =>
+                    node.level === "state" && node.code === state.stateCode,
+                )
+              }
+              onRegionClick={(region) =>
+                goToNode(
+                  (node) =>
+                    node.level === "region" &&
+                    normalizeGeography(node.name) ===
+                      normalizeGeography(region),
+                )
+              }
+            />
+          </div>
+        )}
         <div
-          className={`mt-5 rounded-2xl border p-5 ${current.status === "off-track" ? "border-red-200 bg-red-50/40" : "bg-stone-50"}`}
+          className={`mt-5 rounded-2xl border p-5 ${current.hasTarget && current.status === "off-track" ? "border-red-200 bg-red-50/40" : "bg-stone-50"}`}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -671,15 +778,20 @@ export function SalesMapDrawer({
               </div>
               <h3 className="mt-2 text-xl font-bold">{current.name}</h3>
             </div>
-            <StatusPill status={current.status} />
+            <StatusPill
+              status={current.status}
+              hasTarget={current.hasTarget !== false}
+            />
           </div>
-          {current.status !== "on-track" && (
-            <div className="mt-4 rounded-xl bg-white p-3 text-xs text-red-700">
-              <strong>Impacto geográfico:</strong>{" "}
-              {currency.format(current.revenue - current.target)} abaixo da meta
-              deste nível.
-            </div>
-          )}
+          {current.hasTarget &&
+            current.target > 0 &&
+            current.status !== "on-track" && (
+              <div className="mt-4 rounded-xl bg-white p-3 text-xs text-red-700">
+                <strong>Impacto geográfico:</strong>{" "}
+                {currency.format(Math.max(0, current.target - current.revenue))}{" "}
+                abaixo da meta deste nível.
+              </div>
+            )}
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <p className="text-[10px] uppercase text-stone-400">
@@ -698,7 +810,9 @@ export function SalesMapDrawer({
             <div>
               <p className="text-[10px] uppercase text-stone-400">Margem</p>
               <p className="mt-1 text-sm font-bold">
-                {number.format(current.marginPercent)}%
+                {current.hasMargin === false
+                  ? "Não disponível"
+                  : `${number.format(current.marginPercent)}%`}
               </p>
             </div>
             <div>
@@ -713,21 +827,29 @@ export function SalesMapDrawer({
               <p className="text-[10px] uppercase text-stone-400">
                 Crescimento
               </p>
-              <p
-                className={`mt-1 flex items-center text-sm font-bold ${current.growthPercent >= 0 ? "text-emerald-700" : "text-red-700"}`}
-              >
-                {current.growthPercent >= 0 ? (
-                  <ArrowUpRight size={14} />
-                ) : (
-                  <ArrowDownRight size={14} />
-                )}
-                {number.format(Math.abs(current.growthPercent))}%
-              </p>
+              {current.hasPreviousPeriod === false ? (
+                <p className="mt-1 text-sm font-bold text-stone-500">
+                  Sem base anterior
+                </p>
+              ) : (
+                <p
+                  className={`mt-1 flex items-center text-sm font-bold ${current.growthPercent >= 0 ? "text-emerald-700" : "text-red-700"}`}
+                >
+                  {current.growthPercent >= 0 ? (
+                    <ArrowUpRight size={14} />
+                  ) : (
+                    <ArrowDownRight size={14} />
+                  )}
+                  {number.format(Math.abs(current.growthPercent))}%
+                </p>
+              )}
             </div>
             <div>
               <p className="text-[10px] uppercase text-stone-400">Meta</p>
               <p className="mt-1 text-sm font-bold">
-                {currency.format(current.target)}
+                {current.hasTarget === false
+                  ? "Não definida"
+                  : currency.format(current.target)}
               </p>
             </div>
             <div>
@@ -737,7 +859,21 @@ export function SalesMapDrawer({
               <p
                 className={`mt-1 text-sm font-bold ${statusStyle[current.status].text}`}
               >
-                {number.format(current.attainment)}%
+                {current.hasTarget === false
+                  ? "—"
+                  : `${number.format(current.attainment)}%`}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-stone-400">Pedidos</p>
+              <p className="mt-1 text-sm font-bold">
+                {current.orderCount ?? 0}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-stone-400">Clientes</p>
+              <p className="mt-1 text-sm font-bold">
+                {current.customerCount ?? 0}
               </p>
             </div>
           </div>
@@ -761,7 +897,7 @@ export function SalesMapDrawer({
                 <button
                   key={node.id}
                   onClick={() => openNode(node)}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition hover:bg-stone-50 ${node.status === "off-track" ? "border-red-200" : ""}`}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition hover:bg-stone-50 ${node.hasTarget && node.status === "off-track" ? "border-red-200" : ""}`}
                 >
                   <span
                     className={`grid size-9 shrink-0 place-items-center rounded-xl ${statusStyle[node.status].bg} ${statusStyle[node.status].text}`}
@@ -773,12 +909,15 @@ export function SalesMapDrawer({
                       <p className="truncate text-sm font-semibold">
                         {node.name}
                       </p>
-                      <StatusPill status={node.status} />
+                      <StatusPill
+                        status={node.status}
+                        hasTarget={node.hasTarget !== false}
+                      />
                     </div>
                     <p className="mt-1 text-xs text-stone-400">
                       {currency.format(node.revenue)} •{" "}
-                      {number.format(node.attainment)}% da meta • margem{" "}
-                      {number.format(node.marginPercent)}%
+                      {number.format(node.salesShare)}% de participação •{" "}
+                      {node.orderCount ?? 0} pedido(s)
                     </p>
                   </div>
                   <ChevronRight size={16} className="text-stone-300" />
@@ -791,7 +930,7 @@ export function SalesMapDrawer({
                 Nível {levelLabels[current.level]} selecionado
               </p>
               <p className="mt-1 text-xs text-stone-400">
-                Não há registros subordinados neste dado demonstrativo.
+                Não há registros subordinados neste período.
               </p>
             </div>
           )}

@@ -40,7 +40,8 @@
     "test:sales-order-export-fiscal-policy": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-export-fiscal-policy.test.ts",
     "test:international-sample-policy": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/international-sample-policy.test.ts ../../apps/api/src/sales-order-export-fiscal-policy.test.ts",
     "test:mobile-push": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/mobile-push.test.ts",
-    "test:sales-order-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-billing.test.ts ../../apps/api/src/sales-order-receivable.test.ts"
+    "test:sales-order-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-billing.test.ts ../../apps/api/src/sales-order-receivable.test.ts",
+    "test:sales-map": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-map.test.ts"
   },
   "dependencies": {
     "@bbos/database": "workspace:*",

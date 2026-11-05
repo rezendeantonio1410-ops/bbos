@@ -70,6 +70,7 @@ export type SalesMapLevel =
 export type SalesMapNode = {
   id: string;
   level: SalesMapLevel;
+  code?: string;
   name: string;
   revenue: number;
   volumeKg: number;
@@ -79,6 +80,11 @@ export type SalesMapNode = {
   attainment: number;
   salesShare: number;
   status: PerformanceStatus;
+  orderCount?: number;
+  customerCount?: number;
+  hasMargin?: boolean;
+  hasTarget?: boolean;
+  hasPreviousPeriod?: boolean;
   children?: SalesMapNode[];
 };
 
