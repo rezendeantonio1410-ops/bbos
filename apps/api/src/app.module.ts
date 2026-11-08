@@ -41,6 +41,10 @@ import { BlingWebhookController } from "./integrations/bling/bling-webhook.contr
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
 import { ProductionRequirementsController } from "./production-requirements.controller";
+import {
+  OrderPackagingController,
+  OrderPackagingService,
+} from "./order-packaging.controller";
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -118,6 +122,7 @@ import { MobileNotificationService } from "./mobile-notification.service";
     OperationsFlowController,
     OperationsFlowActionsController,
     ProductionRequirementsController,
+    OrderPackagingController,
     BrokersController,
     CustomersController,
     CuppingController,
@@ -144,6 +149,7 @@ import { MobileNotificationService } from "./mobile-notification.service";
     ProductsService,
     ProductsRepository,
     ProductionService,
+    OrderPackagingService,
     SalesOrdersService,
     CostingService,
     FinanceService,

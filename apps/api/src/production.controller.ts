@@ -13,9 +13,11 @@ import { randomUUID } from "node:crypto";
 import {
   CostType,
   EventType,
+  InventoryReservationStatus,
   Prisma,
   ProductionPriority,
   ProductionStatus,
+  SalesOrderStatus,
 } from "@bbos/database";
 import {
   allocateRoastStageCosts,
@@ -37,7 +39,8 @@ import {
 
 type CreateOrderBody = {
   code: string;
-  productVariantId: string;
+  productId?: string;
+  productVariantId?: string;
   productName?: string;
   sku?: string;
   plannedWeightKg: number;
@@ -83,11 +86,13 @@ type CompleteOrderBody = {
   suppliesCost: number;
   otherIndustrialCosts: number;
   standardCostPerKg: number;
+  salesOrderItemId?: string;
 };
 type CompleteWipPackagingBody = {
   idempotencyKey?: string;
   productVariantId?: string;
   producedPackages?: number;
+  salesOrderItemId?: string;
 };
 type CalculateV2Body = RealProductionCostInput & {
   periodCode: string;
@@ -100,6 +105,141 @@ export class ProductionController {
     private readonly production: ProductionService,
     private readonly auth: AuthService,
   ) {}
+
+  private async requirePackagingDemand(
+    transaction: Prisma.TransactionClient,
+    companyId: string,
+    salesOrderItemId: string | undefined,
+    productVariantId: string,
+    finishedProductId: string,
+    producedPackages: number,
+  ) {
+    const itemId = String(salesOrderItemId ?? "").trim();
+    if (!itemId)
+      throw new BadRequestException(
+        "Selecione o pedido que autorizou este empacotamento.",
+      );
+    const item = await transaction.salesOrderItem.findFirst({
+      where: {
+        id: itemId,
+        companyId,
+        productVariantId,
+        salesOrder: {
+          companyId,
+          status: {
+            in: [SalesOrderStatus.CONFIRMED, SalesOrderStatus.IN_PRODUCTION],
+          },
+        },
+      },
+      include: {
+        salesOrder: { include: { customer: true, items: true } },
+        reservations: { where: { status: InventoryReservationStatus.ACTIVE } },
+      },
+    });
+    if (!item)
+      throw new BadRequestException(
+        "O item selecionado não está aguardando embalagem para este SKU.",
+      );
+    const activeReserved = item.reservations.reduce(
+      (sum, reservation) => sum + reservation.quantity,
+      0,
+    );
+    if (activeReserved > 0)
+      throw new BadRequestException(
+        "Este item já possui uma reserva de produto acabado e requer conferência antes de produzir.",
+      );
+    const balanceRows = await transaction.$queryRaw<
+      Array<{ quantityOnHand: number; reservedQuantity: number }>
+    >`
+      SELECT "quantityOnHand", "reservedQuantity"
+        FROM "FinishedProduct"
+       WHERE id = ${finishedProductId} AND "companyId" = ${companyId}
+       FOR UPDATE
+    `;
+    const balance = balanceRows[0];
+    if (!balance)
+      throw new BadRequestException("Saldo de produto acabado não encontrado.");
+    const availableUnits = Math.max(
+      0,
+      Number(balance.quantityOnHand) - Number(balance.reservedQuantity),
+    );
+    const requiredPackages = Math.max(
+      0,
+      item.quantity - activeReserved - availableUnits,
+    );
+    if (requiredPackages <= 0)
+      throw new BadRequestException(
+        "Já existe produto acabado disponível para este pedido. Faça apenas a reserva do estoque.",
+      );
+    if (producedPackages !== requiredPackages)
+      throw new BadRequestException(
+        `Este pedido precisa de ${requiredPackages.toLocaleString("pt-BR")} pacote(s). O BBOS não permite empacotar quantidade excedente sem outro pedido.`,
+      );
+    return { item, activeReserved, availableUnits, requiredPackages };
+  }
+
+  private async reservePackagedOrderItem(
+    transaction: Prisma.TransactionClient,
+    demand: Awaited<ReturnType<ProductionController["requirePackagingDemand"]>>,
+    finishedProductId: string,
+    warehouseId: string,
+  ) {
+    const { item } = demand;
+    const previousReservation =
+      await transaction.inventoryReservation.findUnique({
+        where: { salesOrderItemId: item.id },
+      });
+    if (previousReservation?.status === InventoryReservationStatus.CONSUMED)
+      throw new BadRequestException(
+        "A reserva deste item já foi consumida e não pode ser recriada.",
+      );
+    await transaction.finishedProduct.update({
+      where: { id: finishedProductId },
+      data: { reservedQuantity: { increment: item.quantity } },
+    });
+    const reservation = previousReservation
+      ? await transaction.inventoryReservation.update({
+          where: { id: previousReservation.id },
+          data: {
+            productVariantId: item.productVariantId,
+            finishedProductId,
+            warehouseId,
+            quantity: item.quantity,
+            status: InventoryReservationStatus.ACTIVE,
+            releasedAt: null,
+            consumedAt: null,
+          },
+        })
+      : await transaction.inventoryReservation.create({
+          data: {
+            companyId: item.companyId,
+            salesOrderId: item.salesOrderId,
+            salesOrderItemId: item.id,
+            productVariantId: item.productVariantId,
+            finishedProductId,
+            warehouseId,
+            quantity: item.quantity,
+            status: InventoryReservationStatus.ACTIVE,
+            idempotencyKey: `SALES_RESERVATION:${item.id}`,
+          },
+        });
+    const activeReservations = await transaction.inventoryReservation.count({
+      where: {
+        salesOrderId: item.salesOrderId,
+        status: InventoryReservationStatus.ACTIVE,
+      },
+    });
+    await transaction.salesOrder.update({
+      where: { id: item.salesOrderId },
+      data: {
+        status:
+          activeReservations >= item.salesOrder.items.length
+            ? SalesOrderStatus.RESERVED
+            : SalesOrderStatus.IN_PRODUCTION,
+      },
+    });
+    return reservation;
+  }
 
   @Post("orders/:id/cost-v2")
   calculateAndSnapshotV2(
@@ -227,12 +367,16 @@ export class ProductionController {
         Array<{
           productionOrderId: string;
           availableKg: Prisma.Decimal;
+          reservedKg: Prisma.Decimal;
+          physicalKg: Prisma.Decimal;
           availableCost: Prisma.Decimal;
         }>
       >`
         SELECT
           "productionOrderId",
-          COALESCE(SUM("availableKg"), 0) AS "availableKg",
+          COALESCE(SUM("availableKg"), 0) AS "physicalKg",
+          COALESCE(SUM("reservedKg"), 0) AS "reservedKg",
+          COALESCE(SUM(GREATEST("availableKg"-"reservedKg",0)), 0) AS "availableKg",
           COALESCE(SUM("availableCost"), 0) AS "availableCost"
         FROM "RoastedWipLot"
         WHERE "companyId" = ${actor.companyId}
@@ -248,6 +392,8 @@ export class ProductionController {
       return {
         ...order,
         wipAvailableKg: Number(wip?.availableKg ?? 0),
+        wipPhysicalKg: Number(wip?.physicalKg ?? 0),
+        wipReservedKg: Number(wip?.reservedKg ?? 0),
         wipAvailableCost: Number(wip?.availableCost ?? 0),
       };
     });
@@ -303,6 +449,67 @@ export class ProductionController {
       }),
     ]);
     return { warehouses, resources, users };
+  }
+
+  @Get("orders/:id/packaging-demand")
+  async packagingDemand(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const order = await this.production.database.productionOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true, productVariant: { select: { productId: true } } },
+    });
+    if (!order)
+      throw new NotFoundException("Ordem de produção não encontrada.");
+    if (!order.productVariant)
+      throw new BadRequestException(
+        "A OP precisa estar vinculada a um perfil de produto.",
+      );
+    return this.production.database.$queryRawUnsafe<any[]>(
+      `WITH active_reservations AS (
+         SELECT "salesOrderItemId",SUM(quantity)::int AS reserved
+           FROM "InventoryReservation"
+          WHERE "companyId"=$1 AND status='ACTIVE'
+          GROUP BY "salesOrderItemId"
+       ), stock AS (
+         SELECT "productVariantId",SUM("quantityOnHand"-"reservedQuantity")::int AS available
+           FROM "FinishedProduct"
+          WHERE "companyId"=$1
+          GROUP BY "productVariantId"
+       ), open_items AS (
+         SELECT soi.id AS "salesOrderItemId",so.id AS "salesOrderId",
+                COALESCE(so."orderNumber",so.code) AS "orderNumber",so."orderedAt",
+                c.name AS "customerName",soi."productVariantId",soi.sku,soi."productName",
+                pv."netWeightGrams",soi.quantity,
+                COALESCE(ar.reserved,0)::int AS "reservedUnits",
+                COALESCE(st.available,0)::int AS "availableFinishedUnits",
+                GREATEST(soi.quantity-COALESCE(ar.reserved,0),0)::int AS "openUnits"
+           FROM "SalesOrderItem" soi
+           JOIN "SalesOrder" so ON so.id=soi."salesOrderId"
+           JOIN "Customer" c ON c.id=so."customerId"
+           JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+           LEFT JOIN active_reservations ar ON ar."salesOrderItemId"=soi.id
+           LEFT JOIN stock st ON st."productVariantId"=soi."productVariantId"
+          WHERE so."companyId"=$1
+            AND so.status::text IN ('CONFIRMED','IN_PRODUCTION')
+            AND pv."productId"=$2
+       ), allocated AS (
+         SELECT open_items.*,
+                COALESCE(SUM("openUnits") OVER (
+                  PARTITION BY "productVariantId"
+                  ORDER BY "orderedAt","salesOrderItemId"
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ),0)::int AS "priorDemand"
+           FROM open_items
+       )
+       SELECT *,
+              GREATEST(0,"openUnits"-GREATEST(0,"availableFinishedUnits"-"priorDemand"))::int AS "requiredPackages",
+              ROUND((GREATEST(0,"openUnits"-GREATEST(0,"availableFinishedUnits"-"priorDemand"))*"netWeightGrams")::numeric/1000,3) AS "requiredKg"
+         FROM allocated
+        WHERE GREATEST(0,"openUnits"-GREATEST(0,"availableFinishedUnits"-"priorDemand")) > 0
+        ORDER BY "orderedAt","orderNumber","productName"`,
+      actor.companyId,
+      order.productVariant.productId,
+    );
   }
 
   @Get("orders/:id")
@@ -409,10 +616,17 @@ export class ProductionController {
       throw new BadRequestException("Um lote não pode ser duplicado na OP.");
     return this.production.database.$transaction(
       async (transaction) => {
-        const variant = await this.production.requireActiveVariant(
-          transaction,
-          body.productVariantId,
-        );
+        const variant = body.productId
+          ? (
+              await this.production.requireProductionProduct(
+                transaction,
+                body.productId,
+              )
+            ).variant
+          : await this.production.requireActiveVariant(
+              transaction,
+              body.productVariantId,
+            );
         const companyId = variant.product.productLine.companyId;
         if (companyId !== actor.companyId)
           throw new BadRequestException(
@@ -946,6 +1160,18 @@ export class ProductionController {
           throw new BadRequestException(
             "O saldo de produto acabado não corresponde ao SKU da OP.",
           );
+        if (!officialVariant)
+          throw new BadRequestException(
+            "O empacotamento por pedido exige um SKU oficial ativo.",
+          );
+        const packagingDemand = await this.requirePackagingDemand(
+          transaction,
+          actor.companyId,
+          body.salesOrderItemId,
+          officialVariant.id,
+          finishedProduct.id,
+          body.producedPackages,
+        );
         const updatedBalance = await transaction.finishedProduct.update({
           where: { id: finishedProduct.id },
           data: {
@@ -954,10 +1180,19 @@ export class ProductionController {
               finishedProduct.productVariantId ?? officialVariant?.id,
           },
         });
+        const reservation = await this.reservePackagedOrderItem(
+          transaction,
+          packagingDemand,
+          finishedProduct.id,
+          warehouse.id,
+        );
         const movement = await transaction.finishedGoodsMovement.create({
           data: {
             companyId: order.companyId,
             productionOrderId: id,
+            salesOrderId: packagingDemand.item.salesOrderId,
+            salesOrderItemId: packagingDemand.item.id,
+            reservationId: reservation.id,
             productVariantId: officialVariant?.id,
             finishedProductId: finishedProduct.id,
             warehouseId: warehouse.id,
@@ -965,10 +1200,10 @@ export class ProductionController {
             packageQuantity: body.producedPackages,
             unit: "UN",
             totalWeightKg: body.finishedOutputKg,
-            sourceType: "PRODUCTION_ORDER",
-            sourceId: order.id,
+            sourceType: "SALES_ORDER_PACKAGING",
+            sourceId: packagingDemand.item.salesOrderId,
             idempotencyKey,
-            reason: `Conclusão da ${order.code}`,
+            reason: `Empacotamento da ${order.code} para o pedido ${packagingDemand.item.salesOrder.orderNumber ?? packagingDemand.item.salesOrder.code}`,
           },
         });
         const roastCostPerKg = new Prisma.Decimal(
@@ -1086,16 +1321,20 @@ export class ProductionController {
             completedAt: new Date(),
           },
         });
+        const finalBalance =
+          await transaction.finishedProduct.findUniqueOrThrow({
+            where: { id: updatedBalance.id },
+          });
         return {
           orderId: id,
           movementId: movement.id,
           productVariantId: officialVariant?.id,
           idempotent: false,
           balance: {
-            physicalUnits: updatedBalance.quantityOnHand,
-            reservedUnits: updatedBalance.reservedQuantity,
+            physicalUnits: finalBalance.quantityOnHand,
+            reservedUnits: finalBalance.reservedQuantity,
             availableUnits:
-              updatedBalance.quantityOnHand - updatedBalance.reservedQuantity,
+              finalBalance.quantityOnHand - finalBalance.reservedQuantity,
           },
           cost,
           utilities: automaticUtilities,
@@ -1308,6 +1547,14 @@ export class ProductionController {
             },
           });
         }
+        const packagingDemand = await this.requirePackagingDemand(
+          transaction,
+          actor.companyId,
+          body.salesOrderItemId,
+          targetVariant.id,
+          targetFinishedProduct.id,
+          packagingPlan.producedPackages,
+        );
         const updatedBalance = await transaction.finishedProduct.update({
           where: { id: targetFinishedProduct.id },
           data: {
@@ -1316,10 +1563,19 @@ export class ProductionController {
             },
           },
         });
+        const reservation = await this.reservePackagedOrderItem(
+          transaction,
+          packagingDemand,
+          targetFinishedProduct.id,
+          sourceMovement.warehouseId,
+        );
         const movement = await transaction.finishedGoodsMovement.create({
           data: {
             companyId: order.companyId,
             productionOrderId: order.id,
+            salesOrderId: packagingDemand.item.salesOrderId,
+            salesOrderItemId: packagingDemand.item.id,
+            reservationId: reservation.id,
             productVariantId: targetVariant.id,
             finishedProductId: targetFinishedProduct.id,
             warehouseId: sourceMovement.warehouseId,
@@ -1327,10 +1583,10 @@ export class ProductionController {
             packageQuantity: packagingPlan.producedPackages,
             unit: "UN",
             totalWeightKg: packagingPlan.finishedOutputKg,
-            sourceType: "PRODUCTION_ORDER_WIP",
-            sourceId: order.id,
+            sourceType: "SALES_ORDER_WIP_PACKAGING",
+            sourceId: packagingDemand.item.salesOrderId,
             idempotencyKey,
-            reason: `Empacotamento do saldo WIP da ${order.code} em ${targetVariant.netWeightGrams} g`,
+            reason: `Empacotamento do saldo WIP da ${order.code} para o pedido ${packagingDemand.item.salesOrder.orderNumber ?? packagingDemand.item.salesOrder.code}`,
           },
         });
 
@@ -1344,6 +1600,10 @@ export class ProductionController {
           data: { actualOutputKg: totalFinishedOutputKg },
         });
 
+        const finalBalance =
+          await transaction.finishedProduct.findUniqueOrThrow({
+            where: { id: updatedBalance.id },
+          });
         return {
           orderId: order.id,
           movementId: movement.id,
@@ -1355,10 +1615,10 @@ export class ProductionController {
           producedPackages: packagingPlan.producedPackages,
           packagingCost,
           balance: {
-            physicalUnits: updatedBalance.quantityOnHand,
-            reservedUnits: updatedBalance.reservedQuantity,
+            physicalUnits: finalBalance.quantityOnHand,
+            reservedUnits: finalBalance.reservedQuantity,
             availableUnits:
-              updatedBalance.quantityOnHand - updatedBalance.reservedQuantity,
+              finalBalance.quantityOnHand - finalBalance.reservedQuantity,
           },
         };
       },

@@ -25,3 +25,17 @@ test("erros da criação aparecem dentro do assistente, sem ficarem atrás do mo
   );
   assert.match(productionPage, /role="alert"/);
 });
+
+test("a nova OP é criada por linha e perfil, sem escolher embalagem", () => {
+  assert.match(productionPage, /Linha e perfil/);
+  assert.match(productionPage, /Café \/ Perfil/);
+  assert.doesNotMatch(productionPage, /SKU \/ Apresentação/);
+  assert.match(productionPage, /productId: order\.productId/);
+  assert.match(productionPage, /ficará no estoque a granel/);
+});
+
+test("Private Label fica no pedido e não aparece como perfil de torra", () => {
+  assert.match(productionPage, /normalizedName\.includes\("white label"\)/);
+  assert.match(productionPage, /normalizedName\.includes\("private label"\)/);
+  assert.match(productionPage, /products\.filter\(isProductionProfile\)/);
+});

@@ -443,6 +443,8 @@ model Company {
   financialAccounts         FinancialAccount[]
   salesChannels             SalesChannel[]
   productPrices             ProductPrice[]
+  customerProductPrices     CustomerProductPrice[]
+  customerPriceEvents       CustomerProductPriceEvent[]
   accountsReceivable        AccountsReceivable[]
   accountsPayable           AccountsPayable[]
   financialTransactions     FinancialTransaction[]
@@ -745,6 +747,7 @@ model Customer {
   reconciliationItems   ReconciliationItem[]
   storefrontPartners    StorefrontPartnerCustomer[]
   visits                CustomerVisit[]
+  productPrices         CustomerProductPrice[]
   createdAt             DateTime                    @default(now())
   updatedAt             DateTime                    @updatedAt
 
@@ -1873,6 +1876,7 @@ model ProductVariant {
   inventoryReservations  InventoryReservation[]
   costEvents             CostEvent[]
   channelPrices          ProductPrice[]
+  customerPrices         CustomerProductPrice[]
 
   @@unique([productId, netWeightGrams])
   @@index([productId, active])
@@ -1924,12 +1928,56 @@ model ProductPrice {
   minimumPrice               Decimal?       @db.Decimal(14, 2)
   minimumMarginPercent       Decimal?       @db.Decimal(7, 3)
   minimumRoiPercent          Decimal?       @db.Decimal(7, 3)
+  salesOrderItems            SalesOrderItem[] @relation("SalesOrderItemBasePrice")
   createdAt                  DateTime       @default(now())
   updatedAt                  DateTime       @updatedAt
 
   @@unique([productVariantId, salesChannelId, currency, validFrom])
   @@index([companyId, salesChannelId, active])
   @@index([productVariantId, active])
+}
+
+model CustomerProductPrice {
+  id               String                      @id @default(cuid())
+  companyId        String
+  company          Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId       String
+  customer         Customer                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productVariantId String
+  productVariant   ProductVariant              @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  currency         String                      @default("BRL") @db.VarChar(3)
+  price            Decimal                     @db.Decimal(14, 2)
+  active           Boolean                     @default(true)
+  validFrom        DateTime?
+  validUntil       DateTime?
+  notes            String?
+  createdByName    String?
+  salesOrderItems  SalesOrderItem[]
+  events           CustomerProductPriceEvent[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@unique([customerId, productVariantId, currency])
+  @@index([companyId, customerId, active])
+  @@index([productVariantId, active])
+}
+
+model CustomerProductPriceEvent {
+  id                     String               @id @default(cuid())
+  companyId              String
+  company                Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerProductPriceId String
+  customerProductPrice   CustomerProductPrice @relation(fields: [customerProductPriceId], references: [id], onDelete: Cascade)
+  actorId                String?
+  actorName              String
+  actorRole              String
+  action                 String               @db.VarChar(20)
+  beforeSnapshot         Json?
+  afterSnapshot          Json
+  createdAt              DateTime             @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([customerProductPriceId, createdAt])
 }
 
 model SalesOrder {
@@ -2269,6 +2317,12 @@ model SalesOrderItem {
   unitPrice              Decimal                 @db.Decimal(14, 2)
   discount               Decimal                 @default(0) @db.Decimal(14, 2)
   totalAmount            Decimal                 @db.Decimal(14, 2)
+  pricingSource          String                  @default("CHANNEL") @db.VarChar(20)
+  baseProductPriceId     String?
+  baseProductPrice       ProductPrice?           @relation("SalesOrderItemBasePrice", fields: [baseProductPriceId], references: [id], onDelete: SetNull)
+  customerProductPriceId String?
+  customerProductPrice   CustomerProductPrice?   @relation(fields: [customerProductPriceId], references: [id], onDelete: SetNull)
+  priceSnapshot          Json?
   reservations           InventoryReservation[]
   finishedGoodsMovements FinishedGoodsMovement[]
   createdAt              DateTime                @default(now())
@@ -2276,6 +2330,8 @@ model SalesOrderItem {
 
   @@index([salesOrderId])
   @@index([productVariantId])
+  @@index([baseProductPriceId])
+  @@index([customerProductPriceId])
 }
 
 model InventoryReservation {

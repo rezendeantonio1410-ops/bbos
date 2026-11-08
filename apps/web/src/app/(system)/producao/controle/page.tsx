@@ -1,41 +1,573 @@
 "use client";
-import { useEffect,useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 
-type Wip={id:string;code:string;productionOrderCode:string;productName:string;sku:string;availableKg:number;producedKg:number;costPerKg?:number|null;availableCost?:number|null;status:string;producedAt:string};
-type Lot={id:string;code:string;name:string;sku:string;warehouse:string;quantityOnHand:number;initialUnits:number;status:string;manufacturedAt:string;expiresAt?:string|null;productionOrderCode?:string|null};
-type Pack={id:string;name:string;sku?:string|null;category:string;unit:string;tracked:boolean;minimumStock:number;targetStock:number;onHand:number;reserved:number;available:number};
-type Demand={productVariantId:string;name:string;sku:string;netWeightGrams:number;uncoveredDemand:number;available:number;minimumUnits:number;targetUnits:number;safetyUnits:number;recommendedUnits:number};
-type Req={id:string;name:string;sku:string;netWeightGrams:number;recommendedUnits:number;uncoveredDemand:number;availableUnits:number;targetUnits:number;status:string;createdAt:string;createdByName?:string|null};
-export default function ProductionControl(){
- const [wip,setWip]=useState<Wip[]>([]),[lots,setLots]=useState<Lot[]>([]),[pack,setPack]=useState<Pack[]>([]),[demand,setDemand]=useState<Demand[]>([]),[requirements,setRequirements]=useState<Req[]>([]),[message,setMessage]=useState("");
- const root=getApiBaseUrl();
- const load=()=>{void Promise.all([
-  fetch(`${root}/operations-flow/wip`,{credentials:"include"}).then(x=>x.ok?x.json():[]),
-  fetch(`${root}/operations-flow/finished-lots`,{credentials:"include"}).then(x=>x.ok?x.json():[]),
-  fetch(`${root}/operations-flow/packaging`,{credentials:"include"}).then(x=>x.ok?x.json():[]),
-  fetch(`${root}/operations-flow/demand`,{credentials:"include"}).then(x=>x.ok?x.json():[]),
-  fetch(`${root}/production-requirements`,{credentials:"include"}).then(x=>x.ok?x.json():[])
- ]).then(([a,b,c,d,e])=>{setWip(a);setLots(b);setPack(c);setDemand(d);setRequirements(e)}).catch(()=>{});};
- useEffect(load,[]);
- const post=async(url:string,body:unknown,method="POST")=>{const r=await fetch(`${root}${url}`,{method,credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p.message??"Falha na operação");return p;};
- const stockIn=async(m:Pack)=>{const q=Number(window.prompt(`Entrada de ${m.name}: quantidade`));if(!Number.isFinite(q)||q<=0)return;const cost=Number(window.prompt("Custo unitário (opcional)")||0);await post(`/operations-flow/packaging/${m.id}/stock-in`,{quantity:q,unitCost:cost,reason:"Entrada manual pelo controle industrial"});setMessage("Entrada registrada.");load();};
- const configure=async(m:Pack)=>{const min=Number(window.prompt("Estoque mínimo",String(m.minimumStock??0)));const target=Number(window.prompt("Estoque alvo",String(m.targetStock??0)));if(!Number.isFinite(min)||!Number.isFinite(target)||min<0||target<0)return;await post(`/operations-flow/packaging/${m.id}/configure`,{tracked:true,minimumStock:min,targetStock:target},"PATCH");setMessage("Controle do insumo ativado.");load();};
- const setExpiry=async(l:Lot)=>{const value=window.prompt(`Validade do lote ${l.code} (AAAA-MM-DD)`,l.expiresAt?l.expiresAt.slice(0,10):"");if(!value)return;await post(`/operations-flow/finished-lots/${l.id}/expiry`,{expiresAt:`${value}T12:00:00`},"PATCH");setMessage("Validade atualizada.");load();};
- const plan=async(d:Demand)=>{await post(`/operations-flow/demand/${d.productVariantId}/requirement`,{recommendedUnits:d.recommendedUnits,uncoveredDemand:d.uncoveredDemand,availableUnits:d.available,targetUnits:Math.max(d.targetUnits,d.minimumUnits)+d.safetyUnits});setMessage(`Necessidade de ${d.recommendedUnits} un. enviada ao planejamento.`);load();};
- const policy=async(d:Demand)=>{const min=Number(window.prompt("Estoque mínimo",String(d.minimumUnits)));const target=Number(window.prompt("Estoque alvo",String(d.targetUnits)));const safety=Number(window.prompt("Estoque de segurança",String(d.safetyUnits)));if([min,target,safety].some(x=>!Number.isSafeInteger(x)||x<0))return;await post(`/operations-flow/stock-policy/${d.productVariantId}`,{minimumUnits:min,targetUnits:target,safetyUnits:safety});setMessage("Política de estoque atualizada.");load();};
- return <div className="mx-auto max-w-[1400px] space-y-8">
-  <header><p className="text-xs font-bold uppercase tracking-[.14em] text-amber-700">Produção · controle industrial</p><h1 className="mt-2 text-3xl font-bold">Do torrador ao pacote</h1><p className="mt-2 text-sm text-stone-500">Demanda, WIP, insumos e lotes PA em uma única linha operacional.</p>{message&&<p className="mt-3 text-sm font-semibold text-forest-700">{message}</p>}</header>
+type Wip = {
+  id: string;
+  code: string;
+  productionOrderCode: string;
+  productName: string;
+  sku: string;
+  availableKg: number;
+  reservedKg: number;
+  allocatableKg: number;
+  producedKg: number;
+  costPerKg?: number | null;
+  availableCost?: number | null;
+  status: string;
+  producedAt: string;
+};
+type Lot = {
+  id: string;
+  code: string;
+  name: string;
+  sku: string;
+  warehouse: string;
+  quantityOnHand: number;
+  initialUnits: number;
+  status: string;
+  manufacturedAt: string;
+  expiresAt?: string | null;
+  productionOrderCode?: string | null;
+};
+type Pack = {
+  id: string;
+  name: string;
+  sku?: string | null;
+  category: string;
+  unit: string;
+  tracked: boolean;
+  minimumStock: number;
+  targetStock: number;
+  onHand: number;
+  reserved: number;
+  available: number;
+};
+type Demand = {
+  productVariantId: string;
+  name: string;
+  sku: string;
+  netWeightGrams: number;
+  uncoveredDemand: number;
+  available: number;
+  minimumUnits: number;
+  targetUnits: number;
+  safetyUnits: number;
+  recommendedUnits: number;
+};
+type Req = {
+  id: string;
+  name: string;
+  sku: string;
+  netWeightGrams: number;
+  recommendedUnits: number;
+  uncoveredDemand: number;
+  availableUnits: number;
+  targetUnits: number;
+  status: string;
+  createdAt: string;
+  createdByName?: string | null;
+};
+type PackagingTask = {
+  id: string;
+  status: "PENDING" | "PARTIAL" | "RESERVED";
+  salesOrderId: string;
+  orderNumber: string;
+  customerName: string;
+  productName: string;
+  sku: string;
+  packageWeightG: number;
+  packageQuantity: number;
+  requestedKg: number;
+  reservedKg: number;
+  fullyReserved: boolean;
+  reference: string;
+};
+export default function ProductionControl() {
+  const [wip, setWip] = useState<Wip[]>([]),
+    [lots, setLots] = useState<Lot[]>([]),
+    [pack, setPack] = useState<Pack[]>([]),
+    [demand, setDemand] = useState<Demand[]>([]),
+    [requirements, setRequirements] = useState<Req[]>([]),
+    [tasks, setTasks] = useState<PackagingTask[]>([]),
+    [message, setMessage] = useState("");
+  const root = getApiBaseUrl();
+  const load = () => {
+    void Promise.all([
+      fetch(`${root}/operations-flow/wip`, { credentials: "include" }).then(
+        (x) => (x.ok ? x.json() : []),
+      ),
+      fetch(`${root}/operations-flow/finished-lots`, {
+        credentials: "include",
+      }).then((x) => (x.ok ? x.json() : [])),
+      fetch(`${root}/operations-flow/packaging`, {
+        credentials: "include",
+      }).then((x) => (x.ok ? x.json() : [])),
+      fetch(`${root}/operations-flow/demand`, { credentials: "include" }).then(
+        (x) => (x.ok ? x.json() : []),
+      ),
+      fetch(`${root}/production-requirements`, { credentials: "include" }).then(
+        (x) => (x.ok ? x.json() : []),
+      ),
+      fetch(`${root}/production/bulk-reservations`, {
+        credentials: "include",
+      }).then((x) => (x.ok ? x.json() : [])),
+    ])
+      .then(([a, b, c, d, e, f]) => {
+        setWip(a);
+        setLots(b);
+        setPack(c);
+        setDemand(d);
+        setRequirements(e);
+        setTasks(f);
+      })
+      .catch(() => {});
+  };
+  useEffect(load, []);
+  const post = async (url: string, body: unknown, method = "POST") => {
+    const r = await fetch(`${root}${url}`, {
+      method,
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const p = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(p.message ?? "Falha na operação");
+    return p;
+  };
+  const stockIn = async (m: Pack) => {
+    const q = Number(window.prompt(`Entrada de ${m.name}: quantidade`));
+    if (!Number.isFinite(q) || q <= 0) return;
+    const cost = Number(window.prompt("Custo unitário (opcional)") || 0);
+    await post(`/operations-flow/packaging/${m.id}/stock-in`, {
+      quantity: q,
+      unitCost: cost,
+      reason: "Entrada manual pelo controle industrial",
+    });
+    setMessage("Entrada registrada.");
+    load();
+  };
+  const configure = async (m: Pack) => {
+    const min = Number(
+      window.prompt("Estoque mínimo", String(m.minimumStock ?? 0)),
+    );
+    const target = Number(
+      window.prompt("Estoque alvo", String(m.targetStock ?? 0)),
+    );
+    if (
+      !Number.isFinite(min) ||
+      !Number.isFinite(target) ||
+      min < 0 ||
+      target < 0
+    )
+      return;
+    await post(
+      `/operations-flow/packaging/${m.id}/configure`,
+      { tracked: true, minimumStock: min, targetStock: target },
+      "PATCH",
+    );
+    setMessage("Controle do insumo ativado.");
+    load();
+  };
+  const setExpiry = async (l: Lot) => {
+    const value = window.prompt(
+      `Validade do lote ${l.code} (AAAA-MM-DD)`,
+      l.expiresAt ? l.expiresAt.slice(0, 10) : "",
+    );
+    if (!value) return;
+    await post(
+      `/operations-flow/finished-lots/${l.id}/expiry`,
+      { expiresAt: `${value}T12:00:00` },
+      "PATCH",
+    );
+    setMessage("Validade atualizada.");
+    load();
+  };
+  const plan = async (d: Demand) => {
+    await post(`/operations-flow/demand/${d.productVariantId}/requirement`, {
+      recommendedUnits: d.recommendedUnits,
+      uncoveredDemand: d.uncoveredDemand,
+      availableUnits: d.available,
+      targetUnits: Math.max(d.targetUnits, d.minimumUnits) + d.safetyUnits,
+    });
+    setMessage(
+      `Necessidade de ${d.recommendedUnits} un. enviada ao planejamento.`,
+    );
+    load();
+  };
+  const policy = async (d: Demand) => {
+    const min = Number(window.prompt("Estoque mínimo", String(d.minimumUnits)));
+    const target = Number(window.prompt("Estoque alvo", String(d.targetUnits)));
+    const safety = Number(
+      window.prompt("Estoque de segurança", String(d.safetyUnits)),
+    );
+    if ([min, target, safety].some((x) => !Number.isSafeInteger(x) || x < 0))
+      return;
+    await post(`/operations-flow/stock-policy/${d.productVariantId}`, {
+      minimumUnits: min,
+      targetUnits: target,
+      safetyUnits: safety,
+    });
+    setMessage("Política de estoque atualizada.");
+    load();
+  };
+  return (
+    <div className="mx-auto max-w-[1400px] space-y-8">
+      <header>
+        <p className="text-xs font-bold uppercase tracking-[.14em] text-amber-700">
+          Produção · controle industrial
+        </p>
+        <h1 className="mt-2 text-3xl font-bold">Do torrador ao pacote</h1>
+        <p className="mt-2 text-sm text-stone-500">
+          Demanda, WIP, insumos e lotes PA em uma única linha operacional.
+        </p>
+        {message && (
+          <p className="mt-3 text-sm font-semibold text-forest-700">
+            {message}
+          </p>
+        )}
+      </header>
 
-  <section><h2 className="mb-3 text-sm font-bold">Produção recomendada</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{demand.filter(x=>x.recommendedUnits>0).map(x=><Card key={x.productVariantId} className="p-4"><div className="flex justify-between gap-4"><div><p className="font-bold">{x.name} · {x.netWeightGrams} g</p><p className="text-xs text-stone-500">{x.sku}</p></div><strong className="text-lg text-amber-700">{x.recommendedUnits} un.</strong></div><div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-stone-500"><span>Demanda<br/><b className="text-stone-800">{x.uncoveredDemand}</b></span><span>Disponível<br/><b className="text-stone-800">{x.available}</b></span><span>Alvo<br/><b className="text-stone-800">{Math.max(x.targetUnits,x.minimumUnits)+x.safetyUnits}</b></span></div><div className="mt-4 flex gap-2"><button onClick={()=>void plan(x)} className="rounded-lg bg-forest-900 px-3 py-2 text-[11px] font-bold text-white">Planejar</button><button onClick={()=>void policy(x)} className="rounded-lg border px-3 py-2 text-[11px] font-bold">Política</button></div></Card>)}</div>{!demand.some(x=>x.recommendedUnits>0)&&<p className="text-sm text-stone-500">Nenhuma necessidade adicional de produção calculada.</p>}</section>
+      <section>
+        <div className="mb-3">
+          <h2 className="text-sm font-bold">
+            Reservas dos pedidos no café torrado a granel
+          </h2>
+          <p className="text-xs text-stone-500">
+            O pedido calcula a necessidade em quilos, mas o café continua a
+            granel. Nenhuma embalagem ou produto acabado é criado nesta etapa.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {tasks.map((task) => (
+            <Card key={task.id} className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-forest-700">
+                    PEDIDO {task.orderNumber}
+                  </p>
+                  <p className="mt-1 font-bold">{task.customerName}</p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    {task.productName} · {task.sku}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-1 text-[10px] font-bold ${task.fullyReserved ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}
+                >
+                  {task.fullyReserved ? "Granel reservado" : "Aguardando torra"}
+                </span>
+              </div>
+              <p className="mt-4 text-lg font-bold">{task.reference}</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Reserva em café torrado a granel:{" "}
+                {Number(task.requestedKg).toLocaleString("pt-BR", {
+                  maximumFractionDigits: 3,
+                })}{" "}
+                kg
+              </p>
+              {task.fullyReserved ? (
+                <p className="mt-4 text-xs font-semibold text-emerald-700">
+                  O saldo está separado para o pedido e permanece fisicamente a
+                  granel.
+                </p>
+              ) : (
+                <p className="mt-4 text-xs font-semibold text-amber-700">
+                  Faltam{" "}
+                  {Math.max(
+                    0,
+                    task.requestedKg - task.reservedKg,
+                  ).toLocaleString("pt-BR", { maximumFractionDigits: 3 })}{" "}
+                  kg de café torrado.
+                </p>
+              )}
+            </Card>
+          ))}
+        </div>
+        {!tasks.length && (
+          <p className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+            Nenhuma reserva de pedido está consumindo o estoque a granel neste
+            momento.
+          </p>
+        )}
+      </section>
 
-  <section><h2 className="mb-3 text-sm font-bold">Necessidades abertas</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{requirements.map(x=><Card key={x.id} className="p-4"><div className="flex justify-between gap-3"><div><p className="font-bold">{x.name} · {x.netWeightGrams} g</p><p className="text-xs text-stone-500">{x.sku} · {x.status}</p></div><strong>{x.recommendedUnits} un.</strong></div><p className="mt-3 text-[10px] text-stone-500">Demanda descoberta {x.uncoveredDemand} · disponível {x.availableUnits} · alvo {x.targetUnits}</p><p className="mt-2 text-[10px] text-stone-400">Criado por {x.createdByName||"BBOS"} em {new Date(x.createdAt).toLocaleString("pt-BR")}</p></Card>)}</div>{!requirements.length&&<p className="text-sm text-stone-500">Nenhuma necessidade aguardando planejamento.</p>}</section>
+      <section>
+        <h2 className="mb-3 text-sm font-bold">Produção recomendada</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {demand
+            .filter((x) => x.recommendedUnits > 0)
+            .map((x) => (
+              <Card key={x.productVariantId} className="p-4">
+                <div className="flex justify-between gap-4">
+                  <div>
+                    <p className="font-bold">
+                      {x.name} · {x.netWeightGrams} g
+                    </p>
+                    <p className="text-xs text-stone-500">{x.sku}</p>
+                  </div>
+                  <strong className="text-lg text-amber-700">
+                    {x.recommendedUnits} un.
+                  </strong>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-stone-500">
+                  <span>
+                    Demanda
+                    <br />
+                    <b className="text-stone-800">{x.uncoveredDemand}</b>
+                  </span>
+                  <span>
+                    Disponível
+                    <br />
+                    <b className="text-stone-800">{x.available}</b>
+                  </span>
+                  <span>
+                    Alvo
+                    <br />
+                    <b className="text-stone-800">
+                      {Math.max(x.targetUnits, x.minimumUnits) + x.safetyUnits}
+                    </b>
+                  </span>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => void plan(x)}
+                    className="rounded-lg bg-forest-900 px-3 py-2 text-[11px] font-bold text-white"
+                  >
+                    Planejar
+                  </button>
+                  <button
+                    onClick={() => void policy(x)}
+                    className="rounded-lg border px-3 py-2 text-[11px] font-bold"
+                  >
+                    Política
+                  </button>
+                </div>
+              </Card>
+            ))}
+        </div>
+        {!demand.some((x) => x.recommendedUnits > 0) && (
+          <p className="text-sm text-stone-500">
+            Nenhuma necessidade adicional de produção calculada.
+          </p>
+        )}
+      </section>
 
-  <section><h2 className="mb-3 text-sm font-bold">WIP torrado</h2><div className="grid gap-3 md:grid-cols-2">{wip.map(x=><Card key={x.id} className="p-4"><div className="flex justify-between gap-4"><div><p className="font-bold">{x.code}</p><p className="text-xs text-stone-500">{x.productionOrderCode} · {x.productName} · {x.sku}</p></div><div className="text-right"><strong>{Number(x.availableKg).toLocaleString("pt-BR",{maximumFractionDigits:2})} kg</strong>{x.availableCost!=null&&<p className="mt-1 text-xs font-semibold text-emerald-700">{Number(x.availableCost).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</p>}</div></div>{x.costPerKg!=null&&<p className="mt-3 text-[11px] text-stone-500">Custo em processo: {Number(x.costPerKg).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/kg</p>}<p className="mt-2 text-[10px] uppercase text-stone-400">Produzido {new Date(x.producedAt).toLocaleDateString("pt-BR")} · {x.status}</p></Card>)}</div>{!wip.length&&<p className="text-sm text-stone-500">Nenhum café torrado aguardando embalagem.</p>}</section>
+      <section>
+        <h2 className="mb-3 text-sm font-bold">Necessidades abertas</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {requirements.map((x) => (
+            <Card key={x.id} className="p-4">
+              <div className="flex justify-between gap-3">
+                <div>
+                  <p className="font-bold">
+                    {x.name} · {x.netWeightGrams} g
+                  </p>
+                  <p className="text-xs text-stone-500">
+                    {x.sku} · {x.status}
+                  </p>
+                </div>
+                <strong>{x.recommendedUnits} un.</strong>
+              </div>
+              <p className="mt-3 text-[10px] text-stone-500">
+                Demanda descoberta {x.uncoveredDemand} · disponível{" "}
+                {x.availableUnits} · alvo {x.targetUnits}
+              </p>
+              <p className="mt-2 text-[10px] text-stone-400">
+                Criado por {x.createdByName || "BBOS"} em{" "}
+                {new Date(x.createdAt).toLocaleString("pt-BR")}
+              </p>
+            </Card>
+          ))}
+        </div>
+        {!requirements.length && (
+          <p className="text-sm text-stone-500">
+            Nenhuma necessidade aguardando planejamento.
+          </p>
+        )}
+      </section>
 
-  <section><div className="mb-3"><h2 className="text-sm font-bold">Embalagens e insumos</h2><p className="text-xs text-stone-500">Após ativado, o controle impede consumo acima do saldo disponível.</p></div><div className="overflow-hidden rounded-2xl border bg-white"><div className="grid grid-cols-[1.4fr_.7fr_.7fr_.7fr_1fr] bg-stone-50 px-4 py-3 text-[10px] font-bold uppercase text-stone-500"><span>Material</span><span>Saldo</span><span>Mínimo</span><span>Controle</span><span>Ação</span></div>{pack.map(x=><div key={x.id} className="grid grid-cols-[1.4fr_.7fr_.7fr_.7fr_1fr] items-center border-t px-4 py-3 text-xs"><span><b>{x.name}</b><br/><em className="not-italic text-stone-500">{x.sku||x.category}</em></span><span className={x.tracked&&x.available<=Number(x.minimumStock)?"font-bold text-red-700":"font-semibold"}>{Number(x.available).toLocaleString("pt-BR")} {x.unit}</span><span>{Number(x.minimumStock).toLocaleString("pt-BR")}</span><span>{x.tracked?"Ativo":"Preparação"}</span><span className="flex gap-1"><button onClick={()=>void stockIn(x)} className="rounded-lg border px-2 py-1.5 font-semibold">Entrada</button><button onClick={()=>void configure(x)} className="rounded-lg border px-2 py-1.5 font-semibold">Configurar</button></span></div>)}</div>{!pack.length&&<p className="mt-3 text-sm text-stone-500">Os materiais aparecerão aqui conforme forem usados nas OPs.</p>}</section>
+      <section>
+        <h2 className="mb-3 text-sm font-bold">
+          Estoque de café torrado em kg
+        </h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          {wip.map((x) => (
+            <Card key={x.id} className="p-4">
+              <div className="flex justify-between gap-4">
+                <div>
+                  <p className="font-bold">{x.code}</p>
+                  <p className="text-xs text-stone-500">
+                    {x.productionOrderCode} · {x.productName} · {x.sku}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <strong>
+                    {Number(x.availableKg).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    kg físicos
+                  </strong>
+                  {x.availableCost != null && (
+                    <p className="mt-1 text-xs font-semibold text-emerald-700">
+                      {Number(x.availableCost).toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-stone-50 p-3 text-xs">
+                <span>
+                  Reservado por pedidos
+                  <br />
+                  <b>
+                    {Number(x.reservedKg ?? 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 3,
+                    })}{" "}
+                    kg
+                  </b>
+                </span>
+                <span>
+                  Livre para novos pedidos
+                  <br />
+                  <b className="text-emerald-700">
+                    {Number(x.allocatableKg ?? x.availableKg).toLocaleString(
+                      "pt-BR",
+                      { maximumFractionDigits: 3 },
+                    )}{" "}
+                    kg
+                  </b>
+                </span>
+              </div>
+              {x.costPerKg != null && (
+                <p className="mt-3 text-[11px] text-stone-500">
+                  Custo em processo:{" "}
+                  {Number(x.costPerKg).toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  })}
+                  /kg
+                </p>
+              )}
+              <p className="mt-2 text-[10px] uppercase text-stone-400">
+                Produzido {new Date(x.producedAt).toLocaleDateString("pt-BR")} ·{" "}
+                {x.status}
+              </p>
+            </Card>
+          ))}
+        </div>
+        {!wip.length && (
+          <p className="text-sm text-stone-500">
+            Nenhum café torrado aguardando embalagem.
+          </p>
+        )}
+      </section>
 
-  <section><h2 className="mb-3 text-sm font-bold">Lotes de produto acabado</h2><div className="overflow-hidden rounded-2xl border bg-white"><div className="grid grid-cols-[1.2fr_1fr_.7fr_.7fr_1fr] bg-stone-50 px-4 py-3 text-[10px] font-bold uppercase text-stone-500"><span>Lote / produto</span><span>OP / armazém</span><span>Inicial</span><span>Saldo</span><span>Validade</span></div>{lots.map(x=><div key={x.id} className="grid grid-cols-[1.2fr_1fr_.7fr_.7fr_1fr] items-center border-t px-4 py-3 text-xs"><span><b>{x.code}</b><br/><em className="not-italic text-stone-500">{x.name} · {x.sku}</em></span><span>{x.productionOrderCode??"Legado"}<br/><em className="not-italic text-stone-500">{x.warehouse}</em></span><span>{x.initialUnits}</span><span>{x.quantityOnHand}</span><button onClick={()=>void setExpiry(x)} className={`text-left ${x.expiresAt?"":"font-semibold text-amber-700"}`}>{x.expiresAt?new Date(x.expiresAt).toLocaleDateString("pt-BR"):"Definir validade"}</button></div>)}</div></section>
- </div>;
+      <section>
+        <div className="mb-3">
+          <h2 className="text-sm font-bold">Embalagens e insumos</h2>
+          <p className="text-xs text-stone-500">
+            Após ativado, o controle impede consumo acima do saldo disponível.
+          </p>
+        </div>
+        <div className="overflow-hidden rounded-2xl border bg-white">
+          <div className="grid grid-cols-[1.4fr_.7fr_.7fr_.7fr_1fr] bg-stone-50 px-4 py-3 text-[10px] font-bold uppercase text-stone-500">
+            <span>Material</span>
+            <span>Saldo</span>
+            <span>Mínimo</span>
+            <span>Controle</span>
+            <span>Ação</span>
+          </div>
+          {pack.map((x) => (
+            <div
+              key={x.id}
+              className="grid grid-cols-[1.4fr_.7fr_.7fr_.7fr_1fr] items-center border-t px-4 py-3 text-xs"
+            >
+              <span>
+                <b>{x.name}</b>
+                <br />
+                <em className="not-italic text-stone-500">
+                  {x.sku || x.category}
+                </em>
+              </span>
+              <span
+                className={
+                  x.tracked && x.available <= Number(x.minimumStock)
+                    ? "font-bold text-red-700"
+                    : "font-semibold"
+                }
+              >
+                {Number(x.available).toLocaleString("pt-BR")} {x.unit}
+              </span>
+              <span>{Number(x.minimumStock).toLocaleString("pt-BR")}</span>
+              <span>{x.tracked ? "Ativo" : "Preparação"}</span>
+              <span className="flex gap-1">
+                <button
+                  onClick={() => void stockIn(x)}
+                  className="rounded-lg border px-2 py-1.5 font-semibold"
+                >
+                  Entrada
+                </button>
+                <button
+                  onClick={() => void configure(x)}
+                  className="rounded-lg border px-2 py-1.5 font-semibold"
+                >
+                  Configurar
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+        {!pack.length && (
+          <p className="mt-3 text-sm text-stone-500">
+            Os materiais aparecerão aqui conforme forem usados nas OPs.
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-bold">Lotes de produto acabado</h2>
+        <div className="overflow-hidden rounded-2xl border bg-white">
+          <div className="grid grid-cols-[1.2fr_1fr_.7fr_.7fr_1fr] bg-stone-50 px-4 py-3 text-[10px] font-bold uppercase text-stone-500">
+            <span>Lote / produto</span>
+            <span>OP / armazém</span>
+            <span>Inicial</span>
+            <span>Saldo</span>
+            <span>Validade</span>
+          </div>
+          {lots.map((x) => (
+            <div
+              key={x.id}
+              className="grid grid-cols-[1.2fr_1fr_.7fr_.7fr_1fr] items-center border-t px-4 py-3 text-xs"
+            >
+              <span>
+                <b>{x.code}</b>
+                <br />
+                <em className="not-italic text-stone-500">
+                  {x.name} · {x.sku}
+                </em>
+              </span>
+              <span>
+                {x.productionOrderCode ?? "Legado"}
+                <br />
+                <em className="not-italic text-stone-500">{x.warehouse}</em>
+              </span>
+              <span>{x.initialUnits}</span>
+              <span>{x.quantityOnHand}</span>
+              <button
+                onClick={() => void setExpiry(x)}
+                className={`text-left ${x.expiresAt ? "" : "font-semibold text-amber-700"}`}
+              >
+                {x.expiresAt
+                  ? new Date(x.expiresAt).toLocaleDateString("pt-BR")
+                  : "Definir validade"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }

@@ -108,6 +108,8 @@ type CustomerHealth = {
 
 type Quote = {
   officialUnitPrice: number;
+  channelUnitPrice: number;
+  pricingSource: "CUSTOMER" | "CHANNEL";
   currency: string;
   salesChannelName: string;
   salesChannelType: string;
@@ -1810,7 +1812,9 @@ function NewOrder({
                         {selectedVariant.line} · estoque disponível{" "}
                         {selectedVariant.availableStock} pacote(s)
                         {lineQuote
-                          ? ` · tabela ${lineQuote.salesChannelName}`
+                          ? lineQuote.pricingSource === "CUSTOMER"
+                            ? ` · preço negociado para este cliente`
+                            : ` · tabela ${lineQuote.salesChannelName}`
                           : ""}
                       </p>
                     )}

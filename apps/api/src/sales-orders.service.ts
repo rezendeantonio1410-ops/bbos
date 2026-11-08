@@ -4,6 +4,7 @@ import {
   NotFoundException,
   type OnModuleDestroy,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import {
   FinishedGoodsMovementType,
   InventoryReservationStatus,
@@ -54,6 +55,10 @@ export type CreateSalesOrderInput = {
     warehouseId: string;
     quantity: number;
     unitPrice: number;
+    pricingSource?: "CHANNEL" | "CUSTOMER" | "SAMPLE";
+    baseProductPriceId?: string;
+    customerProductPriceId?: string | null;
+    priceSnapshot?: Record<string, unknown>;
   }>;
 };
 
@@ -71,6 +76,175 @@ export class SalesOrdersService implements OnModuleDestroy {
   constructor(
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
+
+  private async allocateRoastedWipForOrder(
+    transaction: Prisma.TransactionClient,
+    companyId: string,
+    salesOrderId: string,
+  ) {
+    const items = await transaction.$queryRawUnsafe<any[]>(
+      `WITH item_stock AS (
+         SELECT soi.id,soi.quantity,soi."productVariantId",pv."netWeightGrams",pv."productId",
+                COALESCE((
+                  SELECT MAX(fp."quantityOnHand"-fp."reservedQuantity")
+                    FROM "FinishedProduct" fp
+                   WHERE fp."companyId"=$1 AND fp."productVariantId"=soi."productVariantId"
+                ),0)::int AS "finishedAvailable"
+           FROM "SalesOrderItem" soi
+           JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+          WHERE soi."salesOrderId"=$2 AND soi."companyId"=$1
+       ), distributed AS (
+         SELECT item_stock.*,
+                COALESCE(SUM(quantity) OVER (
+                  PARTITION BY "productVariantId"
+                  ORDER BY id
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ),0)::int AS "priorDemand"
+           FROM item_stock
+       )
+       SELECT id,quantity,"productVariantId","netWeightGrams","productId",
+              GREATEST(0,"finishedAvailable"-"priorDemand")::int AS "finishedAvailable"
+         FROM distributed
+        ORDER BY id`,
+      companyId,
+      salesOrderId,
+    );
+    for (const item of items) {
+      const packageQuantity = Math.max(
+        0,
+        Number(item.quantity) - Number(item.finishedAvailable ?? 0),
+      );
+      if (packageQuantity <= 0) continue;
+      const requestedKg = Number(
+        ((packageQuantity * Number(item.netWeightGrams)) / 1000).toFixed(3),
+      );
+      const existingRows = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "RoastedWipReservation"
+          WHERE "salesOrderItemId"=$1 FOR UPDATE`,
+        item.id,
+      );
+      let reservation = existingRows[0];
+      if (!reservation) {
+        const created = await transaction.$queryRawUnsafe<any[]>(
+          `INSERT INTO "RoastedWipReservation"
+            (id,"companyId","salesOrderId","salesOrderItemId","productVariantId","packageQuantity","requestedKg","reservedKg",status,"createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,0,'PENDING',NOW(),NOW())
+           RETURNING *`,
+          randomUUID(),
+          companyId,
+          salesOrderId,
+          item.id,
+          item.productVariantId,
+          packageQuantity,
+          requestedKg,
+        );
+        reservation = created[0];
+      }
+      if (!["PENDING", "PARTIAL"].includes(String(reservation.status)))
+        continue;
+      let remainingKg = Math.max(
+        0,
+        Number(reservation.requestedKg) - Number(reservation.reservedKg),
+      );
+      if (remainingKg <= 0.0005) continue;
+      const lots = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT w.id,(w."availableKg"-w."reservedKg")::float AS available
+           FROM "RoastedWipLot" w
+           JOIN "ProductVariant" source_variant ON source_variant.id=w."productVariantId"
+          WHERE w."companyId"=$1
+            AND source_variant."productId"=$2
+            AND w.status IN ('AVAILABLE','PARTIALLY_PACKED')
+            AND w."availableKg"-w."reservedKg">0.0005
+          ORDER BY w."producedAt",w.id
+          FOR UPDATE OF w`,
+        companyId,
+        item.productId,
+      );
+      let allocatedKg = 0;
+      for (const lot of lots) {
+        if (remainingKg <= 0.0005) break;
+        const takeKg = Number(
+          Math.min(Number(lot.available), remainingKg).toFixed(3),
+        );
+        if (takeKg <= 0) continue;
+        await transaction.$executeRawUnsafe(
+          `UPDATE "RoastedWipLot"
+              SET "reservedKg"="reservedKg"+$2,"updatedAt"=NOW()
+            WHERE id=$1`,
+          lot.id,
+          takeKg,
+        );
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "RoastedWipReservationAllocation"
+            (id,"companyId","reservationId","wipLotId","quantityKg","consumedKg","createdAt")
+           VALUES ($1,$2,$3,$4,$5,0,NOW())
+           ON CONFLICT ("reservationId","wipLotId") DO UPDATE
+             SET "quantityKg"="RoastedWipReservationAllocation"."quantityKg"+EXCLUDED."quantityKg"`,
+          randomUUID(),
+          companyId,
+          reservation.id,
+          lot.id,
+          takeKg,
+        );
+        allocatedKg += takeKg;
+        remainingKg = Number((remainingKg - takeKg).toFixed(3));
+      }
+      const totalReservedKg = Number(
+        (Number(reservation.reservedKg) + allocatedKg).toFixed(3),
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "RoastedWipReservation"
+            SET "reservedKg"=$2,
+                status=CASE
+                  WHEN $2 >= "requestedKg"-0.0005 THEN 'RESERVED'
+                  WHEN $2 > 0 THEN 'PARTIAL'
+                  ELSE 'PENDING'
+                END,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        reservation.id,
+        totalReservedKg,
+      );
+    }
+  }
+
+  private async releaseRoastedWipForOrder(
+    transaction: Prisma.TransactionClient,
+    companyId: string,
+    salesOrderId: string,
+  ) {
+    const allocations = await transaction.$queryRawUnsafe<any[]>(
+      `SELECT allocation.id,allocation."wipLotId",
+              (allocation."quantityKg"-allocation."consumedKg")::float AS releasable
+         FROM "RoastedWipReservationAllocation" allocation
+         JOIN "RoastedWipReservation" reservation ON reservation.id=allocation."reservationId"
+        WHERE reservation."companyId"=$1 AND reservation."salesOrderId"=$2
+          AND reservation.status IN ('PENDING','PARTIAL','RESERVED')
+        ORDER BY allocation."wipLotId"
+        FOR UPDATE OF allocation`,
+      companyId,
+      salesOrderId,
+    );
+    for (const allocation of allocations) {
+      const releasable = Number(allocation.releasable ?? 0);
+      if (releasable <= 0) continue;
+      await transaction.$executeRawUnsafe(
+        `UPDATE "RoastedWipLot"
+            SET "reservedKg"=GREATEST(0,"reservedKg"-$2),"updatedAt"=NOW()
+          WHERE id=$1`,
+        allocation.wipLotId,
+        releasable,
+      );
+    }
+    await transaction.$executeRawUnsafe(
+      `UPDATE "RoastedWipReservation"
+          SET status='RELEASED',"updatedAt"=NOW()
+        WHERE "companyId"=$1 AND "salesOrderId"=$2
+          AND status IN ('PENDING','PARTIAL','RESERVED')`,
+      companyId,
+      salesOrderId,
+    );
+  }
 
   onModuleDestroy() {
     return this.database.$disconnect();
@@ -497,8 +671,32 @@ export class SalesOrdersService implements OnModuleDestroy {
                   quantity: item.quantity,
                   unitPrice: item.unitPrice,
                   totalAmount: item.quantity * item.unitPrice,
+                  pricingSource:
+                    orderType === "SAMPLE"
+                      ? "SAMPLE"
+                      : (item.pricingSource ?? "CHANNEL"),
+                  baseProductPriceId:
+                    orderType === "SAMPLE"
+                      ? undefined
+                      : item.baseProductPriceId,
+                  customerProductPriceId:
+                    orderType === "SAMPLE"
+                      ? undefined
+                      : item.customerProductPriceId,
+                  priceSnapshot: item.priceSnapshot ?? {
+                    capturedAt: new Date().toISOString(),
+                    source:
+                      orderType === "SAMPLE"
+                        ? "SAMPLE"
+                        : (item.pricingSource ?? "CHANNEL"),
+                    effectiveUnitPrice: item.unitPrice,
+                    currency:
+                      String(input.currency ?? salesChannel?.currency ?? "BRL")
+                        .trim()
+                        .toUpperCase() || "BRL",
+                  },
                 };
-              }),
+              }) as Prisma.SalesOrderItemUncheckedCreateWithoutSalesOrderInput[],
             },
           },
           include: this.orderInclude,
@@ -515,8 +713,10 @@ export class SalesOrdersService implements OnModuleDestroy {
         include: { items: true },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
-      if (order.status === SalesOrderStatus.CONFIRMED)
+      if (order.status === SalesOrderStatus.CONFIRMED) {
+        await this.allocateRoastedWipForOrder(transaction, companyId, id);
         return { orderId: id, idempotent: true, status: order.status };
+      }
       if (order.status !== SalesOrderStatus.DRAFT)
         throw new BadRequestException(
           "Somente pedidos em rascunho podem ser confirmados.",
@@ -529,6 +729,7 @@ export class SalesOrdersService implements OnModuleDestroy {
         where: { id },
         data: { status: SalesOrderStatus.CONFIRMED },
       });
+      await this.allocateRoastedWipForOrder(transaction, companyId, id);
       return {
         orderId: id,
         idempotent: false,
@@ -805,6 +1006,7 @@ export class SalesOrdersService implements OnModuleDestroy {
             },
           });
         }
+        await this.releaseRoastedWipForOrder(transaction, companyId, id);
         await transaction.salesOrder.update({
           where: { id },
           data: { status: SalesOrderStatus.CANCELLED },

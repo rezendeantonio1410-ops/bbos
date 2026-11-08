@@ -116,40 +116,60 @@ export class SalesOrdersController {
     productVariantId: string,
   ) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT pp.id AS "productPriceId", pp.price, pp.currency,
-              pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
-              pp."minimumPrice", pp."minimumMarginPercent", pp."minimumRoiPercent",
-              sc.id AS "salesChannelId", sc.name AS "salesChannelName", sc.type AS "salesChannelType",
-              pv."unitCost", c.segment
-         FROM "Customer" c
-         JOIN "ProductPrice" pp
-           ON pp."companyId" = c."companyId"
-          AND pp."productVariantId" = $2
-         JOIN "SalesChannel" sc ON sc.id = pp."salesChannelId" AND sc.active = true
-         JOIN "ProductVariant" pv ON pv.id = pp."productVariantId"
-        WHERE c.id = $1
-          AND c."companyId" = $3
-          AND pp.active = true
-          AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
-          AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
-          AND (
-            c.segment IS NULL
-            OR c.segment NOT ILIKE '%varejo%'
-            OR sc.code = 'VAREJO'
-          )
-        ORDER BY CASE
-          WHEN c.segment ILIKE '%distrib%' AND sc.type = 'DISTRIBUIDOR' THEN 0
-          WHEN c.segment ILIKE '%cafeter%' AND sc.type = 'CAFETERIA' THEN 0
-          WHEN c.segment ILIKE '%escrit%' AND sc.type = 'ESCRITORIO' THEN 0
-          WHEN c.segment ILIKE '%export%' AND sc.type = 'EXPORTACAO' THEN 0
-          WHEN c.segment ILIKE '%consum%' AND sc.code = 'CONSUMIDOR_FINAL' THEN 0
-          WHEN c.segment ILIKE '%varejo%' AND sc.code = 'VAREJO' THEN 0
-          WHEN sc.type = 'B2B' THEN 1
-          ELSE 5
-        END,
-        pp."validFrom" DESC NULLS LAST,
-        pp."createdAt" DESC
-        LIMIT 1`,
+      `WITH base_price AS (
+         SELECT pp.id AS "productPriceId", pp.price AS "channelPrice", pp.currency,
+                pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
+                pp."minimumPrice", pp."minimumMarginPercent", pp."minimumRoiPercent",
+                sc.id AS "salesChannelId", sc.name AS "salesChannelName", sc.type AS "salesChannelType",
+                pv."unitCost", c.segment
+           FROM "Customer" c
+           JOIN "ProductPrice" pp
+             ON pp."companyId" = c."companyId"
+            AND pp."productVariantId" = $2
+           JOIN "SalesChannel" sc ON sc.id = pp."salesChannelId" AND sc.active = true
+           JOIN "ProductVariant" pv ON pv.id = pp."productVariantId"
+          WHERE c.id = $1
+            AND c."companyId" = $3
+            AND pp.active = true
+            AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
+            AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+            AND (
+              c.segment IS NULL
+              OR c.segment NOT ILIKE '%varejo%'
+              OR sc.code = 'VAREJO'
+            )
+          ORDER BY CASE
+            WHEN c.segment ILIKE '%distrib%' AND sc.type = 'DISTRIBUIDOR' THEN 0
+            WHEN c.segment ILIKE '%cafeter%' AND sc.type = 'CAFETERIA' THEN 0
+            WHEN c.segment ILIKE '%escrit%' AND sc.type = 'ESCRITORIO' THEN 0
+            WHEN c.segment ILIKE '%export%' AND sc.type = 'EXPORTACAO' THEN 0
+            WHEN c.segment ILIKE '%consum%' AND sc.code = 'CONSUMIDOR_FINAL' THEN 0
+            WHEN c.segment ILIKE '%varejo%' AND sc.code = 'VAREJO' THEN 0
+            WHEN sc.type = 'B2B' THEN 1
+            ELSE 5
+          END,
+          pp."validFrom" DESC NULLS LAST,
+          pp."createdAt" DESC
+          LIMIT 1
+       )
+       SELECT bp.*,
+              cpp.id AS "customerProductPriceId",
+              cpp.price AS "customerPrice",
+              cpp.notes AS "customerPriceNotes"
+         FROM base_price bp
+         LEFT JOIN LATERAL (
+           SELECT candidate.id, candidate.price, candidate.notes
+             FROM "CustomerProductPrice" candidate
+            WHERE candidate."companyId"=$3
+              AND candidate."customerId"=$1
+              AND candidate."productVariantId"=$2
+              AND candidate.currency=bp.currency
+              AND candidate.active=true
+              AND (candidate."validFrom" IS NULL OR candidate."validFrom" <= NOW())
+              AND (candidate."validUntil" IS NULL OR candidate."validUntil" >= NOW())
+            ORDER BY candidate."validFrom" DESC NULLS LAST, candidate."updatedAt" DESC
+            LIMIT 1
+         ) cpp ON TRUE`,
       customerId,
       productVariantId,
       companyId,
@@ -162,7 +182,12 @@ export class SalesOrdersController {
     }
     return {
       productPriceId: row.productPriceId as string,
-      officialUnitPrice: Number(row.price),
+      customerProductPriceId:
+        (row.customerProductPriceId as string | null) ?? null,
+      pricingSource: row.customerProductPriceId ? "CUSTOMER" : "CHANNEL",
+      officialUnitPrice: Number(row.customerPrice ?? row.channelPrice),
+      channelUnitPrice: Number(row.channelPrice),
+      customerPriceNotes: (row.customerPriceNotes as string | null) ?? null,
       currency: row.currency as string,
       salesChannelId: row.salesChannelId as string,
       salesChannelName: row.salesChannelName as string,
@@ -620,6 +645,26 @@ export class SalesOrdersController {
         unitPrice: isSample
           ? SAMPLE_FISCAL_PACKAGE_VALUE
           : price.officialUnitPrice,
+        pricingSource: isSample
+          ? "SAMPLE"
+          : (price.pricingSource as "CHANNEL" | "CUSTOMER"),
+        baseProductPriceId: isSample ? undefined : price.productPriceId,
+        customerProductPriceId: isSample ? null : price.customerProductPriceId,
+        priceSnapshot: {
+          capturedAt: new Date().toISOString(),
+          source: isSample ? "SAMPLE" : price.pricingSource,
+          baseProductPriceId: isSample ? null : price.productPriceId,
+          customerProductPriceId: isSample
+            ? null
+            : price.customerProductPriceId,
+          channelUnitPrice: price.channelUnitPrice,
+          effectiveUnitPrice: isSample
+            ? SAMPLE_FISCAL_PACKAGE_VALUE
+            : price.officialUnitPrice,
+          currency: price.currency,
+          salesChannelId: price.salesChannelId,
+          salesChannelName: price.salesChannelName,
+        },
       });
     }
     const incoterm =

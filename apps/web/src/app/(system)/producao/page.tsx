@@ -74,10 +74,38 @@ const status: Record<
 const field =
   "mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-forest-700";
 
+const isProductionProfile = (item: CatalogProduct) => {
+  const normalizedName = item.name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  return (
+    item.active &&
+    (ROASTED_PRODUCT_LINES as readonly ProductLine[]).includes(item.line) &&
+    !normalizedName.includes("white label") &&
+    !normalizedName.includes("private label") &&
+    !normalizedName.includes("marca branca")
+  );
+};
+
 type ProductionOptions = {
   warehouses: Array<{ id: string; code: string; name: string }>;
   resources: Array<{ id: string; code: string; name: string }>;
   users: Array<{ id: string; name: string }>;
+};
+
+type PackagingDemand = {
+  salesOrderItemId: string;
+  salesOrderId: string;
+  orderNumber: string;
+  customerName: string;
+  productVariantId: string;
+  sku: string;
+  productName: string;
+  netWeightGrams: number;
+  quantity: number;
+  requiredPackages: number;
+  requiredKg: string | number;
 };
 
 type UtilityCostEstimate = {
@@ -166,7 +194,16 @@ const mapProductionOrder = (
     ? (row.finishedGoodsMovements as Array<Record<string, unknown>>)
     : [];
   const variant = row.productVariant as
-    { id?: string; netWeightGrams?: number; sku?: string } | undefined;
+    | {
+        id?: string;
+        netWeightGrams?: number;
+        sku?: string;
+        product?: {
+          id?: string;
+          productLine?: { code?: ProductLine };
+        };
+      }
+    | undefined;
   const plannedQuantity = Number(row.plannedWeightKg ?? 0);
   const packageWeightG = Number(variant?.netWeightGrams ?? 500);
   const producedPackages = finishedMovements.reduce(
@@ -195,8 +232,13 @@ const mapProductionOrder = (
   return {
     id: String(row.id),
     code: String(row.code),
+    productId: variant?.product?.id,
     productVariantId:
       String(variant?.id ?? row.productVariantId ?? "") || undefined,
+    productLine:
+      variant?.product?.productLine?.code === "GREEN_COFFEE"
+        ? undefined
+        : variant?.product?.productLine?.code,
     product: String(row.productName ?? "Produto não definido"),
     sku: String(row.sku ?? variant?.sku ?? "—"),
     plannedQuantity,
@@ -343,27 +385,27 @@ function NewOrderWizard({
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
   const [line, setLine] = useState<ProductLine>(ROASTED_PRODUCT_LINES[0]);
   const [productId, setProductId] = useState("");
-  const [productVariantId, setProductVariantId] = useState("");
-  const productsForLine = catalog.filter(
-    (item) => item.line === line && item.active,
+  const productionProfiles = catalog.filter(isProductionProfile);
+  const productsForLine = productionProfiles.filter(
+    (item) => item.line === line,
   );
   const catalogProduct =
     productsForLine.find((item) => item.id === productId) ?? productsForLine[0];
   const product = catalogProduct?.name ?? "";
   const variantsForProduct =
     catalogProduct?.skus.filter((item) => item.active) ?? [];
-  const selectedVariant =
-    variantsForProduct.find((item) => item.id === productVariantId) ??
-    variantsForProduct[0];
+  const selectedVariant = [...variantsForProduct].sort(
+    (left, right) => right.packageWeightG - left.packageWeightG,
+  )[0];
   const sku = selectedVariant?.sku ?? "";
   useEffect(() => {
     void loadProductCatalog().then(({ products }) => {
-      if (!products.length) return;
-      const first = products[0]!;
+      const eligible = products.filter(isProductionProfile);
+      if (!eligible.length) return;
+      const first = eligible[0]!;
       setCatalog(products);
       setLine(first.line);
       setProductId(first.id);
-      setProductVariantId(first.skus[0]?.id ?? "");
     });
   }, []);
   const [quantity, setQuantity] = useState(240);
@@ -400,7 +442,7 @@ function NewOrderWizard({
     0,
   );
   const stages = [
-    "Produto",
+    "Linha e perfil",
     "Quantidade",
     "Data",
     "Café / Blend",
@@ -409,8 +451,8 @@ function NewOrderWizard({
   ];
   const next = () => {
     setError("");
-    if (step === 0 && !selectedVariant)
-      return setError("Selecione uma apresentação/SKU ativa do catálogo.");
+    if (step === 0 && (!catalogProduct || !selectedVariant))
+      return setError("Selecione uma linha e um perfil de café válidos.");
     if (step === 1 && quantity <= 0)
       return setError("Informe uma quantidade maior que zero.");
     if (step === 2 && !responsible.trim())
@@ -458,7 +500,9 @@ function NewOrderWizard({
       await onCreate({
         id: `op-${Date.now()}`,
         code: "OP-NOVA",
+        productId: catalogProduct?.id,
         productVariantId: selectedVariant?.id,
+        productLine: line === "GREEN_COFFEE" ? undefined : line,
         product,
         sku,
         plannedQuantity: quantity,
@@ -474,19 +518,6 @@ function NewOrderWizard({
             : "Blend operacional",
         allocations,
         batches: [],
-        packaging: {
-          packageWeightG: selectedVariant?.packageWeightG ?? 500,
-          plannedPackages: Math.round(
-            (quantity * 1000) / (selectedVariant?.packageWeightG ?? 500),
-          ),
-          producedPackages: 0,
-          lossPackages: 0,
-          packagingName: `Embalagem ${sku}`,
-          packagingUnitCost: 2.75,
-          labelsCost: 0,
-          boxesCost: 0,
-          otherSuppliesCost: 0,
-        },
         costs: {
           greenCoffeeConsumedCost: allocations.reduce(
             (sum, item) => sum + item.reservedKg * item.realCostPerKg,
@@ -565,7 +596,7 @@ function NewOrderWizard({
         </div>
         <div className="min-h-72 py-8">
           {step === 0 && (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-xs font-semibold">
                 Linha
                 <select
@@ -573,11 +604,11 @@ function NewOrderWizard({
                   onChange={(e) => {
                     const nextLine = e.target.value as ProductLine;
                     const nextProduct = catalog.find(
-                      (item) => item.line === nextLine,
+                      (item) =>
+                        item.line === nextLine && isProductionProfile(item),
                     );
                     setLine(nextLine);
                     setProductId(nextProduct?.id ?? "");
-                    setProductVariantId(nextProduct?.skus[0]?.id ?? "");
                   }}
                   className={field}
                 >
@@ -589,7 +620,7 @@ function NewOrderWizard({
                 </select>
               </label>
               <label className="text-xs font-semibold">
-                Produto
+                Café / Perfil
                 <select
                   value={catalogProduct?.id ?? ""}
                   onChange={(event) => {
@@ -597,7 +628,7 @@ function NewOrderWizard({
                       (item) => item.id === event.target.value,
                     );
                     setProductId(event.target.value);
-                    setProductVariantId(next?.skus[0]?.id ?? "");
+                    if (!next) setError("Selecione um perfil válido.");
                   }}
                   className={field}
                   disabled={!productsForLine.length}
@@ -612,36 +643,16 @@ function NewOrderWizard({
                   ))}
                 </select>
               </label>
-              <label className="text-xs font-semibold">
-                SKU / Apresentação
-                <select
-                  value={selectedVariant?.id ?? ""}
-                  onChange={(event) => setProductVariantId(event.target.value)}
-                  className={field}
-                  disabled={!variantsForProduct.length}
-                >
-                  {!variantsForProduct.length && (
-                    <option value="">Nenhum SKU ativo</option>
-                  )}
-                  {variantsForProduct.map((variant) => (
-                    <option key={variant.id} value={variant.id}>
-                      {variant.sku} •{" "}
-                      {variant.packageWeightG === 1000
-                        ? "1 kg"
-                        : `${variant.packageWeightG} g`}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {selectedVariant && (
-                <div className="sm:col-span-3 rounded-xl bg-stone-50 px-4 py-3 text-xs text-stone-600">
-                  <strong className="text-stone-900">{product}</strong> • {sku}{" "}
-                  •{" "}
-                  {selectedVariant.packageWeightG === 1000
-                    ? "1 kg"
-                    : `${selectedVariant.packageWeightG} g`}{" "}
-                  • unidade {selectedVariant.commercialUnit} •{" "}
-                  <span className="text-emerald-700">Ativo</span>
+                <div className="sm:col-span-2 rounded-xl bg-forest-50 px-4 py-3 text-xs text-forest-800">
+                  <strong>
+                    {PRODUCT_LINE_LABELS[line]} · {product}
+                  </strong>
+                  <span className="mt-1 block text-stone-600">
+                    A torra será controlada em kg e ficará no estoque a granel.
+                    A embalagem de 250 g, 500 g ou 1 kg será definida somente
+                    pelo pedido.
+                  </span>
                 </div>
               )}
             </div>
@@ -765,10 +776,11 @@ function NewOrderWizard({
           {step === 5 && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Card className="p-5">
-                <p className="text-xs text-stone-400">Produto</p>
+                <p className="text-xs text-stone-400">Linha e perfil</p>
                 <p className="mt-2 font-bold">{product}</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  {sku} • {number.format(quantity)} kg • {date}
+                  {PRODUCT_LINE_LABELS[line]} • {number.format(quantity)} kg a
+                  granel • {date}
                 </p>
               </Card>
               <Card className="p-5">
@@ -1053,6 +1065,11 @@ function PackagingRegistration({
   const [selectedVariantId, setSelectedVariantId] = useState(
     order.productVariantId ?? "",
   );
+  const [demands, setDemands] = useState<PackagingDemand[]>([]);
+  const [salesOrderItemId, setSalesOrderItemId] = useState("");
+  const selectedDemand = demands.find(
+    (item) => item.salesOrderItemId === salesOrderItemId,
+  );
   const selectedVariant =
     packagingOptions.find((item) => item.id === selectedVariantId) ??
     packagingOptions[0]!;
@@ -1061,7 +1078,7 @@ function PackagingRegistration({
     (sum, item) => sum + item.roastedOutputKg,
     0,
   );
-  const suggestedPackages = Math.floor((roastedKg * 1000) / packageWeightG);
+  const suggestedPackages = selectedDemand?.requiredPackages ?? 0;
   const [options, setOptions] = useState<ProductionOptions>({
     warehouses: [],
     resources: [],
@@ -1137,28 +1154,51 @@ function PackagingRegistration({
         credentials: "include",
         cache: "no-store",
       }),
+      fetch(`${api}/production/orders/${order.id}/packaging-demand`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
     ])
-      .then(async ([loadedOptions, transition, utilityResponse]) => {
-        if (!transition.ok)
-          throw new Error(
-            await readApiError(
-              transition,
-              "Não foi possível iniciar o empacotamento.",
-            ),
-          );
-        setOptions(loadedOptions);
-        setWarehouseId(loadedOptions.warehouses[0]?.id ?? "");
-        if (utilityResponse.ok) {
-          const estimate =
-            (await utilityResponse.json()) as UtilityCostEstimate;
-          setUtilityEstimate(estimate);
-          if (estimate.configured) {
-            setEnergyCost(Number(Number(estimate.energyCost ?? 0).toFixed(2)));
-            setGasCost(Number(Number(estimate.gasCost ?? 0).toFixed(2)));
+      .then(
+        async ([
+          loadedOptions,
+          transition,
+          utilityResponse,
+          demandResponse,
+        ]) => {
+          if (!transition.ok)
+            throw new Error(
+              await readApiError(
+                transition,
+                "Não foi possível iniciar o empacotamento.",
+              ),
+            );
+          setOptions(loadedOptions);
+          setWarehouseId(loadedOptions.warehouses[0]?.id ?? "");
+          const loadedDemands = demandResponse.ok
+            ? ((await demandResponse.json()) as PackagingDemand[])
+            : [];
+          setDemands(loadedDemands);
+          const firstDemand = loadedDemands[0];
+          if (firstDemand) {
+            setSalesOrderItemId(firstDemand.salesOrderItemId);
+            setSelectedVariantId(firstDemand.productVariantId);
+            setProducedPackages(firstDemand.requiredPackages);
           }
-        }
-        setReady(true);
-      })
+          if (utilityResponse.ok) {
+            const estimate =
+              (await utilityResponse.json()) as UtilityCostEstimate;
+            setUtilityEstimate(estimate);
+            if (estimate.configured) {
+              setEnergyCost(
+                Number(Number(estimate.energyCost ?? 0).toFixed(2)),
+              );
+              setGasCost(Number(Number(estimate.gasCost ?? 0).toFixed(2)));
+            }
+          }
+          setReady(true);
+        },
+      )
       .catch((caught) =>
         setError(
           caught instanceof Error
@@ -1169,6 +1209,10 @@ function PackagingRegistration({
   }, [order.id]);
   const submit = async () => {
     setError("");
+    if (!selectedDemand)
+      return setError(
+        "Selecione um pedido confirmado que esteja aguardando embalagem.",
+      );
     if (!Number.isSafeInteger(producedPackages) || producedPackages <= 0)
       return setError("Informe uma quantidade inteira de pacotes.");
     if (finishedOutputKg > roastedKg + 0.001)
@@ -1186,6 +1230,7 @@ function PackagingRegistration({
           body: JSON.stringify({
             warehouseId: warehouseId || undefined,
             productVariantId: selectedVariant.id,
+            salesOrderItemId: selectedDemand.salesOrderItemId,
             finishedOutputKg,
             producedPackages,
             packaging: [
@@ -1216,7 +1261,7 @@ function PackagingRegistration({
           ),
         );
       await onDone(
-        `Empacotamento concluído: ${producedPackages.toLocaleString("pt-BR")} pacotes de ${packageWeightG} g (${selectedVariant.sku}) adicionados ao estoque. O saldo torrado restante continua disponível para outros formatos.`,
+        `Pedido ${selectedDemand.orderNumber}: ${producedPackages.toLocaleString("pt-BR")} pacotes de ${packageWeightG} g (${selectedVariant.sku}) produzidos e reservados. O saldo torrado permanece disponível em kg para os próximos pedidos.`,
       );
     } catch (caught) {
       setError(
@@ -1248,10 +1293,43 @@ function PackagingRegistration({
         </button>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold sm:col-span-2">
+          Pedido que autorizou a embalagem
+          <select
+            value={salesOrderItemId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              const demand = demands.find(
+                (item) => item.salesOrderItemId === nextId,
+              );
+              setSalesOrderItemId(nextId);
+              if (demand) {
+                setSelectedVariantId(demand.productVariantId);
+                setProducedPackages(demand.requiredPackages);
+              }
+            }}
+            className={field}
+          >
+            <option value="">Selecione o pedido</option>
+            {demands.map((item) => (
+              <option key={item.salesOrderItemId} value={item.salesOrderItemId}>
+                {item.orderNumber} · {item.customerName} ·{" "}
+                {item.requiredPackages} pacote(s) · {item.sku}
+              </option>
+            ))}
+          </select>
+          {!demands.length && (
+            <span className="mt-2 block rounded-xl bg-amber-50 p-3 font-normal text-amber-900">
+              Não há pedido confirmado aguardando embalagem. Os{" "}
+              {number.format(roastedKg)} kg continuam no estoque torrado.
+            </span>
+          )}
+        </label>
         <label className="text-xs font-semibold">
           Formato do pacote
           <select
             value={selectedVariant.id}
+            disabled={Boolean(selectedDemand)}
             onChange={(event) => setSelectedVariantId(event.target.value)}
             className={field}
           >
@@ -1272,6 +1350,7 @@ function PackagingRegistration({
             min="1"
             step="1"
             value={producedPackages}
+            readOnly={Boolean(selectedDemand)}
             onChange={(e) => setProducedPackages(Number(e.target.value))}
             className={field}
           />
@@ -1447,9 +1526,9 @@ function PackagingRegistration({
         </p>
       )}
       <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
-        O café torrado será baixado do WIP somente pelo peso desta entrada. O
-        saldo restante continuará disponível e poderá ser empacotado em outra
-        apresentação do mesmo produto.
+        O café torrado será baixado somente pelo peso exigido pelo pedido
+        selecionado. O restante continuará no estoque torrado em quilogramas,
+        sem conversão automática para 250 g, 500 g ou 1 kg.
       </p>
       <div className="mt-5 flex justify-end gap-3">
         <button
@@ -1458,7 +1537,10 @@ function PackagingRegistration({
         >
           Cancelar
         </button>
-        <Button disabled={busy || !ready} onClick={() => void submit()}>
+        <Button
+          disabled={busy || !ready || !selectedDemand}
+          onClick={() => void submit()}
+        >
           {busy ? "Concluindo…" : ready ? "Registrar entrada" : "Preparando…"}
         </Button>
       </div>
@@ -1874,7 +1956,10 @@ function OrderDrawer({
             </div>
             <h2 className="mt-3 text-xl font-bold">{order.product}</h2>
             <p className="mt-1 text-xs text-stone-500">
-              {order.sku} • {order.responsible}
+              {order.productLine
+                ? PRODUCT_LINE_LABELS[order.productLine]
+                : "Perfil de café"}{" "}
+              • café torrado a granel • {order.responsible}
             </p>
           </div>
           <button onClick={onClose} className="rounded-xl border p-2">
@@ -1952,52 +2037,31 @@ function OrderDrawer({
             })}
           </div>
           {!action && (canRoast || canPack || canPackWip) && (
-            <div className="mt-4 flex justify-end">
-              <Button
-                onClick={() =>
-                  setAction(
-                    canRoast ? "roast" : canPackWip ? "pack-wip" : "pack",
-                  )
-                }
-                className="flex items-center gap-2"
-              >
-                {canRoast ? <Flame size={15} /> : <PackageOpen size={15} />}
-                {canRoast
-                  ? "Registrar torra"
-                  : canPackWip
-                    ? `Empacotar saldo WIP · ${number.format(remainingWipKg)} kg`
-                    : "Empacotar"}
-              </Button>
+            <div className="mt-4 flex justify-end gap-2">
+              {(canPack || canPackWip) && (
+                <Link
+                  href="/producao/controle"
+                  className="inline-flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <PackageOpen size={15} />
+                  Ver reservas no café a granel
+                </Link>
+              )}
+              {canRoast && (
+                <Button
+                  onClick={() => setAction("roast")}
+                  className="flex items-center gap-2"
+                >
+                  <Flame size={15} />
+                  Registrar torra
+                </Button>
+              )}
             </div>
           )}
         </section>
         {action === "roast" && (
           <div className="mt-5">
             <RoastRegistration
-              order={order}
-              onCancel={() => setAction(null)}
-              onDone={async (successMessage) => {
-                await onChanged(successMessage);
-                setAction(null);
-              }}
-            />
-          </div>
-        )}
-        {action === "pack" && (
-          <div className="mt-5">
-            <PackagingRegistration
-              order={order}
-              onCancel={() => setAction(null)}
-              onDone={async (successMessage) => {
-                await onChanged(successMessage);
-                setAction(null);
-              }}
-            />
-          </div>
-        )}
-        {action === "pack-wip" && (
-          <div className="mt-5">
-            <RemainingWipPackaging
               order={order}
               onCancel={() => setAction(null)}
               onDone={async (successMessage) => {
@@ -2493,6 +2557,7 @@ export default function ProductionPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         code: `OP-${Date.now()}`,
+        productId: order.productId,
         productVariantId: order.productVariantId,
         productName: order.product,
         sku: order.sku,
@@ -2687,7 +2752,10 @@ export default function ProductionPage() {
                       {order.product}
                     </p>
                     <p className="mt-1 text-xs text-stone-400">
-                      {order.sku} • {order.blendName}
+                      {order.productLine
+                        ? PRODUCT_LINE_LABELS[order.productLine]
+                        : "Perfil de café"}{" "}
+                      • {order.blendName} • a granel
                     </p>
                   </div>
                   <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">

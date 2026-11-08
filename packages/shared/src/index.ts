@@ -592,7 +592,9 @@ export type ProductionAlert = {
 export type ProductionOrderView = {
   id: string;
   code: string;
+  productId?: string;
   productVariantId?: string;
+  productLine?: "RAROS" | "EPICOS" | "CLASSICOS" | "GOURMET";
   product: string;
   sku: string;
   plannedQuantity: number;
