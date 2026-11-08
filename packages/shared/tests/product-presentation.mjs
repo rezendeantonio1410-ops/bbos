@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertCatalogSkuAvailable,
+  isValidGtin,
   PRODUCT_CATALOG_DEMO,
   resolveLegacyProductVariant,
+  validateCreateCatalogProduct,
   validateCreateProductSku,
   validateProductionVariantEligibility,
 } from "../dist/product-presentation.js";
@@ -17,6 +19,9 @@ const allowed = [
   ["GOURMET", 250],
   ["GOURMET", 500],
   ["GOURMET", 1000],
+  ["GREEN_COFFEE", 1000],
+  ["GREEN_COFFEE", 30000],
+  ["GREEN_COFFEE", 60000],
 ];
 
 for (const [line, packageWeightG] of allowed) {
@@ -150,4 +155,63 @@ test("backfill legado mapeia somente SKU com correspondência única", () => {
     ]),
     null,
   );
+});
+
+const validProduct = {
+  line: "GOURMET",
+  productName: "Essencial",
+  sku: "GOU-ESS-500",
+  packageWeightG: 500,
+  commercialUnit: "UN",
+  active: true,
+  grossWeightG: 530,
+  packageWidthCm: 15,
+  packageHeightCm: 24,
+  packageDepthCm: 8,
+  retailPrice: 52,
+  maxDiscountPercent: 10,
+  gtin: "7891000315507",
+  ncm: "09012100",
+  originCode: 0,
+  productionType: "P",
+  fiscalValidated: true,
+};
+
+test("cadastro mestre aceita produto completo e normaliza SKU e NCM", () => {
+  const result = validateCreateCatalogProduct({
+    ...validProduct,
+    sku: " gou-ess-500 ",
+    ncm: "0901.21.00",
+  });
+  assert.equal(result.sku, "GOU-ESS-500");
+  assert.equal(result.ncm, "09012100");
+  assert.equal(result.gtin, "7891000315507");
+});
+
+test("cadastro mestre bloqueia peso, preço, desconto e NCM inconsistentes", () => {
+  assert.throws(
+    () => validateCreateCatalogProduct({ ...validProduct, grossWeightG: 499 }),
+    /peso bruto/,
+  );
+  assert.throws(
+    () => validateCreateCatalogProduct({ ...validProduct, retailPrice: 0 }),
+    /preço de venda/,
+  );
+  assert.throws(
+    () =>
+      validateCreateCatalogProduct({
+        ...validProduct,
+        maxDiscountPercent: 101,
+      }),
+    /desconto máximo/,
+  );
+  assert.throws(
+    () => validateCreateCatalogProduct({ ...validProduct, ncm: "090121" }),
+    /NCM/,
+  );
+});
+
+test("GTIN é validado pelo dígito verificador", () => {
+  assert.equal(isValidGtin("7891000315507"), true);
+  assert.equal(isValidGtin("7891000315508"), false);
 });

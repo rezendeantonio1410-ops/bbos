@@ -1,10 +1,15 @@
 import { Injectable, type OnModuleDestroy } from "@nestjs/common";
-import { Prisma, PrismaClient, prisma, type ProductLineCode } from "@bbos/database";
+import {
+  Prisma,
+  PrismaClient,
+  prisma,
+  type ProductLineCode,
+} from "@bbos/database";
 import {
   assertProductPresentationAllowed,
   normalizeProductCode,
   productSlug,
-  validateCreateProductSku,
+  validateCreateCatalogProduct,
   type CatalogProduct,
   type CreateCatalogProductInput,
   type CreateProductVariantInput,
@@ -14,7 +19,20 @@ import {
 
 const productInclude = {
   productLine: true,
-  variants: { where: { active: true }, orderBy: { netWeightGrams: "asc" as const } },
+  variants: {
+    where: { active: true },
+    orderBy: { netWeightGrams: "asc" as const },
+    include: {
+      channelPrices: {
+        where: {
+          active: true,
+          salesChannel: { code: "CONSUMIDOR_FINAL" },
+        },
+        include: { salesChannel: true },
+        orderBy: { createdAt: "desc" as const },
+      },
+    },
+  },
   storefrontImages: {
     orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }],
     select: {
@@ -46,7 +64,8 @@ const OFFICIAL_LINES: Record<
   RAROS: {
     name: "Raros",
     slug: "raros",
-    description: "Microlotes de disponibilidade excepcional e expressão singular.",
+    description:
+      "Microlotes de disponibilidade excepcional e expressão singular.",
     positioning: "Exclusividade e origem",
     sortOrder: 1,
   },
@@ -70,6 +89,14 @@ const OFFICIAL_LINES: Record<
     description: "Cafés equilibrados com qualidade acessível e confiável.",
     positioning: "Qualidade cotidiana",
     sortOrder: 4,
+  },
+  GREEN_COFFEE: {
+    name: "Café Verde",
+    slug: "cafe-verde",
+    description:
+      "Café verde comercializável, com cadastro fiscal e logístico próprio.",
+    positioning: "Matéria-prima e exportação",
+    sortOrder: 5,
   },
 };
 
@@ -98,7 +125,12 @@ export class ProductsRepository implements OnModuleDestroy {
       include: {
         products: {
           where: { active: true },
-          include: { variants: { where: { active: true }, orderBy: { netWeightGrams: "asc" } } },
+          include: {
+            variants: {
+              where: { active: true },
+              orderBy: { netWeightGrams: "asc" },
+            },
+          },
           orderBy: { name: "asc" },
         },
       },
@@ -115,7 +147,7 @@ export class ProductsRepository implements OnModuleDestroy {
   }
 
   async createProduct(input: CreateCatalogProductInput, companyId: string) {
-    const valid = validateCreateProductSku(input);
+    const valid = validateCreateCatalogProduct(input);
     return this.database.$transaction(
       async (transaction) => {
         await this.ensureOfficialLines(transaction, companyId);
@@ -144,15 +176,31 @@ export class ProductsRepository implements OnModuleDestroy {
             active: input.active,
           },
         });
-        await transaction.productVariant.create({
+        const variant = await transaction.productVariant.create({
           data: {
             productId: product.id,
             sku: valid.sku,
             netWeightGrams: valid.packageWeightG,
+            grossWeightGrams: valid.grossWeightG,
+            packageWidthCm: valid.packageWidthCm,
+            packageHeightCm: valid.packageHeightCm,
+            packageDepthCm: valid.packageDepthCm,
+            gtin: valid.gtin || null,
+            ncm: valid.ncm,
+            originCode: valid.originCode,
+            cest: valid.cest || null,
+            productionType: valid.productionType,
+            fiscalValidated: valid.fiscalValidated,
             salesUnit: input.commercialUnit,
             active: input.active,
           },
         });
+        await this.createConsumerPrice(
+          transaction,
+          companyId,
+          variant.id,
+          valid,
+        );
         const result = await transaction.product.findUniqueOrThrow({
           where: { id: product.id },
           include: productInclude,
@@ -163,36 +211,62 @@ export class ProductsRepository implements OnModuleDestroy {
     );
   }
 
-  async createVariant(productId: string, input: CreateProductVariantInput, companyId: string) {
+  async createVariant(
+    productId: string,
+    input: CreateProductVariantInput,
+    companyId: string,
+  ) {
     return this.database.$transaction(
       async (transaction) => {
         const product = await transaction.product.findUnique({
           where: { id: productId },
           include: { productLine: true },
         });
-        if (!product || product.productLine.companyId !== companyId) throw new Error("Produto não encontrado.");
+        if (!product || product.productLine.companyId !== companyId)
+          throw new Error("Produto não encontrado.");
+        const valid = validateCreateCatalogProduct({
+          ...input,
+          line: product.productLine.code as ProductLine,
+          productName: product.name,
+        });
         assertProductPresentationAllowed(
           product.productLine.code as ProductLine,
-          input.packageWeightG,
+          valid.packageWeightG,
         );
-        const sku = input.sku.trim().toLocaleUpperCase("pt-BR");
+        const sku = valid.sku;
         if (!sku) throw new Error("SKU é obrigatório.");
         await this.assertVariantAvailable(
           transaction,
           sku,
-          input.packageWeightG,
+          valid.packageWeightG,
           product.productLineId,
           product.name,
         );
-        await transaction.productVariant.create({
+        const variant = await transaction.productVariant.create({
           data: {
             productId,
             sku,
-            netWeightGrams: input.packageWeightG,
+            netWeightGrams: valid.packageWeightG,
+            grossWeightGrams: valid.grossWeightG,
+            packageWidthCm: valid.packageWidthCm,
+            packageHeightCm: valid.packageHeightCm,
+            packageDepthCm: valid.packageDepthCm,
+            gtin: valid.gtin || null,
+            ncm: valid.ncm,
+            originCode: valid.originCode,
+            cest: valid.cest || null,
+            productionType: valid.productionType,
+            fiscalValidated: valid.fiscalValidated,
             salesUnit: input.commercialUnit,
             active: input.active,
           },
         });
+        await this.createConsumerPrice(
+          transaction,
+          companyId,
+          variant.id,
+          valid,
+        );
         const result = await transaction.product.findUniqueOrThrow({
           where: { id: productId },
           include: productInclude,
@@ -218,7 +292,9 @@ export class ProductsRepository implements OnModuleDestroy {
         slug: productSlug(input.name),
         code: normalizeProductCode(input.name),
       });
-    const current = await this.database.product.findFirst({ where: { id, productLine: { companyId } } });
+    const current = await this.database.product.findFirst({
+      where: { id, productLine: { companyId } },
+    });
     if (!current) throw new Error("Produto não encontrado.");
     const result = await this.database.product.update({
       where: { id: current.id },
@@ -228,8 +304,14 @@ export class ProductsRepository implements OnModuleDestroy {
     return this.toCatalogProduct(result);
   }
 
-  async updateVariant(id: string, input: { active: boolean }, companyId: string) {
-    const current = await this.database.productVariant.findFirst({ where: { id, product: { productLine: { companyId } } } });
+  async updateVariant(
+    id: string,
+    input: { active: boolean },
+    companyId: string,
+  ) {
+    const current = await this.database.productVariant.findFirst({
+      where: { id, product: { productLine: { companyId } } },
+    });
     if (!current) throw new Error("Apresentação não encontrada.");
     return this.database.productVariant.update({
       where: { id: current.id },
@@ -286,7 +368,11 @@ export class ProductsRepository implements OnModuleDestroy {
   ) {
     return this.database.$transaction(async (transaction) => {
       const current = await transaction.storefrontProductImage.findFirst({
-        where: { id: imageId, productId, product: { productLine: { companyId } } },
+        where: {
+          id: imageId,
+          productId,
+          product: { productLine: { companyId } },
+        },
       });
       if (!current) throw new Error("Imagem não encontrada.");
       if (input.isPrimary === true) {
@@ -322,13 +408,23 @@ export class ProductsRepository implements OnModuleDestroy {
     });
   }
 
-  async deleteStorefrontImage(productId: string, imageId: string, companyId: string) {
+  async deleteStorefrontImage(
+    productId: string,
+    imageId: string,
+    companyId: string,
+  ) {
     return this.database.$transaction(async (transaction) => {
       const current = await transaction.storefrontProductImage.findFirst({
-        where: { id: imageId, productId, product: { productLine: { companyId } } },
+        where: {
+          id: imageId,
+          productId,
+          product: { productLine: { companyId } },
+        },
       });
       if (!current) throw new Error("Imagem não encontrada.");
-      await transaction.storefrontProductImage.delete({ where: { id: imageId } });
+      await transaction.storefrontProductImage.delete({
+        where: { id: imageId },
+      });
       const next = await transaction.storefrontProductImage.findFirst({
         where: { productId },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -390,7 +486,10 @@ export class ProductsRepository implements OnModuleDestroy {
     database: Pick<PrismaClient, "productLine"> | Prisma.TransactionClient,
     companyId: string,
   ) {
-    for (const [code, definition] of Object.entries(OFFICIAL_LINES) as [ProductLine, (typeof OFFICIAL_LINES)[ProductLine]][]) {
+    for (const [code, definition] of Object.entries(OFFICIAL_LINES) as [
+      ProductLine,
+      (typeof OFFICIAL_LINES)[ProductLine],
+    ][]) {
       await database.productLine.upsert({
         where: {
           companyId_code: { companyId, code: code as ProductLineCode },
@@ -443,6 +542,91 @@ export class ProductsRepository implements OnModuleDestroy {
       );
   }
 
+  private async createConsumerPrice(
+    transaction: Prisma.TransactionClient,
+    companyId: string,
+    productVariantId: string,
+    input: Pick<
+      CreateCatalogProductInput,
+      "retailPrice" | "maxDiscountPercent"
+    >,
+  ) {
+    const channel = await transaction.salesChannel.findFirst({
+      where: { companyId, code: "CONSUMIDOR_FINAL", active: true },
+    });
+    if (!channel)
+      throw new Error(
+        "O canal Consumidor final precisa estar ativo antes de cadastrar o produto.",
+      );
+    const minimumPrice =
+      Math.round(
+        Number(input.retailPrice) *
+          (1 - Number(input.maxDiscountPercent) / 100) *
+          100,
+      ) / 100;
+    await transaction.productPrice.create({
+      data: {
+        companyId,
+        productVariantId,
+        salesChannelId: channel.id,
+        currency: "BRL",
+        price: input.retailPrice,
+        active: true,
+        validFrom: new Date(),
+        maxRequestDiscountPercent: input.maxDiscountPercent,
+        maxApprovalDiscountPercent: input.maxDiscountPercent,
+        minimumPrice,
+      },
+    });
+  }
+
+  async suggestNcm(companyId: string, kind: "ROASTED" | "GREEN") {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT pv.ncm,COUNT(*)::int AS uses,MAX(pv."updatedAt") AS "lastUsedAt"
+         FROM "ProductVariant" pv
+         JOIN "Product" p ON p.id=pv."productId"
+         JOIN "ProductLine" pl ON pl.id=p."productLineId"
+        WHERE pl."companyId"=$1
+          AND pv."fiscalValidated"=true
+          AND pv.ncm ~ '^[0-9]{8}$'
+          AND (($2='GREEN' AND pl.code='GREEN_COFFEE')
+            OR ($2='ROASTED' AND pl.code<>'GREEN_COFFEE'))
+        GROUP BY pv.ncm
+        ORDER BY uses DESC,"lastUsedAt" DESC
+        LIMIT 1`,
+      companyId,
+      kind,
+    );
+    let historical = String(rows[0]?.ncm ?? "").replace(/\D/g, "");
+    if (!historical) {
+      const mappedProfiles = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT REGEXP_REPLACE(COALESCE(metadata->>'ncm',''),'[^0-9]','','g') AS ncm,
+                COUNT(*)::int AS uses,MAX("updatedAt") AS "lastUsedAt"
+           FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1
+            AND provider='BLING'
+            AND "resourceType"='STOREFRONT_PRODUCT_PROFILE'
+            AND REGEXP_REPLACE(COALESCE(metadata->>'ncm',''),'[^0-9]','','g') ~ '^[0-9]{8}$'
+            AND (($2='GREEN' AND REGEXP_REPLACE(metadata->>'ncm','[^0-9]','','g') LIKE '09011%')
+              OR ($2='ROASTED' AND REGEXP_REPLACE(metadata->>'ncm','[^0-9]','','g') LIKE '09012%'))
+          GROUP BY REGEXP_REPLACE(COALESCE(metadata->>'ncm',''),'[^0-9]','','g')
+          ORDER BY uses DESC,"lastUsedAt" DESC
+          LIMIT 1`,
+        companyId,
+        kind,
+      );
+      historical = String(mappedProfiles[0]?.ncm ?? "").replace(/\D/g, "");
+    }
+    return {
+      ncm: historical || (kind === "GREEN" ? "09011110" : "09012100"),
+      source: historical ? "HISTORY" : "OFFICIAL_REFERENCE",
+      description:
+        kind === "GREEN"
+          ? "Café não torrado, não descafeinado, em grão"
+          : "Café torrado, não descafeinado",
+    };
+  }
+
   private toCatalogProduct(product: PersistedProduct): CatalogProduct {
     const line = product.productLine.code as ProductLine;
     return {
@@ -457,11 +641,33 @@ export class ProductsRepository implements OnModuleDestroy {
         updatedAt: image.updatedAt.toISOString(),
       })),
       skus: product.variants.map((variant) => ({
+        ...(variant.channelPrices[0]
+          ? {
+              retailPrice: Number(variant.channelPrices[0].price),
+              maxDiscountPercent: Number(
+                variant.channelPrices[0].maxRequestDiscountPercent,
+              ),
+              minimumPrice: Number(
+                variant.channelPrices[0].minimumPrice ??
+                  variant.channelPrices[0].price,
+              ),
+            }
+          : { retailPrice: 0, maxDiscountPercent: 0, minimumPrice: 0 }),
         id: variant.id,
         line,
         productName: product.name,
         sku: variant.sku,
         packageWeightG: variant.netWeightGrams,
+        grossWeightG: variant.grossWeightGrams,
+        packageWidthCm: Number(variant.packageWidthCm),
+        packageHeightCm: Number(variant.packageHeightCm),
+        packageDepthCm: Number(variant.packageDepthCm),
+        gtin: variant.gtin,
+        ncm: variant.ncm,
+        originCode: variant.originCode,
+        cest: variant.cest,
+        productionType: variant.productionType === "T" ? "T" : "P",
+        fiscalValidated: variant.fiscalValidated,
         commercialUnit: variant.salesUnit === "KG" ? "KG" : "UN",
         active: variant.active,
         stockUnits: 0,

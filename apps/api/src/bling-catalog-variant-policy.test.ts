@@ -19,7 +19,13 @@ test("Bling catalog and invoices identify each sellable presentation by variant 
   assert.match(catalog, /metadata\?\.sku/);
   assert.match(catalog, /this\.localCatalog\(companyId\)/);
   assert.match(catalog, /FROM "ProductPrice"/);
+  assert.match(catalog, /pv\."fiscalValidated"/);
+  assert.match(catalog, /Sincronização bloqueada: confirme a validação fiscal/);
+  assert.match(catalog, /\/produtos/);
   assert.match(outbox, /variantId: item\.variantId/);
+  assert.match(outbox, /PRODUCT_UPSERT_REQUESTED/);
+  assert.match(outbox, /enqueueProductVariant/);
+  assert.match(outbox, /blingCatalogSync\.syncVariant/);
   assert.match(outbox, /UPPER\(COALESCE\(metadata->>'sku',''\)\)=\$3/);
   assert.match(outbox, /SKU \$\{sku \|\| variantId\}/);
 });

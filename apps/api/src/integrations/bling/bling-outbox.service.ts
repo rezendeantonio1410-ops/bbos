@@ -173,6 +173,108 @@ export class BlingOutboxService {
     return rows[0] ?? null;
   }
 
+  async enqueueProductVariant(companyId: string, productVariantId: string) {
+    const variant = await this.database.productVariant.findFirst({
+      where: {
+        id: productVariantId,
+        product: { productLine: { companyId } },
+      },
+      select: { id: true, fiscalValidated: true },
+    });
+    if (!variant) throw new Error("Produto não encontrado para sincronização.");
+    if (!variant.fiscalValidated) {
+      return {
+        state: "PENDING_VALIDATION" as const,
+        label: "Aguardando validação fiscal",
+      };
+    }
+    const idempotencyKey = `bling:product-upsert:${productVariantId}`;
+    const id = `bling-outbox-${stableId(idempotencyKey)}`;
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `INSERT INTO "IntegrationOutbox"
+        (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,"idempotencyKey","createdAt","updatedAt")
+       VALUES ($1,$2,'BLING','PRODUCT_UPSERT_REQUESTED','PRODUCT_VARIANT',$3,$4::jsonb,'PENDING',0,$5,NOW(),NOW())
+       ON CONFLICT ("idempotencyKey") DO UPDATE SET
+         payload=EXCLUDED.payload,
+         status=CASE WHEN "IntegrationOutbox".status='SENT' THEN 'SENT' ELSE 'PENDING' END,
+         attempts=CASE WHEN "IntegrationOutbox".status='SENT' THEN "IntegrationOutbox".attempts ELSE 0 END,
+         "lastError"=CASE WHEN "IntegrationOutbox".status='SENT' THEN "IntegrationOutbox"."lastError" ELSE NULL END,
+         "nextAttemptAt"=NULL,"updatedAt"=NOW()
+       RETURNING status,"lastError","updatedAt"`,
+      id,
+      companyId,
+      productVariantId,
+      JSON.stringify({ productVariantId }),
+      idempotencyKey,
+    );
+    return rows[0]?.status === "SENT"
+      ? { state: "SYNCED" as const, label: "Sincronizado com o Bling" }
+      : { state: "QUEUED" as const, label: "Envio ao Bling agendado" };
+  }
+
+  async productSyncStatuses(companyId: string, productVariantIds: string[]) {
+    if (!productVariantIds.length) return {};
+    const [maps, events] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT "internalKey","externalId" FROM "IntegrationResourceMap"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "resourceType"='STOREFRONT_PRODUCT'
+            AND "internalKey"=ANY($2::text[])`,
+        companyId,
+        productVariantIds,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT DISTINCT ON ("aggregateId") "aggregateId",status,"lastError","updatedAt"
+           FROM "IntegrationOutbox"
+          WHERE "companyId"=$1 AND provider='BLING'
+            AND "eventType"='PRODUCT_UPSERT_REQUESTED'
+            AND "aggregateId"=ANY($2::text[])
+          ORDER BY "aggregateId","updatedAt" DESC`,
+        companyId,
+        productVariantIds,
+      ),
+    ]);
+    const mapped = new Set(
+      maps.filter((item) => item.externalId).map((item) => item.internalKey),
+    );
+    const byId = new Map(events.map((item) => [item.aggregateId, item]));
+    return Object.fromEntries(
+      productVariantIds.map((id) => {
+        if (mapped.has(id))
+          return [id, { state: "SYNCED", label: "Sincronizado com o Bling" }];
+        const event = byId.get(id);
+        if (!event)
+          return [id, { state: "NOT_QUEUED", label: "Ainda não enviado" }];
+        if (event.status === "PROCESSING")
+          return [id, { state: "PROCESSING", label: "Enviando ao Bling" }];
+        if (event.status === "FAILED")
+          return [
+            id,
+            {
+              state: "RETRYING",
+              label: "Nova tentativa agendada",
+              lastError: event.lastError,
+            },
+          ];
+        if (event.status === "SENT")
+          return [id, { state: "SYNCED", label: "Sincronizado com o Bling" }];
+        return [id, { state: "QUEUED", label: "Envio ao Bling agendado" }];
+      }),
+    );
+  }
+
+  async retryProductVariant(companyId: string, productVariantId: string) {
+    const idempotencyKey = `bling:product-upsert:${productVariantId}`;
+    await this.database.$executeRawUnsafe(
+      `UPDATE "IntegrationOutbox"
+          SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW()
+        WHERE "companyId"=$1 AND "idempotencyKey"=$2`,
+      companyId,
+      idempotencyKey,
+    );
+    return this.enqueueProductVariant(companyId, productVariantId);
+  }
+
   private normalizeBlingPhone(value: unknown) {
     let normalized = String(value ?? "").replace(/\D/g, "");
     if (normalized.startsWith("55") && normalized.length > 11) {
@@ -2280,6 +2382,14 @@ export class BlingOutboxService {
         row.aggregateType === "FISCAL_DOCUMENT"
       ) {
         result = await this.processLegacyFiscalReady(row);
+      } else if (
+        row.eventType === "PRODUCT_UPSERT_REQUESTED" &&
+        row.aggregateType === "PRODUCT_VARIANT"
+      ) {
+        result = await this.blingCatalogSync.syncVariant(
+          row.companyId,
+          row.aggregateId,
+        );
       } else {
         throw new Error(
           `Evento Bling ainda não implementado: ${row.eventType}/${row.aggregateType}`,

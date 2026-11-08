@@ -68,6 +68,10 @@ type FiscalProfile = {
   tipoProducao: "P" | "T";
   descricaoCurta: string;
   cest?: string | null;
+  gtin?: string | null;
+  largura: number;
+  altura: number;
+  profundidade: number;
 };
 
 @Injectable()
@@ -78,13 +82,17 @@ export class BlingCatalogSyncService {
 
   private async localCatalog(companyId: string) {
     return this.database.$queryRawUnsafe<any[]>(
-      `SELECT p.slug,p.name,pv.id AS "variantId",pv.sku,pv."netWeightGrams",
+      `SELECT p.slug,p.name,pl.code AS "lineCode",pv.id AS "variantId",pv.sku,pv."netWeightGrams",
+              pv."grossWeightGrams",pv."packageWidthCm",pv."packageHeightCm",pv."packageDepthCm",
+              pv.gtin,pv.ncm,pv."originCode",pv.cest,pv."productionType",pv."fiscalValidated",pv."salesUnit",
               COALESCE((
                 SELECT pp.price
                   FROM "ProductPrice" pp
+                  JOIN "SalesChannel" sc ON sc.id=pp."salesChannelId"
                  WHERE pp."companyId"=$1
                    AND pp."productVariantId"=pv.id
                    AND pp.active=true
+                   AND sc.code='CONSUMIDOR_FINAL'
                    AND pp."validFrom" <= NOW()
                    AND (pp."validUntil" IS NULL OR pp."validUntil" > NOW())
                  ORDER BY pp."validFrom" DESC,pp."updatedAt" DESC
@@ -92,7 +100,9 @@ export class BlingCatalogSyncService {
               ),0) AS "catalogPrice"
          FROM "Product" p
          JOIN "ProductVariant" pv ON pv."productId"=p.id
+         JOIN "ProductLine" pl ON pl.id=p."productLineId"
         WHERE p.active=true AND pv.active=true
+          AND pl."companyId"=$1
           AND NULLIF(TRIM(pv.sku),'') IS NOT NULL
         ORDER BY p.slug,pv."netWeightGrams"`,
       companyId,
@@ -394,23 +404,35 @@ export class BlingCatalogSyncService {
 
   private defaultProfile(row: any): FiscalProfile {
     const kg = Math.max(0.001, Number(row.netWeightGrams ?? 0) / 1000);
+    const grossKg = Math.max(kg, Number(row.grossWeightGrams ?? 0) / 1000);
     const governedPrice = Number(row.catalogPrice ?? 0);
     return {
-      ncm: DEFAULT_NCM,
-      origem: 0,
-      unidade: "UN",
+      ncm:
+        String(row.ncm ?? "").replace(/\D/g, "") ||
+        (row.lineCode === "GREEN_COFFEE" ? "09011110" : DEFAULT_NCM),
+      origem: Number.isInteger(Number(row.originCode))
+        ? Number(row.originCode)
+        : 0,
+      unidade: row.salesUnit === "KG" ? "KG" : "UN",
       preco:
         governedPrice > 0
           ? governedPrice
           : (BLING_CATALOG_PRICE_BY_SLUG[String(row.slug)] ?? 0),
       pesoLiquido: kg,
-      pesoBruto: kg,
+      pesoBruto: grossKg,
       tipo: "P",
       situacao: "A",
       formato: "S",
-      tipoProducao: "P",
-      descricaoCurta: `${row.name} — café torrado`,
-      cest: null,
+      tipoProducao: row.productionType === "T" ? "T" : "P",
+      descricaoCurta:
+        row.lineCode === "GREEN_COFFEE"
+          ? `${row.name} — café verde`
+          : `${row.name} — café torrado`,
+      cest: row.cest ? String(row.cest).replace(/\D/g, "") : null,
+      gtin: row.gtin ? String(row.gtin).replace(/\D/g, "") : null,
+      largura: Number(row.packageWidthCm ?? 0),
+      altura: Number(row.packageHeightCm ?? 0),
+      profundidade: Number(row.packageDepthCm ?? 0),
     };
   }
 
@@ -444,6 +466,16 @@ export class BlingCatalogSyncService {
         source.descricaoCurta ?? base.descricaoCurta,
       ).trim(),
       cest: source.cest ? String(source.cest).replace(/\D/g, "") : null,
+      gtin: source.gtin ? String(source.gtin).replace(/\D/g, "") : base.gtin,
+      largura: Number.isFinite(Number(source.largura))
+        ? Number(source.largura)
+        : base.largura,
+      altura: Number.isFinite(Number(source.altura))
+        ? Number(source.altura)
+        : base.altura,
+      profundidade: Number.isFinite(Number(source.profundidade))
+        ? Number(source.profundidade)
+        : base.profundidade,
     };
   }
 
@@ -471,6 +503,12 @@ export class BlingCatalogSyncService {
     ) {
       throw new Error("Peso bruto não pode ser menor que o peso líquido.");
     }
+    if (
+      [profile.largura, profile.altura, profile.profundidade].some(
+        (value) => !Number.isFinite(value) || value <= 0,
+      )
+    )
+      throw new Error("Dimensões do produto inválidas para o Bling.");
   }
 
   private productPayload(row: any, profile: FiscalProfile) {
@@ -485,12 +523,19 @@ export class BlingCatalogSyncService {
       unidade: profile.unidade,
       pesoLiquido: profile.pesoLiquido,
       pesoBruto: profile.pesoBruto,
+      ...(profile.gtin ? { gtin: profile.gtin } : {}),
       volumes: 1,
       itensPorCaixa: 1,
       tipoProducao: profile.tipoProducao,
       condicao: 0,
       freteGratis: false,
       marca: "Bispo Coffees",
+      dimensoes: {
+        largura: profile.largura,
+        altura: profile.altura,
+        profundidade: profile.profundidade,
+        unidadeMedida: 1,
+      },
       observacoes: `Criado e governado pelo BBOS · SKU ${row.sku}`,
       tributacao: {
         origem: profile.origem,
@@ -513,6 +558,107 @@ export class BlingCatalogSyncService {
       if (batch.length < 100) break;
     }
     return products;
+  }
+
+  async syncVariant(companyId: string, variantId: string) {
+    const local = await this.localCatalog(companyId);
+    const row = local.find(
+      (item) => this.catalogKey(item) === String(variantId),
+    );
+    if (!row)
+      throw new Error("Produto BBOS não encontrado para sincronização.");
+    if (!row.fiscalValidated)
+      throw new Error(
+        "Sincronização bloqueada: confirme a validação fiscal do produto.",
+      );
+
+    const [profileMaps, productMaps, companyProfile] = await Promise.all([
+      this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE"),
+      this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
+      this.companyFiscalProfile(companyId),
+    ]);
+    const profile = this.normalizeProfile(
+      row,
+      this.mapForCatalogRow(profileMaps, row)?.metadata,
+    );
+    this.validateProfile(profile);
+    await this.saveResourceMap(
+      companyId,
+      "STOREFRONT_PRODUCT_PROFILE",
+      this.catalogKey(row),
+      this.catalogKey(row),
+      profile,
+    );
+
+    const currentMap = this.mapForCatalogRow(productMaps, row);
+    if (currentMap?.externalId) {
+      const detail = await this.bling.request(
+        companyId,
+        `/produtos/${encodeURIComponent(String(currentMap.externalId))}`,
+        { method: "GET" },
+      );
+      const existing = detail?.data ?? detail ?? {};
+      await this.bling.request(
+        companyId,
+        `/produtos/${encodeURIComponent(String(currentMap.externalId))}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            ...existing,
+            ...this.productPayload(row, profile),
+            id: Number(currentMap.externalId),
+            tributacao: {
+              ...(existing?.tributacao ?? {}),
+              origem: profile.origem,
+              ncm: profile.ncm,
+              ...(profile.cest ? { cest: profile.cest } : {}),
+            },
+          }),
+        },
+      );
+      return { action: "UPDATED", blingProductId: currentMap.externalId };
+    }
+
+    const sku = String(row.sku ?? "")
+      .trim()
+      .toUpperCase();
+    const exactMatches = (await this.fetchBlingProducts(companyId)).filter(
+      (product) =>
+        String(product?.codigo ?? "")
+          .trim()
+          .toUpperCase() === sku,
+    );
+    if (exactMatches.length > 1)
+      throw new Error(
+        `Sincronização bloqueada: existem ${exactMatches.length} produtos com o SKU ${sku} no Bling.`,
+      );
+    if (exactMatches[0]?.id) {
+      const externalId = String(exactMatches[0].id);
+      await this.saveMap(companyId, row, externalId, {
+        sku,
+        productVariantId: row.variantId,
+        source: "SKU_EXACT_MATCH_DURING_AUTOMATIC_SYNC",
+      });
+      return { action: "LINKED", blingProductId: externalId };
+    }
+
+    const result = await this.bling.request(companyId, "/produtos", {
+      method: "POST",
+      body: JSON.stringify(this.productPayload(row, profile)),
+    });
+    const externalId = String(result?.data?.id ?? result?.id ?? "").trim();
+    if (!externalId) throw new Error("Bling criou o produto sem retornar ID.");
+    await this.saveMap(companyId, row, externalId, {
+      sku,
+      productVariantId: row.variantId,
+      source: "CREATED_BY_BBOS_AUTOMATIC_SYNC",
+      fiscalProfile: profile,
+      companyFiscalProfile: {
+        taxRegime: companyProfile.taxRegime,
+        pisCofinsRegime: companyProfile.pisCofinsRegime,
+      },
+    });
+    return { action: "CREATED", blingProductId: externalId };
   }
 
   async status(companyId: string) {

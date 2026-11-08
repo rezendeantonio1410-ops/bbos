@@ -29,7 +29,7 @@ import {
 } from "@bbos/shared";
 import {
   PRODUCT_LINE_LABELS,
-  PRODUCT_LINES,
+  ROASTED_PRODUCT_LINES,
   type CatalogProduct,
   type ProductLine,
 } from "@bbos/shared/product-presentation";
@@ -341,7 +341,7 @@ function NewOrderWizard({
 }) {
   const [step, setStep] = useState(0);
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
-  const [line, setLine] = useState<ProductLine>(PRODUCT_LINES[0]);
+  const [line, setLine] = useState<ProductLine>(ROASTED_PRODUCT_LINES[0]);
   const [productId, setProductId] = useState("");
   const [productVariantId, setProductVariantId] = useState("");
   const productsForLine = catalog.filter(
@@ -581,7 +581,7 @@ function NewOrderWizard({
                   }}
                   className={field}
                 >
-                  {PRODUCT_LINES.map((item) => (
+                  {ROASTED_PRODUCT_LINES.map((item) => (
                     <option key={item} value={item}>
                       {PRODUCT_LINE_LABELS[item]}
                     </option>

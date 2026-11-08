@@ -1,12 +1,20 @@
 export const PRODUCT_LINES = [
+  "GREEN_COFFEE",
   "RAROS",
   "EPICOS",
   "CLASSICOS",
   "GOURMET",
 ] as const;
 export type ProductLine = (typeof PRODUCT_LINES)[number];
-export type ProductPresentationWeightG = 250 | 500 | 1000;
+export const ROASTED_PRODUCT_LINES = [
+  "RAROS",
+  "EPICOS",
+  "CLASSICOS",
+  "GOURMET",
+] as const;
+export type ProductPresentationWeightG = 250 | 500 | 1000 | 30000 | 60000;
 export const PRODUCT_LINE_LABELS: Record<ProductLine, string> = {
+  GREEN_COFFEE: "Café Verde",
   RAROS: "Raros",
   EPICOS: "Épicos",
   CLASSICOS: "Clássicos",
@@ -16,6 +24,13 @@ export const PRODUCT_LINE_META: Record<
   ProductLine,
   { slug: string; description: string; positioning: string; sortOrder: number }
 > = {
+  GREEN_COFFEE: {
+    slug: "cafe-verde",
+    description:
+      "Café verde comercializável, com cadastro fiscal e logístico próprio.",
+    positioning: "Matéria-prima e exportação",
+    sortOrder: 5,
+  },
   RAROS: {
     slug: "raros",
     description:
@@ -45,6 +60,7 @@ export const PRODUCT_LINE_META: Record<
 export const PRODUCT_PRESENTATION_RULES: Readonly<
   Record<ProductLine, readonly ProductPresentationWeightG[]>
 > = {
+  GREEN_COFFEE: [1000, 30000, 60000],
   RAROS: [250],
   EPICOS: [250],
   CLASSICOS: [250, 500, 1000],
@@ -62,6 +78,30 @@ export type CatalogSku = CreateProductSkuInput & {
   active: boolean;
   stockUnits: number;
   salesAmount: number;
+  grossWeightG: number;
+  packageWidthCm: number;
+  packageHeightCm: number;
+  packageDepthCm: number;
+  retailPrice: number;
+  maxDiscountPercent: number;
+  minimumPrice: number;
+  gtin?: string | null;
+  ncm: string;
+  originCode: number;
+  cest?: string | null;
+  productionType: "P" | "T";
+  fiscalValidated: boolean;
+  blingSync?: {
+    state:
+      | "SYNCED"
+      | "QUEUED"
+      | "PROCESSING"
+      | "RETRYING"
+      | "PENDING_VALIDATION"
+      | "NOT_QUEUED";
+    label: string;
+    lastError?: string | null;
+  };
 };
 export type CatalogProduct = {
   id: string;
@@ -115,8 +155,7 @@ export function resolveLegacyProductVariant<
   const normalized = legacySku?.trim().toLocaleUpperCase("pt-BR");
   if (!normalized) return null;
   const matches = variants.filter(
-    (variant) =>
-      variant.sku.trim().toLocaleUpperCase("pt-BR") === normalized,
+    (variant) => variant.sku.trim().toLocaleUpperCase("pt-BR") === normalized,
   );
   return matches.length === 1 ? matches[0]! : null;
 }
@@ -125,6 +164,18 @@ export type CreateCatalogProductInput = CreateProductSkuInput & {
   description?: string;
   commercialUnit: "UN" | "KG";
   active: boolean;
+  grossWeightG: number;
+  packageWidthCm: number;
+  packageHeightCm: number;
+  packageDepthCm: number;
+  retailPrice: number;
+  maxDiscountPercent: number;
+  gtin?: string;
+  ncm: string;
+  originCode: number;
+  cest?: string;
+  productionType: "P" | "T";
+  fiscalValidated: boolean;
 };
 
 export type CreateProductVariantInput = {
@@ -132,7 +183,92 @@ export type CreateProductVariantInput = {
   packageWeightG: number;
   commercialUnit: "UN" | "KG";
   active: boolean;
+  grossWeightG: number;
+  packageWidthCm: number;
+  packageHeightCm: number;
+  packageDepthCm: number;
+  retailPrice: number;
+  maxDiscountPercent: number;
+  gtin?: string;
+  ncm: string;
+  originCode: number;
+  cest?: string;
+  productionType: "P" | "T";
+  fiscalValidated: boolean;
 };
+
+const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
+
+export function isValidGtin(value: string) {
+  const normalized = digits(value);
+  if (![8, 12, 13, 14].includes(normalized.length)) return false;
+  const body = normalized.slice(0, -1);
+  const expected = Number(normalized.at(-1));
+  const sum = [...body]
+    .reverse()
+    .reduce(
+      (total, item, index) => total + Number(item) * (index % 2 === 0 ? 3 : 1),
+      0,
+    );
+  return (10 - (sum % 10)) % 10 === expected;
+}
+
+export function validateCreateCatalogProduct(
+  input: CreateCatalogProductInput,
+): CreateCatalogProductInput {
+  const base = validateCreateProductSku(input);
+  const grossWeightG = Number(input.grossWeightG);
+  const retailPrice = Number(input.retailPrice);
+  const maxDiscountPercent = Number(input.maxDiscountPercent);
+  const packageWidthCm = Number(input.packageWidthCm);
+  const packageHeightCm = Number(input.packageHeightCm);
+  const packageDepthCm = Number(input.packageDepthCm);
+  const ncm = digits(input.ncm);
+  const cest = digits(input.cest);
+  const gtin = digits(input.gtin);
+  const originCode = Number(input.originCode);
+
+  if (!Number.isFinite(grossWeightG) || grossWeightG < base.packageWeightG)
+    throw new Error("O peso bruto não pode ser menor que o peso líquido.");
+  if (
+    [packageWidthCm, packageHeightCm, packageDepthCm].some(
+      (value) => !Number.isFinite(value) || value <= 0,
+    )
+  )
+    throw new Error("Informe largura, altura e profundidade maiores que zero.");
+  if (!Number.isFinite(retailPrice) || retailPrice <= 0)
+    throw new Error("Informe um preço de venda maior que zero.");
+  if (
+    !Number.isFinite(maxDiscountPercent) ||
+    maxDiscountPercent < 0 ||
+    maxDiscountPercent > 100
+  )
+    throw new Error("O desconto máximo deve ficar entre 0% e 100%.");
+  if (!/^\d{8}$/.test(ncm)) throw new Error("O NCM deve conter 8 dígitos.");
+  if (cest && !/^\d{7}$/.test(cest))
+    throw new Error("O CEST deve conter 7 dígitos.");
+  if (!Number.isInteger(originCode) || originCode < 0 || originCode > 8)
+    throw new Error("A origem fiscal deve ficar entre 0 e 8.");
+  if (gtin && !isValidGtin(gtin))
+    throw new Error("O GTIN/EAN informado é inválido.");
+  if (!["P", "T"].includes(input.productionType))
+    throw new Error("Tipo de produção inválido.");
+
+  return {
+    ...input,
+    ...base,
+    grossWeightG,
+    retailPrice,
+    maxDiscountPercent,
+    packageWidthCm,
+    packageHeightCm,
+    packageDepthCm,
+    ncm,
+    cest: cest || undefined,
+    gtin: gtin || undefined,
+    originCode,
+  };
+}
 
 export const normalizeProductCode = (value: string) =>
   value
@@ -150,7 +286,17 @@ export const productSlug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-export const PRODUCT_CATALOG_DEMO: CatalogProduct[] = [
+type CatalogIdentityProduct = Omit<CatalogProduct, "skus"> & {
+  skus: Array<
+    CreateProductSkuInput &
+      Pick<
+        CatalogSku,
+        "id" | "commercialUnit" | "active" | "stockUnits" | "salesAmount"
+      >
+  >;
+};
+
+export const PRODUCT_CATALOG_DEMO: CatalogIdentityProduct[] = [
   {
     id: "classicos-caramelo",
     line: "CLASSICOS",
@@ -329,7 +475,7 @@ export function validateCreateProductSku(
 }
 
 export function assertCatalogSkuAvailable(
-  catalog: readonly CatalogProduct[],
+  catalog: readonly CatalogIdentityProduct[],
   input: CreateProductSkuInput,
 ) {
   const valid = validateCreateProductSku(input);

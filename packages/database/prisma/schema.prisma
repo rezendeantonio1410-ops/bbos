@@ -284,6 +284,7 @@ enum InventoryReservationStatus {
 }
 
 enum ProductLineCode {
+  GREEN_COFFEE
   RAROS
   EPICOS
   CLASSICOS
@@ -1839,6 +1840,16 @@ model ProductVariant {
   product                Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku                    String                    @unique
   netWeightGrams         Int
+  grossWeightGrams       Int                       @default(0)
+  packageWidthCm         Decimal                   @default(18) @db.Decimal(10, 2)
+  packageHeightCm        Decimal                   @default(6) @db.Decimal(10, 2)
+  packageDepthCm         Decimal                   @default(11) @db.Decimal(10, 2)
+  gtin                   String?                   @unique
+  ncm                    String                    @default("09012100") @db.VarChar(8)
+  originCode             Int                       @default(0)
+  cest                   String?                   @db.VarChar(7)
+  productionType         String                    @default("P") @db.VarChar(1)
+  fiscalValidated        Boolean                   @default(false)
   salesUnit              String
   active                 Boolean                   @default(true)
   coffeeCost             Decimal                   @default(0) @db.Decimal(14, 2)
@@ -1896,20 +1907,25 @@ model SalesChannel {
 }
 
 model ProductPrice {
-  id               String         @id @default(cuid())
-  companyId        String
-  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  productVariantId String
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  salesChannelId   String
-  salesChannel     SalesChannel   @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
-  currency         String
-  price            Decimal        @db.Decimal(14, 2)
-  active           Boolean        @default(true)
-  validFrom        DateTime?
-  validUntil       DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                         String         @id @default(cuid())
+  companyId                  String
+  company                    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productVariantId           String
+  productVariant             ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  salesChannelId             String
+  salesChannel               SalesChannel   @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+  currency                   String
+  price                      Decimal        @db.Decimal(14, 2)
+  active                     Boolean        @default(true)
+  validFrom                  DateTime?
+  validUntil                 DateTime?
+  maxRequestDiscountPercent  Decimal        @default(0) @db.Decimal(7, 3)
+  maxApprovalDiscountPercent Decimal        @default(0) @db.Decimal(7, 3)
+  minimumPrice               Decimal?       @db.Decimal(14, 2)
+  minimumMarginPercent       Decimal?       @db.Decimal(7, 3)
+  minimumRoiPercent          Decimal?       @db.Decimal(7, 3)
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
 
   @@unique([productVariantId, salesChannelId, currency, validFrom])
   @@index([companyId, salesChannelId, active])
