@@ -73,7 +73,7 @@ ALTER TABLE "SalesOrderItem"
 CREATE INDEX "SalesOrderItem_baseProductPriceId_idx" ON "SalesOrderItem"("baseProductPriceId");
 CREATE INDEX "SalesOrderItem_customerProductPriceId_idx" ON "SalesOrderItem"("customerProductPriceId");
 
-UPDATE "SalesOrderItem"
+UPDATE "SalesOrderItem" AS soi
    SET "pricingSource" = CASE
      WHEN so."orderType" = 'SAMPLE' THEN 'SAMPLE'
      ELSE 'LEGACY'
