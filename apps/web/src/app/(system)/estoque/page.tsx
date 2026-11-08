@@ -19,6 +19,7 @@ import {
   PackageCheck,
   Plus,
   RefreshCw,
+  Scale,
   Search,
   ShieldAlert,
   Warehouse,
@@ -43,6 +44,10 @@ const currency = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 const integer = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const kilograms = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 3,
+});
 const statusMap: Record<
   ReceiptStatus,
   { label: string; tone: "neutral" | "success" | "warning" | "danger" }
@@ -86,6 +91,26 @@ type FinishedGoodsStock = {
   physicalUnits: number;
   reservedUnits: number;
   availableUnits: number;
+};
+
+type RoastedStockProfile = {
+  productId: string;
+  profileName: string;
+  physicalKg: number;
+  reservedKg: number;
+  availableKg: number;
+  lotCount: number;
+  lastRoastedAt: string | null;
+};
+
+type RoastedStockLine = {
+  lineCode: string;
+  lineName: string;
+  physicalKg: number;
+  reservedKg: number;
+  availableKg: number;
+  lotCount: number;
+  profiles: RoastedStockProfile[];
 };
 
 function SummaryCard({
@@ -621,6 +646,7 @@ export default function InventoryPage() {
   const [movementOpen, setMovementOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGoodsStock[]>([]);
+  const [roastedStock, setRoastedStock] = useState<RoastedStockLine[]>([]);
   const [finishedGoodsOptions, setFinishedGoodsOptions] = useState<
     FinishedGoodsOption[]
   >([]);
@@ -649,9 +675,16 @@ export default function InventoryPage() {
         cache: "no-store",
         credentials: "include",
       }).then((response) => (response.ok ? response.json() : { variants: [] })),
+      fetch(`${api}/operations-flow/roasted-stock-by-line`, {
+        cache: "no-store",
+        credentials: "include",
+      }).then((response) =>
+        response.ok ? (response.json() as Promise<RoastedStockLine[]>) : [],
+      ),
     ])
-      .then(([goods, rawLots, rawMovements, stockOptions]) => {
+      .then(([goods, rawLots, rawMovements, stockOptions, roasted]) => {
         setFinishedGoods(goods as FinishedGoodsStock[]);
+        setRoastedStock(roasted as RoastedStockLine[]);
         setLots(
           (rawLots as Array<Record<string, unknown>>).map((lot) => {
             const supplier = lot.supplier as { name?: string } | undefined;
@@ -770,6 +803,7 @@ export default function InventoryPage() {
       })
       .catch(() => {
         setFinishedGoods([]);
+        setRoastedStock([]);
         setLots([]);
         setMovements([]);
         setFinishedGoodsOptions([]);
@@ -836,6 +870,19 @@ export default function InventoryPage() {
     [finishedGoods],
   );
   const summary = useMemo(() => calculateInventorySummary(lots, 0), [lots]);
+  const roastedSummary = useMemo(
+    () =>
+      roastedStock.reduce(
+        (totals, line) => ({
+          physicalKg: totals.physicalKg + line.physicalKg,
+          reservedKg: totals.reservedKg + line.reservedKg,
+          availableKg: totals.availableKg + line.availableKg,
+          lotCount: totals.lotCount + line.lotCount,
+        }),
+        { physicalKg: 0, reservedKg: 0, availableKg: 0, lotCount: 0 },
+      ),
+    [roastedStock],
+  );
   const locations = [...new Set(lots.map((lot) => lot.location))];
   const filteredLots = lots.filter((lot) => {
     const text =
@@ -923,7 +970,8 @@ export default function InventoryPage() {
             Estoque
           </h1>
           <p className="mt-2 text-sm text-stone-500">
-            Saldos, valor, reservas e rastreabilidade do café verde
+            Café verde, café torrado a granel e produto acabado, com reservas e
+            rastreabilidade
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -959,7 +1007,140 @@ export default function InventoryPage() {
           <SummaryCard key={card.label} {...card} />
         ))}
       </section>
-      <section className="mt-8">
+      <section id="cafe-torrado" className="mt-8 scroll-mt-24">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+              Café torrado a granel
+            </p>
+            <h2 className="mt-1 font-[var(--font-manrope)] text-xl font-semibold">
+              Estoque por linha
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm text-stone-500">
+              O saldo permanece em kg. A embalagem de 250 g, 500 g ou 1 kg só é
+              separada quando o pedido for confirmado.
+            </p>
+          </div>
+          <Link
+            href="/producao/controle"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-forest-700 hover:text-forest-900"
+          >
+            Ver lotes de torra
+            <ArrowRight size={15} />
+          </Link>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard
+            label="Torrado físico"
+            value={`${kilograms.format(roastedSummary.physicalKg)} kg`}
+            icon={Scale}
+          />
+          <SummaryCard
+            label="Reservado por pedidos"
+            value={`${kilograms.format(roastedSummary.reservedKg)} kg`}
+            icon={LockKeyhole}
+          />
+          <SummaryCard
+            label="Livre para novos pedidos"
+            value={`${kilograms.format(roastedSummary.availableKg)} kg`}
+            icon={PackageCheck}
+          />
+          <SummaryCard
+            label="Lotes com saldo"
+            value={integer.format(roastedSummary.lotCount)}
+            icon={Boxes}
+          />
+        </div>
+
+        {roastedStock.length ? (
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            {roastedStock.map((line) => (
+              <Card key={line.lineCode} className="overflow-hidden p-0">
+                <div className="border-b border-stone-100 bg-stone-50/70 p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[.16em] text-forest-700">
+                        Linha
+                      </p>
+                      <h3 className="mt-1 text-lg font-semibold">
+                        {line.lineName}
+                      </h3>
+                    </div>
+                    <Badge tone="neutral">
+                      {integer.format(line.lotCount)}{" "}
+                      {line.lotCount === 1 ? "lote" : "lotes"}
+                    </Badge>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <p className="text-stone-400">Físico</p>
+                      <strong>{kilograms.format(line.physicalKg)} kg</strong>
+                    </div>
+                    <div>
+                      <p className="text-stone-400">Reservado</p>
+                      <strong>{kilograms.format(line.reservedKg)} kg</strong>
+                    </div>
+                    <div>
+                      <p className="text-stone-400">Livre</p>
+                      <strong className="text-forest-700">
+                        {kilograms.format(line.availableKg)} kg
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="divide-y divide-stone-100 px-5">
+                  {line.profiles.map((profile) => (
+                    <div
+                      key={profile.productId}
+                      className="py-4 first:pt-5 last:pb-5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">
+                            {profile.profileName}
+                          </p>
+                          <p className="mt-1 text-[11px] text-stone-400">
+                            {integer.format(profile.lotCount)}{" "}
+                            {profile.lotCount === 1 ? "lote" : "lotes"}
+                            {profile.lastRoastedAt
+                              ? ` · última torra ${new Date(profile.lastRoastedAt).toLocaleDateString("pt-BR")}`
+                              : ""}
+                          </p>
+                        </div>
+                        <strong className="text-sm text-forest-700">
+                          {kilograms.format(profile.availableKg)} kg livres
+                        </strong>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-stone-500">
+                        <span>
+                          Físico {kilograms.format(profile.physicalKg)} kg
+                        </span>
+                        <span>
+                          Reservado {kilograms.format(profile.reservedKg)} kg
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card className="mt-4 py-10 text-center">
+            <Flame size={24} className="mx-auto text-stone-300" />
+            <p className="mt-3 text-sm font-semibold">
+              Nenhum café torrado disponível
+            </p>
+            <p className="mt-1 text-xs text-stone-400">
+              Ao concluir uma torra, o saldo em kg aparecerá aqui na linha
+              correspondente.
+            </p>
+          </Card>
+        )}
+      </section>
+
+      <section id="produto-acabado" className="mt-8 scroll-mt-24">
         <div>
           <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
             Produto acabado

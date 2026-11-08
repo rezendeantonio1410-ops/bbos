@@ -4,7 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Boxes,
   CircleDollarSign,
+  Flame,
   PackageCheck,
   Plus,
   RotateCcw,
@@ -30,6 +32,10 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   minimumFractionDigits: 2,
 });
+const kilograms = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 3,
+});
 type PriceRow = {
   id: string;
   productVariantId: string;
@@ -54,6 +60,15 @@ type CostProduct = {
 };
 
 type CostSummary = { products?: CostProduct[] };
+
+type RoastedStockLine = {
+  lineCode: string;
+  lineName: string;
+  physicalKg: number;
+  reservedKg: number;
+  availableKg: number;
+  lotCount: number;
+};
 
 const INITIAL_PRODUCT: CreateCatalogProductInput = {
   line: "GOURMET",
@@ -117,6 +132,9 @@ export function ProductsVNext() {
   const [catalog, setCatalog] = React.useState<CatalogProduct[]>([]);
   const [prices, setPrices] = React.useState<PriceRow[]>([]);
   const [costs, setCosts] = React.useState<CostProduct[]>([]);
+  const [roastedStock, setRoastedStock] = React.useState<RoastedStockLine[]>(
+    [],
+  );
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -151,17 +169,32 @@ export function ProductsVNext() {
         cache: "no-store",
         signal: controller.signal,
       }),
+      fetch(`${api}/operations-flow/roasted-stock-by-line`, {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      }),
     ])
-      .then(async ([productsResponse, pricesResponse, costsResponse]) => {
-        if (!productsResponse.ok) throw new Error("products");
-        setCatalog(await productsResponse.json());
-        setPrices(pricesResponse.ok ? await pricesResponse.json() : []);
-        const summary: CostSummary = costsResponse.ok
-          ? await costsResponse.json()
-          : {};
-        setCosts(summary.products ?? []);
-        setStatus("ready");
-      })
+      .then(
+        async ([
+          productsResponse,
+          pricesResponse,
+          costsResponse,
+          roastedStockResponse,
+        ]) => {
+          if (!productsResponse.ok) throw new Error("products");
+          setCatalog(await productsResponse.json());
+          setPrices(pricesResponse.ok ? await pricesResponse.json() : []);
+          const summary: CostSummary = costsResponse.ok
+            ? await costsResponse.json()
+            : {};
+          setCosts(summary.products ?? []);
+          setRoastedStock(
+            roastedStockResponse.ok ? await roastedStockResponse.json() : [],
+          );
+          setStatus("ready");
+        },
+      )
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
@@ -411,6 +444,74 @@ export function ProductsVNext() {
           icon={Tags}
           tone="violet"
         />
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-[20px] border border-[var(--vnext-border)] bg-white/95 shadow-[var(--vnext-shadow-card)]">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--vnext-border)] px-5 py-4">
+          <div>
+            <p className="flex items-center gap-2 text-[9px] font-extrabold uppercase tracking-[.14em] text-[var(--vnext-green)]">
+              <Flame size={13} /> Café torrado a granel
+            </p>
+            <h2 className="mt-1 text-lg font-bold">Estoque por linha</h2>
+            <p className="mt-1 text-xs text-[var(--vnext-text-3)]">
+              Saldo em kg; a apresentação é definida somente pelo pedido.
+            </p>
+          </div>
+          <Link
+            href="/estoque#cafe-torrado"
+            className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[var(--vnext-green)]"
+          >
+            Ver perfis e lotes <ArrowRight size={12} />
+          </Link>
+        </div>
+        {roastedStock.length ? (
+          <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+            {roastedStock.map((line) => (
+              <div
+                key={line.lineCode}
+                className="rounded-2xl bg-[var(--vnext-bg-soft)] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[var(--vnext-text-3)]">
+                      Linha
+                    </p>
+                    <h3 className="mt-1 text-sm font-bold">{line.lineName}</h3>
+                  </div>
+                  <Badge tone="neutral">
+                    {line.lotCount} {line.lotCount === 1 ? "lote" : "lotes"}
+                  </Badge>
+                </div>
+                <p className="mt-4 text-2xl font-bold tracking-tight text-[var(--vnext-green)]">
+                  {kilograms.format(line.availableKg)} kg
+                </p>
+                <p className="mt-0.5 text-[10px] text-[var(--vnext-text-3)]">
+                  livres para novos pedidos
+                </p>
+                <div className="mt-3 flex gap-4 border-t border-[var(--vnext-border)] pt-3 text-[10px]">
+                  <span>
+                    Físico{" "}
+                    <strong>{kilograms.format(line.physicalKg)} kg</strong>
+                  </span>
+                  <span>
+                    Reservado{" "}
+                    <strong>{kilograms.format(line.reservedKg)} kg</strong>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid place-items-center px-5 py-8 text-center">
+            <Boxes size={20} className="text-[var(--vnext-text-3)]" />
+            <p className="mt-2 text-xs font-bold">
+              Nenhum café torrado com saldo
+            </p>
+            <p className="mt-1 text-[10px] text-[var(--vnext-text-3)]">
+              As linhas aparecerão aqui após a conclusão das torras.
+            </p>
+          </div>
+        )}
       </section>
 
       {status === "error" && (

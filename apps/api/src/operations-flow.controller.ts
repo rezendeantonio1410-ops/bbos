@@ -10,6 +10,10 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
+import {
+  groupRoastedStockByLine,
+  type RoastedStockRow,
+} from "./roasted-stock-by-line";
 
 @Controller("operations-flow")
 export class OperationsFlowController {
@@ -53,6 +57,39 @@ export class OperationsFlowController {
       'SELECT w.*, GREATEST(w."availableKg"-w."reservedKg",0)::float AS "allocatableKg", po.code AS "productionOrderCode", po."productName", po.sku, pb.code AS "batchCode" FROM "RoastedWipLot" w JOIN "ProductionOrder" po ON po.id=w."productionOrderId" JOIN "ProductionBatch" pb ON pb.id=w."productionBatchId" WHERE w."companyId"=$1 ORDER BY w."producedAt" DESC',
       actor.companyId,
     );
+  }
+
+  @Get("roasted-stock-by-line")
+  async roastedStockByLine(@Req() request: any) {
+    const actor = await this.actor(request);
+    const rows = await this.db
+      .$queryRawUnsafe<RoastedStockRow[]>(
+        `SELECT
+          pl.code::text AS "lineCode",
+          pl.name AS "lineName",
+          pl."sortOrder" AS "lineSortOrder",
+          p.id AS "productId",
+          p.name AS "profileName",
+          COALESCE(SUM(w."availableKg"), 0)::float AS "physicalKg",
+          COALESCE(SUM(w."reservedKg"), 0)::float AS "reservedKg",
+          COALESCE(SUM(GREATEST(w."availableKg" - w."reservedKg", 0)), 0)::float AS "availableKg",
+          COUNT(*)::int AS "lotCount",
+          MAX(w."producedAt") AS "lastRoastedAt"
+        FROM "RoastedWipLot" w
+        JOIN "ProductionOrder" po ON po.id = w."productionOrderId"
+        JOIN "ProductVariant" pv ON pv.id = COALESCE(w."productVariantId", po."productVariantId")
+        JOIN "Product" p ON p.id = pv."productId"
+        JOIN "ProductLine" pl ON pl.id = p."productLineId"
+        WHERE w."companyId" = $1
+          AND w."availableKg" > 0.0005
+          AND pl.code::text IN ('GOURMET', 'CLASSICOS', 'EPICOS', 'RAROS')
+        GROUP BY pl.code, pl.name, pl."sortOrder", p.id, p.name
+        ORDER BY pl."sortOrder", p.name`,
+        actor.companyId,
+      )
+      .catch(() => []);
+
+    return groupRoastedStockByLine(rows);
   }
 
   @Get("finished-lots")
