@@ -108,6 +108,9 @@ export type CatalogProduct = {
   line: ProductLine;
   name: string;
   active: boolean;
+  commercialKind: "STANDARD" | "WHITE_LABEL";
+  baseCoffeeProductId?: string | null;
+  baseCoffeeProductName?: string | null;
   marginPercent: number;
   productionKg: number;
   storefrontImages?: StorefrontProductImage[];
@@ -162,6 +165,8 @@ export function resolveLegacyProductVariant<
 export type CreateCatalogProductInput = CreateProductSkuInput & {
   productCode?: string;
   description?: string;
+  commercialKind?: "STANDARD" | "WHITE_LABEL";
+  baseCoffeeProductId?: string;
   commercialUnit: "UN" | "KG";
   active: boolean;
   grossWeightG: number;
@@ -227,6 +232,17 @@ export function validateCreateCatalogProduct(
   const cest = digits(input.cest);
   const gtin = digits(input.gtin);
   const originCode = Number(input.originCode);
+  const commercialKind = input.commercialKind ?? "STANDARD";
+  const baseCoffeeProductId = String(input.baseCoffeeProductId ?? "").trim();
+
+  if (!["STANDARD", "WHITE_LABEL"].includes(commercialKind))
+    throw new Error("Tipo comercial do produto inválido.");
+  if (commercialKind === "WHITE_LABEL" && base.line === "GREEN_COFFEE")
+    throw new Error("White Label deve pertencer a uma linha de café torrado.");
+  if (commercialKind === "WHITE_LABEL" && !baseCoffeeProductId)
+    throw new Error(
+      "Selecione a linha e o café-base em que este White Label se enquadra.",
+    );
 
   if (!Number.isFinite(grossWeightG) || grossWeightG < base.packageWeightG)
     throw new Error("O peso bruto não pode ser menor que o peso líquido.");
@@ -267,6 +283,9 @@ export function validateCreateCatalogProduct(
     cest: cest || undefined,
     gtin: gtin || undefined,
     originCode,
+    commercialKind,
+    baseCoffeeProductId:
+      commercialKind === "WHITE_LABEL" ? baseCoffeeProductId : undefined,
   };
 }
 
@@ -302,6 +321,7 @@ export const PRODUCT_CATALOG_DEMO: CatalogIdentityProduct[] = [
     line: "CLASSICOS",
     name: "Caramelo",
     active: true,
+    commercialKind: "STANDARD",
     marginPercent: 22.8,
     productionKg: 1480,
     skus: [
@@ -334,6 +354,7 @@ export const PRODUCT_CATALOG_DEMO: CatalogIdentityProduct[] = [
     line: "CLASSICOS",
     name: "Doce de Leite",
     active: true,
+    commercialKind: "STANDARD",
     marginPercent: 21.6,
     productionKg: 1160,
     skus: [
@@ -366,6 +387,7 @@ export const PRODUCT_CATALOG_DEMO: CatalogIdentityProduct[] = [
     line: "CLASSICOS",
     name: "Áureo",
     active: true,
+    commercialKind: "STANDARD",
     marginPercent: 24.1,
     productionKg: 920,
     skus: [
@@ -398,6 +420,7 @@ export const PRODUCT_CATALOG_DEMO: CatalogIdentityProduct[] = [
     line: "GOURMET",
     name: "Melpo",
     active: true,
+    commercialKind: "STANDARD",
     marginPercent: 25.3,
     productionKg: 780,
     skus: [

@@ -24,6 +24,15 @@ test("the ordered SKU is used only to calculate the bulk kilogram reservation", 
   );
   assert.match(orders, /INSERT INTO "RoastedWipReservation"/);
   assert.match(orders, /SET "reservedKg"="reservedKg"\+\$2/);
+  assert.match(
+    orders,
+    /COALESCE\(product\."baseCoffeeProductId",pv\."productId"\) AS "stockProductId"/,
+  );
+  assert.match(
+    orders,
+    /source_product\."productLineId"=target_product\."productLineId"/,
+  );
+  assert.match(orders, /source_product\.id=target_product\.id/);
 });
 
 test("the operational endpoint is read-only and identifies the stock as bulk", () => {
@@ -43,9 +52,26 @@ test("background jobs do not convert reserved bulk coffee into packages", () => 
 
 test("physical packaging and fiscal issue remain separate later actions", () => {
   const orders = source("apps/api/src/sales-orders.controller.ts");
+  const production = source("apps/api/src/production.controller.ts");
   assert.match(orders, /SALES_ORDER_INVOICE_REQUESTED/);
   assert.match(
     orders,
     /pedido precisa estar pronto para expedição antes do faturamento/i,
   );
+  assert.match(production, /SalesOrderStatus\.READY_TO_SHIP/);
+  assert.match(production, /SET "pickedQuantity"=quantity,"pickedAt"=NOW\(\)/);
+  assert.match(
+    production,
+    /COALESCE\(product\."baseCoffeeProductId",pv\."productId"\)=\$2/,
+  );
+});
+
+test("packaging consumes the reserved WIP allocation for the same order item", () => {
+  const migration = source(
+    "packages/database/prisma/migrations/20261108213000_sales_order_term_approval_v1/migration.sql",
+  );
+  assert.match(migration, /SALES_ORDER_WIP_PACKAGING/);
+  assert.match(migration, /"consumedKg"="consumedKg"\+take_kg/);
+  assert.match(migration, /"reservedKg"=GREATEST\(0,"reservedKg"-take_kg\)/);
+  assert.match(migration, /Reserva de WIP torrado insuficiente/);
 });

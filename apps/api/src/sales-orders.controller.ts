@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -12,6 +13,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@bbos/database";
 import {
   SalesOrdersService,
   type CreateSalesOrderInput,
@@ -35,6 +37,7 @@ import {
 
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -82,6 +85,7 @@ export class SalesOrdersController {
     private readonly shipping: StorefrontShippingService,
     private readonly shipment: MelhorEnvioShipmentService,
     private readonly blingCatalogSync: BlingCatalogSyncService,
+    private readonly termApprovals: SalesOrderTermApprovalService,
   ) {}
 
   private async actor(request: any) {
@@ -984,6 +988,15 @@ export class SalesOrdersController {
       );
     }
 
+    const termApproval =
+      paymentType === "TERM"
+        ? await this.termApprovals.ensureForOrder(
+            actor.companyId,
+            order.id,
+            actor,
+          )
+        : null;
+
     return {
       ...order,
       code: orderNumber,
@@ -1012,7 +1025,308 @@ export class SalesOrdersController {
           ? brokerCommissionPerPackage
           : null,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : null,
+      termApproval,
     };
+  }
+
+  @Patch(":id/draft")
+  async editDraft(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body()
+    body: {
+      customerId?: string;
+      paymentType?: "CASH" | "TERM";
+      paymentTerms?: string;
+      notes?: string;
+      reason?: string;
+      items?: Array<{ productVariantId?: string; quantity?: number }>;
+    },
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!["ADMIN", "EXECUTIVE", "SALES"].includes(actor.role))
+      throw new UnauthorizedException(
+        "A edição de pedidos é restrita à administração, diretoria e equipe comercial.",
+      );
+    const reason = String(body.reason ?? "").trim();
+    if (reason.length < 5)
+      throw new BadRequestException(
+        "Informe o motivo da correção para a trilha de auditoria.",
+      );
+    const current = await this.salesOrders.database.salesOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      include: { items: true, reservations: true },
+    });
+    if (!current) throw new BadRequestException("Pedido não encontrado.");
+    if (current.status !== "DRAFT")
+      throw new BadRequestException(
+        "Somente pedidos em rascunho podem ser editados. Após aceite, reserva ou faturamento, use um fluxo formal de alteração.",
+      );
+    if (current.reservations.length)
+      throw new BadRequestException(
+        "O pedido já possui reserva de estoque e não pode ser editado diretamente.",
+      );
+    const accepted = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT id FROM "SalesOrderCustomerApproval"
+        WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='APPROVED'
+        LIMIT 1`,
+      id,
+      actor.companyId,
+    );
+    if (accepted.length)
+      throw new BadRequestException(
+        "O cliente já aceitou este pedido. A correção exige um novo documento e nova autorização.",
+      );
+
+    const customerId = String(body.customerId ?? "").trim();
+    const submittedItems = Array.isArray(body.items) ? body.items : [];
+    if (!customerId || !submittedItems.length)
+      throw new BadRequestException("Cliente e itens são obrigatórios.");
+    const customer = await this.salesOrders.database.customer.findFirst({
+      where: { id: customerId, companyId: actor.companyId, active: true },
+      select: { id: true },
+    });
+    if (!customer)
+      throw new BadRequestException("Cliente ativo não encontrado.");
+
+    const isSample = current.orderType === "SAMPLE";
+    const paymentType = isSample
+      ? "SAMPLE"
+      : String(body.paymentType ?? "CASH").toUpperCase();
+    if (!isSample && !["CASH", "TERM"].includes(paymentType))
+      throw new BadRequestException("Forma de pagamento inválida.");
+    const paymentTerms = isSample
+      ? "Sem cobrança · amostra"
+      : paymentType === "TERM"
+        ? String(body.paymentTerms ?? "").trim()
+        : "À vista";
+    if (paymentType === "TERM" && !paymentTerms)
+      throw new BadRequestException(
+        "Informe a condição de pagamento da venda a prazo.",
+      );
+
+    const pricedItems: CreateSalesOrderInput["items"] = [];
+    let salesChannelId: string | undefined;
+    let salesChannelType: string | undefined;
+    let currency: string | undefined;
+    for (const submitted of submittedItems) {
+      const productVariantId = String(submitted.productVariantId ?? "").trim();
+      const quantity = Number(submitted.quantity);
+      if (!productVariantId || !Number.isSafeInteger(quantity) || quantity <= 0)
+        throw new BadRequestException("Produto ou quantidade inválida.");
+      const price = await this.resolveInternalPrice(
+        actor.companyId,
+        customerId,
+        productVariantId,
+      );
+      if (salesChannelId && salesChannelId !== price.salesChannelId)
+        throw new BadRequestException(
+          "Os itens precisam pertencer ao mesmo canal/tabela comercial.",
+        );
+      salesChannelId = price.salesChannelId;
+      salesChannelType = price.salesChannelType;
+      const itemCurrency = String(price.currency ?? "BRL").toUpperCase();
+      if (currency && currency !== itemCurrency)
+        throw new BadRequestException("Os itens precisam usar a mesma moeda.");
+      currency = itemCurrency;
+      pricedItems.push({
+        productVariantId,
+        warehouseId: "",
+        quantity,
+        unitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : price.officialUnitPrice,
+        pricingSource: isSample
+          ? "SAMPLE"
+          : (price.pricingSource as "CHANNEL" | "CUSTOMER"),
+        baseProductPriceId: isSample ? undefined : price.productPriceId,
+        customerProductPriceId: isSample ? null : price.customerProductPriceId,
+        priceSnapshot: {
+          capturedAt: new Date().toISOString(),
+          source: isSample ? "SAMPLE" : price.pricingSource,
+          baseProductPriceId: isSample ? null : price.productPriceId,
+          customerProductPriceId: isSample
+            ? null
+            : price.customerProductPriceId,
+          channelUnitPrice: price.channelUnitPrice,
+          effectiveUnitPrice: isSample
+            ? SAMPLE_FISCAL_PACKAGE_VALUE
+            : price.officialUnitPrice,
+          currency: price.currency,
+          salesChannelId: price.salesChannelId,
+          salesChannelName: price.salesChannelName,
+        },
+      });
+    }
+    const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
+      salesChannelType,
+      freightResponsibility: String(current.freightResponsibility ?? ""),
+      carrierName: current.carrierName ?? undefined,
+    });
+    if (!deliveryPolicy.valid)
+      throw new BadRequestException(
+        "A troca de cliente alterou o canal comercial e tornou o frete incompatível. Crie um novo pedido ou revise o frete.",
+      );
+    const subtotal = roundMoney(
+      pricedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0,
+      ),
+    );
+    const freight = Number(current.freight ?? 0);
+    const discount = isSample ? 0 : Number(current.discount ?? 0);
+    const totalAmount = roundMoney(subtotal - discount + freight);
+    const totalQuantity = pricedItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    const variants = await this.salesOrders.database.productVariant.findMany({
+      where: {
+        id: { in: pricedItems.map((item) => item.productVariantId) },
+        product: { productLine: { companyId: actor.companyId } },
+      },
+      include: { product: true },
+    });
+    const variantById = new Map(variants.map((item) => [item.id, item]));
+    if (
+      variantById.size !==
+      new Set(pricedItems.map((item) => item.productVariantId)).size
+    )
+      throw new BadRequestException(
+        "Um ou mais produtos não estão disponíveis.",
+      );
+
+    await this.salesOrders.database.$transaction(async (transaction) => {
+      const locked = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT status::text FROM "SalesOrder"
+          WHERE id=$1 AND "companyId"=$2 FOR UPDATE`,
+        id,
+        actor.companyId,
+      );
+      if (locked[0]?.status !== "DRAFT")
+        throw new BadRequestException(
+          "O pedido deixou de ser rascunho e não pode mais ser editado.",
+        );
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "SalesOrderCustomerApproval"
+            SET status='REVOKED',"revokedAt"=NOW(),"updatedAt"=NOW()
+          WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status IN ('PENDING','VIEWED')`,
+        id,
+        actor.companyId,
+      );
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "SalesOrderTermApproval" WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+      );
+      await transaction.salesOrderItem.deleteMany({
+        where: { salesOrderId: id, companyId: actor.companyId },
+      });
+      const updated = await transaction.salesOrder.update({
+        where: { id },
+        data: {
+          customerId,
+          salesChannelId,
+          currency: currency ?? current.currency,
+          paymentType,
+          paymentTermsSnapshot: paymentTerms,
+          notes: String(body.notes ?? "").trim() || null,
+          subtotal,
+          discount,
+          freight,
+          totalAmount,
+          quantity: totalQuantity,
+          unitPrice: pricedItems[0]?.unitPrice ?? 0,
+          items: {
+            create: pricedItems.map((item) => {
+              const variant = variantById.get(item.productVariantId)!;
+              return {
+                companyId: actor.companyId,
+                productVariantId: item.productVariantId,
+                productName: variant.product.name,
+                sku: variant.sku,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalAmount: roundMoney(item.quantity * item.unitPrice),
+                pricingSource: item.pricingSource ?? "CHANNEL",
+                baseProductPriceId: item.baseProductPriceId,
+                customerProductPriceId: item.customerProductPriceId,
+                priceSnapshot: item.priceSnapshot as Prisma.InputJsonValue,
+              };
+            }),
+          },
+        },
+        include: { items: true },
+      });
+      const beforeSnapshot = JSON.stringify({
+        ...current,
+        totalAmount: Number(current.totalAmount),
+        subtotal: Number(current.subtotal ?? 0),
+        discount: Number(current.discount),
+        freight: Number(current.freight),
+      });
+      const afterSnapshot = JSON.stringify({
+        ...updated,
+        totalAmount: Number(updated.totalAmount),
+        subtotal: Number(updated.subtotal ?? 0),
+        discount: Number(updated.discount),
+        freight: Number(updated.freight),
+      });
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "SalesOrderEditAudit"
+          (id,"companyId","salesOrderId","actorId","actorName","actorRole",reason,"beforeSnapshot","afterSnapshot","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,NOW())`,
+        randomUUID(),
+        actor.companyId,
+        id,
+        actor.id,
+        actor.name,
+        actor.role,
+        reason,
+        beforeSnapshot,
+        afterSnapshot,
+      );
+    });
+
+    const termApproval =
+      paymentType === "TERM"
+        ? await this.termApprovals.ensureForOrder(actor.companyId, id, actor)
+        : null;
+    return {
+      order: await this.salesOrders.get(actor.companyId, id),
+      termApproval,
+      message:
+        "Pedido corrigido com auditoria. Links anteriores foram revogados.",
+    };
+  }
+
+  @Get(":id/term-approval")
+  async termApproval(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
+    return this.termApprovals.ensureForOrder(actor.companyId, id, actor);
+  }
+
+  @Post(":id/term-approval/decision")
+  async decideTermApproval(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { decision?: "APPROVE" | "REJECT"; note?: string },
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!body.decision || !["APPROVE", "REJECT"].includes(body.decision))
+      throw new BadRequestException("Decisão financeira inválida.");
+    return this.termApprovals.decide(
+      actor.companyId,
+      id,
+      actor,
+      body.decision,
+      body.note,
+    );
   }
 
   @Get(":id/discount-requests")

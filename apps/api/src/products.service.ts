@@ -48,7 +48,13 @@ export class ProductsService {
 
   updateProduct(
     id: string,
-    input: { name?: string; description?: string; active?: boolean },
+    input: {
+      name?: string;
+      description?: string;
+      active?: boolean;
+      commercialKind?: "STANDARD" | "WHITE_LABEL";
+      baseCoffeeProductId?: string | null;
+    },
     companyId: string,
   ) {
     return this.repository.updateProduct(id, input, companyId);

@@ -158,7 +158,14 @@ export class ProductsController {
   @Patch(":id")
   async updateProduct(
     @Param("id") id: string,
-    @Body() input: { name?: string; description?: string; active?: boolean },
+    @Body()
+    input: {
+      name?: string;
+      description?: string;
+      active?: boolean;
+      commercialKind?: "STANDARD" | "WHITE_LABEL";
+      baseCoffeeProductId?: string | null;
+    },
     @Req() req: Request,
   ) {
     try {

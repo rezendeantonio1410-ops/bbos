@@ -13,10 +13,12 @@ import {
   Eye,
   PackageCheck,
   PackagePlus,
+  Pencil,
   Plus,
   Printer,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Truck,
   X,
 } from "lucide-react";
@@ -44,6 +46,8 @@ const itemQuantityLabel = (quantity: number, sample: boolean) =>
   sample
     ? `${quantity} ${quantity === 1 ? "pacote" : "pacotes"}`
     : `${quantity} un.`;
+const presentationLabel = (grams: number) =>
+  grams >= 1000 ? `${grams / 1000} kg` : `${grams} g`;
 const formatPostalCode = (value: string) =>
   value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
 const paymentOptions = [
@@ -103,6 +107,9 @@ type CustomerHealth = {
   financialHealth: {
     openReceivables: number;
     availableCredit: number;
+    overdueAmount: number;
+    overdueCount: number;
+    maxDaysOverdue: number;
   };
 };
 
@@ -405,6 +412,23 @@ type DiscountRequest = {
   requestedByName: string;
 };
 
+type TermCreditApproval = {
+  requiresApproval: boolean;
+  status: "NOT_REQUIRED" | "PENDING" | "APPROVED" | "REJECTED";
+  approvalId?: string | null;
+  orderAmount: number;
+  overdueAmount: number;
+  overdueCount: number;
+  maxDaysOverdue: number;
+  requestedByName?: string | null;
+  requestedAt?: string | null;
+  decidedByName?: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
+  canDecide: boolean;
+  approverLabel: string;
+};
+
 const statusLabel: Record<string, string> = {
   DRAFT: "Rascunho",
   AWAITING_PAYMENT: "Aguardando Pix",
@@ -484,6 +508,8 @@ export default function OrdersPage() {
   const [creating, setCreating] = useState<"COMMERCIAL" | "SAMPLE" | null>(
     null,
   );
+  const [editing, setEditing] = useState<Order | null>(null);
+  const [canEditOrders, setCanEditOrders] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [busy, setBusy] = useState("");
@@ -541,6 +567,17 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void refresh();
+    void fetch(`${getApiBaseUrl()}/auth/me`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((payload) =>
+        setCanEditOrders(
+          ["ADMIN", "EXECUTIVE", "SALES"].includes(payload?.user?.role),
+        ),
+      )
+      .catch(() => setCanEditOrders(false));
     const timer = window.setInterval(() => {
       void fetch(salesOrdersApi(), {
         credentials: "include",
@@ -817,6 +854,15 @@ export default function OrdersPage() {
                   </div>
                 </button>
                 <div className="mt-3 flex gap-2">
+                  {order.status === "DRAFT" && canEditOrders && (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(order)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-xs font-semibold text-forest-800"
+                    >
+                      <Pencil size={13} /> Editar pedido
+                    </button>
+                  )}
                   {order.paymentType === "TERM" &&
                     order.orderType !== "SAMPLE" &&
                     order.fiscalStatus === "AUTHORIZED" && (
@@ -870,14 +916,429 @@ export default function OrdersPage() {
         />
       )}
 
+      {editing && (
+        <EditDraftOrder
+          order={editing}
+          customers={customers}
+          variants={variants}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            setMessage("Pedido corrigido e registrado na auditoria.");
+            await refresh();
+          }}
+        />
+      )}
+
       {selected && (
         <OrderDrawer
           order={selected}
           onClose={() => setSelected(null)}
           onChanged={() => refreshSelected(selected.id)}
+          canEdit={canEditOrders && selected.status === "DRAFT"}
+          onEdit={() => {
+            setEditing(selected);
+            setSelected(null);
+          }}
         />
       )}
     </div>
+  );
+}
+
+function EditDraftOrder({
+  order,
+  customers,
+  variants,
+  onClose,
+  onSaved,
+}: {
+  order: Order;
+  customers: Customer[];
+  variants: StockOption[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const isSample = order.orderType === "SAMPLE";
+  const [customerId, setCustomerId] = useState(order.customer.id);
+  const [paymentType, setPaymentType] = useState<"CASH" | "TERM">(
+    order.paymentType === "TERM" ? "TERM" : "CASH",
+  );
+  const [paymentTerms, setPaymentTerms] = useState(
+    order.paymentTermsSnapshot && order.paymentTermsSnapshot !== "À vista"
+      ? order.paymentTermsSnapshot
+      : "14 dias",
+  );
+  const [notes, setNotes] = useState(order.notes ?? "");
+  const [reason, setReason] = useState("");
+  const [lines, setLines] = useState<DraftOrderLine[]>(() =>
+    order.items.map((item) => ({
+      id: item.id,
+      variantId: item.productVariantId,
+      quantity: item.quantity,
+    })),
+  );
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [quoteBusy, setQuoteBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const validLines = lines.filter(isCompleteOrderDraftLine);
+    if (!customerId || !validLines.length) {
+      setQuotes({});
+      return () => controller.abort();
+    }
+    if (isSample) {
+      setQuotes(
+        Object.fromEntries(
+          validLines.map((line) => [
+            line.id,
+            {
+              officialUnitPrice: SAMPLE_FISCAL_PACKAGE_VALUE,
+              channelUnitPrice: SAMPLE_FISCAL_PACKAGE_VALUE,
+              pricingSource: "CHANNEL" as const,
+              currency: "BRL",
+              salesChannelName: "Amostra",
+              salesChannelType: "SAMPLE",
+              totalAmount: line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE,
+              discountPolicy: {
+                maxRequestPercent: 0,
+                maxApprovalPercent: 0,
+                minimumPrice: null,
+                minimumMarginPercent: null,
+                minimumRoiPercent: null,
+              },
+            },
+          ]),
+        ),
+      );
+      return () => controller.abort();
+    }
+    setQuoteBusy(true);
+    void Promise.all(
+      validLines.map(async (line) => {
+        const params = new URLSearchParams({
+          customerId,
+          productVariantId: line.variantId,
+          quantity: String(line.quantity),
+        });
+        const response = await fetch(
+          `${salesOrdersApi()}/quote?${params.toString()}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok)
+          throw new Error("Produto sem preço válido para o cliente.");
+        return [line.id, (await response.json()) as Quote] as const;
+      }),
+    )
+      .then((entries) => setQuotes(Object.fromEntries(entries)))
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setQuotes({});
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Não foi possível recalcular os preços.",
+        );
+      })
+      .finally(() => setQuoteBusy(false));
+    return () => controller.abort();
+  }, [customerId, lines, isSample]);
+
+  const validLines = lines.filter(isCompleteOrderDraftLine);
+  const subtotal = validLines.reduce(
+    (sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0),
+    0,
+  );
+  const canSave =
+    Boolean(customerId) &&
+    validLines.length === lines.length &&
+    validLines.length > 0 &&
+    validLines.every((line) => quotes[line.id]) &&
+    reason.trim().length >= 5 &&
+    !quoteBusy &&
+    !saving;
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canSave) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/draft`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          paymentType: isSample ? undefined : paymentType,
+          paymentTerms:
+            !isSample && paymentType === "TERM" ? paymentTerms : undefined,
+          notes,
+          reason,
+          items: validLines.map((line) => ({
+            productVariantId: line.variantId,
+            quantity: line.quantity,
+          })),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(
+          payload.message ?? "Não foi possível corrigir o pedido.",
+        );
+      await onSaved();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível corrigir o pedido.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex justify-end bg-black/25">
+      <button
+        className="absolute inset-0"
+        aria-label="Fechar"
+        onClick={onClose}
+      />
+      <aside className="relative flex h-dvh w-full max-w-3xl flex-col overflow-hidden border-l bg-white shadow-2xl">
+        <header className="flex items-start justify-between border-b px-5 py-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-forest-700">
+              Correção controlada
+            </p>
+            <h2 className="mt-1 text-xl font-bold">
+              Editar {order.orderNumber ?? order.code}
+            </h2>
+            <p className="mt-1 text-xs text-stone-500">
+              Permitido somente no rascunho. Preços serão recalculados e a
+              alteração ficará auditada.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 hover:bg-stone-100"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+            <Field label="Cliente">
+              <select
+                value={customerId}
+                onChange={(event) => setCustomerId(event.target.value)}
+              >
+                {customers.map((customer) => (
+                  <option
+                    key={customer.id}
+                    value={customer.id}
+                    disabled={customer.fiscalReadiness?.ready === false}
+                  >
+                    {customer.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {!isSample && (
+              <section className="rounded-2xl border p-4">
+                <p className="text-xs font-bold">Pagamento</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {(["CASH", "TERM"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPaymentType(value)}
+                      className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === value ? "border-forest-300 bg-forest-50 text-forest-900" : "text-stone-600"}`}
+                    >
+                      {value === "CASH" ? "À vista" : "A prazo"}
+                    </button>
+                  ))}
+                </div>
+                {paymentType === "TERM" && (
+                  <Field label="Condição de pagamento">
+                    <select
+                      value={paymentTerms}
+                      onChange={(event) => setPaymentTerms(event.target.value)}
+                    >
+                      {paymentOptions.map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+              </section>
+            )}
+
+            <section className="rounded-2xl border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold">Produtos e quantidades</p>
+                  <p className="mt-1 text-[10px] text-stone-500">
+                    O BBOS usa novamente a tabela vigente do cliente.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLines((current) => [...current, newDraftLine()])
+                  }
+                  className="inline-flex items-center gap-1 rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"
+                >
+                  <Plus size={12} /> Produto
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {lines.map((line) => (
+                  <div
+                    key={line.id}
+                    className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-[1fr_90px_110px_36px] sm:items-end"
+                  >
+                    <Field label="Produto / apresentação">
+                      <select
+                        value={line.variantId}
+                        onChange={(event) =>
+                          setLines((current) =>
+                            current.map((item) =>
+                              item.id === line.id
+                                ? { ...item, variantId: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">Selecione</option>
+                        {variants.map((variant) => (
+                          <option
+                            key={variant.productVariantId}
+                            value={variant.productVariantId}
+                          >
+                            {variant.line} · {variant.product} ·{" "}
+                            {presentationLabel(variant.presentationGrams)}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Quantidade">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={line.quantity}
+                        onChange={(event) =>
+                          setLines((current) =>
+                            current.map((item) =>
+                              item.id === line.id
+                                ? {
+                                    ...item,
+                                    quantity: Number(event.target.value),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                    <div className="pb-2 text-right text-xs font-bold">
+                      {quotes[line.id]
+                        ? money.format(quotes[line.id]!.totalAmount)
+                        : quoteBusy
+                          ? "Calculando…"
+                          : "—"}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={lines.length === 1}
+                      onClick={() =>
+                        setLines((current) =>
+                          current.filter((item) => item.id !== line.id),
+                        )
+                      }
+                      className="grid size-9 place-items-center rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-30"
+                      aria-label="Remover produto"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-between border-t pt-3 text-sm">
+                <span className="text-stone-500">Subtotal recalculado</span>
+                <strong>{money.format(subtotal)}</strong>
+              </div>
+            </section>
+
+            <Field label="Observações do pedido">
+              <textarea
+                rows={3}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </Field>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <Field label="Motivo da correção (obrigatório)">
+                <textarea
+                  required
+                  minLength={5}
+                  rows={2}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder="Ex.: quantidade informada incorretamente pelo comercial"
+                />
+              </Field>
+              <p className="mt-2 text-[10px] text-amber-900/75">
+                O sistema registra usuário, data, motivo e os dados
+                antes/depois. Links de aceite anteriores serão revogados.
+              </p>
+            </div>
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                {error}
+              </div>
+            )}
+          </div>
+          <footer className="flex justify-end gap-2 border-t bg-white p-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border px-5 py-3 text-xs font-bold"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!canSave}
+              className="rounded-xl bg-forest-900 px-5 py-3 text-xs font-bold text-white disabled:opacity-40"
+            >
+              {saving ? "Salvando correção…" : "Salvar correção"}
+            </button>
+          </footer>
+        </form>
+      </aside>
+    </div>,
+    document.body,
   );
 }
 
@@ -1034,6 +1495,10 @@ function NewOrder({
   const utilization = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   const after = Math.max(0, available - orderTotal);
   const exceeds = isTerm && orderTotal > available;
+  const overdueCount = Number(health?.financialHealth?.overdueCount ?? 0);
+  const overdueAmount = Number(health?.financialHealth?.overdueAmount ?? 0);
+  const maxDaysOverdue = Number(health?.financialHealth?.maxDaysOverdue ?? 0);
+  const isDelinquent = isTerm && (overdueCount > 0 || overdueAmount > 0.005);
   const usesPixFallback =
     isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
   const saveBlockedReason = !completeLines.length
@@ -1641,6 +2106,9 @@ function NewOrder({
                   exceeds={exceeds}
                   status={health?.creditStatus ?? customer?.creditStatus}
                   reviewPending={health?.creditReviewPending}
+                  overdueCount={overdueCount}
+                  overdueAmount={overdueAmount}
+                  maxDaysOverdue={maxDaysOverdue}
                 />
               )}
             </>
@@ -2524,11 +2992,13 @@ function NewOrder({
 
           {isTerm && health && (
             <p
-              className={`rounded-xl px-3 py-2 text-xs ${usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}
+              className={`rounded-xl px-3 py-2 text-xs ${isDelinquent ? "bg-red-50 text-red-800" : usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}
             >
-              {usesPixFallback
-                ? `Sem crédito suficiente para esta compra. Ao confirmar, o cliente receberá o Pix automaticamente; o pedido só avançará depois do pagamento.`
-                : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
+              {isDelinquent
+                ? `Cliente inadimplente: ${overdueCount} título(s) vencido(s), total de ${money.format(overdueAmount)}. O pedido será salvo aguardando autorização de José ou Suzi, que serão notificados.`
+                : usesPixFallback
+                  ? `Sem crédito suficiente para esta compra. Ao confirmar, o cliente receberá o Pix automaticamente; o pedido só avançará depois do pagamento.`
+                  : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
             </p>
           )}
         </div>
@@ -2584,6 +3054,9 @@ function CreditContext({
   exceeds,
   status,
   reviewPending,
+  overdueCount,
+  overdueAmount,
+  maxDaysOverdue,
 }: {
   loading: boolean;
   limit: number;
@@ -2595,6 +3068,9 @@ function CreditContext({
   exceeds: boolean;
   status?: string;
   reviewPending?: boolean;
+  overdueCount: number;
+  overdueAmount: number;
+  maxDaysOverdue: number;
 }) {
   if (loading) {
     return (
@@ -2656,6 +3132,13 @@ function CreditContext({
             : `Impacto do pedido: crédito restante ${money.format(after)}.`}
         </div>
       )}
+      {overdueCount > 0 && (
+        <div className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-800">
+          Inadimplência: {overdueCount} título(s), {money.format(overdueAmount)}
+          {maxDaysOverdue > 0 ? ` · até ${maxDaysOverdue} dias em atraso` : ""}.
+          Venda a prazo exige autorização de José ou Suzi.
+        </div>
+      )}
     </div>
   );
 }
@@ -2675,10 +3158,14 @@ function OrderDrawer({
   order,
   onClose,
   onChanged,
+  canEdit,
+  onEdit,
 }: {
   order: Order;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  canEdit: boolean;
+  onEdit: () => void;
 }) {
   const [mode, setMode] = useState<"INTERNAL" | "CLIENT">("INTERNAL");
   const [requests, setRequests] = useState<DiscountRequest[]>([]);
@@ -2702,6 +3189,10 @@ function OrderDrawer({
   const [manualPixAccountId, setManualPixAccountId] = useState("");
   const [manualPixReference, setManualPixReference] = useState("");
   const [manualPixPaidAt, setManualPixPaidAt] = useState(localDateTimeValue);
+  const [termApproval, setTermApproval] = useState<TermCreditApproval | null>(
+    null,
+  );
+  const [termApprovalNote, setTermApprovalNote] = useState("");
   const shipmentStep = shipmentProgressIndex(fulfillment, order.status);
   const shipmentProgress = Math.round(
     (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
@@ -2728,6 +3219,22 @@ function OrderDrawer({
   useEffect(() => {
     void loadRequests();
   }, [order.id]);
+
+  const loadTermApproval = async () => {
+    if (order.paymentType !== "TERM" || order.orderType === "SAMPLE") {
+      setTermApproval(null);
+      return;
+    }
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/term-approval`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (response.ok) setTermApproval(await response.json());
+  };
+
+  useEffect(() => {
+    void loadTermApproval();
+  }, [order.id, order.paymentType, order.orderType]);
 
   const loadFulfillment = async () => {
     const response = await fetch(
@@ -2875,6 +3382,31 @@ function OrderDrawer({
       setError(payload.message ?? "Não foi possível decidir a solicitação.");
     } else {
       await loadRequests();
+      await onChanged();
+    }
+    setBusy(false);
+  };
+
+  const decideTermApproval = async (decision: "APPROVE" | "REJECT") => {
+    setBusy(true);
+    setError("");
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/term-approval/decision`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision, note: termApprovalNote }),
+      },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setError(
+        payload.message ?? "Não foi possível registrar a decisão financeira.",
+      );
+    } else {
+      setTermApproval(payload);
+      setTermApprovalNote("");
       await onChanged();
     }
     setBusy(false);
@@ -3193,7 +3725,7 @@ function OrderDrawer({
             </div>
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {fulfillment?.fiscalStatus === "AUTHORIZED" &&
               fiscalDocumentUrl && (
                 <a
@@ -3217,6 +3749,15 @@ function OrderDrawer({
                   orderNumber={order.orderNumber ?? order.code}
                 />
               )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-2 rounded-xl border border-forest-200 bg-forest-50 px-4 py-2.5 text-xs font-bold text-forest-800"
+              >
+                <Pencil size={14} /> Editar pedido
+              </button>
+            )}
             <OrderPdfLink
               orderId={order.id}
               provisional={order.status === "DRAFT"}
@@ -3641,8 +4182,99 @@ function OrderDrawer({
               </div>
             </section>
 
+            {termApproval?.requiresApproval && (
+              <section className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-red-950">
+                      Venda a prazo · cliente inadimplente
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-red-800">
+                      {termApproval.overdueCount} título(s) vencido(s), total de{" "}
+                      {money.format(termApproval.overdueAmount)}
+                      {termApproval.maxDaysOverdue > 0
+                        ? ` · atraso de até ${termApproval.maxDaysOverdue} dias`
+                        : ""}
+                      . O pedido só pode seguir com autorização de{" "}
+                      {termApproval.approverLabel}.
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      termApproval.status === "APPROVED"
+                        ? "success"
+                        : termApproval.status === "REJECTED"
+                          ? "danger"
+                          : "warning"
+                    }
+                  >
+                    {termApproval.status === "APPROVED"
+                      ? "Autorizado"
+                      : termApproval.status === "REJECTED"
+                        ? "Recusado"
+                        : "Aguardando autorização"}
+                  </Badge>
+                </div>
+                {termApproval.status === "PENDING" &&
+                  termApproval.canDecide && (
+                    <div className="mt-4">
+                      <label className="block text-xs font-semibold text-red-950">
+                        Observação da decisão
+                        <textarea
+                          rows={2}
+                          value={termApprovalNote}
+                          onChange={(event) =>
+                            setTermApprovalNote(event.target.value)
+                          }
+                          className="mt-2 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm"
+                          placeholder="Condição excepcional autorizada..."
+                        />
+                      </label>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          disabled={busy}
+                          onClick={() => void decideTermApproval("APPROVE")}
+                          className="rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                        >
+                          Autorizar venda a prazo
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => void decideTermApproval("REJECT")}
+                          className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-bold text-red-800 disabled:opacity-50"
+                        >
+                          Recusar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                {termApproval.status === "PENDING" &&
+                  !termApproval.canDecide && (
+                    <p className="mt-3 text-[11px] text-red-800">
+                      José e Suzi foram notificados no BBOS e no aplicativo.
+                    </p>
+                  )}
+                {termApproval.decidedByName && (
+                  <p className="mt-3 border-t border-red-200 pt-3 text-[10px] text-red-800">
+                    Decisão registrada por{" "}
+                    <strong>{termApproval.decidedByName}</strong>
+                    {termApproval.decidedAt
+                      ? ` em ${new Date(termApproval.decidedAt).toLocaleString("pt-BR")}`
+                      : ""}
+                    {termApproval.decisionNote
+                      ? ` · ${termApproval.decisionNote}`
+                      : ""}
+                    .
+                  </p>
+                )}
+              </section>
+            )}
+
             {order.orderType !== "SAMPLE" &&
-              (order.status === "DRAFT" || order.status === "CONFIRMED") && (
+              (order.status === "DRAFT" || order.status === "CONFIRMED") &&
+              (order.paymentType !== "TERM" ||
+                termApproval?.requiresApproval === false ||
+                termApproval?.status === "APPROVED") && (
                 <OrderCustomerApprovalActions
                   orderId={order.id}
                   onAccepted={onChanged}

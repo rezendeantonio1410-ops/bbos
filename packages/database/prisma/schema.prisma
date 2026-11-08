@@ -1774,22 +1774,27 @@ model ProductLine {
 }
 
 model Product {
-  id               String                   @id @default(cuid())
-  productLineId    String
-  productLine      ProductLine              @relation(fields: [productLineId], references: [id], onDelete: Restrict)
-  code             String
-  name             String
-  slug             String
-  description      String
-  active           Boolean                  @default(true)
-  variants         ProductVariant[]
-  storefrontImages StorefrontProductImage[]
-  mediaAssets      StorefrontMediaAsset[]
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
+  id                  String                   @id @default(cuid())
+  productLineId       String
+  productLine         ProductLine              @relation(fields: [productLineId], references: [id], onDelete: Restrict)
+  code                String
+  name                String
+  slug                String
+  description         String
+  active              Boolean                  @default(true)
+  commercialKind      String                   @default("STANDARD")
+  baseCoffeeProductId String?
+  baseCoffeeProduct   Product?                 @relation("WhiteLabelBaseCoffee", fields: [baseCoffeeProductId], references: [id], onDelete: Restrict)
+  whiteLabelProducts  Product[]                @relation("WhiteLabelBaseCoffee")
+  variants            ProductVariant[]
+  storefrontImages    StorefrontProductImage[]
+  mediaAssets         StorefrontMediaAsset[]
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@unique([productLineId, slug])
   @@unique([productLineId, code])
+  @@index([baseCoffeeProductId])
 }
 
 model StorefrontProductImage {
@@ -1911,26 +1916,26 @@ model SalesChannel {
 }
 
 model ProductPrice {
-  id                         String         @id @default(cuid())
+  id                         String           @id @default(cuid())
   companyId                  String
-  company                    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company                    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   productVariantId           String
-  productVariant             ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  productVariant             ProductVariant   @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
   salesChannelId             String
-  salesChannel               SalesChannel   @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+  salesChannel               SalesChannel     @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
   currency                   String
-  price                      Decimal        @db.Decimal(14, 2)
-  active                     Boolean        @default(true)
+  price                      Decimal          @db.Decimal(14, 2)
+  active                     Boolean          @default(true)
   validFrom                  DateTime?
   validUntil                 DateTime?
-  maxRequestDiscountPercent  Decimal        @default(0) @db.Decimal(7, 3)
-  maxApprovalDiscountPercent Decimal        @default(0) @db.Decimal(7, 3)
-  minimumPrice               Decimal?       @db.Decimal(14, 2)
-  minimumMarginPercent       Decimal?       @db.Decimal(7, 3)
-  minimumRoiPercent          Decimal?       @db.Decimal(7, 3)
+  maxRequestDiscountPercent  Decimal          @default(0) @db.Decimal(7, 3)
+  maxApprovalDiscountPercent Decimal          @default(0) @db.Decimal(7, 3)
+  minimumPrice               Decimal?         @db.Decimal(14, 2)
+  minimumMarginPercent       Decimal?         @db.Decimal(7, 3)
+  minimumRoiPercent          Decimal?         @db.Decimal(7, 3)
   salesOrderItems            SalesOrderItem[] @relation("SalesOrderItemBasePrice")
-  createdAt                  DateTime       @default(now())
-  updatedAt                  DateTime       @updatedAt
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 
   @@unique([productVariantId, salesChannelId, currency, validFrom])
   @@index([companyId, salesChannelId, active])
@@ -2058,6 +2063,33 @@ model SalesOrder {
   @@index([brokerId])
   @@index([salesChannelId, status])
   @@index([companyId, importedAt])
+}
+
+model SalesOrderTermApproval {
+  id              String    @id
+  companyId       String
+  salesOrderId    String    @unique
+  customerId      String
+  reason          String    @default("DELINQUENT_CUSTOMER")
+  orderAmount     Decimal   @db.Decimal(14, 2)
+  overdueAmount   Decimal   @db.Decimal(14, 2)
+  overdueCount    Int
+  maxDaysOverdue  Int
+  status          String    @default("PENDING")
+  requestedById   String?
+  requestedByName String
+  requestedByRole String?
+  requestedAt     DateTime  @default(now())
+  decidedById     String?
+  decidedByName   String?
+  decidedByRole   String?
+  decisionNote    String?
+  decidedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([companyId, status, requestedAt])
+  @@index([customerId, requestedAt])
 }
 
 model FinancialAccount {

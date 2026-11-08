@@ -62,6 +62,7 @@ import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { CustomerNotificationService } from "./customer-notification.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { IntegrationWorkerService } from "./integration-worker.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
@@ -168,6 +169,7 @@ import { MobileNotificationService } from "./mobile-notification.service";
     MobileNotificationService,
     SalesOrderCustomerLifecycleService,
     SalesOrderPaymentsService,
+    SalesOrderTermApprovalService,
     IntegrationWorkerService,
     MelhorEnvioShipmentService,
     MelhorEnvioAuthService,

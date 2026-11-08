@@ -19,6 +19,7 @@ import {
   shipSalesStock,
 } from "@bbos/shared";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import {
   resolveSalesOrderType,
   SAMPLE_FISCAL_PACKAGE_VALUE,
@@ -75,6 +76,7 @@ export class SalesOrdersService implements OnModuleDestroy {
 
   constructor(
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+    private readonly termApprovals?: SalesOrderTermApprovalService,
   ) {}
 
   private async allocateRoastedWipForOrder(
@@ -84,7 +86,8 @@ export class SalesOrdersService implements OnModuleDestroy {
   ) {
     const items = await transaction.$queryRawUnsafe<any[]>(
       `WITH item_stock AS (
-         SELECT soi.id,soi.quantity,soi."productVariantId",pv."netWeightGrams",pv."productId",
+         SELECT soi.id,soi.quantity,soi."productVariantId",pv."netWeightGrams",
+                COALESCE(product."baseCoffeeProductId",pv."productId") AS "stockProductId",
                 COALESCE((
                   SELECT MAX(fp."quantityOnHand"-fp."reservedQuantity")
                     FROM "FinishedProduct" fp
@@ -92,6 +95,7 @@ export class SalesOrdersService implements OnModuleDestroy {
                 ),0)::int AS "finishedAvailable"
            FROM "SalesOrderItem" soi
            JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+           JOIN "Product" product ON product.id=pv."productId"
           WHERE soi."salesOrderId"=$2 AND soi."companyId"=$1
        ), distributed AS (
          SELECT item_stock.*,
@@ -102,7 +106,7 @@ export class SalesOrdersService implements OnModuleDestroy {
                 ),0)::int AS "priorDemand"
            FROM item_stock
        )
-       SELECT id,quantity,"productVariantId","netWeightGrams","productId",
+       SELECT id,quantity,"productVariantId","netWeightGrams","stockProductId",
               GREATEST(0,"finishedAvailable"-"priorDemand")::int AS "finishedAvailable"
          FROM distributed
         ORDER BY id`,
@@ -150,15 +154,18 @@ export class SalesOrdersService implements OnModuleDestroy {
       const lots = await transaction.$queryRawUnsafe<any[]>(
         `SELECT w.id,(w."availableKg"-w."reservedKg")::float AS available
            FROM "RoastedWipLot" w
-           JOIN "ProductVariant" source_variant ON source_variant.id=w."productVariantId"
+          JOIN "ProductVariant" source_variant ON source_variant.id=w."productVariantId"
+          JOIN "Product" source_product ON source_product.id=source_variant."productId"
+          JOIN "Product" target_product ON target_product.id=$2
           WHERE w."companyId"=$1
-            AND source_variant."productId"=$2
+            AND source_product."productLineId"=target_product."productLineId"
+            AND source_product.id=target_product.id
             AND w.status IN ('AVAILABLE','PARTIALLY_PACKED')
             AND w."availableKg"-w."reservedKg">0.0005
           ORDER BY w."producedAt",w.id
           FOR UPDATE OF w`,
         companyId,
-        item.productId,
+        item.stockProductId,
       );
       let allocatedKg = 0;
       for (const lot of lots) {
@@ -713,6 +720,7 @@ export class SalesOrdersService implements OnModuleDestroy {
         include: { items: true },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
+      await this.termApprovals?.assertApproved(transaction, companyId, id);
       if (order.status === SalesOrderStatus.CONFIRMED) {
         await this.allocateRoastedWipForOrder(transaction, companyId, id);
         return { orderId: id, idempotent: true, status: order.status };

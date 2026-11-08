@@ -188,6 +188,46 @@ test("cadastro mestre aceita produto completo e normaliza SKU e NCM", () => {
   assert.equal(result.gtin, "7891000315507");
 });
 
+test("White Label exige linha torrada e vínculo com café-base", () => {
+  assert.throws(
+    () =>
+      validateCreateCatalogProduct({
+        ...validProduct,
+        commercialKind: "WHITE_LABEL",
+      }),
+    /café-base|cafe-base/i,
+  );
+  assert.throws(
+    () =>
+      validateCreateCatalogProduct({
+        ...validProduct,
+        line: "GREEN_COFFEE",
+        packageWeightG: 30000,
+        grossWeightG: 30500,
+        commercialKind: "WHITE_LABEL",
+        baseCoffeeProductId: "coffee-1",
+      }),
+    /linha de café torrado/i,
+  );
+  const result = validateCreateCatalogProduct({
+    ...validProduct,
+    commercialKind: "WHITE_LABEL",
+    baseCoffeeProductId: " coffee-1 ",
+  });
+  assert.equal(result.commercialKind, "WHITE_LABEL");
+  assert.equal(result.baseCoffeeProductId, "coffee-1");
+});
+
+test("produto padrão ignora vínculo White Label residual", () => {
+  const result = validateCreateCatalogProduct({
+    ...validProduct,
+    commercialKind: "STANDARD",
+    baseCoffeeProductId: "coffee-1",
+  });
+  assert.equal(result.commercialKind, "STANDARD");
+  assert.equal(result.baseCoffeeProductId, undefined);
+});
+
 test("cadastro mestre bloqueia peso, preço, desconto e NCM inconsistentes", () => {
   assert.throws(
     () => validateCreateCatalogProduct({ ...validProduct, grossWeightG: 499 }),

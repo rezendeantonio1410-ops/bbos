@@ -59,6 +59,10 @@ export class ProductionService implements OnModuleDestroy {
     });
     if (!product || !product.active || !product.productLine.active)
       throw new BadRequestException("Linha ou perfil de café inativo.");
+    if (product.commercialKind === "WHITE_LABEL")
+      throw new BadRequestException(
+        "White Label é uma apresentação de embalagem; selecione o café-base da linha para a torra.",
+      );
     if (
       !(ROASTED_PRODUCT_LINES as readonly string[]).includes(
         product.productLine.code,

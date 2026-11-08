@@ -19,6 +19,9 @@ import {
 
 const productInclude = {
   productLine: true,
+  baseCoffeeProduct: {
+    select: { id: true, name: true, productLineId: true, commercialKind: true },
+  },
   variants: {
     where: { active: true },
     orderBy: { netWeightGrams: "asc" as const },
@@ -156,6 +159,21 @@ export class ProductsRepository implements OnModuleDestroy {
             companyId_code: { companyId, code: valid.line as ProductLineCode },
           },
         });
+        const baseCoffeeProduct = valid.baseCoffeeProductId
+          ? await transaction.product.findFirst({
+              where: {
+                id: valid.baseCoffeeProductId,
+                active: true,
+                commercialKind: "STANDARD",
+                productLineId: line.id,
+                productLine: { companyId },
+              },
+            })
+          : null;
+        if (valid.commercialKind === "WHITE_LABEL" && !baseCoffeeProduct)
+          throw new Error(
+            "O café-base do White Label deve estar ativo e pertencer à mesma linha selecionada.",
+          );
         await this.assertVariantAvailable(
           transaction,
           valid.sku,
@@ -166,7 +184,11 @@ export class ProductsRepository implements OnModuleDestroy {
         const slug = productSlug(valid.productName);
         const product = await transaction.product.upsert({
           where: { productLineId_slug: { productLineId: line.id, slug } },
-          update: { active: input.active },
+          update: {
+            active: input.active,
+            commercialKind: valid.commercialKind,
+            baseCoffeeProductId: baseCoffeeProduct?.id ?? null,
+          },
           create: {
             productLineId: line.id,
             code: normalizeProductCode(input.productCode || valid.productName),
@@ -174,6 +196,8 @@ export class ProductsRepository implements OnModuleDestroy {
             slug,
             description: input.description?.trim() || "",
             active: input.active,
+            commercialKind: valid.commercialKind,
+            baseCoffeeProductId: baseCoffeeProduct?.id ?? null,
           },
         });
         const variant = await transaction.productVariant.create({
@@ -279,12 +303,54 @@ export class ProductsRepository implements OnModuleDestroy {
 
   async updateProduct(
     id: string,
-    input: { name?: string; description?: string; active?: boolean },
+    input: {
+      name?: string;
+      description?: string;
+      active?: boolean;
+      commercialKind?: "STANDARD" | "WHITE_LABEL";
+      baseCoffeeProductId?: string | null;
+    },
     companyId: string,
   ) {
-    const data: Prisma.ProductUpdateInput = {
+    const current = await this.database.product.findFirst({
+      where: { id, productLine: { companyId } },
+    });
+    if (!current) throw new Error("Produto não encontrado.");
+    const commercialKind = input.commercialKind ?? current.commercialKind;
+    if (!["STANDARD", "WHITE_LABEL"].includes(commercialKind))
+      throw new Error("Tipo comercial do produto inválido.");
+    const baseCoffeeProductId =
+      commercialKind === "WHITE_LABEL"
+        ? (input.baseCoffeeProductId ?? current.baseCoffeeProductId)
+        : null;
+    if (commercialKind === "WHITE_LABEL") {
+      if (!baseCoffeeProductId)
+        throw new Error(
+          "Selecione o café-base em que este White Label se enquadra.",
+        );
+      if (baseCoffeeProductId === current.id)
+        throw new Error(
+          "O White Label não pode usar a si mesmo como café-base.",
+        );
+      const baseCoffeeProduct = await this.database.product.findFirst({
+        where: {
+          id: baseCoffeeProductId,
+          active: true,
+          commercialKind: "STANDARD",
+          productLineId: current.productLineId,
+          productLine: { companyId },
+        },
+      });
+      if (!baseCoffeeProduct)
+        throw new Error(
+          "O café-base do White Label deve estar ativo e pertencer à mesma linha.",
+        );
+    }
+    const data: Prisma.ProductUncheckedUpdateInput = {
       active: input.active,
       description: input.description?.trim(),
+      commercialKind,
+      baseCoffeeProductId,
     };
     if (input.name?.trim())
       Object.assign(data, {
@@ -292,10 +358,6 @@ export class ProductsRepository implements OnModuleDestroy {
         slug: productSlug(input.name),
         code: normalizeProductCode(input.name),
       });
-    const current = await this.database.product.findFirst({
-      where: { id, productLine: { companyId } },
-    });
-    if (!current) throw new Error("Produto não encontrado.");
     const result = await this.database.product.update({
       where: { id: current.id },
       data,
@@ -634,6 +696,10 @@ export class ProductsRepository implements OnModuleDestroy {
       line,
       name: product.name,
       active: product.active,
+      commercialKind:
+        product.commercialKind === "WHITE_LABEL" ? "WHITE_LABEL" : "STANDARD",
+      baseCoffeeProductId: product.baseCoffeeProductId,
+      baseCoffeeProductName: product.baseCoffeeProduct?.name ?? null,
       marginPercent: 0,
       productionKg: 0,
       storefrontImages: product.storefrontImages.map((image) => ({

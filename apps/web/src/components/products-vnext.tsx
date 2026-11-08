@@ -74,6 +74,8 @@ const INITIAL_PRODUCT: CreateCatalogProductInput = {
   line: "GOURMET",
   productName: "",
   description: "",
+  commercialKind: "STANDARD",
+  baseCoffeeProductId: undefined,
   sku: "",
   packageWeightG: 500,
   commercialUnit: "UN",
@@ -144,6 +146,11 @@ export function ProductsVNext() {
   );
   const [createError, setCreateError] = React.useState("");
   const [createdMessage, setCreatedMessage] = React.useState("");
+  const [mappingProduct, setMappingProduct] =
+    React.useState<CatalogProduct | null>(null);
+  const [mappingBaseId, setMappingBaseId] = React.useState("");
+  const [mappingBusy, setMappingBusy] = React.useState(false);
+  const [mappingError, setMappingError] = React.useState("");
   const [ncmSource, setNcmSource] = React.useState<
     "HISTORY" | "OFFICIAL_REFERENCE"
   >("OFFICIAL_REFERENCE");
@@ -215,6 +222,13 @@ export function ProductsVNext() {
   }, [createOpen, createStatus]);
 
   const isGreenCoffee = newProduct.line === "GREEN_COFFEE";
+  const isWhiteLabel = newProduct.commercialKind === "WHITE_LABEL";
+  const baseCoffeeProducts = catalog.filter(
+    (product) =>
+      product.active &&
+      product.line === newProduct.line &&
+      product.commercialKind === "STANDARD",
+  );
   React.useEffect(() => {
     if (!createOpen) return;
     const controller = new AbortController();
@@ -278,6 +292,7 @@ export function ProductsVNext() {
     setNewProduct((current) => ({
       ...current,
       line,
+      baseCoffeeProductId: undefined,
       packageWeightG,
       grossWeightG: Math.max(current.grossWeightG, packageWeightG),
       fiscalValidated: false,
@@ -289,6 +304,8 @@ export function ProductsVNext() {
       setNewProduct((current) => ({
         ...current,
         line: "GREEN_COFFEE",
+        commercialKind: "STANDARD",
+        baseCoffeeProductId: undefined,
         packageWeightG: 30000,
         grossWeightG: 30500,
         packageWidthCm: 40,
@@ -303,6 +320,8 @@ export function ProductsVNext() {
     setNewProduct((current) => ({
       ...current,
       line: "GOURMET",
+      commercialKind: "STANDARD",
+      baseCoffeeProductId: undefined,
       packageWeightG: 500,
       grossWeightG: 530,
       packageWidthCm: 15,
@@ -367,6 +386,50 @@ export function ProductsVNext() {
       );
     } finally {
       setCreateStatus("idle");
+    }
+  };
+
+  const openWhiteLabelMapping = (product: CatalogProduct) => {
+    setMappingProduct(product);
+    setMappingBaseId(product.baseCoffeeProductId ?? "");
+    setMappingError("");
+  };
+
+  const saveWhiteLabelMapping = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!mappingProduct || !mappingBaseId) return;
+    setMappingBusy(true);
+    setMappingError("");
+    try {
+      const response = await fetch(`${api}/products/${mappingProduct.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commercialKind: "WHITE_LABEL",
+          baseCoffeeProductId: mappingBaseId,
+        }),
+      });
+      if (!response.ok) throw new Error(await productRequestError(response));
+      const updated = (await response.json()) as CatalogProduct;
+      setCatalog((current) =>
+        current.map((product) =>
+          product.id === updated.id ? updated : product,
+        ),
+      );
+      setCreatedMessage(
+        `${updated.name} foi enquadrado em ${PRODUCT_LINE_LABELS[updated.line]} · ${updated.baseCoffeeProductName}.`,
+      );
+      setMappingProduct(null);
+      setMappingBaseId("");
+    } catch (cause) {
+      setMappingError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível enquadrar o White Label.",
+      );
+    } finally {
+      setMappingBusy(false);
     }
   };
 
@@ -560,18 +623,55 @@ export function ProductsVNext() {
                   <div key={product.id} className="px-5 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-bold">{product.name}</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-bold">
+                            {product.name}
+                          </h3>
+                          {product.commercialKind === "WHITE_LABEL" && (
+                            <Badge
+                              tone={
+                                product.baseCoffeeProductId
+                                  ? "success"
+                                  : "warning"
+                              }
+                            >
+                              White Label
+                            </Badge>
+                          )}
+                        </div>
                         <p className="mt-1 text-[10px] text-[var(--vnext-text-3)]">
                           {product.skus.length} apresentação
                           {product.skus.length === 1 ? "" : "ões"}
                         </p>
+                        {product.commercialKind === "WHITE_LABEL" && (
+                          <p
+                            className={`mt-1 text-[10px] font-semibold ${product.baseCoffeeProductId ? "text-emerald-700" : "text-amber-700"}`}
+                          >
+                            {product.baseCoffeeProductName
+                              ? `Enquadrado em ${PRODUCT_LINE_LABELS[product.line]} · café-base ${product.baseCoffeeProductName}`
+                              : "Vínculo com o café-base pendente de revisão"}
+                          </p>
+                        )}
                       </div>
-                      <Link
-                        href={`/produtos/${product.id}`}
-                        className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[var(--vnext-green)]"
-                      >
-                        Abrir ficha <ArrowRight size={12} />
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {product.commercialKind === "WHITE_LABEL" && (
+                          <button
+                            type="button"
+                            onClick={() => openWhiteLabelMapping(product)}
+                            className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-extrabold text-violet-800"
+                          >
+                            {product.baseCoffeeProductId
+                              ? "Alterar enquadramento"
+                              : "Enquadrar White Label"}
+                          </button>
+                        )}
+                        <Link
+                          href={`/produtos/${product.id}`}
+                          className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[var(--vnext-green)]"
+                        >
+                          Abrir ficha <ArrowRight size={12} />
+                        </Link>
+                      </div>
                     </div>
 
                     <div className="mt-3 grid gap-2">
@@ -706,6 +806,44 @@ export function ProductsVNext() {
                     </p>
                   </button>
                 </div>
+                {!isGreenCoffee && (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewProduct((current) => ({
+                          ...current,
+                          commercialKind: "STANDARD",
+                          baseCoffeeProductId: undefined,
+                        }))
+                      }
+                      className={`rounded-2xl border p-4 text-left transition ${!isWhiteLabel ? "border-emerald-700 bg-emerald-50 ring-2 ring-emerald-100" : "bg-white"}`}
+                    >
+                      <p className="text-sm font-bold">
+                        Produto Bispo / perfil-base
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--vnext-text-2)]">
+                        Pode gerar saldo de café torrado nesta linha e perfil.
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewProduct((current) => ({
+                          ...current,
+                          commercialKind: "WHITE_LABEL",
+                          baseCoffeeProductId: undefined,
+                        }))
+                      }
+                      className={`rounded-2xl border p-4 text-left transition ${isWhiteLabel ? "border-violet-700 bg-violet-50 ring-2 ring-violet-100" : "bg-white"}`}
+                    >
+                      <p className="text-sm font-bold">White Label</p>
+                      <p className="mt-1 text-xs text-[var(--vnext-text-2)]">
+                        Embalagem do cliente vinculada a um café-base da linha.
+                      </p>
+                    </button>
+                  </div>
+                )}
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   {!isGreenCoffee && (
                     <Field label="Linha do café torrado">
@@ -722,6 +860,36 @@ export function ProductsVNext() {
                           </option>
                         ))}
                       </select>
+                    </Field>
+                  )}
+                  {!isGreenCoffee && isWhiteLabel && (
+                    <Field label="Café-base da linha">
+                      <select
+                        required
+                        value={newProduct.baseCoffeeProductId ?? ""}
+                        onChange={(event) =>
+                          setNewProduct((current) => ({
+                            ...current,
+                            baseCoffeeProductId:
+                              event.target.value || undefined,
+                          }))
+                        }
+                        className={inputClass}
+                      >
+                        <option value="">
+                          Selecione o café que será usado
+                        </option>
+                        {baseCoffeeProducts.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="mt-2 block text-[10px] font-normal text-[var(--vnext-text-3)]">
+                        A reserva consumirá somente o saldo torrado deste
+                        perfil, dentro da linha{" "}
+                        {PRODUCT_LINE_LABELS[newProduct.line]}.
+                      </span>
                     </Field>
                   )}
                   <Field label="Nome do produto">
@@ -1134,6 +1302,89 @@ export function ProductsVNext() {
               </footer>
             </form>
           </section>
+        </div>
+      )}
+
+      {mappingProduct && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-[#07120f]/55 p-4 backdrop-blur-sm"
+          onMouseDown={() => !mappingBusy && setMappingProduct(null)}
+        >
+          <form
+            onSubmit={saveWhiteLabelMapping}
+            onMouseDown={(event) => event.stopPropagation()}
+            className="w-full max-w-lg rounded-[24px] border bg-[#FAFAF8] p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-violet-700">
+                  White Label
+                </p>
+                <h2 className="mt-1 text-xl font-bold">
+                  Enquadrar {mappingProduct.name}
+                </h2>
+                <p className="mt-2 text-xs text-[var(--vnext-text-2)]">
+                  Linha fixa: {PRODUCT_LINE_LABELS[mappingProduct.line]}. A
+                  reserva usará somente o café-base escolhido abaixo.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={mappingBusy}
+                onClick={() => setMappingProduct(null)}
+                className="rounded-xl border bg-white p-2"
+                aria-label="Fechar enquadramento"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="mt-5">
+              <Field label="Café-base desta linha">
+                <select
+                  required
+                  value={mappingBaseId}
+                  onChange={(event) => setMappingBaseId(event.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Selecione o perfil torrado</option>
+                  {catalog
+                    .filter(
+                      (candidate) =>
+                        candidate.active &&
+                        candidate.line === mappingProduct.line &&
+                        candidate.commercialKind === "STANDARD",
+                    )
+                    .map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+            </div>
+            {mappingError && (
+              <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-800">
+                {mappingError}
+              </div>
+            )}
+            <footer className="mt-6 flex justify-end gap-2 border-t pt-4">
+              <button
+                type="button"
+                disabled={mappingBusy}
+                onClick={() => setMappingProduct(null)}
+                className="rounded-xl border bg-white px-4 py-3 text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={mappingBusy || !mappingBaseId}
+                className="rounded-xl bg-[#10211D] px-4 py-3 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {mappingBusy ? "Salvando…" : "Salvar enquadramento"}
+              </button>
+            </footer>
+          </form>
         </div>
       )}
     </div>

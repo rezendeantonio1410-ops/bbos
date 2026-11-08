@@ -18,6 +18,7 @@ import { SalesOrdersService } from "./sales-orders.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
 import { resolveSalesOrderPaymentPolicy } from "./sales-order-payment-policy";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -57,6 +58,7 @@ export class SalesOrderApprovalsController {
     private readonly auth: AuthService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
     private readonly payments: SalesOrderPaymentsService,
+    private readonly termApprovals: SalesOrderTermApprovalService,
   ) {}
 
   private async actor(request: any) {
@@ -147,6 +149,11 @@ export class SalesOrderApprovalsController {
       throw new BadRequestException(
         "Resolva as solicitações de desconto pendentes antes de enviar o pedido ao cliente.",
       );
+    await this.termApprovals.assertApproved(
+      this.salesOrders.database,
+      actor.companyId,
+      orderId,
+    );
 
     const expiresInDays = Math.min(
       30,
@@ -451,6 +458,11 @@ export class SalesOrderApprovalsController {
           openReceivables: exposure[0]?.total,
           orderTotal: order.totalAmount,
         });
+        await this.termApprovals.assertApproved(
+          tx,
+          approval.companyId,
+          approval.salesOrderId,
+        );
         if (paymentPolicy.mode === "BLOCKED") {
           throw new BadRequestException(
             "Cliente inativo. O pedido não pode ser confirmado.",

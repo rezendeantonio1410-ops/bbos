@@ -229,16 +229,25 @@ export class ProductionController {
         status: InventoryReservationStatus.ACTIVE,
       },
     });
+    const readyForInvoice = activeReservations >= item.salesOrder.items.length;
+    if (readyForInvoice) {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "SalesOrderItem"
+            SET "pickedQuantity"=quantity,"pickedAt"=NOW()
+          WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+        item.salesOrderId,
+        item.companyId,
+      );
+    }
     await transaction.salesOrder.update({
       where: { id: item.salesOrderId },
       data: {
-        status:
-          activeReservations >= item.salesOrder.items.length
-            ? SalesOrderStatus.RESERVED
-            : SalesOrderStatus.IN_PRODUCTION,
+        status: readyForInvoice
+          ? SalesOrderStatus.READY_TO_SHIP
+          : SalesOrderStatus.IN_PRODUCTION,
       },
     });
-    return reservation;
+    return { ...reservation, readyForInvoice };
   }
 
   @Post("orders/:id/cost-v2")
@@ -487,11 +496,12 @@ export class ProductionController {
            JOIN "SalesOrder" so ON so.id=soi."salesOrderId"
            JOIN "Customer" c ON c.id=so."customerId"
            JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+           JOIN "Product" product ON product.id=pv."productId"
            LEFT JOIN active_reservations ar ON ar."salesOrderItemId"=soi.id
            LEFT JOIN stock st ON st."productVariantId"=soi."productVariantId"
           WHERE so."companyId"=$1
             AND so.status::text IN ('CONFIRMED','IN_PRODUCTION')
-            AND pv."productId"=$2
+            AND COALESCE(product."baseCoffeeProductId",pv."productId")=$2
        ), allocated AS (
          SELECT open_items.*,
                 COALESCE(SUM("openUnits") OVER (
@@ -988,7 +998,8 @@ export class ProductionController {
         if (
           officialVariant &&
           order.productVariant &&
-          officialVariant.productId !== order.productVariant.productId
+          (officialVariant.product.baseCoffeeProductId ??
+            officialVariant.productId) !== order.productVariant.productId
         )
           throw new BadRequestException(
             "Escolha uma apresentação do mesmo produto da OP.",
@@ -1406,7 +1417,10 @@ export class ProductionController {
           transaction,
           String(body?.productVariantId ?? order.productVariant.id).trim(),
         );
-        if (targetVariant.productId !== order.productVariant.productId)
+        if (
+          (targetVariant.product.baseCoffeeProductId ??
+            targetVariant.productId) !== order.productVariant.productId
+        )
           throw new BadRequestException(
             "Escolha uma apresentação do mesmo produto da OP.",
           );
