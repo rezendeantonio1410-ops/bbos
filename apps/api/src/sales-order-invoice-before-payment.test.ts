@@ -52,3 +52,17 @@ test("a late Pix confirmation preserves the operational order status", () => {
   );
   assert.match(payments, /WHERE id=\$1 AND status<>'CANCELLED'/);
 });
+
+test("order cards receive the confirmed payment date from every financial route", () => {
+  const service = source("apps/api/src/sales-orders.service.ts");
+  const page = source("apps/web/src/app/(system)/pedidos/page.tsx");
+  assert.match(service, /receivable\.status='PAID'/);
+  assert.match(service, /attempt\.status='PAID'/);
+  assert.match(
+    service,
+    /COALESCE\(receivable\."paymentDate",attempt\."paidAt"\) AS "paidAt"/,
+  );
+  assert.match(page, /Pagamento feito em/);
+  assert.match(page, /formatPaymentDate\(order\.payment\?\.paidAt\)/);
+  assert.match(page, /bg-emerald-50/);
+});

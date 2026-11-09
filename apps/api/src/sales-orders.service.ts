@@ -81,6 +81,15 @@ type RoastedWipReservationRow = {
   stockLineName: string;
 };
 
+type SalesOrderPaymentSummary = {
+  salesOrderId: string;
+  status: string;
+  method: string | null;
+  amountCents: number;
+  expiresAt: Date | null;
+  paidAt: Date | null;
+};
+
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
   readonly database = prisma;
@@ -297,20 +306,32 @@ export class SalesOrdersService implements OnModuleDestroy {
         ORDER BY "salesOrderId","updatedAt" DESC`,
         orders.map((order) => order.id),
       ),
-      this.database.$queryRawUnsafe<
-        Array<{
-          salesOrderId: string;
-          status: string;
-          method: string;
-          amountCents: number;
-          expiresAt: Date | null;
-          paidAt: Date | null;
-        }>
-      >(
-        `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,method,"amountCents","expiresAt","paidAt"
-           FROM "SalesOrderPaymentAttempt"
-          WHERE "salesOrderId"=ANY($1::text[])
-          ORDER BY "salesOrderId","attemptNumber" DESC`,
+      this.database.$queryRawUnsafe<SalesOrderPaymentSummary[]>(
+        `SELECT orders.id AS "salesOrderId",
+                CASE
+                  WHEN receivable.status='PAID' OR attempt.status='PAID' THEN 'PAID'
+                  ELSE attempt.status
+                END AS status,
+                COALESCE(payment.method,attempt.method) AS method,
+                ROUND(COALESCE(receivable.amount,orders."totalAmount")*100)::int AS "amountCents",
+                attempt."expiresAt",
+                COALESCE(receivable."paymentDate",attempt."paidAt") AS "paidAt"
+           FROM "SalesOrder" orders
+           LEFT JOIN "AccountsReceivable" receivable ON receivable."salesOrderId"=orders.id
+           LEFT JOIN LATERAL (
+             SELECT item.method,item."paidAt"
+               FROM "Payment" item
+              WHERE item."accountsReceivableId"=receivable.id
+              ORDER BY item."paidAt" DESC,item."createdAt" DESC LIMIT 1
+           ) payment ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT item.status,item.method,item."expiresAt",item."paidAt"
+               FROM "SalesOrderPaymentAttempt" item
+              WHERE item."salesOrderId"=orders.id
+              ORDER BY item."attemptNumber" DESC LIMIT 1
+           ) attempt ON TRUE
+          WHERE orders.id=ANY($1::text[])
+            AND (receivable.id IS NOT NULL OR attempt.status IS NOT NULL)`,
         orders.map((order) => order.id),
       ),
       this.database.$queryRawUnsafe<
@@ -357,10 +378,33 @@ export class SalesOrdersService implements OnModuleDestroy {
       return { ...order, payment: null };
     }
     const [payments, fiscalDocuments] = await Promise.all([
-      this.database.$queryRawUnsafe<any[]>(
-        `SELECT status,method,"amountCents","expiresAt","paidAt"
-           FROM "SalesOrderPaymentAttempt"
-          WHERE "salesOrderId"=$1 ORDER BY "attemptNumber" DESC LIMIT 1`,
+      this.database.$queryRawUnsafe<SalesOrderPaymentSummary[]>(
+        `SELECT orders.id AS "salesOrderId",
+                CASE
+                  WHEN receivable.status='PAID' OR attempt.status='PAID' THEN 'PAID'
+                  ELSE attempt.status
+                END AS status,
+                COALESCE(payment.method,attempt.method) AS method,
+                ROUND(COALESCE(receivable.amount,orders."totalAmount")*100)::int AS "amountCents",
+                attempt."expiresAt",
+                COALESCE(receivable."paymentDate",attempt."paidAt") AS "paidAt"
+           FROM "SalesOrder" orders
+           LEFT JOIN "AccountsReceivable" receivable ON receivable."salesOrderId"=orders.id
+           LEFT JOIN LATERAL (
+             SELECT item.method,item."paidAt"
+               FROM "Payment" item
+              WHERE item."accountsReceivableId"=receivable.id
+              ORDER BY item."paidAt" DESC,item."createdAt" DESC LIMIT 1
+           ) payment ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT item.status,item.method,item."expiresAt",item."paidAt"
+               FROM "SalesOrderPaymentAttempt" item
+              WHERE item."salesOrderId"=orders.id
+              ORDER BY item."attemptNumber" DESC LIMIT 1
+           ) attempt ON TRUE
+          WHERE orders.id=$1
+            AND (receivable.id IS NOT NULL OR attempt.status IS NOT NULL)
+          LIMIT 1`,
         order.id,
       ),
       this.database.$queryRawUnsafe<any[]>(

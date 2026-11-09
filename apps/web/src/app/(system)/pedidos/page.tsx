@@ -50,6 +50,14 @@ const presentationLabel = (grams: number) =>
   grams >= 1000 ? `${grams / 1000} kg` : `${grams} g`;
 const formatPostalCode = (value: string) =>
   value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
+const formatPaymentDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+};
 const paymentOptions = [
   "7 dias",
   "14 dias",
@@ -250,7 +258,7 @@ type Order = {
   } | null;
   payment?: {
     status: string;
-    method: string;
+    method?: string | null;
     amountCents: number;
     expiresAt?: string | null;
     paidAt?: string | null;
@@ -757,6 +765,9 @@ export default function OrdersPage() {
               order.shipment?.status === "CANCELLED";
             const compactShipmentException =
               order.shipment?.status === "EXCEPTION";
+            const paymentDate = formatPaymentDate(order.payment?.paidAt);
+            const paymentConfirmed =
+              order.payment?.status === "PAID" && Boolean(paymentDate);
 
             return (
               <Card key={order.id} className="p-4">
@@ -782,6 +793,12 @@ export default function OrdersPage() {
                       <p className="text-xs text-stone-500">
                         {order.customer.name}
                       </p>
+                      {paymentConfirmed && (
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+                          <Check size={12} strokeWidth={3} /> Pagamento feito em{" "}
+                          {paymentDate}
+                        </span>
+                      )}
                     </div>
                     {order.shipment && (
                       <div className="min-w-0 flex-1 text-xs sm:text-center">
