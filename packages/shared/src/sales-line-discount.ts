@@ -1,5 +1,5 @@
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
-const roundPercent = (value: number) => Math.round(value * 1000) / 1000;
+const roundPercent = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
 
 export type SalesLineDiscountInput = {
   officialUnitPrice: number;

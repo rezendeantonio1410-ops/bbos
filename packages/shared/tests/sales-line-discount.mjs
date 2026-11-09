@@ -11,7 +11,7 @@ test("calcula preço final e percentual a partir do desconto em reais", () => {
 
   assert.equal(result.valid, true);
   assert.equal(result.discountAmount, 3);
-  assert.equal(result.discountPercent, 5.455);
+  assert.equal(result.discountPercent, 5.454545);
   assert.equal(result.finalUnitPrice, 52);
 });
 
