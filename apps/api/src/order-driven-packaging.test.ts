@@ -21,7 +21,7 @@ test("customer acceptance attempts automatic packaging when roasted coffee is re
   assert.match(approvals, /emissão da NF-e permanece manual/);
 });
 
-test("the ordered SKU is used only to calculate the bulk kilogram reservation", () => {
+test("the ordered SKU defines the package weight while the roast is pooled by line", () => {
   const orders = source("apps/api/src/sales-orders.service.ts");
   assert.match(
     orders,
@@ -37,10 +37,10 @@ test("the ordered SKU is used only to calculate the bulk kilogram reservation", 
     orders,
     /source_product\."productLineId"=target_product\."productLineId"/,
   );
-  assert.match(orders, /source_product\.id=target_product\.id/);
+  assert.doesNotMatch(orders, /source_product\.id=target_product\.id/);
 });
 
-test("manual reservation reuses the exact bulk coffee mapping instead of requiring packaged stock", () => {
+test("manual reservation reuses the line bulk pool instead of requiring packaged stock", () => {
   const orders = source("apps/api/src/sales-orders.service.ts");
   assert.match(
     orders,
@@ -50,7 +50,7 @@ test("manual reservation reuses the exact bulk coffee mapping instead of requiri
     orders,
     /item\.quantity - Number\(bulkReservation\?\.packageQuantity \?\? 0\)/,
   );
-  assert.match(orders, /Café torrado a granel insuficiente/);
+  assert.match(orders, /Café torrado a granel insuficiente na linha/);
   assert.match(orders, /SalesOrderStatus\.IN_PRODUCTION/);
   assert.match(orders, /ainda não possui café-base definido/);
 });

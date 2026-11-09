@@ -182,7 +182,6 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           JOIN "Product" target_product ON target_product.id=$2
           WHERE w."companyId"=$1
             AND source_product."productLineId"=target_product."productLineId"
-            AND source_product.id=target_product.id
             AND w.status IN ('AVAILABLE','PARTIALLY_PACKED')
             AND w."availableKg"-w."reservedKg">0.0005
           ORDER BY w."producedAt",w.id
@@ -1294,7 +1293,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           if (reservedKg + 0.0005 < requestedKg) {
             const missingKg = Math.max(0, requestedKg - reservedKg);
             throw new BadRequestException(
-              `Café torrado a granel insuficiente para ${reservation.stockLineName} · ${reservation.stockProductName}: necessário ${requestedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, reservado ${reservedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, faltante ${missingKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg.`,
+              `Café torrado a granel insuficiente na linha ${reservation.stockLineName}: necessário ${requestedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, reservado ${reservedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, faltante ${missingKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg.`,
             );
           }
         }
