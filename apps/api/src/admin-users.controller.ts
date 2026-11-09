@@ -150,4 +150,41 @@ export class AdminUsersController {
       select: { id: true, name: true, email: true, role: true, active: true },
     });
   }
+
+  @Patch(":id/password")
+  async password(
+    @Req() request: any,
+    @Param("id") id: string,
+    @Body() body: { password?: string },
+  ) {
+    const actor = await this.admin(request);
+    const password = String(body.password ?? "");
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) throw new BadRequestException(passwordError);
+    const target = await this.db.user.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true, name: true, email: true, role: true },
+    });
+    if (!target) throw new BadRequestException("Usuário não encontrado.");
+    if (target.role === UserRole.PARTNER)
+      throw new BadRequestException(
+        "Gerencie este acesso pelo cadastro do parceiro de venda.",
+      );
+    await this.db.$transaction([
+      this.db.user.update({
+        where: { id },
+        data: { passwordHash: hashPassword(password) },
+      }),
+      this.db.authSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+    return {
+      id: target.id,
+      name: target.name,
+      email: target.email,
+      passwordReset: true,
+    };
+  }
 }
