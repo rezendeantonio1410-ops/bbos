@@ -531,8 +531,10 @@ const filters: Array<[string, string]> = [
 
 const displayStatus = (order: Order) => {
   if (
-    order.shipment?.reexpeditionId &&
-    ["PENDING", "PURCHASED", "LABEL_READY"].includes(order.shipment.status)
+    (order.shipment?.reexpeditionId || order.status === "DELIVERED") &&
+    ["PENDING", "PURCHASED", "LABEL_READY"].includes(
+      order.shipment?.status ?? "",
+    )
   ) {
     return "REEXPEDITION_READY";
   }
