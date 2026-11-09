@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
-import { lookupBrazilianCep } from "@/lib/brazil-address";
+import { brazilianCepDigits, formatBrazilianCep, lookupBrazilianCep } from "@/lib/brazil-address";
+import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 
 const API = `${getApiBaseUrl()}/green-coffee-purchases`;
 const input =
@@ -247,7 +248,6 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(data.message ?? "Não foi possível concluir a operação.");
   return data as T;
 }
-
 export default function SuppliersPage() {
   const [items, setItems] = useState<Supplier[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
@@ -283,6 +283,10 @@ export default function SuppliersPage() {
   >("idle");
   const [unitCity, setUnitCity] = useState("");
   const [unitIbgeCityCode, setUnitIbgeCityCode] = useState("");
+  const [unitCep, setUnitCep] = useState("");
+  const [unitDistrict, setUnitDistrict] = useState("");
+  const [unitAddress, setUnitAddress] = useState("");
+  const [unitComplement, setUnitComplement] = useState("");
   const [productionSpeciesId, setProductionSpeciesId] = useState("");
   const [cultivarQuery, setCultivarQuery] = useState("");
   const [selectedCultivarIds, setSelectedCultivarIds] = useState<string[]>([]);
@@ -299,6 +303,23 @@ export default function SuppliersPage() {
   const [contactAuthorized, setContactAuthorized] = useState(false);
   const [contactActive, setContactActive] = useState(true);
   const [contactMessage, setContactMessage] = useState("");
+  const unitCepLookup = useBrazilianCepAutofill({
+    postalCode: unitCep,
+    enabled: Boolean(unitSupplier),
+    onResolved: (result) => {
+      setUnitCep(result.postalCode);
+      setUnitState(result.state);
+      setUnitCity(result.city);
+      setUnitIbgeCityCode(result.ibgeCityCode ?? "");
+      setUnitDistrict((current) => result.district || current);
+      setUnitAddress((current) => result.address || current);
+      setUnitMunicipalities((current) =>
+        current.some((item) => item.name === result.city && item.state === result.state)
+          ? current
+          : [...current, { ibgeCode: result.ibgeCityCode ?? `cep-${result.city}`, name: result.city, state: result.state }],
+      );
+    },
+  });
 
   const load = async () => {
     const [suppliers, refs] = await Promise.all([
@@ -350,9 +371,14 @@ export default function SuppliersPage() {
     void request<Municipality[]>(
       `${API}/references/municipalities?state=${unitState}`,
     )
-      .then(setUnitMunicipalities)
+      .then((items) =>
+        setUnitMunicipalities((current) => {
+          const resolved = current.find((item) => item.name === unitCity && item.state === unitState);
+          return resolved && !items.some((item) => item.name === resolved.name) ? [...items, resolved] : items;
+        }),
+      )
       .catch(() => setUnitMunicipalities([]));
-  }, [unitState]);
+  }, [unitCity, unitState]);
   useEffect(() => {
     if (editingSupplier && supplierOpen) {
       setSupplierState(editingSupplier.state ?? "");
@@ -371,8 +397,13 @@ export default function SuppliersPage() {
   }, [editingSupplier, supplierOpen]);
   useEffect(() => {
     if (unitSupplier) {
+      setUnitState("");
       setUnitCity("");
       setUnitIbgeCityCode("");
+      setUnitCep("");
+      setUnitDistrict("");
+      setUnitAddress("");
+      setUnitComplement("");
       setProductionSpeciesId("");
       setCultivarQuery("");
       setSelectedCultivarIds([]);
@@ -1279,12 +1310,20 @@ export default function SuppliersPage() {
                   inputMode="numeric"
                   pattern="[0-9]{5}-?[0-9]{3}"
                   placeholder="00000-000"
+                  autoComplete="postal-code"
+                  value={formatBrazilianCep(unitCep)}
+                  onChange={(event) => setUnitCep(brazilianCepDigits(event.target.value))}
                   className={input}
                 />
+                {unitCepLookup.statusText && (
+                  <span className={`mt-1 block text-xs ${unitCepLookup.status === "found" ? "text-emerald-700" : unitCepLookup.status === "not-found" || unitCepLookup.status === "error" ? "text-amber-700" : "text-stone-500"}`}>
+                    {unitCepLookup.statusText}
+                  </span>
+                )}
               </label>
               <label className="text-sm font-semibold">
                 Bairro / Distrito / Localidade
-                <input name="district" className={input} />
+                <input name="district" value={unitDistrict} onChange={(event) => setUnitDistrict(event.target.value)} className={input} />
               </label>
               <label className="text-sm font-semibold">
                 Região cafeeira
@@ -1301,11 +1340,11 @@ export default function SuppliersPage() {
               </label>
               <label className="text-sm font-semibold sm:col-span-2">
                 Endereço
-                <input name="address" className={input} />
+                <input name="address" value={unitAddress} onChange={(event) => setUnitAddress(event.target.value)} className={input} />
               </label>
               <label className="text-sm font-semibold sm:col-span-2">
                 Complemento
-                <input name="addressComplement" className={input} />
+                <input name="addressComplement" value={unitComplement} onChange={(event) => setUnitComplement(event.target.value)} className={input} />
               </label>
               <label className="text-sm font-semibold">
                 Área de café (ha)

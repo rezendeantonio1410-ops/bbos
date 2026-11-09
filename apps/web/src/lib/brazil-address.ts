@@ -7,13 +7,24 @@ export type CepLookupResult = {
   ibgeCityCode?: string;
 };
 
+export const brazilianCepDigits = (value: string) =>
+  value.replace(/\D/g, "").slice(0, 8);
+
+export const formatBrazilianCep = (value: string) =>
+  brazilianCepDigits(value).replace(/(\d{5})(\d)/, "$1-$2");
+
+export const isCompleteBrazilianCep = (value: string) =>
+  brazilianCepDigits(value).length === 8;
+
 export async function lookupBrazilianCep(
   value: string,
+  signal?: AbortSignal,
 ): Promise<CepLookupResult | null> {
-  const digits = value.replace(/\D/g, "");
+  const digits = brazilianCepDigits(value);
   if (digits.length !== 8) return null;
   const response = await fetch(`/api/storefront/address/${digits}`, {
     headers: { Accept: "application/json" },
+    signal,
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("CEP indisponível");

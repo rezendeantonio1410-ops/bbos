@@ -27,6 +27,8 @@ import {
   X,
 } from "lucide-react";
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
+import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
+import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 
 type Health = {
   health: "HEALTHY" | "INFO" | "ATTENTION" | "BLOCKED";
@@ -320,7 +322,19 @@ export default function CustomersPage() {
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState(emptyCustomer);
   const [saving, setSaving] = useState(false);
-  const [cepBusy, setCepBusy] = useState(false);
+  const cepLookup = useBrazilianCepAutofill({
+    postalCode: form.postalCode,
+    enabled: form.countryCode === "BR" && (showNew || Boolean(editCustomer)),
+    onResolved: (result) =>
+      setForm((current) => ({
+        ...current,
+        postalCode: result.postalCode,
+        address: result.address || current.address,
+        district: result.district || current.district,
+        city: result.city,
+        state: result.state,
+      })),
+  });
 
   const [requestCustomer, setRequestCustomer] = useState<Customer | null>(null);
   const [requestedLimit, setRequestedLimit] = useState("");
@@ -500,35 +514,6 @@ export default function CustomersPage() {
       );
     } finally {
       setSaving(false);
-    }
-  };
-
-  const findCep = async () => {
-    const cep = form.postalCode.replace(/\D/g, "");
-    if (cep.length !== 8)
-      return setError(
-        "Informe os 8 números do CEP para eu completar o endereço.",
-      );
-    setCepBusy(true);
-    setError("");
-    try {
-      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await response.json();
-      if (data.erro) throw new Error("CEP não encontrado.");
-      setForm((current) => ({
-        ...current,
-        postalCode: data.cep ?? current.postalCode,
-        address: data.logradouro ?? current.address,
-        district: data.bairro ?? current.district,
-        city: data.localidade ?? current.city,
-        state: data.uf ?? current.state,
-      }));
-    } catch {
-      setError(
-        "Não consegui consultar o CEP agora. Você pode continuar preenchendo manualmente.",
-      );
-    } finally {
-      setCepBusy(false);
     }
   };
 
@@ -1021,22 +1006,49 @@ export default function CustomersPage() {
                 <div className="flex gap-2">
                   <input
                     className="flex-1"
-                    value={form.postalCode}
+                    inputMode={form.countryCode === "BR" ? "numeric" : "text"}
+                    autoComplete="postal-code"
+                    placeholder={form.countryCode === "BR" ? "00000-000" : ""}
+                    value={
+                      form.countryCode === "BR"
+                        ? formatBrazilianCep(form.postalCode)
+                        : form.postalCode
+                    }
                     onChange={(e) =>
-                      setForm({ ...form, postalCode: e.target.value })
+                      setForm({
+                        ...form,
+                        postalCode:
+                          form.countryCode === "BR"
+                            ? brazilianCepDigits(e.target.value)
+                            : e.target.value,
+                      })
                     }
                   />
                   {form.countryCode === "BR" && (
                     <button
                       type="button"
-                      onClick={() => void findCep()}
-                      disabled={cepBusy}
+                      onClick={() => void cepLookup.lookup()}
+                      disabled={cepLookup.busy}
                       className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
                     >
-                      {cepBusy ? "Buscando…" : "Buscar"}
+                      {cepLookup.busy ? "Buscando…" : "Buscar"}
                     </button>
                   )}
                 </div>
+                {form.countryCode === "BR" && cepLookup.statusText && (
+                  <p
+                    className={`mt-1 text-xs ${
+                      cepLookup.status === "found"
+                        ? "text-emerald-700"
+                        : cepLookup.status === "not-found" ||
+                            cepLookup.status === "error"
+                          ? "text-amber-700"
+                          : "text-stone-500"
+                    }`}
+                  >
+                    {cepLookup.statusText}
+                  </p>
+                )}
               </Field>
               <Field
                 label={
@@ -1358,22 +1370,49 @@ export default function CustomersPage() {
                 <div className="flex gap-2">
                   <input
                     className="flex-1"
-                    value={form.postalCode}
+                    inputMode={form.countryCode === "BR" ? "numeric" : "text"}
+                    autoComplete="postal-code"
+                    placeholder={form.countryCode === "BR" ? "00000-000" : ""}
+                    value={
+                      form.countryCode === "BR"
+                        ? formatBrazilianCep(form.postalCode)
+                        : form.postalCode
+                    }
                     onChange={(e) =>
-                      setForm({ ...form, postalCode: e.target.value })
+                      setForm({
+                        ...form,
+                        postalCode:
+                          form.countryCode === "BR"
+                            ? brazilianCepDigits(e.target.value)
+                            : e.target.value,
+                      })
                     }
                   />
                   {form.countryCode === "BR" && (
                     <button
                       type="button"
-                      onClick={() => void findCep()}
-                      disabled={cepBusy}
+                      onClick={() => void cepLookup.lookup()}
+                      disabled={cepLookup.busy}
                       className="rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white"
                     >
-                      {cepBusy ? "Buscando…" : "Buscar"}
+                      {cepLookup.busy ? "Buscando…" : "Buscar"}
                     </button>
                   )}
                 </div>
+                {form.countryCode === "BR" && cepLookup.statusText && (
+                  <p
+                    className={`mt-1 text-xs ${
+                      cepLookup.status === "found"
+                        ? "text-emerald-700"
+                        : cepLookup.status === "not-found" ||
+                            cepLookup.status === "error"
+                          ? "text-amber-700"
+                          : "text-stone-500"
+                    }`}
+                  >
+                    {cepLookup.statusText}
+                  </p>
+                )}
               </Field>
               <Field
                 label={

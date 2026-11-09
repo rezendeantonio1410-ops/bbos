@@ -13,6 +13,8 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
+import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -119,6 +121,13 @@ const purposeLabel = (value: string) => purposeLabels[value] || value;
 const outcomeLabel = (value: string) => outcomeLabels[value] || value;
 const creditStatusLabel = (value?: string) =>
   creditStatusLabels[value || ""] || "não analisado";
+const emptyCustomerAddress = {
+  postalCode: "",
+  city: "",
+  state: "",
+  address: "",
+  district: "",
+};
 
 async function portalApi<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/partner-portal${path}`, {
@@ -148,6 +157,7 @@ export function PartnerOrderWorkspace({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [showCustomer, setShowCustomer] = useState(false);
+  const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
@@ -165,6 +175,19 @@ export function PartnerOrderWorkspace({
   const [showCredit, setShowCredit] = useState(false);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [visitsLoading, setVisitsLoading] = useState(false);
+  const customerCepLookup = useBrazilianCepAutofill({
+    postalCode: customerAddress.postalCode,
+    enabled: showCustomer,
+    onResolved: (result) =>
+      setCustomerAddress((current) => ({
+        ...current,
+        postalCode: result.postalCode,
+        city: result.city,
+        state: result.state,
+        address: result.address || current.address,
+        district: result.district || current.district,
+      })),
+  });
 
   const loadOptions = useCallback(async () => {
     setLoading(true);
@@ -251,6 +274,7 @@ export function PartnerOrderWorkspace({
         "Cliente cadastrado. Registre agora os fatos desta primeira visita.",
       );
       form.reset();
+      setCustomerAddress(emptyCustomerAddress);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -487,18 +511,76 @@ export function PartnerOrderWorkspace({
             <input name="phone" placeholder="+5543999999999" />
           </PortalField>
           <PortalField label="CEP *">
-            <input name="postalCode" inputMode="numeric" required />
+            <input
+              name="postalCode"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              placeholder="00000-000"
+              value={formatBrazilianCep(customerAddress.postalCode)}
+              onChange={(event) =>
+                setCustomerAddress((current) => ({
+                  ...current,
+                  postalCode: brazilianCepDigits(event.target.value),
+                }))
+              }
+              required
+            />
+            {customerCepLookup.statusText && (
+              <span
+                className={`mt-1 block text-xs ${
+                  customerCepLookup.status === "found"
+                    ? "text-emerald-700"
+                    : customerCepLookup.status === "not-found" ||
+                        customerCepLookup.status === "error"
+                      ? "text-amber-700"
+                      : "text-stone-500"
+                }`}
+              >
+                {customerCepLookup.statusText}
+              </span>
+            )}
           </PortalField>
           <div className="grid grid-cols-[1fr_90px] gap-3">
             <PortalField label="Cidade">
-              <input name="city" required />
+              <input
+                name="city"
+                value={customerAddress.city}
+                onChange={(event) =>
+                  setCustomerAddress((current) => ({
+                    ...current,
+                    city: event.target.value,
+                  }))
+                }
+                required
+              />
             </PortalField>
             <PortalField label="UF">
-              <input name="state" maxLength={2} required />
+              <input
+                name="state"
+                maxLength={2}
+                value={customerAddress.state}
+                onChange={(event) =>
+                  setCustomerAddress((current) => ({
+                    ...current,
+                    state: event.target.value.toUpperCase(),
+                  }))
+                }
+                required
+              />
             </PortalField>
           </div>
           <PortalField label="Logradouro *">
-            <input name="address" required />
+            <input
+              name="address"
+              value={customerAddress.address}
+              onChange={(event) =>
+                setCustomerAddress((current) => ({
+                  ...current,
+                  address: event.target.value,
+                }))
+              }
+              required
+            />
           </PortalField>
           <PortalField label="Número *">
             <input
@@ -511,7 +593,17 @@ export function PartnerOrderWorkspace({
             <input name="addressComplement" />
           </PortalField>
           <PortalField label="Bairro *">
-            <input name="district" required />
+            <input
+              name="district"
+              value={customerAddress.district}
+              onChange={(event) =>
+                setCustomerAddress((current) => ({
+                  ...current,
+                  district: event.target.value,
+                }))
+              }
+              required
+            />
           </PortalField>
           <PortalField label="Situação da inscrição estadual">
             <select name="stateRegistrationType" defaultValue="">

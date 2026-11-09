@@ -19,6 +19,8 @@ import {
   ShoppingBag,
   Trash2,
 } from "lucide-react";
+import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
+import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import styles from "../account.module.css";
 
 type Account = {
@@ -118,6 +120,19 @@ export default function CustomerDashboard() {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [reordering, setReordering] = useState("");
   const [address, setAddress] = useState(emptyAddress);
+  const addressCepLookup = useBrazilianCepAutofill({
+    postalCode: address.postalCode,
+    enabled: showAddressForm,
+    onResolved: (result) =>
+      setAddress((current) => ({
+        ...current,
+        postalCode: brazilianCepDigits(result.postalCode),
+        street: result.address || current.street,
+        district: result.district || current.district,
+        city: result.city,
+        state: result.state,
+      })),
+  });
   const [profile, setProfile] = useState({
     name: "",
     phone: "",
@@ -655,18 +670,21 @@ export default function CustomerDashboard() {
                   <label>
                     CEP
                     <input
-                      value={address.postalCode}
+                      value={formatBrazilianCep(address.postalCode)}
                       onChange={(e) =>
                         setAddress({
                           ...address,
-                          postalCode: e.target.value
-                            .replace(/\D/g, "")
-                            .slice(0, 8),
+                          postalCode: brazilianCepDigits(e.target.value),
                         })
                       }
                       inputMode="numeric"
+                      autoComplete="postal-code"
+                      placeholder="00000-000"
                       required
                     />
+                    {addressCepLookup.statusText && (
+                      <span>{addressCepLookup.statusText}</span>
+                    )}
                   </label>
                   <label>
                     Rua
