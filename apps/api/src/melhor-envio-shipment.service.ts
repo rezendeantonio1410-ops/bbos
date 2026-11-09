@@ -140,6 +140,7 @@ export class MelhorEnvioShipmentService
   async onModuleInit() {
     // O status comercial continua protegido pelas regras de estoque.
     // Aqui sincronizamos apenas o que o Melhor Envio informar sobre remessas ativas.
+    await this.auditRecentDeliveredShipments();
     await this.backfillDeliveryExceptionNotifications();
     void this.reconcileActiveShipments();
     this.trackingTimer = setInterval(
@@ -151,6 +152,58 @@ export class MelhorEnvioShipmentService
 
   async onModuleDestroy() {
     if (this.trackingTimer) clearInterval(this.trackingTimer);
+  }
+
+  private async auditRecentDeliveredShipments() {
+    try {
+      const shipments = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT id,"companyId","externalId"
+           FROM "Shipment"
+          WHERE provider='MELHOR_ENVIO'
+            AND status='DELIVERED'
+            AND "externalId" IS NOT NULL
+            AND "updatedAt">=NOW()-INTERVAL '120 days'
+          ORDER BY "updatedAt" DESC
+          LIMIT 100`,
+      );
+      for (const shipment of shipments) {
+        const trackingResponse = await this.request(
+          shipment.companyId,
+          "/me/shipment/tracking",
+          {
+            method: "POST",
+            body: JSON.stringify({ orders: [shipment.externalId] }),
+          },
+        ).catch(() => null);
+        const trackingDetails =
+          (Array.isArray(trackingResponse) ? trackingResponse[0] : null) ||
+          trackingResponse?.[shipment.externalId] ||
+          trackingResponse?.data?.[0] ||
+          trackingResponse?.data?.[shipment.externalId] ||
+          trackingResponse?.data ||
+          trackingResponse ||
+          {};
+        const status = normalizeMelhorEnvioTrackingStatus(
+          trackingDetails?.status ||
+            trackingDetails?.tracking?.status ||
+            trackingDetails?.self_tracking?.status ||
+            "",
+        );
+        if (
+          ["undelivered", "returned", "paused", "suspended"].includes(status)
+        ) {
+          await this.applyTrackingUpdate(
+            shipment.externalId,
+            status,
+            trackingDetails,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Falha ao auditar entregas recentes", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async backfillDeliveryExceptionNotifications() {
