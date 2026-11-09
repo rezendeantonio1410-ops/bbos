@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  Camera,
   CheckCircle2,
   KeyRound,
   ShieldCheck,
@@ -9,6 +10,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { ProfileAvatarField } from "@/components/profile-avatar-field";
 
 type UserRow = {
   id: string;
@@ -34,6 +36,10 @@ export default function UsersPage() {
   const [resetError, setResetError] = useState("");
   const [resetDone, setResetDone] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [avatarTarget, setAvatarTarget] = useState<UserRow | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState("");
+  const [avatarSaving, setAvatarSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -128,6 +134,61 @@ export default function UsersPage() {
     }
   };
 
+  const openAvatar = (user: UserRow) => {
+    setAvatarTarget(user);
+    setAvatarPreview(null);
+    setAvatarError("");
+  };
+
+  const selectAvatar = (file: File | null) => {
+    setAvatarError("");
+    setAvatarPreview(null);
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result : null;
+      if (!value || value.length > 3_000_000) {
+        setAvatarError("A imagem é muito grande. Use JPG, PNG ou WebP de até 2 MB.");
+        return;
+      }
+      setAvatarPreview(value);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveAvatar = async () => {
+    if (!avatarTarget || !avatarPreview) return;
+    setAvatarSaving(true);
+    setAvatarError("");
+    try {
+      const response = await fetch(`/api/admin/users/${avatarTarget.id}/avatar`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ avatarUrl: avatarPreview }),
+      });
+      const body = (await response.json().catch(() => ({}))) as UserRow & {
+        message?: string;
+      };
+      if (!response.ok)
+        throw new Error(body.message ?? "Não foi possível atualizar a foto.");
+      setUsers((current) =>
+        current.map((user) => (user.id === body.id ? { ...user, ...body } : user)),
+      );
+      setDone(`Foto oficial de ${body.name} atualizada no BBOS.`);
+      setAvatarTarget(null);
+      setAvatarPreview(null);
+    } catch (caught) {
+      setAvatarError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível atualizar a foto.",
+      );
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <header>
@@ -202,6 +263,13 @@ export default function UsersPage() {
                       className="mt-2 text-xs font-semibold text-violet-700 hover:text-violet-900"
                     >
                       Redefinir senha
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAvatar(user)}
+                      className="mt-2 block text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                    >
+                      Alterar foto
                     </button>
                   </div>
                 </div>
@@ -368,6 +436,55 @@ export default function UsersPage() {
               className="mt-5 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
             >
               {resetting ? "Redefinindo…" : "Salvar nova senha"}
+            </button>
+          </section>
+        </div>
+      )}
+
+      {avatarTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4">
+          <section className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[.16em] text-emerald-700">
+                  Identidade oficial
+                </p>
+                <h2 className="mt-1 text-xl font-semibold">Foto do perfil</h2>
+                <p className="mt-1 text-sm text-stone-500">
+                  {avatarTarget.name} · {avatarTarget.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar"
+                onClick={() => setAvatarTarget(null)}
+                className="rounded-full border p-2 text-stone-500"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-6">
+              <ProfileAvatarField
+                name={avatarTarget.name}
+                value={avatarPreview ?? avatarTarget.avatarUrl}
+                onChange={selectAvatar}
+              />
+              <p className="mt-3 flex items-center gap-2 text-xs text-stone-400">
+                <Camera size={14} /> JPG, PNG ou WebP · até 2 MB
+              </p>
+            </div>
+            {avatarError && (
+              <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                {avatarError}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={avatarSaving || !avatarPreview}
+              onClick={() => void saveAvatar()}
+              className="mt-5 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {avatarSaving ? "Atualizando…" : "Confirmar foto"}
             </button>
           </section>
         </div>
