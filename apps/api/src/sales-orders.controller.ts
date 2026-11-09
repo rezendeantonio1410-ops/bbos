@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { Prisma, UserRole } from "@bbos/database";
+import { calculateSalesLineDiscount } from "@bbos/shared";
 import {
   SalesOrdersService,
   type CreateSalesOrderInput,
@@ -303,7 +304,11 @@ export class SalesOrdersController {
       customerId?: string;
       productVariantId?: string;
       quantity?: number;
-      items?: Array<{ productVariantId?: string; quantity?: number }>;
+      items?: Array<{
+        productVariantId?: string;
+        quantity?: number;
+        negotiatedUnitPrice?: number;
+      }>;
       packageWidthCm?: number;
       packageHeightCm?: number;
       packageLengthCm?: number;
@@ -323,11 +328,16 @@ export class SalesOrdersController {
       ? body.items.map((item) => ({
           productVariantId: String(item.productVariantId ?? "").trim(),
           quantity: Number(item.quantity ?? 0),
+          negotiatedUnitPrice:
+            item.negotiatedUnitPrice == null
+              ? undefined
+              : Number(item.negotiatedUnitPrice),
         }))
       : [
           {
             productVariantId: String(body.productVariantId ?? "").trim(),
             quantity: Number(body.quantity ?? 0),
+            negotiatedUnitPrice: undefined,
           },
         ];
     if (
@@ -397,9 +407,31 @@ export class SalesOrdersController {
         );
       }
       salesChannelId = price.salesChannelId;
+      const negotiated = calculateSalesLineDiscount({
+        officialUnitPrice: price.officialUnitPrice,
+        finalUnitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : item.negotiatedUnitPrice,
+        maxDiscountPercent:
+          actor.role === UserRole.ADMIN || actor.role === UserRole.EXECUTIVE
+            ? null
+            : price.maxRequestDiscountPercent,
+        minimumPrice: isSample ? null : price.minimumPrice,
+        unitCost: isSample ? null : price.unitCost,
+        minimumMarginPercent: isSample ? null : price.minimumMarginPercent,
+        minimumRoiPercent: isSample ? null : price.minimumRoiPercent,
+      });
+      if (!negotiated.valid)
+        throw new BadRequestException(negotiated.message);
+      const effectiveUnitPrice =
+        negotiated.discountAmount > 0 &&
+        actor.role !== UserRole.ADMIN &&
+        actor.role !== UserRole.EXECUTIVE
+          ? price.officialUnitPrice
+          : negotiated.finalUnitPrice;
       subtotalCents += isSample
         ? sampleFiscalSubtotalCents(item.quantity)
-        : Math.round(price.officialUnitPrice * item.quantity * 100);
+        : Math.round(effectiveUnitPrice * item.quantity * 100);
       weightGrams +=
         Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
     }
@@ -724,6 +756,18 @@ export class SalesOrdersController {
     if (isSample) body.freight = 0;
 
     const pricedItems = [] as CreateSalesOrderInput["items"];
+    const negotiatedDiscounts: Array<{
+      productVariantId: string;
+      productPriceId: string;
+      quantity: number;
+      officialUnitPrice: number;
+      requestedUnitPrice: number;
+      discountPercent: number;
+      discountAmount: number;
+      status: "APPROVED" | "PENDING";
+    }> = [];
+    const canApproveDiscount =
+      actor.role === UserRole.ADMIN || actor.role === UserRole.EXECUTIVE;
     let resolvedChannelId: string | undefined;
     let resolvedChannelType: string | undefined;
     let resolvedCurrency: string | undefined;
@@ -749,11 +793,45 @@ export class SalesOrdersController {
         );
       }
       resolvedCurrency = itemCurrency;
+      const negotiated = calculateSalesLineDiscount({
+        officialUnitPrice: price.officialUnitPrice,
+        finalUnitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : item.negotiatedUnitPrice,
+        maxDiscountPercent: canApproveDiscount
+          ? null
+          : price.maxRequestDiscountPercent,
+        minimumPrice: isSample ? null : price.minimumPrice,
+        unitCost: isSample ? null : price.unitCost,
+        minimumMarginPercent: isSample ? null : price.minimumMarginPercent,
+        minimumRoiPercent: isSample ? null : price.minimumRoiPercent,
+      });
+      if (!negotiated.valid)
+        throw new BadRequestException(negotiated.message);
+      const discountStatus = canApproveDiscount ? "APPROVED" : "PENDING";
+      const effectiveUnitPrice =
+        negotiated.discountAmount > 0 && !canApproveDiscount
+          ? price.officialUnitPrice
+          : negotiated.finalUnitPrice;
+      if (!isSample && negotiated.discountAmount > 0) {
+        negotiatedDiscounts.push({
+          productVariantId: item.productVariantId,
+          productPriceId: price.productPriceId,
+          quantity: item.quantity,
+          officialUnitPrice: negotiated.officialUnitPrice,
+          requestedUnitPrice: negotiated.finalUnitPrice,
+          discountPercent: negotiated.discountPercent,
+          discountAmount: roundMoney(
+            negotiated.discountAmount * item.quantity,
+          ),
+          status: discountStatus,
+        });
+      }
       pricedItems.push({
         ...item,
         unitPrice: isSample
           ? SAMPLE_FISCAL_PACKAGE_VALUE
-          : price.officialUnitPrice,
+          : effectiveUnitPrice,
         pricingSource: isSample
           ? "SAMPLE"
           : (price.pricingSource as "CHANNEL" | "CUSTOMER"),
@@ -769,7 +847,20 @@ export class SalesOrdersController {
           channelUnitPrice: price.channelUnitPrice,
           effectiveUnitPrice: isSample
             ? SAMPLE_FISCAL_PACKAGE_VALUE
-            : price.officialUnitPrice,
+            : effectiveUnitPrice,
+          officialUnitPrice: price.officialUnitPrice,
+          negotiatedUnitPrice:
+            negotiated.discountAmount > 0
+              ? negotiated.finalUnitPrice
+              : price.officialUnitPrice,
+          discountAmount: negotiated.discountAmount,
+          discountPercent: negotiated.discountPercent,
+          discountApprovalStatus:
+            negotiated.discountAmount > 0 ? discountStatus : null,
+          discountAuthorizedBy:
+            negotiated.discountAmount > 0 && canApproveDiscount
+              ? actor.name
+              : null,
           currency: price.currency,
           salesChannelId: price.salesChannelId,
           salesChannelName: price.salesChannelName,
@@ -1041,6 +1132,69 @@ export class SalesOrdersController {
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
     });
 
+    const recordedDiscountRequests: Array<{
+      id: string;
+      salesOrderItemId: string;
+      status: "APPROVED" | "PENDING";
+      officialUnitPrice: number;
+      requestedUnitPrice: number;
+      discountAmount: number;
+      discountPercent: number;
+    }> = [];
+    if (negotiatedDiscounts.length) {
+      await this.salesOrders.database.$transaction(async (transaction) => {
+        for (const discount of negotiatedDiscounts) {
+          const orderItem = order.items.find(
+            (item) => item.productVariantId === discount.productVariantId,
+          );
+          if (!orderItem)
+            throw new BadRequestException(
+              "Não foi possível vincular o desconto ao item do pedido.",
+            );
+          const requestId = randomUUID();
+          const approved = discount.status === "APPROVED";
+          await transaction.$executeRawUnsafe(
+            `INSERT INTO "SalesDiscountRequest"
+              (id,"companyId","salesOrderId","salesOrderItemId","productPriceId",
+               "officialUnitPrice","requestedUnitPrice","discountPercent","discountAmount",
+               rationale,status,"requestedById","requestedByName","requestedByRole",
+               "decidedById","decidedByName","decidedByRole","decisionNote","createdAt","decidedAt")
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW(),
+               CASE WHEN $11='APPROVED' THEN NOW() ELSE NULL END)`,
+            requestId,
+            actor.companyId,
+            order.id,
+            orderItem.id,
+            discount.productPriceId,
+            discount.officialUnitPrice,
+            discount.requestedUnitPrice,
+            discount.discountPercent,
+            discount.discountAmount,
+            "Preço final negociado informado no cadastro do pedido.",
+            discount.status,
+            actor.id,
+            actor.name,
+            actor.role,
+            approved ? actor.id : null,
+            approved ? actor.name : null,
+            approved ? actor.role : null,
+            approved
+              ? "Autorização administrativa registrada no cadastro do pedido."
+              : null,
+          );
+          recordedDiscountRequests.push({
+            id: requestId,
+            salesOrderItemId: orderItem.id,
+            status: discount.status,
+            officialUnitPrice: discount.officialUnitPrice,
+            requestedUnitPrice: discount.requestedUnitPrice,
+            discountAmount: discount.discountAmount,
+            discountPercent: discount.discountPercent,
+          });
+        }
+      });
+    }
+
     const carrierName =
       shippingQuote?.carrierName ?? deliveryPolicy.carrierName;
     const shippingProvider =
@@ -1130,6 +1284,7 @@ export class SalesOrdersController {
           ? brokerCommissionPerPackage
           : null,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : null,
+      discountRequests: recordedDiscountRequests,
       termApproval,
     };
   }

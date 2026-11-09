@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
+import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
 import { OrderPdfLink } from "@/components/order-pdf-link";
@@ -165,6 +166,7 @@ type DraftOrderLine = {
   id: string;
   variantId: string;
   quantity: number;
+  finalUnitPrice?: string;
 };
 
 type PackageBox = {
@@ -184,6 +186,7 @@ const newDraftLine = (): DraftOrderLine => ({
   id: randomId(),
   variantId: "",
   quantity: 1,
+  finalUnitPrice: "",
 });
 
 const newPackageBox = (source?: Partial<PackageBox>): PackageBox => ({
@@ -570,6 +573,7 @@ export default function OrdersPage() {
     null,
   );
   const [editing, setEditing] = useState<Order | null>(null);
+  const [userRole, setUserRole] = useState("");
   const [canEditOrders, setCanEditOrders] = useState(false);
   const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
@@ -635,6 +639,7 @@ export default function OrdersPage() {
     })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((payload) => {
+        setUserRole(String(payload?.user?.role ?? ""));
         setCanEditOrders(
           ["ADMIN", "EXECUTIVE", "SALES"].includes(payload?.user?.role),
         );
@@ -643,6 +648,7 @@ export default function OrdersPage() {
         );
       })
       .catch(() => {
+        setUserRole("");
         setCanEditOrders(false);
         setCanPrepareReexpedition(false);
       });
@@ -1034,6 +1040,7 @@ export default function OrdersPage() {
       {creating && (
         <NewOrder
           orderType={creating}
+          actorRole={userRole}
           customers={customers}
           variants={variants}
           brokers={brokers}
@@ -1474,6 +1481,7 @@ function EditDraftOrder({
 
 function NewOrder({
   orderType,
+  actorRole,
   customers,
   variants,
   brokers,
@@ -1481,6 +1489,7 @@ function NewOrder({
   onCreated,
 }: {
   orderType: "COMMERCIAL" | "SAMPLE";
+  actorRole: string;
   customers: Customer[];
   variants: StockOption[];
   brokers: Broker[];
@@ -1570,6 +1579,32 @@ function NewOrder({
   const firstQuote = completeLines.length
     ? quotes[completeLines[0]!.id]
     : undefined;
+  const canApproveNegotiatedPrice = ["ADMIN", "EXECUTIVE"].includes(
+    actorRole,
+  );
+  const pricedLines = completeLines.map((line) => {
+    const quote = quotes[line.id];
+    return {
+      line,
+      pricing: quote
+        ? calculateSalesLineDiscount({
+            officialUnitPrice: isSample
+              ? SAMPLE_FISCAL_PACKAGE_VALUE
+              : quote.officialUnitPrice,
+            finalUnitPrice: isSample
+              ? SAMPLE_FISCAL_PACKAGE_VALUE
+              : line.finalUnitPrice,
+            maxDiscountPercent: canApproveNegotiatedPrice
+              ? null
+              : quote.discountPolicy.maxRequestPercent,
+            minimumPrice: quote.discountPolicy.minimumPrice,
+          })
+        : null,
+    };
+  });
+  const invalidNegotiatedLine = pricedLines.find(
+    ({ pricing }) => pricing && !pricing.valid,
+  );
   const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
   const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
   const usesPlatformShipping =
@@ -1592,11 +1627,12 @@ function NewOrder({
       ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
       : 0;
   const productsTotal = completeLines.reduce(
-    (sum, line) =>
-      sum +
-      (isSample
-        ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE
-        : Number(quotes[line.id]?.totalAmount ?? 0)),
+    (sum, line) => {
+      const pricing = pricedLines.find(
+        (item) => item.line.id === line.id,
+      )?.pricing;
+      return sum + line.quantity * Number(pricing?.finalUnitPrice ?? 0);
+    },
     0,
   );
   const totalWeightGrams = completeLines.reduce((sum, line) => {
@@ -1639,6 +1675,8 @@ function NewOrder({
         ? "Aguarde a consulta dos preços."
         : completeLines.some((line) => !quotes[line.id])
           ? "Há produto sem preço vigente. Revise os itens destacados."
+          : invalidNegotiatedLine?.pricing?.message
+            ? invalidNegotiatedLine.pricing.message
           : isTerm && !paymentTerms
             ? "Informe a condição da venda a prazo."
             : !freightResponsibility
@@ -1861,7 +1899,8 @@ function NewOrder({
     if (
       !customerId ||
       !completeLines.length ||
-      completeLines.some((line) => !quotes[line.id])
+      completeLines.some((line) => !quotes[line.id]) ||
+      invalidNegotiatedLine
     )
       return;
     setShippingBusy(true);
@@ -1879,6 +1918,10 @@ function NewOrder({
           items: completeLines.map((line) => ({
             productVariantId: line.variantId,
             quantity: line.quantity,
+            negotiatedUnitPrice:
+              line.finalUnitPrice?.trim() === ""
+                ? undefined
+                : Number(line.finalUnitPrice),
           })),
           packages: isSample ? undefined : shippingPackages(),
         }),
@@ -1914,6 +1957,8 @@ function NewOrder({
       return setError(
         "Todos os itens precisam de produto, quantidade e preço vigente.",
       );
+    if (invalidNegotiatedLine?.pricing?.message)
+      return setError(invalidNegotiatedLine.pricing.message);
     if (isTerm && !paymentTerms)
       return setError("Informe a condição da venda a prazo.");
     if (!freightResponsibility)
@@ -2021,6 +2066,10 @@ function NewOrder({
             unitPrice: isSample
               ? SAMPLE_FISCAL_PACKAGE_VALUE
               : quotes[line.id]!.officialUnitPrice,
+            negotiatedUnitPrice:
+              isSample || line.finalUnitPrice?.trim() === ""
+                ? undefined
+                : Number(line.finalUnitPrice),
           };
         }),
       }),
@@ -2253,7 +2302,7 @@ function NewOrder({
                     ? "Selecione a finalidade e o cliente antes dos produtos."
                     : isSample
                       ? "Selecione os produtos e quantidades enviados como amostra."
-                      : `Produtos para o pedido de ${orderPurpose}.`}
+                      : `Produtos para o pedido de ${orderPurpose}. Informe o preço final negociado; o BBOS calcula o desconto em R$ e em %.`}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -2291,12 +2340,26 @@ function NewOrder({
                   (variant) => variant.productVariantId === line.variantId,
                 );
                 const lineQuote = quotes[line.id];
+                const linePricing = lineQuote
+                  ? calculateSalesLineDiscount({
+                      officialUnitPrice: isSample
+                        ? SAMPLE_FISCAL_PACKAGE_VALUE
+                        : lineQuote.officialUnitPrice,
+                      finalUnitPrice: isSample
+                        ? SAMPLE_FISCAL_PACKAGE_VALUE
+                        : line.finalUnitPrice,
+                      maxDiscountPercent: canApproveNegotiatedPrice
+                        ? null
+                        : lineQuote.discountPolicy.maxRequestPercent,
+                      minimumPrice: lineQuote.discountPolicy.minimumPrice,
+                    })
+                  : null;
                 return (
                   <div
                     key={line.id}
                     className="rounded-lg border bg-white px-2.5 py-2"
                   >
-                    <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_30px]">
+                    <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_72px_100px_104px_122px_108px_30px]">
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
                           Produto / apresentação
@@ -2308,7 +2371,11 @@ function NewOrder({
                             setLines((current) =>
                               current.map((item) =>
                                 item.id === line.id
-                                  ? { ...item, variantId: event.target.value }
+                                  ? {
+                                      ...item,
+                                      variantId: event.target.value,
+                                      finalUnitPrice: "",
+                                    }
                                   : item,
                               ),
                             )
@@ -2363,7 +2430,7 @@ function NewOrder({
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                          {isSample ? "Preço / pacote" : "Preço unit."}
+                          {isSample ? "Preço / pacote" : "Preço tabela"}
                         </p>
                         <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">
                           {quoteBusy && line.variantId
@@ -2379,14 +2446,60 @@ function NewOrder({
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Preço final
+                        </p>
+                        {isSample ? (
+                          <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">
+                            {money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            inputMode="decimal"
+                            aria-label={`Preço final do item ${index + 1}`}
+                            value={line.finalUnitPrice ?? ""}
+                            placeholder={
+                              lineQuote
+                                ? lineQuote.officialUnitPrice.toFixed(2)
+                                : "0,00"
+                            }
+                            onChange={(event) =>
+                              setLines((current) =>
+                                current.map((item) =>
+                                  item.id === line.id
+                                    ? {
+                                        ...item,
+                                        finalUnitPrice: event.target.value,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            className={`w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold ${linePricing && !linePricing.valid ? "border-red-400 text-red-800" : ""}`}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Desconto
+                        </p>
+                        <div className="rounded-lg bg-violet-50 px-2 py-1.5 text-right text-[10px] font-bold text-violet-800">
+                          {linePricing
+                            ? `${money.format(linePricing.discountAmount)} · ${linePricing.discountPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+                            : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
                           Subtotal
                         </p>
                         <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">
                           {lineQuote
                             ? money.format(
-                                isSample
-                                  ? line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE
-                                  : lineQuote.totalAmount,
+                                line.quantity *
+                                  Number(linePricing?.finalUnitPrice ?? 0),
                               )
                             : "—"}
                         </div>
@@ -2414,6 +2527,14 @@ function NewOrder({
                             ? ` · preço negociado para este cliente`
                             : ` · tabela ${lineQuote.salesChannelName}`
                           : ""}
+                        {linePricing && linePricing.discountAmount > 0
+                          ? ` · desconto ${money.format(linePricing.discountAmount)} por unidade (${linePricing.discountPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)`
+                          : ""}
+                      </p>
+                    )}
+                    {linePricing && !linePricing.valid && (
+                      <p className="mt-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[10px] text-red-800">
+                        {linePricing.message}
                       </p>
                     )}
                     {lineQuoteErrors[line.id] && (

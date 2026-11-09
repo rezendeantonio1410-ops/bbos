@@ -57,6 +57,7 @@ export type CreateSalesOrderInput = {
     warehouseId: string;
     quantity: number;
     unitPrice: number;
+    negotiatedUnitPrice?: number;
     pricingSource?: "CHANNEL" | "CUSTOMER" | "SAMPLE";
     baseProductPriceId?: string;
     customerProductPriceId?: string | null;

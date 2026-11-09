@@ -23,6 +23,7 @@
     "test:products": "node --test tests/product-presentation.mjs tests/storefront-catalog.mjs",
     "test:finished-goods": "node --test tests/finished-goods-inventory.mjs",
     "test:sales-inventory": "node --test tests/sales-inventory-engine.mjs",
+    "test:sales-line-discount": "node --test tests/sales-line-discount.mjs",
     "test:cost-period": "node --test tests/cost-period-engine.mjs"
   },
   "devDependencies": {
