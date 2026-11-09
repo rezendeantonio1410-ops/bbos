@@ -409,8 +409,16 @@ function shipmentProgressIndex(
     OUT_FOR_DELIVERY: 3,
     DELIVERED: 4,
   };
-  const commercialIndex =
-    orderStatus === "DELIVERED" ? 4 : orderStatus === "SHIPPED" ? 2 : 0;
+  // A remessa mais recente é a fonte da verdade quando existe. Isso evita que
+  // uma reexpedição recém-etiquetada herde o status comercial DELIVERED da
+  // remessa anterior do mesmo pedido.
+  const commercialIndex = shipment?.status
+    ? 0
+    : orderStatus === "DELIVERED"
+      ? 4
+      : orderStatus === "SHIPPED"
+        ? 2
+        : 0;
   return Math.max(
     statusIndex[String(shipment?.status ?? "")] ?? 0,
     commercialIndex,

@@ -68,6 +68,10 @@ test("a tela distingue os documentos fiscais e imprime a etiqueta nova", () => {
   assert.match(ordersPage, /Imprimir nova etiqueta/);
   assert.match(salesOrdersController, /AS "printableLabelUrl"/);
   assert.match(ordersPage, /fulfillment\?\.printableLabelUrl/);
+  assert.match(
+    ordersPage,
+    /const commercialIndex = shipment\?\.status[\s\S]*\? 0/,
+  );
   assert.match(ordersPage, /Ver devolução/);
   assert.match(ordersPage, /Ver nova saída/);
 });
