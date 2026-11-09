@@ -62,7 +62,6 @@ const LEADERSHIP: BbosRole[] = ["ADMIN", "EXECUTIVE"];
 const MARKETPLACE: BbosRole[] = [
   "ADMIN",
   "EXECUTIVE",
-  "SALES",
   "MARKETPLACE_OPERATOR",
 ];
 const KNOWN_ROLES = new Set<BbosRole>([...ALL, "MARKETPLACE_OPERATOR"]);
@@ -152,7 +151,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Commerce",
         description: "Canais, preços e governança",
         icon: Globe2,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        roles: ["ADMIN", "EXECUTIVE"],
         keywords: ["preco", "canal", "tabela"],
       },
       {

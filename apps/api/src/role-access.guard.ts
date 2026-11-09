@@ -40,7 +40,6 @@ const COMMERCIAL: readonly BbosRole[] = [
 const MARKETPLACE: readonly BbosRole[] = [
   "ADMIN",
   "EXECUTIVE",
-  "SALES",
   "MARKETPLACE_OPERATOR",
 ];
 
@@ -71,7 +70,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   FinanceSalesScheduleController: ["ADMIN", "EXECUTIVE", "FINANCE"],
   FinanceAssistedReconciliationController: ["ADMIN", "EXECUTIVE", "FINANCE"],
   ReconciliationController: ["ADMIN", "EXECUTIVE", "FINANCE"],
-  CommerceController: ["ADMIN", "EXECUTIVE", "SALES"],
+  CommerceController: ["ADMIN", "EXECUTIVE"],
   AdminCoffeeReferenceController: LEADERSHIP,
   AdminUsersController: ["ADMIN"],
   IntegrationsController: LEADERSHIP,

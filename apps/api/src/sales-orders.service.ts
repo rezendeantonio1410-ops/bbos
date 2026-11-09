@@ -616,11 +616,26 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     return this.database.$disconnect();
   }
 
-  async list(companyId: string) {
+  async list(companyId: string, excludePlatformOrders = false) {
+    const platformScope: Prisma.SalesOrderWhereInput = excludePlatformOrders
+      ? {
+          externalOrderId: null,
+          importedAt: null,
+          OR: [
+            { salesChannelId: null },
+            {
+              salesChannel: {
+                is: { type: { not: "ECOMMERCE" }, platformCode: null },
+              },
+            },
+          ],
+        }
+      : {};
     const orders = await this.database.salesOrder.findMany({
       where: {
         companyId,
         status: { not: SalesOrderStatus.CANCELLED },
+        ...platformScope,
       },
       include: this.orderInclude,
       orderBy: { orderedAt: "desc" },

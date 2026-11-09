@@ -40,6 +40,52 @@ test("sales order list and detail are isolated by company", async () => {
   });
 });
 
+test("sales role list excludes ecommerce and platform orders", async () => {
+  let where: Record<string, unknown> | undefined;
+  const service = new SalesOrdersService({} as never);
+  Object.defineProperty(service, "database", {
+    value: {
+      salesOrder: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          where = args.where;
+          return [];
+        },
+      },
+    },
+  });
+
+  await service.list("company-a", true);
+
+  assert.deepEqual(where, {
+    companyId: "company-a",
+    status: { not: "CANCELLED" },
+    externalOrderId: null,
+    importedAt: null,
+    OR: [
+      { salesChannelId: null },
+      {
+        salesChannel: {
+          is: { type: { not: "ECOMMERCE" }, platformCode: null },
+        },
+      },
+    ],
+  });
+});
+
+test("seller dashboard receives the same ecommerce restriction", () => {
+  const controller = readFileSync(
+    join(__dirname, "dashboard.controller.ts"),
+    "utf8",
+  );
+  const service = readFileSync(join(__dirname, "dashboard.service.ts"), "utf8");
+
+  assert.match(controller, /request\.user!\.role === "SALES"/);
+  assert.match(service, /excludePlatformOrders/);
+  assert.match(service, /externalOrderId: null/);
+  assert.match(service, /type: \{ not: "ECOMMERCE" \}/);
+  assert.match(service, /channel\.type <> 'ECOMMERCE'/);
+});
+
 test("export overview never assumes BRL when export currency is missing", async () => {
   const service = new SalesOrdersService({} as never);
   Object.defineProperty(service, "database", {
@@ -119,8 +165,11 @@ test("sales order controller derives order access from the signed session", () =
   assert.match(source, /actorForOrder\(request, id\)/);
   assert.match(
     source,
-    /this\.salesOrders\.list\(\(await this\.actor\(request\)\)\.companyId\)/,
+    /actor\.role === UserRole\.SALES/,
   );
+  assert.match(source, /assertOrderVisibleToActor\(actor, id\)/);
+  assert.match(source, /externalOrderId: null/);
+  assert.match(source, /type: \{ not: "ECOMMERCE" \}/);
   assert.match(
     source,
     /nextOrderNumber\(\(await this\.actor\(request\)\)\.companyId\)/,

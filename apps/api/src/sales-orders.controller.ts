@@ -98,7 +98,34 @@ export class SalesOrdersController {
   private async actorForOrder(request: any, id: string) {
     const actor = await this.actor(request);
     await this.salesOrders.get(actor.companyId, id);
+    await this.assertOrderVisibleToActor(actor, id);
     return actor;
+  }
+
+  private async assertOrderVisibleToActor(actor: any, id: string) {
+    if (actor.role !== UserRole.SALES) return;
+    const visible = await this.salesOrders.database.salesOrder.findFirst({
+      where: {
+        id,
+        companyId: actor.companyId,
+        externalOrderId: null,
+        importedAt: null,
+        OR: [
+          { salesChannelId: null },
+          {
+            salesChannel: {
+              is: { type: { not: "ECOMMERCE" }, platformCode: null },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!visible) {
+      throw new ForbiddenException(
+        "Pedidos do site e de plataformas são restritos à administração e aos operadores autorizados.",
+      );
+    }
   }
 
   private async nextOrderNumber(companyId: string) {
@@ -213,7 +240,11 @@ export class SalesOrdersController {
 
   @Get()
   async list(@Req() request: any) {
-    return this.salesOrders.list((await this.actor(request)).companyId);
+    const actor = await this.actor(request);
+    return this.salesOrders.list(
+      actor.companyId,
+      actor.role === UserRole.SALES,
+    );
   }
 
   @Get("options")
@@ -589,7 +620,8 @@ export class SalesOrdersController {
 
   @Get(":id")
   async get(@Param("id") id: string, @Req() request: any) {
-    return this.salesOrders.get((await this.actor(request)).companyId, id);
+    const actor = await this.actorForOrder(request, id);
+    return this.salesOrders.get(actor.companyId, id);
   }
 
   @Get(":id/pdf")
@@ -598,7 +630,7 @@ export class SalesOrdersController {
     @Req() request: any,
     @Res() response: any,
   ) {
-    const actor = await this.actor(request);
+    const actor = await this.actorForOrder(request, id);
     const order: any = await this.salesOrders.get(actor.companyId, id);
     const approvals = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT "acceptedByName","acceptedAt"
@@ -628,7 +660,7 @@ export class SalesOrdersController {
     @Req() request: any,
     @Res() response: any,
   ) {
-    const actor = await this.actor(request);
+    const actor = await this.actorForOrder(request, id);
     const order = await this.salesOrders.get(actor.companyId, id);
     const data = await loadSalesOrderBillingData(
       this.salesOrders.database,
@@ -1423,7 +1455,7 @@ export class SalesOrdersController {
       rationale: string;
     },
   ) {
-    const actor = await this.actor(request);
+    const actor = await this.actorForOrder(request, id);
     const itemRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT soi.id, soi.quantity, soi."productVariantId", so."customerId", so."companyId", so.status, so."orderType"
          FROM "SalesOrderItem" soi

@@ -1,14 +1,27 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, LockKeyhole, Mail } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  LockKeyhole,
+  Mail,
+  Smartphone,
+} from "lucide-react";
 import { Button } from "@bbos/ui";
 import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
 import { Logo } from "@/components/logo";
+import { registerBbosServiceWorker } from "@/lib/push-client";
 
 const API_WAKE_TIMEOUT_MS = 75000;
 const LOGIN_TIMEOUT_MS = 30000;
+
+type BbosInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -31,6 +44,38 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const [installPrompt, setInstallPrompt] =
+    useState<BbosInstallPromptEvent | null>(null);
+  const [appInstalled, setAppInstalled] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches;
+    setAppInstalled(standalone);
+    if (!standalone) void registerBbosServiceWorker().catch(() => undefined);
+
+    const handlePrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BbosInstallPromptEvent);
+    };
+    const handleInstalled = () => {
+      setAppInstalled(true);
+      setInstallPrompt(null);
+    };
+    window.addEventListener("beforeinstallprompt", handlePrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handlePrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === "accepted") setAppInstalled(true);
+    setInstallPrompt(null);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -225,6 +270,44 @@ export default function LoginPage() {
               {busy ? "Conectando…" : "Entrar no BBOS"} <ArrowRight size={16} />
             </Button>
           </form>
+          {!appInstalled && (
+            <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <div className="flex gap-3">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-800 shadow-sm">
+                  <Smartphone size={20} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-forest-950">
+                    Instalar o BBOS neste tablet
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-stone-600">
+                    Use como aplicativo no Samsung, com ícone na tela inicial e
+                    acesso em tela cheia.
+                  </p>
+                  {installPrompt ? (
+                    <button
+                      type="button"
+                      onClick={() => void installApp()}
+                      className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-forest-950 px-4 text-sm font-bold text-white"
+                    >
+                      <Download size={17} /> Instalar aplicativo
+                    </button>
+                  ) : (
+                    <p className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs leading-5 text-stone-700">
+                      No Chrome ou Samsung Internet, toque no menu <b>⋮</b> e
+                      escolha <b>Instalar aplicativo</b> ou{" "}
+                      <b>Adicionar à tela inicial</b>.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+          {appInstalled && (
+            <p className="mt-6 rounded-xl bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-800">
+              BBOS instalado neste dispositivo.
+            </p>
+          )}
           <p className="mt-8 text-center text-xs text-stone-400">
             Ambiente seguro • Acesso restrito à equipe Bispo
           </p>

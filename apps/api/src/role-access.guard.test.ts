@@ -295,6 +295,24 @@ test("o vendedor registra atendimentos sem abrir a operação para o financeiro"
   }
 });
 
+test("o vendedor não acessa e-commerce nem marketplaces", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  for (const controller of [
+    "CommerceController",
+    "StorefrontOrdersController",
+    "StorefrontFulfillmentController",
+    "MarketplacesController",
+  ]) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({ controller, handler: "list", role: "SALES" }),
+        ),
+      ForbiddenException,
+    );
+  }
+});
+
 test("partner portal data queries are always scoped to the signed partner and company", () => {
   const source = readFileSync(
     join(__dirname, "partner-portal.controller.ts"),

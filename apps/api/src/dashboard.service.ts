@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
-import { prisma } from "@bbos/database";
+import { prisma, type Prisma } from "@bbos/database";
 import type {
   ExecutiveDashboard,
   IndustrialDashboard,
@@ -79,10 +79,24 @@ export class DashboardService implements OnModuleDestroy {
     await this.db.$disconnect();
   }
 
-  async home(companyId: string) {
+  async home(companyId: string, excludePlatformOrders = false) {
     const now = new Date();
     const day = periodStart("day");
     const month = periodStart("month");
+    const orderVisibility: Prisma.SalesOrderWhereInput = excludePlatformOrders
+      ? {
+          externalOrderId: null,
+          importedAt: null,
+          OR: [
+            { salesChannelId: null },
+            {
+              salesChannel: {
+                is: { type: { not: "ECOMMERCE" }, platformCode: null },
+              },
+            },
+          ],
+        }
+      : {};
     const [
       orders,
       salesDay,
@@ -96,7 +110,7 @@ export class DashboardService implements OnModuleDestroy {
       deliveryExceptions,
     ] = await Promise.all([
       this.db.salesOrder.findMany({
-        where: { companyId },
+        where: { companyId, ...orderVisibility },
         select: {
           id: true,
           status: true,
@@ -110,6 +124,7 @@ export class DashboardService implements OnModuleDestroy {
           orderType: "COMMERCIAL",
           orderedAt: { gte: day },
           status: { not: "CANCELLED" },
+          ...orderVisibility,
         },
         _sum: { totalAmount: true },
       }),
@@ -119,6 +134,7 @@ export class DashboardService implements OnModuleDestroy {
           orderType: "COMMERCIAL",
           orderedAt: { gte: month },
           status: { not: "CANCELLED" },
+          ...orderVisibility,
         },
         _sum: { totalAmount: true },
       }),
@@ -186,9 +202,27 @@ export class DashboardService implements OnModuleDestroy {
            ) event ON TRUE
           WHERE shipment."companyId"=$1
             AND shipment.status='EXCEPTION'
+            AND (
+              $2::boolean = FALSE
+              OR (
+                so."externalOrderId" IS NULL
+                AND so."importedAt" IS NULL
+                AND (
+                  so."salesChannelId" IS NULL
+                  OR EXISTS (
+                    SELECT 1
+                      FROM "SalesChannel" channel
+                     WHERE channel.id=so."salesChannelId"
+                       AND channel.type <> 'ECOMMERCE'
+                       AND channel."platformCode" IS NULL
+                  )
+                )
+              )
+            )
           ORDER BY shipment."updatedAt" DESC
           LIMIT 20`,
         companyId,
+        excludePlatformOrders,
       ),
     ]);
     const open = orders.filter(
