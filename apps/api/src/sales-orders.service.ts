@@ -326,6 +326,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         for (const item of order.items) {
           const bulkReservation = bulkByItem.get(item.id);
           const existingReservation = item.reservations[0] ?? null;
+          let effectiveReservation = existingReservation;
           const existingReservedUnits = Number(
             existingReservation?.quantity ?? 0,
           );
@@ -392,17 +393,6 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           const producedPackages = Number(
             bulkReservation?.packageQuantity ?? 0,
           );
-          const reserveIncrement = Math.max(
-            0,
-            item.quantity - existingReservedUnits,
-          );
-          const availableAfterPackaging =
-            currentBalance.quantityOnHand +
-            producedPackages -
-            currentBalance.reservedQuantity;
-          if (availableAfterPackaging < reserveIncrement)
-            return { advanced: false, reason: "WAITING_FINISHED_STOCK" };
-
           const idempotencyKey = `SALES_ORDER_AUTO_PACK:${item.id}`;
           const existingMovement = bulkReservation
             ? await transaction.finishedGoodsMovement.findFirst({
@@ -415,13 +405,20 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
               where: { id: currentBalance.id },
               data: { quantityOnHand: { increment: packagesToCreate } },
             });
+            // A automação histórica de produto acabado pode reservar o item
+            // assim que o saldo entra. Reaproveite essa reserva em vez de
+            // tentar criar uma segunda linha para o mesmo salesOrderItemId.
+            effectiveReservation =
+              await transaction.inventoryReservation.findUnique({
+                where: { salesOrderItemId: item.id },
+              });
             await transaction.finishedGoodsMovement.create({
               data: {
                 companyId,
                 productionOrderId: null,
                 salesOrderId,
                 salesOrderItemId: item.id,
-                reservationId: existingReservation?.id ?? null,
+                reservationId: effectiveReservation?.id ?? null,
                 productVariantId: item.productVariantId,
                 finishedProductId: currentBalance.id,
                 warehouseId: currentBalance.warehouseId,
@@ -437,15 +434,33 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             });
           }
 
+          const refreshedBalance =
+            await transaction.finishedProduct.findUniqueOrThrow({
+              where: { id: currentBalance.id },
+            });
+          const effectiveReservedUnits =
+            effectiveReservation?.status === InventoryReservationStatus.ACTIVE
+              ? Number(effectiveReservation.quantity)
+              : 0;
+          const reserveIncrement = Math.max(
+            0,
+            item.quantity - effectiveReservedUnits,
+          );
+          const availableNow =
+            refreshedBalance.quantityOnHand -
+            refreshedBalance.reservedQuantity;
+          if (availableNow < reserveIncrement)
+            return { advanced: false, reason: "WAITING_FINISHED_STOCK" };
+
           if (reserveIncrement > 0) {
             await transaction.finishedProduct.update({
               where: { id: currentBalance.id },
               data: { reservedQuantity: { increment: reserveIncrement } },
             });
           }
-          if (existingReservation) {
+          if (effectiveReservation) {
             await transaction.inventoryReservation.update({
-              where: { id: existingReservation.id },
+              where: { id: effectiveReservation.id },
               data: {
                 productVariantId: item.productVariantId,
                 finishedProductId: currentBalance.id,

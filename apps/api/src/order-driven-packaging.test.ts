@@ -87,6 +87,17 @@ test("background reconciliation packages fully reserved roasted coffee", () => {
   assert.match(orders, /sourceType: "SALES_ORDER_WIP_PACKAGING"/);
 });
 
+test("automatic packaging reuses the reservation created by the legacy stock trigger", () => {
+  const orders = source("apps/api/src/sales-orders.service.ts");
+  assert.match(
+    orders,
+    /effectiveReservation\s*=\s*await transaction\.inventoryReservation\.findUnique/,
+  );
+  assert.match(orders, /where: \{ salesOrderItemId: item\.id \}/);
+  assert.match(orders, /reservationId: effectiveReservation\?\.id \?\? null/);
+  assert.match(orders, /if \(effectiveReservation\)/);
+});
+
 test("automatic packaging leaves fiscal issue as the only manual action", () => {
   const orders = source("apps/api/src/sales-orders.controller.ts");
   const service = source("apps/api/src/sales-orders.service.ts");
