@@ -541,33 +541,61 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                           </div>
                         ) : (
                           <div className="divide-y divide-stone-100">
-                            {notifications.map((item) => (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => void openNotification(item)}
-                                className={`w-full px-4 py-3 text-left transition hover:bg-stone-50 ${item.readAt ? "bg-white" : "bg-amber-50/45"}`}
-                              >
-                                <div className="flex gap-3">
-                                  <span
-                                    className={`mt-1 size-2 shrink-0 rounded-full ${item.readAt ? "bg-stone-200" : "bg-amber-500"}`}
-                                  />
-                                  <span className="min-w-0">
-                                    <strong className="block text-xs text-stone-900">
-                                      {item.title}
-                                    </strong>
-                                    <span className="mt-1 block text-[10px] leading-4 text-stone-500">
-                                      {item.message}
-                                    </span>
-                                    <span className="mt-2 block text-[9px] text-stone-400">
-                                      {new Date(item.createdAt).toLocaleString(
-                                        "pt-BR",
+                            {notifications.map((item) => {
+                              const criticalDelivery = item.type.startsWith(
+                                "ORDER_DELIVERY_EXCEPTION",
+                              );
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => void openNotification(item)}
+                                  className={`w-full px-4 py-3 text-left transition hover:bg-stone-50 ${
+                                    criticalDelivery
+                                      ? item.readAt
+                                        ? "bg-red-50/35"
+                                        : "bg-red-50"
+                                      : item.readAt
+                                        ? "bg-white"
+                                        : "bg-amber-50/45"
+                                  }`}
+                                >
+                                  <div className="flex gap-3">
+                                    <span
+                                      className={`mt-1 size-2 shrink-0 rounded-full ${
+                                        criticalDelivery
+                                          ? "bg-red-600 ring-4 ring-red-100"
+                                          : item.readAt
+                                            ? "bg-stone-200"
+                                            : "bg-amber-500"
+                                      }`}
+                                    />
+                                    <span className="min-w-0">
+                                      {criticalDelivery && (
+                                        <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-red-700">
+                                          Ação imediata
+                                        </span>
                                       )}
+                                      <strong
+                                        className={`block text-xs ${criticalDelivery ? "text-red-950" : "text-stone-900"}`}
+                                      >
+                                        {item.title}
+                                      </strong>
+                                      <span
+                                        className={`mt-1 block text-[10px] leading-4 ${criticalDelivery ? "text-red-800" : "text-stone-500"}`}
+                                      >
+                                        {item.message}
+                                      </span>
+                                      <span className="mt-2 block text-[9px] text-stone-400">
+                                        {new Date(
+                                          item.createdAt,
+                                        ).toLocaleString("pt-BR")}
+                                      </span>
                                     </span>
-                                  </span>
-                                </div>
-                              </button>
-                            ))}
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

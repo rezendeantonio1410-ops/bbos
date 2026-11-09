@@ -93,6 +93,7 @@ export class DashboardService implements OnModuleDestroy {
       products,
       openPurchases,
       overdueReceivables,
+      deliveryExceptions,
     ] = await Promise.all([
       this.db.salesOrder.findMany({
         where: { companyId },
@@ -162,6 +163,33 @@ export class DashboardService implements OnModuleDestroy {
         _sum: { openAmount: true },
         _count: { _all: true },
       }),
+      this.db.$queryRawUnsafe<
+        Array<{
+          orderNumber: string | null;
+          customerName: string | null;
+          title: string | null;
+          detail: string | null;
+        }>
+      >(
+        `SELECT COALESCE(so."orderNumber",so.code) AS "orderNumber",
+                customer.name AS "customerName",
+                event.title,
+                event.detail
+           FROM "Shipment" shipment
+           LEFT JOIN "SalesOrder" so ON so.id=shipment."salesOrderId"
+           LEFT JOIN "Customer" customer ON customer.id=so."customerId"
+           LEFT JOIN LATERAL (
+             SELECT title,detail
+               FROM "SalesOrderCustomerEvent"
+              WHERE "salesOrderId"=so.id AND source='CARRIER'
+              ORDER BY "occurredAt" DESC LIMIT 1
+           ) event ON TRUE
+          WHERE shipment."companyId"=$1
+            AND shipment.status='EXCEPTION'
+          ORDER BY shipment."updatedAt" DESC
+          LIMIT 20`,
+        companyId,
+      ),
     ]);
     const open = orders.filter(
       (o) => !["DELIVERED", "CANCELLED"].includes(o.status),
@@ -197,6 +225,19 @@ export class DashboardService implements OnModuleDestroy {
       finishedAvailableUnits <= 0 &&
       greenAvailableKg <= 0;
     const alerts = [
+      ...(deliveryExceptions.length
+        ? [
+            {
+              tone: "CRÍTICO",
+              title: `${deliveryExceptions.length} entrega(s) com problema`,
+              impact: deliveryExceptions[0]?.orderNumber
+                ? `${deliveryExceptions[0].orderNumber}${deliveryExceptions[0].customerName ? ` · ${deliveryExceptions[0].customerName}` : ""}: ${deliveryExceptions[0].title ?? "a transportadora informou uma ocorrência"}.`
+                : "Há remessa com falha, suspensão ou devolução que exige ação.",
+              href: "/pedidos",
+              action: "Resolver entrega",
+            },
+          ]
+        : []),
       ...(productionBlocked
         ? [
             {
@@ -445,26 +486,24 @@ export class DashboardService implements OnModuleDestroy {
           plannedKg: toNumber(o.plannedWeightKg),
           actualKg: toNumber(o.actualOutputKg),
         })),
-      history: orders
-        .slice(0, 20)
-        .map((o) => ({
-          id: o.id,
-          code: o.code,
-          blend: o.productName,
-          plannedKg: toNumber(o.plannedWeightKg),
-          producedKg: toNumber(o.actualOutputKg),
-          yieldPercent: o.actualInputKg
-            ? (toNumber(o.actualOutputKg) / toNumber(o.actualInputKg)) * 100
-            : 0,
-          costPerKg: 0,
-          status:
-            o.status === "COMPLETED"
-              ? "completed"
-              : o.status === "IN_PROGRESS"
-                ? "in-progress"
-                : "open",
-          completedAt: o.completedAt?.toLocaleString("pt-BR"),
-        })),
+      history: orders.slice(0, 20).map((o) => ({
+        id: o.id,
+        code: o.code,
+        blend: o.productName,
+        plannedKg: toNumber(o.plannedWeightKg),
+        producedKg: toNumber(o.actualOutputKg),
+        yieldPercent: o.actualInputKg
+          ? (toNumber(o.actualOutputKg) / toNumber(o.actualInputKg)) * 100
+          : 0,
+        costPerKg: 0,
+        status:
+          o.status === "COMPLETED"
+            ? "completed"
+            : o.status === "IN_PROGRESS"
+              ? "in-progress"
+              : "open",
+        completedAt: o.completedAt?.toLocaleString("pt-BR"),
+      })),
       alerts: pendingLab
         ? [
             {

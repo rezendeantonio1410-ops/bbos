@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
+import {
+  MelhorEnvioShipmentService,
+  normalizeMelhorEnvioTrackingStatus,
+} from "./melhor-envio-shipment.service";
 
 function createService(database: Record<string, unknown>) {
   const storefrontEvents: unknown[][] = [];
@@ -112,4 +115,61 @@ test("tracking updates both sides of an integrated storefront sale", async () =>
     executions.some((sql) => sql.includes('UPDATE "SalesOrder"')),
     true,
   );
+});
+
+test("never treats an unsuccessful delivery as delivered", () => {
+  assert.equal(
+    normalizeMelhorEnvioTrackingStatus("order.undelivered"),
+    "undelivered",
+  );
+  assert.equal(
+    normalizeMelhorEnvioTrackingStatus("A entrega não pode ser efetuada"),
+    "undelivered",
+  );
+  assert.equal(
+    normalizeMelhorEnvioTrackingStatus("Seu pacote será devolvido"),
+    "returned",
+  );
+  assert.equal(
+    normalizeMelhorEnvioTrackingStatus("order.delivered"),
+    "delivered",
+  );
+});
+
+test("opens a critical operational notification when delivery fails", async () => {
+  const executions: Array<{ sql: string; params: unknown[] }> = [];
+  const database = {
+    $queryRawUnsafe: async () => [
+      {
+        id: "shipment-1",
+        companyId: "company-1",
+        status: "OUT_FOR_DELIVERY",
+        storefrontOrderId: null,
+        salesOrderId: "sales-1",
+        salesOrderNumber: "B-2026-000018",
+        customerName: "Signa Coffee",
+      },
+    ],
+    $executeRawUnsafe: async (sql: string, ...params: unknown[]) => {
+      executions.push({ sql, params });
+      return 1;
+    },
+  };
+  const { service, salesEvents } = createService(database);
+
+  const result = await service.applyTrackingUpdate(
+    "shipment-external-1",
+    "order.undelivered",
+    { data: { reason: "Endereço incorreto ou incompleto" } },
+  );
+
+  assert.equal(result.status, "EXCEPTION");
+  assert.equal(salesEvents[0]?.[1], "UNDELIVERED");
+  const notification = executions.find(({ sql }) =>
+    sql.includes('INSERT INTO "OperationalNotification"'),
+  );
+  assert.ok(notification);
+  assert.equal(notification.params.includes("company-1"), true);
+  assert.match(String(notification.params.at(-1)), /B-2026-000018/);
+  assert.match(String(notification.params.at(-1)), /Endereço incorreto/);
 });

@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
@@ -7,6 +13,82 @@ import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifec
 import { settleMelhorEnvioFreight } from "./storefront-shipping-finance";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
+
+export function normalizeMelhorEnvioTrackingStatus(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^order\./, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  // "undelivered" precisa ser reconhecido antes de "delivered". Caso
+  // contrário, uma entrega frustrada pode ser interpretada como concluída.
+  if (
+    normalized.includes("undelivered") ||
+    normalized.includes("not_delivered") ||
+    normalized.includes("delivery_failed") ||
+    normalized.includes("failed_delivery") ||
+    normalized.includes("nao_entregue") ||
+    normalized.includes("nao_pode_ser_efetuada")
+  )
+    return "undelivered";
+  if (
+    normalized.includes("return_to_sender") ||
+    normalized.includes("returning") ||
+    normalized.includes("returned") ||
+    normalized.includes("devolucao") ||
+    normalized.includes("devolvido") ||
+    normalized.includes("sera_devolvido")
+  )
+    return "returned";
+  if (normalized.includes("paused") || normalized.includes("interrompid"))
+    return "paused";
+  if (normalized.includes("suspended") || normalized.includes("suspens"))
+    return "suspended";
+  if (normalized === "delivered" || normalized === "entregue")
+    return "delivered";
+  if (normalized.includes("out_for_delivery") || normalized.includes("saiu"))
+    return "out_for_delivery";
+  if (normalized.includes("received") || normalized.includes("recebid"))
+    return "received";
+  if (
+    normalized.includes("posted") ||
+    normalized.includes("postad") ||
+    normalized.includes("in_transit") ||
+    normalized.includes("transit") ||
+    normalized.includes("movimenta")
+  )
+    return "in_transit";
+  if (normalized.includes("cancelled") || normalized.includes("canceled"))
+    return "cancelled";
+  if (normalized.includes("generated")) return "generated";
+  if (normalized.includes("released")) return "released";
+  if (normalized.includes("created")) return "created";
+  if (normalized.includes("pending")) return "pending";
+  return normalized;
+}
+
+function trackingIssueReason(payload: any) {
+  const candidates = [
+    payload?.reason,
+    payload?.description,
+    payload?.message,
+    payload?.detail,
+    payload?.data?.reason,
+    payload?.data?.description,
+    payload?.data?.message,
+    payload?.data?.detail,
+    payload?.tracking?.reason,
+    payload?.tracking?.description,
+  ];
+  const reason = candidates.find(
+    (candidate) => typeof candidate === "string" && candidate.trim().length > 3,
+  );
+  return typeof reason === "string" ? reason.trim().slice(0, 280) : null;
+}
 
 export function melhorEnvioSenderFiscalFields(input: {
   companyDocument?: unknown;
@@ -42,7 +124,9 @@ export function melhorEnvioSenderFiscalFields(input: {
 }
 
 @Injectable()
-export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy {
+export class MelhorEnvioShipmentService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly database = prisma;
   private trackingTimer?: NodeJS.Timeout;
   private reconcilingTracking = false;
@@ -56,6 +140,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
   async onModuleInit() {
     // O status comercial continua protegido pelas regras de estoque.
     // Aqui sincronizamos apenas o que o Melhor Envio informar sobre remessas ativas.
+    await this.backfillDeliveryExceptionNotifications();
     void this.reconcileActiveShipments();
     this.trackingTimer = setInterval(
       () => void this.reconcileActiveShipments(),
@@ -68,6 +153,69 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     if (this.trackingTimer) clearInterval(this.trackingTimer);
   }
 
+  private async backfillDeliveryExceptionNotifications() {
+    try {
+      const shipments = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT sh.id,sh."companyId",sh."salesOrderId",
+                COALESCE(so."orderNumber",so.code) AS "salesOrderNumber",
+                customer.name AS "customerName",
+                COALESCE(event.title,'Problema na entrega') AS title,
+                COALESCE(event.detail,'A transportadora informou uma ocorrência que exige ação.') AS detail
+           FROM "Shipment" sh
+           LEFT JOIN "SalesOrder" so ON so.id=sh."salesOrderId"
+           LEFT JOIN "Customer" customer ON customer.id=so."customerId"
+           LEFT JOIN LATERAL (
+             SELECT title,detail
+               FROM "SalesOrderCustomerEvent"
+              WHERE "salesOrderId"=sh."salesOrderId" AND source='CARRIER'
+              ORDER BY "occurredAt" DESC LIMIT 1
+           ) event ON TRUE
+          WHERE sh.provider='MELHOR_ENVIO' AND sh.status='EXCEPTION'
+          ORDER BY sh."updatedAt" DESC
+          LIMIT 100`,
+      );
+      for (const shipment of shipments) {
+        await this.notifyDeliveryException(
+          shipment,
+          shipment.title,
+          shipment.detail,
+        );
+      }
+    } catch (error) {
+      console.error("Falha ao recuperar alertas de entrega pendentes", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async notifyDeliveryException(
+    shipment: any,
+    title: string,
+    detail: string,
+  ) {
+    const orderLabel = shipment.salesOrderNumber
+      ? `Pedido ${shipment.salesOrderNumber}`
+      : "Uma entrega";
+    const customerLabel = shipment.customerName
+      ? ` de ${shipment.customerName}`
+      : "";
+    const notificationType = `ORDER_DELIVERY_EXCEPTION:${shipment.id}`;
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "OperationalNotification"
+        (id,"companyId",type,title,message,"targetRole","createdAt")
+       SELECT $1,$2,$3,$4,$5,'ALL',NOW()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "OperationalNotification"
+           WHERE "companyId"=$2 AND type=$3
+        )`,
+      randomUUID(),
+      shipment.companyId,
+      notificationType,
+      "Pendência crítica na entrega",
+      `${orderLabel}${customerLabel}: ${title}. ${detail}`,
+    );
+  }
+
   private async reconcileActiveShipments() {
     if (this.reconcilingTracking) return;
     this.reconcilingTracking = true;
@@ -78,7 +226,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
            FROM "Shipment" sh
           WHERE sh.provider='MELHOR_ENVIO'
             AND sh."externalId" IS NOT NULL
-            AND sh.status IN ('LABEL_READY','PURCHASED','IN_TRANSIT','OUT_FOR_DELIVERY')
+            AND sh.status IN ('LABEL_READY','PURCHASED','IN_TRANSIT','OUT_FOR_DELIVERY','EXCEPTION')
           ORDER BY sh."updatedAt" ASC
           LIMIT 100`,
       );
@@ -91,14 +239,10 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
               `/me/orders/${encodeURIComponent(shipment.externalId)}`,
               { method: "GET" },
             ).catch(() => ({})),
-            this.request(
-              shipment.companyId,
-              "/me/shipment/tracking",
-              {
-                method: "POST",
-                body: JSON.stringify({ orders: [shipment.externalId] }),
-              },
-            ).catch(() => ({})),
+            this.request(shipment.companyId, "/me/shipment/tracking", {
+              method: "POST",
+              body: JSON.stringify({ orders: [shipment.externalId] }),
+            }).catch(() => ({})),
           ]);
 
           const trackingDetails =
@@ -148,39 +292,41 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
             JSON.stringify(details || {}),
           );
 
-          const rawStatus = String(
+          const rawStatus = normalizeMelhorEnvioTrackingStatus(
             trackingDetails?.status ||
               trackingDetails?.tracking?.status ||
               trackingDetails?.self_tracking?.status ||
               orderDetails?.status ||
               "",
-          ).toLowerCase();
+          );
           const postedAt =
             trackingDetails?.posted_at || orderDetails?.posted_at || null;
           const deliveredAt =
             trackingDetails?.delivered_at || orderDetails?.delivered_at || null;
 
-          if (deliveredAt || rawStatus.includes("deliver")) {
+          if (
+            ["undelivered", "returned", "paused", "suspended"].includes(
+              rawStatus,
+            )
+          ) {
+            await this.applyTrackingUpdate(
+              shipment.externalId,
+              rawStatus,
+              details,
+            );
+          } else if (deliveredAt || rawStatus === "delivered") {
             await this.applyTrackingUpdate(
               shipment.externalId,
               "delivered",
               details,
             );
-          } else if (
-            rawStatus.includes("out_for_delivery") ||
-            rawStatus.includes("saiu")
-          ) {
+          } else if (rawStatus === "out_for_delivery") {
             await this.applyTrackingUpdate(
               shipment.externalId,
               "out_for_delivery",
               details,
             );
-          } else if (
-            postedAt ||
-            rawStatus.includes("post") ||
-            rawStatus.includes("transit") ||
-            rawStatus.includes("movimenta")
-          ) {
+          } else if (postedAt || rawStatus === "in_transit") {
             await this.applyTrackingUpdate(
               shipment.externalId,
               "in_transit",
@@ -201,7 +347,10 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
   }
 
   private base() {
-    return (process.env.MELHOR_ENVIO_API_URL?.trim() || "https://melhorenvio.com.br/api/v2").replace(/\/$/, "");
+    return (
+      process.env.MELHOR_ENVIO_API_URL?.trim() ||
+      "https://melhorenvio.com.br/api/v2"
+    ).replace(/\/$/, "");
   }
 
   private async request(companyId: string, path: string, init?: RequestInit) {
@@ -212,7 +361,8 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
         accept: "application/json",
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
-        "user-agent": process.env.MELHOR_ENVIO_USER_AGENT?.trim() || "Bispo Coffees BBOS",
+        "user-agent":
+          process.env.MELHOR_ENVIO_USER_AGENT?.trim() || "Bispo Coffees BBOS",
         ...(init?.headers || {}),
       },
     });
@@ -220,9 +370,9 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     if (!response.ok) {
       const providerMessage = String(
         body?.message ||
-        body?.error ||
-        (body?.errors ? JSON.stringify(body.errors) : "") ||
-        "",
+          body?.error ||
+          (body?.errors ? JSON.stringify(body.errors) : "") ||
+          "",
       ).trim();
       console.error("Melhor Envio recusou a operação", {
         path,
@@ -240,7 +390,8 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
 
   private required(name: string) {
     const value = process.env[name]?.trim();
-    if (!value) throw new ServiceUnavailableException(`${name} não configurado.`);
+    if (!value)
+      throw new ServiceUnavailableException(`${name} não configurado.`);
     return value;
   }
 
@@ -258,13 +409,14 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       }
       await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
     }
-    throw new ServiceUnavailableException("A etiqueta foi gerada, mas o PDF ainda não ficou disponível.");
+    throw new ServiceUnavailableException(
+      "A etiqueta foi gerada, mas o PDF ainda não ficou disponível.",
+    );
   }
 
   private sender() {
     const fiscalFields = melhorEnvioSenderFiscalFields({
-      companyDocument:
-        process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112",
+      companyDocument: process.env.SHIPPING_SENDER_DOCUMENT || "13008726000112",
       personalDocument: process.env.SHIPPING_SENDER_CPF,
       stateRegister: process.env.SHIPPING_SENDER_STATE_REGISTER,
     });
@@ -284,13 +436,19 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     };
   }
 
-  async markInvoiceAuthorized(orderId: string, metadata: Record<string, unknown> = {}) {
+  async markInvoiceAuthorized(
+    orderId: string,
+    metadata: Record<string, unknown> = {},
+  ) {
     const updated = await this.database.$executeRawUnsafe(
       `UPDATE "StorefrontOrder" SET status='INVOICED',"updatedAt"=NOW()
         WHERE id=$1 AND status IN ('PAID','PREPARING','INVOICED')`,
       orderId,
     );
-    if (!updated) throw new BadRequestException("Pedido não encontrado ou fora da etapa de faturamento.");
+    if (!updated)
+      throw new BadRequestException(
+        "Pedido não encontrado ou fora da etapa de faturamento.",
+      );
     await this.lifecycle.record(
       orderId,
       "INVOICE_AUTHORIZED",
@@ -311,9 +469,16 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       orderId,
     );
     const order = orders[0];
-    if (!order) throw new BadRequestException("Pedido ou cotação de frete não encontrado.");
-    if (order.status !== "INVOICED") throw new BadRequestException("A etiqueta só pode ser comprada após a autorização da NF-e.");
-    if (order.shippingProvider !== "MELHOR_ENVIO") throw new BadRequestException("Este pedido não utiliza Melhor Envio.");
+    if (!order)
+      throw new BadRequestException(
+        "Pedido ou cotação de frete não encontrado.",
+      );
+    if (order.status !== "INVOICED")
+      throw new BadRequestException(
+        "A etiqueta só pode ser comprada após a autorização da NF-e.",
+      );
+    if (order.shippingProvider !== "MELHOR_ENVIO")
+      throw new BadRequestException("Este pedido não utiliza Melhor Envio.");
 
     const prior = await this.database.$queryRawUnsafe<any[]>(
       `SELECT * FROM "Shipment" WHERE "storefrontOrderId"=$1 LIMIT 1`,
@@ -328,8 +493,15 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
           (id,"companyId","storefrontOrderId","shippingQuoteId",provider,status,"serviceId","serviceName","carrierName",
            "providerPriceCents","customerPriceCents",metadata,"createdAt","updatedAt")
          VALUES ($1,$2,$3,$4,'MELHOR_ENVIO','PENDING',$5,$6,$7,$8,$9,'{}'::jsonb,NOW(),NOW())`,
-        shipmentId, order.companyId, order.id, order.shippingQuoteId, order.serviceId, order.serviceName,
-        order.carrierName, order.providerPriceCents, order.customerPriceCents,
+        shipmentId,
+        order.companyId,
+        order.id,
+        order.shippingQuoteId,
+        order.serviceId,
+        order.serviceName,
+        order.carrierName,
+        order.providerPriceCents,
+        order.customerPriceCents,
       );
     }
 
@@ -341,39 +513,62 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       const cartResult = await this.request(order.companyId, "/me/cart", {
         method: "POST",
         body: JSON.stringify({
-        service: Number(order.serviceId),
-        from: this.sender(),
-        to: {
-          name: customer.name,
-          phone: digits(customer.phone),
-          email: customer.email,
-          document: digits(customer.cpf),
-          address: delivery.street,
-          complement: delivery.complement || "",
-          number: delivery.number,
-          district: delivery.district,
-          city: delivery.city,
-          state_abbr: delivery.state,
-          country_id: "BR",
-          postal_code: digits(delivery.postalCode),
-        },
-        products: items.map((item: any) => ({
-          name: item.name,
-          quantity: Number(item.quantity),
-          unitary_value: Number(item.unitPriceCents) / 100,
-          weight: Math.max(0.001, Number(item.weightGrams || 0) / 1000 / Math.max(1, Number(item.quantity))),
-        })),
-        volumes: Array.isArray(order.package) ? order.package : [order.package],
-        options: { insurance_value: Number(order.subtotalCents) / 100, receipt: false, own_hand: false, reverse: false, non_commercial: false },
+          service: Number(order.serviceId),
+          from: this.sender(),
+          to: {
+            name: customer.name,
+            phone: digits(customer.phone),
+            email: customer.email,
+            document: digits(customer.cpf),
+            address: delivery.street,
+            complement: delivery.complement || "",
+            number: delivery.number,
+            district: delivery.district,
+            city: delivery.city,
+            state_abbr: delivery.state,
+            country_id: "BR",
+            postal_code: digits(delivery.postalCode),
+          },
+          products: items.map((item: any) => ({
+            name: item.name,
+            quantity: Number(item.quantity),
+            unitary_value: Number(item.unitPriceCents) / 100,
+            weight: Math.max(
+              0.001,
+              Number(item.weightGrams || 0) /
+                1000 /
+                Math.max(1, Number(item.quantity)),
+            ),
+          })),
+          volumes: Array.isArray(order.package)
+            ? order.package
+            : [order.package],
+          options: {
+            insurance_value: Number(order.subtotalCents) / 100,
+            receipt: false,
+            own_hand: false,
+            reverse: false,
+            non_commercial: false,
+          },
         }),
       });
       externalId = String(cartResult?.id || "");
-      const cartPriceCents = Math.round(Number(cartResult?.price || cartResult?.custom_price || 0) * 100);
-      if (cartPriceCents > 0 && cartPriceCents !== Number(order.providerPriceCents)) {
+      const cartPriceCents = Math.round(
+        Number(cartResult?.price || cartResult?.custom_price || 0) * 100,
+      );
+      if (
+        cartPriceCents > 0 &&
+        cartPriceCents !== Number(order.providerPriceCents)
+      ) {
         await this.database.$executeRawUnsafe(
           `UPDATE "Shipment" SET status='EXCEPTION',metadata=$2::jsonb,"updatedAt"=NOW() WHERE id=$1`,
           shipmentId,
-          JSON.stringify({ reason: "PRICE_CHANGED", quotedCents: Number(order.providerPriceCents), cartPriceCents, cartResult }),
+          JSON.stringify({
+            reason: "PRICE_CHANGED",
+            quotedCents: Number(order.providerPriceCents),
+            cartPriceCents,
+            cartResult,
+          }),
         );
         await this.database.$executeRawUnsafe(
           `UPDATE "StorefrontOrder" SET status='EXCEPTION',"updatedAt"=NOW() WHERE id=$1`,
@@ -388,38 +583,65 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
           `storefront:shipping-price-exception:${order.id}`,
           { quotedCents: Number(order.providerPriceCents), cartPriceCents },
         );
-        throw new BadRequestException("O valor da transportadora mudou após a compra. Pedido enviado para conferência, sem cobrança adicional ao cliente.");
+        throw new BadRequestException(
+          "O valor da transportadora mudou após a compra. Pedido enviado para conferência, sem cobrança adicional ao cliente.",
+        );
       }
     }
-    if (!externalId) throw new ServiceUnavailableException("Melhor Envio não retornou o identificador da remessa.");
+    if (!externalId)
+      throw new ServiceUnavailableException(
+        "Melhor Envio não retornou o identificador da remessa.",
+      );
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET "externalId"=$2,status='CARTED',"updatedAt"=NOW() WHERE id=$1`,
-      shipmentId, externalId,
+      shipmentId,
+      externalId,
     );
 
-    await this.request(order.companyId, "/me/shipment/checkout", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
-    await this.database.$executeRawUnsafe(`UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`, shipmentId);
+    await this.request(order.companyId, "/me/shipment/checkout", {
+      method: "POST",
+      body: JSON.stringify({ orders: [externalId] }),
+    });
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
+      shipmentId,
+    );
     await this.database.$transaction((transaction) =>
       settleMelhorEnvioFreight(transaction, {
         id: order.id,
         companyId: order.companyId,
         code: order.code,
         shippingProvider: order.shippingProvider,
-        shippingCents: Number(order.customerPriceCents ?? order.shippingCents ?? 0),
+        shippingCents: Number(
+          order.customerPriceCents ?? order.shippingCents ?? 0,
+        ),
         providerPriceCents: Number(order.providerPriceCents ?? 0),
         paidAt: order.paidAt,
         shipmentId,
         externalId,
       }),
     );
-    await this.request(order.companyId, "/me/shipment/generate", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
+    await this.request(order.companyId, "/me/shipment/generate", {
+      method: "POST",
+      body: JSON.stringify({ orders: [externalId] }),
+    });
     const labelUrl = await this.printWhenReady(order.companyId, externalId);
-    const details = await this.request(order.companyId, `/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => ({}));
-    const trackingCode = String(details?.tracking || details?.tracking_code || "") || null;
-    const trackingUrl = String(details?.tracking_url || details?.tracking?.url || "") || null;
+    const details = await this.request(
+      order.companyId,
+      `/me/orders/${encodeURIComponent(externalId)}`,
+      { method: "GET" },
+    ).catch(() => ({}));
+    const trackingCode =
+      String(details?.tracking || details?.tracking_code || "") || null;
+    const trackingUrl =
+      String(details?.tracking_url || details?.tracking?.url || "") || null;
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET status='LABEL_READY',"labelUrl"=$2,"trackingCode"=$3,"trackingUrl"=$4,metadata=$5::jsonb,"updatedAt"=NOW() WHERE id=$1`,
-      shipmentId, labelUrl || null, trackingCode, trackingUrl, JSON.stringify(details || {}),
+      shipmentId,
+      labelUrl || null,
+      trackingCode,
+      trackingUrl,
+      JSON.stringify(details || {}),
     );
     await this.lifecycle.record(
       order.id,
@@ -428,9 +650,21 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       "A etiqueta de transporte foi emitida e o pedido está pronto para postagem.",
       "MELHOR_ENVIO",
       `storefront:shipment-created:${order.id}`,
-      { shipmentId, externalId, carrierName: order.carrierName, serviceName: order.serviceName },
+      {
+        shipmentId,
+        externalId,
+        carrierName: order.carrierName,
+        serviceName: order.serviceName,
+      },
     );
-    return { id: shipmentId, externalId, status: "LABEL_READY", labelUrl, trackingCode, trackingUrl };
+    return {
+      id: shipmentId,
+      externalId,
+      status: "LABEL_READY",
+      labelUrl,
+      trackingCode,
+      trackingUrl,
+    };
   }
 
   async postingAgenciesForSalesOrder(orderId: string) {
@@ -443,15 +677,22 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       orderId,
     );
     const order = rows[0];
-    if (!order) throw new BadRequestException("Pedido ou cotação de frete não encontrado.");
+    if (!order)
+      throw new BadRequestException(
+        "Pedido ou cotação de frete não encontrado.",
+      );
     if (order.shippingProvider !== "MELHOR_ENVIO")
       throw new BadRequestException("Este pedido não utiliza Melhor Envio.");
 
     const sender = this.sender();
-    const carrierCompanyId = String(order.rawResponse?.company?.id ?? "").trim();
+    const carrierCompanyId = String(
+      order.rawResponse?.company?.id ?? "",
+    ).trim();
     const params = new URLSearchParams({
       country: "BR",
-      state: String(process.env.SHIPPING_SENDER_STATE?.trim() || "PR").toUpperCase(),
+      state: String(
+        process.env.SHIPPING_SENDER_STATE?.trim() || "PR",
+      ).toUpperCase(),
       city: sender.city,
     });
     if (carrierCompanyId) params.set("company", carrierCompanyId);
@@ -469,41 +710,84 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
           ? response.agencies
           : [];
 
-    const agencies = rawAgencies.map((agency: any) => {
-      const address = agency?.address ?? agency?.agency_address ?? {};
-      const city = address?.city ?? agency?.city ?? {};
-      const state = address?.state ?? agency?.state ?? {};
-      const street =
-        address?.address ?? address?.street ?? agency?.address ?? agency?.street ?? "";
-      const number = address?.number ?? agency?.number ?? "";
-      const district = address?.district ?? address?.neighborhood ?? agency?.district ?? "";
-      const postalCode =
-        address?.postal_code ?? address?.postalCode ?? agency?.postal_code ?? agency?.postalCode ?? "";
-      const cityName = typeof city === "string" ? city : (city?.city ?? city?.name ?? agency?.city_name ?? sender.city);
-      const stateCode = typeof state === "string" ? state : (state?.state_abbr ?? state?.abbr ?? state?.code ?? agency?.state_abbr ?? params.get("state"));
-      const id = String(agency?.id ?? agency?.agency_id ?? agency?.agencyId ?? "");
-      const name = String(agency?.name ?? agency?.company_name ?? agency?.agency_name ?? `Agência ${id}`);
-      const addressLine = [street, number].filter(Boolean).join(", ");
-      const locationLine = [district, cityName, stateCode].filter(Boolean).join(" · ");
-      const mapsQuery = [addressLine, district, cityName, stateCode, postalCode].filter(Boolean).join(", ");
-      return {
-        id,
-        name,
-        companyName: String(agency?.company_name ?? agency?.company?.name ?? order.carrierName ?? ""),
-        address: addressLine,
-        district: String(district || ""),
-        city: String(cityName || ""),
-        state: String(stateCode || ""),
-        postalCode: String(postalCode || ""),
-        locationLine,
-        phone: String(agency?.phone ?? agency?.telephone ?? ""),
-        latitude: Number(agency?.latitude ?? address?.latitude ?? NaN),
-        longitude: Number(agency?.longitude ?? address?.longitude ?? NaN),
-        mapsUrl: mapsQuery
-          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
-          : null,
-      };
-    }).filter((agency: any) => agency.id);
+    const agencies = rawAgencies
+      .map((agency: any) => {
+        const address = agency?.address ?? agency?.agency_address ?? {};
+        const city = address?.city ?? agency?.city ?? {};
+        const state = address?.state ?? agency?.state ?? {};
+        const street =
+          address?.address ??
+          address?.street ??
+          agency?.address ??
+          agency?.street ??
+          "";
+        const number = address?.number ?? agency?.number ?? "";
+        const district =
+          address?.district ?? address?.neighborhood ?? agency?.district ?? "";
+        const postalCode =
+          address?.postal_code ??
+          address?.postalCode ??
+          agency?.postal_code ??
+          agency?.postalCode ??
+          "";
+        const cityName =
+          typeof city === "string"
+            ? city
+            : (city?.city ?? city?.name ?? agency?.city_name ?? sender.city);
+        const stateCode =
+          typeof state === "string"
+            ? state
+            : (state?.state_abbr ??
+              state?.abbr ??
+              state?.code ??
+              agency?.state_abbr ??
+              params.get("state"));
+        const id = String(
+          agency?.id ?? agency?.agency_id ?? agency?.agencyId ?? "",
+        );
+        const name = String(
+          agency?.name ??
+            agency?.company_name ??
+            agency?.agency_name ??
+            `Agência ${id}`,
+        );
+        const addressLine = [street, number].filter(Boolean).join(", ");
+        const locationLine = [district, cityName, stateCode]
+          .filter(Boolean)
+          .join(" · ");
+        const mapsQuery = [
+          addressLine,
+          district,
+          cityName,
+          stateCode,
+          postalCode,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return {
+          id,
+          name,
+          companyName: String(
+            agency?.company_name ??
+              agency?.company?.name ??
+              order.carrierName ??
+              "",
+          ),
+          address: addressLine,
+          district: String(district || ""),
+          city: String(cityName || ""),
+          state: String(stateCode || ""),
+          postalCode: String(postalCode || ""),
+          locationLine,
+          phone: String(agency?.phone ?? agency?.telephone ?? ""),
+          latitude: Number(agency?.latitude ?? address?.latitude ?? NaN),
+          longitude: Number(agency?.longitude ?? address?.longitude ?? NaN),
+          mapsUrl: mapsQuery
+            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+            : null,
+        };
+      })
+      .filter((agency: any) => agency.id);
 
     return {
       carrierName: order.carrierName,
@@ -517,7 +801,15 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       agencies,
     };
   }
-  async requoteForSalesOrder(orderId: string, packages?: Array<{ weight: number; length: number; width: number; height: number }>) {
+  async requoteForSalesOrder(
+    orderId: string,
+    packages?: Array<{
+      weight: number;
+      length: number;
+      width: number;
+      height: number;
+    }>,
+  ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
               q."serviceId",q."serviceName",q."carrierName",
@@ -529,29 +821,57 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       orderId,
     );
     const order = rows[0];
-    if (!order) throw new BadRequestException("Pedido comercial ou cotação de frete não encontrado.");
-    const originalPackages = Array.isArray(order.package) ? order.package : [order.package];
-    const packagePayload = Array.isArray(packages) && packages.length ? packages : originalPackages;
+    if (!order)
+      throw new BadRequestException(
+        "Pedido comercial ou cotação de frete não encontrado.",
+      );
+    const originalPackages = Array.isArray(order.package)
+      ? order.package
+      : [order.package];
+    const packagePayload =
+      Array.isArray(packages) && packages.length ? packages : originalPackages;
     for (const volume of packagePayload) {
-      if (![volume.weight, volume.length, volume.width, volume.height].every((value) => Number(value) > 0)) throw new BadRequestException("Peso e dimensões de todas as caixas devem ser maiores que zero.");
+      if (
+        ![volume.weight, volume.length, volume.width, volume.height].every(
+          (value) => Number(value) > 0,
+        )
+      )
+        throw new BadRequestException(
+          "Peso e dimensões de todas as caixas devem ser maiores que zero.",
+        );
     }
-    const response = await this.request(order.companyId, "/me/shipment/calculate", {
-      method: "POST",
-      body: JSON.stringify({
-        from: { postal_code: this.sender().postal_code },
-        to: { postal_code: digits(order.customerPostalCode) },
-        packages: packagePayload,
-      }),
-    });
-    const raw = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+    const response = await this.request(
+      order.companyId,
+      "/me/shipment/calculate",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          from: { postal_code: this.sender().postal_code },
+          to: { postal_code: digits(order.customerPostalCode) },
+          packages: packagePayload,
+        }),
+      },
+    );
+    const raw = Array.isArray(response)
+      ? response
+      : Array.isArray(response?.data)
+        ? response.data
+        : [];
     const options = raw
-      .filter((item: any) => !item?.error && Number(item?.price ?? item?.custom_price ?? 0) > 0)
+      .filter(
+        (item: any) =>
+          !item?.error && Number(item?.price ?? item?.custom_price ?? 0) > 0,
+      )
       .map((item: any) => ({
         serviceId: String(item.id ?? ""),
         serviceName: String(item.name ?? ""),
         carrierName: String(item.company?.name ?? ""),
-        priceCents: Math.round(Number(item.custom_price ?? item.price ?? 0) * 100),
-        deliveryDays: Number(item.custom_delivery_time ?? item.delivery_time ?? 0),
+        priceCents: Math.round(
+          Number(item.custom_price ?? item.price ?? 0) * 100,
+        ),
+        deliveryDays: Number(
+          item.custom_delivery_time ?? item.delivery_time ?? 0,
+        ),
       }))
       .sort((a: any, b: any) => a.priceCents - b.priceCents);
     return {
@@ -565,30 +885,66 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     };
   }
 
-  async selectRequoteForSalesOrder(orderId: string, selection: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }) {
+  async selectRequoteForSalesOrder(
+    orderId: string,
+    selection: {
+      serviceId: string;
+      serviceName: string;
+      carrierName: string;
+      priceCents: number;
+      deliveryDays?: number;
+      packages?: Array<{
+        weight: number;
+        length: number;
+        width: number;
+        height: number;
+      }>;
+    },
+  ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so."shippingQuoteId",so.freight,q."customerPriceCents",q."providerPriceCents",q.package
          FROM "SalesOrder" so JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
-        WHERE so.id=$1 LIMIT 1`, orderId);
+        WHERE so.id=$1 LIMIT 1`,
+      orderId,
+    );
     const current = rows[0];
-    if (!current) throw new BadRequestException("Pedido ou cotação não encontrado.");
-    if (!selection?.serviceId || !selection?.priceCents) throw new BadRequestException("Selecione uma cotação válida.");
-    const packages = selection.packages?.length ? selection.packages : (Array.isArray(current.package) ? current.package : [current.package]);
+    if (!current)
+      throw new BadRequestException("Pedido ou cotação não encontrado.");
+    if (!selection?.serviceId || !selection?.priceCents)
+      throw new BadRequestException("Selecione uma cotação válida.");
+    const packages = selection.packages?.length
+      ? selection.packages
+      : Array.isArray(current.package)
+        ? current.package
+        : [current.package];
     await this.database.$executeRawUnsafe(
       `UPDATE "ShippingQuote" SET "serviceId"=$2,"serviceName"=$3,"carrierName"=$4,
          "providerPriceCents"=$5,package=$6::jsonb,"deliveryDays"=$7,"updatedAt"=NOW()
        WHERE id=$1`,
-      current.shippingQuoteId, selection.serviceId, selection.serviceName, selection.carrierName,
-      selection.priceCents, JSON.stringify(packages), Number(selection.deliveryDays || 0));
+      current.shippingQuoteId,
+      selection.serviceId,
+      selection.serviceName,
+      selection.carrierName,
+      selection.priceCents,
+      JSON.stringify(packages),
+      Number(selection.deliveryDays || 0),
+    );
     await this.database.$executeRawUnsafe(
       `UPDATE "SalesOrder" SET "shippingServiceId"=$2,"shippingServiceName"=$3,"carrierName"=$4,"updatedAt"=NOW() WHERE id=$1`,
-      orderId, selection.serviceId, selection.serviceName, selection.carrierName);
+      orderId,
+      selection.serviceId,
+      selection.serviceName,
+      selection.carrierName,
+    );
     return {
       selected: true,
       customerFreightCents: Math.round(Number(current.freight || 0) * 100),
       providerPriceCents: selection.priceCents,
-      logisticsResultCents: Math.round(Number(current.freight || 0) * 100) - selection.priceCents,
-      serviceId: selection.serviceId, serviceName: selection.serviceName, carrierName: selection.carrierName,
+      logisticsResultCents:
+        Math.round(Number(current.freight || 0) * 100) - selection.priceCents,
+      serviceId: selection.serviceId,
+      serviceName: selection.serviceName,
+      carrierName: selection.carrierName,
     };
   }
 
@@ -611,9 +967,14 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       orderId,
     );
     const order = orders[0];
-    if (!order) throw new BadRequestException("Pedido comercial ou cotação de frete não encontrado.");
+    if (!order)
+      throw new BadRequestException(
+        "Pedido comercial ou cotação de frete não encontrado.",
+      );
     if (order.shippingProvider !== "MELHOR_ENVIO")
-      throw new BadRequestException("Este pedido comercial não utiliza Melhor Envio.");
+      throw new BadRequestException(
+        "Este pedido comercial não utiliza Melhor Envio.",
+      );
 
     const authorized = await this.database.$queryRawUnsafe<any[]>(
       `SELECT id,"accessKey" FROM "FiscalDocument"
@@ -622,7 +983,9 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
       orderId,
     );
     if (!authorized[0])
-      throw new BadRequestException("A etiqueta só pode ser comprada após a autorização da NF-e.");
+      throw new BadRequestException(
+        "A etiqueta só pode ser comprada após a autorização da NF-e.",
+      );
 
     if (order.storefrontOrderId) {
       await this.database.$executeRawUnsafe(
@@ -670,7 +1033,10 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
         ORDER BY soi."createdAt" ASC`,
       orderId,
     );
-    if (!items.length) throw new BadRequestException("Pedido comercial sem itens para expedição.");
+    if (!items.length)
+      throw new BadRequestException(
+        "Pedido comercial sem itens para expedição.",
+      );
 
     const shipmentId = prior[0]?.id || randomUUID();
     if (!prior[0]) {
@@ -694,16 +1060,25 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     }
 
     const rawAddress = String(order.customerAddress || "").trim();
-    const addressMatch = rawAddress.match(/^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/);
+    const addressMatch = rawAddress.match(
+      /^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/,
+    );
     const street = String(addressMatch?.[1] || rawAddress).trim();
     const number = String(addressMatch?.[2] || "S/N").trim();
-    if (!street || !order.customerPostalCode || !order.customerCity || !order.customerState) {
+    if (
+      !street ||
+      !order.customerPostalCode ||
+      !order.customerCity ||
+      !order.customerState
+    ) {
       throw new BadRequestException(
         "Complete endereço, CEP, cidade e UF do cliente antes de gerar a etiqueta.",
       );
     }
 
-    const packagePayload = Array.isArray(order.package) ? order.package : [order.package];
+    const packagePayload = Array.isArray(order.package)
+      ? order.package
+      : [order.package];
     let externalId = prior[0]?.externalId || "";
     if (!externalId) {
       const cartResult = await this.request(order.companyId, "/me/cart", {
@@ -729,10 +1104,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
             name: item.productName,
             quantity: Number(item.quantity),
             unitary_value: Number(item.unitPrice),
-            weight: Math.max(
-              0.001,
-              Number(item.netWeightGrams || 0) / 1000,
-            ),
+            weight: Math.max(0.001, Number(item.netWeightGrams || 0) / 1000),
           })),
           volumes: packagePayload,
           options: {
@@ -741,7 +1113,9 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
             own_hand: false,
             reverse: false,
             non_commercial: false,
-            invoice: { key: String(authorized[0].accessKey || "") || undefined },
+            invoice: {
+              key: String(authorized[0].accessKey || "") || undefined,
+            },
           },
         }),
       });
@@ -863,43 +1237,153 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     };
   }
 
-  async applyTrackingUpdate(externalId: string, statusValue: string, payload: unknown) {
+  async applyTrackingUpdate(
+    externalId: string,
+    statusValue: string,
+    payload: unknown,
+  ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "Shipment" WHERE provider='MELHOR_ENVIO' AND "externalId"=$1 LIMIT 1`,
+      `SELECT sh.*,
+              COALESCE(so."orderNumber",so.code) AS "salesOrderNumber",
+              customer.name AS "customerName"
+         FROM "Shipment" sh
+         LEFT JOIN "SalesOrder" so ON so.id=sh."salesOrderId"
+         LEFT JOIN "Customer" customer ON customer.id=so."customerId"
+        WHERE sh.provider='MELHOR_ENVIO' AND sh."externalId"=$1
+        LIMIT 1`,
       externalId,
     );
     const shipment = rows[0];
     if (!shipment) return { ignored: true };
-    const normalized = statusValue
-      .toLowerCase()
-      .replace(/^order\./, "")
-      .replace(/[\s-]+/g, "_");
-    const mapping = normalized.includes("out_for_delivery") || normalized.includes("saiu")
-      ? { status: "OUT_FOR_DELIVERY", order: "SHIPPED", event: "OUT_FOR_DELIVERY", title: "Saiu para entrega", detail: "A transportadora informou que o pedido saiu para entrega no endereço indicado." }
-      : normalized === "delivered" || normalized === "entregue"
-        ? { status: "DELIVERED", order: "DELIVERED", event: "DELIVERED", title: "Pedido entregue", detail: "A transportadora confirmou a entrega do pedido." }
-        : normalized === "received" || normalized.includes("recebid")
-          ? { status: "IN_TRANSIT", order: "SHIPPED", event: "RECEIVED", title: "Recebido no ponto de distribuição", detail: "O volume foi recebido pelo ponto de distribuição ou postagem." }
-          : normalized === "posted" || normalized.includes("postad") || normalized.includes("transit") || normalized.includes("movimenta")
-            ? { status: "IN_TRANSIT", order: "SHIPPED", event: "SHIPPED", title: "Pedido a caminho", detail: "O pedido foi postado e está em transporte." }
-            : normalized === "generated"
-              ? { status: "LABEL_READY", order: null, event: "LABEL_GENERATED", title: "Etiqueta gerada", detail: "A etiqueta de transporte foi gerada e está pronta para uso." }
-              : normalized === "released"
-                ? { status: "PURCHASED", order: null, event: "LABEL_RELEASED", title: "Etiqueta liberada", detail: "O Melhor Envio confirmou o pagamento e liberou a etiqueta." }
-                : normalized === "created"
-                  ? { status: "PENDING", order: null, event: "LABEL_CREATED", title: "Etiqueta criada", detail: "A solicitação da etiqueta foi criada no Melhor Envio." }
-                  : normalized === "pending"
-                    ? { status: "PENDING", order: null, event: "LABEL_PENDING", title: "Etiqueta em preparação", detail: "A etiqueta está em preparação no Melhor Envio." }
-                    : normalized === "undelivered"
-                      ? { status: "EXCEPTION", order: null, event: "UNDELIVERED", title: "Entrega não realizada", detail: "A transportadora informou que não foi possível concluir a entrega." }
-                      : normalized === "paused"
-                        ? { status: "EXCEPTION", order: null, event: "PAUSED", title: "Entrega interrompida", detail: "A entrega foi interrompida e pode exigir uma ação do destinatário." }
-                        : normalized === "suspended"
-                          ? { status: "EXCEPTION", order: null, event: "SUSPENDED", title: "Envio suspenso", detail: "O Melhor Envio informou que o envio foi suspenso." }
-                          : normalized === "cancelled" || normalized === "canceled"
-                            ? { status: "CANCELLED", order: null, event: "SHIPMENT_CANCELLED", title: "Etiqueta cancelada", detail: "A etiqueta de transporte foi cancelada." }
-                            : null;
+    const normalized = normalizeMelhorEnvioTrackingStatus(statusValue);
+    const mapping =
+      normalized.includes("out_for_delivery") || normalized.includes("saiu")
+        ? {
+            status: "OUT_FOR_DELIVERY",
+            order: "SHIPPED",
+            event: "OUT_FOR_DELIVERY",
+            title: "Saiu para entrega",
+            detail:
+              "A transportadora informou que o pedido saiu para entrega no endereço indicado.",
+          }
+        : normalized === "delivered" || normalized === "entregue"
+          ? {
+              status: "DELIVERED",
+              order: "DELIVERED",
+              event: "DELIVERED",
+              title: "Pedido entregue",
+              detail: "A transportadora confirmou a entrega do pedido.",
+            }
+          : normalized === "received" || normalized.includes("recebid")
+            ? {
+                status: "IN_TRANSIT",
+                order: "SHIPPED",
+                event: "RECEIVED",
+                title: "Recebido no ponto de distribuição",
+                detail:
+                  "O volume foi recebido pelo ponto de distribuição ou postagem.",
+              }
+            : normalized === "posted" ||
+                normalized.includes("postad") ||
+                normalized.includes("transit") ||
+                normalized.includes("movimenta")
+              ? {
+                  status: "IN_TRANSIT",
+                  order: "SHIPPED",
+                  event: "SHIPPED",
+                  title: "Pedido a caminho",
+                  detail: "O pedido foi postado e está em transporte.",
+                }
+              : normalized === "generated"
+                ? {
+                    status: "LABEL_READY",
+                    order: null,
+                    event: "LABEL_GENERATED",
+                    title: "Etiqueta gerada",
+                    detail:
+                      "A etiqueta de transporte foi gerada e está pronta para uso.",
+                  }
+                : normalized === "released"
+                  ? {
+                      status: "PURCHASED",
+                      order: null,
+                      event: "LABEL_RELEASED",
+                      title: "Etiqueta liberada",
+                      detail:
+                        "O Melhor Envio confirmou o pagamento e liberou a etiqueta.",
+                    }
+                  : normalized === "created"
+                    ? {
+                        status: "PENDING",
+                        order: null,
+                        event: "LABEL_CREATED",
+                        title: "Etiqueta criada",
+                        detail:
+                          "A solicitação da etiqueta foi criada no Melhor Envio.",
+                      }
+                    : normalized === "pending"
+                      ? {
+                          status: "PENDING",
+                          order: null,
+                          event: "LABEL_PENDING",
+                          title: "Etiqueta em preparação",
+                          detail:
+                            "A etiqueta está em preparação no Melhor Envio.",
+                        }
+                      : normalized === "undelivered"
+                        ? {
+                            status: "EXCEPTION",
+                            order: null,
+                            event: "UNDELIVERED",
+                            title: "Entrega não realizada",
+                            detail:
+                              "A transportadora informou que não foi possível concluir a entrega.",
+                          }
+                        : normalized === "returned"
+                          ? {
+                              status: "EXCEPTION",
+                              order: null,
+                              event: "RETURNED",
+                              title: "Pedido em devolução",
+                              detail:
+                                "A transportadora informou que o pedido será devolvido ao remetente.",
+                            }
+                          : normalized === "paused"
+                            ? {
+                                status: "EXCEPTION",
+                                order: null,
+                                event: "PAUSED",
+                                title: "Entrega interrompida",
+                                detail:
+                                  "A entrega foi interrompida e pode exigir uma ação do destinatário.",
+                              }
+                            : normalized === "suspended"
+                              ? {
+                                  status: "EXCEPTION",
+                                  order: null,
+                                  event: "SUSPENDED",
+                                  title: "Envio suspenso",
+                                  detail:
+                                    "O Melhor Envio informou que o envio foi suspenso.",
+                                }
+                              : normalized === "cancelled" ||
+                                  normalized === "canceled"
+                                ? {
+                                    status: "CANCELLED",
+                                    order: null,
+                                    event: "SHIPMENT_CANCELLED",
+                                    title: "Etiqueta cancelada",
+                                    detail:
+                                      "A etiqueta de transporte foi cancelada.",
+                                  }
+                                : null;
     if (!mapping) return { ignored: true };
+    const providerReason =
+      mapping.status === "EXCEPTION" ? trackingIssueReason(payload) : null;
+    const effectiveDetail =
+      providerReason && !mapping.detail.includes(providerReason)
+        ? `${mapping.detail} Motivo informado: ${providerReason}`
+        : mapping.detail;
     const statusRank: Record<string, number> = {
       PENDING: 0,
       PURCHASED: 1,
@@ -912,13 +1396,18 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     const shouldAdvanceStatus =
       mapping.status === "EXCEPTION" ||
       mapping.status === "CANCELLED" ||
-      (statusRank[mapping.status] ?? 0) >= (statusRank[String(shipment.status)] ?? 0);
-    const nextStatus = shouldAdvanceStatus ? mapping.status : String(shipment.status);
+      (statusRank[mapping.status] ?? 0) >=
+        (statusRank[String(shipment.status)] ?? 0);
+    const nextStatus = shouldAdvanceStatus
+      ? mapping.status
+      : String(shipment.status);
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET status=$2,metadata=COALESCE(metadata,'{}'::jsonb) || $3::jsonb,
          "postedAt"=CASE WHEN $2 IN ('IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED') THEN COALESCE("postedAt",NOW()) ELSE "postedAt" END,
          "deliveredAt"=CASE WHEN $2='DELIVERED' THEN COALESCE("deliveredAt",NOW()) ELSE "deliveredAt" END,"updatedAt"=NOW() WHERE id=$1`,
-      shipment.id, nextStatus, JSON.stringify(payload || {}),
+      shipment.id,
+      nextStatus,
+      JSON.stringify(payload || {}),
     );
     if (shipment.storefrontOrderId) {
       if (mapping.order) {
@@ -932,7 +1421,7 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
         shipment.storefrontOrderId,
         mapping.event,
         mapping.title,
-        mapping.detail,
+        effectiveDetail,
         "CARRIER",
         `storefront:${mapping.event.toLowerCase()}:${shipment.storefrontOrderId}`,
         { externalId, status: statusValue },
@@ -940,8 +1429,9 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
     }
     if (shipment.salesOrderId) {
       if (mapping.order) {
-        await this.database.$executeRawUnsafe(
-          `UPDATE "SalesOrder"
+        await this.database
+          .$executeRawUnsafe(
+            `UPDATE "SalesOrder"
               SET status=$2::"SalesOrderStatus",
                   "updatedAt"=NOW()
             WHERE id=$1
@@ -949,28 +1439,42 @@ export class MelhorEnvioShipmentService implements OnModuleInit, OnModuleDestroy
                 (status='INVOICED' AND $2::"SalesOrderStatus"='SHIPPED')
                 OR (status='SHIPPED' AND $2::"SalesOrderStatus"='DELIVERED')
               )`,
-          shipment.salesOrderId,
-          mapping.order,
-        ).catch((error) => {
-          // O banco pode bloquear SHIPPED enquanto não houver baixa física.
-          // A remessa/rastreio continua sendo atualizada; o status comercial só
-          // avança quando as regras de estoque estiverem satisfeitas.
-          console.warn("Status comercial preservado durante sincronização de rastreio", {
-            salesOrderId: shipment.salesOrderId,
-            targetStatus: mapping.order,
-            error: error instanceof Error ? error.message : String(error),
+            shipment.salesOrderId,
+            mapping.order,
+          )
+          .catch((error) => {
+            // O banco pode bloquear SHIPPED enquanto não houver baixa física.
+            // A remessa/rastreio continua sendo atualizada; o status comercial só
+            // avança quando as regras de estoque estiverem satisfeitas.
+            console.warn(
+              "Status comercial preservado durante sincronização de rastreio",
+              {
+                salesOrderId: shipment.salesOrderId,
+                targetStatus: mapping.order,
+                error: error instanceof Error ? error.message : String(error),
+              },
+            );
+            return 0;
           });
-          return 0;
-        });
       }
       await this.customerLifecycle.record(
         shipment.salesOrderId,
         mapping.event,
         mapping.title,
-        mapping.detail,
+        effectiveDetail,
         "CARRIER",
         `sales-order:${mapping.event.toLowerCase()}:${shipment.salesOrderId}`,
         { externalId, status: statusValue },
+      );
+    }
+    if (
+      mapping.status === "EXCEPTION" &&
+      String(shipment.status) !== "EXCEPTION"
+    ) {
+      await this.notifyDeliveryException(
+        shipment,
+        mapping.title,
+        effectiveDetail,
       );
     }
     return {

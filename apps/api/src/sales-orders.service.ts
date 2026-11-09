@@ -296,14 +296,27 @@ export class SalesOrdersService implements OnModuleDestroy {
           serviceName: string | null;
           trackingCode: string | null;
           authorizationCode: string | null;
+          latestEventTitle: string | null;
+          latestEventDetail: string | null;
+          latestEventAt: Date | null;
           updatedAt: Date;
         }>
       >(
-        `SELECT DISTINCT ON ("salesOrderId") "salesOrderId",status,"carrierName","serviceName",
-              "trackingCode",metadata->>'authorization_code' AS "authorizationCode","updatedAt"
-         FROM "Shipment"
-        WHERE provider='MELHOR_ENVIO' AND "salesOrderId"=ANY($1::text[])
-        ORDER BY "salesOrderId","updatedAt" DESC`,
+        `SELECT DISTINCT ON (shipment."salesOrderId")
+                shipment."salesOrderId",shipment.status,shipment."carrierName",shipment."serviceName",
+                shipment."trackingCode",shipment.metadata->>'authorization_code' AS "authorizationCode",
+                event.title AS "latestEventTitle",event.detail AS "latestEventDetail",
+                event."occurredAt" AS "latestEventAt",shipment."updatedAt"
+           FROM "Shipment" shipment
+           LEFT JOIN LATERAL (
+             SELECT title,detail,"occurredAt"
+               FROM "SalesOrderCustomerEvent"
+              WHERE "salesOrderId"=shipment."salesOrderId" AND source='CARRIER'
+              ORDER BY "occurredAt" DESC LIMIT 1
+           ) event ON TRUE
+          WHERE shipment.provider='MELHOR_ENVIO'
+            AND shipment."salesOrderId"=ANY($1::text[])
+          ORDER BY shipment."salesOrderId",shipment."updatedAt" DESC`,
         orders.map((order) => order.id),
       ),
       this.database.$queryRawUnsafe<SalesOrderPaymentSummary[]>(

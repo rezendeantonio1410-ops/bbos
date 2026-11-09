@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -254,6 +255,9 @@ type Order = {
     serviceName?: string | null;
     trackingCode?: string | null;
     authorizationCode?: string | null;
+    latestEventTitle?: string | null;
+    latestEventDetail?: string | null;
+    latestEventAt?: string | null;
     updatedAt: string;
   } | null;
   payment?: {
@@ -615,6 +619,10 @@ export default function OrdersPage() {
   );
   const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
   const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
+  const deliveryIssues = orders.filter(
+    (item) => item.shipment?.status === "EXCEPTION",
+  );
+  const firstDeliveryIssue = deliveryIssues[0];
   const avgTicket = commercialOrders.length
     ? commercialOrders.reduce(
         (sum, item) => sum + Number(item.totalAmount),
@@ -686,6 +694,35 @@ export default function OrdersPage() {
         <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">
           {message}
         </div>
+      )}
+
+      {firstDeliveryIssue && (
+        <button
+          type="button"
+          onClick={() => setSelected(firstDeliveryIssue)}
+          className="mt-5 flex w-full items-start gap-3 rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-left shadow-[0_10px_30px_rgba(185,28,28,.12)]"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-600 text-white">
+            <ShieldAlert size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <strong className="block text-sm text-red-950">
+              {deliveryIssues.length === 1
+                ? "1 entrega exige ação imediata"
+                : `${deliveryIssues.length} entregas exigem ação imediata`}
+            </strong>
+            <span className="mt-1 block text-xs leading-5 text-red-800">
+              {firstDeliveryIssue.orderNumber ?? firstDeliveryIssue.code} ·{" "}
+              {firstDeliveryIssue.customer.name}:{" "}
+              {firstDeliveryIssue.shipment?.latestEventTitle ??
+                "problema informado pela transportadora"}
+              .
+            </span>
+            <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-700">
+              Abrir pedido e resolver <ChevronRight size={12} />
+            </span>
+          </span>
+        </button>
       )}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
@@ -770,7 +807,27 @@ export default function OrdersPage() {
               order.payment?.status === "PAID" && Boolean(paymentDate);
 
             return (
-              <Card key={order.id} className="p-4">
+              <Card
+                key={order.id}
+                className={`p-4 ${compactShipmentException ? "border-2 border-red-300 bg-red-50/35 shadow-[0_10px_30px_rgba(185,28,28,.10)]" : ""}`}
+              >
+                {compactShipmentException && (
+                  <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-600 px-3 py-2.5 text-white">
+                    <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wide">
+                        Pendência crítica na entrega
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-4 text-red-50">
+                        {order.shipment?.latestEventTitle ??
+                          "A transportadora informou um problema."}
+                        {order.shipment?.latestEventDetail
+                          ? ` — ${order.shipment.latestEventDetail}`
+                          : " Abra o pedido para verificar e agir."}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <button
                   onClick={() => setSelected(order)}
                   className="w-full text-left"
