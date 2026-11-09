@@ -11,6 +11,14 @@ const shipment = readFileSync(
   join(__dirname, "melhor-envio-shipment.service.ts"),
   "utf8",
 );
+const salesOrdersController = readFileSync(
+  join(__dirname, "sales-orders.controller.ts"),
+  "utf8",
+);
+const ordersPage = readFileSync(
+  join(__dirname, "../../web/src/app/(system)/pedidos/page.tsx"),
+  "utf8",
+);
 const migration = readFileSync(
   join(
     __dirname,
@@ -42,4 +50,22 @@ test("a nova remessa é separada e preserva a original", () => {
   assert.match(shipment, /async createReexpeditionLabel/);
   assert.match(shipment, /"customerPriceCents"[\s\S]*,0,/);
   assert.match(shipment, /status='LABEL_CREATED'/);
+});
+
+test("a tela distingue os documentos fiscais e imprime a etiqueta nova", () => {
+  assert.match(
+    salesOrdersController,
+    /original_fiscal\.number AS "reexpeditionOriginalFiscalNumber"/,
+  );
+  assert.match(
+    salesOrdersController,
+    /return_fiscal\.number AS "reexpeditionReturnFiscalNumber"/,
+  );
+  assert.match(
+    salesOrdersController,
+    /replacement_fiscal\.number AS "reexpeditionReplacementFiscalNumber"/,
+  );
+  assert.match(ordersPage, /Imprimir nova etiqueta/);
+  assert.match(ordersPage, /Ver devolução/);
+  assert.match(ordersPage, /Ver nova saída/);
 });

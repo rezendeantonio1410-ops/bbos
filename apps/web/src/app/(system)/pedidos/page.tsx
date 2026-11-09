@@ -340,6 +340,15 @@ type ShipmentInfo = {
   reexpeditionReason?: string | null;
   reexpeditionLastError?: string | null;
   reexpeditionCompletedAt?: string | null;
+  reexpeditionOriginalFiscalNumber?: string | null;
+  reexpeditionOriginalFiscalPdfUrl?: string | null;
+  reexpeditionOriginalFiscalDanfeUrl?: string | null;
+  reexpeditionReturnFiscalNumber?: string | null;
+  reexpeditionReturnFiscalPdfUrl?: string | null;
+  reexpeditionReturnFiscalDanfeUrl?: string | null;
+  reexpeditionReplacementFiscalNumber?: string | null;
+  reexpeditionReplacementFiscalPdfUrl?: string | null;
+  reexpeditionReplacementFiscalDanfeUrl?: string | null;
   reexpeditionAddressSnapshot?: {
     address?: string;
     number?: string;
@@ -3315,6 +3324,18 @@ function OrderDrawer({
   const shipmentIsCancelled = fulfillment?.status === "CANCELLED";
   const fiscalDocumentUrl =
     fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl || null;
+  const originalFiscalDocumentUrl =
+    fulfillment?.reexpeditionOriginalFiscalPdfUrl ||
+    fulfillment?.reexpeditionOriginalFiscalDanfeUrl ||
+    null;
+  const returnFiscalDocumentUrl =
+    fulfillment?.reexpeditionReturnFiscalPdfUrl ||
+    fulfillment?.reexpeditionReturnFiscalDanfeUrl ||
+    null;
+  const replacementFiscalDocumentUrl =
+    fulfillment?.reexpeditionReplacementFiscalPdfUrl ||
+    fulfillment?.reexpeditionReplacementFiscalDanfeUrl ||
+    null;
 
   const selectedItem =
     order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
@@ -4483,9 +4504,15 @@ function OrderDrawer({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {fiscalDocumentUrl && (
+                    {(fulfillment?.reexpeditionId
+                      ? originalFiscalDocumentUrl
+                      : fiscalDocumentUrl) && (
                       <a
-                        href={fiscalDocumentUrl}
+                        href={
+                          fulfillment?.reexpeditionId
+                            ? (originalFiscalDocumentUrl ?? undefined)
+                            : (fiscalDocumentUrl ?? undefined)
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
@@ -4493,16 +4520,55 @@ function OrderDrawer({
                         {fulfillment?.reexpeditionId
                           ? "Ver NF-e original"
                           : "Ver NF-e"}
-                        {fulfillment?.fiscalNumber
-                          ? ` nº ${fulfillment.fiscalNumber}`
+                        {(fulfillment?.reexpeditionId
+                          ? fulfillment.reexpeditionOriginalFiscalNumber
+                          : fulfillment?.fiscalNumber)
+                          ? ` nº ${
+                              fulfillment?.reexpeditionId
+                                ? fulfillment.reexpeditionOriginalFiscalNumber
+                                : fulfillment?.fiscalNumber
+                            }`
                           : ""}
                       </a>
                     )}
+                    {fulfillment?.reexpeditionId &&
+                      returnFiscalDocumentUrl && (
+                        <a
+                          href={returnFiscalDocumentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-[11px] font-bold text-amber-900"
+                        >
+                          Ver devolução
+                          {fulfillment.reexpeditionReturnFiscalNumber
+                            ? ` nº ${fulfillment.reexpeditionReturnFiscalNumber}`
+                            : ""}
+                        </a>
+                      )}
+                    {fulfillment?.reexpeditionId &&
+                      replacementFiscalDocumentUrl && (
+                        <a
+                          href={replacementFiscalDocumentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
+                        >
+                          Ver nova saída
+                          {fulfillment.reexpeditionReplacementFiscalNumber
+                            ? ` nº ${fulfillment.reexpeditionReplacementFiscalNumber}`
+                            : ""}
+                        </a>
+                      )}
                     {fulfillment?.reexpeditionId ? (
                       fulfillment.labelUrl ? (
-                        <span className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-[11px] font-bold text-amber-900">
-                          Etiqueta original preservada · não reutilizar
-                        </span>
+                        <a
+                          href={fulfillment.labelUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                        >
+                          Imprimir nova etiqueta
+                        </a>
                       ) : null
                     ) : fulfillment?.fiscalStatus === "REJECTED" ? (
                       <button

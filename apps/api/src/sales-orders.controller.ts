@@ -445,6 +445,15 @@ export class SalesOrdersController {
               re.reason AS "reexpeditionReason",
               re."lastError" AS "reexpeditionLastError",
               re."completedAt" AS "reexpeditionCompletedAt",
+              original_fiscal.number AS "reexpeditionOriginalFiscalNumber",
+              original_fiscal."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "reexpeditionOriginalFiscalPdfUrl",
+              original_fiscal."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "reexpeditionOriginalFiscalDanfeUrl",
+              return_fiscal.number AS "reexpeditionReturnFiscalNumber",
+              return_fiscal."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "reexpeditionReturnFiscalPdfUrl",
+              return_fiscal."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "reexpeditionReturnFiscalDanfeUrl",
+              replacement_fiscal.number AS "reexpeditionReplacementFiscalNumber",
+              replacement_fiscal."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "reexpeditionReplacementFiscalPdfUrl",
+              replacement_fiscal."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "reexpeditionReplacementFiscalDanfeUrl",
               EXISTS (
                 SELECT 1 FROM "SalesOrderCustomerEvent" issue
                  WHERE issue."salesOrderId"=so.id
@@ -476,6 +485,12 @@ export class SalesOrdersController {
             WHERE "salesOrderId"=so.id
             ORDER BY "attemptNumber" DESC LIMIT 1
          ) re ON TRUE
+         LEFT JOIN "FiscalDocument" original_fiscal
+           ON original_fiscal.id=re."originalFiscalDocumentId"
+         LEFT JOIN "FiscalDocument" return_fiscal
+           ON return_fiscal.id=re."returnFiscalDocumentId"
+         LEFT JOIN "FiscalDocument" replacement_fiscal
+           ON replacement_fiscal.id=re."replacementFiscalDocumentId"
          LEFT JOIN LATERAL (
            SELECT * FROM "Shipment"
             WHERE "salesOrderId"=so.id
