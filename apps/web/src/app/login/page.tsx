@@ -47,6 +47,7 @@ export default function LoginPage() {
   const [installPrompt, setInstallPrompt] =
     useState<BbosInstallPromptEvent | null>(null);
   const [appInstalled, setAppInstalled] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
     const standalone = window.matchMedia("(display-mode: standalone)").matches;
@@ -70,7 +71,11 @@ export default function LoginPage() {
   }, []);
 
   async function installApp() {
-    if (!installPrompt) return;
+    if (!installPrompt) {
+      await registerBbosServiceWorker().catch(() => undefined);
+      setShowInstallHelp(true);
+      return;
+    }
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
     if (choice.outcome === "accepted") setAppInstalled(true);
@@ -213,6 +218,47 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-stone-500">
             Entre com suas credenciais corporativas.
           </p>
+          {!appInstalled && (
+            <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <div className="flex gap-3">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-800 shadow-sm">
+                  <Smartphone size={20} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-forest-950">
+                    Instalar o BBOS neste tablet
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-stone-600">
+                    Crie o ícone do BBOS na tela inicial do Samsung.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void installApp()}
+                    className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-forest-950 px-4 text-sm font-bold text-white"
+                  >
+                    <Download size={17} /> Instalar aplicativo
+                  </button>
+                  {!installPrompt && showInstallHelp && (
+                    <div className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs leading-5 text-stone-700">
+                      <p>
+                        <b>Chrome:</b> toque em <b>⋮</b>, depois em{" "}
+                        <b>Adicionar à tela inicial</b> e <b>Instalar</b>.
+                      </p>
+                      <p className="mt-2">
+                        <b>Samsung Internet:</b> toque em <b>☰</b>, depois em{" "}
+                        <b>Adicionar página a</b> e <b>Tela inicial</b>.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+          {appInstalled && (
+            <p className="mt-5 rounded-xl bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-800">
+              BBOS instalado neste dispositivo.
+            </p>
+          )}
           <form onSubmit={submit} className="mt-9 space-y-5">
             <label className="block">
               <span className="text-xs font-semibold text-stone-700">
@@ -270,44 +316,6 @@ export default function LoginPage() {
               {busy ? "Conectando…" : "Entrar no BBOS"} <ArrowRight size={16} />
             </Button>
           </form>
-          {!appInstalled && (
-            <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
-              <div className="flex gap-3">
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-800 shadow-sm">
-                  <Smartphone size={20} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-forest-950">
-                    Instalar o BBOS neste tablet
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-stone-600">
-                    Use como aplicativo no Samsung, com ícone na tela inicial e
-                    acesso em tela cheia.
-                  </p>
-                  {installPrompt ? (
-                    <button
-                      type="button"
-                      onClick={() => void installApp()}
-                      className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-forest-950 px-4 text-sm font-bold text-white"
-                    >
-                      <Download size={17} /> Instalar aplicativo
-                    </button>
-                  ) : (
-                    <p className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs leading-5 text-stone-700">
-                      No Chrome ou Samsung Internet, toque no menu <b>⋮</b> e
-                      escolha <b>Instalar aplicativo</b> ou{" "}
-                      <b>Adicionar à tela inicial</b>.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </section>
-          )}
-          {appInstalled && (
-            <p className="mt-6 rounded-xl bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-800">
-              BBOS instalado neste dispositivo.
-            </p>
-          )}
           <p className="mt-8 text-center text-xs text-stone-400">
             Ambiente seguro • Acesso restrito à equipe Bispo
           </p>

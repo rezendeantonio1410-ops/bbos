@@ -1,4 +1,4 @@
-const CACHE_VERSION = "bbos-mobile-v1";
+const CACHE_VERSION = "bbos-mobile-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -16,6 +16,13 @@ self.addEventListener("activate", (event) => {
         ),
     ]),
   );
+});
+
+// Some Android browsers only expose the install action after the service
+// worker actively participates in navigation. BBOS remains online-first.
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+  event.respondWith(fetch(event.request));
 });
 
 self.addEventListener("push", (event) => {

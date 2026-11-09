@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import { navigationForRole } from "../components/bbos-navigation";
 import { normalizeHostname, resolveDomainRedirect } from "./domain-routing";
@@ -71,6 +73,19 @@ test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro",
   assert.equal(routes.includes("/commerce/marketplaces"), false);
   assert.equal(routes.includes("/financeiro"), false);
   assert.equal(routes.includes("/usuarios"), false);
+});
+
+test("o login sempre oferece instalação e o service worker habilita PWA no Android", () => {
+  const login = readFileSync(join(__dirname, "../app/login/page.tsx"), "utf8");
+  const serviceWorker = readFileSync(
+    join(__dirname, "../../public/sw.js"),
+    "utf8",
+  );
+
+  assert.match(login, /Instalar o BBOS neste tablet/);
+  assert.match(login, /Instalar aplicativo/);
+  assert.match(login, /Samsung Internet/);
+  assert.match(serviceWorker, /addEventListener\("fetch"/);
 });
 
 test("management domain opens the BBOS login instead of the storefront", () => {
