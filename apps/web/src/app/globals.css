@@ -154,7 +154,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Tablet and phone ergonomics for every authenticated BBOS screen.
    Controls stay large enough for touch and text fields avoid browser zoom while typing. */
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 1023px) {
   [data-bbos-app-shell] :where(button, a, [role="button"]),
   [data-bbos-login] :where(button, a, [role="button"]) {
     touch-action: manipulation;
