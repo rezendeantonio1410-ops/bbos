@@ -118,7 +118,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen bg-white lg:grid-cols-[1.05fr_.95fr]">
+    <main
+      data-bbos-login
+      className="grid min-h-screen bg-white lg:grid-cols-[1.05fr_.95fr]"
+    >
       <section className="relative hidden overflow-hidden bg-forest-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-28 -top-28 size-[420px] rounded-full border-[80px] border-white/[.035]" />
         <Logo variant="login" />

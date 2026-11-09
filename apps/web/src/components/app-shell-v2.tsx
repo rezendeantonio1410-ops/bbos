@@ -65,6 +65,14 @@ const corporateTitleByRole: Record<string, string> = {
   MARKETPLACE_OPERATOR: "Operador de marketplace",
 };
 
+const salesTabletShortcuts = [
+  { href: "/home", shortLabel: "Início" },
+  { href: "/clientes", shortLabel: "Clientes" },
+  { href: "/atendimento", shortLabel: "Visitas" },
+  { href: "/pedidos", shortLabel: "Pedidos" },
+  { href: "/vendas", shortLabel: "Vendas" },
+] as const;
+
 export function AppShellV2({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -152,6 +160,14 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     () => navigationForRole(sessionUser?.role),
     [sessionUser?.role],
   );
+  const salesQuickLinks = useMemo(() => {
+    if (sessionUser?.role !== "SALES") return [];
+    const items = navGroups.flatMap((group) => group.items);
+    return salesTabletShortcuts.flatMap((shortcut) => {
+      const item = items.find((candidate) => candidate.href === shortcut.href);
+      return item ? [{ ...item, shortLabel: shortcut.shortLabel }] : [];
+    });
+  }, [navGroups, sessionUser?.role]);
   const pageLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -417,7 +433,11 @@ export function AppShellV2({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--surface-page)] text-[var(--bbos-text-primary)]">
+    <div
+      data-bbos-app-shell
+      data-bbos-role={sessionUser?.role ?? ""}
+      className="min-h-screen bg-[var(--surface-page)] text-[var(--bbos-text-primary)]"
+    >
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r bg-white lg:block">
         <Sidebar />
       </aside>
@@ -708,11 +728,43 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             </div>
           )}
         </header>
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        <main data-bbos-main className="p-4 sm:p-6 lg:p-8">
+          {children}
+        </main>
         <footer className="border-t px-6 py-4 text-center text-[10px] text-[var(--bbos-text-muted)]">
           {SYSTEM_CREATOR_CREDIT_PT}
         </footer>
       </div>
+      {salesQuickLinks.length > 0 && (
+        <nav
+          data-bbos-sales-tablet-nav
+          aria-label="Atalhos do vendedor"
+          className="fixed inset-x-2 bottom-[calc(.5rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-5 overflow-hidden rounded-2xl border border-stone-200 bg-white/95 p-1 shadow-[0_12px_40px_rgba(15,23,42,.18)] backdrop-blur lg:hidden"
+        >
+          {salesQuickLinks.map((item) => {
+            const Icon = item.icon;
+            const active =
+              pathname === item.href ||
+              (item.href !== "/home" &&
+                pathname.startsWith(`${item.href}/`));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-bold transition ${
+                  active
+                    ? "bg-emerald-50 text-emerald-800"
+                    : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
+                }`}
+              >
+                <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+                <span className="truncate">{item.shortLabel}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
       <CommandCenter
         open={commandOpen}
         onClose={() => {

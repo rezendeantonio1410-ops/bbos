@@ -65,6 +65,8 @@ test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro",
   );
   assert.ok(routes.includes("/clientes"));
   assert.ok(routes.includes("/atendimento"));
+  assert.ok(routes.includes("/pedidos"));
+  assert.ok(routes.includes("/vendas"));
   assert.equal(routes.includes("/financeiro"), false);
   assert.equal(routes.includes("/usuarios"), false);
 });

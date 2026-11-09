@@ -152,6 +152,40 @@ button, input, select, textarea, a { transition-duration: var(--bbos-motion-stan
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--bbos-focus-ring); outline-offset: 2px; }
 ::selection { background: var(--brand-chinese-black); color: var(--brand-whitt-sand); }
 
+/* Tablet and phone ergonomics for every authenticated BBOS screen.
+   Controls stay large enough for touch and text fields avoid browser zoom while typing. */
+@media (pointer: coarse) {
+  [data-bbos-app-shell] :where(button, a, [role="button"]),
+  [data-bbos-login] :where(button, a, [role="button"]) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(8, 117, 104, .12);
+  }
+
+  [data-bbos-app-shell] :where(button, [role="button"]),
+  [data-bbos-login] :where(button, [role="button"]) {
+    min-height: 44px;
+  }
+
+  [data-bbos-app-shell] :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+  [data-bbos-login] :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    min-height: 48px;
+    font-size: 16px;
+    line-height: 1.5;
+    scroll-margin-top: 6rem;
+  }
+
+  [data-bbos-app-shell] textarea,
+  [data-bbos-login] textarea {
+    min-height: 112px;
+  }
+}
+
+@media (max-width: 1023px) {
+  [data-bbos-app-shell][data-bbos-role="SALES"] [data-bbos-main] {
+    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
