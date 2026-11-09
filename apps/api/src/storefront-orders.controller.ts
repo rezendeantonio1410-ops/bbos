@@ -1841,7 +1841,7 @@ export class StorefrontOrdersController
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT status,"serviceName","carrierName","trackingCode","trackingUrl","postedAt","deliveredAt"
-           FROM "Shipment" WHERE "storefrontOrderId"=$1 LIMIT 1`,
+           FROM "Shipment" WHERE "storefrontOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
         orderId,
       ),
     ]);

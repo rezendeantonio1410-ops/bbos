@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -13,7 +14,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { Prisma } from "@bbos/database";
+import { Prisma, UserRole } from "@bbos/database";
 import {
   SalesOrdersService,
   type CreateSalesOrderInput,
@@ -434,7 +435,29 @@ export class SalesOrdersController {
               f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage",
               o.status::text AS "invoiceQueueStatus",
               o."lastError" AS "invoiceQueueError",
-              o."updatedAt" AS "invoiceQueueUpdatedAt"
+              o."updatedAt" AS "invoiceQueueUpdatedAt",
+              re.id AS "reexpeditionId",
+              re.status AS "reexpeditionStatus",
+              re."attemptNumber" AS "reexpeditionAttemptNumber",
+              re."preparedAt" AS "reexpeditionPreparedAt",
+              re."preparedByName" AS "reexpeditionPreparedByName",
+              re."addressSnapshot" AS "reexpeditionAddressSnapshot",
+              re.reason AS "reexpeditionReason",
+              re."lastError" AS "reexpeditionLastError",
+              re."completedAt" AS "reexpeditionCompletedAt",
+              EXISTS (
+                SELECT 1 FROM "SalesOrderCustomerEvent" issue
+                 WHERE issue."salesOrderId"=so.id
+                   AND issue.source IN ('MELHOR_ENVIO','CARRIER')
+                   AND issue."eventType" IN ('UNDELIVERED','RETURNED','PAUSED','SUSPENDED')
+                   AND NOT EXISTS (
+                     SELECT 1 FROM "SalesOrderCustomerEvent" resolved
+                      WHERE resolved."salesOrderId"=so.id
+                        AND resolved.source IN ('MELHOR_ENVIO','CARRIER')
+                        AND resolved."eventType"='DELIVERED'
+                        AND resolved."occurredAt">issue."occurredAt"
+                   )
+              ) AS "hasUnresolvedDeliveryException"
          FROM "SalesOrder" so
          LEFT JOIN LATERAL (
            SELECT * FROM "FiscalDocument"
@@ -448,7 +471,18 @@ export class SalesOrdersController {
               AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'
             ORDER BY "createdAt" DESC LIMIT 1
          ) o ON TRUE
-         LEFT JOIN "Shipment" s ON s."salesOrderId"=so.id
+         LEFT JOIN LATERAL (
+           SELECT * FROM "SalesOrderReexpedition"
+            WHERE "salesOrderId"=so.id
+            ORDER BY "attemptNumber" DESC LIMIT 1
+         ) re ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT * FROM "Shipment"
+            WHERE "salesOrderId"=so.id
+            ORDER BY CASE WHEN id=re."replacementShipmentId" THEN 0 ELSE 1 END,
+                     "createdAt" DESC
+            LIMIT 1
+         ) s ON TRUE
         WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
         id,
         actor.companyId,
@@ -512,6 +546,25 @@ export class SalesOrdersController {
   async label(@Param("id") id: string, @Req() request: any) {
     await this.actorForOrder(request, id);
     return this.shipment.createLabelForSalesOrder(id);
+  }
+
+  @Post(":id/reexpedition/prepare")
+  async prepareReexpedition(
+    @Param("id") id: string,
+    @Body() body: { returnConfirmed?: boolean; reason?: string },
+    @Req() request: any,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.EXECUTIVE) {
+      throw new ForbiddenException(
+        "Somente José, Suzi ou um administrador autorizado pode confirmar a devolução e preparar o reenvio.",
+      );
+    }
+    return this.shipment.prepareReexpeditionForSalesOrder(
+      id,
+      { id: actor.id, companyId: actor.companyId, name: actor.name },
+      body,
+    );
   }
 
   @Get(":id")

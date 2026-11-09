@@ -1582,7 +1582,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         }
         if (order.shippingProvider === "MELHOR_ENVIO") {
           const shipments = await transaction.$queryRawUnsafe<any[]>(
-            `SELECT status,"labelUrl" FROM "Shipment" WHERE "salesOrderId"=$1 LIMIT 1`,
+            `SELECT status,"labelUrl" FROM "Shipment" WHERE "salesOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
             order.id,
           );
           const shipment = shipments[0];

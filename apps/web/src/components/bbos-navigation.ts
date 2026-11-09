@@ -4,6 +4,7 @@ import {
   Boxes,
   Calculator,
   CircleDollarSign,
+  ClipboardList,
   Factory,
   FlaskConical,
   Gauge,
@@ -42,12 +43,7 @@ export type BbosNavItem = {
 };
 
 export type BbosNavGroup = {
-  id:
-    | "overview"
-    | "commercial"
-    | "international"
-    | "operations"
-    | "management";
+  id: "overview" | "commercial" | "international" | "operations" | "management";
   label: string;
   description: string;
   alwaysOpen?: boolean;
@@ -126,6 +122,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: UsersRound,
         roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
         keywords: ["cliente", "credito"],
+      },
+      {
+        href: "/atendimento",
+        label: "Atendimento",
+        description: "Visitas, relatos e próximas ações",
+        icon: ClipboardList,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["visita", "relato", "vendedor", "follow-up"],
       },
       {
         href: "/pedidos",

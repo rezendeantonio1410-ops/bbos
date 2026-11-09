@@ -9,6 +9,10 @@ import {
   SAMPLE_FISCAL_POLICY_VERSION,
 } from "../../sample-fiscal-route";
 import { resolveExportFiscalRoute } from "../../export-fiscal-route";
+import {
+  REEXPEDITION_FISCAL_POLICY_VERSION,
+  resolveReexpeditionFiscalRoute,
+} from "../../reexpedition-fiscal-route";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -51,6 +55,12 @@ type CompanyFiscalProfile = {
   exportDepartureLocation?: string | null;
   exportDepartureState?: string | null;
   exportValidatedByAccountant: boolean;
+  reexpeditionReturnNatureOperationId?: string | null;
+  reexpeditionReturnNatureOperationName?: string | null;
+  reexpeditionOutboundNatureOperationId?: string | null;
+  reexpeditionOutboundNatureOperationName?: string | null;
+  reexpeditionValidatedByAccountant: boolean;
+  reexpeditionFiscalPolicyVersion: typeof REEXPEDITION_FISCAL_POLICY_VERSION;
   notes?: string | null;
   validatedByAccountant: boolean;
 };
@@ -229,6 +239,12 @@ export class BlingCatalogSyncService {
       exportDepartureLocation: null,
       exportDepartureState: "PR",
       exportValidatedByAccountant: false,
+      reexpeditionReturnNatureOperationId: null,
+      reexpeditionReturnNatureOperationName: null,
+      reexpeditionOutboundNatureOperationId: null,
+      reexpeditionOutboundNatureOperationName: null,
+      reexpeditionValidatedByAccountant: false,
+      reexpeditionFiscalPolicyVersion: REEXPEDITION_FISCAL_POLICY_VERSION,
       notes:
         "CST, CFOP e alíquotas devem ser validados com a contabilidade antes da primeira NF-e real.",
       validatedByAccountant: false,
@@ -245,6 +261,9 @@ export class BlingCatalogSyncService {
       row?.metadata && typeof row.metadata === "object" ? row.metadata : {};
     const usesCurrentSamplePolicy =
       metadata.sampleFiscalPolicyVersion === SAMPLE_FISCAL_POLICY_VERSION;
+    const usesCurrentReexpeditionPolicy =
+      metadata.reexpeditionFiscalPolicyVersion ===
+      REEXPEDITION_FISCAL_POLICY_VERSION;
     return {
       ...this.defaultCompanyFiscalProfile(),
       ...metadata,
@@ -256,6 +275,10 @@ export class BlingCatalogSyncService {
       sampleValidatedByAccountant:
         usesCurrentSamplePolicy &&
         Boolean(metadata.sampleValidatedByAccountant),
+      reexpeditionFiscalPolicyVersion: REEXPEDITION_FISCAL_POLICY_VERSION,
+      reexpeditionValidatedByAccountant:
+        usesCurrentReexpeditionPolicy &&
+        Boolean(metadata.reexpeditionValidatedByAccountant),
     } as CompanyFiscalProfile;
   }
 
@@ -332,6 +355,27 @@ export class BlingCatalogSyncService {
         patch.exportValidatedByAccountant ??
         current.exportValidatedByAccountant,
       ),
+      reexpeditionReturnNatureOperationId:
+        patch.reexpeditionReturnNatureOperationId == null
+          ? (current.reexpeditionReturnNatureOperationId ?? null)
+          : String(patch.reexpeditionReturnNatureOperationId).replace(/\D/g, "") || null,
+      reexpeditionReturnNatureOperationName:
+        patch.reexpeditionReturnNatureOperationName == null
+          ? (current.reexpeditionReturnNatureOperationName ?? null)
+          : String(patch.reexpeditionReturnNatureOperationName).trim() || null,
+      reexpeditionOutboundNatureOperationId:
+        patch.reexpeditionOutboundNatureOperationId == null
+          ? (current.reexpeditionOutboundNatureOperationId ?? null)
+          : String(patch.reexpeditionOutboundNatureOperationId).replace(/\D/g, "") || null,
+      reexpeditionOutboundNatureOperationName:
+        patch.reexpeditionOutboundNatureOperationName == null
+          ? (current.reexpeditionOutboundNatureOperationName ?? null)
+          : String(patch.reexpeditionOutboundNatureOperationName).trim() || null,
+      reexpeditionValidatedByAccountant: Boolean(
+        patch.reexpeditionValidatedByAccountant ??
+        current.reexpeditionValidatedByAccountant,
+      ),
+      reexpeditionFiscalPolicyVersion: REEXPEDITION_FISCAL_POLICY_VERSION,
       notes:
         patch.notes == null
           ? (current.notes ?? null)
@@ -360,6 +404,8 @@ export class BlingCatalogSyncService {
       throw new Error("UF de embarque inválida.");
     }
     if (next.exportValidatedByAccountant) resolveExportFiscalRoute(next);
+    if (next.reexpeditionValidatedByAccountant)
+      resolveReexpeditionFiscalRoute(next);
     await this.saveResourceMap(
       companyId,
       "COMPANY_FISCAL_PROFILE",
@@ -367,6 +413,25 @@ export class BlingCatalogSyncService {
       companyId,
       next,
     );
+    if (next.reexpeditionValidatedByAccountant) {
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "IntegrationOutbox" o
+              SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW()
+             FROM "SalesOrderReexpedition" re
+            WHERE re."companyId"=$1 AND re.status='CONFIGURATION_REQUIRED'
+              AND o."aggregateId"=re.id
+              AND o."eventType"='SALES_ORDER_REEXPEDITION_REQUESTED'`,
+          companyId,
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderReexpedition"
+              SET status='QUEUED',"lastError"=NULL,"updatedAt"=NOW()
+            WHERE "companyId"=$1 AND status='CONFIGURATION_REQUIRED'`,
+          companyId,
+        );
+      });
+    }
     return next;
   }
 
@@ -379,6 +444,12 @@ export class BlingCatalogSyncService {
 
   async exportFiscalRoute(companyId: string) {
     return resolveExportFiscalRoute(await this.companyFiscalProfile(companyId));
+  }
+
+  async reexpeditionFiscalRoute(companyId: string) {
+    return resolveReexpeditionFiscalRoute(
+      await this.companyFiscalProfile(companyId),
+    );
   }
 
   async operationNatures(companyId: string) {

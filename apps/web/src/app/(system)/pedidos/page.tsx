@@ -331,6 +331,24 @@ type ShipmentInfo = {
   invoiceQueueStatus?: string | null;
   invoiceQueueError?: string | null;
   invoiceQueueUpdatedAt?: string | null;
+  hasUnresolvedDeliveryException?: boolean;
+  reexpeditionId?: string | null;
+  reexpeditionStatus?: string | null;
+  reexpeditionAttemptNumber?: number | null;
+  reexpeditionPreparedAt?: string | null;
+  reexpeditionPreparedByName?: string | null;
+  reexpeditionReason?: string | null;
+  reexpeditionLastError?: string | null;
+  reexpeditionCompletedAt?: string | null;
+  reexpeditionAddressSnapshot?: {
+    address?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state_abbr?: string;
+    postal_code?: string;
+  } | null;
   trackingEvents?: Array<{
     eventType: string;
     title: string;
@@ -524,6 +542,7 @@ export default function OrdersPage() {
   );
   const [editing, setEditing] = useState<Order | null>(null);
   const [canEditOrders, setCanEditOrders] = useState(false);
+  const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [busy, setBusy] = useState("");
@@ -586,12 +605,18 @@ export default function OrdersPage() {
       cache: "no-store",
     })
       .then(async (response) => (response.ok ? response.json() : null))
-      .then((payload) =>
+      .then((payload) => {
         setCanEditOrders(
           ["ADMIN", "EXECUTIVE", "SALES"].includes(payload?.user?.role),
-        ),
-      )
-      .catch(() => setCanEditOrders(false));
+        );
+        setCanPrepareReexpedition(
+          ["ADMIN", "EXECUTIVE"].includes(payload?.user?.role),
+        );
+      })
+      .catch(() => {
+        setCanEditOrders(false);
+        setCanPrepareReexpedition(false);
+      });
     const timer = window.setInterval(() => {
       void fetch(salesOrdersApi(), {
         credentials: "include",
@@ -1011,6 +1036,7 @@ export default function OrdersPage() {
           onClose={() => setSelected(null)}
           onChanged={() => refreshSelected(selected.id)}
           canEdit={canEditOrders && selected.status === "DRAFT"}
+          canPrepareReexpedition={canPrepareReexpedition}
           onEdit={() => {
             setEditing(selected);
             setSelected(null);
@@ -3234,12 +3260,14 @@ function OrderDrawer({
   onClose,
   onChanged,
   canEdit,
+  canPrepareReexpedition,
   onEdit,
 }: {
   order: Order;
   onClose: () => void;
   onChanged: () => Promise<void>;
   canEdit: boolean;
+  canPrepareReexpedition: boolean;
   onEdit: () => void;
 }) {
   const [mode, setMode] = useState<"INTERNAL" | "CLIENT">("INTERNAL");
@@ -3272,7 +3300,10 @@ function OrderDrawer({
   const shipmentProgress = Math.round(
     (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
   );
-  const shipmentHasException = fulfillment?.status === "EXCEPTION";
+  const shipmentHasException =
+    fulfillment?.reexpeditionStatus !== "LABEL_CREATED" &&
+    (fulfillment?.status === "EXCEPTION" ||
+      fulfillment?.hasUnresolvedDeliveryException === true);
   const shipmentIsCancelled = fulfillment?.status === "CANCELLED";
   const fiscalDocumentUrl =
     fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl || null;
@@ -3324,14 +3355,23 @@ function OrderDrawer({
 
   useEffect(() => {
     void loadFulfillment();
-    if (!["INVOICED", "READY_TO_SHIP"].includes(order.status)) return;
+    const reexpeditionProcessing =
+      Boolean(fulfillment?.reexpeditionId) &&
+      !["LABEL_CREATED", "CANCELLED"].includes(
+        String(fulfillment?.reexpeditionStatus ?? ""),
+      );
+    if (
+      !["INVOICED", "READY_TO_SHIP"].includes(order.status) &&
+      !reexpeditionProcessing
+    )
+      return;
 
     const refreshTimer = window.setInterval(() => {
       void loadFulfillment();
     }, 5000);
 
     return () => window.clearInterval(refreshTimer);
-  }, [order.id, order.status]);
+  }, [order.id, order.status, fulfillment?.reexpeditionId, fulfillment?.reexpeditionStatus]);
 
   const loadPostingAgencies = async () => {
     if (order.shippingProvider !== "MELHOR_ENVIO") {
@@ -3614,6 +3654,43 @@ function OrderDrawer({
         cause instanceof Error
           ? cause.message
           : "Não foi possível gerar a etiqueta.",
+      );
+    } finally {
+      setFulfillmentBusy(false);
+    }
+  };
+
+  const prepareReexpedition = async () => {
+    const confirmed = window.confirm(
+      "Confirma que o pacote devolvido já retornou fisicamente à Bispo? O BBOS preservará a remessa original e cuidará automaticamente da devolução fiscal, da nova saída, da etiqueta e do rastreio.",
+    );
+    if (!confirmed) return;
+
+    setFulfillmentBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/reexpedition/prepare`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ returnConfirmed: true }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload.message ?? "Não foi possível preparar a reexpedição.",
+        );
+      }
+      await loadFulfillment();
+      await onChanged();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível preparar a reexpedição.",
       );
     } finally {
       setFulfillmentBusy(false);
@@ -4382,17 +4459,19 @@ function OrderDrawer({
                       Expedição · Melhor Envio
                     </p>
                     <p className="mt-1 text-[10px] text-emerald-800">
-                      {fulfillment?.fiscalStatus === "REJECTED"
-                        ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
-                        : fulfillment?.labelUrl
-                          ? "Etiqueta pronta para impressão."
-                          : fulfillment?.fiscalStatus === "AUTHORIZED"
-                            ? "NF-e autorizada. A etiqueta já pode ser gerada."
-                            : ["INVOICED", "READY_TO_SHIP"].includes(
-                                  order.status,
-                                ) && fulfillment?.fiscalStatus === "SENT"
-                              ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
-                              : "A etiqueta será liberada após a autorização da NF-e."}
+                      {fulfillment?.reexpeditionId
+                        ? "Reexpedição em preparação. A etiqueta e a NF-e anteriores estão preservadas apenas para auditoria."
+                        : fulfillment?.fiscalStatus === "REJECTED"
+                          ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
+                          : fulfillment?.labelUrl
+                            ? "Etiqueta pronta para impressão."
+                            : fulfillment?.fiscalStatus === "AUTHORIZED"
+                              ? "NF-e autorizada. A etiqueta já pode ser gerada."
+                              : ["INVOICED", "READY_TO_SHIP"].includes(
+                                    order.status,
+                                  ) && fulfillment?.fiscalStatus === "SENT"
+                                ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
+                                : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -4403,13 +4482,21 @@ function OrderDrawer({
                         rel="noreferrer"
                         className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
                       >
-                        Ver NF-e
+                        {fulfillment?.reexpeditionId
+                          ? "Ver NF-e original"
+                          : "Ver NF-e"}
                         {fulfillment?.fiscalNumber
                           ? ` nº ${fulfillment.fiscalNumber}`
                           : ""}
                       </a>
                     )}
-                    {fulfillment?.fiscalStatus === "REJECTED" ? (
+                    {fulfillment?.reexpeditionId ? (
+                      fulfillment.labelUrl ? (
+                        <span className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-[11px] font-bold text-amber-900">
+                          Etiqueta original preservada · não reutilizar
+                        </span>
+                      ) : null
+                    ) : fulfillment?.fiscalStatus === "REJECTED" ? (
                       <button
                         type="button"
                         disabled={busy}
@@ -4488,6 +4575,121 @@ function OrderDrawer({
                       >
                         Ver detalhes no Melhor Rastreio
                       </a>
+                    )}
+                  </div>
+                )}
+
+                {shipmentHasException && !fulfillment?.reexpeditionId && (
+                  <div className="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 shadow-[0_12px_30px_-24px_rgba(185,28,28,0.8)]">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="max-w-2xl">
+                        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-red-800">
+                          Entrega com devolução
+                        </p>
+                        <p className="mt-1 text-xs font-bold text-red-950">
+                          Confirme o retorno físico antes de preparar uma nova
+                          expedição.
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-red-800">
+                          O BBOS preservará a remessa antiga, validará o
+                          endereço e não fará nova venda, cobrança ou baixa de
+                          estoque. Documentos fiscais, etiqueta e rastreio serão
+                          processados automaticamente.
+                        </p>
+                      </div>
+                      {canPrepareReexpedition ? (
+                        <button
+                          type="button"
+                          disabled={fulfillmentBusy || busy}
+                          onClick={() => void prepareReexpedition()}
+                          className="rounded-xl bg-red-800 px-4 py-3 text-[11px] font-black text-white disabled:opacity-50"
+                        >
+                          {fulfillmentBusy
+                            ? "Iniciando…"
+                            : "Confirmar devolução e reexpedir"}
+                        </button>
+                      ) : (
+                        <span className="rounded-xl border border-red-200 bg-white px-4 py-3 text-[10px] font-bold text-red-800">
+                          Aguardando confirmação da administração ou direção.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {fulfillment?.reexpeditionId && (
+                  <div className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">
+                          Reexpedição automática · tentativa{" "}
+                          {fulfillment.reexpeditionAttemptNumber ?? 1}
+                        </p>
+                        <p className="mt-1 text-sm font-black text-amber-950">
+                          {{
+                            QUEUED: "Na fila de processamento",
+                            CONFIGURATION_REQUIRED:
+                              "Configuração fiscal necessária",
+                            RETURN_FISCAL_PENDING:
+                              "Emitindo devolução fiscal",
+                            RETURN_FISCAL_AUTHORIZED:
+                              "Devolução autorizada",
+                            OUTBOUND_FISCAL_PENDING:
+                              "Emitindo a nova saída",
+                            OUTBOUND_FISCAL_AUTHORIZED:
+                              "Nova saída autorizada",
+                            LABEL_PENDING: "Gerando a nova etiqueta",
+                            LABEL_CREATED: "Reenvio pronto para postagem",
+                            FAILED: "Processamento interrompido",
+                            CANCELLED: "Reexpedição cancelada",
+                          }[
+                            String(
+                              fulfillment.reexpeditionStatus ?? "QUEUED",
+                            )
+                          ] ?? "Processando a reexpedição"}
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-amber-900">
+                          A etiqueta e a remessa anteriores estão preservadas e
+                          não podem ser reutilizadas. O BBOS avança sozinho e
+                          só interrompe o fluxo diante de uma rejeição real.
+                        </p>
+                        {fulfillment.reexpeditionLastError && (
+                          <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-800">
+                            {fulfillment.reexpeditionLastError}
+                          </p>
+                        )}
+                      </div>
+                      {fulfillment.reexpeditionPreparedAt && (
+                        <span className="rounded-full bg-white px-3 py-1.5 text-[9px] font-bold text-amber-900">
+                          {fulfillment.reexpeditionPreparedByName
+                            ? `${fulfillment.reexpeditionPreparedByName} · `
+                            : ""}
+                          {new Date(
+                            fulfillment.reexpeditionPreparedAt,
+                          ).toLocaleString("pt-BR")}
+                        </span>
+                      )}
+                    </div>
+                    {fulfillment.reexpeditionAddressSnapshot && (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-white p-3 text-[10px] text-stone-700">
+                        <p className="font-black uppercase tracking-wider text-stone-500">
+                          Endereço conferido para o reenvio
+                        </p>
+                        <p className="mt-1 font-bold text-stone-950">
+                          {fulfillment.reexpeditionAddressSnapshot.address},{" "}
+                          {fulfillment.reexpeditionAddressSnapshot.number}
+                          {fulfillment.reexpeditionAddressSnapshot.complement
+                            ? ` · ${fulfillment.reexpeditionAddressSnapshot.complement}`
+                            : ""}
+                        </p>
+                        <p className="mt-0.5">
+                          {fulfillment.reexpeditionAddressSnapshot.district} ·{" "}
+                          {fulfillment.reexpeditionAddressSnapshot.city}/
+                          {fulfillment.reexpeditionAddressSnapshot.state_abbr} ·
+                          CEP{" "}
+                          {fulfillment.reexpeditionAddressSnapshot.postal_code}
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}

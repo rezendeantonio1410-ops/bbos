@@ -75,6 +75,44 @@ test("manual Pix approval is restricted to administrators", () => {
   }
 });
 
+test("seller requests credit but only leadership reaches the decision endpoint", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "CustomersController",
+        handler: "requestCredit",
+        role: "SALES",
+      }),
+    ),
+    true,
+  );
+  for (const role of ["SALES", "FINANCE"]) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({
+            controller: "CustomersController",
+            handler: "credit",
+            role,
+          }),
+        ),
+      ForbiddenException,
+    );
+  }
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "CustomersController",
+        handler: "credit",
+        role: "ADMIN",
+      }),
+    ),
+    true,
+  );
+});
+
 test("dashboard endpoints honor their narrower executive and industrial scopes", () => {
   const guard = new RoleAccessGuard(privateReflector);
 
@@ -227,6 +265,34 @@ test("partner access is isolated from the internal BBOS", () => {
       ),
     ForbiddenException,
   );
+});
+
+test("o vendedor registra atendimentos sem abrir a operação para o financeiro", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+
+  for (const handler of ["recentVisits", "createVisit"]) {
+    assert.equal(
+      guard.canActivate(
+        executionContext({
+          controller: "CustomersController",
+          handler,
+          role: "SALES",
+        }),
+      ),
+      true,
+    );
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({
+            controller: "CustomersController",
+            handler,
+            role: "FINANCE",
+          }),
+        ),
+      ForbiddenException,
+    );
+  }
 });
 
 test("partner portal data queries are always scoped to the signed partner and company", () => {

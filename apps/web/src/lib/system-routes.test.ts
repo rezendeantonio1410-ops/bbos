@@ -9,6 +9,7 @@ test("all internal management roots require a session", () => {
     "/home",
     "/aplicativo",
     "/clientes",
+    "/atendimento",
     "/fornecedores",
     "/corretores",
     "/notas-entrada",
@@ -56,6 +57,16 @@ test("marketplace operators only see their dedicated marketplace area", () => {
     group.items.map((item) => item.href),
   );
   assert.deepEqual(routes, ["/commerce/marketplaces"]);
+});
+
+test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro", () => {
+  const routes = navigationForRole("SALES").flatMap((group) =>
+    group.items.map((item) => item.href),
+  );
+  assert.ok(routes.includes("/clientes"));
+  assert.ok(routes.includes("/atendimento"));
+  assert.equal(routes.includes("/financeiro"), false);
+  assert.equal(routes.includes("/usuarios"), false);
 });
 
 test("management domain opens the BBOS login instead of the storefront", () => {

@@ -316,7 +316,11 @@ export class StorefrontCustomerService {
                 s."trackingCode",s."trackingUrl",s.status AS "shipmentStatus",
                 e."eventType" AS "latestEventType",e.title AS "latestEventTitle",e."occurredAt" AS "latestEventAt"
            FROM "StorefrontOrder" o
-           LEFT JOIN "Shipment" s ON s."storefrontOrderId"=o.id
+           LEFT JOIN LATERAL (
+             SELECT * FROM "Shipment"
+              WHERE "storefrontOrderId"=o.id
+              ORDER BY "createdAt" DESC LIMIT 1
+           ) s ON TRUE
            LEFT JOIN LATERAL (
              SELECT "eventType",title,"occurredAt" FROM "StorefrontOrderEvent"
               WHERE "storefrontOrderId"=o.id AND public=TRUE

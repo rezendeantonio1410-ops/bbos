@@ -6,6 +6,7 @@ export const protectedSystemPrefixes = [
   "/blends",
   "/cafe-verde",
   "/clientes",
+  "/atendimento",
   "/recebimento",
   "/compras-cafe-verde",
   "/compras-cafe-verde-v2",

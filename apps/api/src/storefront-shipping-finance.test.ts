@@ -194,7 +194,7 @@ test("liga a reserva ao pagamento e a baixa à compra da etiqueta", () => {
   assert.match(controller, /reserveMelhorEnvioFreight\(transaction/);
   assert.equal(
     [...shipment.matchAll(/settleMelhorEnvioFreight\(transaction/g)].length,
-    2,
+    3,
   );
   assert.match(migration, /shipping-payable:storefront:/);
   assert.match(migration, /shipping-allocation:storefront:/);

@@ -88,6 +88,11 @@ type CompanyFiscalProfile = {
   exportDepartureLocation?: string | null;
   exportDepartureState?: string | null;
   exportValidatedByAccountant: boolean;
+  reexpeditionReturnNatureOperationId?: string | null;
+  reexpeditionReturnNatureOperationName?: string | null;
+  reexpeditionOutboundNatureOperationId?: string | null;
+  reexpeditionOutboundNatureOperationName?: string | null;
+  reexpeditionValidatedByAccountant: boolean;
   notes?: string | null;
   validatedByAccountant: boolean;
 };
@@ -926,6 +931,153 @@ export default function IntegrationsPage() {
                 Rota de exportação validada pela contabilidade
               </label>
             </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
+            <div>
+              <p className="text-sm font-bold text-violet-950">
+                Rota fiscal automática para reexpedição
+              </p>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-violet-800">
+                Após a confirmação do retorno físico, o BBOS emite a NF-e de
+                entrada por devolução, emite a nova saída sem gerar cobrança e
+                só então compra uma nova etiqueta. A nota e a etiqueta antigas
+                permanecem preservadas para auditoria.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+              <label className="block">
+                <span className="mb-1 block text-[9px] font-bold uppercase tracking-[.08em] text-violet-800">
+                  Devolução de venda · entrada
+                </span>
+                <select
+                  value={
+                    profiles.companyProfile
+                      .reexpeditionReturnNatureOperationId ?? ""
+                  }
+                  onChange={(event) => {
+                    const selected = operationNatures.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    updateCompany({
+                      reexpeditionReturnNatureOperationId:
+                        event.target.value || null,
+                      reexpeditionReturnNatureOperationName:
+                        selected?.name ?? null,
+                      reexpeditionValidatedByAccountant: false,
+                    });
+                  }}
+                  className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2.5 text-xs text-stone-800 outline-none focus:border-violet-600"
+                >
+                  <option value="">Selecione a natureza de entrada</option>
+                  {profiles.companyProfile
+                    .reexpeditionReturnNatureOperationId &&
+                    !operationNatures.some(
+                      (item) =>
+                        item.id ===
+                        profiles.companyProfile
+                          .reexpeditionReturnNatureOperationId,
+                    ) && (
+                      <option
+                        value={
+                          profiles.companyProfile
+                            .reexpeditionReturnNatureOperationId
+                        }
+                      >
+                        {profiles.companyProfile
+                          .reexpeditionReturnNatureOperationName ??
+                          `Natureza #${profiles.companyProfile.reexpeditionReturnNatureOperationId}`}
+                      </option>
+                    )}
+                  {operationNatures.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[9px] font-bold uppercase tracking-[.08em] text-violet-800">
+                  Reexpedição · nova saída
+                </span>
+                <select
+                  value={
+                    profiles.companyProfile
+                      .reexpeditionOutboundNatureOperationId ?? ""
+                  }
+                  onChange={(event) => {
+                    const selected = operationNatures.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    updateCompany({
+                      reexpeditionOutboundNatureOperationId:
+                        event.target.value || null,
+                      reexpeditionOutboundNatureOperationName:
+                        selected?.name ?? null,
+                      reexpeditionValidatedByAccountant: false,
+                    });
+                  }}
+                  className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2.5 text-xs text-stone-800 outline-none focus:border-violet-600"
+                >
+                  <option value="">Selecione a natureza de nova saída</option>
+                  {profiles.companyProfile
+                    .reexpeditionOutboundNatureOperationId &&
+                    !operationNatures.some(
+                      (item) =>
+                        item.id ===
+                        profiles.companyProfile
+                          .reexpeditionOutboundNatureOperationId,
+                    ) && (
+                      <option
+                        value={
+                          profiles.companyProfile
+                            .reexpeditionOutboundNatureOperationId
+                        }
+                      >
+                        {profiles.companyProfile
+                          .reexpeditionOutboundNatureOperationName ??
+                          `Natureza #${profiles.companyProfile.reexpeditionOutboundNatureOperationId}`}
+                      </option>
+                    )}
+                  {operationNatures.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-violet-950">
+                <input
+                  type="checkbox"
+                  checked={
+                    profiles.companyProfile
+                      .reexpeditionValidatedByAccountant
+                  }
+                  disabled={
+                    !profiles.companyProfile
+                      .reexpeditionReturnNatureOperationId ||
+                    !profiles.companyProfile
+                      .reexpeditionOutboundNatureOperationId ||
+                    profiles.companyProfile
+                      .reexpeditionReturnNatureOperationId ===
+                      profiles.companyProfile
+                        .reexpeditionOutboundNatureOperationId
+                  }
+                  onChange={(event) =>
+                    updateCompany({
+                      reexpeditionValidatedByAccountant:
+                        event.target.checked,
+                    })
+                  }
+                />
+                Rota de reexpedição validada pela contabilidade
+              </label>
+            </div>
+            <p className="mt-3 text-[11px] leading-5 text-violet-800">
+              Esta é uma configuração única. Depois de validada, cada caso é
+              conduzido integralmente pelo BBOS; rejeições do Bling, da SEFAZ
+              ou do Melhor Envio viram pendências visíveis e notificações.
+            </p>
           </div>
 
           <div className="mt-4 flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">

@@ -78,6 +78,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   OperationsFlowController: CORE,
   OperationsFlowActionsController: OPERATIONS,
   ProductionRequirementsController: OPERATIONS,
+  OrderPackagingController: OPERATIONS,
   BrokersController: COMMERCIAL,
   CustomersController: COMMERCIAL,
   CuppingController: OPERATIONS,
@@ -111,6 +112,11 @@ const HANDLER_ROLE_POLICY: Readonly<
     portalAccessStatus: ["ADMIN"],
     portalPermissions: ["ADMIN"],
     getPortalPermissions: ["ADMIN"],
+  },
+  CustomersController: {
+    recentVisits: ["ADMIN", "EXECUTIVE", "SALES"],
+    createVisit: ["ADMIN", "EXECUTIVE", "SALES"],
+    credit: LEADERSHIP,
   },
 };
 

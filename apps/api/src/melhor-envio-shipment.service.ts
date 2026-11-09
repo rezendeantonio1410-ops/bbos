@@ -11,6 +11,10 @@ import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { settleMelhorEnvioFreight } from "./storefront-shipping-finance";
+import {
+  assessMelhorEnvioRecipient,
+  melhorEnvioRecipientError,
+} from "./melhor-envio-recipient-policy";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -516,7 +520,8 @@ export class MelhorEnvioShipmentService
 
   async createLabel(orderId: string) {
     const orders = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT o.*,q.package,q."providerPriceCents",q."customerPriceCents",q."serviceId",q."serviceName",q."carrierName"
+      `SELECT o.*,q.package,q."providerPriceCents",q."customerPriceCents",q."serviceId",q."serviceName",q."carrierName",
+              q."destinationPostalCode"
          FROM "StorefrontOrder" o JOIN "ShippingQuote" q ON q.id=o."shippingQuoteId"
         WHERE o.id=$1 LIMIT 1`,
       orderId,
@@ -534,7 +539,7 @@ export class MelhorEnvioShipmentService
       throw new BadRequestException("Este pedido não utiliza Melhor Envio.");
 
     const prior = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "Shipment" WHERE "storefrontOrderId"=$1 LIMIT 1`,
+      `SELECT * FROM "Shipment" WHERE "storefrontOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
       orderId,
     );
     if (prior[0]?.labelUrl) return { ...prior[0], idempotent: true };
@@ -561,6 +566,40 @@ export class MelhorEnvioShipmentService
     const customer = order.customer || {};
     const delivery = order.delivery || {};
     const items = Array.isArray(order.items) ? order.items : [];
+    const recipientAssessment = assessMelhorEnvioRecipient({
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      document: customer.cpf || customer.cnpj || customer.taxId,
+      address: delivery.street,
+      number: delivery.number,
+      complement: delivery.complement,
+      district: delivery.district,
+      city: delivery.city,
+      state: delivery.state,
+      postalCode: delivery.postalCode,
+      quotedPostalCode: order.destinationPostalCode,
+    });
+    if (!recipientAssessment.ready) {
+      throw new BadRequestException(
+        melhorEnvioRecipientError(recipientAssessment.issues),
+      );
+    }
+    const recipient = recipientAssessment.recipient;
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment"
+          SET metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+              "updatedAt"=NOW()
+        WHERE id=$1`,
+      shipmentId,
+      JSON.stringify({
+        recipientPreflight: {
+          checkedAt: new Date().toISOString(),
+          source: "STOREFRONT_ORDER_SNAPSHOT",
+          recipient,
+        },
+      }),
+    );
     let externalId = prior[0]?.externalId || "";
     if (!externalId) {
       const cartResult = await this.request(order.companyId, "/me/cart", {
@@ -568,20 +607,7 @@ export class MelhorEnvioShipmentService
         body: JSON.stringify({
           service: Number(order.serviceId),
           from: this.sender(),
-          to: {
-            name: customer.name,
-            phone: digits(customer.phone),
-            email: customer.email,
-            document: digits(customer.cpf),
-            address: delivery.street,
-            complement: delivery.complement || "",
-            number: delivery.number,
-            district: delivery.district,
-            city: delivery.city,
-            state_abbr: delivery.state,
-            country_id: "BR",
-            postal_code: digits(delivery.postalCode),
-          },
+          to: recipient,
           products: items.map((item: any) => ({
             name: item.name,
             quantity: Number(item.quantity),
@@ -1005,11 +1031,14 @@ export class MelhorEnvioShipmentService
     const orders = await this.database.$queryRawUnsafe<any[]>(
       `SELECT so.*,q.package,q."providerPriceCents",q."customerPriceCents",
               q."serviceId",q."serviceName",q."carrierName",
-              sfo.id AS "storefrontOrderId",
+              sfo.id AS "storefrontOrderId",sfo.delivery AS "storefrontDelivery",
               c.name AS "customerName",c."taxId" AS "customerTaxId",
               c.email AS "customerEmail",c.phone AS "customerPhone",
               c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
-              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState"
+              c."addressNumber" AS "customerAddressNumber",
+              c."addressComplement" AS "customerAddressComplement",
+              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState",
+              q."destinationPostalCode"
          FROM "SalesOrder" so
          JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
          JOIN "Customer" c ON c.id=so."customerId"
@@ -1028,6 +1057,20 @@ export class MelhorEnvioShipmentService
       throw new BadRequestException(
         "Este pedido comercial não utiliza Melhor Envio.",
       );
+
+    const activeReexpeditions = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,status,"attemptNumber"
+         FROM "SalesOrderReexpedition"
+        WHERE "salesOrderId"=$1
+          AND status NOT IN ('LABEL_CREATED','CANCELLED')
+        ORDER BY "attemptNumber" DESC LIMIT 1`,
+      orderId,
+    );
+    if (activeReexpeditions[0]) {
+      throw new BadRequestException(
+        "Este pedido possui uma reexpedição automática em andamento. A etiqueta antiga não pode ser reutilizada.",
+      );
+    }
 
     const authorized = await this.database.$queryRawUnsafe<any[]>(
       `SELECT id,"accessKey" FROM "FiscalDocument"
@@ -1112,22 +1155,44 @@ export class MelhorEnvioShipmentService
       );
     }
 
-    const rawAddress = String(order.customerAddress || "").trim();
-    const addressMatch = rawAddress.match(
-      /^(.*?)(?:,|\s)+(\d+[A-Za-z0-9/-]*)\s*$/,
-    );
-    const street = String(addressMatch?.[1] || rawAddress).trim();
-    const number = String(addressMatch?.[2] || "S/N").trim();
-    if (
-      !street ||
-      !order.customerPostalCode ||
-      !order.customerCity ||
-      !order.customerState
-    ) {
+    const delivery = order.storefrontDelivery || {};
+    const recipientAssessment = assessMelhorEnvioRecipient({
+      name: delivery.name || order.customerName,
+      phone: delivery.phone || order.customerPhone,
+      email: delivery.email || order.customerEmail,
+      document:
+        delivery.cpf || delivery.cnpj || delivery.taxId || order.customerTaxId,
+      address: delivery.street || order.customerAddress,
+      number: delivery.number || order.customerAddressNumber,
+      complement: delivery.complement || order.customerAddressComplement,
+      district: delivery.district || order.customerDistrict,
+      city: delivery.city || order.customerCity,
+      state: delivery.state || order.customerState,
+      postalCode: delivery.postalCode || order.customerPostalCode,
+      quotedPostalCode: order.destinationPostalCode,
+    });
+    if (!recipientAssessment.ready) {
       throw new BadRequestException(
-        "Complete endereço, CEP, cidade e UF do cliente antes de gerar a etiqueta.",
+        melhorEnvioRecipientError(recipientAssessment.issues),
       );
     }
+    const recipient = recipientAssessment.recipient;
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment"
+          SET metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+              "updatedAt"=NOW()
+        WHERE id=$1`,
+      shipmentId,
+      JSON.stringify({
+        recipientPreflight: {
+          checkedAt: new Date().toISOString(),
+          source: order.storefrontOrderId
+            ? "STOREFRONT_ORDER_SNAPSHOT"
+            : "CUSTOMER_MASTER",
+          recipient,
+        },
+      }),
+    );
 
     const packagePayload = Array.isArray(order.package)
       ? order.package
@@ -1139,20 +1204,7 @@ export class MelhorEnvioShipmentService
         body: JSON.stringify({
           service: Number(order.serviceId),
           from: this.sender(),
-          to: {
-            name: order.customerName,
-            phone: digits(order.customerPhone),
-            email: order.customerEmail,
-            document: digits(order.customerTaxId),
-            address: street,
-            complement: "",
-            number,
-            district: order.customerDistrict || "",
-            city: order.customerCity,
-            state_abbr: order.customerState,
-            country_id: "BR",
-            postal_code: digits(order.customerPostalCode),
-          },
+          to: recipient,
           products: items.map((item: any) => ({
             name: item.productName,
             quantity: Number(item.quantity),
@@ -1178,7 +1230,11 @@ export class MelhorEnvioShipmentService
       );
       if (externalId) {
         await this.database.$executeRawUnsafe(
-          `UPDATE "Shipment" SET "externalId"=$2,metadata=$3::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+          `UPDATE "Shipment"
+              SET "externalId"=$2,
+                  metadata=COALESCE(metadata,'{}'::jsonb) || $3::jsonb,
+                  "updatedAt"=NOW()
+            WHERE id=$1`,
           shipmentId,
           externalId,
           JSON.stringify({ cartResult, cartPriceCents }),
@@ -1249,7 +1305,7 @@ export class MelhorEnvioShipmentService
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment"
           SET status='LABEL_READY',"labelUrl"=$2,"trackingCode"=$3,"trackingUrl"=$4,
-              metadata=$5::jsonb,"updatedAt"=NOW()
+              metadata=COALESCE(metadata,'{}'::jsonb) || $5::jsonb,"updatedAt"=NOW()
         WHERE id=$1`,
       shipmentId,
       labelUrl || null,
@@ -1287,6 +1343,519 @@ export class MelhorEnvioShipmentService
       labelUrl,
       trackingCode,
       trackingUrl,
+    };
+  }
+
+  async createReexpeditionLabel(
+    reexpeditionId: string,
+    fiscalAccessKey: string,
+  ) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT re.*,so.code,so."orderNumber",so."shippingQuoteId",so."shippingProvider",
+              so.subtotal,so."totalAmount",q.package,q."providerPriceCents",
+              q."serviceId",q."serviceName",q."carrierName",
+              sfo.id AS "storefrontOrderId"
+         FROM "SalesOrderReexpedition" re
+         JOIN "SalesOrder" so ON so.id=re."salesOrderId"
+         JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+         LEFT JOIN "StorefrontOrder" sfo
+           ON sfo."companyId"=so."companyId"
+          AND sfo.code=COALESCE(so."orderNumber",so.code)
+        WHERE re.id=$1 LIMIT 1`,
+      reexpeditionId,
+    );
+    const reexpedition = rows[0];
+    if (!reexpedition)
+      throw new BadRequestException("Reexpedição não encontrada.");
+    if (reexpedition.shippingProvider !== "MELHOR_ENVIO")
+      throw new BadRequestException(
+        "A reexpedição automática exige um pedido do Melhor Envio.",
+      );
+    if (!/^\d{44}$/.test(String(fiscalAccessKey ?? "").replace(/\D/g, "")))
+      throw new BadRequestException(
+        "A nova etiqueta exige a chave da NF-e de reexpedição autorizada.",
+      );
+
+    if (reexpedition.replacementShipmentId) {
+      const existing = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "Shipment" WHERE id=$1 LIMIT 1`,
+        reexpedition.replacementShipmentId,
+      );
+      if (existing[0]?.labelUrl)
+        return { ...existing[0], idempotent: true };
+    }
+
+    const items = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT soi."productName",soi.quantity,soi."unitPrice",pv."netWeightGrams"
+         FROM "SalesOrderItem" soi
+         JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+        WHERE soi."salesOrderId"=$1 ORDER BY soi."createdAt" ASC`,
+      reexpedition.salesOrderId,
+    );
+    if (!items.length)
+      throw new BadRequestException("Pedido sem itens para reexpedição.");
+
+    const shipmentId = reexpedition.replacementShipmentId || randomUUID();
+    if (!reexpedition.replacementShipmentId) {
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "Shipment"
+           (id,"companyId","storefrontOrderId","salesOrderId","shippingQuoteId",provider,status,
+             "serviceId","serviceName","carrierName","providerPriceCents","customerPriceCents",
+             metadata,"createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,'MELHOR_ENVIO','PENDING',$6,$7,$8,$9,0,$10::jsonb,NOW(),NOW())`,
+          shipmentId,
+          reexpedition.companyId,
+          reexpedition.storefrontOrderId,
+          reexpedition.salesOrderId,
+          reexpedition.shippingQuoteId,
+          reexpedition.serviceId,
+          reexpedition.serviceName,
+          reexpedition.carrierName,
+          reexpedition.providerPriceCents,
+          JSON.stringify({
+            reexpeditionId,
+            attemptNumber: reexpedition.attemptNumber,
+            recipientPreflight: {
+              checkedAt: new Date().toISOString(),
+              source: "REEXPEDITION_ADDRESS_SNAPSHOT",
+              recipient: reexpedition.addressSnapshot,
+            },
+          }),
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderReexpedition"
+              SET "replacementShipmentId"=$2,status='LABEL_PENDING',"lastError"=NULL,"updatedAt"=NOW()
+            WHERE id=$1`,
+          reexpeditionId,
+          shipmentId,
+        );
+      });
+    }
+
+    const packagePayload = Array.isArray(reexpedition.package)
+      ? reexpedition.package
+      : [reexpedition.package];
+    const prior = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "Shipment" WHERE id=$1 LIMIT 1`,
+      shipmentId,
+    );
+    let externalId = String(prior[0]?.externalId ?? "");
+    let providerPriceCents = Number(
+      prior[0]?.providerPriceCents ?? reexpedition.providerPriceCents ?? 0,
+    );
+    if (!externalId) {
+      const cartResult = await this.request(
+        reexpedition.companyId,
+        "/me/cart",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            service: Number(reexpedition.serviceId),
+            from: this.sender(),
+            to: reexpedition.addressSnapshot,
+            products: items.map((item: any) => ({
+              name: item.productName,
+              quantity: Number(item.quantity),
+              unitary_value: Number(item.unitPrice),
+              weight: Math.max(
+                0.001,
+                Number(item.netWeightGrams || 0) / 1000,
+              ),
+            })),
+            volumes: packagePayload,
+            options: {
+              insurance_value: Number(
+                reexpedition.subtotal || reexpedition.totalAmount || 0,
+              ),
+              receipt: false,
+              own_hand: false,
+              reverse: false,
+              non_commercial: false,
+              invoice: { key: String(fiscalAccessKey).replace(/\D/g, "") },
+            },
+          }),
+        },
+      );
+      externalId = String(cartResult?.id ?? "");
+      providerPriceCents = Math.round(
+        Number(cartResult?.price ?? cartResult?.custom_price ?? 0) * 100,
+      );
+      if (!externalId)
+        throw new ServiceUnavailableException(
+          "Melhor Envio não retornou o identificador da nova remessa.",
+        );
+      await this.database.$executeRawUnsafe(
+        `UPDATE "Shipment"
+            SET "externalId"=$2,status='CARTED',"providerPriceCents"=$3,
+                metadata=COALESCE(metadata,'{}'::jsonb) || $4::jsonb,"updatedAt"=NOW()
+          WHERE id=$1`,
+        shipmentId,
+        externalId,
+        providerPriceCents,
+        JSON.stringify({ cartResult, fiscalAccessKey }),
+      );
+    }
+
+    await this.request(reexpedition.companyId, "/me/shipment/checkout", {
+      method: "POST",
+      body: JSON.stringify({ orders: [externalId] }),
+    });
+    await this.database.$executeRawUnsafe(
+      `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
+      shipmentId,
+    );
+    await this.database.$transaction((transaction) =>
+      settleMelhorEnvioFreight(transaction, {
+        id: reexpeditionId,
+        companyId: reexpedition.companyId,
+        code: `${reexpedition.orderNumber || reexpedition.code} · reexpedição ${reexpedition.attemptNumber}`,
+        shippingProvider: "MELHOR_ENVIO",
+        shippingCents: 0,
+        providerPriceCents,
+        paidAt: new Date(),
+        shipmentId,
+        externalId,
+      }),
+    );
+    await this.request(reexpedition.companyId, "/me/shipment/generate", {
+      method: "POST",
+      body: JSON.stringify({ orders: [externalId] }),
+    });
+    const labelUrl = await this.printWhenReady(
+      reexpedition.companyId,
+      externalId,
+    );
+    const details = await this.request(
+      reexpedition.companyId,
+      `/me/orders/${encodeURIComponent(externalId)}`,
+      { method: "GET" },
+    ).catch(() => ({}));
+    const trackingCode =
+      String(details?.tracking ?? details?.tracking_code ?? "") || null;
+    const trackingUrl =
+      String(details?.tracking_url ?? details?.tracking?.url ?? "") || null;
+
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "Shipment"
+            SET status='LABEL_READY',"labelUrl"=$2,"trackingCode"=$3,"trackingUrl"=$4,
+                metadata=COALESCE(metadata,'{}'::jsonb) || $5::jsonb,"updatedAt"=NOW()
+          WHERE id=$1`,
+        shipmentId,
+        labelUrl || null,
+        trackingCode,
+        trackingUrl,
+        JSON.stringify(details || {}),
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "SalesOrderReexpedition"
+            SET status='LABEL_CREATED',"lastError"=NULL,"completedAt"=NOW(),"updatedAt"=NOW()
+          WHERE id=$1`,
+        reexpeditionId,
+      );
+    });
+
+    if (reexpedition.storefrontOrderId) {
+      await this.lifecycle.record(
+        reexpedition.storefrontOrderId,
+        "SHIPMENT_CREATED",
+        "Reenvio preparado",
+        "A nova etiqueta foi emitida e o pacote está pronto para postagem.",
+        "MELHOR_ENVIO",
+        `storefront:reexpedition-shipment:${reexpeditionId}`,
+        { reexpeditionId, shipmentId, externalId, trackingCode, trackingUrl },
+      );
+    }
+    await this.customerLifecycle.record(
+      reexpedition.salesOrderId,
+      "REEXPEDITION_LABEL_CREATED",
+      "Reenvio preparado",
+      "A nova etiqueta foi emitida e o pacote está pronto para postagem.",
+      "MELHOR_ENVIO",
+      `sales-order:reexpedition-shipment:${reexpeditionId}`,
+      { reexpeditionId, shipmentId, externalId, trackingCode, trackingUrl },
+    );
+    return {
+      id: shipmentId,
+      externalId,
+      status: "LABEL_READY",
+      labelUrl,
+      trackingCode,
+      trackingUrl,
+      reexpeditionId,
+    };
+  }
+
+  async prepareReexpeditionForSalesOrder(
+    orderId: string,
+    actor: { id: string; companyId: string; name: string },
+    input: { returnConfirmed?: boolean; reason?: string },
+  ) {
+    if (input.returnConfirmed !== true) {
+      throw new BadRequestException(
+        "Confirme que o pacote retornou fisicamente à Bispo antes de preparar a reexpedição.",
+      );
+    }
+
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,so."companyId",COALESCE(so."orderNumber",so.code) AS code,
+              so."shippingProvider",q."destinationPostalCode",
+              sfo.id AS "storefrontOrderId",sfo.delivery AS "storefrontDelivery",
+              c.name AS "customerName",c."taxId" AS "customerTaxId",
+              c.email AS "customerEmail",c.phone AS "customerPhone",
+              c."postalCode" AS "customerPostalCode",c.address AS "customerAddress",
+              c."addressNumber" AS "customerAddressNumber",
+              c."addressComplement" AS "customerAddressComplement",
+              c.district AS "customerDistrict",c.city AS "customerCity",c.state AS "customerState",
+              sh.id AS "shipmentId",sh.status AS "shipmentStatus",sh."externalId",
+              sh."serviceId",sh."serviceName",sh."carrierName",sh."labelUrl",
+              sh."trackingCode",sh."trackingUrl",sh.metadata AS "shipmentMetadata",
+              sh."postedAt",sh."deliveredAt",sh."createdAt" AS "shipmentCreatedAt",
+              EXISTS (
+                SELECT 1 FROM "SalesOrderCustomerEvent" issue
+                 WHERE issue."salesOrderId"=so.id
+                   AND issue.source IN ('MELHOR_ENVIO','CARRIER')
+                   AND issue."eventType" IN ('UNDELIVERED','RETURNED','PAUSED','SUSPENDED')
+                   AND NOT EXISTS (
+                     SELECT 1 FROM "SalesOrderCustomerEvent" resolved
+                      WHERE resolved."salesOrderId"=so.id
+                        AND resolved.source IN ('MELHOR_ENVIO','CARRIER')
+                        AND resolved."eventType"='DELIVERED'
+                        AND resolved."occurredAt">issue."occurredAt"
+                   )
+              ) AS "hasUnresolvedDeliveryException",
+              f.id AS "originalFiscalDocumentId",f.number AS "originalFiscalNumber",
+              f."accessKey" AS "originalFiscalAccessKey"
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id=so."customerId"
+         LEFT JOIN "ShippingQuote" q ON q.id=so."shippingQuoteId"
+         LEFT JOIN "StorefrontOrder" sfo
+           ON sfo."companyId"=so."companyId"
+          AND sfo.code=COALESCE(so."orderNumber",so.code)
+         LEFT JOIN LATERAL (
+           SELECT * FROM "Shipment"
+            WHERE "salesOrderId"=so.id OR "storefrontOrderId"=sfo.id
+            ORDER BY "updatedAt" DESC LIMIT 1
+         ) sh ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT id,number,"accessKey" FROM "FiscalDocument"
+            WHERE "salesOrderId"=so.id AND direction='OUTBOUND' AND status='AUTHORIZED'
+            ORDER BY "createdAt" DESC LIMIT 1
+         ) f ON TRUE
+        WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
+      orderId,
+      actor.companyId,
+    );
+    const order = rows[0];
+    if (!order) throw new BadRequestException("Pedido não encontrado.");
+    if (order.shippingProvider !== "MELHOR_ENVIO") {
+      throw new BadRequestException(
+        "A reexpedição assistida está disponível apenas para envios do Melhor Envio.",
+      );
+    }
+    if (!order.shipmentId || !order.externalId) {
+      throw new BadRequestException(
+        "A remessa original não foi encontrada para preparar o reenvio.",
+      );
+    }
+    const providerStatus = normalizeMelhorEnvioTrackingStatus(
+      order.shipmentMetadata?.tracking_snapshot?.status ??
+        order.shipmentMetadata?.status ??
+        "",
+    );
+    if (
+      order.shipmentStatus !== "EXCEPTION" &&
+      !order.hasUnresolvedDeliveryException &&
+      !["undelivered", "returned"].includes(providerStatus)
+    ) {
+      throw new BadRequestException(
+        "O reenvio só pode ser preparado após uma falha de entrega ou devolução registrada.",
+      );
+    }
+
+    const delivery = order.storefrontDelivery || {};
+    const assessment = assessMelhorEnvioRecipient({
+      // Na reexpedição, o cadastro mestre corrigido prevalece sobre o retrato
+      // histórico do checkout que produziu a etiqueta devolvida.
+      name: order.customerName || delivery.name,
+      phone: order.customerPhone || delivery.phone,
+      email: order.customerEmail || delivery.email,
+      document:
+        order.customerTaxId || delivery.cpf || delivery.cnpj || delivery.taxId,
+      address: order.customerAddress || delivery.street,
+      number: order.customerAddressNumber || delivery.number,
+      complement: order.customerAddressComplement || delivery.complement,
+      district: order.customerDistrict || delivery.district,
+      city: order.customerCity || delivery.city,
+      state: order.customerState || delivery.state,
+      postalCode: order.customerPostalCode || delivery.postalCode,
+      quotedPostalCode: order.destinationPostalCode,
+    });
+    if (!assessment.ready) {
+      throw new BadRequestException(
+        melhorEnvioRecipientError(assessment.issues),
+      );
+    }
+
+    const reason =
+      String(input.reason ?? "").trim() ||
+      "Pacote devolvido pela transportadora após falha na entrega.";
+    const shipmentSnapshot = {
+      shipmentId: order.shipmentId,
+      status: order.shipmentStatus,
+      externalId: order.externalId,
+      serviceId: order.serviceId,
+      serviceName: order.serviceName,
+      carrierName: order.carrierName,
+      labelUrl: order.labelUrl,
+      trackingCode: order.trackingCode,
+      trackingUrl: order.trackingUrl,
+      postedAt: order.postedAt,
+      deliveredAt: order.deliveredAt,
+      createdAt: order.shipmentCreatedAt,
+      providerStatus,
+      originalFiscalNumber: order.originalFiscalNumber,
+      originalFiscalAccessKey: order.originalFiscalAccessKey,
+    };
+
+    const prepared = await this.database.$transaction(async (transaction) => {
+      const existing = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "SalesOrderReexpedition"
+          WHERE "salesOrderId"=$1
+            AND status NOT IN ('LABEL_CREATED','CANCELLED')
+          ORDER BY "attemptNumber" DESC LIMIT 1`,
+        order.id,
+      );
+      if (existing[0]) return { ...existing[0], idempotent: true };
+
+      const attempts = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT COALESCE(MAX("attemptNumber"),0)::int+1 AS next
+           FROM "SalesOrderReexpedition" WHERE "salesOrderId"=$1`,
+        order.id,
+      );
+      const attemptNumber = Number(attempts[0]?.next ?? 1);
+      const reexpeditionId = randomUUID();
+      const inserted = await transaction.$queryRawUnsafe<any[]>(
+        `INSERT INTO "SalesOrderReexpedition"
+          (id,"companyId","salesOrderId","originalShipmentId","attemptNumber",status,reason,
+           "addressSnapshot","shipmentSnapshot","originalFiscalDocumentId",
+           "preparedByUserId","preparedByName","preparedAt","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,'QUEUED',$6,$7::jsonb,$8::jsonb,$9,$10,$11,NOW(),NOW(),NOW())
+         RETURNING *`,
+        reexpeditionId,
+        order.companyId,
+        order.id,
+        order.shipmentId,
+        attemptNumber,
+        reason,
+        JSON.stringify(assessment.recipient),
+        JSON.stringify(shipmentSnapshot),
+        order.originalFiscalDocumentId || null,
+        actor.id,
+        actor.name,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "Shipment"
+            SET metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,
+                "updatedAt"=NOW()
+          WHERE id=$1`,
+        order.shipmentId,
+        JSON.stringify({
+          reexpedition: {
+            id: reexpeditionId,
+            attemptNumber,
+            status: "QUEUED",
+            preparedAt: new Date().toISOString(),
+            preparedBy: actor.name,
+            addressSnapshot: assessment.recipient,
+          },
+        }),
+      );
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "IntegrationOutbox"
+          (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,
+           "idempotencyKey","createdAt","updatedAt")
+         VALUES ($1,$2,'BLING','SALES_ORDER_REEXPEDITION_REQUESTED','SALES_ORDER_REEXPEDITION',$3,
+                 $4::jsonb,'PENDING',0,$5,NOW(),NOW())
+         ON CONFLICT ("idempotencyKey") DO UPDATE SET
+           status=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN 'PENDING' ELSE "IntegrationOutbox".status END,
+           "lastError"=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN NULL ELSE "IntegrationOutbox"."lastError" END,
+           "nextAttemptAt"=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN NULL ELSE "IntegrationOutbox"."nextAttemptAt" END,
+           "updatedAt"=NOW()`,
+        randomUUID(),
+        order.companyId,
+        reexpeditionId,
+        JSON.stringify({
+          reexpeditionId,
+          salesOrderId: order.id,
+          attemptNumber,
+        }),
+        `bling:sales-order-reexpedition:${reexpeditionId}`,
+      );
+      return { ...inserted[0], idempotent: false };
+    });
+
+    // Um segundo clique após corrigir a configuração fiscal reativa a mesma
+    // tentativa, sem criar documentos ou remessas duplicados.
+    await this.database.$transaction((transaction) =>
+      transaction.$executeRawUnsafe(
+        `INSERT INTO "IntegrationOutbox"
+        (id,"companyId",provider,"eventType","aggregateType","aggregateId",payload,status,attempts,
+         "idempotencyKey","createdAt","updatedAt")
+       VALUES ($1,$2,'BLING','SALES_ORDER_REEXPEDITION_REQUESTED','SALES_ORDER_REEXPEDITION',$3,
+               $4::jsonb,'PENDING',0,$5,NOW(),NOW())
+       ON CONFLICT ("idempotencyKey") DO UPDATE SET
+         status=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN 'PENDING' ELSE "IntegrationOutbox".status END,
+         attempts=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN 0 ELSE "IntegrationOutbox".attempts END,
+         "lastError"=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN NULL ELSE "IntegrationOutbox"."lastError" END,
+         "nextAttemptAt"=CASE WHEN "IntegrationOutbox".status IN ('FAILED','CANCELLED') THEN NULL ELSE "IntegrationOutbox"."nextAttemptAt" END,
+         "updatedAt"=NOW()`,
+        randomUUID(),
+        order.companyId,
+        prepared.id,
+        JSON.stringify({
+          reexpeditionId: prepared.id,
+          salesOrderId: order.id,
+          attemptNumber: prepared.attemptNumber,
+        }),
+        `bling:sales-order-reexpedition:${prepared.id}`,
+      ),
+    );
+
+    if (order.storefrontOrderId) {
+      await this.lifecycle.record(
+        order.storefrontOrderId,
+        "EXCEPTION",
+        "Reexpedição em preparação",
+        "A devolução foi confirmada. A Bispo está preparando uma nova expedição com conferência fiscal e de endereço.",
+        "ADMIN",
+        `storefront:reexpedition-prepared:${prepared.id}`,
+        { reexpeditionId: prepared.id, attemptNumber: prepared.attemptNumber },
+        false,
+      );
+    }
+    await this.customerLifecycle.record(
+      order.id,
+      "REEXPEDITION_PREPARED",
+      "Reexpedição automática iniciada",
+      "A devolução foi confirmada. O BBOS cuidará dos documentos fiscais, da nova etiqueta e do rastreio.",
+      "ADMIN",
+      `sales-order:reexpedition-prepared:${prepared.id}`,
+      { reexpeditionId: prepared.id, attemptNumber: prepared.attemptNumber },
+      false,
+    );
+
+    return {
+      id: prepared.id,
+      status: prepared.status,
+      attemptNumber: prepared.attemptNumber,
+      preparedAt: prepared.preparedAt,
+      preparedByName: prepared.preparedByName,
+      addressSnapshot: prepared.addressSnapshot,
+      idempotent: prepared.idempotent,
+      nextAction:
+        "Acompanhar o processamento automático do novo documento fiscal de entrada, da nova saída e da etiqueta. O BBOS só pedirá atenção se Bling, SEFAZ ou Melhor Envio rejeitarem alguma etapa.",
     };
   }
 

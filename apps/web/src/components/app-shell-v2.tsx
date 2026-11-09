@@ -59,7 +59,7 @@ type ShellNotification = {
 const corporateTitleByRole: Record<string, string> = {
   ADMIN: "Sócio Administrador",
   EXECUTIVE: "Diretor",
-  SALES: "Comercial",
+  SALES: "Vendedor",
   FINANCE: "Financeiro",
   INDUSTRIAL: "Industrial",
   MARKETPLACE_OPERATOR: "Operador de marketplace",

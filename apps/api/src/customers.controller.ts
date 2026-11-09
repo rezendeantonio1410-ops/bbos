@@ -1,3 +1,4 @@
+import { prisma } from "@bbos/database";
 import { normalizeCustomerPhone } from "@bbos/shared";
 import {
   BadRequestException,
@@ -11,13 +12,14 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 import {
   assessCustomerFiscalReadiness,
   customerFiscalReadinessMessage,
 } from "./customer-fiscal-readiness";
+import { parseCustomerVisitInput } from "./customer-visit-input";
+import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 
 const CREDIT_STATUSES = [
   "NOT_ANALYZED",
@@ -224,6 +226,39 @@ export class CustomersController {
     );
   }
 
+  @Get(":id/sales-history")
+  async salesHistory(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT so.id,COALESCE(so."orderNumber",so.code) AS "orderNumber",
+              so.status::text AS status,so."orderedAt",so."totalAmount",so."paymentType",
+              so."paymentTermsSnapshot",ar.status::text AS "paymentStatus",ar."dueDate",
+              ar."openAmount",ar."paymentDate",
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'productName',item."productName",'sku',item.sku,'quantity',item.quantity,
+                  'unitPrice',item."unitPrice",'totalAmount',item."totalAmount"
+                ) ORDER BY item."createdAt")
+                  FROM "SalesOrderItem" item
+                 WHERE item."salesOrderId"=so.id
+              ),'[]'::json) AS items
+         FROM "SalesOrder" so
+         LEFT JOIN "AccountsReceivable" ar
+           ON ar."salesOrderId"=so.id AND ar."companyId"=so."companyId"
+        WHERE so."companyId"=$1 AND so."customerId"=$2
+        ORDER BY so."orderedAt" DESC,so."createdAt" DESC
+        LIMIT 200`,
+      actor.companyId,
+      id,
+    );
+  }
+
   @Get(":id/visits")
   async visitHistory(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
@@ -245,6 +280,60 @@ export class CustomersController {
       actor.companyId,
       id,
     );
+  }
+
+  @Get("visits/recent")
+  async recentVisits(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT v.id,v."customerId",v."recordedByName",v."visitAt",v."contactName",
+              v.purpose,v.outcome,v.facts,v."nextAction",v."nextActionAt",v."createdAt",
+              c.name AS "customerName",c."tradeName" AS "customerTradeName"
+         FROM "CustomerVisit" v
+         JOIN "Customer" c ON c.id=v."customerId" AND c."companyId"=v."companyId"
+        WHERE v."companyId"=$1
+        ORDER BY v."visitAt" DESC,v."createdAt" DESC
+        LIMIT 300`,
+      actor.companyId,
+    );
+  }
+
+  @Post(":id/visits")
+  async createVisit(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId, active: true },
+      select: { id: true },
+    });
+    if (!customer) {
+      throw new NotFoundException("Cliente ativo não encontrado.");
+    }
+
+    const input = parseCustomerVisitInput(body);
+    const visitId = randomUUID();
+    await this.db.$executeRawUnsafe(
+      `INSERT INTO "CustomerVisit"
+        (id,"companyId","customerId","recordedByUserId","recordedByName",
+         "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
+      visitId,
+      actor.companyId,
+      id,
+      actor.id ?? null,
+      actor.name,
+      input.visitAt,
+      input.contactName,
+      input.purpose,
+      input.outcome,
+      input.facts,
+      input.nextAction,
+      input.nextActionAt,
+    );
+    return { id: visitId, ok: true };
   }
 
   @Post()
@@ -342,7 +431,8 @@ export class CustomersController {
     const actor = await this.actor(request);
     const customer = (
       await this.db.$queryRawUnsafe<any[]>(
-        `SELECT id, "companyId", "creditStatus", "creditLimit", "paymentTerms" FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
+        `SELECT id,name,"companyId","creditStatus","creditLimit","paymentTerms"
+           FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
         id,
         actor.companyId,
       )
@@ -397,13 +487,14 @@ export class CustomersController {
       );
 
     const keepsCurrentApproval = customer.creditStatus === "APPROVED";
+    const requestEventId = randomUUID();
     await this.db.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(
         `INSERT INTO "CustomerCreditEvent"
           (id, "companyId", "customerId", "eventType", "requestedLimit", "requestedTerms", "monthlyVolume", rationale,
            "actorId", "actorName", "actorRole", "createdAt")
          VALUES ($1,$2,$3,'REQUEST',$4,$5,$6,$7,$8,$9,$10,NOW())`,
-        randomUUID(),
+        requestEventId,
         actor.companyId,
         id,
         requestedLimit,
@@ -420,6 +511,22 @@ export class CustomersController {
             WHERE id=$1 AND "companyId"=$2`,
           id,
           actor.companyId,
+        );
+      }
+      const notificationMessage = `${actor.name} solicitou ${requestedLimit.toLocaleString(
+        "pt-BR",
+        { style: "currency", currency: "BRL" },
+      )} de crédito para ${customer.name}, na condição ${requestedTerms}.`;
+      for (const targetRole of ["ADMIN", "EXECUTIVE"]) {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "OperationalNotification"
+            (id,"companyId",type,title,message,"targetRole","createdAt")
+           VALUES ($1,$2,$3,'Crédito aguardando decisão',$4,$5,NOW())`,
+          randomUUID(),
+          actor.companyId,
+          `CREDIT_REQUEST:${id}:${targetRole}:${requestEventId}`,
+          notificationMessage,
+          targetRole,
         );
       }
     });
@@ -582,9 +689,9 @@ export class CustomersController {
     @Body() body: Record<string, any>,
   ) {
     const actor = await this.actor(request);
-    if (!["ADMIN", "EXECUTIVE", "FINANCE"].includes(actor.role)) {
+    if (!isDesignatedTermCreditApprover(actor)) {
       throw new UnauthorizedException(
-        "A análise de crédito é restrita à administração/financeiro.",
+        "Somente José ou Suzi podem aprovar ou rejeitar crédito.",
       );
     }
     const status = String(body.status ?? "").toUpperCase();
@@ -597,6 +704,7 @@ export class CustomersController {
     const notes = String(body.notes ?? "").trim() || null;
 
     let updated: any;
+    const decisionEventId = randomUUID();
     await this.db.$transaction(async (tx) => {
       const rows = await tx.$queryRawUnsafe<any[]>(
         `UPDATE "Customer" SET "creditStatus"=$3, "creditLimit"=$4, "creditNotes"=$5,
@@ -618,7 +726,7 @@ export class CustomersController {
           (id, "companyId", "customerId", "eventType", "decisionStatus", "decidedLimit", "decisionTerms", notes,
            "actorId", "actorName", "actorRole", "createdAt")
          VALUES ($1,$2,$3,'DECISION',$4,$5,$6,$7,$8,$9,$10,NOW())`,
-        randomUUID(),
+        decisionEventId,
         actor.companyId,
         id,
         status,
@@ -628,6 +736,21 @@ export class CustomersController {
         actor.id ?? null,
         actor.name,
         actor.role ?? null,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "OperationalNotification"
+          (id,"companyId",type,title,message,"targetRole","createdAt")
+         VALUES ($1,$2,$3,$4,$5,'SALES',NOW())`,
+        randomUUID(),
+        actor.companyId,
+        `CREDIT_DECISION:${id}:${decisionEventId}`,
+        status === "APPROVED"
+          ? "Crédito aprovado"
+          : "Decisão de crédito registrada",
+        `${actor.name} definiu o crédito de ${updated.name} como ${status === "APPROVED" ? "aprovado" : status === "REJECTED" ? "reprovado" : "em análise"}, com limite de ${limit.toLocaleString(
+          "pt-BR",
+          { style: "currency", currency: "BRL" },
+        )}.`,
       );
     });
 

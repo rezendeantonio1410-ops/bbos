@@ -32,6 +32,11 @@ const commercial: Journey = {
   label: "Ciclo da venda",
   steps: [
     { label: "Cliente", href: "/clientes", match: ["/clientes"] },
+    {
+      label: "Atendimento",
+      href: "/atendimento",
+      match: ["/atendimento"],
+    },
     { label: "Preço / crédito", href: "/commerce", match: ["/commerce"] },
     { label: "Pedido", href: "/pedidos", match: ["/pedidos"] },
     { label: "Estoque", href: "/produtos", match: ["/produtos"] },
@@ -75,9 +80,14 @@ function journeyForPath(pathname: string): Journey | null {
   )
     return operational;
   if (
-    ["/clientes", "/pedidos", "/vendas", "/commerce", "/expedicao"].some(
-      (prefix) => pathname.startsWith(prefix),
-    )
+    [
+      "/clientes",
+      "/atendimento",
+      "/pedidos",
+      "/vendas",
+      "/commerce",
+      "/expedicao",
+    ].some((prefix) => pathname.startsWith(prefix))
   )
     return commercial;
   if (

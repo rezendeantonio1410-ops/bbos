@@ -9,6 +9,7 @@ import { CustomerNotificationService } from "./customer-notification.service";
 import { FiscalInboundService } from "./fiscal-inbound.service";
 import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
 import { MobileNotificationService } from "./mobile-notification.service";
+import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
 
 @Injectable()
 export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -22,6 +23,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly fiscalInbound: FiscalInboundService,
     private readonly mercadoLivre: MercadoLivreService,
     private readonly mobileNotifications: MobileNotificationService,
+    private readonly salesReceivableAlerts: SalesReceivableAlertService,
   ) {}
 
   onModuleInit() {
@@ -46,6 +48,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
       await this.notifications.processNext();
       await this.fiscalInbound.syncConfiguredCompanies();
       await this.mercadoLivre.syncConnectedCompanies();
+      await this.salesReceivableAlerts.sync();
       await this.mobileNotifications.processNext();
     } catch (error) {
       this.logger.error(error instanceof Error ? error.message : String(error));

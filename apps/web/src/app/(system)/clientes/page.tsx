@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import {
   brazilMobileDigits,
   formatBrazilMobile,
   normalizeCustomerPhone,
   MOBILE_ERROR,
 } from "@bbos/shared";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BadgeDollarSign,
@@ -25,6 +26,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
 
 type Health = {
   health: "HEALTHY" | "INFO" | "ATTENTION" | "BLOCKED";
@@ -64,6 +66,7 @@ type Customer = {
   creditNotes?: string | null;
   creditReviewedAt?: string | null;
   creditReviewedBy?: string | null;
+  creditReviewPending?: boolean;
   fiscalReadiness?: {
     ready: boolean;
     issues: string[];
@@ -99,6 +102,27 @@ type CustomerVisit = {
   facts: string;
   nextAction?: string | null;
   nextActionAt?: string | null;
+};
+
+type CustomerSale = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  orderedAt: string;
+  totalAmount: string | number;
+  paymentType?: string | null;
+  paymentTermsSnapshot?: string | null;
+  paymentStatus?: string | null;
+  dueDate?: string | null;
+  openAmount?: string | number | null;
+  paymentDate?: string | null;
+  items: Array<{
+    productName: string;
+    sku: string;
+    quantity: number;
+    unitPrice: string | number;
+    totalAmount: string | number;
+  }>;
 };
 
 const segments = [
@@ -210,6 +234,25 @@ const visitOutcomeLabel: Record<string, string> = {
   SEM_INTERESSE: "Sem interesse agora",
   NAO_LOCALIZADO: "Contato não localizado",
 };
+const saleStatusLabel: Record<string, string> = {
+  DRAFT: "Rascunho",
+  CONFIRMED: "Confirmado",
+  RESERVED: "Reservado",
+  IN_PRODUCTION: "Em produção",
+  PICKING: "Separação",
+  READY_TO_SHIP: "Pronto",
+  INVOICED: "Faturado",
+  SHIPPED: "Expedido",
+  DELIVERED: "Entregue",
+  CANCELLED: "Cancelado",
+};
+const paymentStatusLabel: Record<string, string> = {
+  OPEN: "Em aberto",
+  PARTIAL: "Parcial",
+  PAID: "Pago",
+  OVERDUE: "Vencido",
+  CANCELLED: "Cancelado",
+};
 const money = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateTime = (value: string) =>
@@ -217,6 +260,17 @@ const dateTime = (value: string) =>
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+const dateOnly = (value: string) =>
+  new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(
+    new Date(value),
+  );
+const normalizedFirstName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)[0];
 const customerFormError = (form: typeof emptyCustomer) => {
   try {
     normalizeCustomerPhone(form.phone);
@@ -285,6 +339,10 @@ export default function CustomersPage() {
   const [visitCustomer, setVisitCustomer] = useState<Customer | null>(null);
   const [visitHistory, setVisitHistory] = useState<CustomerVisit[]>([]);
   const [visitHistoryLoading, setVisitHistoryLoading] = useState(false);
+  const [salesHistory, setSalesHistory] = useState<CustomerSale[]>([]);
+  const [salesHistoryLoading, setSalesHistoryLoading] = useState(false);
+  const [canApproveCredit, setCanApproveCredit] = useState(false);
+  const historyAutoOpened = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -312,6 +370,17 @@ export default function CustomersPage() {
   };
   useEffect(() => {
     void load();
+  }, []);
+  useEffect(() => {
+    void fetchSessionIdentity(getApiRoot(), { retryDelaysMs: [0] })
+      .then((identity) => {
+        const isLeader = ["ADMIN", "EXECUTIVE"].includes(identity.role);
+        const firstName = normalizedFirstName(identity.name);
+        setCanApproveCredit(
+          isLeader && (firstName === "jose" || firstName === "suzi"),
+        );
+      })
+      .catch(() => setCanApproveCredit(false));
   }, []);
 
   const filtered = useMemo(() => {
@@ -519,7 +588,7 @@ export default function CustomersPage() {
     }
   };
 
-  const fetchHistory = async (customerId: string) => {
+  const fetchHistory = useCallback(async (customerId: string) => {
     setHistoryLoading(true);
     try {
       const response = await fetch(
@@ -532,53 +601,85 @@ export default function CustomersPage() {
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
-  const openCredit = (customer: Customer) => {
-    setError("");
-    setCreditCustomer(customer);
-    setCreditStatus(
-      customer.creditStatus === "NOT_ANALYZED"
-        ? "UNDER_REVIEW"
-        : customer.creditStatus,
-    );
-    setCreditLimit(String(customer.creditLimit ?? 0));
-    setCreditTerms(
-      customer.paymentTerms && customer.paymentTerms !== "À vista"
-        ? customer.paymentTerms
-        : "28 dias",
-    );
-    setCreditNotes(customer.creditNotes ?? "");
-    void fetchHistory(customer.id);
-  };
+  const openCredit = useCallback(
+    (customer: Customer) => {
+      setError("");
+      setCreditCustomer(customer);
+      setCreditStatus(
+        customer.creditStatus === "NOT_ANALYZED"
+          ? "UNDER_REVIEW"
+          : customer.creditStatus,
+      );
+      setCreditLimit(String(customer.creditLimit ?? 0));
+      setCreditTerms(
+        customer.paymentTerms && customer.paymentTerms !== "À vista"
+          ? customer.paymentTerms
+          : "28 dias",
+      );
+      setCreditNotes(customer.creditNotes ?? "");
+      void fetchHistory(customer.id);
+    },
+    [fetchHistory],
+  );
 
-  const openVisits = async (customer: Customer) => {
+  const openVisits = useCallback(async (customer: Customer) => {
     setError("");
     setVisitCustomer(customer);
     setVisitHistory([]);
+    setSalesHistory([]);
     setVisitHistoryLoading(true);
+    setSalesHistoryLoading(true);
     try {
-      const response = await fetch(`/api/customers/${customer.id}/visits`, {
-        credentials: "include",
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => []);
-      if (!response.ok) {
+      const [visitsResponse, salesResponse] = await Promise.all([
+        fetch(`/api/customers/${customer.id}/visits`, {
+          credentials: "include",
+          cache: "no-store",
+        }),
+        fetch(`/api/customers/${customer.id}/sales-history`, {
+          credentials: "include",
+          cache: "no-store",
+        }),
+      ]);
+      const [visitsPayload, salesPayload] = await Promise.all([
+        visitsResponse.json().catch(() => []),
+        salesResponse.json().catch(() => []),
+      ]);
+      if (!visitsResponse.ok || !salesResponse.ok) {
         throw new Error(
-          payload?.message ?? "Não foi possível carregar as visitas.",
+          visitsPayload?.message ??
+            salesPayload?.message ??
+            "Não foi possível carregar o histórico do cliente.",
         );
       }
-      setVisitHistory(payload);
+      setVisitHistory(visitsPayload);
+      setSalesHistory(salesPayload);
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível carregar as visitas.",
+          : "Não foi possível carregar o histórico do cliente.",
       );
     } finally {
       setVisitHistoryLoading(false);
+      setSalesHistoryLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (historyAutoOpened.current || customers.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const creditCustomerId = params.get("credito");
+    const historyCustomerId = params.get("cliente");
+    const customerId = creditCustomerId || historyCustomerId;
+    if (!customerId) return;
+    const customer = customers.find((item) => item.id === customerId);
+    if (!customer) return;
+    historyAutoOpened.current = true;
+    if (creditCustomerId) openCredit(customer);
+    else void openVisits(customer);
+  }, [customers, openCredit, openVisits]);
 
   const saveCredit = async () => {
     if (!creditCustomer) return;
@@ -619,6 +720,20 @@ export default function CustomersPage() {
 
   const attention = customers.filter((c) =>
     ["ATTENTION", "BLOCKED"].includes(c.financialHealth?.health),
+  ).length;
+  const effectiveSales = salesHistory.filter(
+    (sale) => sale.status !== "CANCELLED",
+  );
+  const salesTotal = effectiveSales.reduce(
+    (total, sale) => total + Number(sale.totalAmount ?? 0),
+    0,
+  );
+  const overdueSales = effectiveSales.filter(
+    (sale) =>
+      Boolean(sale.dueDate) &&
+      Number(sale.openAmount ?? 0) > 0 &&
+      !["PAID", "CANCELLED"].includes(String(sale.paymentStatus ?? "")) &&
+      new Date(sale.dueDate!).getTime() < Date.now(),
   ).length;
 
   return (
@@ -669,7 +784,9 @@ export default function CustomersPage() {
         <Kpi
           label="Crédito em análise"
           value={
-            customers.filter((c) => c.creditStatus === "UNDER_REVIEW").length
+            customers.filter(
+              (c) => c.creditReviewPending || c.creditStatus === "UNDER_REVIEW",
+            ).length
           }
           tone="violet"
         />
@@ -717,6 +834,7 @@ export default function CustomersPage() {
                 onRequest={() => openRequest(customer)}
                 onCredit={() => openCredit(customer)}
                 onVisits={() => void openVisits(customer)}
+                canApproveCredit={canApproveCredit}
               />
             ))}
           </div>
@@ -1509,10 +1627,14 @@ export default function CustomersPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[.18em] text-violet-700">
-                  Etapa 2 · Decisão administrativa
+                  {canApproveCredit
+                    ? "Etapa 2 · Decisão administrativa"
+                    : "Crédito · Consulta"}
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold">
-                  Análise de crédito
+                  {canApproveCredit
+                    ? "Análise de crédito"
+                    : "Histórico de crédito"}
                 </h2>
                 <p className="mt-1 text-sm text-stone-500">
                   {creditCustomer.tradeName || creditCustomer.name}
@@ -1530,64 +1652,79 @@ export default function CustomersPage() {
               history={creditHistory}
               loading={historyLoading}
             />
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Field label="Situação">
-                <select
-                  value={creditStatus}
-                  onChange={(e) =>
-                    setCreditStatus(e.target.value as Customer["creditStatus"])
-                  }
+            {canApproveCredit ? (
+              <>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <Field label="Situação">
+                    <select
+                      value={creditStatus}
+                      onChange={(e) =>
+                        setCreditStatus(
+                          e.target.value as Customer["creditStatus"],
+                        )
+                      }
+                    >
+                      <option value="UNDER_REVIEW">Em análise</option>
+                      <option value="APPROVED">Aprovado</option>
+                      <option value="REJECTED">Reprovado</option>
+                      <option value="NOT_ANALYZED">Não analisado</option>
+                    </select>
+                  </Field>
+                  <Field label="Limite aprovado (R$)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Condição aprovada" wide>
+                    <select
+                      value={creditTerms}
+                      onChange={(e) => setCreditTerms(e.target.value)}
+                    >
+                      {paymentOptions.map((p) => (
+                        <option key={p}>{p}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Observação da decisão" wide>
+                    <textarea
+                      rows={4}
+                      value={creditNotes}
+                      onChange={(e) => setCreditNotes(e.target.value)}
+                      placeholder="Documentos analisados, justificativa, condição, ressalvas..."
+                    />
+                  </Field>
+                </div>
+                <p className="mt-4 text-xs leading-5 text-stone-500">
+                  A decisão não apaga a solicitação anterior. Cada nova revisão
+                  permanece registrada na trilha de crédito.
+                </p>
+                {error && (
+                  <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
+                <button
+                  disabled={saving}
+                  onClick={() => void saveCredit()}
+                  className="mt-5 w-full rounded-xl bg-stone-950 py-3 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  <option value="UNDER_REVIEW">Em análise</option>
-                  <option value="APPROVED">Aprovado</option>
-                  <option value="REJECTED">Reprovado</option>
-                  <option value="NOT_ANALYZED">Não analisado</option>
-                </select>
-              </Field>
-              <Field label="Limite aprovado (R$)">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={creditLimit}
-                  onChange={(e) => setCreditLimit(e.target.value)}
-                />
-              </Field>
-              <Field label="Condição aprovada" wide>
-                <select
-                  value={creditTerms}
-                  onChange={(e) => setCreditTerms(e.target.value)}
-                >
-                  {paymentOptions.map((p) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Observação da decisão" wide>
-                <textarea
-                  rows={4}
-                  value={creditNotes}
-                  onChange={(e) => setCreditNotes(e.target.value)}
-                  placeholder="Documentos analisados, justificativa, condição, ressalvas..."
-                />
-              </Field>
-            </div>
-            <p className="mt-4 text-xs leading-5 text-stone-500">
-              A decisão não apaga a solicitação anterior. Cada nova revisão
-              permanece registrada na trilha de crédito.
-            </p>
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-                {error}
+                  {saving ? "Salvando…" : "Salvar decisão auditável"}
+                </button>
+              </>
+            ) : (
+              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                <p className="font-semibold">Decisão protegida</p>
+                <p className="mt-1 text-xs leading-5 text-blue-800">
+                  O vendedor pode solicitar crédito e acompanhar o resultado.
+                  Somente José ou Suzi podem aprovar, reprovar ou alterar o
+                  limite.
+                </p>
               </div>
             )}
-            <button
-              disabled={saving}
-              onClick={() => void saveCredit()}
-              className="mt-5 w-full rounded-xl bg-stone-950 py-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {saving ? "Salvando…" : "Salvar decisão auditável"}
-            </button>
             <CreditTimeline history={creditHistory} />
           </div>
         </div>
@@ -1602,7 +1739,7 @@ export default function CustomersPage() {
                   Relacionamento comercial
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold">
-                  Histórico de visitas
+                  Histórico comercial
                 </h2>
                 <p className="mt-1 text-sm text-stone-500">
                   {visitCustomer.tradeName || visitCustomer.name}
@@ -1616,61 +1753,191 @@ export default function CustomersPage() {
               </button>
             </div>
 
-            {visitHistoryLoading ? (
-              <p className="mt-6 rounded-2xl bg-stone-50 p-5 text-sm text-stone-500">
-                Carregando visitas…
-              </p>
-            ) : visitHistory.length === 0 ? (
-              <div className="mt-6 rounded-2xl border border-dashed p-8 text-center">
-                <History className="mx-auto text-stone-300" />
-                <p className="mt-3 font-semibold">Nenhuma visita registrada</p>
-                <p className="mt-1 text-sm text-stone-500">
-                  O histórico aparecerá aqui quando o vendedor registrar a
-                  primeira visita no aplicativo.
+            <section className="mt-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">Vendas e pagamentos</h3>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Produtos comprados, valores, vencimentos e situação de cada
+                    pedido.
+                  </p>
+                </div>
+                <Link
+                  href="/pedidos"
+                  className="rounded-xl border px-3 py-2 text-xs font-semibold"
+                >
+                  Todos os pedidos
+                </Link>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-stone-100 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-stone-500">
+                    Pedidos
+                  </p>
+                  <p className="mt-1 font-semibold">{effectiveSales.length}</p>
+                </div>
+                <div className="rounded-xl bg-stone-100 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-stone-500">
+                    Vendas
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {money(salesTotal)}
+                  </p>
+                </div>
+                <div
+                  className={`rounded-xl p-3 ${overdueSales ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}
+                >
+                  <p className="text-[10px] uppercase tracking-wider opacity-70">
+                    Em atraso
+                  </p>
+                  <p className="mt-1 font-semibold">{overdueSales}</p>
+                </div>
+              </div>
+
+              {salesHistoryLoading ? (
+                <p className="mt-3 rounded-2xl bg-stone-50 p-5 text-sm text-stone-500">
+                  Carregando vendas…
                 </p>
-              </div>
-            ) : (
-              <div className="mt-6 space-y-3">
-                {visitHistory.map((visit) => (
-                  <article
-                    key={visit.id}
-                    className="rounded-2xl border border-stone-200 p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold">
-                          {visitPurposeLabel[visit.purpose] || visit.purpose} ·{" "}
-                          {visitOutcomeLabel[visit.outcome] || visit.outcome}
-                        </p>
-                        <p className="mt-1 text-xs text-stone-500">
-                          {dateTime(visit.visitAt)} · {visit.recordedByName}
-                          {visit.partnerName &&
-                          visit.partnerName !== visit.recordedByName
-                            ? ` (${visit.partnerName})`
+              ) : salesHistory.length === 0 ? (
+                <p className="mt-3 rounded-2xl border border-dashed p-5 text-center text-sm text-stone-500">
+                  Este cliente ainda não possui vendas registradas.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {salesHistory.map((sale) => {
+                    const overdue =
+                      Boolean(sale.dueDate) &&
+                      Number(sale.openAmount ?? 0) > 0 &&
+                      !["PAID", "CANCELLED"].includes(
+                        String(sale.paymentStatus ?? ""),
+                      ) &&
+                      new Date(sale.dueDate!).getTime() < Date.now();
+                    return (
+                      <article
+                        key={sale.id}
+                        className={`rounded-2xl border p-4 ${overdue ? "border-red-200 bg-red-50/60" : "border-stone-200"}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold">
+                              {sale.orderNumber}
+                            </p>
+                            <p className="mt-1 text-xs text-stone-500">
+                              {dateOnly(sale.orderedAt)} ·{" "}
+                              {saleStatusLabel[sale.status] || sale.status}
+                            </p>
+                          </div>
+                          <p className="font-semibold">
+                            {money(Number(sale.totalAmount ?? 0))}
+                          </p>
+                        </div>
+                        {sale.items.length > 0 && (
+                          <div className="mt-3 space-y-1 text-xs text-stone-600">
+                            {sale.items.map((item) => (
+                              <p key={`${sale.id}-${item.sku}`}>
+                                {item.quantity} × {item.productName}
+                                <span className="text-stone-400">
+                                  {" "}
+                                  · {item.sku}
+                                </span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        {(sale.paymentStatus || sale.dueDate) && (
+                          <div
+                            className={`mt-3 rounded-xl p-3 text-xs ${overdue ? "bg-red-100 text-red-900" : "bg-stone-100 text-stone-700"}`}
+                          >
+                            <strong>
+                              {overdue
+                                ? "Pagamento vencido"
+                                : paymentStatusLabel[
+                                    String(sale.paymentStatus ?? "")
+                                  ] || "Pagamento"}
+                            </strong>
+                            {sale.dueDate
+                              ? ` · vencimento ${dateOnly(sale.dueDate)}`
+                              : ""}
+                            {Number(sale.openAmount ?? 0) > 0
+                              ? ` · saldo ${money(Number(sale.openAmount))}`
+                              : ""}
+                            {sale.paymentDate
+                              ? ` · pago em ${dateOnly(sale.paymentDate)}`
+                              : ""}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-7 border-t border-stone-200 pt-6">
+              <h3 className="font-semibold">Visitas e atendimentos</h3>
+              <p className="mt-1 text-xs text-stone-500">
+                Relatos registrados pelo vendedor e próximas ações combinadas.
+              </p>
+
+              {visitHistoryLoading ? (
+                <p className="mt-6 rounded-2xl bg-stone-50 p-5 text-sm text-stone-500">
+                  Carregando visitas…
+                </p>
+              ) : visitHistory.length === 0 ? (
+                <div className="mt-6 rounded-2xl border border-dashed p-8 text-center">
+                  <History className="mx-auto text-stone-300" />
+                  <p className="mt-3 font-semibold">
+                    Nenhuma visita registrada
+                  </p>
+                  <p className="mt-1 text-sm text-stone-500">
+                    O histórico aparecerá aqui quando o vendedor registrar a
+                    primeira visita no aplicativo.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-3">
+                  {visitHistory.map((visit) => (
+                    <article
+                      key={visit.id}
+                      className="rounded-2xl border border-stone-200 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold">
+                            {visitPurposeLabel[visit.purpose] || visit.purpose}{" "}
+                            ·{" "}
+                            {visitOutcomeLabel[visit.outcome] || visit.outcome}
+                          </p>
+                          <p className="mt-1 text-xs text-stone-500">
+                            {dateTime(visit.visitAt)} · {visit.recordedByName}
+                            {visit.partnerName &&
+                            visit.partnerName !== visit.recordedByName
+                              ? ` (${visit.partnerName})`
+                              : ""}
+                          </p>
+                        </div>
+                        {visit.contactName && (
+                          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-600">
+                            Contato: {visit.contactName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+                        {visit.facts}
+                      </p>
+                      {visit.nextAction && (
+                        <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
+                          <strong>Próxima ação:</strong> {visit.nextAction}
+                          {visit.nextActionAt
+                            ? ` · ${dateTime(visit.nextActionAt)}`
                             : ""}
-                        </p>
-                      </div>
-                      {visit.contactName && (
-                        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-600">
-                          Contato: {visit.contactName}
-                        </span>
+                        </div>
                       )}
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
-                      {visit.facts}
-                    </p>
-                    {visit.nextAction && (
-                      <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
-                        <strong>Próxima ação:</strong> {visit.nextAction}
-                        {visit.nextActionAt
-                          ? ` · ${dateTime(visit.nextActionAt)}`
-                          : ""}
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-            )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
           </aside>
         </div>
       )}
@@ -1684,12 +1951,14 @@ function CustomerRow({
   onRequest,
   onCredit,
   onVisits,
+  canApproveCredit,
 }: {
   customer: Customer;
   onEdit: () => void;
   onRequest: () => void;
   onCredit: () => void;
   onVisits: () => void;
+  canApproveCredit: boolean;
 }) {
   const h = customer.financialHealth;
   const style =
@@ -1778,6 +2047,11 @@ function CustomerRow({
                 Disponível {money(h.availableCredit)}
               </p>
             )}
+            {customer.creditReviewPending && (
+              <p className="text-[10px] font-semibold text-violet-700">
+                Revisão solicitada
+              </p>
+            )}
           </div>
           <button
             onClick={onEdit}
@@ -1789,24 +2063,33 @@ function CustomerRow({
             onClick={onVisits}
             className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
           >
-            <History size={14} /> Visitas
+            <History size={14} /> Histórico comercial
           </button>
-          {customer.creditStatus !== "UNDER_REVIEW" && (
-            <button
-              onClick={onRequest}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-            >
-              <Send size={14} /> Solicitar crédito
-            </button>
-          )}
+          <Link
+            href={`/atendimento?cliente=${encodeURIComponent(customer.id)}`}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+          >
+            <Plus size={14} /> Registrar visita
+          </Link>
+          {!customer.creditReviewPending &&
+            customer.creditStatus !== "UNDER_REVIEW" && (
+              <button
+                onClick={onRequest}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                <Send size={14} /> Solicitar crédito
+              </button>
+            )}
           <button
             onClick={onCredit}
             className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
           >
             <BadgeDollarSign size={15} />{" "}
-            {customer.creditStatus === "UNDER_REVIEW"
+            {(customer.creditReviewPending ||
+              customer.creditStatus === "UNDER_REVIEW") &&
+            canApproveCredit
               ? "Analisar"
-              : "Histórico"}
+              : "Crédito"}
             <ChevronRight size={14} />
           </button>
         </div>

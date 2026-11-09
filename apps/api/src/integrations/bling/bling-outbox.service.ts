@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@bbos/database";
+import { prisma, UserRole } from "@bbos/database";
 import { createHash } from "node:crypto";
 import { BlingService } from "./bling.service";
 import { StorefrontLifecycleService } from "../../storefront-lifecycle.service";
@@ -19,6 +19,8 @@ import {
 import type { ExportFiscalRoute } from "../../export-fiscal-route";
 import { internationalSampleFiscalValues } from "../../international-sample-policy";
 import { ensureSalesOrderReceivable } from "../../sales-order-receivable";
+import { MobileNotificationService } from "../../mobile-notification.service";
+import { reexpeditionCfopMatches } from "../../reexpedition-fiscal-route";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -77,6 +79,7 @@ export class BlingOutboxService {
     private readonly shipment: MelhorEnvioShipmentService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
     private readonly blingCatalogSync: BlingCatalogSyncService,
+    private readonly mobileNotifications: MobileNotificationService,
   ) {}
 
   private async ensureSampleNatureOnSalesOrder(
@@ -1733,6 +1736,425 @@ export class BlingOutboxService {
     };
   }
 
+  private reexpeditionRemoteStatus(note: any, sendResult?: any) {
+    const key = String(note?.chaveAcesso ?? note?.chave ?? "").replace(
+      /\D/g,
+      "",
+    );
+    const text = String(
+      note?.situacao?.nome ??
+        note?.situacao?.descricao ??
+        note?.situacao ??
+        "",
+    ).toLowerCase();
+    const protocol = String(
+      note?.protocolo ??
+        note?.protocoloAutorizacao ??
+        note?.numeroProtocolo ??
+        "",
+    ).trim();
+    const authorizedDocument = String(
+      note?.linkDanfe ?? note?.linkPDF ?? note?.xml ?? note?.linkXml ?? "",
+    ).trim();
+    const sefaz = this.sefazAuthorization(sendResult);
+    if (
+      sefaz.status === "AUTHORIZED" ||
+      (key.length === 44 &&
+        (protocol ||
+          authorizedDocument ||
+          text.includes("autoriz") ||
+          text.includes("danfe")))
+    )
+      return "AUTHORIZED" as const;
+    if (
+      sefaz.status === "REJECTED" ||
+      text.includes("rejeit") ||
+      text.includes("deneg") ||
+      text.includes("bloque")
+    )
+      return "REJECTED" as const;
+    return "SENT" as const;
+  }
+
+  private reexpeditionContact(order: any, originalNote: any, corrected: boolean) {
+    const original = originalNote?.contato ?? originalNote?.destinatario ?? {};
+    const document = String(order.customerTaxId ?? "").replace(/\D/g, "");
+    const address = corrected ? order.addressSnapshot ?? {} : {};
+    const stateRegistrationType = String(
+      order.customerStateRegistrationType ?? "NON_TAXPAYER",
+    );
+    return {
+      nome:
+        document.length === 14
+          ? order.customerLegalName || order.customerName
+          : order.customerName,
+      tipoPessoa: document.length === 14 ? "J" : "F",
+      numeroDocumento: document,
+      contribuinte: this.blingStateRegistrationIndicator({
+        stateRegistrationType,
+      }),
+      ie:
+        stateRegistrationType === "NUMBER"
+          ? order.customerStateRegistration || undefined
+          : stateRegistrationType === "EXEMPT"
+            ? "ISENTO"
+            : undefined,
+      telefone: order.customerPhone || original?.telefone || undefined,
+      email: order.customerEmail || original?.email || undefined,
+      endereco: {
+        endereco:
+          address.address || original?.endereco?.endereco || order.customerAddress,
+        numero:
+          address.number || original?.endereco?.numero || order.customerAddressNumber,
+        complemento:
+          address.complement ||
+          original?.endereco?.complemento ||
+          order.customerAddressComplement ||
+          undefined,
+        bairro:
+          address.district || original?.endereco?.bairro || order.customerDistrict,
+        cep: String(
+          address.postal_code ||
+            original?.endereco?.cep ||
+            order.customerPostalCode ||
+            "",
+        ).replace(/\D/g, ""),
+        municipio:
+          address.city || original?.endereco?.municipio || order.customerCity,
+        uf:
+          address.state_abbr || original?.endereco?.uf || order.customerState,
+      },
+    };
+  }
+
+  private async ensureReexpeditionFiscalDocument(
+    row: any,
+    originalNote: any,
+    kind: "RETURN" | "OUTBOUND",
+    natureOperationId: string,
+    referencedAccessKey: string,
+  ) {
+    const column =
+      kind === "RETURN"
+        ? "returnFiscalDocumentId"
+        : "replacementFiscalDocumentId";
+    const stage =
+      kind === "RETURN"
+        ? "RETURN_FISCAL_PENDING"
+        : "OUTBOUND_FISCAL_PENDING";
+    const authorizedStage =
+      kind === "RETURN"
+        ? "RETURN_FISCAL_AUTHORIZED"
+        : "OUTBOUND_FISCAL_AUTHORIZED";
+    let fiscal = row[column]
+      ? (
+          await this.database.$queryRawUnsafe<any[]>(
+            `SELECT * FROM "FiscalDocument" WHERE id=$1 LIMIT 1`,
+            row[column],
+          )
+        )[0]
+      : null;
+    let note: any = null;
+    if (fiscal?.externalId) {
+      note = await this.bling
+        .request(
+          row.companyId,
+          `/nfe/${encodeURIComponent(fiscal.externalId)}`,
+          { method: "GET" },
+        )
+        .then((result) => result?.data ?? result ?? {})
+        .catch(() => null);
+      const remoteStatus = note
+        ? this.reexpeditionRemoteStatus(
+            note,
+            fiscal.payloadSnapshot?.blingSend,
+          )
+        : "SENT";
+      if (note && remoteStatus === "REJECTED") {
+        throw new Error(
+          `SEFAZ rejeitou a NF-e de ${kind === "RETURN" ? "devolução" : "reexpedição"}: ${fiscal.payloadSnapshot?.sefazMessage ?? "revise a pendência fiscal indicada no Bling"}.`,
+        );
+      }
+      if (note && remoteStatus === "AUTHORIZED") {
+        const accessKey = String(
+          note?.chaveAcesso ?? fiscal.accessKey ?? "",
+        ).replace(/\D/g, "");
+        await this.database.$transaction(async (transaction) => {
+          await transaction.$executeRawUnsafe(
+            `UPDATE "FiscalDocument"
+                SET status='AUTHORIZED',number=COALESCE($2,number),series=COALESCE($3,series),
+                    "accessKey"=COALESCE($4,"accessKey"),
+                    "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $5::jsonb,
+                    "updatedAt"=NOW() WHERE id=$1`,
+            fiscal.id,
+            note?.numero == null ? null : String(note.numero),
+            note?.serie == null ? null : String(note.serie),
+            accessKey || null,
+            JSON.stringify({ blingNfe: note, reconciledAt: new Date().toISOString() }),
+          );
+          await transaction.$executeRawUnsafe(
+            `UPDATE "SalesOrderReexpedition"
+                SET status=$2,"lastError"=NULL,"updatedAt"=NOW() WHERE id=$1`,
+            row.id,
+            authorizedStage,
+          );
+        });
+        return { ...fiscal, status: "AUTHORIZED", accessKey };
+      }
+    }
+
+    if (!fiscal) {
+      const sourceItems = Array.isArray(originalNote?.itens)
+        ? originalNote.itens.map((item: any) =>
+            this.sampleInvoiceItemPayload(item),
+          )
+        : [];
+      if (!sourceItems.length || sourceItems.some((item: any) => !item.codigo))
+        throw new Error(
+          "Reexpedição bloqueada: a NF-e original não possui itens completos para gerar os documentos vinculados.",
+        );
+      const payload = {
+        tipo: kind === "RETURN" ? 0 : 1,
+        numero: "",
+        dataOperacao: currentBlingDateTime(),
+        contato: this.reexpeditionContact(row, originalNote, kind === "OUTBOUND"),
+        naturezaOperacao: { id: Number(natureOperationId) },
+        finalidade: kind === "RETURN" ? 4 : 1,
+        documentosReferenciados: [
+          { modelo: "55", chaveAcesso: referencedAccessKey },
+        ],
+        observacoes:
+          kind === "RETURN"
+            ? `DEVOLUÇÃO DE VENDA POR RETORNO DA TRANSPORTADORA | NF-e original ${row.originalFiscalNumber ?? ""} | BBOS: ${row.code} | Reexpedição ${row.attemptNumber}`
+            : `NOVA SAÍDA PARA REEXPEDIÇÃO SEM NOVA COBRANÇA | BBOS: ${row.code} | Reexpedição ${row.attemptNumber}`,
+        itens: sourceItems,
+        parcelas: [],
+      };
+      const created = await this.bling.request(row.companyId, "/nfe", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const externalId = String(
+        created?.data?.id ??
+          created?.data?.idNotaFiscal ??
+          created?.id ??
+          created?.idNotaFiscal ??
+          "",
+      );
+      if (!externalId)
+        throw new Error("Bling não retornou o ID da NF-e de reexpedição.");
+      const fiscalId = `fiscal-${stableId(`${row.companyId}:${row.id}:${kind}:${externalId}`)}`;
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO "FiscalDocument"
+            (id,"companyId",direction,"documentType",status,"customerId","salesOrderId",
+             "externalProvider","externalId","totalAmount","payloadSnapshot","createdAt","updatedAt")
+           VALUES ($1,$2,$3,'NFE','SENT',$4,$5,'BLING',$6,$7,$8::jsonb,NOW(),NOW())`,
+          fiscalId,
+          row.companyId,
+          kind === "RETURN" ? "INBOUND" : "OUTBOUND",
+          row.customerId,
+          row.salesOrderId,
+          externalId,
+          row.totalAmount,
+          JSON.stringify({
+            create: created,
+            reexpeditionId: row.id,
+            reexpeditionKind: kind,
+            referencedAccessKey,
+            noCommercialReceivable: true,
+            noBbosInventoryMovement: true,
+          }),
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderReexpedition"
+              SET "${column}"=$2,status=$3,"lastError"=NULL,"updatedAt"=NOW()
+            WHERE id=$1`,
+          row.id,
+          fiscalId,
+          stage,
+        );
+      });
+      fiscal = { id: fiscalId, externalId, status: "SENT", payloadSnapshot: {} };
+      note = null;
+    }
+
+    note =
+      note ??
+      (await this.bling
+        .request(
+          row.companyId,
+          `/nfe/${encodeURIComponent(fiscal.externalId)}`,
+          { method: "GET" },
+        )
+        .then((result) => result?.data ?? result ?? {}));
+    if (!reexpeditionCfopMatches(note?.itens, kind)) {
+      throw new Error(
+        kind === "RETURN"
+          ? "Reexpedição bloqueada antes da SEFAZ: a natureza de devolução não gerou CFOP de entrada (1.xxx ou 2.xxx)."
+          : "Reexpedição bloqueada antes da SEFAZ: a natureza de nova saída não gerou CFOP de saída (5.xxx ou 6.xxx).",
+      );
+    }
+    const sendResult = await this.bling.request(
+      row.companyId,
+      `/nfe/${encodeURIComponent(fiscal.externalId)}/enviar?enviarEmail=false`,
+      { method: "POST" },
+    );
+    const refreshed = await this.bling
+      .request(
+        row.companyId,
+        `/nfe/${encodeURIComponent(fiscal.externalId)}`,
+        { method: "GET" },
+      )
+      .then((result) => result?.data ?? result ?? note)
+      .catch(() => note);
+    const status = this.reexpeditionRemoteStatus(refreshed, sendResult);
+    const sefaz = this.sefazAuthorization(sendResult);
+    const accessKey = String(refreshed?.chaveAcesso ?? "").replace(/\D/g, "");
+    await this.database.$executeRawUnsafe(
+      `UPDATE "FiscalDocument"
+          SET status=$2,number=COALESCE($3,number),series=COALESCE($4,series),
+              "accessKey"=COALESCE($5,"accessKey"),
+              "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $6::jsonb,
+              "updatedAt"=NOW() WHERE id=$1`,
+      fiscal.id,
+      status,
+      refreshed?.numero == null ? null : String(refreshed.numero),
+      refreshed?.serie == null ? null : String(refreshed.serie),
+      accessKey || null,
+      JSON.stringify({
+        blingSend: sendResult,
+        blingNfe: refreshed,
+        authorizationRequestedAt: new Date().toISOString(),
+        sefazStatusCode: sefaz.code,
+        sefazMessage: sefaz.message,
+      }),
+    );
+    if (status === "REJECTED")
+      throw new Error(
+        `SEFAZ rejeitou a NF-e de ${kind === "RETURN" ? "devolução" : "reexpedição"}: ${sefaz.message ?? "revise a configuração fiscal"}.`,
+      );
+    if (status !== "AUTHORIZED" || accessKey.length !== 44)
+      throw new Error(
+        `NF-e de ${kind === "RETURN" ? "devolução" : "reexpedição"} enviada à SEFAZ e aguardando autorização.`,
+      );
+    await this.database.$executeRawUnsafe(
+      `UPDATE "SalesOrderReexpedition"
+          SET status=$2,"lastError"=NULL,"updatedAt"=NOW() WHERE id=$1`,
+      row.id,
+      authorizedStage,
+    );
+    return { ...fiscal, status, accessKey };
+  }
+
+  private async processSalesOrderReexpedition(outbox: any) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT re.*,so.code,so."totalAmount",so."customerId",c.name AS "customerName",
+              c."legalName" AS "customerLegalName",c."taxId" AS "customerTaxId",
+              c.email AS "customerEmail",c.phone AS "customerPhone",
+              c.address AS "customerAddress",c."addressNumber" AS "customerAddressNumber",
+              c."addressComplement" AS "customerAddressComplement",c.district AS "customerDistrict",
+              c.city AS "customerCity",c.state AS "customerState",c."postalCode" AS "customerPostalCode",
+              c."stateRegistration" AS "customerStateRegistration",
+              c."stateRegistrationType" AS "customerStateRegistrationType",
+              original."externalId" AS "originalFiscalExternalId",
+              original."accessKey" AS "originalFiscalAccessKey",original.number AS "originalFiscalNumber"
+         FROM "SalesOrderReexpedition" re
+         JOIN "SalesOrder" so ON so.id=re."salesOrderId"
+         JOIN "Customer" c ON c.id=so."customerId"
+         JOIN "FiscalDocument" original ON original.id=re."originalFiscalDocumentId"
+        WHERE re.id=$1 AND re."companyId"=$2 LIMIT 1`,
+      outbox.aggregateId,
+      outbox.companyId,
+    );
+    const row = rows[0];
+    if (!row) throw new Error("Reexpedição da fila não foi encontrada.");
+    if (row.status === "LABEL_CREATED") return { idempotent: true, status: row.status };
+
+    try {
+      const route = await this.blingCatalogSync.reexpeditionFiscalRoute(
+        row.companyId,
+      );
+      if (!/^\d{44}$/.test(String(row.originalFiscalAccessKey ?? "")))
+        throw new Error(
+          "Reexpedição bloqueada: a NF-e original autorizada não possui chave de acesso válida.",
+        );
+      const originalResult = await this.bling.request(
+        row.companyId,
+        `/nfe/${encodeURIComponent(row.originalFiscalExternalId)}`,
+        { method: "GET" },
+      );
+      const originalNote = originalResult?.data ?? originalResult ?? {};
+      const returned = await this.ensureReexpeditionFiscalDocument(
+        row,
+        originalNote,
+        "RETURN",
+        route.returnNatureOperationId,
+        row.originalFiscalAccessKey,
+      );
+      row.returnFiscalDocumentId = returned.id;
+      const outbound = await this.ensureReexpeditionFiscalDocument(
+        row,
+        originalNote,
+        "OUTBOUND",
+        route.outboundNatureOperationId,
+        returned.accessKey,
+      );
+      row.replacementFiscalDocumentId = outbound.id;
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrderReexpedition"
+            SET status='LABEL_PENDING',"lastError"=NULL,"updatedAt"=NOW() WHERE id=$1`,
+        row.id,
+      );
+      const shipment = await this.shipment.createReexpeditionLabel(
+        row.id,
+        outbound.accessKey,
+      );
+      await this.mobileNotifications.queueForRoles({
+        companyId: row.companyId,
+        roles: [UserRole.ADMIN, UserRole.EXECUTIVE],
+        idempotencyKey: `reexpedition-ready:${row.id}`,
+        type: "REEXPEDITION_READY",
+        title: "Reexpedição pronta",
+        message: `${row.code}: documentos fiscais e nova etiqueta emitidos. Pacote pronto para postagem.`,
+        href: "/pedidos",
+        entityType: "SALES_ORDER_REEXPEDITION",
+        entityId: row.id,
+      });
+      return { reexpeditionId: row.id, shipment };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const configurationRequired = /configura|natureza|validada uma vez/i.test(message);
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrderReexpedition"
+            SET status=CASE
+                  WHEN $2::boolean THEN 'CONFIGURATION_REQUIRED'
+                  WHEN status IN ('RETURN_FISCAL_PENDING','RETURN_FISCAL_AUTHORIZED',
+                                  'OUTBOUND_FISCAL_PENDING','OUTBOUND_FISCAL_AUTHORIZED','LABEL_PENDING')
+                    THEN status
+                  ELSE 'FAILED'
+                END,
+                "lastError"=$3,"updatedAt"=NOW()
+          WHERE id=$1`,
+        row.id,
+        configurationRequired,
+        message.slice(0, 2000),
+      );
+      await this.mobileNotifications.queueForRoles({
+        companyId: row.companyId,
+        roles: [UserRole.ADMIN, UserRole.EXECUTIVE],
+        idempotencyKey: `reexpedition-attention:${row.id}:${stableId(message)}`,
+        type: "REEXPEDITION_ATTENTION",
+        title: "Reexpedição exige atenção",
+        message: `${row.code}: ${message}`.slice(0, 500),
+        href: "/pedidos",
+        entityType: "SALES_ORDER_REEXPEDITION",
+        entityId: row.id,
+      });
+      throw error;
+    }
+  }
+
   private fiscalStatus(value: unknown) {
     const code = Number(
       typeof value === "object" && value !== null
@@ -1844,6 +2266,7 @@ export class BlingOutboxService {
          LEFT JOIN "SalesChannel" sc ON sc.id=so."salesChannelId"
         WHERE f."externalProvider"='BLING'
           AND f."externalId" IS NOT NULL
+          AND NOT (COALESCE(f."payloadSnapshot",'{}'::jsonb) ? 'reexpeditionId')
           AND (
             f.status='SENT'
             OR (
@@ -2377,6 +2800,11 @@ export class BlingOutboxService {
         row.aggregateType === "SALES_ORDER"
       ) {
         result = await this.processSalesOrderInvoice(row);
+      } else if (
+        row.eventType === "SALES_ORDER_REEXPEDITION_REQUESTED" &&
+        row.aggregateType === "SALES_ORDER_REEXPEDITION"
+      ) {
+        result = await this.processSalesOrderReexpedition(row);
       } else if (
         row.eventType === "FISCAL_DOCUMENT_READY" &&
         row.aggregateType === "FISCAL_DOCUMENT"
