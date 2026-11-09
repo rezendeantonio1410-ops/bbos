@@ -6,14 +6,19 @@ import { join } from "node:path";
 const root = join(__dirname, "../../..");
 const source = (path: string) => readFileSync(join(root, path), "utf8");
 
-test("customer acceptance reserves the order without packaging it", () => {
+test("customer acceptance attempts automatic packaging when roasted coffee is ready", () => {
   const approvals = source("apps/api/src/sales-order-approvals.controller.ts");
+  const orders = source("apps/api/src/sales-orders.service.ts");
   assert.match(
     approvals,
     /salesOrders\.confirm\(result\.companyId, result\.salesOrderId\)/,
   );
-  assert.doesNotMatch(approvals, /completeReadyForOrder|orderPackaging/);
-  assert.match(approvals, /estoque de café torrado a granel/);
+  assert.match(
+    orders,
+    /this\.automaticallyPackageReadyOrder\(\s*companyId,\s*id,?\s*\)/,
+  );
+  assert.match(approvals, /prepara e reserva automaticamente as embalagens/);
+  assert.match(approvals, /emissão da NF-e permanece manual/);
 });
 
 test("the ordered SKU is used only to calculate the bulk kilogram reservation", () => {
@@ -73,25 +78,26 @@ test("the operational endpoint is read-only and identifies the stock as bulk", (
   );
 });
 
-test("background jobs do not convert reserved bulk coffee into packages", () => {
-  const worker = source("apps/api/src/integration-worker.service.ts");
-  assert.doesNotMatch(worker, /orderPackaging|processReady/);
+test("background reconciliation packages fully reserved roasted coffee", () => {
+  const orders = source("apps/api/src/sales-orders.service.ts");
+  assert.match(orders, /reconcileAutomaticPackaging/);
+  assert.match(orders, /setInterval\(/);
+  assert.match(orders, /reservation\.status !== "RESERVED"/);
+  assert.match(orders, /SALES_ORDER_AUTO_PACK:/);
+  assert.match(orders, /sourceType: "SALES_ORDER_WIP_PACKAGING"/);
 });
 
-test("physical packaging and fiscal issue remain separate later actions", () => {
+test("automatic packaging leaves fiscal issue as the only manual action", () => {
   const orders = source("apps/api/src/sales-orders.controller.ts");
-  const production = source("apps/api/src/production.controller.ts");
+  const service = source("apps/api/src/sales-orders.service.ts");
   assert.match(orders, /SALES_ORDER_INVOICE_REQUESTED/);
   assert.match(
     orders,
     /pedido precisa estar pronto para expedição antes do faturamento/i,
   );
-  assert.match(production, /SalesOrderStatus\.READY_TO_SHIP/);
-  assert.match(production, /SET "pickedQuantity"=quantity,"pickedAt"=NOW\(\)/);
-  assert.match(
-    production,
-    /COALESCE\(product\."baseCoffeeProductId",pv\."productId"\)=\$2/,
-  );
+  assert.match(service, /SalesOrderStatus\.READY_TO_SHIP/);
+  assert.match(service, /SET "pickedQuantity"=quantity,"pickedAt"=NOW\(\)/);
+  assert.doesNotMatch(service, /SALES_ORDER_INVOICE_REQUESTED/);
 });
 
 test("packaging consumes the reserved WIP allocation for the same order item", () => {

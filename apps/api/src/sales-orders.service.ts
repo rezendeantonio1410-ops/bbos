@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   type OnModuleDestroy,
+  type OnModuleInit,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
@@ -91,8 +92,10 @@ type SalesOrderPaymentSummary = {
 };
 
 @Injectable()
-export class SalesOrdersService implements OnModuleDestroy {
+export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
   readonly database = prisma;
+  private automaticPackagingTimer?: NodeJS.Timeout;
+  private automaticPackagingRunning = false;
 
   constructor(
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
@@ -235,6 +238,326 @@ export class SalesOrdersService implements OnModuleDestroy {
     }
   }
 
+  private async automaticallyPackageReadyOrder(
+    companyId: string,
+    salesOrderId: string,
+  ) {
+    const result = await this.database.$transaction(
+      async (transaction) => {
+        const locked = await transaction.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+            FROM "SalesOrder"
+           WHERE id=${salesOrderId} AND "companyId"=${companyId}
+           FOR UPDATE
+        `;
+        if (!locked[0]) return { advanced: false, reason: "NOT_FOUND" };
+
+        const order = await transaction.salesOrder.findFirst({
+          where: {
+            id: salesOrderId,
+            companyId,
+            status: {
+              in: [SalesOrderStatus.CONFIRMED, SalesOrderStatus.IN_PRODUCTION],
+            },
+          },
+          include: {
+            items: {
+              include: {
+                productVariant: {
+                  include: { product: { include: { productLine: true } } },
+                },
+                reservations: {
+                  where: { status: InventoryReservationStatus.ACTIVE },
+                },
+              },
+            },
+          },
+        });
+        if (!order?.items.length)
+          return { advanced: false, reason: "NOT_ELIGIBLE" };
+
+        await this.allocateRoastedWipForOrder(
+          transaction,
+          companyId,
+          salesOrderId,
+        );
+
+        const bulkReservations = await transaction.$queryRawUnsafe<
+          Array<{
+            id: string;
+            salesOrderItemId: string;
+            packageQuantity: number;
+            requestedKg: Prisma.Decimal;
+            reservedKg: Prisma.Decimal;
+            status: string;
+          }>
+        >(
+          `SELECT id,"salesOrderItemId","packageQuantity","requestedKg","reservedKg",status
+             FROM "RoastedWipReservation"
+            WHERE "companyId"=$1 AND "salesOrderId"=$2
+              AND status IN ('PENDING','PARTIAL','RESERVED')
+            ORDER BY id
+            FOR UPDATE`,
+          companyId,
+          salesOrderId,
+        );
+        if (
+          bulkReservations.some(
+            (reservation) =>
+              reservation.status !== "RESERVED" ||
+              Number(reservation.reservedKg) + 0.0005 <
+                Number(reservation.requestedKg),
+          )
+        )
+          return { advanced: false, reason: "WAITING_ROASTED_COFFEE" };
+
+        const bulkByItem = new Map(
+          bulkReservations.map((reservation) => [
+            reservation.salesOrderItemId,
+            reservation,
+          ]),
+        );
+        const finishedWarehouse = await transaction.warehouse.findFirst({
+          where: { companyId, type: "FINISHED_GOODS" },
+          orderBy: { code: "asc" },
+        });
+        if (!finishedWarehouse)
+          return { advanced: false, reason: "NO_FINISHED_WAREHOUSE" };
+
+        for (const item of order.items) {
+          const bulkReservation = bulkByItem.get(item.id);
+          const existingReservation = item.reservations[0] ?? null;
+          const existingReservedUnits = Number(
+            existingReservation?.quantity ?? 0,
+          );
+          if (!bulkReservation && existingReservedUnits >= item.quantity)
+            continue;
+
+          let finishedProduct = existingReservation
+            ? await transaction.finishedProduct.findFirst({
+                where: {
+                  id: existingReservation.finishedProductId,
+                  companyId,
+                },
+              })
+            : await transaction.finishedProduct.findFirst({
+                where: {
+                  companyId,
+                  productVariantId: item.productVariantId,
+                  warehouseId: finishedWarehouse.id,
+                },
+                orderBy: { createdAt: "asc" },
+              });
+          if (!finishedProduct) {
+            try {
+              finishedProduct = await transaction.finishedProduct.create({
+                data: {
+                  companyId,
+                  blendId: null,
+                  productionOrderId: null,
+                  productVariantId: item.productVariantId,
+                  warehouseId: finishedWarehouse.id,
+                  sku: item.sku,
+                  name: item.productName,
+                  line: item.productVariant.product.productLine.code,
+                  packageWeightG: item.productVariant.netWeightGrams,
+                  quantityOnHand: 0,
+                  reservedQuantity: 0,
+                  standardPrice: item.unitPrice,
+                },
+              });
+            } catch (error) {
+              if (!(error instanceof Prisma.PrismaClientKnownRequestError))
+                throw error;
+              finishedProduct = await transaction.finishedProduct.findFirst({
+                where: {
+                  companyId,
+                  productVariantId: item.productVariantId,
+                  warehouseId: finishedWarehouse.id,
+                },
+              });
+              if (!finishedProduct) throw error;
+            }
+          }
+
+          await transaction.$queryRaw`
+            SELECT id
+              FROM "FinishedProduct"
+             WHERE id=${finishedProduct.id}
+             FOR UPDATE
+          `;
+          const currentBalance =
+            await transaction.finishedProduct.findUniqueOrThrow({
+              where: { id: finishedProduct.id },
+            });
+          const producedPackages = Number(
+            bulkReservation?.packageQuantity ?? 0,
+          );
+          const reserveIncrement = Math.max(
+            0,
+            item.quantity - existingReservedUnits,
+          );
+          const availableAfterPackaging =
+            currentBalance.quantityOnHand +
+            producedPackages -
+            currentBalance.reservedQuantity;
+          if (availableAfterPackaging < reserveIncrement)
+            return { advanced: false, reason: "WAITING_FINISHED_STOCK" };
+
+          const idempotencyKey = `SALES_ORDER_AUTO_PACK:${item.id}`;
+          const existingMovement = bulkReservation
+            ? await transaction.finishedGoodsMovement.findFirst({
+                where: { companyId, idempotencyKey },
+              })
+            : null;
+          const packagesToCreate = existingMovement ? 0 : producedPackages;
+          if (packagesToCreate > 0) {
+            await transaction.finishedProduct.update({
+              where: { id: currentBalance.id },
+              data: { quantityOnHand: { increment: packagesToCreate } },
+            });
+            await transaction.finishedGoodsMovement.create({
+              data: {
+                companyId,
+                productionOrderId: null,
+                salesOrderId,
+                salesOrderItemId: item.id,
+                reservationId: existingReservation?.id ?? null,
+                productVariantId: item.productVariantId,
+                finishedProductId: currentBalance.id,
+                warehouseId: currentBalance.warehouseId,
+                type: "PRODUCTION_IN",
+                packageQuantity: packagesToCreate,
+                unit: "UN",
+                totalWeightKg: bulkReservation!.requestedKg,
+                sourceType: "SALES_ORDER_WIP_PACKAGING",
+                sourceId: salesOrderId,
+                idempotencyKey,
+                reason: `Empacotamento automático do pedido ${order.orderNumber ?? order.code}`,
+              },
+            });
+          }
+
+          if (reserveIncrement > 0) {
+            await transaction.finishedProduct.update({
+              where: { id: currentBalance.id },
+              data: { reservedQuantity: { increment: reserveIncrement } },
+            });
+          }
+          if (existingReservation) {
+            await transaction.inventoryReservation.update({
+              where: { id: existingReservation.id },
+              data: {
+                productVariantId: item.productVariantId,
+                finishedProductId: currentBalance.id,
+                warehouseId: currentBalance.warehouseId,
+                quantity: item.quantity,
+                status: InventoryReservationStatus.ACTIVE,
+                releasedAt: null,
+                consumedAt: null,
+              },
+            });
+          } else {
+            await transaction.inventoryReservation.create({
+              data: {
+                companyId,
+                salesOrderId,
+                salesOrderItemId: item.id,
+                productVariantId: item.productVariantId,
+                finishedProductId: currentBalance.id,
+                warehouseId: currentBalance.warehouseId,
+                quantity: item.quantity,
+                status: InventoryReservationStatus.ACTIVE,
+                idempotencyKey: `SALES_RESERVATION:${item.id}`,
+              },
+            });
+          }
+        }
+
+        const readyItems = await transaction.inventoryReservation.count({
+          where: {
+            salesOrderId,
+            status: InventoryReservationStatus.ACTIVE,
+          },
+        });
+        if (readyItems < order.items.length)
+          return { advanced: false, reason: "WAITING_RESERVATIONS" };
+
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderItem"
+              SET "pickedQuantity"=quantity,"pickedAt"=NOW()
+            WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+          salesOrderId,
+          companyId,
+        );
+        await transaction.salesOrder.update({
+          where: { id: salesOrderId },
+          data: { status: SalesOrderStatus.READY_TO_SHIP },
+        });
+        return { advanced: true, reason: "READY_TO_INVOICE" };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+    if (result.advanced) {
+      try {
+        await this.customerLifecycle.record(
+          salesOrderId,
+          "ORDER_READY_TO_INVOICE",
+          "Pedido pronto para emissão da NF-e",
+          "O café torrado reservado foi convertido automaticamente nas embalagens do pedido. A emissão da NF-e continua dependendo de ação manual.",
+          "BBOS",
+          `sales-order:auto-packaged:${salesOrderId}`,
+          {},
+          false,
+        );
+      } catch (error) {
+        console.error("Falha ao registrar embalagem automática do pedido", {
+          orderId: salesOrderId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return result;
+  }
+
+  private async reconcileAutomaticPackaging() {
+    if (this.automaticPackagingRunning) return;
+    this.automaticPackagingRunning = true;
+    try {
+      const candidates = await this.database.salesOrder.findMany({
+        where: {
+          status: {
+            in: [SalesOrderStatus.CONFIRMED, SalesOrderStatus.IN_PRODUCTION],
+          },
+        },
+        select: { id: true, companyId: true },
+        orderBy: { orderedAt: "asc" },
+        take: 200,
+      });
+      for (const order of candidates) {
+        try {
+          await this.automaticallyPackageReadyOrder(order.companyId, order.id);
+        } catch (error) {
+          console.error("Falha ao automatizar embalagem do pedido", {
+            orderId: order.id,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } finally {
+      this.automaticPackagingRunning = false;
+    }
+  }
+
+  onModuleInit() {
+    void this.reconcileAutomaticPackaging();
+    this.automaticPackagingTimer = setInterval(
+      () => void this.reconcileAutomaticPackaging(),
+      30_000,
+    );
+    this.automaticPackagingTimer.unref?.();
+  }
+
   private async releaseRoastedWipForOrder(
     transaction: Prisma.TransactionClient,
     companyId: string,
@@ -274,6 +597,8 @@ export class SalesOrdersService implements OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    if (this.automaticPackagingTimer)
+      clearInterval(this.automaticPackagingTimer);
     return this.database.$disconnect();
   }
 
@@ -822,7 +1147,21 @@ export class SalesOrdersService implements OnModuleDestroy {
       {},
       false,
     );
-    return result;
+    let automaticPackaging: Awaited<
+      ReturnType<SalesOrdersService["automaticallyPackageReadyOrder"]>
+    > | null = null;
+    try {
+      automaticPackaging = await this.automaticallyPackageReadyOrder(
+        companyId,
+        id,
+      );
+    } catch (error) {
+      console.error("Falha ao automatizar embalagem após confirmar pedido", {
+        orderId: id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return { ...result, automaticPackaging };
   }
 
   async reserve(

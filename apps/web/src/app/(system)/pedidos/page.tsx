@@ -448,7 +448,7 @@ const statusLabel: Record<string, string> = {
   RESERVED: "Reservado",
   IN_PRODUCTION: "Aguardando embalagem",
   PICKING: "Separação",
-  READY_TO_SHIP: "Pronto para expedição",
+  READY_TO_SHIP: "Pronto para emitir NF-e",
   INVOICED: "Faturado",
   INVOICE_REQUESTED: "Faturamento solicitado",
   INVOICE_ERROR: "Erro na NF-e",
@@ -483,7 +483,7 @@ const filters: Array<[string, string]> = [
   ["RESERVED", "Reservados"],
   ["IN_PRODUCTION", "Aguardando embalagem"],
   ["PICKING", "Separação"],
-  ["READY_TO_SHIP", "Prontos"],
+  ["READY_TO_SHIP", "Prontos para NF-e"],
   ["INVOICE_REQUESTED", "Emissão NF-e"],
   ["INVOICED", "Faturados"],
   ["SHIPPED", "Expedidos"],
@@ -760,11 +760,10 @@ export default function OrdersPage() {
           )}
         />
         <Kpi
-          label="Prontos para expedição"
+          label="Prontos para emitir NF-e"
           value={String(
-            orders.filter((item) =>
-              ["READY_TO_SHIP", "INVOICED"].includes(item.status),
-            ).length,
+            orders.filter((item) => displayStatus(item) === "READY_TO_SHIP")
+              .length,
           )}
         />
         <Kpi label="Ticket médio" value={money.format(avgTicket)} />

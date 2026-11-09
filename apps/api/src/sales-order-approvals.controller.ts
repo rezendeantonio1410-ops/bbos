@@ -520,7 +520,7 @@ export class SalesOrderApprovalsController {
       "Pedido confirmado",
       result.requiresPix
         ? "Recebemos sua confirmação. A produção e a emissão da NF-e podem avançar; o pagamento continua pendente e será controlado separadamente."
-        : "Recebemos sua confirmação. A quantidade necessária foi separada no estoque de café torrado a granel, sem gerar produto embalado.",
+        : "Recebemos sua confirmação. Havendo café torrado disponível, o BBOS prepara e reserva automaticamente as embalagens do pedido; a emissão da NF-e permanece manual.",
       "BBOS",
       `sales-order:confirmed:${result.salesOrderId}`,
       { acceptedByName: name, paymentPending: result.requiresPix },
