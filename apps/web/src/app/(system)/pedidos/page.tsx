@@ -166,7 +166,7 @@ type DraftOrderLine = {
   id: string;
   variantId: string;
   quantity: number;
-  finalUnitPrice?: string;
+  discountAmount?: string;
 };
 
 type PackageBox = {
@@ -186,7 +186,7 @@ const newDraftLine = (): DraftOrderLine => ({
   id: randomId(),
   variantId: "",
   quantity: 1,
-  finalUnitPrice: "",
+  discountAmount: "",
 });
 
 const newPackageBox = (source?: Partial<PackageBox>): PackageBox => ({
@@ -1591,9 +1591,7 @@ function NewOrder({
             officialUnitPrice: isSample
               ? SAMPLE_FISCAL_PACKAGE_VALUE
               : quote.officialUnitPrice,
-            finalUnitPrice: isSample
-              ? SAMPLE_FISCAL_PACKAGE_VALUE
-              : line.finalUnitPrice,
+            discountAmount: isSample ? 0 : line.discountAmount,
             maxDiscountPercent: canApproveNegotiatedPrice
               ? null
               : quote.discountPolicy.maxRequestPercent,
@@ -1919,9 +1917,10 @@ function NewOrder({
             productVariantId: line.variantId,
             quantity: line.quantity,
             negotiatedUnitPrice:
-              line.finalUnitPrice?.trim() === ""
+              line.discountAmount?.trim() === ""
                 ? undefined
-                : Number(line.finalUnitPrice),
+                : pricedLines.find((item) => item.line.id === line.id)?.pricing
+                    ?.finalUnitPrice,
           })),
           packages: isSample ? undefined : shippingPackages(),
         }),
@@ -2067,9 +2066,10 @@ function NewOrder({
               ? SAMPLE_FISCAL_PACKAGE_VALUE
               : quotes[line.id]!.officialUnitPrice,
             negotiatedUnitPrice:
-              isSample || line.finalUnitPrice?.trim() === ""
+              isSample || line.discountAmount?.trim() === ""
                 ? undefined
-                : Number(line.finalUnitPrice),
+                : pricedLines.find((item) => item.line.id === line.id)?.pricing
+                    ?.finalUnitPrice,
           };
         }),
       }),
@@ -2302,7 +2302,7 @@ function NewOrder({
                     ? "Selecione a finalidade e o cliente antes dos produtos."
                     : isSample
                       ? "Selecione os produtos e quantidades enviados como amostra."
-                      : `Produtos para o pedido de ${orderPurpose}. Informe o preço final negociado; o BBOS calcula o desconto em R$ e em %.`}
+                      : `Produtos para o pedido de ${orderPurpose}. Informe o desconto em reais; o BBOS calcula o percentual e o preço final.`}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -2345,9 +2345,7 @@ function NewOrder({
                       officialUnitPrice: isSample
                         ? SAMPLE_FISCAL_PACKAGE_VALUE
                         : lineQuote.officialUnitPrice,
-                      finalUnitPrice: isSample
-                        ? SAMPLE_FISCAL_PACKAGE_VALUE
-                        : line.finalUnitPrice,
+                      discountAmount: isSample ? 0 : line.discountAmount,
                       maxDiscountPercent: canApproveNegotiatedPrice
                         ? null
                         : lineQuote.discountPolicy.maxRequestPercent,
@@ -2374,7 +2372,7 @@ function NewOrder({
                                   ? {
                                       ...item,
                                       variantId: event.target.value,
-                                      finalUnitPrice: "",
+                                      discountAmount: "",
                                     }
                                   : item,
                               ),
@@ -2446,32 +2444,28 @@ function NewOrder({
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                          Preço final
+                          Desconto (R$)
                         </p>
                         {isSample ? (
                           <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">
-                            {money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}
+                            {money.format(0)}
                           </div>
                         ) : (
                           <input
                             type="number"
-                            min="0.01"
+                            min="0"
                             step="0.01"
                             inputMode="decimal"
-                            aria-label={`Preço final do item ${index + 1}`}
-                            value={line.finalUnitPrice ?? ""}
-                            placeholder={
-                              lineQuote
-                                ? lineQuote.officialUnitPrice.toFixed(2)
-                                : "0,00"
-                            }
+                            aria-label={`Desconto em reais do item ${index + 1}`}
+                            value={line.discountAmount ?? ""}
+                            placeholder="0,00"
                             onChange={(event) =>
                               setLines((current) =>
                                 current.map((item) =>
                                   item.id === line.id
                                     ? {
                                         ...item,
-                                        finalUnitPrice: event.target.value,
+                                        discountAmount: event.target.value,
                                       }
                                     : item,
                                 ),
@@ -2483,12 +2477,27 @@ function NewOrder({
                       </div>
                       <div>
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                          Desconto
+                          Preço final
                         </p>
                         <div className="rounded-lg bg-violet-50 px-2 py-1.5 text-right text-[10px] font-bold text-violet-800">
-                          {linePricing
-                            ? `${money.format(linePricing.discountAmount)} · ${linePricing.discountPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
-                            : "—"}
+                          {linePricing ? (
+                            <>
+                              {money.format(linePricing.finalUnitPrice)}
+                              <span className="ml-1 font-medium">
+                                ·{" "}
+                                {linePricing.discountPercent.toLocaleString(
+                                  "pt-BR",
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
+                                %
+                              </span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
                         </div>
                       </div>
                       <div>

@@ -3,10 +3,10 @@ import test from "node:test";
 
 import { calculateSalesLineDiscount } from "../dist/sales-line-discount.js";
 
-test("calcula desconto em reais e percentual a partir do preço final", () => {
+test("calcula preço final e percentual a partir do desconto em reais", () => {
   const result = calculateSalesLineDiscount({
     officialUnitPrice: 55,
-    finalUnitPrice: 52,
+    discountAmount: 3,
   });
 
   assert.equal(result.valid, true);
@@ -15,7 +15,7 @@ test("calcula desconto em reais e percentual a partir do preço final", () => {
   assert.equal(result.finalUnitPrice, 52);
 });
 
-test("mantém o preço de tabela quando o preço final não foi informado", () => {
+test("mantém o preço de tabela quando o desconto não foi informado", () => {
   const result = calculateSalesLineDiscount({ officialUnitPrice: 55 });
 
   assert.equal(result.valid, true);
@@ -27,12 +27,12 @@ test("mantém o preço de tabela quando o preço final não foi informado", () =
 test("protege limite percentual e preço mínimo", () => {
   const overLimit = calculateSalesLineDiscount({
     officialUnitPrice: 55,
-    finalUnitPrice: 49,
+    discountAmount: 6,
     maxDiscountPercent: 5,
   });
   const belowFloor = calculateSalesLineDiscount({
     officialUnitPrice: 55,
-    finalUnitPrice: 51,
+    discountAmount: 4,
     minimumPrice: 52,
   });
 
@@ -40,4 +40,14 @@ test("protege limite percentual e preço mínimo", () => {
   assert.match(overLimit.message, /máximo permitido/i);
   assert.equal(belowFloor.valid, false);
   assert.match(belowFloor.message, /mínimo protegido/i);
+});
+
+test("bloqueia desconto em reais igual ou superior ao preço de tabela", () => {
+  const result = calculateSalesLineDiscount({
+    officialUnitPrice: 55,
+    discountAmount: 55,
+  });
+
+  assert.equal(result.valid, false);
+  assert.match(result.message, /menor que o preço de tabela/i);
 });

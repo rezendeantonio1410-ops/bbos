@@ -4,6 +4,7 @@ const roundPercent = (value: number) => Math.round(value * 1000) / 1000;
 export type SalesLineDiscountInput = {
   officialUnitPrice: number;
   finalUnitPrice?: number | string | null;
+  discountAmount?: number | string | null;
   maxDiscountPercent?: number | null;
   minimumPrice?: number | null;
   unitCost?: number | null;
@@ -30,17 +31,25 @@ export function calculateSalesLineDiscount(
     input.finalUnitPrice !== undefined &&
     input.finalUnitPrice !== null &&
     String(input.finalUnitPrice).trim() !== "";
+  const hasDiscountAmount =
+    input.discountAmount !== undefined &&
+    input.discountAmount !== null &&
+    String(input.discountAmount).trim() !== "";
+  const informedDiscountAmount = hasDiscountAmount
+    ? roundMoney(Number(input.discountAmount))
+    : 0;
   const finalUnitPrice = roundMoney(
-    hasFinalPrice ? Number(input.finalUnitPrice) : officialUnitPrice,
+    hasDiscountAmount
+      ? officialUnitPrice - informedDiscountAmount
+      : hasFinalPrice
+        ? Number(input.finalUnitPrice)
+        : officialUnitPrice,
   );
 
   const base = {
     officialUnitPrice,
     finalUnitPrice,
-    discountAmount: Math.max(
-      0,
-      roundMoney(officialUnitPrice - finalUnitPrice),
-    ),
+    discountAmount: Math.max(0, roundMoney(officialUnitPrice - finalUnitPrice)),
     discountPercent:
       officialUnitPrice > 0
         ? Math.max(
@@ -61,6 +70,26 @@ export function calculateSalesLineDiscount(
       message: "O preço de tabela precisa ser maior que zero.",
     };
   }
+  if (
+    hasDiscountAmount &&
+    (!Number.isFinite(informedDiscountAmount) || informedDiscountAmount < 0)
+  ) {
+    return {
+      ...base,
+      valid: false,
+      message: "Informe um desconto em reais igual ou maior que zero.",
+    };
+  }
+  if (
+    hasDiscountAmount &&
+    informedDiscountAmount >= officialUnitPrice
+  ) {
+    return {
+      ...base,
+      valid: false,
+      message: "O desconto em reais deve ser menor que o preço de tabela.",
+    };
+  }
   if (!Number.isFinite(finalUnitPrice) || finalUnitPrice <= 0) {
     return {
       ...base,
@@ -77,8 +106,7 @@ export function calculateSalesLineDiscount(
   }
 
   const maxDiscountPercent =
-    input.maxDiscountPercent === undefined ||
-    input.maxDiscountPercent === null
+    input.maxDiscountPercent === undefined || input.maxDiscountPercent === null
       ? null
       : Number(input.maxDiscountPercent);
   if (
