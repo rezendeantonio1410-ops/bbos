@@ -15,6 +15,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
+import { SalesOrdersService } from "./sales-orders.service";
 
 type PaymentReason =
   "CASH_ORDER" | "CREDIT_NOT_APPROVED" | "INSUFFICIENT_CREDIT";
@@ -41,6 +42,7 @@ export class SalesOrderPaymentsService {
   constructor(
     private readonly mercadoPago: MercadoPagoService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+    private readonly salesOrders?: SalesOrdersService,
   ) {}
 
   private publicPayment(attempt: any) {
@@ -321,6 +323,13 @@ export class SalesOrderPaymentsService {
     );
 
     if (!result.idempotent) {
+      if (
+        [SalesOrderStatus.DRAFT, SalesOrderStatus.CONFIRMED].includes(
+          preview.orderStatus,
+        )
+      ) {
+        await this.salesOrders?.confirm(actor.companyId, orderId);
+      }
       await this.customerLifecycle.record(
         orderId,
         "PAYMENT_CONFIRMED",
@@ -652,9 +661,11 @@ export class SalesOrderPaymentsService {
           providerOrder.status_detail,
         );
         const orderConfirmed = await transaction.$executeRawUnsafe(
-          `UPDATE "SalesOrder" SET status='CONFIRMED',"paymentType"='CASH',
+          `UPDATE "SalesOrder" SET
+                  status=CASE WHEN status='DRAFT' THEN 'CONFIRMED'::"SalesOrderStatus" ELSE status END,
+                  "paymentType"='CASH',
                   "paymentTermsSnapshot"='Pix',"updatedAt"=NOW()
-            WHERE id=$1 AND status='DRAFT'`,
+            WHERE id=$1 AND status<>'CANCELLED'`,
           attempt.salesOrderId,
         );
         return {
@@ -663,6 +674,24 @@ export class SalesOrderPaymentsService {
         };
       });
       if (changed.attemptUpdated && changed.orderConfirmed) {
+        if (
+          [SalesOrderStatus.DRAFT, SalesOrderStatus.CONFIRMED].includes(
+            attempt.orderStatus,
+          )
+        ) {
+          const orderRows = await this.database.$queryRawUnsafe<
+            Array<{ companyId: string }>
+          >(
+            `SELECT "companyId" FROM "SalesOrder" WHERE id=$1 LIMIT 1`,
+            attempt.salesOrderId,
+          );
+          if (orderRows[0]?.companyId) {
+            await this.salesOrders?.confirm(
+              orderRows[0].companyId,
+              attempt.salesOrderId,
+            );
+          }
+        }
         await this.customerLifecycle.record(
           attempt.salesOrderId,
           "PAYMENT_CONFIRMED",

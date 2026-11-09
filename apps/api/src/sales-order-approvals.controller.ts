@@ -491,7 +491,7 @@ export class SalesOrderApprovalsController {
           );
         await tx.$executeRawUnsafe(
           `UPDATE "SalesOrder"
-            SET status=CASE WHEN $2::boolean THEN status ELSE 'CONFIRMED'::"SalesOrderStatus" END,
+            SET status='CONFIRMED'::"SalesOrderStatus",
                 "paymentType"=CASE WHEN $2::boolean THEN 'CASH' ELSE "paymentType" END,
                 "paymentTermsSnapshot"=CASE WHEN $2::boolean THEN 'Pix' ELSE "paymentTermsSnapshot" END,
                 "updatedAt"=NOW()
@@ -502,7 +502,7 @@ export class SalesOrderApprovalsController {
         return {
           ok: true,
           status: "APPROVED",
-          orderStatus: requiresPix ? "DRAFT" : "CONFIRMED",
+          orderStatus: "CONFIRMED",
           acceptedAt,
           salesOrderId: approval.salesOrderId,
           requiresPix,
@@ -511,6 +511,19 @@ export class SalesOrderApprovalsController {
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    await this.salesOrders.confirm(result.companyId, result.salesOrderId);
+    await this.customerLifecycle.record(
+      result.salesOrderId,
+      "ORDER_CONFIRMED",
+      "Pedido confirmado",
+      result.requiresPix
+        ? "Recebemos sua confirmação. A produção e a emissão da NF-e podem avançar; o pagamento continua pendente e será controlado separadamente."
+        : "Recebemos sua confirmação. A quantidade necessária foi separada no estoque de café torrado a granel, sem gerar produto embalado.",
+      "BBOS",
+      `sales-order:confirmed:${result.salesOrderId}`,
+      { acceptedByName: name, paymentPending: result.requiresPix },
     );
 
     if (result.requiresPix) {
@@ -536,16 +549,6 @@ export class SalesOrderApprovalsController {
       }
     }
 
-    await this.salesOrders.confirm(result.companyId, result.salesOrderId);
-    await this.customerLifecycle.record(
-      result.salesOrderId,
-      "ORDER_CONFIRMED",
-      "Pedido confirmado",
-      "Recebemos sua confirmação. A quantidade necessária foi separada no estoque de café torrado a granel, sem gerar produto embalado.",
-      "BBOS",
-      `sales-order:confirmed:${result.salesOrderId}`,
-      { acceptedByName: name },
-    );
     const publicResult = withoutCompanyId(result);
     return { ...publicResult, orderStatus: "CONFIRMED" };
   }

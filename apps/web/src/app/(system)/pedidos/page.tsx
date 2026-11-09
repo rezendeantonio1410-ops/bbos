@@ -480,7 +480,6 @@ const filters: Array<[string, string]> = [
 
 const displayStatus = (order: Order) => {
   if (
-    order.status === "DRAFT" &&
     ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
       order.payment?.status ?? "",
     )
@@ -3830,14 +3829,28 @@ function OrderDrawer({
 
             {displayStatus(order) === "AWAITING_PAYMENT" && (
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-bold text-amber-950">
-                  Pix enviado com a confirmação
-                </p>
-                <p className="mt-1 text-[11px] leading-5 text-amber-800">
-                  O pedido permanece protegido em rascunho e só avança para
-                  estoque e faturamento depois que o Mercado Pago confirmar o
-                  crédito ou um administrador aprovar o recebimento direto.
-                </p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-amber-950">
+                      Pagamento pendente
+                    </p>
+                    <p className="mt-1 max-w-2xl text-[11px] leading-5 text-amber-800">
+                      A produção, a reserva e a emissão da NF-e podem avançar
+                      sem registrar o pagamento. A expedição permanece bloqueada
+                      até a baixa financeira.
+                    </p>
+                  </div>
+                  {order.status === "DRAFT" && canEdit && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("confirm")}
+                      className="rounded-xl bg-amber-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Liberando…" : "Liberar produção e NF-e"}
+                    </button>
+                  )}
+                </div>
                 {order.payment?.expiresAt && (
                   <p className="mt-2 text-[10px] text-amber-700">
                     Expira em{" "}

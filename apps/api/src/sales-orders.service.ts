@@ -1154,6 +1154,36 @@ export class SalesOrdersService implements OnModuleDestroy {
             "A NF-e vigente precisa estar autorizada pela SEFAZ antes da expedição.",
           );
         }
+        const normalizedTerms = String(order.paymentTermsSnapshot ?? "")
+          .trim()
+          .toLowerCase();
+        const cashSale =
+          order.paymentType === "CASH" ||
+          (order.paymentType === "LEGACY" &&
+            (!normalizedTerms ||
+              normalizedTerms === "à vista" ||
+              normalizedTerms === "a vista" ||
+              normalizedTerms === "pix"));
+        if (cashSale) {
+          const paymentRows = await transaction.$queryRawUnsafe<
+            Array<{ paid: boolean }>
+          >(
+            `SELECT (
+                EXISTS (
+                  SELECT 1 FROM "SalesOrderPaymentAttempt" attempt
+                   WHERE attempt."salesOrderId"=$1 AND attempt.status='PAID'
+                ) OR EXISTS (
+                  SELECT 1 FROM "AccountsReceivable" receivable
+                   WHERE receivable."salesOrderId"=$1 AND receivable.status='PAID'
+                )
+              ) AS paid`,
+            order.id,
+          );
+          if (!paymentRows[0]?.paid)
+            throw new BadRequestException(
+              "A NF-e pode ser emitida antes do pagamento, mas a expedição de uma venda à vista exige a baixa financeira.",
+            );
+        }
         if (order.shippingProvider === "MELHOR_ENVIO") {
           const shipments = await transaction.$queryRawUnsafe<any[]>(
             `SELECT status,"labelUrl" FROM "Shipment" WHERE "salesOrderId"=$1 LIMIT 1`,
