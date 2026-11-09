@@ -434,6 +434,7 @@ const statusLabel: Record<string, string> = {
   AWAITING_PAYMENT: "Aguardando Pix",
   CONFIRMED: "Confirmado",
   RESERVED: "Reservado",
+  IN_PRODUCTION: "Aguardando embalagem",
   PICKING: "Separação",
   READY_TO_SHIP: "Pronto para expedição",
   INVOICED: "Faturado",
@@ -450,6 +451,7 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
     AWAITING_PAYMENT: "warning",
     CONFIRMED: "warning",
     RESERVED: "warning",
+    IN_PRODUCTION: "warning",
     PICKING: "warning",
     READY_TO_SHIP: "success",
     INVOICED: "success",
@@ -467,6 +469,7 @@ const filters: Array<[string, string]> = [
   ["AWAITING_PAYMENT", "Aguardando Pix"],
   ["CONFIRMED", "Confirmados"],
   ["RESERVED", "Reservados"],
+  ["IN_PRODUCTION", "Aguardando embalagem"],
   ["PICKING", "Separação"],
   ["READY_TO_SHIP", "Prontos"],
   ["INVOICE_REQUESTED", "Emissão NF-e"],
@@ -4034,6 +4037,7 @@ function OrderDrawer({
             {[
               "CONFIRMED",
               "RESERVED",
+              "IN_PRODUCTION",
               "PICKING",
               "READY_TO_SHIP",
               "INVOICED",
@@ -4058,18 +4062,21 @@ function OrderDrawer({
                               ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
                               : order.status === "RESERVED"
                                 ? "O estoque está reservado. Inicie a separação física do pedido."
-                                : order.status === "PICKING"
-                                  ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                                  : order.status === "READY_TO_SHIP" &&
-                                      fulfillment?.fiscalStatus === "AUTHORIZED"
-                                    ? fulfillment?.labelUrl
-                                      ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                                      : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
-                                    : order.status === "READY_TO_SHIP"
-                                      ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                                      : fulfillment?.labelUrl
-                                        ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                                        : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                                : order.status === "IN_PRODUCTION"
+                                  ? "O café torrado a granel está reservado por linha e perfil. O pedido aguarda a embalagem definida na venda."
+                                  : order.status === "PICKING"
+                                    ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                                    : order.status === "READY_TO_SHIP" &&
+                                        fulfillment?.fiscalStatus ===
+                                          "AUTHORIZED"
+                                      ? fulfillment?.labelUrl
+                                        ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                        : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                                      : order.status === "READY_TO_SHIP"
+                                        ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                        : fulfillment?.labelUrl
+                                          ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                          : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
                   {order.status === "CONFIRMED" && (

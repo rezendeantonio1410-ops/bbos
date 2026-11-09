@@ -35,6 +35,34 @@ test("the ordered SKU is used only to calculate the bulk kilogram reservation", 
   assert.match(orders, /source_product\.id=target_product\.id/);
 });
 
+test("manual reservation reuses the exact bulk coffee mapping instead of requiring packaged stock", () => {
+  const orders = source("apps/api/src/sales-orders.service.ts");
+  assert.match(
+    orders,
+    /await this\.allocateRoastedWipForOrder\(transaction, companyId, id\)/,
+  );
+  assert.match(
+    orders,
+    /item\.quantity - Number\(bulkReservation\?\.packageQuantity \?\? 0\)/,
+  );
+  assert.match(orders, /Café torrado a granel insuficiente/);
+  assert.match(orders, /SalesOrderStatus\.IN_PRODUCTION/);
+  assert.match(orders, /ainda não possui café-base definido/);
+});
+
+test("the confirmed legacy White Label mapping is migrated to Gourmet Essencial", () => {
+  const migration = source(
+    "packages/database/prisma/migrations/20261109001500_map_white_label_classico_to_essencial/migration.sql",
+  );
+  assert.match(migration, /WHITE_LABEL_CLASSICO_500GR/);
+  assert.match(migration, /base_coffee\.code = 'ESSENCIAL'/);
+  assert.match(migration, /white_label_line\.code = 'GOURMET'/);
+  assert.match(
+    migration,
+    /base_line\."companyId" = white_label_line\."companyId"/,
+  );
+});
+
 test("the operational endpoint is read-only and identifies the stock as bulk", () => {
   const reservations = source("apps/api/src/order-packaging.controller.ts");
   assert.match(reservations, /@Controller\("production\/bulk-reservations"\)/);

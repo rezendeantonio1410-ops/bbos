@@ -70,6 +70,17 @@ type SalesBrokerOption = {
   active: boolean;
 };
 
+type RoastedWipReservationRow = {
+  id: string;
+  salesOrderItemId: string;
+  packageQuantity: number;
+  requestedKg: Prisma.Decimal;
+  reservedKg: Prisma.Decimal;
+  status: "PENDING" | "PARTIAL" | "RESERVED";
+  stockProductName: string;
+  stockLineName: string;
+};
+
 @Injectable()
 export class SalesOrdersService implements OnModuleDestroy {
   readonly database = prisma;
@@ -847,9 +858,65 @@ export class SalesOrdersService implements OnModuleDestroy {
           throw new BadRequestException(
             "Pedido legado sem itens não pode ser reservado automaticamente.",
           );
+        const unmappedWhiteLabel = order.items.find(
+          (item) =>
+            item.productVariant.product.commercialKind === "WHITE_LABEL" &&
+            !item.productVariant.product.baseCoffeeProductId,
+        );
+        if (unmappedWhiteLabel)
+          throw new BadRequestException(
+            `O White Label ${unmappedWhiteLabel.productName} ainda não possui café-base definido. Vincule-o a uma linha e perfil antes de reservar.`,
+          );
+
+        await this.allocateRoastedWipForOrder(transaction, companyId, id);
+        const bulkReservations = await transaction.$queryRawUnsafe<
+          RoastedWipReservationRow[]
+        >(
+          `SELECT reservation.id,reservation."salesOrderItemId",
+                    reservation."packageQuantity",reservation."requestedKg",
+                    reservation."reservedKg",reservation.status,
+                    stock_product.name AS "stockProductName",
+                    stock_line.name AS "stockLineName"
+               FROM "RoastedWipReservation" reservation
+               JOIN "SalesOrderItem" item ON item.id=reservation."salesOrderItemId"
+               JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+               JOIN "Product" sale_product ON sale_product.id=variant."productId"
+               JOIN "Product" stock_product
+                 ON stock_product.id=COALESCE(sale_product."baseCoffeeProductId",sale_product.id)
+               JOIN "ProductLine" stock_line ON stock_line.id=stock_product."productLineId"
+              WHERE reservation."companyId"=$1
+                AND reservation."salesOrderId"=$2
+                AND reservation.status IN ('PENDING','PARTIAL','RESERVED')
+              ORDER BY reservation.id
+              FOR UPDATE OF reservation`,
+          companyId,
+          id,
+        );
+        for (const reservation of bulkReservations) {
+          const requestedKg = Number(reservation.requestedKg);
+          const reservedKg = Number(reservation.reservedKg);
+          if (reservedKg + 0.0005 < requestedKg) {
+            const missingKg = Math.max(0, requestedKg - reservedKg);
+            throw new BadRequestException(
+              `Café torrado a granel insuficiente para ${reservation.stockLineName} · ${reservation.stockProductName}: necessário ${requestedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, reservado ${reservedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, faltante ${missingKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg.`,
+            );
+          }
+        }
+        const bulkByItem = new Map(
+          bulkReservations.map((reservation) => [
+            reservation.salesOrderItemId,
+            reservation,
+          ]),
+        );
         const requestedBalances = [];
         for (const item of order.items) {
           const warehouseId = warehouseByVariant?.[item.productVariantId];
+          const bulkReservation = bulkByItem.get(item.id);
+          const finishedQuantity = Math.max(
+            0,
+            item.quantity - Number(bulkReservation?.packageQuantity ?? 0),
+          );
+          if (finishedQuantity <= 0) continue;
           const previousReservation = order.reservations.find(
             (reservation) => reservation.salesOrderItemId === item.id,
           );
@@ -876,7 +943,12 @@ export class SalesOrdersService implements OnModuleDestroy {
                 },
               });
           if (!balance) throw this.insufficient(item, 0);
-          requestedBalances.push({ item, balance, previousReservation });
+          requestedBalances.push({
+            item,
+            balance,
+            previousReservation,
+            reserveQuantity: finishedQuantity,
+          });
         }
         requestedBalances.sort((a, b) =>
           a.balance.id.localeCompare(b.balance.id),
@@ -887,18 +959,18 @@ export class SalesOrdersService implements OnModuleDestroy {
             where: { id: entry.balance.id },
           });
           const available = current.quantityOnHand - current.reservedQuantity;
-          if (entry.item.quantity > available)
+          if (entry.reserveQuantity > available)
             throw this.insufficient(entry.item, available);
           reserveSalesStock(
             salesInventoryBalance(
               current.quantityOnHand,
               current.reservedQuantity,
             ),
-            entry.item.quantity,
+            entry.reserveQuantity,
           );
           await transaction.finishedProduct.update({
             where: { id: current.id },
-            data: { reservedQuantity: { increment: entry.item.quantity } },
+            data: { reservedQuantity: { increment: entry.reserveQuantity } },
           });
           if (entry.previousReservation) {
             await transaction.inventoryReservation.update({
@@ -907,7 +979,7 @@ export class SalesOrdersService implements OnModuleDestroy {
                 productVariantId: entry.item.productVariantId,
                 finishedProductId: current.id,
                 warehouseId: current.warehouseId,
-                quantity: entry.item.quantity,
+                quantity: entry.reserveQuantity,
                 status: InventoryReservationStatus.ACTIVE,
                 releasedAt: null,
               },
@@ -921,15 +993,18 @@ export class SalesOrdersService implements OnModuleDestroy {
                 productVariantId: entry.item.productVariantId,
                 finishedProductId: current.id,
                 warehouseId: current.warehouseId,
-                quantity: entry.item.quantity,
+                quantity: entry.reserveQuantity,
                 idempotencyKey: `SALES_RESERVATION:${entry.item.id}`,
               },
             });
           }
         }
+        const nextStatus = bulkReservations.length
+          ? SalesOrderStatus.IN_PRODUCTION
+          : SalesOrderStatus.RESERVED;
         await transaction.salesOrder.update({
           where: { id },
-          data: { status: SalesOrderStatus.RESERVED },
+          data: { status: nextStatus },
         });
         return {
           orderId: id,
@@ -937,7 +1012,17 @@ export class SalesOrdersService implements OnModuleDestroy {
           reservations: await transaction.inventoryReservation.findMany({
             where: { salesOrderId: id },
           }),
-          status: SalesOrderStatus.RESERVED,
+          bulkReservations: bulkReservations.map((reservation) => ({
+            id: reservation.id,
+            salesOrderItemId: reservation.salesOrderItemId,
+            packageQuantity: Number(reservation.packageQuantity),
+            requestedKg: Number(reservation.requestedKg),
+            reservedKg: Number(reservation.reservedKg),
+            status: reservation.status,
+            line: reservation.stockLineName,
+            product: reservation.stockProductName,
+          })),
+          status: nextStatus,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },

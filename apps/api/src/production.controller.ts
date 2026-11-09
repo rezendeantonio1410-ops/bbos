@@ -195,7 +195,11 @@ export class ProductionController {
       );
     await transaction.finishedProduct.update({
       where: { id: finishedProductId },
-      data: { reservedQuantity: { increment: item.quantity } },
+      data: {
+        reservedQuantity: {
+          increment: Math.max(0, item.quantity - demand.activeReserved),
+        },
+      },
     });
     const reservation = previousReservation
       ? await transaction.inventoryReservation.update({
