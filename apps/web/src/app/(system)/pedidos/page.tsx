@@ -255,6 +255,7 @@ type Order = {
     serviceName?: string | null;
     trackingCode?: string | null;
     authorizationCode?: string | null;
+    reexpeditionId?: string | null;
     latestEventTitle?: string | null;
     latestEventDetail?: string | null;
     latestEventAt?: string | null;
@@ -488,6 +489,7 @@ const statusLabel: Record<string, string> = {
   INVOICED: "Faturado",
   INVOICE_REQUESTED: "Faturamento solicitado",
   INVOICE_ERROR: "Erro na NF-e",
+  REEXPEDITION_READY: "Reenvio pronto",
   SHIPPED: "Expedido",
   DELIVERED: "Entregue",
   CANCELLED: "Cancelado",
@@ -505,6 +507,7 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
     INVOICED: "success",
     INVOICE_REQUESTED: "warning",
     INVOICE_ERROR: "danger",
+    REEXPEDITION_READY: "success",
     SHIPPED: "success",
     DELIVERED: "success",
     CANCELLED: "danger",
@@ -527,6 +530,12 @@ const filters: Array<[string, string]> = [
 ];
 
 const displayStatus = (order: Order) => {
+  if (
+    order.shipment?.reexpeditionId &&
+    ["PENDING", "PURCHASED", "LABEL_READY"].includes(order.shipment.status)
+  ) {
+    return "REEXPEDITION_READY";
+  }
   if (
     ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
       order.payment?.status ?? "",

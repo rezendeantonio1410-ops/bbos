@@ -635,6 +635,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           serviceName: string | null;
           trackingCode: string | null;
           authorizationCode: string | null;
+          reexpeditionId: string | null;
           latestEventTitle: string | null;
           latestEventDetail: string | null;
           latestEventAt: Date | null;
@@ -644,6 +645,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         `SELECT DISTINCT ON (shipment."salesOrderId")
                 shipment."salesOrderId",shipment.status,shipment."carrierName",shipment."serviceName",
                 shipment."trackingCode",shipment.metadata->>'authorization_code' AS "authorizationCode",
+                shipment.metadata->>'reexpeditionId' AS "reexpeditionId",
                 event.title AS "latestEventTitle",event.detail AS "latestEventDetail",
                 event."occurredAt" AS "latestEventAt",shipment."updatedAt"
            FROM "Shipment" shipment
