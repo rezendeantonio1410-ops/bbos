@@ -66,6 +66,8 @@ test("a tela distingue os documentos fiscais e imprime a etiqueta nova", () => {
     /replacement_fiscal\.number AS "reexpeditionReplacementFiscalNumber"/,
   );
   assert.match(ordersPage, /Imprimir nova etiqueta/);
+  assert.match(salesOrdersController, /AS "printableLabelUrl"/);
+  assert.match(ordersPage, /fulfillment\?\.printableLabelUrl/);
   assert.match(ordersPage, /Ver devolução/);
   assert.match(ordersPage, /Ver nova saída/);
 });

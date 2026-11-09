@@ -425,6 +425,11 @@ export class SalesOrdersController {
       this.salesOrders.database.$queryRawUnsafe<any[]>(
         `SELECT s.*,
               s.metadata->>'authorization_code' AS "authorizationCode",
+              COALESCE(
+                s.metadata#>>'{files,1,pdf}',
+                s.metadata#>>'{order_snapshot,files,1,pdf}',
+                s."labelUrl"
+              ) AS "printableLabelUrl",
               f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId",
               f.number AS "fiscalNumber",

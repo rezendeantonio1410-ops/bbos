@@ -316,6 +316,7 @@ type ShipmentInfo = {
   id?: string | null;
   status?: string | null;
   labelUrl?: string | null;
+  printableLabelUrl?: string | null;
   trackingCode?: string | null;
   authorizationCode?: string | null;
   trackingUrl?: string | null;
@@ -3324,6 +3325,8 @@ function OrderDrawer({
   const shipmentIsCancelled = fulfillment?.status === "CANCELLED";
   const fiscalDocumentUrl =
     fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl || null;
+  const printableLabelUrl =
+    fulfillment?.printableLabelUrl || fulfillment?.labelUrl || null;
   const originalFiscalDocumentUrl =
     fulfillment?.reexpeditionOriginalFiscalPdfUrl ||
     fulfillment?.reexpeditionOriginalFiscalDanfeUrl ||
@@ -4560,9 +4563,9 @@ function OrderDrawer({
                         </a>
                       )}
                     {fulfillment?.reexpeditionId ? (
-                      fulfillment.labelUrl ? (
+                      printableLabelUrl ? (
                         <a
-                          href={fulfillment.labelUrl}
+                          href={printableLabelUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
@@ -4579,9 +4582,9 @@ function OrderDrawer({
                       >
                         {busy ? "Reprocessando…" : "Reprocessar NF-e"}
                       </button>
-                    ) : fulfillment?.labelUrl ? (
+                    ) : printableLabelUrl ? (
                       <a
-                        href={fulfillment.labelUrl}
+                        href={printableLabelUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
