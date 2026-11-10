@@ -997,7 +997,10 @@ export class BlingOutboxService {
       );
     }
     const exportFiscalRoute = isExport
-      ? await this.blingCatalogSync.exportFiscalRoute(row.companyId)
+      ? await this.blingCatalogSync.exportFiscalRoute(
+          row.companyId,
+          order.orderType === "SAMPLE" ? "SAMPLE" : "COMMERCIAL",
+        )
       : null;
     const isInternationalSample = isExport && order.orderType === "SAMPLE";
     const orderCurrency = String(

@@ -71,6 +71,14 @@ test("international samples use export CFOP and a separate customs value", () =>
   );
   assert.match(outboxSource, /internationalSampleFiscalValues/);
   assert.match(outboxSource, /AMOSTRA INTERNACIONAL SEM VALOR COMERCIAL/);
+  assert.match(
+    controllerSource,
+    /exportFiscalRoute\([\s\S]*actor\.companyId,[\s\S]*orderType === "SAMPLE" \? "SAMPLE" : "COMMERCIAL"/,
+  );
+  assert.match(
+    outboxSource,
+    /exportFiscalRoute\([\s\S]*row\.companyId,[\s\S]*order\.orderType === "SAMPLE" \? "SAMPLE" : "COMMERCIAL"/,
+  );
 });
 
 test("green coffee export reserves approved lots in kilograms before invoicing", () => {

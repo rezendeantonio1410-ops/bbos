@@ -88,6 +88,10 @@ type CompanyFiscalProfile = {
   exportDepartureLocation?: string | null;
   exportDepartureState?: string | null;
   exportValidatedByAccountant: boolean;
+  exportSampleCfop?: string | null;
+  exportSampleNatureOperationId?: string | null;
+  exportSampleNatureOperationName?: string | null;
+  exportSampleValidatedByAccountant: boolean;
   reexpeditionReturnNatureOperationId?: string | null;
   reexpeditionReturnNatureOperationName?: string | null;
   reexpeditionOutboundNatureOperationId?: string | null;
@@ -931,6 +935,102 @@ export default function IntegrationsPage() {
                 Rota de exportação validada pela contabilidade
               </label>
             </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-cyan-100 bg-cyan-50/60 p-4">
+            <div>
+              <p className="text-sm font-bold text-cyan-950">
+                Rota fiscal para amostras internacionais
+              </p>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-cyan-800">
+                Esta rota é separada da venda internacional. Assim, uma amostra
+                sem valor comercial nunca reutiliza por engano a natureza ou o
+                CFOP de uma venda para o exterior.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-[2fr_1fr_auto] lg:items-end">
+              <label className="block">
+                <span className="mb-1 block text-[9px] font-bold uppercase tracking-[.08em] text-cyan-800">
+                  Natureza de amostra no Bling
+                </span>
+                <select
+                  value={
+                    profiles.companyProfile.exportSampleNatureOperationId ?? ""
+                  }
+                  onChange={(event) => {
+                    const selected = operationNatures.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    updateCompany({
+                      exportSampleNatureOperationId: event.target.value || null,
+                      exportSampleNatureOperationName: selected?.name ?? null,
+                      exportSampleValidatedByAccountant: false,
+                    });
+                  }}
+                  className="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2.5 text-xs text-stone-800 outline-none focus:border-cyan-600"
+                >
+                  <option value="">
+                    Selecione a natureza de amostra internacional
+                  </option>
+                  {profiles.companyProfile.exportSampleNatureOperationId &&
+                    !operationNatures.some(
+                      (item) =>
+                        item.id ===
+                        profiles.companyProfile.exportSampleNatureOperationId,
+                    ) && (
+                      <option
+                        value={
+                          profiles.companyProfile.exportSampleNatureOperationId
+                        }
+                      >
+                        {profiles.companyProfile
+                          .exportSampleNatureOperationName ??
+                          `Natureza #${profiles.companyProfile.exportSampleNatureOperationId}`}
+                      </option>
+                    )}
+                  {operationNatures.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="CFOP da amostra"
+                value={profiles.companyProfile.exportSampleCfop ?? ""}
+                onChange={(value) =>
+                  updateCompany({
+                    exportSampleCfop: value,
+                    exportSampleValidatedByAccountant: false,
+                  })
+                }
+              />
+              <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-cyan-950">
+                <input
+                  type="checkbox"
+                  checked={
+                    profiles.companyProfile.exportSampleValidatedByAccountant
+                  }
+                  disabled={
+                    !profiles.companyProfile.exportSampleNatureOperationId ||
+                    !profiles.companyProfile.exportSampleCfop ||
+                    !profiles.companyProfile.exportDepartureLocation ||
+                    !profiles.companyProfile.exportDepartureState
+                  }
+                  onChange={(event) =>
+                    updateCompany({
+                      exportSampleValidatedByAccountant: event.target.checked,
+                    })
+                  }
+                />
+                Amostra internacional validada pela contabilidade
+              </label>
+            </div>
+            <p className="mt-3 text-[11px] leading-5 text-cyan-800">
+              O local e a UF de embarque são os mesmos informados na rota de
+              exportação acima. O BBOS continua exigindo valor aduaneiro, câmbio
+              e data da cotação para cada remessa.
+            </p>
           </div>
 
           <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/60 p-4">

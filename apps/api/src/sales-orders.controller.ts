@@ -942,6 +942,7 @@ export class SalesOrdersController {
       try {
         exportRoute = await this.blingCatalogSync.exportFiscalRoute(
           actor.companyId,
+          orderType === "SAMPLE" ? "SAMPLE" : "COMMERCIAL",
         );
       } catch (cause) {
         throw new BadRequestException(

@@ -55,6 +55,10 @@ type CompanyFiscalProfile = {
   exportDepartureLocation?: string | null;
   exportDepartureState?: string | null;
   exportValidatedByAccountant: boolean;
+  exportSampleCfop?: string | null;
+  exportSampleNatureOperationId?: string | null;
+  exportSampleNatureOperationName?: string | null;
+  exportSampleValidatedByAccountant: boolean;
   reexpeditionReturnNatureOperationId?: string | null;
   reexpeditionReturnNatureOperationName?: string | null;
   reexpeditionOutboundNatureOperationId?: string | null;
@@ -239,6 +243,10 @@ export class BlingCatalogSyncService {
       exportDepartureLocation: null,
       exportDepartureState: "PR",
       exportValidatedByAccountant: false,
+      exportSampleCfop: null,
+      exportSampleNatureOperationId: null,
+      exportSampleNatureOperationName: null,
+      exportSampleValidatedByAccountant: false,
       reexpeditionReturnNatureOperationId: null,
       reexpeditionReturnNatureOperationName: null,
       reexpeditionOutboundNatureOperationId: null,
@@ -355,6 +363,23 @@ export class BlingCatalogSyncService {
         patch.exportValidatedByAccountant ??
         current.exportValidatedByAccountant,
       ),
+      exportSampleCfop:
+        patch.exportSampleCfop == null
+          ? (current.exportSampleCfop ?? null)
+          : String(patch.exportSampleCfop).replace(/\D/g, "") || null,
+      exportSampleNatureOperationId:
+        patch.exportSampleNatureOperationId == null
+          ? (current.exportSampleNatureOperationId ?? null)
+          : String(patch.exportSampleNatureOperationId).replace(/\D/g, "") ||
+            null,
+      exportSampleNatureOperationName:
+        patch.exportSampleNatureOperationName == null
+          ? (current.exportSampleNatureOperationName ?? null)
+          : String(patch.exportSampleNatureOperationName).trim() || null,
+      exportSampleValidatedByAccountant: Boolean(
+        patch.exportSampleValidatedByAccountant ??
+        current.exportSampleValidatedByAccountant,
+      ),
       reexpeditionReturnNatureOperationId:
         patch.reexpeditionReturnNatureOperationId == null
           ? (current.reexpeditionReturnNatureOperationId ?? null)
@@ -397,6 +422,11 @@ export class BlingCatalogSyncService {
     if (next.exportCfop && !/^7\d{3}$/.test(next.exportCfop)) {
       throw new Error("CFOP de exportação deve ter 4 dígitos e iniciar por 7.");
     }
+    if (next.exportSampleCfop && !/^7\d{3}$/.test(next.exportSampleCfop)) {
+      throw new Error(
+        "CFOP de amostra internacional deve ter 4 dígitos e iniciar por 7.",
+      );
+    }
     if (
       next.exportDepartureState &&
       !/^[A-Z]{2}$/.test(next.exportDepartureState)
@@ -404,6 +434,16 @@ export class BlingCatalogSyncService {
       throw new Error("UF de embarque inválida.");
     }
     if (next.exportValidatedByAccountant) resolveExportFiscalRoute(next);
+    if (next.exportSampleValidatedByAccountant) {
+      resolveExportFiscalRoute({
+        exportCfop: next.exportSampleCfop,
+        exportNatureOperationId: next.exportSampleNatureOperationId,
+        exportNatureOperationName: next.exportSampleNatureOperationName,
+        exportDepartureLocation: next.exportDepartureLocation,
+        exportDepartureState: next.exportDepartureState,
+        exportValidatedByAccountant: next.exportSampleValidatedByAccountant,
+      });
+    }
     if (next.reexpeditionValidatedByAccountant)
       resolveReexpeditionFiscalRoute(next);
     await this.saveResourceMap(
@@ -442,8 +482,22 @@ export class BlingCatalogSyncService {
     );
   }
 
-  async exportFiscalRoute(companyId: string) {
-    return resolveExportFiscalRoute(await this.companyFiscalProfile(companyId));
+  async exportFiscalRoute(
+    companyId: string,
+    orderType: "COMMERCIAL" | "SAMPLE" = "COMMERCIAL",
+  ) {
+    const profile = await this.companyFiscalProfile(companyId);
+    if (orderType === "SAMPLE") {
+      return resolveExportFiscalRoute({
+        exportCfop: profile.exportSampleCfop,
+        exportNatureOperationId: profile.exportSampleNatureOperationId,
+        exportNatureOperationName: profile.exportSampleNatureOperationName,
+        exportDepartureLocation: profile.exportDepartureLocation,
+        exportDepartureState: profile.exportDepartureState,
+        exportValidatedByAccountant: profile.exportSampleValidatedByAccountant,
+      });
+    }
+    return resolveExportFiscalRoute(profile);
   }
 
   async reexpeditionFiscalRoute(companyId: string) {
