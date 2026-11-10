@@ -79,7 +79,8 @@ export class IntegrationsController {
           )
           .catch(() => []),
         this.database.$queryRawUnsafe<any[]>(
-          `SELECT id,name,"legalName","taxId","postalCode",address,"addressNumber",
+          `SELECT id,name,"legalName","taxId","countryCode","countryName","foreignTaxId",
+                  "postalCode",address,"addressNumber",
                   "addressComplement",district,city,state,"stateRegistration","stateRegistrationType"
              FROM "Customer"
             WHERE "companyId"=$1 AND active=TRUE

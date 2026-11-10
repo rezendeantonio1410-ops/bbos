@@ -19,6 +19,10 @@ const databaseSchema = readFileSync(
   resolve(__dirname, "../../../packages/database/prisma/schema.prisma"),
   "utf8",
 );
+const integrationsSource = readFileSync(
+  resolve(__dirname, "integrations.controller.ts"),
+  "utf8",
+);
 
 test("international orders require foreign customer, fiscal route and exchange audit", () => {
   assert.match(controllerSource, /customer\.countryCode === "BR"/);
@@ -28,6 +32,13 @@ test("international orders require foreign customer, fiscal route and exchange a
   assert.match(
     controllerSource,
     /SELECT c\.name,c\."legalName",c\."taxId",c\."countryCode",c\."countryName",c\."foreignTaxId"/,
+  );
+});
+
+test("integration readiness evaluates foreign customers with their international identity", () => {
+  assert.match(
+    integrationsSource,
+    /SELECT id,name,"legalName","taxId","countryCode","countryName","foreignTaxId"/,
   );
 });
 
