@@ -71,6 +71,9 @@ test("orders screen exposes explicit shipment and completion actions", () => {
   assert.match(page, /Confirmar expedição/);
   assert.match(page, /Confirmar retirada e concluir/);
   assert.match(page, /Confirmar entrega e concluir/);
+  assert.match(page, /const canFinalizeDelivery/);
+  assert.match(page, /\["INVOICED", "SHIPPED"\]\.includes\(order\.status\)/);
+  assert.match(page, /overflow-y-auto overscroll-contain/);
   assert.match(page, /\["OVERDUE", "Atrasados"\]/);
   assert.match(page, /searchParams\.get\("filtro"\) === "atrasados"/);
   assert.match(page, /Abrir e resolver/);

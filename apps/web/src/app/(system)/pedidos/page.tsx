@@ -3826,6 +3826,11 @@ function OrderDrawer({
             .join(" · ")
         : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
   const isPickup = order.freightResponsibility === "PICKUP";
+  const canFinalizeDelivery =
+    canCompleteDelivery &&
+    (["INVOICED", "SHIPPED"].includes(order.status) ||
+      (order.status === "READY_TO_SHIP" &&
+        fulfillment?.fiscalStatus === "AUTHORIZED"));
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote
     ? quote.officialUnitPrice * (1 - requested / 100)
@@ -4136,13 +4141,13 @@ function OrderDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
       <button
         aria-label="Fechar"
         onClick={onClose}
         className="absolute inset-0 bg-black/25"
       />
-      <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-white p-6">
+      <aside className="relative h-dvh max-h-dvh min-h-0 w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 [scrollbar-gutter:stable]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -4602,39 +4607,31 @@ function OrderDrawer({
                         {busy ? "Processando…" : "Confirmar expedição"}
                       </button>
                     )}
-                  {canCompleteDelivery &&
-                    ["INVOICED", "READY_TO_SHIP", "SHIPPED"].includes(
-                      order.status,
-                    ) &&
-                    (order.status === "SHIPPED" ||
-                      fulfillment?.fiscalStatus === "AUTHORIZED") && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void completeDelivery(
-                            isPickup ? "PICKUP" : "MANUAL_DELIVERY",
-                          )
-                        }
-                        className="rounded-xl bg-emerald-700 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
-                      >
-                        {busy
-                          ? "Concluindo…"
-                          : isPickup
-                            ? "Confirmar retirada e concluir"
-                            : "Confirmar entrega e concluir"}
-                      </button>
-                    )}
-                </div>
-                {canCompleteDelivery &&
-                  ["INVOICED", "READY_TO_SHIP", "SHIPPED"].includes(
-                    order.status,
-                  ) && (
-                    <p className="mt-3 text-[10px] text-stone-500">
-                      A confirmação de retirada ou entrega grava data e usuário
-                      responsável na auditoria do pedido.
-                    </p>
+                  {canFinalizeDelivery && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void completeDelivery(
+                          isPickup ? "PICKUP" : "MANUAL_DELIVERY",
+                        )
+                      }
+                      className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(4,120,87,.16)] disabled:opacity-50"
+                    >
+                      {busy
+                        ? "Concluindo…"
+                        : isPickup
+                          ? "Confirmar retirada e concluir"
+                          : "Confirmar entrega e concluir"}
+                    </button>
                   )}
+                </div>
+                {canFinalizeDelivery && (
+                  <p className="mt-3 text-[10px] text-stone-500">
+                    A confirmação de retirada ou entrega grava data e usuário
+                    responsável na auditoria do pedido.
+                  </p>
+                )}
                 {error && (
                   <div
                     role="alert"
