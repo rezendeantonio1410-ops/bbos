@@ -519,6 +519,7 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
 
 const filters: Array<[string, string]> = [
   ["ALL", "Todos"],
+  ["OVERDUE", "Atrasados"],
   ["SAMPLE", "Amostras"],
   ["DRAFT", "Rascunho"],
   ["AWAITING_PAYMENT", "Aguardando Pix"],
@@ -532,6 +533,26 @@ const filters: Array<[string, string]> = [
   ["SHIPPED", "Expedidos"],
   ["DELIVERED", "Concluídos"],
 ];
+
+const overdueTerminalStatuses = new Set(["SHIPPED", "DELIVERED", "CANCELLED"]);
+
+const isOverdueOrder = (order: Order, now = Date.now()) => {
+  if (
+    !order.expectedDeliveryDate ||
+    overdueTerminalStatuses.has(order.status)
+  ) {
+    return false;
+  }
+  const expected = new Date(order.expectedDeliveryDate).getTime();
+  return Number.isFinite(expected) && expected < now;
+};
+
+const overdueDays = (order: Order, now = Date.now()) => {
+  if (!order.expectedDeliveryDate) return 0;
+  const expected = new Date(order.expectedDeliveryDate).getTime();
+  if (!Number.isFinite(expected)) return 0;
+  return Math.max(1, Math.ceil((now - expected) / 86_400_000));
+};
 
 const displayStatus = (order: Order) => {
   if (
@@ -636,8 +657,12 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void refresh();
-    if (new URLSearchParams(window.location.search).get("novo") === "1") {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("novo") === "1") {
       setCreating("COMMERCIAL");
+    }
+    if (searchParams.get("filtro") === "atrasados") {
+      setFilter("OVERDUE");
     }
     void fetch(`${getApiBaseUrl()}/auth/me`, {
       credentials: "include",
@@ -687,9 +712,11 @@ export default function OrdersPage() {
     () =>
       filter === "ALL"
         ? orders
-        : filter === "SAMPLE"
-          ? orders.filter((item) => item.orderType === "SAMPLE")
-          : orders.filter((item) => displayStatus(item) === filter),
+        : filter === "OVERDUE"
+          ? orders.filter((item) => isOverdueOrder(item))
+          : filter === "SAMPLE"
+            ? orders.filter((item) => item.orderType === "SAMPLE")
+            : orders.filter((item) => displayStatus(item) === filter),
     [orders, filter],
   );
   const open = orders.filter(
@@ -700,6 +727,7 @@ export default function OrdersPage() {
   const deliveryIssues = orders.filter(
     (item) => item.shipment?.status === "EXCEPTION",
   );
+  const overdueOrders = orders.filter((item) => isOverdueOrder(item));
   const firstDeliveryIssue = deliveryIssues[0];
   const avgTicket = commercialOrders.length
     ? commercialOrders.reduce(
@@ -856,7 +884,9 @@ export default function OrdersPage() {
             onClick={() => setFilter(value)}
             className={`rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}
           >
-            {label}
+            {value === "OVERDUE" && overdueOrders.length > 0
+              ? `${label} (${overdueOrders.length})`
+              : label}
           </button>
         ))}
       </div>
@@ -884,11 +914,19 @@ export default function OrdersPage() {
             const paymentDate = formatPaymentDate(order.payment?.paidAt);
             const paymentConfirmed =
               order.payment?.status === "PAID" && Boolean(paymentDate);
+            const overdue = isOverdueOrder(order);
+            const daysLate = overdue ? overdueDays(order) : 0;
 
             return (
               <Card
                 key={order.id}
-                className={`p-4 ${compactShipmentException ? "border-2 border-red-300 bg-red-50/35 shadow-[0_10px_30px_rgba(185,28,28,.10)]" : ""}`}
+                className={`p-4 ${
+                  compactShipmentException
+                    ? "border-2 border-red-300 bg-red-50/35 shadow-[0_10px_30px_rgba(185,28,28,.10)]"
+                    : overdue
+                      ? "border-2 border-amber-300 bg-amber-50/25"
+                      : ""
+                }`}
               >
                 {compactShipmentException && (
                   <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-600 px-3 py-2.5 text-white">
@@ -905,6 +943,29 @@ export default function OrdersPage() {
                           : " Abra o pedido para verificar e agir."}
                       </p>
                     </div>
+                  </div>
+                )}
+                {overdue && !compactShipmentException && (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-100/70 px-3 py-2.5 text-amber-950">
+                    <div className="flex items-center gap-2">
+                      <Clock3 size={16} className="shrink-0" />
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide">
+                          Pedido atrasado
+                        </p>
+                        <p className="mt-0.5 text-[11px]">
+                          Prazo vencido há {daysLate}{" "}
+                          {daysLate === 1 ? "dia" : "dias"}.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(order)}
+                      className="inline-flex min-h-10 items-center gap-1 rounded-xl bg-amber-950 px-3 text-[10px] font-black text-white"
+                    >
+                      Abrir e resolver <ChevronRight size={12} />
+                    </button>
                   </div>
                 )}
                 <button

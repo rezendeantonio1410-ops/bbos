@@ -147,6 +147,14 @@ export function HomeCommandV3() {
             : "healthy";
 
   const hero = getHeroState(state, critical, attention);
+  const priorityGridClass =
+    home.alerts.length <= 1
+      ? "grid-cols-1"
+      : home.alerts.length === 2
+        ? "md:grid-cols-2"
+        : home.alerts.length === 3
+          ? "md:grid-cols-2 xl:grid-cols-3"
+          : "md:grid-cols-2 xl:grid-cols-4";
   const primaryHref = isSales
     ? "/pedidos"
     : state === "insufficient"
@@ -237,7 +245,7 @@ export function HomeCommandV3() {
           subtitle="O BBOS mostra exceções; silêncio não vira certeza."
         />
         {home.alerts.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className={`grid gap-3 ${priorityGridClass}`}>
             {home.alerts.map((item) => (
               <ActionCard key={`${item.tone}-${item.title}`} {...item} />
             ))}
@@ -292,8 +300,10 @@ export function HomeCommandV3() {
                 ? `${home.overdueOrders} atrasado${home.overdueOrders > 1 ? "s" : ""}`
                 : "Nenhum atraso registrado"
             }
-            href="/pedidos"
-            tone="neutral"
+            href={
+              home.overdueOrders > 0 ? "/pedidos?filtro=atrasados" : "/pedidos"
+            }
+            tone={home.overdueOrders > 0 ? "amber" : "neutral"}
           />
           {!isSales && (
             <PulseCard
@@ -800,7 +810,7 @@ function ActionCard({
       <p className="mt-1 text-[11px] leading-5 text-stone-500">{impact}</p>
       <Link
         href={href}
-        className="mt-3 inline-flex items-center gap-1 text-[10px] font-black text-emerald-700"
+        className="mt-4 inline-flex min-h-10 items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[10px] font-black text-emerald-800 transition hover:bg-emerald-100"
       >
         {action} <ArrowRight size={11} />
       </Link>

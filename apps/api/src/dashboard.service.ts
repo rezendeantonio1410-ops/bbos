@@ -289,9 +289,10 @@ export class DashboardService implements OnModuleDestroy {
             {
               tone: "CRÍTICO",
               title: `${overdue} pedido(s) atrasado(s)`,
-              impact: "Existem pedidos com prazo vencido.",
-              href: "/pedidos",
-              action: "Ver pedidos",
+              impact:
+                "Existem pedidos com prazo vencido. Abra a fila já filtrada e registre a expedição, retirada ou entrega.",
+              href: "/pedidos?filtro=atrasados",
+              action: "Resolver atrasos",
             },
           ]
         : []),

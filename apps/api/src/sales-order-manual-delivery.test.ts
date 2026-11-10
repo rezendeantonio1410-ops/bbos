@@ -71,6 +71,9 @@ test("orders screen exposes explicit shipment and completion actions", () => {
   assert.match(page, /Confirmar expedição/);
   assert.match(page, /Confirmar retirada e concluir/);
   assert.match(page, /Confirmar entrega e concluir/);
+  assert.match(page, /\["OVERDUE", "Atrasados"\]/);
+  assert.match(page, /searchParams\.get\("filtro"\) === "atrasados"/);
+  assert.match(page, /Abrir e resolver/);
   assert.match(page, /operationalAction\("deliver", \{ method \}\)/);
   assert.match(page, /setCanCompleteDelivery\([\s\S]*?"SALES"/);
   assert.match(controller, /@Post\(":id\/deliver"\)/);
@@ -79,4 +82,6 @@ test("orders screen exposes explicit shipment and completion actions", () => {
     dashboard,
     /!\["SHIPPED", "DELIVERED", "CANCELLED"\]\.includes\(o\.status\)/,
   );
+  assert.match(dashboard, /\/pedidos\?filtro=atrasados/);
+  assert.match(dashboard, /Resolver atrasos/);
 });
