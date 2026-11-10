@@ -577,6 +577,7 @@ export default function OrdersPage() {
   const [userRole, setUserRole] = useState("");
   const [canEditOrders, setCanEditOrders] = useState(false);
   const [canOperateOrders, setCanOperateOrders] = useState(false);
+  const [canCompleteDelivery, setCanCompleteDelivery] = useState(false);
   const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
@@ -653,6 +654,11 @@ export default function OrdersPage() {
             payload?.user?.role,
           ),
         );
+        setCanCompleteDelivery(
+          ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE", "SALES"].includes(
+            payload?.user?.role,
+          ),
+        );
         setCanPrepareReexpedition(
           ["ADMIN", "EXECUTIVE"].includes(payload?.user?.role),
         );
@@ -661,6 +667,7 @@ export default function OrdersPage() {
         setUserRole("");
         setCanEditOrders(false);
         setCanOperateOrders(false);
+        setCanCompleteDelivery(false);
         setCanPrepareReexpedition(false);
       });
     const timer = window.setInterval(() => {
@@ -1085,6 +1092,7 @@ export default function OrdersPage() {
           onChanged={() => refreshSelected(selected.id)}
           canEdit={canEditOrders && selected.status === "DRAFT"}
           canOperate={canOperateOrders}
+          canCompleteDelivery={canCompleteDelivery}
           canPrepareReexpedition={canPrepareReexpedition}
           onEdit={() => {
             setEditing(selected);
@@ -3433,6 +3441,7 @@ function OrderDrawer({
   onChanged,
   canEdit,
   canOperate,
+  canCompleteDelivery,
   canPrepareReexpedition,
   onEdit,
 }: {
@@ -3441,6 +3450,7 @@ function OrderDrawer({
   onChanged: () => Promise<void>;
   canEdit: boolean;
   canOperate: boolean;
+  canCompleteDelivery: boolean;
   canPrepareReexpedition: boolean;
   onEdit: () => void;
 }) {
@@ -4529,7 +4539,7 @@ function OrderDrawer({
                         {busy ? "Processando…" : "Confirmar expedição"}
                       </button>
                     )}
-                  {canOperate &&
+                  {canCompleteDelivery &&
                     ["INVOICED", "READY_TO_SHIP", "SHIPPED"].includes(
                       order.status,
                     ) &&
@@ -4553,7 +4563,7 @@ function OrderDrawer({
                       </button>
                     )}
                 </div>
-                {canOperate &&
+                {canCompleteDelivery &&
                   ["INVOICED", "READY_TO_SHIP", "SHIPPED"].includes(
                     order.status,
                   ) && (

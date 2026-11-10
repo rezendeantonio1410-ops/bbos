@@ -72,7 +72,9 @@ test("orders screen exposes explicit shipment and completion actions", () => {
   assert.match(page, /Confirmar retirada e concluir/);
   assert.match(page, /Confirmar entrega e concluir/);
   assert.match(page, /operationalAction\("deliver", \{ method \}\)/);
+  assert.match(page, /setCanCompleteDelivery\([\s\S]*?"SALES"/);
   assert.match(controller, /@Post\(":id\/deliver"\)/);
+  assert.match(controller, /assertOrderVisibleToActor/);
   assert.match(
     dashboard,
     /!\["SHIPPED", "DELIVERED", "CANCELLED"\]\.includes\(o\.status\)/,

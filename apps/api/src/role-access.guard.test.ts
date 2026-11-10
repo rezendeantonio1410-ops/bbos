@@ -248,9 +248,15 @@ test("o vendedor consulta o catálogo comercial sem administrar produto fiscal",
   }
 });
 
-test("o vendedor negocia o pedido mas não opera estoque, fiscal ou expedição", () => {
+test("o vendedor negocia e registra entrega, mas não opera estoque, fiscal ou expedição", () => {
   const guard = new RoleAccessGuard(privateReflector);
-  for (const handler of ["create", "editDraft", "requestDiscount", "confirm"]) {
+  for (const handler of [
+    "create",
+    "editDraft",
+    "requestDiscount",
+    "confirm",
+    "deliver",
+  ]) {
     assert.equal(
       guard.canActivate(
         executionContext({
@@ -269,7 +275,6 @@ test("o vendedor negocia o pedido mas não opera estoque, fiscal ou expedição"
     "invoice",
     "label",
     "ship",
-    "deliver",
     "cancel",
     "prepareReexpedition",
     "decideDiscount",

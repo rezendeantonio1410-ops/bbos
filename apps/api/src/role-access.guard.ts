@@ -138,7 +138,7 @@ const HANDLER_ROLE_POLICY: Readonly<
     reserve: CORE_WITHOUT_SALES,
     cancel: CORE_WITHOUT_SALES,
     ship: CORE_WITHOUT_SALES,
-    deliver: CORE_WITHOUT_SALES,
+    deliver: CORE,
     picking: CORE_WITHOUT_SALES,
     readyToShip: CORE_WITHOUT_SALES,
     confirmPicking: CORE_WITHOUT_SALES,
