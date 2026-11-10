@@ -75,6 +75,30 @@ test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro",
   assert.equal(routes.includes("/usuarios"), false);
 });
 
+test("contabilidade recebe somente áreas de consulta fiscal e financeira", () => {
+  const routes = navigationForRole("ACCOUNTANT").flatMap((group) =>
+    group.items.map((item) => item.href),
+  );
+  assert.deepEqual(routes, [
+    "/clientes",
+    "/pedidos",
+    "/vendas",
+    "/notas-entrada",
+    "/financeiro",
+    "/custos",
+  ]);
+  for (const forbidden of [
+    "/home",
+    "/dashboard",
+    "/cafe-verde",
+    "/producao",
+    "/integracoes",
+    "/usuarios",
+  ]) {
+    assert.equal(routes.includes(forbidden), false);
+  }
+});
+
 test("a tela inicial do vendedor prioriza ações comerciais amigáveis ao tablet", () => {
   const source = readFileSync(
     join(__dirname, "../components/home-command-v3.tsx"),

@@ -61,6 +61,7 @@ const corporateTitleByRole: Record<string, string> = {
   EXECUTIVE: "Diretor",
   SALES: "Vendedor",
   FINANCE: "Financeiro",
+  ACCOUNTANT: "Contabilidade",
   INDUSTRIAL: "Industrial",
   MARKETPLACE_OPERATOR: "Operador de marketplace",
 };
@@ -97,6 +98,23 @@ const salesRestrictedPrefixes = [
   "/bbos",
   "/pedidos/aprovacao",
 ] as const;
+
+const accountantAllowedRoutes = new Set([
+  "/financeiro",
+  "/financeiro/receber",
+  "/financeiro/pagar",
+  "/financeiro/fluxo-caixa",
+  "/financeiro/agenda-vendas",
+  "/financeiro/bancos-contas",
+  "/financeiro/conciliacao",
+  "/notas-entrada",
+  "/custos",
+  "/clientes",
+  "/pedidos",
+  "/vendas",
+  "/perfil",
+]);
+const accountantAllowedPrefixes = ["/custos/produtos/"] as const;
 
 export function AppShellV2({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -245,6 +263,20 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     ) {
       router.replace("/home");
     }
+  }, [pathname, router, sessionState, sessionUser?.role]);
+
+  useEffect(() => {
+    if (
+      sessionState !== "authenticated" ||
+      sessionUser?.role !== "ACCOUNTANT" ||
+      pathname === "/login"
+    )
+      return;
+    if (
+      !accountantAllowedRoutes.has(pathname) &&
+      !accountantAllowedPrefixes.some((prefix) => pathname.startsWith(prefix))
+    )
+      router.replace("/financeiro");
   }, [pathname, router, sessionState, sessionUser?.role]);
 
   useEffect(() => {

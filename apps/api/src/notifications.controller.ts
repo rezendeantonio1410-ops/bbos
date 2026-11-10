@@ -49,8 +49,9 @@ export class NotificationsController {
   @Get()
   async list(@Req() request: AuthenticatedRequest) {
     const { companyId, role } = request.user;
+    const targetRoles = role === "ACCOUNTANT" ? ["ACCOUNTANT"] : [role, "ALL"];
     const notifications = await prisma.operationalNotification.findMany({
-      where: { companyId, targetRole: { in: [role, "ALL"] } },
+      where: { companyId, targetRole: { in: targetRoles } },
       orderBy: { createdAt: "desc" },
       take: 40,
     });
@@ -79,8 +80,9 @@ export class NotificationsController {
   @Patch(":id/read")
   async read(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     const { companyId, role } = request.user;
+    const targetRoles = role === "ACCOUNTANT" ? ["ACCOUNTANT"] : [role, "ALL"];
     const result = await prisma.operationalNotification.updateMany({
-      where: { id, companyId, targetRole: { in: [role, "ALL"] } },
+      where: { id, companyId, targetRole: { in: targetRoles } },
       data: { readAt: new Date() },
     });
     if (!result.count)
@@ -91,8 +93,9 @@ export class NotificationsController {
   @Patch("read-all")
   async readAll(@Req() request: AuthenticatedRequest) {
     const { companyId, role } = request.user;
+    const targetRoles = role === "ACCOUNTANT" ? ["ACCOUNTANT"] : [role, "ALL"];
     const result = await prisma.operationalNotification.updateMany({
-      where: { companyId, targetRole: { in: [role, "ALL"] }, readAt: null },
+      where: { companyId, targetRole: { in: targetRoles }, readAt: null },
       data: { readAt: new Date() },
     });
     return { ok: true, updated: result.count };

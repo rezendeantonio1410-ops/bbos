@@ -12,6 +12,7 @@ export type BbosRole =
   | "EXECUTIVE"
   | "INDUSTRIAL"
   | "FINANCE"
+  | "ACCOUNTANT"
   | "SALES"
   | "MARKETPLACE_OPERATOR"
   | "PARTNER";
@@ -21,12 +22,13 @@ const ALL: readonly BbosRole[] = [
   "EXECUTIVE",
   "INDUSTRIAL",
   "FINANCE",
+  "ACCOUNTANT",
   "SALES",
   "MARKETPLACE_OPERATOR",
 ];
 const AUTHENTICATED: readonly BbosRole[] = [...ALL, "PARTNER"];
 const CORE: readonly BbosRole[] = ALL.filter(
-  (role) => role !== "MARKETPLACE_OPERATOR",
+  (role) => role !== "MARKETPLACE_OPERATOR" && role !== "ACCOUNTANT",
 );
 const CORE_WITHOUT_SALES: readonly BbosRole[] = CORE.filter(
   (role) => role !== "SALES",
@@ -47,6 +49,17 @@ const MARKETPLACE: readonly BbosRole[] = [
   "ADMIN",
   "EXECUTIVE",
   "MARKETPLACE_OPERATOR",
+];
+const ACCOUNTING_READ: readonly BbosRole[] = [
+  "ADMIN",
+  "EXECUTIVE",
+  "FINANCE",
+  "ACCOUNTANT",
+];
+const ACCOUNTING_WRITE: readonly BbosRole[] = [
+  "ADMIN",
+  "EXECUTIVE",
+  "FINANCE",
 ];
 
 /**
@@ -72,10 +85,10 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   SalesOrdersController: CORE,
   SalesOrderApprovalsController: CORE,
   SalesOrderManualPaymentsController: ["ADMIN"],
-  FinanceController: ["ADMIN", "EXECUTIVE", "FINANCE"],
-  FinanceSalesScheduleController: ["ADMIN", "EXECUTIVE", "FINANCE"],
-  FinanceAssistedReconciliationController: ["ADMIN", "EXECUTIVE", "FINANCE"],
-  ReconciliationController: ["ADMIN", "EXECUTIVE", "FINANCE"],
+  FinanceController: ACCOUNTING_WRITE,
+  FinanceSalesScheduleController: ACCOUNTING_WRITE,
+  FinanceAssistedReconciliationController: ACCOUNTING_WRITE,
+  ReconciliationController: ACCOUNTING_WRITE,
   CommerceController: ["ADMIN", "EXECUTIVE"],
   AdminCoffeeReferenceController: LEADERSHIP,
   AdminUsersController: ["ADMIN"],
@@ -105,8 +118,74 @@ const HANDLER_ROLE_POLICY: Readonly<
   Record<string, Readonly<Record<string, readonly BbosRole[]>>>
 > = {
   DashboardController: {
+    home: [...CORE, "ACCOUNTANT"],
     executive: LEADERSHIP,
     industrial: OPERATIONS,
+  },
+  FinanceController: {
+    summary: ACCOUNTING_READ,
+    receivables: ACCOUNTING_READ,
+    payables: ACCOUNTING_READ,
+    accounts: ACCOUNTING_READ,
+    institutions: ACCOUNTING_READ,
+    createInstitution: ACCOUNTING_WRITE,
+    createAccount: ACCOUNTING_WRITE,
+    createPayable: ACCOUNTING_WRITE,
+    receive: ACCOUNTING_WRITE,
+    pay: ACCOUNTING_WRITE,
+  },
+  FinanceSalesScheduleController: {
+    list: ACCOUNTING_READ,
+    order: ACCOUNTING_READ,
+  },
+  FinanceAssistedReconciliationController: {
+    candidates: ACCOUNTING_READ,
+    settle: ACCOUNTING_WRITE,
+  },
+  ReconciliationController: {
+    summary: ACCOUNTING_READ,
+    pending: ACCOUNTING_READ,
+    accounts: ACCOUNTING_READ,
+    institutions: ACCOUNTING_READ,
+    bankTransactions: ACCOUNTING_READ,
+    list: ACCOUNTING_READ,
+    suggestions: ACCOUNTING_READ,
+    create: ACCOUNTING_WRITE,
+    importBankTransaction: ACCOUNTING_WRITE,
+    importStatement: ACCOUNTING_WRITE,
+    match: ACCOUNTING_WRITE,
+    autoMatch: ACCOUNTING_WRITE,
+    unmatch: ACCOUNTING_WRITE,
+    ignore: ACCOUNTING_WRITE,
+  },
+  FiscalInboundController: {
+    list: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    detail: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    importXml: OPERATIONS_FINANCE,
+    sync: OPERATIONS_FINANCE,
+    matchPurchase: OPERATIONS_FINANCE,
+    allocateItem: OPERATIONS_FINANCE,
+  },
+  CostingController: {
+    summary: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    listCostCenters: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    getCostCenter: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    listResources: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    getProductVariantCost: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    getSkuCost: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    listEvents: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    options: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    listTariffs: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    listRules: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    listPeriods: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    preflight: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
+    createCostEvent: OPERATIONS_FINANCE,
+    createTariff: OPERATIONS_FINANCE,
+    updateResource: OPERATIONS_FINANCE,
+    createRule: OPERATIONS_FINANCE,
+    createPeriod: OPERATIONS_FINANCE,
+    calculate: OPERATIONS_FINANCE,
+    close: OPERATIONS_FINANCE,
   },
   OperationsFlowController: {
     stockIn: OPERATIONS,
@@ -127,7 +206,13 @@ const HANDLER_ROLE_POLICY: Readonly<
     validateSku: OPERATIONS,
   },
   SalesOrdersController: {
-    exportOverview: CORE_WITHOUT_SALES,
+    list: [...CORE, "ACCOUNTANT"],
+    options: [...CORE, "ACCOUNTANT"],
+    exportOverview: [...CORE_WITHOUT_SALES, "ACCOUNTANT"],
+    fulfillment: [...CORE, "ACCOUNTANT"],
+    get: [...CORE, "ACCOUNTANT"],
+    pdf: [...CORE, "ACCOUNTANT"],
+    billingPdf: [...CORE, "ACCOUNTANT"],
     postingAgencies: CORE_WITHOUT_SALES,
     requoteShipping: CORE_WITHOUT_SALES,
     selectRequoteShipping: CORE_WITHOUT_SALES,
@@ -157,6 +242,11 @@ const HANDLER_ROLE_POLICY: Readonly<
     update: COMMERCIAL_WITHOUT_SALES,
   },
   CustomersController: {
+    list: [...COMMERCIAL, "ACCOUNTANT"],
+    getHealth: [...COMMERCIAL, "ACCOUNTANT"],
+    creditHistory: [...COMMERCIAL, "ACCOUNTANT"],
+    salesHistory: [...COMMERCIAL, "ACCOUNTANT"],
+    visitHistory: [...COMMERCIAL, "ACCOUNTANT"],
     recentVisits: ["ADMIN", "EXECUTIVE", "SALES"],
     createVisit: ["ADMIN", "EXECUTIVE", "SALES"],
     credit: LEADERSHIP,

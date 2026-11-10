@@ -754,12 +754,14 @@ export default function OrdersPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button
+            data-bbos-write-action
             onClick={() => openNewOrder("SAMPLE")}
             className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950"
           >
             <PackagePlus size={15} /> Novo pedido de amostra
           </button>
           <button
+            data-bbos-write-action
             onClick={() => openNewOrder("COMMERCIAL")}
             className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white"
           >

@@ -47,6 +47,50 @@ test("finance access is enforced by the API, not only hidden in navigation", () 
   );
 });
 
+test("contabilidade consulta dados sem executar mutações financeiras ou operacionais", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  const allowedReads = [
+    ["FinanceController", "summary"],
+    ["FinanceController", "receivables"],
+    ["ReconciliationController", "list"],
+    ["CostingController", "summary"],
+    ["FiscalInboundController", "list"],
+    ["SalesOrdersController", "list"],
+    ["SalesOrdersController", "pdf"],
+    ["CustomersController", "salesHistory"],
+  ] as const;
+  for (const [controller, handler] of allowedReads) {
+    assert.equal(
+      guard.canActivate(
+        executionContext({ controller, handler, role: "ACCOUNTANT" }),
+      ),
+      true,
+      `${controller}.${handler} should be readable by ACCOUNTANT`,
+    );
+  }
+
+  const deniedWrites = [
+    ["FinanceController", "createPayable"],
+    ["FinanceController", "receive"],
+    ["ReconciliationController", "match"],
+    ["CostingController", "createCostEvent"],
+    ["FiscalInboundController", "importXml"],
+    ["SalesOrdersController", "invoice"],
+    ["SalesOrdersController", "reserve"],
+    ["CustomersController", "credit"],
+  ] as const;
+  for (const [controller, handler] of deniedWrites) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({ controller, handler, role: "ACCOUNTANT" }),
+        ),
+      ForbiddenException,
+      `${controller}.${handler} must stay blocked for ACCOUNTANT`,
+    );
+  }
+});
+
 test("manual Pix approval is restricted to administrators", () => {
   const guard = new RoleAccessGuard(privateReflector);
 

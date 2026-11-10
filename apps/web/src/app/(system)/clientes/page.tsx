@@ -740,6 +740,7 @@ export default function CustomersPage() {
           </p>
         </div>
         <button
+          data-bbos-write-action
           onClick={() => {
             setError("");
             setShowNew(true);
@@ -2096,6 +2097,7 @@ function CustomerRow({
             )}
           </div>
           <button
+            data-bbos-write-action
             onClick={onEdit}
             className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
           >
@@ -2108,6 +2110,7 @@ function CustomerRow({
             <History size={14} /> Histórico comercial
           </button>
           <Link
+            data-bbos-write-action
             href={`/atendimento?cliente=${encodeURIComponent(customer.id)}`}
             className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
           >
@@ -2116,6 +2119,7 @@ function CustomerRow({
           {!customer.creditReviewPending &&
             customer.creditStatus !== "UNDER_REVIEW" && (
               <button
+                data-bbos-write-action
                 onClick={onRequest}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
               >
@@ -2123,6 +2127,7 @@ function CustomerRow({
               </button>
             )}
           <button
+            data-bbos-write-action
             onClick={onCredit}
             className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
           >

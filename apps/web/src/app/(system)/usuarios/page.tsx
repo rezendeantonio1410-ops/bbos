@@ -21,6 +21,16 @@ type UserRow = {
   avatarUrl?: string | null;
 };
 
+const roleLabel: Record<string, string> = {
+  ADMIN: "Sócio administrador",
+  EXECUTIVE: "Executivo",
+  FINANCE: "Financeiro",
+  ACCOUNTANT: "Contabilidade",
+  SALES: "Vendedor / Comercial",
+  INDUSTRIAL: "Produção",
+  MARKETPLACE_OPERATOR: "Operador de marketplace",
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,7 +258,7 @@ export default function UsersPage() {
                   </div>
                   <div className="shrink-0 text-right">
                     <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold">
-                      {user.role}
+                      {roleLabel[user.role] ?? user.role}
                     </span>
                     <p
                       className={`mt-1 text-[11px] ${
@@ -311,6 +321,7 @@ export default function UsersPage() {
                 <option value="ADMIN">Sócio administrador (ADMIN)</option>
                 <option value="EXECUTIVE">Executivo</option>
                 <option value="FINANCE">Financeiro</option>
+                <option value="ACCOUNTANT">Contabilidade (somente leitura)</option>
                 <option value="SALES">Vendedor / Comercial</option>
                 <option value="INDUSTRIAL">Produção</option>
                 <option value="MARKETPLACE_OPERATOR">
@@ -321,6 +332,12 @@ export default function UsersPage() {
                 <p className="mt-2 text-[11px] leading-5 text-blue-700">
                   Acesso a cadastro de clientes, atendimento, visitas e operação
                   comercial, sem permissão financeira ou administrativa.
+                </p>
+              )}
+              {role === "ACCOUNTANT" && (
+                <p className="mt-2 text-[11px] leading-5 text-violet-700">
+                  Consulta financeira, fiscal, custos, clientes, pedidos e vendas.
+                  Não altera pagamentos, notas, estoque, crédito ou cadastros.
                 </p>
               )}
             </Label>

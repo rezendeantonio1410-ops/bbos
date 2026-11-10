@@ -149,7 +149,7 @@ export default function ReceivablesPage() {
               <div><Badge tone={label === "Vencido" ? "danger" : label === "Parcial" ? "warning" : label === "Pago" ? "success" : "neutral"}>{label}</Badge></div>
               <div>
                 {canReceive ? (
-                  <button onClick={() => { setNotice(""); setSelected(row); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 font-bold text-emerald-800 transition hover:bg-emerald-100">
+                  <button data-bbos-write-action onClick={() => { setNotice(""); setSelected(row); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 font-bold text-emerald-800 transition hover:bg-emerald-100">
                     <CircleDollarSign size={15} /> Marcar como pago
                   </button>
                 ) : row.payments?.length ? (

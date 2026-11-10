@@ -133,6 +133,7 @@ export default function LoginPage() {
         "returnTo",
       );
       const isPartner = payload?.user?.role === "PARTNER";
+      const isAccountant = payload?.user?.role === "ACCOUNTANT";
       const safeReturnTo =
         requestedReturnTo &&
         requestedReturnTo.startsWith("/") &&
@@ -141,6 +142,8 @@ export default function LoginPage() {
           : null;
       const destination = isPartner
         ? "/parceiro"
+        : isAccountant
+          ? "/financeiro"
         : safeReturnTo && !safeReturnTo.startsWith("/parceiro")
           ? safeReturnTo
           : "/home";

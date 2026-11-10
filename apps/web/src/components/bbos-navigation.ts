@@ -30,6 +30,7 @@ export type BbosRole =
   | "EXECUTIVE"
   | "INDUSTRIAL"
   | "FINANCE"
+  | "ACCOUNTANT"
   | "SALES"
   | "MARKETPLACE_OPERATOR";
 
@@ -59,8 +60,13 @@ const ALL: BbosRole[] = [
   "SALES",
 ];
 const LEADERSHIP: BbosRole[] = ["ADMIN", "EXECUTIVE"];
+const ACCOUNTING: BbosRole[] = ["ADMIN", "EXECUTIVE", "FINANCE", "ACCOUNTANT"];
 const MARKETPLACE: BbosRole[] = ["ADMIN", "EXECUTIVE", "MARKETPLACE_OPERATOR"];
-const KNOWN_ROLES = new Set<BbosRole>([...ALL, "MARKETPLACE_OPERATOR"]);
+const KNOWN_ROLES = new Set<BbosRole>([
+  ...ALL,
+  "ACCOUNTANT",
+  "MARKETPLACE_OPERATOR",
+]);
 
 export const bbosNavigation: BbosNavGroup[] = [
   {
@@ -115,7 +121,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Clientes",
         description: "Cadastro, crédito e relacionamento",
         icon: UsersRound,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
         keywords: ["cliente", "credito"],
       },
       {
@@ -131,7 +137,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Pedidos",
         description: "Cotação, promessa, reserva e entrega",
         icon: ShoppingBag,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        roles: [
+          "ADMIN",
+          "EXECUTIVE",
+          "SALES",
+          "FINANCE",
+          "INDUSTRIAL",
+          "ACCOUNTANT",
+        ],
         keywords: ["pedido", "venda", "estoque"],
       },
       {
@@ -139,7 +152,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Vendas",
         description: "Desempenho e carteira comercial",
         icon: BarChart3,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
         keywords: ["faturamento", "receita"],
       },
       {
@@ -251,7 +264,13 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Notas de entrada",
         description: "Captura, classificação e alocação fiscal",
         icon: FileInput,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
+        roles: [
+          "ADMIN",
+          "EXECUTIVE",
+          "INDUSTRIAL",
+          "FINANCE",
+          "ACCOUNTANT",
+        ],
         keywords: [
           "nfe",
           "nota fiscal",
@@ -267,7 +286,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Financeiro",
         description: "Receber, pagar, caixa e conciliar",
         icon: CircleDollarSign,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE"],
+        roles: ACCOUNTING,
         keywords: ["caixa", "receber", "pagar"],
       },
       {
@@ -275,7 +294,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Custos",
         description: "Custo real, margem e retorno",
         icon: Calculator,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL", "ACCOUNTANT"],
         keywords: ["margem", "roi", "custeio"],
       },
       {

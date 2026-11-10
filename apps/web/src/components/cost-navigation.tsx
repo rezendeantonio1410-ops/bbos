@@ -11,6 +11,6 @@ const items = [
 export function CostNavigation() {
   const pathname = usePathname();
   return <nav aria-label="Navegação de custos" className="mt-5 flex gap-1 overflow-x-auto rounded-2xl border border-[#E8ECEB] bg-white p-1.5 shadow-[0_8px_24px_rgba(20,35,33,.04)]">
-    {items.map(([href,label]) => <Link key={href} href={href} className={`whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition ${pathname === href ? "bg-forest-900 text-white" : "text-stone-600 hover:bg-forest-50 hover:text-forest-900"}`}>{label}</Link>)}
+    {items.map(([href,label]) => <Link key={href} href={href} data-bbos-write-action={href === "/custos" ? undefined : true} className={`whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition ${pathname === href ? "bg-forest-900 text-white" : "text-stone-600 hover:bg-forest-50 hover:text-forest-900"}`}>{label}</Link>)}
   </nav>;
 }
