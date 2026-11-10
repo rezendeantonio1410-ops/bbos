@@ -6,7 +6,10 @@ import {
   salesOverdueMessage,
   salesOverdueNotificationType,
 } from "./sales-receivable-alert.service";
-import { notificationHref } from "./notification-links";
+import {
+  keepCurrentCreditDecisions,
+  notificationHref,
+} from "./notification-links";
 
 test("alerta de atraso direciona o vendedor ao cadastro do cliente", () => {
   const type = salesOverdueNotificationType("customer-1", "receivable-1");
@@ -25,6 +28,20 @@ test("mensagem informa cliente, pedido, valor e dias de atraso", () => {
   assert.match(message, /B-2026-42/);
   assert.match(message, /1\.250,00/);
   assert.match(message, /4 dia/);
+});
+
+test("notificações mostram somente a decisão de crédito atual por cliente", () => {
+  const items = keepCurrentCreditDecisions([
+    { id: "new", type: "CREDIT_DECISION:customer-1:event-new" },
+    { id: "other", type: "CREDIT_DECISION:customer-2:event-other" },
+    { id: "old", type: "CREDIT_DECISION:customer-1:event-old" },
+    { id: "visit", type: "SALES_VISIT:customer-1" },
+  ]);
+
+  assert.deepEqual(
+    items.map((item) => item.id),
+    ["new", "other", "visit"],
+  );
 });
 
 test("varredura considera somente recebíveis realmente vencidos e notifica SALES", () => {

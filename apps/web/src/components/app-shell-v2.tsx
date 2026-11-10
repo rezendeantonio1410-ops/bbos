@@ -297,7 +297,11 @@ export function AppShellV2({ children }: { children: ReactNode }) {
   }
 
   const user = sessionUser;
-  const currentLabel = pageLabels[pathname] ?? "BBOS";
+  const isSales = sessionUser?.role === "SALES";
+  const currentLabel =
+    isSales && pathname === "/home"
+      ? "Painel comercial"
+      : (pageLabels[pathname] ?? "BBOS");
   const openAssistant = () =>
     window.dispatchEvent(new Event("bbos:open-assistant"));
   const logout = async () => {
@@ -564,7 +568,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                         <div>
                           <p className="text-sm font-bold">Notificações</p>
                           <p className="mt-0.5 text-[10px] text-stone-400">
-                            Decisões e exceções da operação
+                            {isSales
+                              ? "Avisos e decisões comerciais"
+                              : "Decisões e exceções da operação"}
                           </p>
                         </div>
                         {unreadNotifications > 0 && (
@@ -589,10 +595,12 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                               className="mx-auto text-stone-300"
                             />
                             <p className="mt-3 text-xs font-semibold text-stone-700">
-                              Nenhuma notificação operacional.
+                              {isSales
+                                ? "Nenhum aviso comercial."
+                                : "Nenhuma notificação operacional."}
                             </p>
                             <p className="mt-1 text-[10px] leading-4 text-stone-400">
-                              Novas exceções aparecerão aqui quando exigirem
+                              Novos avisos aparecerão aqui quando exigirem
                               acompanhamento.
                             </p>
                           </div>

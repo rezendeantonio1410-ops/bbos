@@ -7,7 +7,10 @@ import {
   Req,
 } from "@nestjs/common";
 import { prisma } from "@bbos/database";
-import { notificationHref } from "./notification-links";
+import {
+  keepCurrentCreditDecisions,
+  notificationHref,
+} from "./notification-links";
 
 type AuthenticatedRequest = {
   user: { companyId: string; role: string };
@@ -51,10 +54,13 @@ export class NotificationsController {
       orderBy: { createdAt: "desc" },
       take: 40,
     });
-    const visibleNotifications =
+    const roleVisibleNotifications =
       role === "SALES"
         ? await this.visibleToSales(notifications, companyId)
         : notifications;
+    const visibleNotifications = keepCurrentCreditDecisions(
+      roleVisibleNotifications,
+    );
     return {
       updatedAt: new Date().toISOString(),
       unreadCount: visibleNotifications.filter((item) => !item.readAt).length,

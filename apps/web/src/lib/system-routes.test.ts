@@ -75,6 +75,21 @@ test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro",
   assert.equal(routes.includes("/usuarios"), false);
 });
 
+test("a tela inicial do vendedor prioriza ações comerciais amigáveis ao tablet", () => {
+  const source = readFileSync(
+    join(__dirname, "../components/home-command-v3.tsx"),
+    "utf8",
+  );
+
+  assert.match(source, /Bispo Coffees · Painel comercial/);
+  assert.match(source, /Novo pedido/);
+  assert.match(source, /Novo cliente/);
+  assert.match(source, /Registrar visita/);
+  assert.match(source, /Minha carteira/);
+  assert.match(source, /\/pedidos\?novo=1/);
+  assert.match(source, /\/clientes\?novo=1/);
+});
+
 test("o login sempre oferece instalação e o service worker habilita PWA no Android", () => {
   const login = readFileSync(join(__dirname, "../app/login/page.tsx"), "utf8");
   const serviceWorker = readFileSync(

@@ -384,6 +384,9 @@ export default function CustomersPage() {
   };
   useEffect(() => {
     void load();
+    if (new URLSearchParams(window.location.search).get("novo") === "1") {
+      setShowNew(true);
+    }
   }, []);
   useEffect(() => {
     void fetchSessionIdentity(getApiRoot(), { retryDelaysMs: [0] })

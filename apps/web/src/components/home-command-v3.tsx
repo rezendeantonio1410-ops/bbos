@@ -8,9 +8,12 @@ import {
   ClipboardCheck,
   Factory,
   PackageCheck,
+  Plus,
   ShieldAlert,
+  ShoppingBag,
   Sparkles,
   Sprout,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
 import { Card } from "@bbos/ui";
@@ -159,6 +162,18 @@ export function HomeCommandV3() {
         ? "Ver o que pede decisão"
         : "Abrir visão executiva";
   const openAI = () => window.dispatchEvent(new Event("bbos:open-assistant"));
+
+  if (loaded && isSales) {
+    return (
+      <SalesHome
+        greeting={greeting}
+        firstName={firstName}
+        home={home}
+        state={state}
+        onOpenAssistant={openAI}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1580px] space-y-6 pb-8">
@@ -389,6 +404,236 @@ export function HomeCommandV3() {
         ausência de dados em certeza.
       </p>
     </div>
+  );
+}
+
+function SalesHome({
+  greeting,
+  firstName,
+  home,
+  state,
+  onOpenAssistant,
+}: {
+  greeting: string;
+  firstName: string;
+  home: HomeData;
+  state: EvidenceState;
+  onOpenAssistant: () => void;
+}) {
+  const priority = home.alerts[0];
+  const priorityCount = home.alerts.length;
+
+  return (
+    <div className="mx-auto w-full max-w-[1320px] space-y-4 pb-24 sm:pb-8">
+      <section className="rounded-[24px] border border-stone-200 bg-gradient-to-br from-white via-white to-[#f8f4ec] p-5 shadow-[0_12px_35px_rgba(18,37,33,.055)] sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-5">
+          <div className="min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-700">
+              Bispo Coffees · Painel comercial
+            </p>
+            <h1 className="mt-2 text-[clamp(30px,4vw,44px)] font-semibold leading-none tracking-[-.04em] text-stone-950">
+              {greeting}, {firstName}.
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-stone-500">
+              {priority
+                ? `${priorityCount} assunto${priorityCount > 1 ? "s" : ""} pede${priorityCount > 1 ? "m" : ""} acompanhamento comercial.`
+                : "Sua carteira está pronta para clientes, visitas e novos pedidos."}
+            </p>
+          </div>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Link
+              href="/pedidos"
+              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#10201d] px-5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(14,25,29,.12)] sm:flex-none"
+            >
+              Acompanhar pedidos <ArrowRight size={15} />
+            </Link>
+            <button
+              type="button"
+              onClick={onOpenAssistant}
+              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-xs font-bold text-violet-700 sm:flex-none"
+            >
+              <Sparkles size={15} /> Perguntar ao BBOS
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section
+        aria-label="Ações rápidas"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+      >
+        <SalesQuickAction
+          href="/pedidos?novo=1"
+          icon={Plus}
+          title="Novo pedido"
+          copy="Montar uma venda"
+          tone="green"
+        />
+        <SalesQuickAction
+          href="/clientes?novo=1"
+          icon={UsersRound}
+          title="Novo cliente"
+          copy="Cadastrar e acompanhar"
+          tone="blue"
+        />
+        <SalesQuickAction
+          href="/atendimento"
+          icon={ClipboardCheck}
+          title="Registrar visita"
+          copy="Salvar o atendimento"
+          tone="violet"
+        />
+        <SalesQuickAction
+          href="/vendas"
+          icon={WalletCards}
+          title="Minha carteira"
+          copy="Ver histórico e resultados"
+          tone="amber"
+        />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
+        <div className="rounded-[20px] border border-stone-200 bg-white p-5 shadow-[0_4px_18px_rgba(18,37,33,.035)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-emerald-700">
+                Prioridade de hoje
+              </p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-stone-950">
+                O que merece sua atenção
+              </h2>
+            </div>
+            {priorityCount > 0 && (
+              <span className="rounded-full bg-red-50 px-3 py-1 text-[10px] font-black text-red-700">
+                {priorityCount}{" "}
+                {priorityCount === 1 ? "pendência" : "pendências"}
+              </span>
+            )}
+          </div>
+
+          {priority ? (
+            <div className="mt-4 flex flex-col gap-4 rounded-2xl border border-red-100 bg-red-50/55 p-4 sm:flex-row sm:items-center">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-100 text-red-700">
+                <ShieldAlert size={19} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <strong className="block text-sm text-red-950">
+                  {priority.title}
+                </strong>
+                <p className="mt-1 text-xs leading-5 text-red-800/80">
+                  {priority.impact}
+                </p>
+              </div>
+              <Link
+                href={priority.href}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-xl bg-white px-4 text-xs font-bold text-red-700 shadow-sm"
+              >
+                {priority.action} <ArrowRight size={13} />
+              </Link>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <CompactDecision state={state} isSales />
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <SalesMetric
+            href="/vendas"
+            label="Vendas hoje"
+            value={money.format(home.salesToday)}
+            note={`No mês: ${money.format(home.salesMonth)}`}
+            icon={WalletCards}
+          />
+          <SalesMetric
+            href="/pedidos"
+            label="Pedidos abertos"
+            value={String(home.openOrders)}
+            note={
+              home.overdueOrders
+                ? `${home.overdueOrders} atrasado${home.overdueOrders > 1 ? "s" : ""}`
+                : "Nenhum atraso"
+            }
+            icon={ShoppingBag}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SalesQuickAction({
+  href,
+  icon: Icon,
+  title,
+  copy,
+  tone,
+}: {
+  href: string;
+  icon: typeof Factory;
+  title: string;
+  copy: string;
+  tone: "green" | "blue" | "violet" | "amber";
+}) {
+  const toneClass =
+    tone === "green"
+      ? "bg-emerald-50 text-emerald-700"
+      : tone === "blue"
+        ? "bg-blue-50 text-blue-700"
+        : tone === "violet"
+          ? "bg-violet-50 text-violet-700"
+          : "bg-amber-50 text-amber-700";
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-[108px] items-center gap-3 rounded-[18px] border border-stone-200 bg-white p-4 shadow-[0_4px_18px_rgba(18,37,33,.035)] transition active:scale-[.99]"
+    >
+      <span
+        className={`grid size-11 shrink-0 place-items-center rounded-xl ${toneClass}`}
+      >
+        <Icon size={19} />
+      </span>
+      <span className="min-w-0">
+        <strong className="block text-sm text-stone-950">{title}</strong>
+        <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+          {copy}
+        </span>
+      </span>
+      <ArrowRight className="ml-auto shrink-0 text-stone-300" size={14} />
+    </Link>
+  );
+}
+
+function SalesMetric({
+  href,
+  label,
+  value,
+  note,
+  icon: Icon,
+}: {
+  href: string;
+  label: string;
+  value: string;
+  note: string;
+  icon: typeof Factory;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[168px] flex-col rounded-[20px] border border-stone-200 bg-white p-4 shadow-[0_4px_18px_rgba(18,37,33,.035)]"
+    >
+      <span className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+        <Icon size={17} />
+      </span>
+      <span className="mt-auto text-[9px] font-extrabold uppercase tracking-[.11em] text-stone-400">
+        {label}
+      </span>
+      <strong className="mt-1 block text-[clamp(20px,2.5vw,28px)] tracking-tight text-stone-950">
+        {value}
+      </strong>
+      <span className="mt-1 text-[10px] text-stone-500">{note}</span>
+    </Link>
   );
 }
 

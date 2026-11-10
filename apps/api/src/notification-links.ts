@@ -1,3 +1,16 @@
+export function keepCurrentCreditDecisions<T extends { type: string }>(
+  notifications: T[],
+) {
+  const customerIds = new Set<string>();
+  return notifications.filter((item) => {
+    if (!item.type.startsWith("CREDIT_DECISION:")) return true;
+    const customerId = item.type.split(":")[1];
+    if (!customerId || customerIds.has(customerId)) return false;
+    customerIds.add(customerId);
+    return true;
+  });
+}
+
 export function notificationHref(type: string, purchaseId: string | null) {
   if (type.startsWith("SALES_RECEIVABLE_OVERDUE")) {
     const customerId = type.split(":")[1];

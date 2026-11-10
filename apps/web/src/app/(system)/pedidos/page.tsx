@@ -635,6 +635,9 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void refresh();
+    if (new URLSearchParams(window.location.search).get("novo") === "1") {
+      setCreating("COMMERCIAL");
+    }
     void fetch(`${getApiBaseUrl()}/auth/me`, {
       credentials: "include",
       cache: "no-store",
