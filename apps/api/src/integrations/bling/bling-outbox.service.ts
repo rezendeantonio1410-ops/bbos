@@ -318,7 +318,20 @@ export class BlingOutboxService {
           : customer?.name,
       tipo: isForeign ? "E" : document.length === 11 ? "F" : "J",
       situacao: "A",
-      numeroDocumento: document,
+      // Bling documents `numeroDocumento` as CPF/CNPJ and validates that
+      // field again when a sales order is created. A foreign fiscal identity
+      // is therefore kept in BBOS for the export NF-e, but must not be stored
+      // as the Brazilian document of the Bling contact.
+      numeroDocumento: isForeign ? "" : document,
+      informacoesContato: isForeign
+        ? [
+            String(remote?.informacoesContato ?? "").trim(),
+            `Identificação fiscal estrangeira: ${document}`,
+          ]
+            .filter(Boolean)
+            .filter((value, index, values) => values.indexOf(value) === index)
+            .join(" | ")
+        : remote?.informacoesContato,
       indicadorIe: this.blingStateRegistrationIndicator(
         isForeign ? { stateRegistrationType: "NON_TAXPAYER" } : customer,
       ),
@@ -726,7 +739,13 @@ export class BlingOutboxService {
       const remoteDocument = this.normalizeFiscalIdentity(
         remote?.numeroDocumento ?? remote?.cnpj ?? remote?.cpf ?? "",
       );
-      if (remoteDocument === fiscalIdentity) {
+      const remotePersonType = String(
+        remote?.tipo ?? remote?.tipoPessoa ?? "",
+      ).toUpperCase();
+      if (
+        (isForeign && remotePersonType === "E") ||
+        (!isForeign && remoteDocument === fiscalIdentity)
+      ) {
         return this.syncBlingContact(
           companyId,
           String(existing.externalId),
@@ -1416,9 +1435,17 @@ export class BlingOutboxService {
         remoteContact?.cpf ??
         "",
     );
-    if (!expectedDocument || remoteDocument !== expectedDocument) {
+    const remotePersonType = String(
+      remoteContact?.tipo ?? remoteContact?.tipoPessoa ?? "",
+    ).toUpperCase();
+    if (
+      (isExport && remotePersonType !== "E") ||
+      (!isExport && (!expectedDocument || remoteDocument !== expectedDocument))
+    ) {
       throw new Error(
-        `Emissão fiscal bloqueada: identificação fiscal do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`,
+        isExport
+          ? "Emissão fiscal bloqueada: o destinatário do Bling não está cadastrado como pessoa estrangeira."
+          : `Emissão fiscal bloqueada: identificação fiscal do destinatário no Bling (${remoteDocument || "ausente"}) difere do cliente do pedido BBOS (${expectedDocument || "ausente"}).`,
       );
     }
 
@@ -1745,10 +1772,7 @@ export class BlingOutboxService {
       "",
     );
     const text = String(
-      note?.situacao?.nome ??
-        note?.situacao?.descricao ??
-        note?.situacao ??
-        "",
+      note?.situacao?.nome ?? note?.situacao?.descricao ?? note?.situacao ?? "",
     ).toLowerCase();
     const protocol = String(
       note?.protocolo ??
@@ -1779,10 +1803,14 @@ export class BlingOutboxService {
     return "SENT" as const;
   }
 
-  private reexpeditionContact(order: any, originalNote: any, corrected: boolean) {
+  private reexpeditionContact(
+    order: any,
+    originalNote: any,
+    corrected: boolean,
+  ) {
     const original = originalNote?.contato ?? originalNote?.destinatario ?? {};
     const document = String(order.customerTaxId ?? "").replace(/\D/g, "");
-    const address = corrected ? order.addressSnapshot ?? {} : {};
+    const address = corrected ? (order.addressSnapshot ?? {}) : {};
     const stateRegistrationType = String(
       order.customerStateRegistrationType ?? "NON_TAXPAYER",
     );
@@ -1806,16 +1834,22 @@ export class BlingOutboxService {
       email: order.customerEmail || original?.email || undefined,
       endereco: {
         endereco:
-          address.address || original?.endereco?.endereco || order.customerAddress,
+          address.address ||
+          original?.endereco?.endereco ||
+          order.customerAddress,
         numero:
-          address.number || original?.endereco?.numero || order.customerAddressNumber,
+          address.number ||
+          original?.endereco?.numero ||
+          order.customerAddressNumber,
         complemento:
           address.complement ||
           original?.endereco?.complemento ||
           order.customerAddressComplement ||
           undefined,
         bairro:
-          address.district || original?.endereco?.bairro || order.customerDistrict,
+          address.district ||
+          original?.endereco?.bairro ||
+          order.customerDistrict,
         cep: String(
           address.postal_code ||
             original?.endereco?.cep ||
@@ -1824,8 +1858,7 @@ export class BlingOutboxService {
         ).replace(/\D/g, ""),
         municipio:
           address.city || original?.endereco?.municipio || order.customerCity,
-        uf:
-          address.state_abbr || original?.endereco?.uf || order.customerState,
+        uf: address.state_abbr || original?.endereco?.uf || order.customerState,
       },
     };
   }
@@ -1842,9 +1875,7 @@ export class BlingOutboxService {
         ? "returnFiscalDocumentId"
         : "replacementFiscalDocumentId";
     const stage =
-      kind === "RETURN"
-        ? "RETURN_FISCAL_PENDING"
-        : "OUTBOUND_FISCAL_PENDING";
+      kind === "RETURN" ? "RETURN_FISCAL_PENDING" : "OUTBOUND_FISCAL_PENDING";
     const authorizedStage =
       kind === "RETURN"
         ? "RETURN_FISCAL_AUTHORIZED"
@@ -1868,10 +1899,7 @@ export class BlingOutboxService {
         .then((result) => result?.data ?? result ?? {})
         .catch(() => null);
       const remoteStatus = note
-        ? this.reexpeditionRemoteStatus(
-            note,
-            fiscal.payloadSnapshot?.blingSend,
-          )
+        ? this.reexpeditionRemoteStatus(note, fiscal.payloadSnapshot?.blingSend)
         : "SENT";
       if (note && remoteStatus === "REJECTED") {
         throw new Error(
@@ -1893,7 +1921,10 @@ export class BlingOutboxService {
             note?.numero == null ? null : String(note.numero),
             note?.serie == null ? null : String(note.serie),
             accessKey || null,
-            JSON.stringify({ blingNfe: note, reconciledAt: new Date().toISOString() }),
+            JSON.stringify({
+              blingNfe: note,
+              reconciledAt: new Date().toISOString(),
+            }),
           );
           await transaction.$executeRawUnsafe(
             `UPDATE "SalesOrderReexpedition"
@@ -1920,7 +1951,11 @@ export class BlingOutboxService {
         tipo: kind === "RETURN" ? 0 : 1,
         numero: "",
         dataOperacao: currentBlingDateTime(),
-        contato: this.reexpeditionContact(row, originalNote, kind === "OUTBOUND"),
+        contato: this.reexpeditionContact(
+          row,
+          originalNote,
+          kind === "OUTBOUND",
+        ),
         naturezaOperacao: { id: Number(natureOperationId) },
         finalidade: kind === "RETURN" ? 4 : 1,
         documentosReferenciados: [
@@ -1978,7 +2013,12 @@ export class BlingOutboxService {
           stage,
         );
       });
-      fiscal = { id: fiscalId, externalId, status: "SENT", payloadSnapshot: {} };
+      fiscal = {
+        id: fiscalId,
+        externalId,
+        status: "SENT",
+        payloadSnapshot: {},
+      };
       note = null;
     }
 
@@ -2004,11 +2044,9 @@ export class BlingOutboxService {
       { method: "POST" },
     );
     const refreshed = await this.bling
-      .request(
-        row.companyId,
-        `/nfe/${encodeURIComponent(fiscal.externalId)}`,
-        { method: "GET" },
-      )
+      .request(row.companyId, `/nfe/${encodeURIComponent(fiscal.externalId)}`, {
+        method: "GET",
+      })
       .then((result) => result?.data ?? result ?? note)
       .catch(() => note);
     const status = this.reexpeditionRemoteStatus(refreshed, sendResult);
@@ -2072,7 +2110,8 @@ export class BlingOutboxService {
     );
     const row = rows[0];
     if (!row) throw new Error("Reexpedição da fila não foi encontrada.");
-    if (row.status === "LABEL_CREATED") return { idempotent: true, status: row.status };
+    if (row.status === "LABEL_CREATED")
+      return { idempotent: true, status: row.status };
 
     try {
       const route = await this.blingCatalogSync.reexpeditionFiscalRoute(
@@ -2127,7 +2166,9 @@ export class BlingOutboxService {
       return { reexpeditionId: row.id, shipment };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const configurationRequired = /configura|natureza|validada uma vez/i.test(message);
+      const configurationRequired = /configura|natureza|validada uma vez/i.test(
+        message,
+      );
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrderReexpedition"
             SET status=CASE
