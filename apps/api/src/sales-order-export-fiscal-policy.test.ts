@@ -56,6 +56,15 @@ test("Bling export draft is repaired and checked before SEFAZ transmission", () 
   );
 });
 
+test("foreign Bling contacts never send their international ID as a Brazilian CPF/CNPJ", () => {
+  assert.match(outboxSource, /numeroDocumento: isForeign \? "" : document/);
+  assert.match(
+    outboxSource,
+    /Identificação fiscal estrangeira: \$\{document\}/,
+  );
+  assert.match(outboxSource, /isExport && remotePersonType !== "E"/);
+});
+
 test("foreign-priced orders are converted to BRL before the fiscal draft", () => {
   assert.match(
     outboxSource,
