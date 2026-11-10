@@ -410,70 +410,71 @@ enum CuppingParticipantInviteStatus {
 }
 
 model Company {
-  id                        String                       @id @default(cuid())
-  name                      String
-  tradeName                 String
-  taxId                     String                       @unique
-  currency                  String                       @default("BRL")
-  createdAt                 DateTime                     @default(now())
-  updatedAt                 DateTime                     @updatedAt
-  users                     User[]
-  suppliers                 Supplier[]
-  customers                 Customer[]
-  coffeeLots                CoffeeLot[]
-  warehouses                Warehouse[]
-  blends                    Blend[]
-  productionOrders          ProductionOrder[]
-  products                  FinishedProduct[]
-  productLines              ProductLine[]
-  salesOrders               SalesOrder[]
-  industrialEvents          IndustrialEvent[]
-  costEvents                CostEvent[]
-  productionBatches         ProductionBatch[]
-  productionConsumptions    ProductionConsumption[]
-  packagingConsumptions     PackagingConsumption[]
-  finishedGoodsMovements    FinishedGoodsMovement[]
-  salesOrderItems           SalesOrderItem[]
-  inventoryReservations     InventoryReservation[]
-  costCenters               CostCenter[]
-  productiveResources       ProductiveResource[]
-  allocationPeriods         AllocationPeriod[]
-  allocationRules           AllocationRule[]
-  costSnapshots             CostCalculationSnapshot[]
-  costTariffs               CostTariff[]
-  financialAccounts         FinancialAccount[]
-  salesChannels             SalesChannel[]
-  productPrices             ProductPrice[]
-  customerProductPrices     CustomerProductPrice[]
-  customerPriceEvents       CustomerProductPriceEvent[]
-  accountsReceivable        AccountsReceivable[]
-  accountsPayable           AccountsPayable[]
-  financialTransactions     FinancialTransaction[]
-  payments                  Payment[]
-  reconciliationItems       ReconciliationItem[]
-  reconciliationEvents      ReconciliationEvent[]
-  financialInstitutions     FinancialInstitution[]
-  bankTransactions          BankTransaction[]
-  greenCoffeeReceipts       GreenCoffeeReceipt[]
-  greenCoffeePurchases      GreenCoffeePurchase[]
-  greenCoffeeApprovals      GreenCoffeeApprovalRequest[]
-  operationalNotifications  OperationalNotification[]
-  mobileNotifications       MobileNotification[]
-  pushSubscriptions         PushSubscription[]
-  greenCoffeeAuditEvents    GreenCoffeeAuditEvent[]
-  coffeeSpecies             CoffeeSpecies[]
-  coffeeRegions             CoffeeRegion[]
-  screenClassifications     ScreenClassification[]
-  supplierBankAccounts      SupplierBankAccount[]
-  brokers                   Broker[]
-  storefrontPartners        StorefrontPartner[]
-  cuppingSessions           CuppingSession[]
-  cuppingParticipantInvites CuppingParticipantInvite[]
-  cuppingTrainingSessions   CuppingTrainingSession[]
-  professionalCoffeeSamples ProfessionalCoffeeSample[]
-  cuppingPublicSessions     CuppingPublicSession[]
-  storefrontMediaAssets     StorefrontMediaAsset[]
-  customerVisits            CustomerVisit[]
+  id                           String                        @id @default(cuid())
+  name                         String
+  tradeName                    String
+  taxId                        String                        @unique
+  currency                     String                        @default("BRL")
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  users                        User[]
+  suppliers                    Supplier[]
+  customers                    Customer[]
+  coffeeLots                   CoffeeLot[]
+  warehouses                   Warehouse[]
+  blends                       Blend[]
+  productionOrders             ProductionOrder[]
+  products                     FinishedProduct[]
+  productLines                 ProductLine[]
+  salesOrders                  SalesOrder[]
+  industrialEvents             IndustrialEvent[]
+  costEvents                   CostEvent[]
+  productionBatches            ProductionBatch[]
+  productionConsumptions       ProductionConsumption[]
+  packagingConsumptions        PackagingConsumption[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  salesOrderItems              SalesOrderItem[]
+  inventoryReservations        InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  costCenters                  CostCenter[]
+  productiveResources          ProductiveResource[]
+  allocationPeriods            AllocationPeriod[]
+  allocationRules              AllocationRule[]
+  costSnapshots                CostCalculationSnapshot[]
+  costTariffs                  CostTariff[]
+  financialAccounts            FinancialAccount[]
+  salesChannels                SalesChannel[]
+  productPrices                ProductPrice[]
+  customerProductPrices        CustomerProductPrice[]
+  customerPriceEvents          CustomerProductPriceEvent[]
+  accountsReceivable           AccountsReceivable[]
+  accountsPayable              AccountsPayable[]
+  financialTransactions        FinancialTransaction[]
+  payments                     Payment[]
+  reconciliationItems          ReconciliationItem[]
+  reconciliationEvents         ReconciliationEvent[]
+  financialInstitutions        FinancialInstitution[]
+  bankTransactions             BankTransaction[]
+  greenCoffeeReceipts          GreenCoffeeReceipt[]
+  greenCoffeePurchases         GreenCoffeePurchase[]
+  greenCoffeeApprovals         GreenCoffeeApprovalRequest[]
+  operationalNotifications     OperationalNotification[]
+  mobileNotifications          MobileNotification[]
+  pushSubscriptions            PushSubscription[]
+  greenCoffeeAuditEvents       GreenCoffeeAuditEvent[]
+  coffeeSpecies                CoffeeSpecies[]
+  coffeeRegions                CoffeeRegion[]
+  screenClassifications        ScreenClassification[]
+  supplierBankAccounts         SupplierBankAccount[]
+  brokers                      Broker[]
+  storefrontPartners           StorefrontPartner[]
+  cuppingSessions              CuppingSession[]
+  cuppingParticipantInvites    CuppingParticipantInvite[]
+  cuppingTrainingSessions      CuppingTrainingSession[]
+  professionalCoffeeSamples    ProfessionalCoffeeSample[]
+  cuppingPublicSessions        CuppingPublicSession[]
+  storefrontMediaAssets        StorefrontMediaAsset[]
+  customerVisits               CustomerVisit[]
 }
 
 /// Recoverable archive for narrowly scoped production data cleanups.
@@ -783,51 +784,53 @@ model CustomerVisit {
 }
 
 model Warehouse {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                   String
-  code                   String
-  type                   String
-  coffeeLots             CoffeeLot[]
-  finishedProducts       FinishedProduct[]
-  industrialEvents       IndustrialEvent[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  inventoryReservations  InventoryReservation[]
-  greenCoffeeReceipts    GreenCoffeeReceipt[]
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                         String
+  code                         String
+  type                         String
+  coffeeLots                   CoffeeLot[]
+  finishedProducts             FinishedProduct[]
+  industrialEvents             IndustrialEvent[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  inventoryReservations        InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  greenCoffeeReceipts          GreenCoffeeReceipt[]
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 
   @@unique([companyId, code])
 }
 
 model CoffeeLot {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplierId             String
-  supplier               Supplier                @relation(fields: [supplierId], references: [id])
-  warehouseId            String
-  warehouse              Warehouse               @relation(fields: [warehouseId], references: [id])
-  code                   String
-  origin                 String
-  harvest                String?
-  variety                String?
-  qualityScore           Decimal?                @db.Decimal(5, 2)
-  initialWeightKg        Decimal                 @db.Decimal(14, 3)
-  currentWeightKg        Decimal                 @db.Decimal(14, 3)
-  reservedWeightKg       Decimal                 @default(0) @db.Decimal(14, 3)
-  purchaseCost           Decimal                 @db.Decimal(14, 2)
-  landedCost             Decimal                 @db.Decimal(14, 2)
-  status                 CoffeeLotStatus         @default(RECEIVED)
-  blendComponents        BlendComponent[]
-  industrialEvents       IndustrialEvent[]
-  costEvents             CostEvent[]
-  productionConsumptions ProductionConsumption[]
-  receivedAt             DateTime                @default(now())
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  receipt                GreenCoffeeReceipt?
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId                   String
+  supplier                     Supplier                      @relation(fields: [supplierId], references: [id])
+  warehouseId                  String
+  warehouse                    Warehouse                     @relation(fields: [warehouseId], references: [id])
+  code                         String
+  origin                       String
+  harvest                      String?
+  variety                      String?
+  qualityScore                 Decimal?                      @db.Decimal(5, 2)
+  initialWeightKg              Decimal                       @db.Decimal(14, 3)
+  currentWeightKg              Decimal                       @db.Decimal(14, 3)
+  reservedWeightKg             Decimal                       @default(0) @db.Decimal(14, 3)
+  purchaseCost                 Decimal                       @db.Decimal(14, 2)
+  landedCost                   Decimal                       @db.Decimal(14, 2)
+  status                       CoffeeLotStatus               @default(RECEIVED)
+  blendComponents              BlendComponent[]
+  industrialEvents             IndustrialEvent[]
+  costEvents                   CostEvent[]
+  productionConsumptions       ProductionConsumption[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  receivedAt                   DateTime                      @default(now())
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  receipt                      GreenCoffeeReceipt?
 
   @@unique([companyId, code])
   @@index([supplierId, warehouseId])
@@ -1844,45 +1847,46 @@ model StorefrontMediaAsset {
 }
 
 model ProductVariant {
-  id                     String                    @id @default(cuid())
-  productId              String
-  product                Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku                    String                    @unique
-  netWeightGrams         Int
-  grossWeightGrams       Int                       @default(0)
-  packageWidthCm         Decimal                   @default(18) @db.Decimal(10, 2)
-  packageHeightCm        Decimal                   @default(6) @db.Decimal(10, 2)
-  packageDepthCm         Decimal                   @default(11) @db.Decimal(10, 2)
-  gtin                   String?                   @unique
-  ncm                    String                    @default("09012100") @db.VarChar(8)
-  originCode             Int                       @default(0)
-  cest                   String?                   @db.VarChar(7)
-  productionType         String                    @default("P") @db.VarChar(1)
-  fiscalValidated        Boolean                   @default(false)
-  salesUnit              String
-  active                 Boolean                   @default(true)
-  coffeeCost             Decimal                   @default(0) @db.Decimal(14, 2)
-  industrialCost         Decimal                   @default(0) @db.Decimal(14, 2)
-  packagingCost          Decimal                   @default(0) @db.Decimal(14, 2)
-  labelCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  boxCost                Decimal                   @default(0) @db.Decimal(14, 2)
-  laborCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  energyCost             Decimal                   @default(0) @db.Decimal(14, 2)
-  otherCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  totalCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  unitCost               Decimal                   @default(0) @db.Decimal(14, 2)
-  marginPercent          Decimal                   @default(0) @db.Decimal(7, 3)
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
-  costSnapshots          CostCalculationSnapshot[]
-  productionOrders       ProductionOrder[]
-  finishedProducts       FinishedProduct[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  salesOrderItems        SalesOrderItem[]
-  inventoryReservations  InventoryReservation[]
-  costEvents             CostEvent[]
-  channelPrices          ProductPrice[]
-  customerPrices         CustomerProductPrice[]
+  id                           String                        @id @default(cuid())
+  productId                    String
+  product                      Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                          String                        @unique
+  netWeightGrams               Int
+  grossWeightGrams             Int                           @default(0)
+  packageWidthCm               Decimal                       @default(18) @db.Decimal(10, 2)
+  packageHeightCm              Decimal                       @default(6) @db.Decimal(10, 2)
+  packageDepthCm               Decimal                       @default(11) @db.Decimal(10, 2)
+  gtin                         String?                       @unique
+  ncm                          String                        @default("09012100") @db.VarChar(8)
+  originCode                   Int                           @default(0)
+  cest                         String?                       @db.VarChar(7)
+  productionType               String                        @default("P") @db.VarChar(1)
+  fiscalValidated              Boolean                       @default(false)
+  salesUnit                    String
+  active                       Boolean                       @default(true)
+  coffeeCost                   Decimal                       @default(0) @db.Decimal(14, 2)
+  industrialCost               Decimal                       @default(0) @db.Decimal(14, 2)
+  packagingCost                Decimal                       @default(0) @db.Decimal(14, 2)
+  labelCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  boxCost                      Decimal                       @default(0) @db.Decimal(14, 2)
+  laborCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  energyCost                   Decimal                       @default(0) @db.Decimal(14, 2)
+  otherCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  totalCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  unitCost                     Decimal                       @default(0) @db.Decimal(14, 2)
+  marginPercent                Decimal                       @default(0) @db.Decimal(7, 3)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  costSnapshots                CostCalculationSnapshot[]
+  productionOrders             ProductionOrder[]
+  finishedProducts             FinishedProduct[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  salesOrderItems              SalesOrderItem[]
+  inventoryReservations        InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  costEvents                   CostEvent[]
+  channelPrices                ProductPrice[]
+  customerPrices               CustomerProductPrice[]
 
   @@unique([productId, netWeightGrams])
   @@index([productId, active])
@@ -1987,50 +1991,50 @@ model CustomerProductPriceEvent {
 }
 
 model SalesOrder {
-  id                           String                  @id @default(cuid())
+  id                           String                        @id @default(cuid())
   companyId                    String
-  company                      Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customerId                   String
-  customer                     Customer                @relation(fields: [customerId], references: [id])
+  customer                     Customer                      @relation(fields: [customerId], references: [id])
   createdByStorefrontPartnerId String?
-  createdByStorefrontPartner   StorefrontPartner?      @relation(fields: [createdByStorefrontPartnerId], references: [id], onDelete: SetNull)
+  createdByStorefrontPartner   StorefrontPartner?            @relation(fields: [createdByStorefrontPartnerId], references: [id], onDelete: SetNull)
   brokerId                     String?
-  broker                       Broker?                 @relation(fields: [brokerId], references: [id], onDelete: SetNull)
-  brokerCommissionMode         String?                 @db.VarChar(20)
-  brokerCommissionPercent      Decimal?                @db.Decimal(7, 4)
-  brokerCommissionPerPackage   Decimal?                @db.Decimal(14, 2)
-  brokerCommissionAmount       Decimal?                @db.Decimal(14, 2)
+  broker                       Broker?                       @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerCommissionMode         String?                       @db.VarChar(20)
+  brokerCommissionPercent      Decimal?                      @db.Decimal(7, 4)
+  brokerCommissionPerPackage   Decimal?                      @db.Decimal(14, 2)
+  brokerCommissionAmount       Decimal?                      @db.Decimal(14, 2)
   salesChannelId               String?
-  salesChannel                 SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
+  salesChannel                 SalesChannel?                 @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
   finishedProductId            String?
-  finishedProduct              FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
+  finishedProduct              FinishedProduct?              @relation(fields: [finishedProductId], references: [id])
   code                         String
   orderNumber                  String?
-  orderType                    String                  @default("COMMERCIAL") @db.VarChar(20)
-  status                       SalesOrderStatus        @default(DRAFT)
+  orderType                    String                        @default("COMMERCIAL") @db.VarChar(20)
+  status                       SalesOrderStatus              @default(DRAFT)
   quantity                     Int
-  unitPrice                    Decimal                 @db.Decimal(14, 2)
-  totalAmount                  Decimal                 @db.Decimal(14, 2)
-  orderedAt                    DateTime                @default(now())
+  unitPrice                    Decimal                       @db.Decimal(14, 2)
+  totalAmount                  Decimal                       @db.Decimal(14, 2)
+  orderedAt                    DateTime                      @default(now())
   orderDate                    DateTime?
   expectedDeliveryDate         DateTime?
-  subtotal                     Decimal?                @db.Decimal(14, 2)
-  discount                     Decimal                 @default(0) @db.Decimal(14, 2)
-  freight                      Decimal                 @default(0) @db.Decimal(14, 2)
+  subtotal                     Decimal?                      @db.Decimal(14, 2)
+  discount                     Decimal                       @default(0) @db.Decimal(14, 2)
+  freight                      Decimal                       @default(0) @db.Decimal(14, 2)
   notes                        String?
-  paymentType                  String                  @default("LEGACY")
+  paymentType                  String                        @default("LEGACY")
   paymentTermsSnapshot         String?
   freightResponsibility        String?
   carrierName                  String?
   customerReference            String?
   incoterm                     String?
   incotermLocation             String?
-  currency                     String                  @default("BRL") @db.VarChar(3)
-  exchangeRateToBrl            Decimal?                @db.Decimal(14, 6)
+  currency                     String                        @default("BRL") @db.VarChar(3)
+  exchangeRateToBrl            Decimal?                      @db.Decimal(14, 6)
   exchangeRateDate             DateTime?
-  customsDeclaredValue         Decimal?                @db.Decimal(14, 2)
+  customsDeclaredValue         Decimal?                      @db.Decimal(14, 2)
   exportDepartureLocation      String?
-  exportDepartureState         String?                 @db.VarChar(2)
+  exportDepartureState         String?                       @db.VarChar(2)
   shippingQuoteId              String?
   shippingProvider             String?
   shippingServiceId            String?
@@ -2039,10 +2043,10 @@ model SalesOrder {
   externalOrderId              String?
   externalOrderNumber          String?
   externalStatus               String?
-  channelGrossAmount           Decimal?                @db.Decimal(14, 2)
-  channelFeeAmount             Decimal                 @default(0) @db.Decimal(14, 2)
-  channelFreightAmount         Decimal                 @default(0) @db.Decimal(14, 2)
-  channelNetAmount             Decimal?                @db.Decimal(14, 2)
+  channelGrossAmount           Decimal?                      @db.Decimal(14, 2)
+  channelFeeAmount             Decimal                       @default(0) @db.Decimal(14, 2)
+  channelFreightAmount         Decimal                       @default(0) @db.Decimal(14, 2)
+  channelNetAmount             Decimal?                      @db.Decimal(14, 2)
   channelPayload               Json?
   importedAt                   DateTime?
   channelUpdatedAt             DateTime?
@@ -2051,10 +2055,11 @@ model SalesOrder {
   costEvents                   CostEvent[]
   items                        SalesOrderItem[]
   reservations                 InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
   finishedGoodsMovements       FinishedGoodsMovement[]
   accountsReceivable           AccountsReceivable[]
-  createdAt                    DateTime                @default(now())
-  updatedAt                    DateTime                @updatedAt
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 
   @@unique([companyId, code])
   @@unique([companyId, salesChannelId, externalOrderId])
@@ -2335,31 +2340,32 @@ model ReconciliationEvent {
 }
 
 model SalesOrderItem {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  salesOrderId           String
-  salesOrder             SalesOrder              @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  productVariantId       String
-  productVariant         ProductVariant          @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
-  productName            String
-  sku                    String
-  quantity               Int
-  pickedQuantity         Int                     @default(0)
-  pickedAt               DateTime?
-  unitPrice              Decimal                 @db.Decimal(14, 2)
-  discount               Decimal                 @default(0) @db.Decimal(14, 2)
-  totalAmount            Decimal                 @db.Decimal(14, 2)
-  pricingSource          String                  @default("CHANNEL") @db.VarChar(20)
-  baseProductPriceId     String?
-  baseProductPrice       ProductPrice?           @relation("SalesOrderItemBasePrice", fields: [baseProductPriceId], references: [id], onDelete: SetNull)
-  customerProductPriceId String?
-  customerProductPrice   CustomerProductPrice?   @relation(fields: [customerProductPriceId], references: [id], onDelete: SetNull)
-  priceSnapshot          Json?
-  reservations           InventoryReservation[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesOrderId                 String
+  salesOrder                   SalesOrder                    @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productVariantId             String
+  productVariant               ProductVariant                @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  productName                  String
+  sku                          String
+  quantity                     Int
+  pickedQuantity               Int                           @default(0)
+  pickedAt                     DateTime?
+  unitPrice                    Decimal                       @db.Decimal(14, 2)
+  discount                     Decimal                       @default(0) @db.Decimal(14, 2)
+  totalAmount                  Decimal                       @db.Decimal(14, 2)
+  pricingSource                String                        @default("CHANNEL") @db.VarChar(20)
+  baseProductPriceId           String?
+  baseProductPrice             ProductPrice?                 @relation("SalesOrderItemBasePrice", fields: [baseProductPriceId], references: [id], onDelete: SetNull)
+  customerProductPriceId       String?
+  customerProductPrice         CustomerProductPrice?         @relation(fields: [customerProductPriceId], references: [id], onDelete: SetNull)
+  priceSnapshot                Json?
+  reservations                 InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 
   @@index([salesOrderId])
   @@index([productVariantId])
@@ -2393,6 +2399,34 @@ model InventoryReservation {
   @@index([productVariantId, status])
   @@index([salesOrderId, status])
   @@index([finishedProductId, status])
+}
+
+model GreenCoffeeSalesReservation {
+  id               String                     @id @default(cuid())
+  companyId        String
+  company          Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesOrderId     String
+  salesOrder       SalesOrder                 @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem             @relation(fields: [salesOrderItemId], references: [id], onDelete: Restrict)
+  productVariantId String
+  productVariant   ProductVariant             @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  coffeeLotId      String
+  coffeeLot        CoffeeLot                  @relation(fields: [coffeeLotId], references: [id], onDelete: Restrict)
+  warehouseId      String
+  warehouse        Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantityKg       Decimal                    @db.Decimal(14, 3)
+  status           InventoryReservationStatus @default(ACTIVE)
+  idempotencyKey   String                     @unique
+  releasedAt       DateTime?
+  consumedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@unique([salesOrderItemId, coffeeLotId])
+  @@index([salesOrderId, status])
+  @@index([coffeeLotId, status])
+  @@index([productVariantId, status])
 }
 
 model IndustrialEvent {

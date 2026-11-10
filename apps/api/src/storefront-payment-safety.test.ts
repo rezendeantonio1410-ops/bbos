@@ -14,6 +14,13 @@ test("checkout reserva estoque e confirma o pedido na mesma transação", async 
     productName: "Caramelo",
     sku: "CARAMELO-500",
     quantity: 2,
+    productVariant: {
+      product: {
+        commercialKind: "BISPO",
+        baseCoffeeProductId: null,
+        productLine: { code: "CLASSICOS" },
+      },
+    },
   };
   const balance = {
     id: "balance-1",
@@ -24,6 +31,7 @@ test("checkout reserva estoque e confirma o pedido na mesma transação", async 
     reservedQuantity: 1,
   };
   const transaction = {
+    $queryRawUnsafe: async () => [],
     $queryRaw: async (strings: TemplateStringsArray) => {
       const sql = strings.join("?");
       calls.push(
@@ -45,6 +53,12 @@ test("checkout reserva estoque e confirma o pedido na mesma transação", async 
         calls.push(`order:${data.status}`);
         return { id: "order-1", ...data };
       },
+    },
+    salesOrderItem: {
+      findMany: async () => [],
+    },
+    greenCoffeeSalesReservation: {
+      findMany: async () => [],
     },
     finishedProduct: {
       findFirst: async () => balance,

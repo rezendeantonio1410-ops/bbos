@@ -11,6 +11,14 @@ const outboxSource = readFileSync(
   resolve(__dirname, "integrations/bling/bling-outbox.service.ts"),
   "utf8",
 );
+const salesOrdersSource = readFileSync(
+  resolve(__dirname, "sales-orders.service.ts"),
+  "utf8",
+);
+const databaseSchema = readFileSync(
+  resolve(__dirname, "../../../packages/database/prisma/schema.prisma"),
+  "utf8",
+);
 
 test("international orders require foreign customer, fiscal route and exchange audit", () => {
   assert.match(controllerSource, /customer\.countryCode === "BR"/);
@@ -63,4 +71,36 @@ test("international samples use export CFOP and a separate customs value", () =>
   );
   assert.match(outboxSource, /internationalSampleFiscalValues/);
   assert.match(outboxSource, /AMOSTRA INTERNACIONAL SEM VALOR COMERCIAL/);
+});
+
+test("green coffee export reserves approved lots in kilograms before invoicing", () => {
+  assert.match(databaseSchema, /model GreenCoffeeSalesReservation/);
+  assert.match(salesOrdersSource, /productLine: \{ code: "GREEN_COFFEE" \}/);
+  assert.match(salesOrdersSource, /status='APPROVED'/);
+  assert.match(
+    salesOrdersSource,
+    /currentWeightKg: \{ decrement: quantityKg \}/,
+  );
+  assert.match(
+    salesOrdersSource,
+    /reservedWeightKg: \{ increment: quantityKg \}/,
+  );
+  assert.match(salesOrdersSource, /WAITING_GREEN_COFFEE/);
+});
+
+test("green coffee is not converted into roasted WIP or finished packages", () => {
+  assert.match(salesOrdersSource, /line\.code <> 'GREEN_COFFEE'/);
+  assert.match(salesOrdersSource, /productLine\?\.code !== "GREEN_COFFEE"/);
+});
+
+test("shipping consumes the reserved green lot with an auditable event", () => {
+  assert.match(salesOrdersSource, /movementType: "green-coffee-export-sale"/);
+  assert.match(
+    salesOrdersSource,
+    /reservedWeightKg: \{ decrement: reservation\.quantityKg \}/,
+  );
+  assert.match(
+    salesOrdersSource,
+    /status: InventoryReservationStatus\.CONSUMED/,
+  );
 });

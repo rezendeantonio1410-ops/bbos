@@ -164,7 +164,7 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   );
   assert.match(
     ordersPage,
-    /order\.status === "INVOICED"[\s\S]*NF-e autorizada\. Pedido faturado e pronto para a expedição ou retirada\./,
+    /order\.status === "INVOICED"[\s\S]*NF-e autorizada\. Pedido faturado e pronto para envio ou confirmação de entrega\./,
   );
   assert.match(
     ordersPage,

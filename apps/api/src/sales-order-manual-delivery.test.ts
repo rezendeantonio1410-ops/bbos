@@ -30,7 +30,12 @@ test("manual delivery dispatches inventory once and closes the order with audit"
   const shipments: unknown[][] = [];
   service.ship = async (...args: any[]) => {
     shipments.push(args);
-    return { orderId: "order-1", idempotent: false, movementIds: [] };
+    return {
+      orderId: "order-1",
+      idempotent: false,
+      movementIds: [],
+      greenReservationIds: [],
+    };
   };
 
   const result = await service.deliver("company-1", "order-1", {

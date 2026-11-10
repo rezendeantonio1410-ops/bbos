@@ -120,7 +120,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
            FROM "SalesOrderItem" soi
            JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
            JOIN "Product" product ON product.id=pv."productId"
+           JOIN "ProductLine" line ON line.id=product."productLineId"
           WHERE soi."salesOrderId"=$2 AND soi."companyId"=$1
+            AND line.code <> 'GREEN_COFFEE'
        ), distributed AS (
          SELECT item_stock.*,
                 COALESCE(SUM(quantity) OVER (
@@ -238,6 +240,128 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async allocateGreenCoffeeForOrder(
+    transaction: Prisma.TransactionClient,
+    companyId: string,
+    salesOrderId: string,
+  ) {
+    const items = await transaction.salesOrderItem.findMany({
+      where: {
+        companyId,
+        salesOrderId,
+        productVariant: { product: { productLine: { code: "GREEN_COFFEE" } } },
+      },
+      include: {
+        productVariant: true,
+        greenCoffeeSalesReservations: true,
+      },
+      orderBy: { id: "asc" },
+    });
+
+    for (const item of items) {
+      if (
+        item.greenCoffeeSalesReservations.some(
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.CONSUMED,
+        )
+      )
+        continue;
+
+      const requestedKg = Number(
+        ((item.quantity * item.productVariant.netWeightGrams) / 1000).toFixed(
+          3,
+        ),
+      );
+      const alreadyReservedKg = item.greenCoffeeSalesReservations
+        .filter(
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.ACTIVE,
+        )
+        .reduce(
+          (total, reservation) => total + Number(reservation.quantityKg),
+          0,
+        );
+      let remainingKg = Number(
+        Math.max(0, requestedKg - alreadyReservedKg).toFixed(3),
+      );
+      if (remainingKg <= 0.0005) continue;
+
+      const lots = await transaction.$queryRawUnsafe<
+        Array<{
+          id: string;
+          warehouseId: string;
+          currentWeightKg: Prisma.Decimal;
+        }>
+      >(
+        `SELECT id,"warehouseId","currentWeightKg"
+           FROM "CoffeeLot"
+          WHERE "companyId"=$1
+            AND status='APPROVED'
+            AND "currentWeightKg">0.0005
+          ORDER BY "receivedAt",id
+          FOR UPDATE`,
+        companyId,
+      );
+
+      for (const lot of lots) {
+        if (remainingKg <= 0.0005) break;
+        const quantityKg = Number(
+          Math.min(Number(lot.currentWeightKg), remainingKg).toFixed(3),
+        );
+        if (quantityKg <= 0) continue;
+
+        await transaction.coffeeLot.update({
+          where: { id: lot.id },
+          data: {
+            currentWeightKg: { decrement: quantityKg },
+            reservedWeightKg: { increment: quantityKg },
+          },
+        });
+        await transaction.greenCoffeeSalesReservation.upsert({
+          where: {
+            salesOrderItemId_coffeeLotId: {
+              salesOrderItemId: item.id,
+              coffeeLotId: lot.id,
+            },
+          },
+          create: {
+            companyId,
+            salesOrderId,
+            salesOrderItemId: item.id,
+            productVariantId: item.productVariantId,
+            coffeeLotId: lot.id,
+            warehouseId: lot.warehouseId,
+            quantityKg,
+            idempotencyKey: `GREEN_SALES_RESERVATION:${item.id}:${lot.id}`,
+          },
+          update: {
+            quantityKg: { increment: quantityKg },
+            status: InventoryReservationStatus.ACTIVE,
+            releasedAt: null,
+            consumedAt: null,
+          },
+        });
+        remainingKg = Number((remainingKg - quantityKg).toFixed(3));
+      }
+    }
+  }
+
+  private greenCoffeeReservationComplete(
+    item: {
+      quantity: number;
+      productVariant: { netWeightGrams: number };
+    },
+    reservations: Array<{ quantityKg: Prisma.Decimal | number }>,
+  ) {
+    const requestedKg =
+      (item.quantity * item.productVariant.netWeightGrams) / 1000;
+    const reservedKg = reservations.reduce(
+      (total, reservation) => total + Number(reservation.quantityKg),
+      0,
+    );
+    return reservedKg + 0.0005 >= requestedKg;
+  }
+
   private async automaticallyPackageReadyOrder(
     companyId: string,
     salesOrderId: string,
@@ -269,6 +393,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                 reservations: {
                   where: { status: InventoryReservationStatus.ACTIVE },
                 },
+                greenCoffeeSalesReservations: {
+                  where: { status: InventoryReservationStatus.ACTIVE },
+                },
               },
             },
           },
@@ -281,6 +408,40 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           companyId,
           salesOrderId,
         );
+        await this.allocateGreenCoffeeForOrder(
+          transaction,
+          companyId,
+          salesOrderId,
+        );
+
+        const greenReservations =
+          await transaction.greenCoffeeSalesReservation.findMany({
+            where: {
+              companyId,
+              salesOrderId,
+              status: InventoryReservationStatus.ACTIVE,
+            },
+          });
+        const greenByItem = new Map<string, typeof greenReservations>();
+        for (const reservation of greenReservations) {
+          const current = greenByItem.get(reservation.salesOrderItemId) ?? [];
+          current.push(reservation);
+          greenByItem.set(reservation.salesOrderItemId, current);
+        }
+        const greenItems = order.items.filter(
+          (item) =>
+            item.productVariant?.product?.productLine?.code === "GREEN_COFFEE",
+        );
+        if (
+          greenItems.some(
+            (item) =>
+              !this.greenCoffeeReservationComplete(
+                item,
+                greenByItem.get(item.id) ?? [],
+              ),
+          )
+        )
+          return { advanced: false, reason: "WAITING_GREEN_COFFEE" };
 
         const bulkReservations = await transaction.$queryRawUnsafe<
           Array<{
@@ -317,14 +478,20 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             reservation,
           ]),
         );
-        const finishedWarehouse = await transaction.warehouse.findFirst({
-          where: { companyId, type: "FINISHED_GOODS" },
-          orderBy: { code: "asc" },
-        });
-        if (!finishedWarehouse)
+        const nonGreenItems = order.items.filter(
+          (item) =>
+            item.productVariant?.product?.productLine?.code !== "GREEN_COFFEE",
+        );
+        const finishedWarehouse = nonGreenItems.length
+          ? await transaction.warehouse.findFirst({
+              where: { companyId, type: "FINISHED_GOODS" },
+              orderBy: { code: "asc" },
+            })
+          : null;
+        if (nonGreenItems.length && !finishedWarehouse)
           return { advanced: false, reason: "NO_FINISHED_WAREHOUSE" };
 
-        for (const item of order.items) {
+        for (const item of nonGreenItems) {
           const bulkReservation = bulkByItem.get(item.id);
           const existingReservation = item.reservations[0] ?? null;
           let effectiveReservation = existingReservation;
@@ -345,7 +512,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                 where: {
                   companyId,
                   productVariantId: item.productVariantId,
-                  warehouseId: finishedWarehouse.id,
+                  warehouseId: finishedWarehouse!.id,
                 },
                 orderBy: { createdAt: "asc" },
               });
@@ -357,7 +524,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                   blendId: null,
                   productionOrderId: null,
                   productVariantId: item.productVariantId,
-                  warehouseId: finishedWarehouse.id,
+                  warehouseId: finishedWarehouse!.id,
                   sku: item.sku,
                   name: item.productName,
                   line: item.productVariant.product.productLine.code,
@@ -374,7 +541,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                 where: {
                   companyId,
                   productVariantId: item.productVariantId,
-                  warehouseId: finishedWarehouse.id,
+                  warehouseId: finishedWarehouse!.id,
                 },
               });
               if (!finishedProduct) throw error;
@@ -488,13 +655,15 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           }
         }
 
-        const readyItems = await transaction.inventoryReservation.count({
-          where: {
-            salesOrderId,
-            status: InventoryReservationStatus.ACTIVE,
+        const readyFinishedItems = await transaction.inventoryReservation.count(
+          {
+            where: {
+              salesOrderId,
+              status: InventoryReservationStatus.ACTIVE,
+            },
           },
-        });
-        if (readyItems < order.items.length)
+        );
+        if (readyFinishedItems + greenItems.length < order.items.length)
           return { advanced: false, reason: "WAITING_RESERVATIONS" };
 
         await transaction.$executeRawUnsafe(
@@ -518,7 +687,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           salesOrderId,
           "ORDER_READY_TO_INVOICE",
           "Pedido pronto para emissão da NF-e",
-          "O café torrado reservado foi convertido automaticamente nas embalagens do pedido. A emissão da NF-e continua dependendo de ação manual.",
+          "O estoque necessário foi reservado automaticamente conforme o pedido. A emissão da NF-e continua dependendo de ação manual.",
           "BBOS",
           `sales-order:auto-packaged:${salesOrderId}`,
           {},
@@ -871,24 +1040,29 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   async options(companyId: string) {
-    const [customers, balances, brokers] = await Promise.all([
-      this.database.customer.findMany({
-        where: { companyId },
-        orderBy: { name: "asc" },
-      }),
-      this.database.finishedProduct.findMany({
-        where: {
-          productVariantId: { not: null },
-          productVariant: { product: { productLine: { companyId } } },
-        },
-        include: {
-          warehouse: true,
-          productVariant: {
-            include: { product: { include: { productLine: true } } },
+    const [customers, balances, brokers, greenVariants, greenStock] =
+      await Promise.all([
+        this.database.customer.findMany({
+          where: { companyId },
+          orderBy: { name: "asc" },
+        }),
+        this.database.finishedProduct.findMany({
+          where: {
+            productVariantId: { not: null },
+            productVariant: {
+              product: {
+                productLine: { companyId, code: { not: "GREEN_COFFEE" } },
+              },
+            },
           },
-        },
-      }),
-      this.database.$queryRaw<SalesBrokerOption[]>(Prisma.sql`
+          include: {
+            warehouse: true,
+            productVariant: {
+              include: { product: { include: { productLine: true } } },
+            },
+          },
+        }),
+        this.database.$queryRaw<SalesBrokerOption[]>(Prisma.sql`
         SELECT broker.id,
                partner.name,
                partner."tradeName",
@@ -902,7 +1076,38 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
            AND partner."isSalesBroker" = TRUE
          ORDER BY partner.name ASC
       `),
-    ]);
+        this.database.productVariant.findMany({
+          where: {
+            active: true,
+            product: {
+              active: true,
+              productLine: { companyId, code: "GREEN_COFFEE" },
+            },
+          },
+          include: { product: { include: { productLine: true } } },
+          orderBy: [{ product: { name: "asc" } }, { netWeightGrams: "asc" }],
+        }),
+        this.database.$queryRaw<
+          Array<{
+            warehouseId: string;
+            warehouse: string;
+            quantityOnHand: Prisma.Decimal;
+            reservedQuantity: Prisma.Decimal;
+          }>
+        >(Prisma.sql`
+        SELECT warehouse.id AS "warehouseId",
+               warehouse.name AS warehouse,
+               COALESCE(SUM(lot."currentWeightKg"),0) AS "quantityOnHand",
+               COALESCE(SUM(lot."reservedWeightKg"),0) AS "reservedQuantity"
+          FROM "CoffeeLot" lot
+          JOIN "Warehouse" warehouse ON warehouse.id=lot."warehouseId"
+         WHERE lot."companyId"=${companyId}
+           AND lot.status='APPROVED'
+         GROUP BY warehouse.id,warehouse.name
+         ORDER BY COALESCE(SUM(lot."currentWeightKg"),0) DESC,warehouse.name ASC
+      `),
+      ]);
+    const primaryGreenStock = greenStock[0] ?? null;
     return {
       customers: customers.map((customer) => ({
         id: customer.id,
@@ -915,18 +1120,40 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         fiscalReadiness: assessCustomerFiscalReadiness(customer),
       })),
       brokers,
-      variants: balances.map((item) => ({
-        productVariantId: item.productVariantId,
-        warehouseId: item.warehouseId,
-        warehouse: item.warehouse.name,
-        line: item.productVariant!.product.productLine.name,
-        lineCode: item.productVariant!.product.productLine.code,
-        product: item.productVariant!.product.name,
-        sku: item.productVariant!.sku,
-        presentationGrams: item.productVariant!.netWeightGrams,
-        salesUnit: item.productVariant!.salesUnit,
-        ...salesInventoryBalance(item.quantityOnHand, item.reservedQuantity),
-      })),
+      variants: [
+        ...balances.map((item) => ({
+          productVariantId: item.productVariantId,
+          warehouseId: item.warehouseId,
+          warehouse: item.warehouse.name,
+          line: item.productVariant!.product.productLine.name,
+          lineCode: item.productVariant!.product.productLine.code,
+          product: item.productVariant!.product.name,
+          sku: item.productVariant!.sku,
+          presentationGrams: item.productVariant!.netWeightGrams,
+          salesUnit: item.productVariant!.salesUnit,
+          ...salesInventoryBalance(item.quantityOnHand, item.reservedQuantity),
+        })),
+        ...greenVariants.map((variant) => {
+          const freeKg = Number(primaryGreenStock?.quantityOnHand ?? 0);
+          const reservedKg = Number(primaryGreenStock?.reservedQuantity ?? 0);
+          const physicalKg = freeKg + reservedKg;
+          const unitKg = variant.netWeightGrams / 1000;
+          return {
+            productVariantId: variant.id,
+            warehouseId: primaryGreenStock?.warehouseId ?? "",
+            warehouse: primaryGreenStock?.warehouse ?? "Estoque de café verde",
+            line: variant.product.productLine.name,
+            lineCode: variant.product.productLine.code,
+            product: variant.product.name,
+            sku: variant.sku,
+            presentationGrams: variant.netWeightGrams,
+            salesUnit: variant.salesUnit,
+            onHand: unitKg > 0 ? Math.floor(physicalKg / unitKg) : 0,
+            reserved: unitKg > 0 ? Math.ceil(reservedKg / unitKg) : 0,
+            available: unitKg > 0 ? Math.floor(freeKg / unitKg) : 0,
+          };
+        }),
+      ],
     };
   }
 
@@ -1153,6 +1380,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
       await this.termApprovals?.assertApproved(transaction, companyId, id);
       if (order.status === SalesOrderStatus.CONFIRMED) {
         await this.allocateRoastedWipForOrder(transaction, companyId, id);
+        await this.allocateGreenCoffeeForOrder(transaction, companyId, id);
         return { orderId: id, idempotent: true, status: order.status };
       }
       if (order.status !== SalesOrderStatus.DRAFT)
@@ -1168,6 +1396,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         data: { status: SalesOrderStatus.CONFIRMED },
       });
       await this.allocateRoastedWipForOrder(transaction, companyId, id);
+      await this.allocateGreenCoffeeForOrder(transaction, companyId, id);
       return {
         orderId: id,
         idempotent: false,
@@ -1258,6 +1487,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
               },
             },
             reservations: true,
+            greenCoffeeSalesReservations: true,
           },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
@@ -1265,17 +1495,44 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           (reservation) =>
             reservation.status === InventoryReservationStatus.ACTIVE,
         );
+        const activeGreenReservations = (
+          order.greenCoffeeSalesReservations ?? []
+        ).filter(
+            (reservation) =>
+              reservation.status === InventoryReservationStatus.ACTIVE,
+          );
+        const greenItems = order.items.filter(
+          (item) =>
+            item.productVariant?.product?.productLine?.code === "GREEN_COFFEE",
+        );
+        const greenComplete = greenItems.every((item) =>
+          this.greenCoffeeReservationComplete(
+            item,
+            activeGreenReservations.filter(
+              (reservation) => reservation.salesOrderItemId === item.id,
+            ),
+          ),
+        );
+        const coveredFinishedItemIds = new Set(
+          activeReservations
+            .map((reservation) => reservation.salesOrderItemId)
+            .filter(Boolean),
+        );
+        const coveredFinishedItems =
+          coveredFinishedItemIds.size || activeReservations.length;
         if (
           (order.status === SalesOrderStatus.RESERVED ||
             order.status === SalesOrderStatus.PICKING ||
             order.status === SalesOrderStatus.READY_TO_SHIP ||
             order.status === SalesOrderStatus.INVOICED) &&
-          activeReservations.length === order.items.length
+          coveredFinishedItems + greenItems.length === order.items.length &&
+          greenComplete
         )
           return {
             orderId: id,
             idempotent: true,
             reservations: activeReservations,
+            greenCoffeeReservations: activeGreenReservations,
             status: order.status,
           };
         if (activeReservations.length) {
@@ -1302,6 +1559,31 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           );
 
         await this.allocateRoastedWipForOrder(transaction, companyId, id);
+        await this.allocateGreenCoffeeForOrder(transaction, companyId, id);
+        const allocatedGreenReservations =
+          await transaction.greenCoffeeSalesReservation.findMany({
+            where: {
+              companyId,
+              salesOrderId: id,
+              status: InventoryReservationStatus.ACTIVE,
+            },
+          });
+        for (const item of greenItems) {
+          const itemReservations = allocatedGreenReservations.filter(
+            (reservation) => reservation.salesOrderItemId === item.id,
+          );
+          if (!this.greenCoffeeReservationComplete(item, itemReservations)) {
+            const requestedKg =
+              (item.quantity * item.productVariant.netWeightGrams) / 1000;
+            const reservedKg = itemReservations.reduce(
+              (total, reservation) => total + Number(reservation.quantityKg),
+              0,
+            );
+            throw new BadRequestException(
+              `Café verde aprovado insuficiente: necessário ${requestedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg, reservado ${reservedKg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg.`,
+            );
+          }
+        }
         const bulkReservations = await transaction.$queryRawUnsafe<
           RoastedWipReservationRow[]
         >(
@@ -1343,6 +1625,10 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         );
         const requestedBalances = [];
         for (const item of order.items) {
+          if (
+            item.productVariant?.product?.productLine?.code === "GREEN_COFFEE"
+          )
+            continue;
           const warehouseId = warehouseByVariant?.[item.productVariantId];
           const bulkReservation = bulkByItem.get(item.id);
           const finishedQuantity = Math.max(
@@ -1445,6 +1731,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           reservations: await transaction.inventoryReservation.findMany({
             where: { salesOrderId: id },
           }),
+          greenCoffeeReservations: allocatedGreenReservations,
           bulkReservations: bulkReservations.map((reservation) => ({
             id: reservation.id,
             salesOrderItemId: reservation.salesOrderItemId,
@@ -1475,16 +1762,26 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
 
         const order = await transaction.salesOrder.findFirst({
           where: { id, companyId },
-          include: { reservations: true },
+          include: {
+            reservations: true,
+            greenCoffeeSalesReservations: true,
+          },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
         const activeReservations = order.reservations.filter(
           (reservation) =>
             reservation.status === InventoryReservationStatus.ACTIVE,
         );
+        const activeGreenReservations = (
+          order.greenCoffeeSalesReservations ?? []
+        ).filter(
+            (reservation) =>
+              reservation.status === InventoryReservationStatus.ACTIVE,
+          );
         if (
           order.status === SalesOrderStatus.CANCELLED &&
-          activeReservations.length === 0
+          activeReservations.length === 0 &&
+          activeGreenReservations.length === 0
         )
           return { orderId: id, idempotent: true };
         if (
@@ -1532,6 +1829,25 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             },
           });
         }
+        for (const reservation of activeGreenReservations.sort((a, b) =>
+          a.coffeeLotId.localeCompare(b.coffeeLotId),
+        )) {
+          await transaction.$queryRaw`SELECT id FROM "CoffeeLot" WHERE id = ${reservation.coffeeLotId} FOR UPDATE`;
+          await transaction.coffeeLot.update({
+            where: { id: reservation.coffeeLotId },
+            data: {
+              currentWeightKg: { increment: reservation.quantityKg },
+              reservedWeightKg: { decrement: reservation.quantityKg },
+            },
+          });
+          await transaction.greenCoffeeSalesReservation.update({
+            where: { id: reservation.id },
+            data: {
+              status: InventoryReservationStatus.RELEASED,
+              releasedAt: new Date(),
+            },
+          });
+        }
         await this.releaseRoastedWipForOrder(transaction, companyId, id);
         await transaction.salesOrder.update({
           where: { id },
@@ -1559,26 +1875,43 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             reservations: {
               include: { productVariant: true, salesOrderItem: true },
             },
+            greenCoffeeSalesReservations: {
+              include: { productVariant: true, salesOrderItem: true },
+            },
             finishedGoodsMovements: true,
           },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
-        const hasActiveReservations = order.reservations.some(
-          (reservation) =>
-            reservation.status === InventoryReservationStatus.ACTIVE,
-        );
+        const hasActiveReservations =
+          order.reservations.some(
+            (reservation) =>
+              reservation.status === InventoryReservationStatus.ACTIVE,
+          ) ||
+          (order.greenCoffeeSalesReservations ?? []).some(
+            (reservation) =>
+              reservation.status === InventoryReservationStatus.ACTIVE,
+          );
+        const consumedGreenReservations = (
+          order.greenCoffeeSalesReservations ?? []
+        ).filter(
+            (reservation) =>
+              reservation.status === InventoryReservationStatus.CONSUMED,
+          );
         if (
           order.status === SalesOrderStatus.SHIPPED &&
-          order.finishedGoodsMovements.length
+          (order.finishedGoodsMovements.length ||
+            consumedGreenReservations.length)
         )
           return {
             orderId: id,
             idempotent: true,
             movements: order.finishedGoodsMovements,
+            greenCoffeeReservations: consumedGreenReservations,
           };
         if (
           !hasActiveReservations &&
-          order.finishedGoodsMovements.length &&
+          (order.finishedGoodsMovements.length ||
+            consumedGreenReservations.length) &&
           (
             [
               SalesOrderStatus.READY_TO_SHIP,
@@ -1597,6 +1930,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             orderId: id,
             idempotent: true,
             movements: order.finishedGoodsMovements,
+            greenCoffeeReservations: consumedGreenReservations,
           };
         }
         const shippableStatuses: SalesOrderStatus[] = [
@@ -1680,7 +2014,10 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           .sort((a, b) =>
             a.finishedProductId.localeCompare(b.finishedProductId),
           );
-        if (!active.length)
+        const activeGreen = (order.greenCoffeeSalesReservations ?? [])
+          .filter((item) => item.status === InventoryReservationStatus.ACTIVE)
+          .sort((a, b) => a.coffeeLotId.localeCompare(b.coffeeLotId));
+        if (!active.length && !activeGreen.length)
           throw new BadRequestException("Pedido não possui reservas ativas.");
         if (order.status !== SalesOrderStatus.INVOICED) {
           await transaction.salesOrder.update({
@@ -1742,11 +2079,58 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             },
           });
         }
+        const greenReservationIds: string[] = [];
+        for (const reservation of activeGreen) {
+          await transaction.$queryRaw`SELECT id FROM "CoffeeLot" WHERE id = ${reservation.coffeeLotId} FOR UPDATE`;
+          const lot = await transaction.coffeeLot.findUniqueOrThrow({
+            where: { id: reservation.coffeeLotId },
+          });
+          if (
+            Number(lot.reservedWeightKg) + 0.0005 <
+            Number(reservation.quantityKg)
+          )
+            throw new BadRequestException(
+              `O lote verde ${lot.code} não possui a quantidade reservada necessária para expedição.`,
+            );
+          await transaction.coffeeLot.update({
+            where: { id: lot.id },
+            data: { reservedWeightKg: { decrement: reservation.quantityKg } },
+          });
+          await transaction.industrialEvent.create({
+            data: {
+              companyId: order.companyId,
+              coffeeLotId: lot.id,
+              warehouseId: reservation.warehouseId,
+              type: "ADJUSTMENT",
+              quantityKg: -Number(reservation.quantityKg),
+              metadata: {
+                movementType: "green-coffee-export-sale",
+                salesOrderId: order.id,
+                salesOrderItemId: reservation.salesOrderItemId,
+                productVariantId: reservation.productVariantId,
+                sku: reservation.salesOrderItem.sku,
+              },
+            },
+          });
+          await transaction.greenCoffeeSalesReservation.update({
+            where: { id: reservation.id },
+            data: {
+              status: InventoryReservationStatus.CONSUMED,
+              consumedAt: new Date(),
+            },
+          });
+          greenReservationIds.push(reservation.id);
+        }
         await transaction.salesOrder.update({
           where: { id },
           data: { status: SalesOrderStatus.SHIPPED },
         });
-        return { orderId: id, idempotent: false, movementIds };
+        return {
+          orderId: id,
+          idempotent: false,
+          movementIds,
+          greenReservationIds,
+        };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
