@@ -28,6 +28,9 @@ const AUTHENTICATED: readonly BbosRole[] = [...ALL, "PARTNER"];
 const CORE: readonly BbosRole[] = ALL.filter(
   (role) => role !== "MARKETPLACE_OPERATOR",
 );
+const CORE_WITHOUT_SALES: readonly BbosRole[] = CORE.filter(
+  (role) => role !== "SALES",
+);
 const LEADERSHIP: readonly BbosRole[] = ["ADMIN", "EXECUTIVE"];
 const OPERATIONS: readonly BbosRole[] = ["ADMIN", "EXECUTIVE", "INDUSTRIAL"];
 const OPERATIONS_FINANCE: readonly BbosRole[] = [...OPERATIONS, "FINANCE"];
@@ -37,6 +40,9 @@ const COMMERCIAL: readonly BbosRole[] = [
   "SALES",
   "FINANCE",
 ];
+const COMMERCIAL_WITHOUT_SALES: readonly BbosRole[] = COMMERCIAL.filter(
+  (role) => role !== "SALES",
+);
 const MARKETPLACE: readonly BbosRole[] = [
   "ADMIN",
   "EXECUTIVE",
@@ -74,7 +80,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   AdminCoffeeReferenceController: LEADERSHIP,
   AdminUsersController: ["ADMIN"],
   IntegrationsController: LEADERSHIP,
-  OperationsFlowController: CORE,
+  OperationsFlowController: CORE_WITHOUT_SALES,
   OperationsFlowActionsController: OPERATIONS,
   ProductionRequirementsController: OPERATIONS,
   OrderPackagingController: OPERATIONS,
@@ -92,7 +98,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   StorefrontOperationsController: LEADERSHIP,
   FiscalInboundController: OPERATIONS_FINANCE,
   MarketplacesController: MARKETPLACE,
-  AdminStorefrontMediaController: ["ADMIN", "EXECUTIVE", "SALES"],
+  AdminStorefrontMediaController: LEADERSHIP,
 };
 
 const HANDLER_ROLE_POLICY: Readonly<
@@ -106,11 +112,48 @@ const HANDLER_ROLE_POLICY: Readonly<
     stockIn: OPERATIONS,
     stockPolicy: OPERATIONS,
   },
+  ProductsController: {
+    createProduct: OPERATIONS,
+    ncmSuggestion: OPERATIONS,
+    createVariant: OPERATIONS,
+    updateProduct: OPERATIONS,
+    updateVariant: OPERATIONS,
+    retryBling: OPERATIONS,
+    uploadStorefrontImage: OPERATIONS,
+    updateStorefrontImage: OPERATIONS,
+    deleteStorefrontImage: OPERATIONS,
+    getRules: OPERATIONS,
+    getRulesForLine: OPERATIONS,
+    validateSku: OPERATIONS,
+  },
+  SalesOrdersController: {
+    exportOverview: CORE_WITHOUT_SALES,
+    postingAgencies: CORE_WITHOUT_SALES,
+    requoteShipping: CORE_WITHOUT_SALES,
+    selectRequoteShipping: CORE_WITHOUT_SALES,
+    label: CORE_WITHOUT_SALES,
+    prepareReexpedition: LEADERSHIP,
+    decideTermApproval: LEADERSHIP,
+    decideDiscount: LEADERSHIP,
+    reserve: CORE_WITHOUT_SALES,
+    cancel: CORE_WITHOUT_SALES,
+    ship: CORE_WITHOUT_SALES,
+    picking: CORE_WITHOUT_SALES,
+    readyToShip: CORE_WITHOUT_SALES,
+    confirmPicking: CORE_WITHOUT_SALES,
+    invoice: CORE_WITHOUT_SALES,
+  },
   StorefrontPartnersController: {
+    create: LEADERSHIP,
+    update: LEADERSHIP,
     portalAccess: ["ADMIN"],
     portalAccessStatus: ["ADMIN"],
     portalPermissions: ["ADMIN"],
     getPortalPermissions: ["ADMIN"],
+  },
+  BrokersController: {
+    create: COMMERCIAL_WITHOUT_SALES,
+    update: COMMERCIAL_WITHOUT_SALES,
   },
   CustomersController: {
     recentVisits: ["ADMIN", "EXECUTIVE", "SALES"],

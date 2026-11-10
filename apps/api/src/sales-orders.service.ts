@@ -448,8 +448,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             item.quantity - effectiveReservedUnits,
           );
           const availableNow =
-            refreshedBalance.quantityOnHand -
-            refreshedBalance.reservedQuantity;
+            refreshedBalance.quantityOnHand - refreshedBalance.reservedQuantity;
           if (availableNow < reserveIncrement)
             return { advanced: false, reason: "WAITING_FINISHED_STOCK" };
 
@@ -906,7 +905,13 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     ]);
     return {
       customers: customers.map((customer) => ({
-        ...customer,
+        id: customer.id,
+        name: customer.name,
+        segment: customer.segment,
+        active: customer.active,
+        paymentTerms: customer.paymentTerms,
+        creditStatus: customer.creditStatus,
+        creditLimit: customer.creditLimit,
         fiscalReadiness: assessCustomerFiscalReadiness(customer),
       })),
       brokers,

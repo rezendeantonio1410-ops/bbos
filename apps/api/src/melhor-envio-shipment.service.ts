@@ -256,21 +256,46 @@ export class MelhorEnvioShipmentService
     const customerLabel = shipment.customerName
       ? ` de ${shipment.customerName}`
       : "";
-    const notificationType = `ORDER_DELIVERY_EXCEPTION:${shipment.id}`;
-    await this.database.$executeRawUnsafe(
-      `INSERT INTO "OperationalNotification"
-        (id,"companyId",type,title,message,"targetRole","createdAt")
-       SELECT $1,$2,$3,$4,$5,'ALL',NOW()
-        WHERE NOT EXISTS (
-          SELECT 1 FROM "OperationalNotification"
-           WHERE "companyId"=$2 AND type=$3
-        )`,
-      randomUUID(),
-      shipment.companyId,
-      notificationType,
-      "Pendência crítica na entrega",
-      `${orderLabel}${customerLabel}: ${title}. ${detail}`,
+    const scope = (
+      await this.database.$queryRawUnsafe<any[]>(
+        `SELECT sh."storefrontOrderId",so."externalOrderId",so."importedAt",
+                channel.type::text AS "channelType",channel."platformCode"
+           FROM "Shipment" sh
+           LEFT JOIN "SalesOrder" so ON so.id=sh."salesOrderId"
+           LEFT JOIN "SalesChannel" channel ON channel.id=so."salesChannelId"
+          WHERE sh.id=$1 AND sh."companyId"=$2 LIMIT 1`,
+        shipment.id,
+        shipment.companyId,
+      )
+    )[0];
+    const isPlatformOrder = Boolean(
+      scope?.storefrontOrderId ||
+      scope?.externalOrderId ||
+      scope?.importedAt ||
+      scope?.channelType === "ECOMMERCE" ||
+      scope?.platformCode,
     );
+    const targetRoles = isPlatformOrder
+      ? ["ADMIN", "EXECUTIVE", "MARKETPLACE_OPERATOR"]
+      : ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "SALES"];
+    for (const targetRole of targetRoles) {
+      const notificationType = `ORDER_DELIVERY_EXCEPTION:${shipment.id}:${targetRole}`;
+      await this.database.$executeRawUnsafe(
+        `INSERT INTO "OperationalNotification"
+          (id,"companyId",type,title,message,"targetRole","createdAt")
+         SELECT $1,$2,$3,$4,$5,$6,NOW()
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "OperationalNotification"
+             WHERE "companyId"=$2 AND type=$3
+          )`,
+        randomUUID(),
+        shipment.companyId,
+        notificationType,
+        "Pendência crítica na entrega",
+        `${orderLabel}${customerLabel}: ${title}. ${detail}`,
+        targetRole,
+      );
+    }
   }
 
   private async reconcileActiveShipments() {
@@ -1381,8 +1406,7 @@ export class MelhorEnvioShipmentService
         `SELECT * FROM "Shipment" WHERE id=$1 LIMIT 1`,
         reexpedition.replacementShipmentId,
       );
-      if (existing[0]?.labelUrl)
-        return { ...existing[0], idempotent: true };
+      if (existing[0]?.labelUrl) return { ...existing[0], idempotent: true };
     }
 
     const items = await this.database.$queryRawUnsafe<any[]>(
@@ -1458,10 +1482,7 @@ export class MelhorEnvioShipmentService
               name: item.productName,
               quantity: Number(item.quantity),
               unitary_value: Number(item.unitPrice),
-              weight: Math.max(
-                0.001,
-                Number(item.netWeightGrams || 0) / 1000,
-              ),
+              weight: Math.max(0.001, Number(item.netWeightGrams || 0) / 1000),
             })),
             volumes: packagePayload,
             options: {

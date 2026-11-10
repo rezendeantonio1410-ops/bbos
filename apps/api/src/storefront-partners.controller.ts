@@ -104,7 +104,7 @@ export class StorefrontPartnersController {
   @Get()
   async list(@Req() request: any) {
     const actor = await this.actor(request);
-    return this.database.$queryRawUnsafe<any[]>(
+    const partners = await this.database.$queryRawUnsafe<any[]>(
       `SELECT partner.*, portal.id AS "portalUserId", portal.email AS "portalEmail",
               portal.active AS "portalActive",
               broker.id AS "brokerId", broker.active AS "brokerActive",
@@ -117,6 +117,16 @@ export class StorefrontPartnersController {
         ORDER BY partner.name ASC`,
       actor.companyId,
     );
+    if (actor.role !== UserRole.SALES) return partners;
+    return partners.map((partner) => ({
+      id: partner.id,
+      name: partner.name,
+      tradeName: partner.tradeName,
+      active: partner.active,
+      isSalesBroker: partner.isSalesBroker,
+      brokerId: partner.brokerId,
+      brokerActive: partner.brokerActive,
+    }));
   }
 
   @Patch(":id/portal-permissions")

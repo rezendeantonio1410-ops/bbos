@@ -13,7 +13,14 @@ const emptyHome = {
   openPurchases: 0,
   finishedGoodsUnits: 0,
   finishedGoodsReserved: 0,
-  greenLots: [],
+  greenLots: [] as Array<{
+    origin: string;
+    code: string;
+    variety: string;
+    currentKg: number;
+    reservedKg: number;
+    status: string;
+  }>,
   alerts: [],
 };
 
@@ -131,5 +138,46 @@ test("blocks sales from forging a costs context in intelligence", async () => {
         question: "Qual produto tem a melhor margem?",
       }),
     /não possui acesso à inteligência de custos/i,
+  );
+});
+
+test("keeps seller intelligence inside the commercial scope", async () => {
+  const result = await createService({
+    home: {
+      ...emptyHome,
+      salesMonth: 1200,
+      openOrders: 3,
+      productionActualKg: 500,
+      greenLots: [
+        {
+          origin: "Fazenda",
+          code: "LOT-1",
+          variety: "Arara",
+          currentKg: 100,
+          reservedKg: 0,
+          status: "APPROVED",
+        },
+      ],
+    },
+  }).ask("company-a", "SALES", {
+    path: "/home",
+    question: "Como está a produção e o estoque?",
+  });
+
+  assert.match(result.answer, /sem abrir dados internos de produção/i);
+  assert.equal(
+    result.facts.some((fact) => fact.href === "/producao"),
+    false,
+  );
+});
+
+test("blocks seller intelligence from export data", async () => {
+  await assert.rejects(
+    () =>
+      createService().ask("company-a", "SALES", {
+        path: "/exportacoes",
+        question: "Mostre a carteira internacional",
+      }),
+    /não possui acesso à inteligência de exportações/i,
   );
 });

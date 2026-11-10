@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -9,7 +10,7 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { Prisma } from "@bbos/database";
+import { Prisma, UserRole } from "@bbos/database";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
 import { Public } from "./auth.guard";
@@ -65,6 +66,32 @@ export class SalesOrderApprovalsController {
     const actor = await this.auth.resolve(this.auth.readToken(request));
     if (!actor) throw new UnauthorizedException("Sessão inválida.");
     return actor;
+  }
+
+  private async assertOrderVisibleToActor(actor: any, orderId: string) {
+    if (actor.role !== UserRole.SALES) return;
+    const visible = await this.salesOrders.database.salesOrder.findFirst({
+      where: {
+        id: orderId,
+        companyId: actor.companyId,
+        externalOrderId: null,
+        importedAt: null,
+        OR: [
+          { salesChannelId: null },
+          {
+            salesChannel: {
+              is: { type: { not: "ECOMMERCE" }, platformCode: null },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!visible) {
+      throw new ForbiddenException(
+        "Pedidos do site e de plataformas são restritos à administração e aos operadores autorizados.",
+      );
+    }
   }
 
   private async snapshot(
@@ -130,6 +157,7 @@ export class SalesOrderApprovalsController {
     @Body() body: { expiresInDays?: number },
   ) {
     const actor = await this.actor(request);
+    await this.assertOrderVisibleToActor(actor, orderId);
     const snapshot = await this.snapshot(orderId);
     if (snapshot.companyId !== actor.companyId)
       throw new UnauthorizedException("Pedido fora da empresa do usuário.");
@@ -236,6 +264,7 @@ export class SalesOrderApprovalsController {
   @Get(":orderId/history")
   async history(@Param("orderId") orderId: string, @Req() request: any) {
     const actor = await this.actor(request);
+    await this.assertOrderVisibleToActor(actor, orderId);
     return this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT id,status,"expiresAt","createdByName","createdAt","viewedAt","acceptedByName","acceptedByEmail",
               "acceptedAt","customerNote","revokedAt","destinationMasked","verificationRequired","verificationCodeVerifiedAt"

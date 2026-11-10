@@ -42,7 +42,7 @@ export class BrokersController {
       include: { businessPartner: true },
       orderBy: { name: "asc" },
     });
-    return brokers.map((broker) => ({
+    const result = brokers.map((broker) => ({
       ...broker,
       name: broker.businessPartner?.name ?? broker.name,
       legalName: broker.businessPartner?.legalName ?? broker.legalName,
@@ -54,6 +54,14 @@ export class BrokersController {
       active: Boolean(broker.businessPartner?.active ?? true) && broker.active,
       isSalesBroker: broker.businessPartner?.isSalesBroker ?? true,
       isGreenCoffeeBroker: broker.businessPartner?.isGreenCoffeeBroker ?? true,
+    }));
+    if (actor.role !== "SALES") return result;
+    return result.map((broker) => ({
+      id: broker.id,
+      name: broker.name,
+      tradeName: broker.tradeName,
+      active: broker.active,
+      isSalesBroker: broker.isSalesBroker,
     }));
   }
 

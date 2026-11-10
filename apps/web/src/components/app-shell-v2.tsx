@@ -73,6 +73,31 @@ const salesTabletShortcuts = [
   { href: "/vendas", shortLabel: "Vendas" },
 ] as const;
 
+const salesRestrictedPrefixes = [
+  "/dashboard",
+  "/dashboard-industrial",
+  "/cafe-verde",
+  "/compras-cafe-verde",
+  "/recebimento",
+  "/estoque",
+  "/laboratorio",
+  "/producao",
+  "/blends",
+  "/produtos",
+  "/fornecedores",
+  "/corretores",
+  "/commerce",
+  "/exportacoes",
+  "/notas-entrada",
+  "/financeiro",
+  "/custos",
+  "/integracoes",
+  "/usuarios",
+  "/bi",
+  "/bbos",
+  "/pedidos/aprovacao",
+] as const;
+
 export function AppShellV2({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -209,6 +234,18 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     const returnTo = `${pathname}${window.location.search}`;
     router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   }, [pathname, router, sessionState]);
+
+  useEffect(() => {
+    if (sessionState !== "authenticated" || sessionUser?.role !== "SALES")
+      return;
+    if (
+      salesRestrictedPrefixes.some(
+        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+      )
+    ) {
+      router.replace("/home");
+    }
+  }, [pathname, router, sessionState, sessionUser?.role]);
 
   useEffect(() => {
     if (
@@ -745,8 +782,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             const Icon = item.icon;
             const active =
               pathname === item.href ||
-              (item.href !== "/home" &&
-                pathname.startsWith(`${item.href}/`));
+              (item.href !== "/home" && pathname.startsWith(`${item.href}/`));
             return (
               <Link
                 key={item.href}

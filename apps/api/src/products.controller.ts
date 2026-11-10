@@ -57,11 +57,39 @@ export class ProductsController {
     }));
   }
 
+  private salesCatalogView(catalog: any[]) {
+    return catalog.map((product) => ({
+      id: product.id,
+      line: product.line,
+      name: product.name,
+      description: product.description,
+      active: product.active,
+      commercialKind: product.commercialKind,
+      baseCoffeeProductId: product.baseCoffeeProductId,
+      baseCoffeeProductName: product.baseCoffeeProductName,
+      skus: (product.skus ?? []).map((sku: any) => ({
+        id: sku.id,
+        sku: sku.sku,
+        line: sku.line,
+        productName: sku.productName,
+        packageWeightG: sku.packageWeightG,
+        retailPrice: sku.retailPrice,
+        maxDiscountPercent: sku.maxDiscountPercent,
+        minimumPrice: sku.minimumPrice,
+        commercialUnit: sku.commercialUnit,
+        active: sku.active,
+        stockUnits: sku.stockUnits,
+        salesAmount: sku.salesAmount,
+      })),
+    }));
+  }
+
   @Get()
   async listCatalog(@Req() req: Request) {
     try {
       const actor = await requireSession(req, this.auth);
       const catalog = await this.products.listCatalog(actor.companyId);
+      if (actor.role === "SALES") return this.salesCatalogView(catalog);
       return await this.withBlingStatus(actor.companyId, catalog);
     } catch (error) {
       throwProductError(error);
@@ -290,6 +318,7 @@ export class ProductsController {
       const actor = await requireSession(req, this.auth);
       const product = await this.products.getProduct(id, actor.companyId);
       if (!product) throw new NotFoundException("Produto não encontrado.");
+      if (actor.role === "SALES") return this.salesCatalogView([product])[0];
       return (await this.withBlingStatus(actor.companyId, [product]))[0];
     } catch (error) {
       if (error instanceof NotFoundException) throw error;

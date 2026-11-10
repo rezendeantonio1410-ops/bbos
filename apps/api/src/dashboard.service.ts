@@ -272,7 +272,7 @@ export class DashboardService implements OnModuleDestroy {
             },
           ]
         : []),
-      ...(productionBlocked
+      ...(!excludePlatformOrders && productionBlocked
         ? [
             {
               tone: "CRÍTICO",
@@ -301,12 +301,14 @@ export class DashboardService implements OnModuleDestroy {
               tone: "CRÍTICO",
               title: `${overdueReceivables._count._all} recebimento(s) vencido(s)`,
               impact: `${money(toNumber(overdueReceivables._sum.openAmount))} aguardam regularização financeira.`,
-              href: "/financeiro/receber",
-              action: "Revisar recebimentos",
+              href: excludePlatformOrders ? "/clientes" : "/financeiro/receber",
+              action: excludePlatformOrders
+                ? "Revisar clientes"
+                : "Revisar recebimentos",
             },
           ]
         : []),
-      ...(pendingLab
+      ...(!excludePlatformOrders && pendingLab
         ? [
             {
               tone: "ATENÇÃO",
@@ -323,20 +325,26 @@ export class DashboardService implements OnModuleDestroy {
       salesMonth: toNumber(salesMonth._sum.totalAmount),
       openOrders: open,
       overdueOrders: overdue,
-      productionActualKg: toNumber(production._sum.actualOutputKg),
-      productionPlannedKg: toNumber(production._sum.plannedWeightKg),
-      pendingLab,
-      openPurchases,
+      productionActualKg: excludePlatformOrders
+        ? 0
+        : toNumber(production._sum.actualOutputKg),
+      productionPlannedKg: excludePlatformOrders
+        ? 0
+        : toNumber(production._sum.plannedWeightKg),
+      pendingLab: excludePlatformOrders ? 0 : pendingLab,
+      openPurchases: excludePlatformOrders ? 0 : openPurchases,
       finishedGoodsUnits: toNumber(products._sum.quantityOnHand),
       finishedGoodsReserved: toNumber(products._sum.reservedQuantity),
-      greenLots: lots.map((lot) => ({
-        origin: lot.origin,
-        code: lot.code,
-        variety: lot.variety ?? "—",
-        currentKg: toNumber(lot.currentWeightKg),
-        reservedKg: toNumber(lot.reservedWeightKg),
-        status: lot.status,
-      })),
+      greenLots: excludePlatformOrders
+        ? []
+        : lots.map((lot) => ({
+            origin: lot.origin,
+            code: lot.code,
+            variety: lot.variety ?? "—",
+            currentKg: toNumber(lot.currentWeightKg),
+            reservedKg: toNumber(lot.reservedWeightKg),
+            status: lot.status,
+          })),
       alerts,
     };
   }

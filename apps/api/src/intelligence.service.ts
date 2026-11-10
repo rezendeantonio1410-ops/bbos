@@ -34,11 +34,17 @@ export class IntelligenceService {
   ) {}
 
   async ask(companyId: string, role: string, input: IntelligenceInput) {
+    const isSales = role === "SALES";
     const path = String(input.path ?? "/home");
     const question = String(input.question ?? "")
       .trim()
       .toLocaleLowerCase("pt-BR");
     if (path.startsWith("/exportacoes")) {
+      if (isSales) {
+        throw new ForbiddenException(
+          "Seu perfil comercial não possui acesso à inteligência de exportações.",
+        );
+      }
       return this.exportsAnswer(companyId);
     }
     if (path.startsWith("/custos")) {
@@ -49,7 +55,7 @@ export class IntelligenceService {
       }
       return this.costsAnswer(companyId);
     }
-    const snapshot = await this.dashboard.home(companyId);
+    const snapshot = await this.dashboard.home(companyId, isSales);
     const facts: IntelligenceFact[] = [
       {
         label: "Vendas no mês",
@@ -66,11 +72,15 @@ export class IntelligenceService {
         value: String(snapshot.overdueOrders),
         href: "/pedidos",
       },
-      {
-        label: "Produção no mês",
-        value: `${snapshot.productionActualKg.toLocaleString("pt-BR")} kg`,
-        href: "/producao",
-      },
+      ...(!isSales
+        ? [
+            {
+              label: "Produção no mês",
+              value: `${snapshot.productionActualKg.toLocaleString("pt-BR")} kg`,
+              href: "/producao",
+            },
+          ]
+        : []),
     ];
     const greenAvailable = snapshot.greenLots.reduce(
       (sum, lot) => sum + Math.max(0, lot.currentKg - lot.reservedKg),
@@ -87,6 +97,15 @@ export class IntelligenceService {
 
     let answer: string;
     if (
+      isSales &&
+      (question.includes("estoque") ||
+        question.includes("café") ||
+        question.includes("cafe") ||
+        question.includes("produ"))
+    ) {
+      answer =
+        "Seu perfil acompanha a disponibilidade comercial dentro do pedido, sem abrir dados internos de produção, lotes ou custos. Posso ajudar com clientes, visitas, preços, crédito, pedidos e atrasos.";
+    } else if (
       question.includes("estoque") ||
       question.includes("café") ||
       question.includes("cafe")
@@ -117,11 +136,13 @@ export class IntelligenceService {
         href: firstAlert.href,
       });
     } else if (!hasEvidence) {
-      answer =
-        "Ainda não há movimentação operacional suficiente para concluir o que merece atenção. Registre ou conecte pedidos, estoque, produção e qualidade antes de transformar ausência de dados em recomendação.";
+      answer = isSales
+        ? "Ainda não há movimentação comercial suficiente para concluir o que merece atenção. Registre clientes, visitas ou pedidos antes de transformar ausência de dados em recomendação."
+        : "Ainda não há movimentação operacional suficiente para concluir o que merece atenção. Registre ou conecte pedidos, estoque, produção e qualidade antes de transformar ausência de dados em recomendação.";
     } else {
-      answer =
-        "Na consulta atual, não encontrei uma exceção crítica registrada. O próximo passo seguro é acompanhar pedidos em aberto e preservar estoque, produção e caixa alinhados à promessa feita ao cliente.";
+      answer = isSales
+        ? "Na consulta atual, não encontrei uma exceção comercial crítica registrada. O próximo passo seguro é acompanhar clientes, visitas e pedidos em aberto."
+        : "Na consulta atual, não encontrei uma exceção crítica registrada. O próximo passo seguro é acompanhar pedidos em aberto e preservar estoque, produção e caixa alinhados à promessa feita ao cliente.";
     }
 
     return this.response(answer, facts);

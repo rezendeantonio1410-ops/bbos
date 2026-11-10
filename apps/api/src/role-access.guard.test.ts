@@ -165,18 +165,19 @@ test("internal cupping sessions are available only to operational roles", () => 
   );
 });
 
-test("operations flow keeps broad visibility but restricts stock changes", () => {
+test("operations flow is not exposed to sellers and keeps stock changes operational", () => {
   const guard = new RoleAccessGuard(privateReflector);
 
-  assert.equal(
-    guard.canActivate(
-      executionContext({
-        controller: "OperationsFlowController",
-        handler: "summary",
-        role: "SALES",
-      }),
-    ),
-    true,
+  assert.throws(
+    () =>
+      guard.canActivate(
+        executionContext({
+          controller: "OperationsFlowController",
+          handler: "summary",
+          role: "SALES",
+        }),
+      ),
+    ForbiddenException,
   );
   assert.throws(
     () =>
@@ -210,6 +211,111 @@ test("operations flow keeps broad visibility but restricts stock changes", () =>
       ),
     ForbiddenException,
   );
+});
+
+test("o vendedor consulta o catálogo comercial sem administrar produto fiscal", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "ProductsController",
+        handler: "listCatalog",
+        role: "SALES",
+      }),
+    ),
+    true,
+  );
+  for (const handler of [
+    "createProduct",
+    "createVariant",
+    "updateProduct",
+    "updateVariant",
+    "retryBling",
+    "ncmSuggestion",
+    "uploadStorefrontImage",
+  ]) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({
+            controller: "ProductsController",
+            handler,
+            role: "SALES",
+          }),
+        ),
+      ForbiddenException,
+    );
+  }
+});
+
+test("o vendedor negocia o pedido mas não opera estoque, fiscal ou expedição", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  for (const handler of ["create", "editDraft", "requestDiscount", "confirm"]) {
+    assert.equal(
+      guard.canActivate(
+        executionContext({
+          controller: "SalesOrdersController",
+          handler,
+          role: "SALES",
+        }),
+      ),
+      true,
+    );
+  }
+  for (const handler of [
+    "reserve",
+    "picking",
+    "confirmPicking",
+    "invoice",
+    "label",
+    "ship",
+    "cancel",
+    "prepareReexpedition",
+    "decideDiscount",
+    "decideTermApproval",
+    "exportOverview",
+  ]) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({
+            controller: "SalesOrdersController",
+            handler,
+            role: "SALES",
+          }),
+        ),
+      ForbiddenException,
+    );
+  }
+});
+
+test("o vendedor não administra parceiros, corretores ou mídia da loja", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  assert.equal(
+    guard.canActivate(
+      executionContext({
+        controller: "StorefrontPartnersController",
+        handler: "list",
+        role: "SALES",
+      }),
+    ),
+    true,
+  );
+  for (const [controller, handler] of [
+    ["StorefrontPartnersController", "create"],
+    ["StorefrontPartnersController", "update"],
+    ["BrokersController", "create"],
+    ["BrokersController", "update"],
+    ["AdminStorefrontMediaController", "list"],
+  ] as const) {
+    assert.throws(
+      () =>
+        guard.canActivate(
+          executionContext({ controller, handler, role: "SALES" }),
+        ),
+      ForbiddenException,
+    );
+  }
 });
 
 test("unmapped private controllers fail closed", () => {

@@ -421,8 +421,7 @@ export class SalesOrdersController {
         minimumMarginPercent: isSample ? null : price.minimumMarginPercent,
         minimumRoiPercent: isSample ? null : price.minimumRoiPercent,
       });
-      if (!negotiated.valid)
-        throw new BadRequestException(negotiated.message);
+      if (!negotiated.valid) throw new BadRequestException(negotiated.message);
       const effectiveUnitPrice =
         negotiated.discountAmount > 0 &&
         actor.role !== UserRole.ADMIN &&
@@ -581,7 +580,25 @@ export class SalesOrdersController {
         actor.companyId,
       ),
     ]);
-    return rows[0] ? { ...rows[0], trackingEvents } : null;
+    if (!rows[0]) return null;
+    if (actor.role !== UserRole.SALES) return { ...rows[0], trackingEvents };
+    const fulfillment = rows[0];
+    return {
+      status: fulfillment.status,
+      carrierName: fulfillment.carrierName,
+      serviceName: fulfillment.serviceName,
+      trackingCode: fulfillment.trackingCode,
+      trackingUrl: fulfillment.trackingUrl,
+      latestEventTitle: fulfillment.latestEventTitle,
+      latestEventDetail: fulfillment.latestEventDetail,
+      latestEventAt: fulfillment.latestEventAt,
+      updatedAt: fulfillment.updatedAt,
+      fiscalStatus: fulfillment.fiscalStatus,
+      fiscalNumber: fulfillment.fiscalNumber,
+      hasUnresolvedDeliveryException:
+        fulfillment.hasUnresolvedDeliveryException,
+      trackingEvents,
+    };
   }
 
   @Post(":id/requote-shipping")
@@ -806,8 +823,7 @@ export class SalesOrdersController {
         minimumMarginPercent: isSample ? null : price.minimumMarginPercent,
         minimumRoiPercent: isSample ? null : price.minimumRoiPercent,
       });
-      if (!negotiated.valid)
-        throw new BadRequestException(negotiated.message);
+      if (!negotiated.valid) throw new BadRequestException(negotiated.message);
       const discountStatus = canApproveDiscount ? "APPROVED" : "PENDING";
       const effectiveUnitPrice =
         negotiated.discountAmount > 0 && !canApproveDiscount
@@ -821,17 +837,13 @@ export class SalesOrdersController {
           officialUnitPrice: negotiated.officialUnitPrice,
           requestedUnitPrice: negotiated.finalUnitPrice,
           discountPercent: negotiated.discountPercent,
-          discountAmount: roundMoney(
-            negotiated.discountAmount * item.quantity,
-          ),
+          discountAmount: roundMoney(negotiated.discountAmount * item.quantity),
           status: discountStatus,
         });
       }
       pricedItems.push({
         ...item,
-        unitPrice: isSample
-          ? SAMPLE_FISCAL_PACKAGE_VALUE
-          : effectiveUnitPrice,
+        unitPrice: isSample ? SAMPLE_FISCAL_PACKAGE_VALUE : effectiveUnitPrice,
         pricingSource: isSample
           ? "SAMPLE"
           : (price.pricingSource as "CHANNEL" | "CUSTOMER"),
@@ -866,6 +878,11 @@ export class SalesOrdersController {
           salesChannelName: price.salesChannelName,
         },
       });
+    }
+    if (actor.role === UserRole.SALES && resolvedChannelType === "EXPORTACAO") {
+      throw new ForbiddenException(
+        "O perfil de vendedor não cria pedidos de exportação.",
+      );
     }
     const incoterm =
       resolvedChannelType === "EXPORTACAO"
@@ -1417,6 +1434,11 @@ export class SalesOrdersController {
           salesChannelName: price.salesChannelName,
         },
       });
+    }
+    if (actor.role === UserRole.SALES && salesChannelType === "EXPORTACAO") {
+      throw new ForbiddenException(
+        "O perfil de vendedor não edita pedidos de exportação.",
+      );
     }
     const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
       salesChannelType,

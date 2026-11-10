@@ -59,11 +59,7 @@ const ALL: BbosRole[] = [
   "SALES",
 ];
 const LEADERSHIP: BbosRole[] = ["ADMIN", "EXECUTIVE"];
-const MARKETPLACE: BbosRole[] = [
-  "ADMIN",
-  "EXECUTIVE",
-  "MARKETPLACE_OPERATOR",
-];
+const MARKETPLACE: BbosRole[] = ["ADMIN", "EXECUTIVE", "MARKETPLACE_OPERATOR"];
 const KNOWN_ROLES = new Set<BbosRole>([...ALL, "MARKETPLACE_OPERATOR"]);
 
 export const bbosNavigation: BbosNavGroup[] = [
@@ -167,7 +163,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Biblioteca da marca",
         description: "Fundadores, provas, origem e vitrines",
         icon: Images,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        roles: ["ADMIN", "EXECUTIVE"],
         keywords: ["foto", "imagem", "fundadores", "prova", "origem", "loja"],
       },
     ],
@@ -183,7 +179,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Central de exportações",
         description: "Carteira, logística e documentos",
         icon: Ship,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
         keywords: [
           "exportacao",
           "internacional",
@@ -239,7 +235,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Produtos",
         description: "SKU, apresentação, custo e disponibilidade",
         icon: PackageCheck,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "SALES"],
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
         keywords: ["sku", "pacote", "acabado"],
       },
     ],

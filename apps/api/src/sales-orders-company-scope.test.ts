@@ -163,10 +163,7 @@ test("sales order controller derives order access from the signed session", () =
     "utf8",
   );
   assert.match(source, /actorForOrder\(request, id\)/);
-  assert.match(
-    source,
-    /actor\.role === UserRole\.SALES/,
-  );
+  assert.match(source, /actor\.role === UserRole\.SALES/);
   assert.match(source, /assertOrderVisibleToActor\(actor, id\)/);
   assert.match(source, /externalOrderId: null/);
   assert.match(source, /type: \{ not: "ECOMMERCE" \}/);
@@ -175,12 +172,22 @@ test("sales order controller derives order access from the signed session", () =
     /nextOrderNumber\(\(await this\.actor\(request\)\)\.companyId\)/,
   );
   assert.match(source, /so\."companyId"=\$2/);
-  assert.match(
-    source,
-    /Pedidos de exportação exigem Incoterm e local nomeado/,
-  );
+  assert.match(source, /Pedidos de exportação exigem Incoterm e local nomeado/);
   assert.doesNotMatch(
     source,
     /this\.salesOrders\.(get|confirm|reserve|cancel|ship)\(id[,)]/,
   );
+});
+
+test("seller approval links cannot reveal ecommerce or platform orders", () => {
+  const source = readFileSync(
+    join(__dirname, "sales-order-approvals.controller.ts"),
+    "utf8",
+  );
+
+  assert.match(source, /assertOrderVisibleToActor\(actor, orderId\)/);
+  assert.match(source, /actor\.role !== UserRole\.SALES/);
+  assert.match(source, /externalOrderId: null/);
+  assert.match(source, /importedAt: null/);
+  assert.match(source, /type: \{ not: "ECOMMERCE" \}/);
 });

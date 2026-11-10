@@ -32,6 +32,7 @@ import { OrderCustomerApprovalActions } from "@/components/order-customer-approv
 import {
   filterCustomersByOrderPurpose,
   listOrderPurposes,
+  orderPurposeKey,
 } from "@/lib/order-purpose-filter";
 import {
   hasInvalidSelectedOrderDraftLine,
@@ -575,6 +576,7 @@ export default function OrdersPage() {
   const [editing, setEditing] = useState<Order | null>(null);
   const [userRole, setUserRole] = useState("");
   const [canEditOrders, setCanEditOrders] = useState(false);
+  const [canOperateOrders, setCanOperateOrders] = useState(false);
   const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
@@ -643,6 +645,11 @@ export default function OrdersPage() {
         setCanEditOrders(
           ["ADMIN", "EXECUTIVE", "SALES"].includes(payload?.user?.role),
         );
+        setCanOperateOrders(
+          ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"].includes(
+            payload?.user?.role,
+          ),
+        );
         setCanPrepareReexpedition(
           ["ADMIN", "EXECUTIVE"].includes(payload?.user?.role),
         );
@@ -650,6 +657,7 @@ export default function OrdersPage() {
       .catch(() => {
         setUserRole("");
         setCanEditOrders(false);
+        setCanOperateOrders(false);
         setCanPrepareReexpedition(false);
       });
     const timer = window.setInterval(() => {
@@ -1011,17 +1019,18 @@ export default function OrdersPage() {
                     compact
                     provisional={order.status === "DRAFT"}
                   />
-                  {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
-                    order.status,
-                  ) && (
-                    <button
-                      disabled={!!busy}
-                      onClick={() => void action(order, "cancel")}
-                      className="rounded-lg border px-3 py-2 text-xs"
-                    >
-                      Cancelar
-                    </button>
-                  )}
+                  {canOperateOrders &&
+                    ["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
+                      order.status,
+                    ) && (
+                      <button
+                        disabled={!!busy}
+                        onClick={() => void action(order, "cancel")}
+                        className="rounded-lg border px-3 py-2 text-xs"
+                      >
+                        Cancelar
+                      </button>
+                    )}
                 </div>
               </Card>
             );
@@ -1072,6 +1081,7 @@ export default function OrdersPage() {
           onClose={() => setSelected(null)}
           onChanged={() => refreshSelected(selected.id)}
           canEdit={canEditOrders && selected.status === "DRAFT"}
+          canOperate={canOperateOrders}
           canPrepareReexpedition={canPrepareReexpedition}
           onEdit={() => {
             setEditing(selected);
@@ -1561,8 +1571,13 @@ function NewOrder({
   }, []);
 
   const orderPurposes = useMemo(
-    () => listOrderPurposes(customers),
-    [customers],
+    () =>
+      listOrderPurposes(customers).filter((purpose) => {
+        if (actorRole !== "SALES") return true;
+        const key = orderPurposeKey(purpose);
+        return !key.includes("e-commerce") && !key.includes("export");
+      }),
+    [actorRole, customers],
   );
   const filteredCustomers = useMemo(
     () => filterCustomersByOrderPurpose(customers, orderPurpose),
@@ -1579,9 +1594,7 @@ function NewOrder({
   const firstQuote = completeLines.length
     ? quotes[completeLines[0]!.id]
     : undefined;
-  const canApproveNegotiatedPrice = ["ADMIN", "EXECUTIVE"].includes(
-    actorRole,
-  );
+  const canApproveNegotiatedPrice = ["ADMIN", "EXECUTIVE"].includes(actorRole);
   const pricedLines = completeLines.map((line) => {
     const quote = quotes[line.id];
     return {
@@ -1624,15 +1637,12 @@ function NewOrder({
     usesPlatformShipping && !isSample
       ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
       : 0;
-  const productsTotal = completeLines.reduce(
-    (sum, line) => {
-      const pricing = pricedLines.find(
-        (item) => item.line.id === line.id,
-      )?.pricing;
-      return sum + line.quantity * Number(pricing?.finalUnitPrice ?? 0);
-    },
-    0,
-  );
+  const productsTotal = completeLines.reduce((sum, line) => {
+    const pricing = pricedLines.find(
+      (item) => item.line.id === line.id,
+    )?.pricing;
+    return sum + line.quantity * Number(pricing?.finalUnitPrice ?? 0);
+  }, 0);
   const totalWeightGrams = completeLines.reduce((sum, line) => {
     const variant = variants.find(
       (candidate) => candidate.productVariantId === line.variantId,
@@ -1675,32 +1685,32 @@ function NewOrder({
           ? "Há produto sem preço vigente. Revise os itens destacados."
           : invalidNegotiatedLine?.pricing?.message
             ? invalidNegotiatedLine.pricing.message
-          : isTerm && !paymentTerms
-            ? "Informe a condição da venda a prazo."
-            : !freightResponsibility
-              ? "Selecione quem será responsável pelo frete."
-              : usesPlatformShipping && !selectedShippingQuote
-                ? isSample
-                  ? "Pesquise e selecione o envio da amostra."
-                  : "Calcule e selecione uma opção de frete."
-                : isDistributor &&
-                    freightResponsibility === "CUSTOMER_CARRIER" &&
-                    !carrierName.trim()
-                  ? "Informe a transportadora indicada pelo distribuidor."
-                  : isExport && (!incoterm.trim() || !incotermLocation.trim())
-                    ? "Informe o Incoterm e o local nomeado da exportação."
-                    : isSample &&
-                        isExport &&
-                        (!customsDeclaredValue ||
-                          Number(customsDeclaredValue) <= 0)
-                      ? "Informe o valor aduaneiro declarado da amostra."
-                      : isExport &&
-                          orderCurrency !== "BRL" &&
-                          (!exchangeRateToBrl ||
-                            Number(exchangeRateToBrl) <= 0 ||
-                            !exchangeRateDate)
-                        ? "Informe a cotação da moeda para BRL e a data da cotação."
-                        : "";
+            : isTerm && !paymentTerms
+              ? "Informe a condição da venda a prazo."
+              : !freightResponsibility
+                ? "Selecione quem será responsável pelo frete."
+                : usesPlatformShipping && !selectedShippingQuote
+                  ? isSample
+                    ? "Pesquise e selecione o envio da amostra."
+                    : "Calcule e selecione uma opção de frete."
+                  : isDistributor &&
+                      freightResponsibility === "CUSTOMER_CARRIER" &&
+                      !carrierName.trim()
+                    ? "Informe a transportadora indicada pelo distribuidor."
+                    : isExport && (!incoterm.trim() || !incotermLocation.trim())
+                      ? "Informe o Incoterm e o local nomeado da exportação."
+                      : isSample &&
+                          isExport &&
+                          (!customsDeclaredValue ||
+                            Number(customsDeclaredValue) <= 0)
+                        ? "Informe o valor aduaneiro declarado da amostra."
+                        : isExport &&
+                            orderCurrency !== "BRL" &&
+                            (!exchangeRateToBrl ||
+                              Number(exchangeRateToBrl) <= 0 ||
+                              !exchangeRateDate)
+                          ? "Informe a cotação da moeda para BRL e a data da cotação."
+                          : "";
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, {
@@ -3419,6 +3429,7 @@ function OrderDrawer({
   onClose,
   onChanged,
   canEdit,
+  canOperate,
   canPrepareReexpedition,
   onEdit,
 }: {
@@ -3426,6 +3437,7 @@ function OrderDrawer({
   onClose: () => void;
   onChanged: () => Promise<void>;
   canEdit: boolean;
+  canOperate: boolean;
   canPrepareReexpedition: boolean;
   onEdit: () => void;
 }) {
@@ -3444,8 +3456,7 @@ function OrderDrawer({
     order.shipment
       ? {
           ...order.shipment,
-          hasUnresolvedDeliveryException:
-            order.shipment.status === "EXCEPTION",
+          hasUnresolvedDeliveryException: order.shipment.status === "EXCEPTION",
         }
       : null,
   );
@@ -3552,7 +3563,12 @@ function OrderDrawer({
     }, 5000);
 
     return () => window.clearInterval(refreshTimer);
-  }, [order.id, order.status, fulfillment?.reexpeditionId, fulfillment?.reexpeditionStatus]);
+  }, [
+    order.id,
+    order.status,
+    fulfillment?.reexpeditionId,
+    fulfillment?.reexpeditionStatus,
+  ]);
 
   const loadPostingAgencies = async () => {
     if (order.shippingProvider !== "MELHOR_ENVIO") {
@@ -3575,8 +3591,8 @@ function OrderDrawer({
   };
 
   useEffect(() => {
-    void loadPostingAgencies();
-  }, [order.id, order.shippingProvider]);
+    if (canOperate) void loadPostingAgencies();
+  }, [canOperate, order.id, order.shippingProvider]);
 
   useEffect(() => {
     let active = true;
@@ -4423,7 +4439,7 @@ function OrderDrawer({
                                           : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
-                  {order.status === "CONFIRMED" && (
+                  {canOperate && order.status === "CONFIRMED" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -4433,7 +4449,7 @@ function OrderDrawer({
                       {busy ? "Reservando…" : "Reservar estoque"}
                     </button>
                   )}
-                  {order.status === "RESERVED" && (
+                  {canOperate && order.status === "RESERVED" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -4443,7 +4459,7 @@ function OrderDrawer({
                       {busy ? "Processando…" : "Iniciar separação"}
                     </button>
                   )}
-                  {order.status === "PICKING" && (
+                  {canOperate && order.status === "PICKING" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -4453,7 +4469,8 @@ function OrderDrawer({
                       {busy ? "Processando…" : "Confirmar separação"}
                     </button>
                   )}
-                  {order.status === "READY_TO_SHIP" &&
+                  {canOperate &&
+                    order.status === "READY_TO_SHIP" &&
                     fulfillment?.fiscalStatus !== "AUTHORIZED" && (
                       <button
                         type="button"
@@ -4476,7 +4493,8 @@ function OrderDrawer({
                               : "Faturar no Bling"}
                       </button>
                     )}
-                  {fulfillment?.fiscalStatus === "AUTHORIZED" &&
+                  {canOperate &&
+                    fulfillment?.fiscalStatus === "AUTHORIZED" &&
                     (order.status === "INVOICED" ||
                       order.status === "READY_TO_SHIP") &&
                     fulfillment?.labelUrl && (
@@ -4672,9 +4690,11 @@ function OrderDrawer({
                         {fulfillment?.reexpeditionId
                           ? "Ver NF-e original"
                           : "Ver NF-e"}
-                        {(fulfillment?.reexpeditionId
-                          ? fulfillment.reexpeditionOriginalFiscalNumber
-                          : fulfillment?.fiscalNumber)
+                        {(
+                          fulfillment?.reexpeditionId
+                            ? fulfillment.reexpeditionOriginalFiscalNumber
+                            : fulfillment?.fiscalNumber
+                        )
                           ? ` nº ${
                               fulfillment?.reexpeditionId
                                 ? fulfillment.reexpeditionOriginalFiscalNumber
@@ -4683,20 +4703,19 @@ function OrderDrawer({
                           : ""}
                       </a>
                     )}
-                    {fulfillment?.reexpeditionId &&
-                      returnFiscalDocumentUrl && (
-                        <a
-                          href={returnFiscalDocumentUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-[11px] font-bold text-amber-900"
-                        >
-                          Ver devolução
-                          {fulfillment.reexpeditionReturnFiscalNumber
-                            ? ` nº ${fulfillment.reexpeditionReturnFiscalNumber}`
-                            : ""}
-                        </a>
-                      )}
+                    {fulfillment?.reexpeditionId && returnFiscalDocumentUrl && (
+                      <a
+                        href={returnFiscalDocumentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-[11px] font-bold text-amber-900"
+                      >
+                        Ver devolução
+                        {fulfillment.reexpeditionReturnFiscalNumber
+                          ? ` nº ${fulfillment.reexpeditionReturnFiscalNumber}`
+                          : ""}
+                      </a>
+                    )}
                     {fulfillment?.reexpeditionId &&
                       replacementFiscalDocumentUrl && (
                         <a
@@ -4711,69 +4730,70 @@ function OrderDrawer({
                             : ""}
                         </a>
                       )}
-                    {fulfillment?.reexpeditionId ? (
-                      printableLabelUrl ? (
+                    {canOperate &&
+                      (fulfillment?.reexpeditionId ? (
+                        printableLabelUrl ? (
+                          <a
+                            href={printableLabelUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                          >
+                            Imprimir nova etiqueta
+                          </a>
+                        ) : null
+                      ) : fulfillment?.fiscalStatus === "REJECTED" ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void retryRejectedInvoice()}
+                          className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                        >
+                          {busy ? "Reprocessando…" : "Reprocessar NF-e"}
+                        </button>
+                      ) : printableLabelUrl ? (
                         <a
                           href={printableLabelUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
                         >
-                          Imprimir nova etiqueta
+                          Abrir etiqueta
                         </a>
-                      ) : null
-                    ) : fulfillment?.fiscalStatus === "REJECTED" ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void retryRejectedInvoice()}
-                        className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-                      >
-                        {busy ? "Reprocessando…" : "Reprocessar NF-e"}
-                      </button>
-                    ) : printableLabelUrl ? (
-                      <a
-                        href={printableLabelUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
-                      >
-                        Abrir etiqueta
-                      </a>
-                    ) : fulfillment?.fiscalStatus === "SENT" &&
-                      fulfillment?.fiscalExternalId ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void resetMissingInvoice()}
-                        className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
-                      >
-                        {busy ? "Verificando…" : "NF-e excluída no Bling"}
-                      </button>
-                    ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
-                      <>
-                        {order.orderType === "SAMPLE" && (
-                          <button
-                            type="button"
-                            disabled={busy || fulfillmentBusy}
-                            onClick={() => void resetCancelledInvoice()}
-                            className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
-                          >
-                            {busy
-                              ? "Regularizando…"
-                              : "NF-e cancelada no Bling"}
-                          </button>
-                        )}
+                      ) : fulfillment?.fiscalStatus === "SENT" &&
+                        fulfillment?.fiscalExternalId ? (
                         <button
                           type="button"
-                          disabled={fulfillmentBusy || busy}
-                          onClick={() => void generateLabel()}
-                          className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => void resetMissingInvoice()}
+                          className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
                         >
-                          {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                          {busy ? "Verificando…" : "NF-e excluída no Bling"}
                         </button>
-                      </>
-                    ) : null}
+                      ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
+                        <>
+                          {order.orderType === "SAMPLE" && (
+                            <button
+                              type="button"
+                              disabled={busy || fulfillmentBusy}
+                              onClick={() => void resetCancelledInvoice()}
+                              className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
+                            >
+                              {busy
+                                ? "Regularizando…"
+                                : "NF-e cancelada no Bling"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={fulfillmentBusy || busy}
+                            onClick={() => void generateLabel()}
+                            className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                          >
+                            {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                          </button>
+                        </>
+                      ) : null)}
                   </div>
                 </div>
                 {(fulfillment?.authorizationCode ||
@@ -4856,28 +4876,22 @@ function OrderDrawer({
                             QUEUED: "Na fila de processamento",
                             CONFIGURATION_REQUIRED:
                               "Configuração fiscal necessária",
-                            RETURN_FISCAL_PENDING:
-                              "Emitindo devolução fiscal",
-                            RETURN_FISCAL_AUTHORIZED:
-                              "Devolução autorizada",
-                            OUTBOUND_FISCAL_PENDING:
-                              "Emitindo a nova saída",
-                            OUTBOUND_FISCAL_AUTHORIZED:
-                              "Nova saída autorizada",
+                            RETURN_FISCAL_PENDING: "Emitindo devolução fiscal",
+                            RETURN_FISCAL_AUTHORIZED: "Devolução autorizada",
+                            OUTBOUND_FISCAL_PENDING: "Emitindo a nova saída",
+                            OUTBOUND_FISCAL_AUTHORIZED: "Nova saída autorizada",
                             LABEL_PENDING: "Gerando a nova etiqueta",
                             LABEL_CREATED: "Reenvio pronto para postagem",
                             FAILED: "Processamento interrompido",
                             CANCELLED: "Reexpedição cancelada",
                           }[
-                            String(
-                              fulfillment.reexpeditionStatus ?? "QUEUED",
-                            )
+                            String(fulfillment.reexpeditionStatus ?? "QUEUED")
                           ] ?? "Processando a reexpedição"}
                         </p>
                         <p className="mt-1 text-[10px] leading-relaxed text-amber-900">
                           A etiqueta e a remessa anteriores estão preservadas e
-                          não podem ser reutilizadas. O BBOS avança sozinho e
-                          só interrompe o fluxo diante de uma rejeição real.
+                          não podem ser reutilizadas. O BBOS avança sozinho e só
+                          interrompe o fluxo diante de uma rejeição real.
                         </p>
                         {fulfillment.reexpeditionLastError && (
                           <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-800">

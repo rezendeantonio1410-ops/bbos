@@ -173,9 +173,14 @@ export class CustomersController {
       this.health(actor.companyId),
     ]);
     const byId = new Map(health.map((item) => [item.id, item]));
-    return customers.map((customer) =>
-      this.decorate(customer, byId.get(customer.id)),
-    );
+    return customers.map((customer) => {
+      const decorated = this.decorate(customer, byId.get(customer.id));
+      if (actor.role !== "SALES") return decorated;
+      const salesView = { ...decorated };
+      delete salesView.creditNotes;
+      delete salesView.creditReviewedBy;
+      return salesView;
+    });
   }
 
   @Get(":id/health")
@@ -214,7 +219,7 @@ export class CustomersController {
       where: { id, companyId: actor.companyId },
     });
     if (!customer) throw new NotFoundException("Cliente não encontrado.");
-    return this.db.$queryRawUnsafe<any[]>(
+    const events = await this.db.$queryRawUnsafe<any[]>(
       `SELECT id, "eventType", "requestedLimit", "requestedTerms", "monthlyVolume", rationale,
               "decisionStatus", "decidedLimit", "decisionTerms", notes,
               "actorId", "actorName", "actorRole", "createdAt"
@@ -224,6 +229,15 @@ export class CustomersController {
       actor.companyId,
       id,
     );
+    if (actor.role !== "SALES") return events;
+    return events.map((event) => {
+      const salesView = { ...event };
+      delete salesView.notes;
+      delete salesView.actorId;
+      delete salesView.actorName;
+      delete salesView.actorRole;
+      return salesView;
+    });
   }
 
   @Get(":id/sales-history")
@@ -252,10 +266,23 @@ export class CustomersController {
          LEFT JOIN "AccountsReceivable" ar
            ON ar."salesOrderId"=so.id AND ar."companyId"=so."companyId"
         WHERE so."companyId"=$1 AND so."customerId"=$2
+          AND (
+            NOT $3::boolean
+            OR (
+              so."externalOrderId" IS NULL
+              AND so."importedAt" IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM "SalesChannel" channel
+                 WHERE channel.id=so."salesChannelId"
+                   AND (channel.type::text='ECOMMERCE' OR channel."platformCode" IS NOT NULL)
+              )
+            )
+          )
         ORDER BY so."orderedAt" DESC,so."createdAt" DESC
         LIMIT 200`,
       actor.companyId,
       id,
+      actor.role === "SALES",
     );
   }
 
