@@ -269,6 +269,7 @@ test("o vendedor negocia o pedido mas não opera estoque, fiscal ou expedição"
     "invoice",
     "label",
     "ship",
+    "deliver",
     "cancel",
     "prepareReexpedition",
     "decideDiscount",

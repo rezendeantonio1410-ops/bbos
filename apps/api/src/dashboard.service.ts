@@ -226,13 +226,13 @@ export class DashboardService implements OnModuleDestroy {
       ),
     ]);
     const open = orders.filter(
-      (o) => !["DELIVERED", "CANCELLED"].includes(o.status),
+      (o) => !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.status),
     ).length;
     const overdue = orders.filter(
       (o) =>
         o.expectedDeliveryDate &&
         o.expectedDeliveryDate < now &&
-        !["DELIVERED", "CANCELLED"].includes(o.status),
+        !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.status),
     ).length;
     const greenAvailableKg = lots.reduce((sum, lot) => {
       if (!["RECEIVED", "QUALITY_REVIEW", "APPROVED"].includes(lot.status))

@@ -1543,7 +1543,14 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async ship(companyId: string, id: string) {
+  async ship(
+    companyId: string,
+    id: string,
+    options: {
+      allowMissingCarrierLabel?: boolean;
+      skipCustomerNotification?: boolean;
+    } = {},
+  ) {
     const result = await this.database.$transaction(
       async (transaction) => {
         const order = await transaction.salesOrder.findFirst({
@@ -1556,6 +1563,10 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           },
         });
         if (!order) throw new NotFoundException("Pedido não encontrado.");
+        const hasActiveReservations = order.reservations.some(
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.ACTIVE,
+        );
         if (
           order.status === SalesOrderStatus.SHIPPED &&
           order.finishedGoodsMovements.length
@@ -1565,6 +1576,29 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
             idempotent: true,
             movements: order.finishedGoodsMovements,
           };
+        if (
+          !hasActiveReservations &&
+          order.finishedGoodsMovements.length &&
+          (
+            [
+              SalesOrderStatus.READY_TO_SHIP,
+              SalesOrderStatus.INVOICED,
+              SalesOrderStatus.SHIPPED,
+            ] as SalesOrderStatus[]
+          ).includes(order.status)
+        ) {
+          if (order.status !== SalesOrderStatus.SHIPPED) {
+            await transaction.salesOrder.update({
+              where: { id },
+              data: { status: SalesOrderStatus.SHIPPED },
+            });
+          }
+          return {
+            orderId: id,
+            idempotent: true,
+            movements: order.finishedGoodsMovements,
+          };
+        }
         const shippableStatuses: SalesOrderStatus[] = [
           SalesOrderStatus.CONFIRMED,
           SalesOrderStatus.RESERVED,
@@ -1617,7 +1651,10 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
               "A NF-e pode ser emitida antes do pagamento, mas a expedição de uma venda à vista exige a baixa financeira.",
             );
         }
-        if (order.shippingProvider === "MELHOR_ENVIO") {
+        if (
+          order.shippingProvider === "MELHOR_ENVIO" &&
+          !options.allowMissingCarrierLabel
+        ) {
           const shipments = await transaction.$queryRawUnsafe<any[]>(
             `SELECT status,"labelUrl" FROM "Shipment" WHERE "salesOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
             order.id,
@@ -1713,15 +1750,83 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
+    if (!options.skipCustomerNotification) {
+      await this.customerLifecycle.record(
+        id,
+        "SHIPPED",
+        "Pedido a caminho",
+        "Seu pedido foi expedido pela Bispo Coffees e está a caminho.",
+        "BBOS",
+        `sales-order:shipped:${id}`,
+      );
+    }
+    return result;
+  }
+
+  async deliver(
+    companyId: string,
+    id: string,
+    input: {
+      method: "PICKUP" | "MANUAL_DELIVERY";
+      actorName?: string | null;
+      actorRole?: string | null;
+    },
+  ) {
+    const current = await this.database.salesOrder.findFirst({
+      where: { id, companyId },
+      select: { id: true, status: true },
+    });
+    if (!current) throw new NotFoundException("Pedido não encontrado.");
+    if (current.status === SalesOrderStatus.CANCELLED) {
+      throw new BadRequestException(
+        "Pedido cancelado não pode ser concluído como entregue.",
+      );
+    }
+    if (current.status === SalesOrderStatus.DELIVERED) {
+      return { orderId: id, idempotent: true, status: "DELIVERED" };
+    }
+
+    if (current.status !== SalesOrderStatus.SHIPPED) {
+      await this.ship(companyId, id, {
+        allowMissingCarrierLabel: true,
+        skipCustomerNotification: true,
+      });
+    }
+
+    const deliveredAt = new Date();
+    await this.database.salesOrder.update({
+      where: { id },
+      data: {
+        status: SalesOrderStatus.DELIVERED,
+        deliveredAt,
+      },
+    });
+
+    const pickup = input.method === "PICKUP";
+    const actorName = String(input.actorName ?? "Operador BBOS").trim();
     await this.customerLifecycle.record(
       id,
-      "SHIPPED",
-      "Pedido a caminho",
-      "Seu pedido foi expedido pela Bispo Coffees e está a caminho.",
+      "DELIVERED",
+      pickup ? "Pedido retirado" : "Pedido entregue",
+      pickup
+        ? `A retirada foi confirmada no BBOS por ${actorName}.`
+        : `A entrega foi confirmada manualmente no BBOS por ${actorName}.`,
       "BBOS",
-      `sales-order:shipped:${id}`,
+      `sales-order:delivered:${id}`,
+      {
+        completionMethod: input.method,
+        actorName,
+        actorRole: input.actorRole ?? null,
+        deliveredAt: deliveredAt.toISOString(),
+      },
     );
-    return result;
+
+    return {
+      orderId: id,
+      idempotent: false,
+      status: "DELIVERED",
+      deliveredAt,
+    };
   }
 
   async transition(

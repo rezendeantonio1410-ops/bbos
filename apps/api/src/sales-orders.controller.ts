@@ -1910,6 +1910,25 @@ export class SalesOrdersController {
       id,
     );
   }
+  @Post(":id/deliver")
+  async deliver(
+    @Param("id") id: string,
+    @Body() body: { method?: "PICKUP" | "MANUAL_DELIVERY" },
+    @Req() request: any,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    const method = body.method;
+    if (!method || !["PICKUP", "MANUAL_DELIVERY"].includes(method)) {
+      throw new BadRequestException(
+        "Informe se o pedido foi retirado ou entregue.",
+      );
+    }
+    return this.salesOrders.deliver(actor.companyId, id, {
+      method,
+      actorName: actor.name,
+      actorRole: actor.role,
+    });
+  }
   @Post(":id/picking")
   async picking(@Param("id") id: string, @Req() request: any) {
     return this.salesOrders.transition(

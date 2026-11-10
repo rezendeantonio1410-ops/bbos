@@ -3752,6 +3752,7 @@ function OrderDrawer({
             .filter(Boolean)
             .join(" · ")
         : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
+  const isPickup = order.freightResponsibility === "PICKUP";
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote
     ? quote.officialUnitPrice * (1 - requested / 100)
@@ -3819,6 +3820,17 @@ function OrderDrawer({
     } finally {
       setBusy(false);
     }
+  };
+
+  const completeDelivery = async (method: "PICKUP" | "MANUAL_DELIVERY") => {
+    const pickup = method === "PICKUP";
+    const confirmed = window.confirm(
+      pickup
+        ? "Confirma que este pedido foi retirado ou entregue em mãos? O BBOS registrará a data, o usuário responsável e concluirá o fluxo."
+        : "Confirma que este pedido já foi entregue ao cliente? O BBOS registrará a data, o usuário responsável e concluirá o fluxo.",
+    );
+    if (!confirmed) return;
+    await operationalAction("deliver", { method });
   };
 
   const confirmPicking = async () => {
@@ -4404,6 +4416,7 @@ function OrderDrawer({
               "PICKING",
               "READY_TO_SHIP",
               "INVOICED",
+              "SHIPPED",
             ].includes(order.status) && (
               <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4417,29 +4430,33 @@ function OrderDrawer({
                         ? `Falha no faturamento: ${fulfillment.invoiceQueueError}`
                         : fulfillment?.fiscalStatus === "REJECTED"
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
-                          : order.status === "INVOICED"
-                            ? fulfillment?.labelUrl
-                              ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                              : "NF-e autorizada. Pedido faturado e pronto para a expedição ou retirada."
-                            : order.status === "CONFIRMED"
-                              ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
-                              : order.status === "RESERVED"
-                                ? "O estoque está reservado. Inicie a separação física do pedido."
-                                : order.status === "IN_PRODUCTION"
-                                  ? "O café torrado a granel está reservado por linha e perfil. O pedido aguarda a embalagem definida na venda."
-                                  : order.status === "PICKING"
-                                    ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                                    : order.status === "READY_TO_SHIP" &&
-                                        fulfillment?.fiscalStatus ===
-                                          "AUTHORIZED"
-                                      ? fulfillment?.labelUrl
-                                        ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
-                                        : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
-                                      : order.status === "READY_TO_SHIP"
-                                        ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                                        : fulfillment?.labelUrl
-                                          ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                                          : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                          : order.status === "SHIPPED"
+                            ? "Pedido enviado. Confirme a entrega quando o cliente receber para concluir o fluxo."
+                            : order.status === "INVOICED"
+                              ? isPickup
+                                ? "NF-e autorizada. Confirme a retirada ou entrega em mãos para concluir o fluxo."
+                                : fulfillment?.labelUrl
+                                  ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                  : "NF-e autorizada. Pedido faturado e pronto para envio ou confirmação de entrega."
+                              : order.status === "CONFIRMED"
+                                ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
+                                : order.status === "RESERVED"
+                                  ? "O estoque está reservado. Inicie a separação física do pedido."
+                                  : order.status === "IN_PRODUCTION"
+                                    ? "O café torrado a granel está reservado por linha e perfil. O pedido aguarda a embalagem definida na venda."
+                                    : order.status === "PICKING"
+                                      ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                                      : order.status === "READY_TO_SHIP" &&
+                                          fulfillment?.fiscalStatus ===
+                                            "AUTHORIZED"
+                                        ? fulfillment?.labelUrl
+                                          ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                          : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                                        : order.status === "READY_TO_SHIP"
+                                          ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                          : fulfillment?.labelUrl
+                                            ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                            : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
                   {canOperate && order.status === "CONFIRMED" && (
@@ -4500,7 +4517,9 @@ function OrderDrawer({
                     fulfillment?.fiscalStatus === "AUTHORIZED" &&
                     (order.status === "INVOICED" ||
                       order.status === "READY_TO_SHIP") &&
-                    fulfillment?.labelUrl && (
+                    !isPickup &&
+                    (fulfillment?.labelUrl ||
+                      order.shippingProvider !== "MELHOR_ENVIO") && (
                       <button
                         type="button"
                         disabled={busy}
@@ -4510,7 +4529,39 @@ function OrderDrawer({
                         {busy ? "Processando…" : "Confirmar expedição"}
                       </button>
                     )}
+                  {canOperate &&
+                    ["INVOICED", "READY_TO_SHIP", "SHIPPED"].includes(
+                      order.status,
+                    ) &&
+                    (order.status === "SHIPPED" ||
+                      fulfillment?.fiscalStatus === "AUTHORIZED") && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void completeDelivery(
+                            isPickup ? "PICKUP" : "MANUAL_DELIVERY",
+                          )
+                        }
+                        className="rounded-xl bg-emerald-700 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy
+                          ? "Concluindo…"
+                          : isPickup
+                            ? "Confirmar retirada e concluir"
+                            : "Confirmar entrega e concluir"}
+                      </button>
+                    )}
                 </div>
+                {canOperate &&
+                  ["INVOICED", "READY_TO_SHIP", "SHIPPED"].includes(
+                    order.status,
+                  ) && (
+                    <p className="mt-3 text-[10px] text-stone-500">
+                      A confirmação de retirada ou entrega grava data e usuário
+                      responsável na auditoria do pedido.
+                    </p>
+                  )}
                 {error && (
                   <div
                     role="alert"
