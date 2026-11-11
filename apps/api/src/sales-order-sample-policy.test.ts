@@ -166,10 +166,7 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
     ordersPage,
     /order\.status === "INVOICED"[\s\S]*NF-e autorizada\. Pedido faturado e pronto para envio ou confirmação de entrega\./,
   );
-  assert.match(
-    ordersPage,
-    /fiscalStatus === "AUTHORIZED"[\s\S]*Imprimir NF-e/,
-  );
+  assert.match(ordersPage, /fiscalStatus === "AUTHORIZED"[\s\S]*Imprimir NF-e/);
   assert.match(
     fiscal,
     /repairInvoiceRecipient[\s\S]*contribuinte: this\.blingStateRegistrationIndicator/,
@@ -221,6 +218,18 @@ test("invoice request waits for SEFAZ authorization before invoicing the order",
   assert.ok(retryInvoice);
   assert.match(retryInvoice, /"resourceType"='CONTACT_DOCUMENT'/);
   assert.doesNotMatch(retryInvoice, /'SALES_ORDER'/);
+  assert.match(
+    retryInvoice,
+    /fiscalExternalId[\s\S]*\/nfe\/\$\{encodeURIComponent\(row\.fiscalExternalId\)\}/,
+  );
+  assert.match(
+    retryInvoice,
+    /remoteStatus === "AUTHORIZED"[\s\S]*status='AUTHORIZED'[\s\S]*reconciledFromRetry: true/,
+  );
+  assert.match(
+    retryInvoice,
+    /const document[\s\S]*if \(document\)[\s\S]*"resourceType"='CONTACT_DOCUMENT'/,
+  );
   assert.match(
     financialMigration,
     /OLD\.status::text = 'INVOICED'[\s\S]*NEW\."orderType" = 'SAMPLE'/,
