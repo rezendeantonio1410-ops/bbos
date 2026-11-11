@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { navigationForRole } from "../components/bbos-navigation";
+import {
+  mobileNavigationForRole,
+  navigationForRole,
+} from "../components/bbos-navigation";
 import { normalizeHostname, resolveDomainRedirect } from "./domain-routing";
 import { isProtectedSystemPath } from "./system-routes";
 
@@ -73,6 +76,22 @@ test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro",
   assert.equal(routes.includes("/commerce/marketplaces"), false);
   assert.equal(routes.includes("/financeiro"), false);
   assert.equal(routes.includes("/usuarios"), false);
+});
+
+test("atalhos móveis respeitam o perfil e deixam o menu completo como saída segura", () => {
+  assert.deepEqual(
+    mobileNavigationForRole("ADMIN").map((item) => item.href),
+    ["/home", "/pedidos", "/estoque", "/financeiro"],
+  );
+  assert.deepEqual(
+    mobileNavigationForRole("SALES").map((item) => item.href),
+    ["/home", "/clientes", "/atendimento", "/pedidos"],
+  );
+  assert.deepEqual(
+    mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
+    ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
+  );
+  assert.deepEqual(mobileNavigationForRole("FUTURE_ROLE"), []);
 });
 
 test("contabilidade recebe somente áreas de consulta fiscal e financeira", () => {

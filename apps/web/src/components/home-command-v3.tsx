@@ -255,7 +255,7 @@ export function HomeCommandV3() {
             Abrir pedidos <ArrowRight size={13} />
           </Link>
         </div>
-        <div className="grid gap-px bg-[var(--bbos-surface-border)] sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px bg-[var(--bbos-surface-border)] xl:grid-cols-4">
           {flowSteps.map((step, index) => (
             <FlowStep
               key={step.label}
@@ -358,7 +358,7 @@ export function HomeCommandV3() {
         </aside>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <PulseCard
           icon={WalletCards}
           label="Vendas hoje"
@@ -623,7 +623,7 @@ function SalesMetric({
   return (
     <Link
       href={href}
-      className="flex min-h-[168px] flex-col rounded-[20px] border border-stone-200 bg-white p-4 shadow-[0_4px_18px_rgba(18,37,33,.035)]"
+      className="flex min-h-[144px] flex-col rounded-[20px] border border-stone-200 bg-white p-4 shadow-[0_4px_18px_rgba(18,37,33,.035)] sm:min-h-[168px]"
     >
       <span className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
         <Icon size={17} />

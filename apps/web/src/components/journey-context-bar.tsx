@@ -114,56 +114,84 @@ export function JourneyContextBar() {
       step.match?.some((prefix) => pathname.startsWith(prefix)),
     ),
   );
+  const currentStep = journey.steps[activeIndex];
+  const nextStep = journey.steps[activeIndex + 1];
 
   return (
-    <div className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_8px_24px_rgba(18,34,29,.035)]">
-      <div className="flex items-center gap-3 border-b border-stone-100 px-4 py-2.5 sm:px-5">
-        <span className="text-[9px] font-extrabold uppercase tracking-[.15em] text-stone-400">
-          {journey.label}
-        </span>
-        <span className="text-[10px] font-semibold text-stone-500">
-          Você está aqui
-        </span>
+    <>
+      <div className="mb-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-[0_6px_20px_rgba(18,34,29,.03)] md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="block text-[9px] font-extrabold uppercase tracking-[.14em] text-stone-400">
+              {journey.label} · etapa {activeIndex + 1} de{" "}
+              {journey.steps.length}
+            </span>
+            <span className="mt-1 flex items-center gap-2 text-sm font-bold text-stone-900">
+              <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#EAF6F2] text-[#087568]">
+                <Circle size={11} />
+              </span>
+              <span className="truncate">{currentStep?.label}</span>
+            </span>
+          </div>
+          {nextStep?.href && (
+            <Link
+              href={nextStep.href}
+              className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl bg-stone-50 px-3 text-[10px] font-bold text-stone-600"
+            >
+              Próxima <ChevronRight size={13} />
+            </Link>
+          )}
+        </div>
       </div>
-      <div className="flex min-w-max items-center gap-1 overflow-x-auto px-3 py-3 sm:px-4">
-        {journey.steps.map((step, index) => {
-          const current = index === activeIndex;
-          const done = index < activeIndex;
-          const content = (
-            <>
-              <span
-                className={`grid size-6 place-items-center rounded-lg ${current ? "bg-[#EAF6F2] text-[#087568]" : done ? "bg-emerald-50 text-emerald-600" : "bg-stone-50 text-stone-300"}`}
-              >
-                {done ? <Check size={12} /> : <Circle size={10} />}
-              </span>
-              <span
-                className={`text-[11px] font-semibold ${current ? "text-stone-900" : done ? "text-stone-600" : "text-stone-400"}`}
-              >
-                {step.label}
-              </span>
-            </>
-          );
-          return (
-            <div key={step.label} className="flex items-center gap-1">
-              {step.href ? (
-                <Link
-                  href={step.href}
-                  className={`flex items-center gap-2 rounded-xl px-2.5 py-2 transition hover:bg-stone-50 ${current ? "ring-1 ring-[#087568]/15" : ""}`}
+      <div className="mb-5 hidden overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_8px_24px_rgba(18,34,29,.035)] md:block">
+        <div className="flex items-center gap-3 border-b border-stone-100 px-4 py-2.5 sm:px-5">
+          <span className="text-[9px] font-extrabold uppercase tracking-[.15em] text-stone-400">
+            {journey.label}
+          </span>
+          <span className="text-[10px] font-semibold text-stone-500">
+            Você está aqui
+          </span>
+        </div>
+        <div className="flex min-w-max items-center gap-1 overflow-x-auto px-3 py-3 sm:px-4">
+          {journey.steps.map((step, index) => {
+            const current = index === activeIndex;
+            const done = index < activeIndex;
+            const content = (
+              <>
+                <span
+                  className={`grid size-6 place-items-center rounded-lg ${current ? "bg-[#EAF6F2] text-[#087568]" : done ? "bg-emerald-50 text-emerald-600" : "bg-stone-50 text-stone-300"}`}
                 >
-                  {content}
-                </Link>
-              ) : (
-                <span className="flex items-center gap-2 rounded-xl px-2.5 py-2">
-                  {content}
+                  {done ? <Check size={12} /> : <Circle size={10} />}
                 </span>
-              )}
-              {index < journey.steps.length - 1 && (
-                <ChevronRight size={13} className="text-stone-300" />
-              )}
-            </div>
-          );
-        })}
+                <span
+                  className={`text-[11px] font-semibold ${current ? "text-stone-900" : done ? "text-stone-600" : "text-stone-400"}`}
+                >
+                  {step.label}
+                </span>
+              </>
+            );
+            return (
+              <div key={step.label} className="flex items-center gap-1">
+                {step.href ? (
+                  <Link
+                    href={step.href}
+                    className={`flex items-center gap-2 rounded-xl px-2.5 py-2 transition hover:bg-stone-50 ${current ? "ring-1 ring-[#087568]/15" : ""}`}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <span className="flex items-center gap-2 rounded-xl px-2.5 py-2">
+                    {content}
+                  </span>
+                )}
+                {index < journey.steps.length - 1 && (
+                  <ChevronRight size={13} className="text-stone-300" />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
