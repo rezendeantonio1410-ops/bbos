@@ -105,6 +105,7 @@ export class DashboardService implements OnModuleDestroy {
       pendingLab,
       lots,
       products,
+      roastedStock,
       openPurchases,
       overdueReceivables,
       deliveryExceptions,
@@ -161,6 +162,22 @@ export class DashboardService implements OnModuleDestroy {
         where: { companyId },
         _sum: { quantityOnHand: true, reservedQuantity: true },
       }),
+      this.db
+        .$queryRawUnsafe<
+          Array<{
+            physicalKg: number;
+            reservedKg: number;
+            availableKg: number;
+          }>
+        >(
+          `SELECT COALESCE(SUM("availableKg"),0)::float AS "physicalKg",
+                  COALESCE(SUM("reservedKg"),0)::float AS "reservedKg",
+                  COALESCE(SUM(GREATEST("availableKg"-"reservedKg",0)),0)::float AS "availableKg"
+             FROM "RoastedWipLot"
+            WHERE "companyId"=$1`,
+          companyId,
+        )
+        .catch(() => [{ physicalKg: 0, reservedKg: 0, availableKg: 0 }]),
       this.db.greenCoffeePurchase.count({
         where: {
           companyId,
@@ -234,6 +251,18 @@ export class DashboardService implements OnModuleDestroy {
         o.expectedDeliveryDate < now &&
         !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.status),
     ).length;
+    const orderFlow = {
+      order: orders.filter((order) =>
+        ["DRAFT", "CONFIRMED"].includes(order.status),
+      ).length,
+      preparation: orders.filter((order) =>
+        ["RESERVED", "PICKING", "IN_PRODUCTION"].includes(order.status),
+      ).length,
+      fiscal: orders.filter((order) => order.status === "READY_TO_SHIP").length,
+      shipping: orders.filter((order) =>
+        ["INVOICED", "SHIPPED"].includes(order.status),
+      ).length,
+    };
     const greenAvailableKg = lots.reduce((sum, lot) => {
       if (!["RECEIVED", "QUALITY_REVIEW", "APPROVED"].includes(lot.status))
         return sum;
@@ -326,6 +355,7 @@ export class DashboardService implements OnModuleDestroy {
       salesMonth: toNumber(salesMonth._sum.totalAmount),
       openOrders: open,
       overdueOrders: overdue,
+      orderFlow,
       productionActualKg: excludePlatformOrders
         ? 0
         : toNumber(production._sum.actualOutputKg),
@@ -336,6 +366,13 @@ export class DashboardService implements OnModuleDestroy {
       openPurchases: excludePlatformOrders ? 0 : openPurchases,
       finishedGoodsUnits: toNumber(products._sum.quantityOnHand),
       finishedGoodsReserved: toNumber(products._sum.reservedQuantity),
+      roastedStock: excludePlatformOrders
+        ? { physicalKg: 0, reservedKg: 0, availableKg: 0 }
+        : {
+            physicalKg: toNumber(roastedStock[0]?.physicalKg),
+            reservedKg: toNumber(roastedStock[0]?.reservedKg),
+            availableKg: toNumber(roastedStock[0]?.availableKg),
+          },
       greenLots: excludePlatformOrders
         ? []
         : lots.map((lot) => ({

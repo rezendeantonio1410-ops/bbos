@@ -84,6 +84,7 @@ test("seller dashboard receives the same ecommerce restriction", () => {
   assert.match(service, /externalOrderId: null/);
   assert.match(service, /type: \{ not: "ECOMMERCE" \}/);
   assert.match(service, /channel\.type <> 'ECOMMERCE'/);
+  assert.match(service, /roastedStock: excludePlatformOrders/);
 });
 
 test("export overview never assumes BRL when export currency is missing", async () => {

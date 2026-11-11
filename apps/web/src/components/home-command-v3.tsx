@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  BrainCircuit,
   ClipboardCheck,
   Factory,
   PackageCheck,
@@ -23,7 +22,6 @@ import {
   type SessionIdentity,
 } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
-import { OperationalNextBestAction } from "@/components/operational-next-best-action";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -37,12 +35,23 @@ type HomeData = {
   salesMonth: number;
   openOrders: number;
   overdueOrders: number;
+  orderFlow: {
+    order: number;
+    preparation: number;
+    fiscal: number;
+    shipping: number;
+  };
   productionActualKg: number;
   productionPlannedKg: number;
   pendingLab: number;
   openPurchases: number;
   finishedGoodsUnits: number;
   finishedGoodsReserved: number;
+  roastedStock: {
+    physicalKg: number;
+    reservedKg: number;
+    availableKg: number;
+  };
   greenLots: Array<{
     origin: string;
     code: string;
@@ -73,12 +82,14 @@ const emptyHome: HomeData = {
   salesMonth: 0,
   openOrders: 0,
   overdueOrders: 0,
+  orderFlow: { order: 0, preparation: 0, fiscal: 0, shipping: 0 },
   productionActualKg: 0,
   productionPlannedKg: 0,
   pendingLab: 0,
   openPurchases: 0,
   finishedGoodsUnits: 0,
   finishedGoodsReserved: 0,
+  roastedStock: { physicalKg: 0, reservedKg: 0, availableKg: 0 },
   greenLots: [],
   alerts: [],
 };
@@ -103,7 +114,15 @@ export function HomeCommandV3() {
       fetchSessionIdentity(authRoot),
     ])
       .then(([data, user]) => {
-        setHome(data as HomeData);
+        const received = data as Partial<HomeData>;
+        setHome({
+          ...emptyHome,
+          ...received,
+          orderFlow: received.orderFlow ?? emptyHome.orderFlow,
+          roastedStock: received.roastedStock ?? emptyHome.roastedStock,
+          greenLots: received.greenLots ?? [],
+          alerts: received.alerts ?? [],
+        });
         setIdentity(user);
         setAvailable(true);
       })
@@ -147,29 +166,40 @@ export function HomeCommandV3() {
             : "healthy";
 
   const hero = getHeroState(state, critical, attention);
-  const priorityGridClass =
-    home.alerts.length <= 1
-      ? "grid-cols-1"
-      : home.alerts.length === 2
-        ? "md:grid-cols-2"
-        : home.alerts.length === 3
-          ? "md:grid-cols-2 xl:grid-cols-3"
-          : "md:grid-cols-2 xl:grid-cols-4";
-  const primaryHref = isSales
-    ? "/pedidos"
-    : state === "insufficient"
-      ? "/pedidos"
-      : state === "critical" || state === "attention"
-        ? "#prioridades"
-        : "/dashboard";
-  const primaryLabel = isSales
-    ? "Abrir carteira comercial"
-    : state === "insufficient"
-      ? "Começar o dia"
-      : state === "critical" || state === "attention"
-        ? "Ver o que pede decisão"
-        : "Abrir visão executiva";
   const openAI = () => window.dispatchEvent(new Event("bbos:open-assistant"));
+  const finishedAvailable = Math.max(
+    0,
+    home.finishedGoodsUnits - home.finishedGoodsReserved,
+  );
+  const flowSteps = [
+    {
+      label: "Pedido",
+      value: home.orderFlow.order,
+      detail: "rascunhos e confirmados",
+      icon: ShoppingBag,
+    },
+    {
+      label: "Preparação",
+      value: home.orderFlow.preparation,
+      detail: "reserva, separação e produção",
+      icon: Factory,
+    },
+    {
+      label: "Fiscal",
+      value: home.orderFlow.fiscal,
+      detail: "prontos para emissão",
+      icon: ClipboardCheck,
+    },
+    {
+      label: "Expedição",
+      value: home.orderFlow.shipping,
+      detail: "faturados ou em trânsito",
+      icon: PackageCheck,
+    },
+  ];
+  const bottleneck = flowSteps.reduce((largest, step) =>
+    step.value > largest.value ? step : largest,
+  );
 
   if (loaded && isSales) {
     return (
@@ -184,232 +214,194 @@ export function HomeCommandV3() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1580px] space-y-6 pb-8">
-      <section className="grid gap-5 rounded-[24px] border border-stone-200 bg-gradient-to-br from-white via-white to-[#f8f4ec] p-6 shadow-[0_12px_35px_rgba(18,37,33,.055)] lg:grid-cols-[1.35fr_.65fr] lg:p-7">
-        <div className="flex min-h-[205px] flex-col justify-center">
-          <p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-700">
-            Bispo Coffees · Central de comando
+    <div className="mx-auto w-full max-w-[1500px] space-y-4 pb-6">
+      <section className="flex flex-col gap-4 rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_8px_24px_rgba(21,58,51,.045)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold uppercase tracking-[.15em] text-[var(--bbos-coffee-green)]">
+            Bispo Coffees · Fluxo operacional
           </p>
-          <h1 className="mt-2 text-[clamp(34px,3.4vw,52px)] font-semibold leading-[1.02] tracking-[-.045em] text-stone-950">
+          <h1 className="mt-1 text-[clamp(26px,2.6vw,36px)] font-semibold leading-tight tracking-[-.035em]">
             {greeting}, {firstName}.
           </h1>
-          <p className="mt-3 max-w-3xl text-[15px] leading-6 text-stone-500">
+          <p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">
             {hero.summary}
           </p>
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Link
-              href={primaryHref}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#10201d] px-4 text-xs font-bold text-white shadow-[0_8px_18px_rgba(14,25,29,.12)] transition hover:-translate-y-px"
-            >
-              {primaryLabel} <ArrowRight size={14} />
-            </Link>
-            <button
-              type="button"
-              onClick={openAI}
-              className="text-xs font-bold text-violet-700 transition hover:text-violet-900"
-            >
-              Perguntar ao BBOS
-            </button>
-          </div>
         </div>
-
         <button
           type="button"
           onClick={openAI}
-          className="group grid min-h-[190px] grid-cols-[42px_1fr] content-center gap-3 rounded-[20px] border border-violet-200 bg-gradient-to-br from-[#fbf9ff] to-[#f5f1fb] p-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(109,79,163,.10)]"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-4 text-xs font-bold text-[var(--bbos-intelligence)] hover:bg-[var(--bbos-intelligence-soft)]"
         >
-          <span className="grid size-10 place-items-center rounded-xl bg-white text-violet-700 shadow-sm">
-            <BrainCircuit size={19} />
-          </span>
-          <span>
-            <small className="block text-[9px] font-black uppercase tracking-[.14em] text-violet-700">
-              BBOS Intelligence
-            </small>
-            <strong className="mt-1 block text-[15px] leading-5 text-stone-900">
-              {hero.aiTitle}
-            </strong>
-            <span className="mt-2 block text-[11px] leading-[1.55] text-stone-500">
-              {hero.aiCopy}
-            </span>
-            <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-extrabold text-violet-700">
-              Abrir neste contexto <ArrowRight size={12} />
-            </span>
-          </span>
+          <Sparkles size={15} /> Perguntar ao BBOS
         </button>
       </section>
 
-      <section id="prioridades" className="space-y-3">
-        <SectionHeader
-          eyebrow="Agora"
-          title="O que merece sua atenção"
-          subtitle="O BBOS mostra exceções; silêncio não vira certeza."
-        />
-        {home.alerts.length ? (
-          <div className={`grid gap-3 ${priorityGridClass}`}>
-            {home.alerts.map((item) => (
-              <ActionCard key={`${item.tone}-${item.title}`} {...item} />
-            ))}
+      <section className="overflow-hidden rounded-[18px] border bg-[var(--bbos-surface-card)] shadow-[0_6px_20px_rgba(21,58,51,.035)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
+              Do pedido à entrega
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--bbos-text-muted)]">
+              {bottleneck.value > 0
+                ? `Maior concentração agora: ${bottleneck.label.toLowerCase()} (${bottleneck.value}).`
+                : "Nenhum pedido ativo nas etapas operacionais."}
+            </p>
           </div>
-        ) : (
-          <CompactDecision state={state} isSales={isSales} />
-        )}
-      </section>
-
-      {!isSales && (
-        <section className="space-y-3">
-          <SectionHeader
-            eyebrow="Próximo passo"
-            title="Próxima melhor ação"
-            subtitle="Uma recomendação de cada vez, baseada no que o sistema consegue provar."
-          />
-          <OperationalNextBestAction />
-        </section>
-      )}
-
-      <section className="space-y-3">
-        <SectionHeader
-          eyebrow="Hoje"
-          title={isSales ? "Pulso comercial" : "Pulso da operação"}
-          subtitle={
-            isSales
-              ? "Vendas e pedidos para orientar o atendimento do dia."
-              : "Quatro sinais para entender o dia sem navegar por relatórios."
-          }
-        />
-        <div
-          className={`grid gap-3 md:grid-cols-2 ${isSales ? "" : "xl:grid-cols-4"}`}
-        >
-          <PulseCard
-            icon={WalletCards}
-            label="Vendas"
-            value={money.format(home.salesToday)}
-            note={
-              home.salesMonth > 0
-                ? `Mês: ${money.format(home.salesMonth)}`
-                : "Nenhuma venda registrada"
-            }
-            href="/vendas"
-            tone="green"
-          />
-          <PulseCard
-            icon={PackageCheck}
-            label="Pedidos"
-            value={`${home.openOrders} em aberto`}
-            note={
-              home.overdueOrders
-                ? `${home.overdueOrders} atrasado${home.overdueOrders > 1 ? "s" : ""}`
-                : "Nenhum atraso registrado"
-            }
-            href={
-              home.overdueOrders > 0 ? "/pedidos?filtro=atrasados" : "/pedidos"
-            }
-            tone={home.overdueOrders > 0 ? "amber" : "neutral"}
-          />
-          {!isSales && (
-            <PulseCard
-              icon={Factory}
-              label="Produção"
-              value={`${kg.format(home.productionActualKg)} kg`}
-              note={
-                home.productionPlannedKg
-                  ? `Planejado: ${kg.format(home.productionPlannedKg)} kg`
-                  : "Nenhuma produção programada"
-              }
-              href="/producao"
-              tone="amber"
+          <Link
+            href="/pedidos"
+            className="inline-flex items-center gap-1 text-xs font-bold text-[var(--bbos-coffee-green)]"
+          >
+            Abrir pedidos <ArrowRight size={13} />
+          </Link>
+        </div>
+        <div className="grid gap-px bg-[var(--bbos-surface-border)] sm:grid-cols-2 xl:grid-cols-4">
+          {flowSteps.map((step, index) => (
+            <FlowStep
+              key={step.label}
+              {...step}
+              index={index + 1}
+              highlighted={step.value > 0 && step.label === bottleneck.label}
             />
-          )}
-          {!isSales && (
-            <PulseCard
-              icon={ClipboardCheck}
-              label="Qualidade"
-              value={`${home.pendingLab} em análise`}
-              note={
-                home.pendingLab
-                  ? "Há lotes aguardando liberação"
-                  : "Nenhuma análise pendente"
-              }
-              href="/laboratorio"
-              tone="violet"
-            />
-          )}
+          ))}
         </div>
       </section>
 
-      {!isSales && (
-        <section className="space-y-3">
-          <SectionHeader
-            eyebrow="Cobertura"
-            title="Antes de faltar"
-            subtitle="Estoque só ganha destaque quando muda uma decisão."
-          />
-          <Card className="overflow-hidden rounded-[18px] border-stone-200 bg-white p-0 shadow-[0_4px_18px_rgba(18,37,33,.035)]">
-            <div className="grid gap-px bg-stone-200 sm:grid-cols-2">
-              <StockPanel
-                icon={PackageCheck}
-                title="Produto acabado"
-                value={`${kg.format(home.finishedGoodsUnits)} un.`}
-                secondary={`${kg.format(home.finishedGoodsReserved)} reservadas`}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section
+          id="prioridades"
+          className="rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_6px_20px_rgba(21,58,51,.035)]"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
+                Fila que precisa avançar
+              </p>
+              <h2 className="mt-1 text-lg font-bold tracking-tight">
+                O que merece sua atenção
+              </h2>
+            </div>
+            {home.alerts.length > 0 && (
+              <span className="rounded-full bg-[var(--bbos-danger-soft)] px-2.5 py-1 text-[11px] font-extrabold text-[var(--bbos-danger)]">
+                {home.alerts.length}{" "}
+                {home.alerts.length === 1 ? "pendência" : "pendências"}
+              </span>
+            )}
+          </div>
+          <div className="mt-3 space-y-2">
+            {home.alerts.length ? (
+              home.alerts
+                .slice(0, 4)
+                .map((item) => (
+                  <ActionCard key={`${item.tone}-${item.title}`} {...item} />
+                ))
+            ) : (
+              <CompactDecision state={state} isSales={isSales} />
+            )}
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          <section className="rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_6px_20px_rgba(21,58,51,.035)]">
+            <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
+              Capacidade disponível
+            </p>
+            <div className="mt-3 divide-y">
+              <CapacityRow
+                label="Café torrado livre"
+                value={`${kg.format(home.roastedStock.availableKg)} kg`}
+                note={`${kg.format(home.roastedStock.reservedKg)} kg reservados`}
                 href="/estoque"
               />
-              <StockPanel
-                icon={Sprout}
-                title="Café verde"
-                value={`${kg.format(greenAvailable)} kg`}
-                secondary={`${kg.format(greenReserved)} kg reservados`}
-                href="/cafe-verde"
+              <CapacityRow
+                label="Produção planejada"
+                value={`${kg.format(home.productionPlannedKg)} kg`}
+                note={`${kg.format(home.productionActualKg)} kg produzidos no período`}
+                href="/producao"
+              />
+              <CapacityRow
+                label="Produto acabado livre"
+                value={`${kg.format(finishedAvailable)} un.`}
+                note={`${kg.format(home.finishedGoodsReserved)} un. reservadas`}
+                href="/estoque"
               />
             </div>
-          </Card>
-        </section>
-      )}
+          </section>
 
-      {!isSales && home.greenLots.length > 0 && (
-        <section className="space-y-3">
-          <SectionHeader
-            eyebrow="Matéria-prima"
-            title="Lotes que pedem acompanhamento"
-            subtitle="Só aparece quando há contexto útil para acompanhar."
-          />
-          <Card className="overflow-hidden rounded-[18px] border-stone-200 bg-white p-0 shadow-[0_4px_18px_rgba(18,37,33,.035)]">
-            <div className="divide-y divide-stone-100">
-              {home.greenLots.slice(0, 5).map((l) => (
-                <Link
-                  href="/cafe-verde"
-                  key={`${l.code}-${l.origin}`}
-                  className="grid gap-3 px-4 py-3 text-xs transition hover:bg-stone-50 sm:grid-cols-[1.7fr_.7fr_.7fr_auto] sm:items-center"
-                >
-                  <div>
-                    <strong className="block">
-                      {l.origin} · {l.code}
-                    </strong>
-                    <span className="mt-1 block text-[10px] text-stone-400">
-                      {l.variety}
-                    </span>
-                  </div>
-                  <div>
-                    <small className="block text-[8px] uppercase tracking-wider text-stone-400">
-                      Disponível
-                    </small>
-                    <strong>{kg.format(l.currentKg)} kg</strong>
-                  </div>
-                  <div>
-                    <small className="block text-[8px] uppercase tracking-wider text-stone-400">
-                      Reservado
-                    </small>
-                    <strong>{kg.format(l.reservedKg)} kg</strong>
-                  </div>
-                  <span className="rounded-full bg-stone-100 px-2 py-1 text-[8px] font-extrabold tracking-wide">
-                    {l.status}
-                  </span>
-                </Link>
-              ))}
+          <section className="rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_6px_20px_rgba(21,58,51,.035)]">
+            <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
+              Ações rápidas
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <QuickAction
+                href="/pedidos?novo=1"
+                icon={Plus}
+                label="Novo pedido"
+              />
+              <QuickAction
+                href="/producao"
+                icon={Factory}
+                label="Programar torra"
+              />
+              <QuickAction
+                href="/estoque"
+                icon={PackageCheck}
+                label="Ver estoque"
+              />
+              <QuickAction
+                href="/pedidos"
+                icon={ClipboardCheck}
+                label="Avançar pedidos"
+              />
             </div>
-          </Card>
-        </section>
-      )}
+          </section>
+        </aside>
+      </div>
 
-      <p className="text-[9px] leading-5 text-stone-400">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <PulseCard
+          icon={WalletCards}
+          label="Vendas hoje"
+          value={money.format(home.salesToday)}
+          note={`No mês: ${money.format(home.salesMonth)}`}
+          href="/vendas"
+          tone="green"
+        />
+        <PulseCard
+          icon={PackageCheck}
+          label="Pedidos em aberto"
+          value={String(home.openOrders)}
+          note={
+            home.overdueOrders
+              ? `${home.overdueOrders} atrasados`
+              : "Nenhum atraso"
+          }
+          href={home.overdueOrders ? "/pedidos?filtro=atrasados" : "/pedidos"}
+          tone={home.overdueOrders ? "amber" : "neutral"}
+        />
+        <PulseCard
+          icon={Sprout}
+          label="Café verde livre"
+          value={`${kg.format(Math.max(0, greenAvailable - greenReserved))} kg`}
+          note={`${kg.format(greenReserved)} kg reservados`}
+          href="/cafe-verde"
+          tone="neutral"
+        />
+        <PulseCard
+          icon={ClipboardCheck}
+          label="Qualidade"
+          value={`${home.pendingLab} em análise`}
+          note={
+            home.pendingLab
+              ? "Aguardando liberação"
+              : "Nenhuma análise pendente"
+          }
+          href="/laboratorio"
+          tone="violet"
+        />
+      </section>
+
+      <p className="text-[11px] leading-5 text-[var(--bbos-text-muted)]">
         Estado de confiança: {confidenceLabel(state)}. O BBOS não converte
         ausência de dados em certeza.
       </p>
@@ -647,6 +639,102 @@ function SalesMetric({
   );
 }
 
+function FlowStep({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  index,
+  highlighted,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  icon: typeof Factory;
+  index: number;
+  highlighted: boolean;
+}) {
+  return (
+    <Link
+      href="/pedidos"
+      className="group bg-[var(--bbos-surface-card)] p-3.5 transition hover:bg-[var(--bbos-surface-subtle)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="flex items-center gap-2">
+          <span
+            className={`grid size-8 place-items-center rounded-lg ${
+              highlighted
+                ? "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]"
+                : "bg-[var(--bbos-nav-active)] text-[var(--bbos-coffee-green)]"
+            }`}
+          >
+            <Icon size={16} />
+          </span>
+          <span>
+            <small className="block text-[10px] font-bold text-[var(--bbos-text-muted)]">
+              Etapa {index}
+            </small>
+            <strong className="block text-sm">{label}</strong>
+          </span>
+        </span>
+        <strong className="text-2xl tracking-tight">{value}</strong>
+      </div>
+      <p className="mt-2 text-[11px] leading-4 text-[var(--bbos-text-muted)]">
+        {detail}
+      </p>
+    </Link>
+  );
+}
+
+function CapacityRow({
+  label,
+  value,
+  note,
+  href,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+    >
+      <span className="min-w-0">
+        <span className="block text-xs font-bold">{label}</span>
+        <span className="mt-0.5 block truncate text-[10px] text-[var(--bbos-text-muted)]">
+          {note}
+        </span>
+      </span>
+      <strong className="shrink-0 text-sm text-[var(--bbos-coffee-green)]">
+        {value}
+      </strong>
+    </Link>
+  );
+}
+
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: typeof Factory;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-20 flex-col justify-between rounded-xl border bg-[var(--bbos-surface-subtle)] p-3 text-xs font-bold transition hover:border-[var(--bbos-control-border)] hover:bg-white"
+    >
+      <Icon size={17} className="text-[var(--bbos-coffee-green)]" />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
 function getHeroState(
   state: EvidenceState,
   critical: number,
@@ -702,28 +790,6 @@ function confidenceLabel(state: EvidenceState) {
   if (state === "healthy") return "leitura baseada nos dados disponíveis";
   if (state === "loading") return "contexto em atualização";
   return "há exceções operacionais a avaliar";
-}
-
-function SectionHeader({
-  eyebrow,
-  title,
-  subtitle,
-}: {
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] font-extrabold uppercase tracking-[.17em] text-emerald-700">
-        {eyebrow}
-      </p>
-      <h2 className="mt-1 text-xl font-bold tracking-tight text-stone-950">
-        {title}
-      </h2>
-      <p className="mt-1 text-xs text-stone-500">{subtitle}</p>
-    </div>
-  );
 }
 
 function CompactDecision({
@@ -795,25 +861,29 @@ function ActionCard({
           ? "text-emerald-700 bg-emerald-50"
           : "text-stone-600 bg-stone-100";
   return (
-    <Card className="rounded-[17px] border-stone-200 p-4 shadow-none transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-start justify-between">
+    <Card className="rounded-xl border-[var(--bbos-surface-border)] p-3 shadow-none">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <span
-          className={`grid size-8 place-items-center rounded-full ${toneClass}`}
+          className={`grid size-8 shrink-0 place-items-center rounded-lg ${toneClass}`}
         >
           <Icon size={15} />
         </span>
-        <span className="text-[8px] font-black tracking-wider text-stone-400">
-          {tone}
-        </span>
+        <div className="min-w-0 flex-1">
+          <span className="text-[10px] font-black tracking-wide text-[var(--bbos-text-muted)]">
+            {tone}
+          </span>
+          <h3 className="text-[13px] font-extrabold">{title}</h3>
+          <p className="mt-0.5 text-[11px] leading-4 text-[var(--bbos-text-secondary)]">
+            {impact}
+          </p>
+        </div>
+        <Link
+          href={href}
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1 rounded-lg border border-[var(--bbos-control-border)] bg-white px-3 text-[10px] font-black text-[var(--bbos-coffee-green)]"
+        >
+          {action} <ArrowRight size={11} />
+        </Link>
       </div>
-      <h3 className="mt-3 text-[13px] font-extrabold">{title}</h3>
-      <p className="mt-1 text-[11px] leading-5 text-stone-500">{impact}</p>
-      <Link
-        href={href}
-        className="mt-4 inline-flex min-h-10 items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[10px] font-black text-emerald-800 transition hover:bg-emerald-100"
-      >
-        {action} <ArrowRight size={11} />
-      </Link>
     </Card>
   );
 }
@@ -844,53 +914,22 @@ function PulseCard({
   return (
     <Link
       href={href}
-      className="group block rounded-[18px] border border-stone-200 bg-white p-4 text-inherit shadow-[0_4px_18px_rgba(18,37,33,.035)] transition hover:-translate-y-0.5 hover:shadow-md"
+      className="group block rounded-[16px] border bg-[var(--bbos-surface-card)] p-3.5 text-inherit shadow-[0_4px_14px_rgba(18,37,33,.03)] transition hover:-translate-y-0.5"
     >
       <span
         className={`grid size-8 place-items-center rounded-xl ${toneClass}`}
       >
         <Icon size={16} />
       </span>
-      <small className="mt-4 block text-[9px] font-extrabold uppercase tracking-[.1em] text-stone-400">
+      <small className="mt-3 block text-[10px] font-extrabold uppercase tracking-[.09em] text-[var(--bbos-text-muted)]">
         {label}
       </small>
       <strong className="mt-1 block text-[22px] tracking-tight text-stone-950">
         {value}
       </strong>
-      <p className="mt-1 text-[10px] text-stone-500">{note}</p>
-      <span className="mt-3 inline-flex items-center gap-1 text-[9px] font-bold text-stone-400 opacity-0 transition group-hover:opacity-100">
-        Abrir <ArrowRight size={10} />
-      </span>
-    </Link>
-  );
-}
-
-function StockPanel({
-  icon: Icon,
-  title,
-  value,
-  secondary,
-  href,
-}: {
-  icon: typeof Factory;
-  title: string;
-  value: string;
-  secondary: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="block bg-white p-5 text-inherit transition hover:bg-stone-50"
-    >
-      <div className="flex items-center gap-2 text-[11px] font-bold text-stone-500">
-        <Icon size={16} />
-        {title}
-      </div>
-      <strong className="mt-3 block text-2xl tracking-tight text-stone-950">
-        {value}
-      </strong>
-      <p className="mt-1 text-[10px] text-stone-400">{secondary}</p>
+      <p className="mt-1 text-[11px] text-[var(--bbos-text-secondary)]">
+        {note}
+      </p>
     </Link>
   );
 }

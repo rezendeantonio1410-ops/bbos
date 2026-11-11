@@ -264,13 +264,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Notas de entrada",
         description: "Captura, classificação e alocação fiscal",
         icon: FileInput,
-        roles: [
-          "ADMIN",
-          "EXECUTIVE",
-          "INDUSTRIAL",
-          "FINANCE",
-          "ACCOUNTANT",
-        ],
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE", "ACCOUNTANT"],
         keywords: [
           "nfe",
           "nota fiscal",
@@ -346,27 +340,31 @@ export function navigationForRole(role?: string | null) {
 
 export const toneClasses = {
   green: {
-    text: "text-[#087568]",
-    dot: "bg-[#087568]",
-    soft: "bg-[#EAF6F2]",
-    active: "bg-[#EAF6F2] text-[#123B35] shadow-[inset_3px_0_0_#087568]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
   blue: {
-    text: "text-[#3E73A8]",
-    dot: "bg-[#3E73A8]",
-    soft: "bg-[#EEF5FB]",
-    active: "bg-[#EEF5FB] text-[#244F79] shadow-[inset_3px_0_0_#3E73A8]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
   amber: {
-    text: "text-[#B87518]",
-    dot: "bg-[#C8923E]",
-    soft: "bg-[#FFF6E6]",
-    active: "bg-[#FFF6E6] text-[#795019] shadow-[inset_3px_0_0_#C8923E]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
   violet: {
-    text: "text-[#6D4FA3]",
-    dot: "bg-[#6D4FA3]",
-    soft: "bg-[#F4F0FB]",
-    active: "bg-[#F4F0FB] text-[#523B7C] shadow-[inset_3px_0_0_#6D4FA3]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
 } as const;

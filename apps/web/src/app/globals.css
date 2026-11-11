@@ -4,7 +4,9 @@
 
 /* The mobile preview shell already receives the single institutional mark from
    the cupping layout; avoid rendering a second copy in its compact toolbar. */
-[data-cupping-mobile-session] header img[src*="bispo-logo-official-transparent"] {
+[data-cupping-mobile-session]
+  header
+  img[src*="bispo-logo-official-transparent"] {
   display: none;
 }
 
@@ -12,7 +14,7 @@
    same responsive grid, so neither can escape the phone viewport. */
 [data-reference-sensory-flow][data-level="level-2"] > div.relative {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
   align-items: center;
   column-gap: 4px;
   box-sizing: border-box;
@@ -27,7 +29,9 @@
   width: 100%;
   min-width: 0;
 }
-[data-reference-sensory-flow][data-level="level-2"] > div.relative > div.pointer-events-none {
+[data-reference-sensory-flow][data-level="level-2"]
+  > div.relative
+  > div.pointer-events-none {
   position: relative !important;
   inset: auto !important;
   grid-column: 2;
@@ -35,12 +39,18 @@
   height: 300px !important;
   min-width: 0;
 }
-[data-reference-sensory-flow][data-level="level-2"] > div.relative > div.pointer-events-none img {
-  transform: scale(.88);
+[data-reference-sensory-flow][data-level="level-2"]
+  > div.relative
+  > div.pointer-events-none
+  img {
+  transform: scale(0.88);
   transform-origin: center;
   clip-path: circle(46% at 50% 50%);
 }
- [data-reference-sensory-flow][data-level="level-2"] > div.relative > div.pointer-events-none img:only-child {
+[data-reference-sensory-flow][data-level="level-2"]
+  > div.relative
+  > div.pointer-events-none
+  img:only-child {
   transform: scale(1.15);
 }
 [data-reference-sensory-flow][data-level="level-2"] > div.relative > p {
@@ -62,95 +72,179 @@
 
 /* Fragrance/Aroma family references get a slightly clearer read without
    changing the approved wheel geometry or the Flavor experience. */
-[data-reference-sensory-flow][data-level="level-1"][data-sensory-context="FRAGRANCE"] svg image,
-[data-reference-sensory-flow][data-level="level-1"][data-sensory-context="AROMA"] svg image {
+[data-reference-sensory-flow][data-level="level-1"][data-sensory-context="FRAGRANCE"]
+  svg
+  image,
+[data-reference-sensory-flow][data-level="level-1"][data-sensory-context="AROMA"]
+  svg
+  image {
   width: 68px;
   height: 56px;
 }
 
 [data-reference-sensory-flow] button.fixed {
-  bottom: calc(.5rem + env(safe-area-inset-bottom));
+  bottom: calc(0.5rem + env(safe-area-inset-bottom));
 }
 
 [data-reference-sensory-flow] > div.fixed {
-  padding-bottom: calc(.5rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
 }
 
 :root {
   color-scheme: light;
-  --font-inter: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-inter:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
   --font-manrope: Montserrat, Inter, ui-sans-serif, system-ui, sans-serif;
-  --brand-ritual-black: #0A0A0A;
-  --brand-chinese-black: #0E191D;
-  --brand-whitt-sand: #EBEBEB;
-  --brand-platinum: #E0EAE9;
-  --surface-base: #FFFFFF;
-  --surface-card: #FFFFFF;
-  --surface-header: #FFFFFF;
-  --surface-sidebar: #FFFFFF;
-  --surface-page: #F7F7F5;
-  --surface-muted: #FAFAF8;
-  --surface-border: #E7E7E3;
+  --brand-ritual-black: #0a0a0a;
+  --brand-chinese-black: #0e191d;
+  --brand-whitt-sand: #ebebeb;
+  --brand-platinum: #e0eae9;
+  --surface-base: #ffffff;
+  --surface-card: #ffffff;
+  --surface-header: #ffffff;
+  --surface-sidebar: #ffffff;
+  --surface-page: #f7f7f5;
+  --surface-muted: #fafaf8;
+  --surface-border: #e7e7e3;
   --analytic-identity: #087568;
-  --analytic-positive: #16A06A;
-  --analytic-coffee: #C8923E;
-  --analytic-finance: #3E73A8;
-  --analytic-projection: #7867A9;
-  --analytic-attention: #E99A35;
-  --analytic-critical: #D95757;
+  --analytic-positive: #16a06a;
+  --analytic-coffee: #c8923e;
+  --analytic-finance: #3e73a8;
+  --analytic-projection: #7867a9;
+  --analytic-attention: #e99a35;
+  --analytic-critical: #d95757;
   /* BBOS Human Experience System — semantic, deliberately compatible with the current UI. */
-  --bbos-surface-base: #FFFFFF;
-  --bbos-surface-elevated: #FFFFFF;
-  --bbos-surface-subtle: #FAFAF8;
-  --bbos-surface-warm: #FBF8F1;
-  --bbos-surface-page: #F7F7F5;
-  --bbos-text-primary: #0A0A0A;
-  --bbos-text-secondary: #626B69;
-  --bbos-text-muted: #7A8381;
-  --bbos-text-on-action: #FFFFFF;
-  --bbos-action-primary: #0A0A0A;
-  --bbos-action-primary-hover: #0E191D;
-  --bbos-action-secondary: #E7E7E3;
+  --bbos-surface-base: #ffffff;
+  --bbos-surface-elevated: #ffffff;
+  --bbos-surface-subtle: #fafaf8;
+  --bbos-surface-warm: #fbf8f1;
+  --bbos-surface-page: #f7f7f5;
+  --bbos-text-primary: #0a0a0a;
+  --bbos-text-secondary: #626b69;
+  --bbos-text-muted: #7a8381;
+  --bbos-text-on-action: #ffffff;
+  --bbos-action-primary: #0a0a0a;
+  --bbos-action-primary-hover: #0e191d;
+  --bbos-action-secondary: #e7e7e3;
   --bbos-state-success: #047857;
   --bbos-success: #047857;
-  --bbos-success-soft: #ECFDF5;
-  --bbos-success-border: #A7F3D0;
-  --bbos-state-information: #0369A1;
-  --bbos-info: #0369A1;
-  --bbos-info-soft: #EFF6FF;
-  --bbos-state-attention: #B45309;
-  --bbos-warning: #B45309;
-  --bbos-warning-soft: #FFFBEB;
-  --bbos-warning-border: #FCD34D;
-  --bbos-state-critical: #B91C1C;
-  --bbos-danger: #B91C1C;
-  --bbos-danger-soft: #FEF2F2;
-  --bbos-danger-border: #FCA5A5;
-  --bbos-intelligence: #6D4FA3;
-  --bbos-intelligence-soft: #F5F3FF;
-  --bbos-state-neutral: #57534E;
-  --bbos-surface: #FFFFFF;
-  --bbos-surface-card: #FFFFFF;
-  --bbos-surface-border: #E7E7E3;
+  --bbos-success-soft: #ecfdf5;
+  --bbos-success-border: #a7f3d0;
+  --bbos-state-information: #0369a1;
+  --bbos-info: #0369a1;
+  --bbos-info-soft: #eff6ff;
+  --bbos-state-attention: #b45309;
+  --bbos-warning: #b45309;
+  --bbos-warning-soft: #fffbeb;
+  --bbos-warning-border: #fcd34d;
+  --bbos-state-critical: #b91c1c;
+  --bbos-danger: #b91c1c;
+  --bbos-danger-soft: #fef2f2;
+  --bbos-danger-border: #fca5a5;
+  --bbos-intelligence: #6d4fa3;
+  --bbos-intelligence-soft: #f5f3ff;
+  --bbos-state-neutral: #57534e;
+  --bbos-surface: #ffffff;
+  --bbos-surface-card: #ffffff;
+  --bbos-surface-border: #e7e7e3;
+  --bbos-control-border: #a8b0ac;
+  --bbos-nav-active: #eaf6f2;
+  --bbos-nav-active-text: #123b35;
   --bbos-spacing-section: 1.25rem;
   --bbos-spacing-control: 0.75rem;
   --bbos-font-body: var(--font-inter);
   --bbos-font-display: var(--font-manrope);
   --bbos-coffee-green: #087568;
-  --bbos-coffee-roasted: #3E73A8;
-  --bbos-coffee-caramel: #C8923E;
-  --bbos-border: #E7E7E3;
+  --bbos-coffee-roasted: #3e73a8;
+  --bbos-coffee-caramel: #c8923e;
+  --bbos-border: #e7e7e3;
   --bbos-focus-ring: #087568;
   --bbos-radius-card: 1rem;
   --bbos-radius-control: 0.75rem;
   --bbos-motion-standard: 180ms ease;
 }
-* { border-color: theme('colors.stone.200'); }
-body { margin: 0; background: var(--surface-page); color: var(--brand-ritual-black); }
-button, input, select, textarea { font: inherit; }
-button, input, select, textarea, a { transition-duration: var(--bbos-motion-standard); }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--bbos-focus-ring); outline-offset: 2px; }
-::selection { background: var(--brand-chinese-black); color: var(--brand-whitt-sand); }
+
+/* Calm, higher-contrast theme for the authenticated operating system only.
+   The public storefront keeps its own established palette. */
+[data-bbos-app-shell] {
+  --surface-base: #fafbf9;
+  --surface-card: #fafbf9;
+  --surface-header: #fafbf9;
+  --surface-sidebar: #f6f8f5;
+  --surface-page: #eef1ed;
+  --surface-muted: #f3f5f2;
+  --surface-border: #cfd8d2;
+  --analytic-identity: #08685e;
+  --analytic-positive: #047857;
+  --analytic-coffee: #895108;
+  --analytic-finance: #0369a1;
+  --analytic-projection: #654791;
+  --analytic-attention: #895108;
+  --analytic-critical: #a52f2f;
+  --bbos-surface-base: #fafbf9;
+  --bbos-surface-elevated: #ffffff;
+  --bbos-surface-subtle: #f3f5f2;
+  --bbos-surface-warm: #f6f3ea;
+  --bbos-surface-page: #eef1ed;
+  --bbos-text-primary: #19211e;
+  --bbos-text-secondary: #46554e;
+  --bbos-text-muted: #59675f;
+  --bbos-action-primary: #153a33;
+  --bbos-action-primary-hover: #0f2e29;
+  --bbos-action-secondary: #e4eae6;
+  --bbos-state-attention: #895108;
+  --bbos-warning: #895108;
+  --bbos-state-critical: #a52f2f;
+  --bbos-danger: #a52f2f;
+  --bbos-intelligence: #654791;
+  --bbos-surface: #fafbf9;
+  --bbos-surface-card: #ffffff;
+  --bbos-surface-border: #cfd8d2;
+  --bbos-control-border: #87958d;
+  --bbos-nav-active: #e7efea;
+  --bbos-nav-active-text: #15473f;
+  --bbos-spacing-section: 1rem;
+  --bbos-coffee-green: #08685e;
+  --bbos-coffee-roasted: #0369a1;
+  --bbos-coffee-caramel: #895108;
+  --bbos-border: #cfd8d2;
+  --bbos-focus-ring: #08685e;
+  --bbos-radius-card: 0.875rem;
+}
+* {
+  border-color: var(--surface-border);
+}
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--brand-ritual-black);
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+input,
+select,
+textarea,
+a {
+  transition-duration: var(--bbos-motion-standard);
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--bbos-focus-ring);
+  outline-offset: 2px;
+}
+::selection {
+  background: var(--brand-chinese-black);
+  color: var(--brand-whitt-sand);
+}
 
 /* Tablet and phone ergonomics for every authenticated BBOS screen.
    Controls stay large enough for touch and text fields avoid browser zoom while typing. */
@@ -158,7 +252,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   [data-bbos-app-shell] :where(button, a, [role="button"]),
   [data-bbos-login] :where(button, a, [role="button"]) {
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(8, 117, 104, .12);
+    -webkit-tap-highlight-color: rgba(8, 117, 104, 0.12);
   }
 
   [data-bbos-app-shell] :where(button, [role="button"]),
@@ -166,8 +260,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     min-height: 44px;
   }
 
-  [data-bbos-app-shell] :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
-  [data-bbos-login] :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  [data-bbos-app-shell]
+    :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+  [data-bbos-login]
+    :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
     min-height: 48px;
     font-size: 16px;
     line-height: 1.5;
@@ -191,7 +287,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Safra pertence à compra/lote, não ao cadastro estrutural da fazenda. */
@@ -231,11 +334,19 @@ label:has(input[name="productionHarvest"]) {
   box-shadow: 0 6px 20px rgba(15, 30, 28, 0.04);
 }
 
-.industrial-dashboard :is(.text-stone-950, .text-stone-900, .text-stone-800) { color: #111514; }
-.industrial-dashboard :is(.text-stone-600, .text-stone-500) { color: #626b69; }
-.industrial-dashboard .text-stone-400 { color: #7a8381; }
+.industrial-dashboard :is(.text-stone-950, .text-stone-900, .text-stone-800) {
+  color: #111514;
+}
+.industrial-dashboard :is(.text-stone-600, .text-stone-500) {
+  color: #626b69;
+}
+.industrial-dashboard .text-stone-400 {
+  color: #7a8381;
+}
 
-.home-command { color: #111514; }
+.home-command {
+  color: #111514;
+}
 .home-command [data-ui-card] {
   background-color: var(--surface-card);
   border: 1px solid var(--surface-border);
@@ -243,5 +354,7 @@ label:has(input[name="productionHarvest"]) {
 }
 
 @layer utilities {
-  .text-balance { text-wrap: balance; }
+  .text-balance {
+    text-wrap: balance;
+  }
 }

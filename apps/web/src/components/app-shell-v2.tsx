@@ -378,7 +378,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     <div
       className={`flex h-full flex-col ${mobile ? "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]" : ""}`}
     >
-      <div className="flex items-center justify-between px-5 py-5">
+      <div className="flex items-center justify-between px-4 py-4">
         <Logo />
         {mobile && (
           <button
@@ -390,8 +390,8 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           </button>
         )}
       </div>
-      <div className="mx-4 mb-4 flex items-center gap-2 rounded-2xl border bg-[var(--bbos-surface-warm)] px-3 py-3">
-        <span className="grid size-9 place-items-center rounded-xl bg-white">
+      <div className="mx-3 mb-3 flex items-center gap-2 rounded-xl border bg-[var(--bbos-surface-warm)] px-3 py-2.5">
+        <span className="grid size-8 place-items-center rounded-lg bg-white">
           <Factory size={16} />
         </span>
         <div className="min-w-0 flex-1">
@@ -401,22 +401,19 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           </p>
         </div>
       </div>
-      <nav className="flex-1 space-y-2 overflow-y-auto px-3 pb-5">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
         {navGroups.map((group) => {
           const tone = toneClasses[group.tone];
           const isOpen = group.alwaysOpen || expandedGroup === group.label;
           const hasActive = group.label === activeGroup;
           return (
-            <div key={group.id} className="rounded-2xl">
+            <div key={group.id} className="rounded-xl">
               {group.alwaysOpen ? (
-                <div className={`px-3 pb-2 pt-1 ${tone.text}`}>
-                  <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.14em]">
+                <div className={`px-2.5 pb-1.5 pt-1 ${tone.text}`}>
+                  <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.12em]">
                     <span className={`size-1.5 rounded-full ${tone.dot}`} />
                     {group.label}
                   </div>
-                  <p className="ml-3.5 mt-1 text-[9px] font-medium normal-case tracking-normal text-stone-400">
-                    {group.description}
-                  </p>
                 </div>
               ) : (
                 <button
@@ -424,16 +421,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                   onClick={() =>
                     setExpandedGroup(isOpen && !hasActive ? "" : group.label)
                   }
-                  className={`w-full rounded-2xl border px-3 py-3 text-left transition hover:-translate-y-px hover:shadow-sm ${hasActive ? `${tone.soft} border-transparent` : "border-stone-100 bg-white/65"}`}
+                  className={`w-full rounded-xl border px-2.5 py-2 text-left transition hover:bg-white ${hasActive ? `${tone.soft} border-transparent` : "border-transparent bg-transparent"}`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span
-                      className={`flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.12em] ${tone.text}`}
+                      className={`flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.1em] ${tone.text}`}
                     >
                       <span
-                        className={`grid size-7 place-items-center rounded-lg ${tone.dot}`}
+                        className={`grid size-6 place-items-center rounded-md ${tone.dot}`}
                       >
-                        <span className="size-2 rounded-[3px] border-2 border-white/95" />
+                        <span className="size-1.5 rounded-[2px] border-2 border-white/95" />
                       </span>
                       {group.label}
                     </span>
@@ -442,64 +439,50 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                       className={`text-stone-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
                     />
                   </div>
-                  <p className="ml-9 mt-1 text-[9px] font-semibold text-stone-400">
-                    {group.description}
-                  </p>
                 </button>
               )}
               {isOpen && (
-                <div className="mt-1 space-y-0.5 pl-1">
-                  {group.items.map(
-                    ({ href, label, description, icon: Icon }) => {
-                      const active =
-                        pathname === href ||
-                        (href !== "/home" && pathname.startsWith(`${href}/`));
-                      return (
-                        <Link
-                          key={href}
-                          href={href}
-                          onClick={() => mobile && setMobileOpen(false)}
-                          className={`group flex items-start gap-3 rounded-xl px-3 py-2.5 transition ${active ? tone.active : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
-                        >
-                          <Icon
-                            size={17}
-                            className={`mt-0.5 shrink-0 ${active ? "" : tone.text}`}
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-[13px] font-semibold">
-                              {label}
-                            </span>
-                            <span className="mt-0.5 block truncate text-[9px] font-medium opacity-55">
-                              {description}
-                            </span>
-                          </span>
-                        </Link>
-                      );
-                    },
-                  )}
+                <div className="mt-0.5 space-y-0.5">
+                  {group.items.map(({ href, label, icon: Icon }) => {
+                    const active =
+                      pathname === href ||
+                      (href !== "/home" && pathname.startsWith(`${href}/`));
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => mobile && setMobileOpen(false)}
+                        className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition ${active ? tone.active : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
+                      >
+                        <Icon
+                          size={16}
+                          className={`shrink-0 ${active ? "" : tone.text}`}
+                        />
+                        <span className="min-w-0 truncate text-[12px] font-semibold">
+                          {label}
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
           );
         })}
       </nav>
-      <div className="mx-4 mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/55 p-3">
+      <div className="mx-3 mb-3 rounded-xl border bg-[var(--bbos-nav-active)] p-2.5">
         <div className="flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-xl bg-white text-emerald-700">
+          <span className="grid size-7 place-items-center rounded-lg bg-white text-[var(--bbos-coffee-green)]">
             <Activity size={15} />
           </span>
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-emerald-700">
-              Operação hoje
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-bold text-[var(--bbos-nav-active-text)]">
+              Operação conectada
             </p>
-            <p className="mt-0.5 text-[11px] font-bold text-stone-800">
-              Sistema conectado
+            <p className="text-[10px] text-[var(--bbos-text-muted)]">
+              Dados disponíveis
             </p>
           </div>
-        </div>
-        <div className="mt-3 flex items-center gap-2 text-[10px] text-stone-500">
-          <span className="size-2 rounded-full bg-emerald-500" />
-          <span>Sessão ativa · dados disponíveis</span>
         </div>
       </div>
     </div>
@@ -511,7 +494,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       data-bbos-role={sessionUser?.role ?? ""}
       className="min-h-screen bg-[var(--surface-page)] text-[var(--bbos-text-primary)]"
     >
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r bg-white lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r bg-[var(--surface-sidebar)] lg:block">
         <Sidebar />
       </aside>
       {mobileOpen && (
@@ -521,14 +504,14 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative h-full w-72 bg-white shadow-xl">
+          <aside className="relative h-full w-72 bg-[var(--surface-sidebar)] shadow-xl">
             <Sidebar mobile />
           </aside>
         </div>
       )}
-      <div className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
-          <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="lg:pl-60">
+        <header className="sticky top-0 z-20 border-b bg-[color:var(--surface-header)]/95 pt-[env(safe-area-inset-top)] backdrop-blur">
+          <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-5 lg:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 aria-label="Abrir menu"
@@ -548,7 +531,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => setCommandOpen(true)}
-                className="hidden min-h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-[11px] font-semibold text-stone-500 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 md:flex"
+                className="hidden min-h-9 items-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 text-[11px] font-semibold text-[var(--bbos-text-secondary)] transition hover:bg-[var(--bbos-surface-subtle)] md:flex"
               >
                 <Search size={15} />
                 <span>Buscar ou agir no BBOS</span>
@@ -805,10 +788,10 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             </div>
           )}
         </header>
-        <main data-bbos-main className="p-4 sm:p-6 lg:p-8">
+        <main data-bbos-main className="p-3 sm:p-4 lg:p-5">
           {children}
         </main>
-        <footer className="border-t px-6 py-4 text-center text-[10px] text-[var(--bbos-text-muted)]">
+        <footer className="border-t px-5 py-3 text-center text-[10px] text-[var(--bbos-text-muted)]">
           {SYSTEM_CREATOR_CREDIT_PT}
         </footer>
       </div>
