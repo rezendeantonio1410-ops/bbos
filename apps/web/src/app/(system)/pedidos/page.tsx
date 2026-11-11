@@ -833,7 +833,7 @@ export default function OrdersPage() {
         </button>
       )}
 
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <Kpi label="Pedidos em aberto" value={String(open.length)} />
         <Kpi
           label="Valor em carteira"
