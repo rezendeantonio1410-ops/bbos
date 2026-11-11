@@ -2534,22 +2534,161 @@ export class BlingOutboxService {
 
   async retrySalesOrderInvoice(companyId: string, orderId: string) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT so.id,so.status,c."taxId" FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId" WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
+      `SELECT so.id,so.status,c."taxId",
+              f.id AS "fiscalId",f."externalId" AS "fiscalExternalId"
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id=so."customerId"
+         LEFT JOIN LATERAL (
+           SELECT id,"externalId"
+             FROM "FiscalDocument"
+            WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
+            ORDER BY "createdAt" DESC
+            LIMIT 1
+         ) f ON TRUE
+        WHERE so.id=$1 AND so."companyId"=$2
+        LIMIT 1`,
       orderId,
       companyId,
     );
     const row = rows[0];
     if (!row) throw new Error("Pedido não encontrado.");
+
+    // The operator may have corrected and authorized the existing NF-e directly
+    // in Bling. Reconcile that fiscal truth before resetting the outbox, otherwise
+    // BBOS can keep showing an old rejection or even attempt a duplicate issue.
+    if (row.fiscalId && row.fiscalExternalId) {
+      try {
+        const detail = await this.bling.request(
+          companyId,
+          `/nfe/${encodeURIComponent(row.fiscalExternalId)}`,
+          { method: "GET" },
+        );
+        const note = detail?.data ?? detail ?? {};
+        const remoteStatus = this.fiscalStatus(note?.situacao);
+        const protocol = String(
+          note?.protocolo ??
+            note?.protocoloAutorizacao ??
+            note?.numeroProtocolo ??
+            note?.protocoloUso ??
+            note?.protocoloNfe ??
+            "",
+        ).trim();
+        const accessKey = String(
+          note?.chaveAcesso ?? note?.chave ?? "",
+        ).replace(/\D/g, "");
+        const danfeUrl = String(
+          note?.linkDanfe ?? note?.linkPDF ?? note?.danfe ?? note?.pdf ?? "",
+        ).trim();
+        const xmlUrl = String(
+          note?.linkXml ?? note?.xml ?? note?.xmlUrl ?? "",
+        ).trim();
+        const statusText = String(
+          note?.situacao?.nome ??
+            note?.situacao?.descricao ??
+            note?.situacao ??
+            "",
+        ).toLowerCase();
+        const authorized =
+          remoteStatus === "AUTHORIZED" ||
+          (accessKey.length === 44 &&
+            (protocol ||
+              danfeUrl ||
+              xmlUrl ||
+              statusText.includes("autoriz") ||
+              statusText.includes("danfe")));
+
+        if (authorized) {
+          const number =
+            note?.numero == null ? null : String(note.numero).trim() || null;
+          const series =
+            note?.serie == null ? null : String(note.serie).trim() || null;
+          await this.database.$transaction(async (transaction) => {
+            await transaction.$executeRawUnsafe(
+              `UPDATE "FiscalDocument"
+                  SET status='AUTHORIZED',
+                      number=COALESCE($2,number),
+                      series=COALESCE($3,series),
+                      "accessKey"=COALESCE($4,"accessKey"),
+                      "payloadSnapshot"=COALESCE("payloadSnapshot",'{}'::jsonb) || $5::jsonb,
+                      "updatedAt"=NOW()
+                WHERE id=$1`,
+              row.fiscalId,
+              number,
+              series,
+              accessKey || null,
+              JSON.stringify({
+                blingNfe: note,
+                reconciledAt: new Date().toISOString(),
+                reconciledFromRetry: true,
+                sefazStatusCode: null,
+                sefazMessage: null,
+                authorizationLastError: null,
+              }),
+            );
+            await transaction.$executeRawUnsafe(
+              `UPDATE "SalesOrder"
+                  SET status='INVOICED',
+                      "invoicedAt"=COALESCE("invoicedAt",NOW()),
+                      "updatedAt"=NOW()
+                WHERE id=$1 AND status IN ('READY_TO_SHIP','INVOICED')`,
+              orderId,
+            );
+            await transaction.$executeRawUnsafe(
+              `UPDATE "IntegrationOutbox"
+                  SET status='SENT',"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW()
+                WHERE "companyId"=$1
+                  AND "aggregateId"=$2
+                  AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,
+              companyId,
+              orderId,
+            );
+          });
+          await ensureSalesOrderReceivable(this.database, orderId, number);
+          await this.customerLifecycle.record(
+            orderId,
+            "INVOICE_AUTHORIZED",
+            "Nota fiscal emitida",
+            "A nota fiscal do seu pedido foi autorizada e a expedição será preparada.",
+            "BLING",
+            `sales-order:invoice-authorized:${orderId}`,
+            {
+              fiscalId: row.fiscalId,
+              externalId: row.fiscalExternalId,
+              accessKey: accessKey || null,
+              number,
+              series,
+            },
+          );
+          return {
+            processed: true,
+            reconciled: true,
+            fiscalId: row.fiscalId,
+            externalId: row.fiscalExternalId,
+            fiscalStatus: "AUTHORIZED",
+            accessKey: accessKey || null,
+            number,
+            series,
+          };
+        }
+      } catch (error) {
+        if (!isBlingNotFound(error)) {
+          throw new Error(
+            `Não foi possível consultar a NF-e existente no Bling: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
+
     const document = String(row.taxId ?? "").replace(/\D/g, "");
-    if (!document)
-      throw new Error(
-        "Reprocessamento fiscal bloqueado: cliente sem CPF/CNPJ.",
+    // Foreign recipients legitimately have no Brazilian CPF/CNPJ. In that case,
+    // keep the existing Bling contact mapping and retry the fiscal document.
+    if (document) {
+      await this.database.$executeRawUnsafe(
+        `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
+        companyId,
+        document,
       );
-    await this.database.$executeRawUnsafe(
-      `DELETE FROM "IntegrationResourceMap" WHERE "companyId"=$1 AND provider='BLING' AND "resourceType"='CONTACT_DOCUMENT' AND "internalKey"=$2`,
-      companyId,
-      document,
-    );
+    }
     await this.database.$executeRawUnsafe(
       `UPDATE "IntegrationOutbox" SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW() WHERE "companyId"=$1 AND "aggregateId"=$2 AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'`,
       companyId,
