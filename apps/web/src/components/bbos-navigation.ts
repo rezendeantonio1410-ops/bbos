@@ -22,6 +22,7 @@ import {
   ShoppingBag,
   Smartphone,
   UsersRound,
+  Warehouse,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -236,6 +237,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["op", "torra", "batch", "empacotamento"],
       },
       {
+        href: "/estoque",
+        label: "Estoque",
+        description: "Café verde, torrado e produto acabado",
+        icon: Warehouse,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["saldo", "torrado", "granel", "produto acabado"],
+      },
+      {
         href: "/blends",
         label: "Blends",
         description: "Receitas e composição de lotes",
@@ -336,6 +345,26 @@ export function navigationForRole(role?: string | null) {
       items: group.items.filter((item) => item.roles.includes(resolved)),
     }))
     .filter((group) => group.items.length > 0);
+}
+
+const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
+  ADMIN: ["/home", "/pedidos", "/estoque", "/financeiro"],
+  EXECUTIVE: ["/home", "/pedidos", "/estoque", "/dashboard"],
+  INDUSTRIAL: ["/home", "/producao", "/estoque", "/dashboard-industrial"],
+  FINANCE: ["/home", "/pedidos", "/financeiro", "/notas-entrada"],
+  ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
+  SALES: ["/home", "/clientes", "/atendimento", "/pedidos"],
+  MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
+};
+
+export function mobileNavigationForRole(role?: string | null) {
+  if (!role || !KNOWN_ROLES.has(role as BbosRole)) return [];
+  const items = navigationForRole(role).flatMap((group) => group.items);
+  const priority = mobileRoutePriority[role as BbosRole] ?? [];
+  return priority.flatMap((href) => {
+    const item = items.find((candidate) => candidate.href === href);
+    return item ? [item] : [];
+  });
 }
 
 export const toneClasses = {

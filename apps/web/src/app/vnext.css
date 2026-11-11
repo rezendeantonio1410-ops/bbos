@@ -1,44 +1,52 @@
 .bbos-system-vnext {
-  --vnext-bg: #F5F6F2;
-  --vnext-bg-soft: #FAFAF7;
-  --vnext-surface: rgba(255,255,255,.94);
-  --vnext-surface-solid: #FFFFFF;
-  --vnext-border: #E4E8E2;
-  --vnext-border-strong: #D6DDD7;
+  --vnext-bg: #f5f6f2;
+  --vnext-bg-soft: #fafaf7;
+  --vnext-surface: rgba(255, 255, 255, 0.94);
+  --vnext-surface-solid: #ffffff;
+  --vnext-border: #e4e8e2;
+  --vnext-border-strong: #d6ddd7;
   --vnext-text: #111715;
-  --vnext-text-2: #56615D;
-  --vnext-text-3: #7C8782;
+  --vnext-text-2: #56615d;
+  --vnext-text-3: #7c8782;
   --vnext-green: #087568;
-  --vnext-green-soft: #EAF6F2;
-  --vnext-green-mid: #B8DDD4;
-  --vnext-violet: #6D4FA3;
-  --vnext-violet-soft: #F4F0FB;
-  --vnext-blue: #3E73A8;
-  --vnext-blue-soft: #EEF5FB;
-  --vnext-amber: #B87518;
-  --vnext-amber-soft: #FFF6E6;
-  --vnext-red: #B94343;
-  --vnext-red-soft: #FFF0F0;
-  --vnext-shadow-card: 0 10px 30px rgba(23, 40, 34, .045);
-  --vnext-shadow-float: 0 18px 50px rgba(18, 34, 29, .09);
+  --vnext-green-soft: #eaf6f2;
+  --vnext-green-mid: #b8ddd4;
+  --vnext-violet: #6d4fa3;
+  --vnext-violet-soft: #f4f0fb;
+  --vnext-blue: #3e73a8;
+  --vnext-blue-soft: #eef5fb;
+  --vnext-amber: #b87518;
+  --vnext-amber-soft: #fff6e6;
+  --vnext-red: #b94343;
+  --vnext-red-soft: #fff0f0;
+  --vnext-shadow-card: 0 10px 30px rgba(23, 40, 34, 0.045);
+  --vnext-shadow-float: 0 18px 50px rgba(18, 34, 29, 0.09);
   --vnext-radius-card: 18px;
   --vnext-radius-control: 12px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 7% 2%, rgba(8,117,104,.035), transparent 24rem),
-    radial-gradient(circle at 95% 8%, rgba(109,79,163,.028), transparent 22rem),
+    radial-gradient(
+      circle at 7% 2%,
+      rgba(8, 117, 104, 0.035),
+      transparent 24rem
+    ),
+    radial-gradient(
+      circle at 95% 8%,
+      rgba(109, 79, 163, 0.028),
+      transparent 22rem
+    ),
     var(--vnext-bg);
   color: var(--vnext-text);
 }
 
 .bbos-system-vnext > div > aside {
-  background: rgba(250,250,247,.96) !important;
+  background: rgba(250, 250, 247, 0.96) !important;
   border-color: var(--vnext-border) !important;
-  box-shadow: inset -1px 0 0 rgba(255,255,255,.7);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7);
 }
 
 .bbos-system-vnext > div > div > header {
-  background: rgba(255,255,255,.84) !important;
+  background: rgba(255, 255, 255, 0.84) !important;
   border-color: var(--vnext-border) !important;
   backdrop-filter: blur(18px) saturate(1.1);
   -webkit-backdrop-filter: blur(18px) saturate(1.1);
@@ -50,7 +58,7 @@
 
 .bbos-system-vnext main > div,
 .bbos-system-vnext main > section {
-  animation: vnext-enter .22s ease-out both;
+  animation: vnext-enter 0.22s ease-out both;
 }
 
 .bbos-system-vnext [data-ui-card],
@@ -67,7 +75,7 @@
 
 .bbos-system-vnext :is(input, select, textarea) {
   border-color: var(--vnext-border) !important;
-  background-color: rgba(255,255,255,.96);
+  background-color: rgba(255, 255, 255, 0.96);
   color: var(--vnext-text);
   border-radius: var(--vnext-radius-control);
 }
@@ -78,7 +86,7 @@
 
 .bbos-system-vnext :is(input, select, textarea):focus {
   border-color: var(--vnext-green) !important;
-  box-shadow: 0 0 0 3px rgba(8,117,104,.09);
+  box-shadow: 0 0 0 3px rgba(8, 117, 104, 0.09);
 }
 
 .bbos-system-vnext button,
@@ -88,11 +96,11 @@
 
 .bbos-system-vnext button:not(:disabled):active,
 .bbos-system-vnext a:active {
-  transform: translateY(.5px);
+  transform: translateY(0.5px);
 }
 
 .bbos-system-vnext .bg-white {
-  background-color: rgba(255,255,255,.96);
+  background-color: rgba(255, 255, 255, 0.96);
 }
 
 .bbos-system-vnext .bg-stone-50,
@@ -128,7 +136,7 @@
 
 .bbos-system-vnext .bg-forest-900,
 .bbos-system-vnext .bg-forest-800 {
-  background-color: #10211D !important;
+  background-color: #10211d !important;
 }
 
 .bbos-system-vnext .bg-emerald-50,
@@ -162,7 +170,7 @@
 }
 
 .bbos-system-vnext tbody tr:hover {
-  background: rgba(8,117,104,.025);
+  background: rgba(8, 117, 104, 0.025);
 }
 
 .bbos-system-vnext .fixed.bg-white,
@@ -176,16 +184,106 @@
 }
 
 .bbos-system-vnext ::selection {
-  background: rgba(8,117,104,.18);
+  background: rgba(8, 117, 104, 0.18);
   color: var(--vnext-text);
 }
 
 @keyframes vnext-enter {
-  from { opacity: 0; transform: translateY(2px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bbos-system-vnext main > div,
-  .bbos-system-vnext main > section { animation: none; }
+  .bbos-system-vnext main > section {
+    animation: none;
+  }
+}
+
+/* Responsive operating shell: the phone is action-first and the portrait
+   tablet keeps useful density without inheriting the desktop sidebar. */
+@media (max-width: 1023px) {
+  .bbos-system-vnext {
+    min-height: 100dvh;
+    overflow-x: clip;
+  }
+
+  .bbos-system-vnext [data-bbos-main] {
+    min-width: 0;
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+
+  .bbos-system-vnext [data-bbos-main] > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .bbos-system-vnext [data-bbos-main] :is(.overflow-x-auto, [role="region"]) {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .bbos-system-vnext [data-bbos-mobile-dock] {
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+  }
+
+  .bbos-system-vnext ~ .bbos-ai-fab {
+    right: 0.75rem;
+    bottom: calc(5.35rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 639px) {
+  .bbos-system-vnext [data-bbos-header] > div:first-child {
+    height: 3.25rem;
+  }
+
+  .bbos-system-vnext [data-bbos-main] {
+    padding-inline: 0.625rem;
+    padding-top: 0.625rem;
+  }
+
+  .bbos-system-vnext [data-bbos-main] table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .bbos-system-vnext [data-bbos-main] :is(input, select, textarea) {
+    max-width: 100%;
+  }
+
+  .bbos-system-vnext footer {
+    display: none;
+  }
+
+  .bbos-system-vnext ~ .bbos-ai-fab {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    padding: 0;
+  }
+
+  .bbos-system-vnext ~ .bbos-ai-fab span {
+    display: none;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .bbos-system-vnext [data-bbos-main] {
+    padding-inline: 1rem;
+  }
+
+  .bbos-system-vnext [data-bbos-mobile-dock] {
+    width: min(46rem, calc(100% - 2rem));
+  }
 }

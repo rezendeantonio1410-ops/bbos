@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 import { Logo } from "./logo";
 import { UserAvatar } from "./user-avatar";
 import {
+  mobileNavigationForRole,
   navigationForRole,
   toneClasses,
   type BbosNavGroup,
@@ -66,13 +67,20 @@ const corporateTitleByRole: Record<string, string> = {
   MARKETPLACE_OPERATOR: "Operador de marketplace",
 };
 
-const salesTabletShortcuts = [
-  { href: "/home", shortLabel: "Início" },
-  { href: "/clientes", shortLabel: "Clientes" },
-  { href: "/atendimento", shortLabel: "Visitas" },
-  { href: "/pedidos", shortLabel: "Pedidos" },
-  { href: "/vendas", shortLabel: "Vendas" },
-] as const;
+const mobileShortLabelByHref: Record<string, string> = {
+  "/home": "Início",
+  "/dashboard": "Executivo",
+  "/dashboard-industrial": "Industrial",
+  "/clientes": "Clientes",
+  "/atendimento": "Visitas",
+  "/pedidos": "Pedidos",
+  "/estoque": "Estoque",
+  "/producao": "Produção",
+  "/financeiro": "Financeiro",
+  "/notas-entrada": "Notas",
+  "/custos": "Custos",
+  "/commerce/marketplaces": "Marketplaces",
+};
 
 const salesRestrictedPrefixes = [
   "/dashboard",
@@ -203,14 +211,14 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     () => navigationForRole(sessionUser?.role),
     [sessionUser?.role],
   );
-  const salesQuickLinks = useMemo(() => {
-    if (sessionUser?.role !== "SALES") return [];
-    const items = navGroups.flatMap((group) => group.items);
-    return salesTabletShortcuts.flatMap((shortcut) => {
-      const item = items.find((candidate) => candidate.href === shortcut.href);
-      return item ? [{ ...item, shortLabel: shortcut.shortLabel }] : [];
-    });
-  }, [navGroups, sessionUser?.role]);
+  const mobileQuickLinks = useMemo(
+    () =>
+      mobileNavigationForRole(sessionUser?.role).map((item) => ({
+        ...item,
+        shortLabel: mobileShortLabelByHref[item.href] ?? item.label,
+      })),
+    [sessionUser?.role],
+  );
   const pageLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -504,14 +512,17 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative h-full w-72 bg-[var(--surface-sidebar)] shadow-xl">
+          <aside className="relative h-full w-[min(88vw,320px)] bg-[var(--surface-sidebar)] shadow-xl">
             <Sidebar mobile />
           </aside>
         </div>
       )}
       <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 border-b bg-[color:var(--surface-header)]/95 pt-[env(safe-area-inset-top)] backdrop-blur">
-          <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-5 lg:px-6">
+        <header
+          data-bbos-header
+          className="sticky top-0 z-20 border-b bg-[color:var(--surface-header)]/95 pt-[env(safe-area-inset-top)] backdrop-blur"
+        >
+          <div className="flex h-14 items-center justify-between gap-2 px-3 sm:gap-4 sm:px-5 lg:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 aria-label="Abrir menu"
@@ -520,9 +531,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
               >
                 <Menu size={18} />
               </button>
-              <div>
-                <p className="text-sm font-semibold">{currentLabel}</p>
-                <p className="text-[10px] text-[var(--bbos-text-muted)]">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{currentLabel}</p>
+                <p className="hidden text-[10px] text-[var(--bbos-text-muted)] sm:block">
                   Bispo Business Operating System
                 </p>
               </div>
@@ -578,7 +589,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                       className="fixed inset-0 z-30 cursor-default"
                       onClick={() => setNotificationOpen(false)}
                     />
-                    <div className="absolute right-0 z-40 mt-2 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+                    <div className="fixed inset-x-2 top-[calc(3.75rem_+_env(safe-area-inset-top))] z-40 max-h-[min(72vh,560px)] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[min(360px,calc(100vw-2rem))]">
                       <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
                         <div>
                           <p className="text-sm font-bold">Notificações</p>
@@ -598,7 +609,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                           </button>
                         )}
                       </div>
-                      <div className="max-h-[420px] overflow-y-auto">
+                      <div className="max-h-[calc(min(72vh,560px)_-_64px)] overflow-y-auto">
                         {!notificationsAvailable ? (
                           <div className="p-5 text-xs text-red-700">
                             Não foi possível confirmar as notificações agora.
@@ -788,20 +799,23 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             </div>
           )}
         </header>
-        <main data-bbos-main className="p-3 sm:p-4 lg:p-5">
+        <main data-bbos-main className="p-2.5 sm:p-4 lg:p-5">
           {children}
         </main>
         <footer className="border-t px-5 py-3 text-center text-[10px] text-[var(--bbos-text-muted)]">
           {SYSTEM_CREATOR_CREDIT_PT}
         </footer>
       </div>
-      {salesQuickLinks.length > 0 && (
+      {mobileQuickLinks.length > 0 && (
         <nav
-          data-bbos-sales-tablet-nav
-          aria-label="Atalhos do vendedor"
-          className="fixed inset-x-2 bottom-[calc(.5rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-5 overflow-hidden rounded-2xl border border-stone-200 bg-white/95 p-1 shadow-[0_12px_40px_rgba(15,23,42,.18)] backdrop-blur lg:hidden"
+          data-bbos-mobile-dock
+          aria-label="Atalhos principais"
+          className="fixed bottom-[calc(.45rem_+_env(safe-area-inset-bottom))] left-1/2 z-40 grid w-[calc(100%_-_1rem)] max-w-3xl -translate-x-1/2 grid-cols-5 overflow-hidden rounded-[20px] border border-stone-200 bg-white/95 p-1 shadow-[0_12px_40px_rgba(15,23,42,.18)] backdrop-blur lg:hidden"
+          style={{
+            gridTemplateColumns: `repeat(${mobileQuickLinks.length + 1}, minmax(0, 1fr))`,
+          }}
         >
-          {salesQuickLinks.map((item) => {
+          {mobileQuickLinks.map((item) => {
             const Icon = item.icon;
             const active =
               pathname === item.href ||
@@ -811,7 +825,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-bold transition ${
+                className={`flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-bold transition sm:min-h-16 sm:text-[11px] ${
                   active
                     ? "bg-emerald-50 text-emerald-800"
                     : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
@@ -822,6 +836,15 @@ export function AppShellV2({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-bold text-stone-500 transition hover:bg-stone-50 hover:text-stone-900 sm:min-h-16 sm:text-[11px]"
+            aria-label="Abrir todas as áreas"
+          >
+            <Menu size={20} />
+            <span>Menu</span>
+          </button>
         </nav>
       )}
       <CommandCenter
@@ -896,11 +919,11 @@ function CommandCenter({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[80] flex justify-center bg-black/30 px-4 pt-[10vh] backdrop-blur-[2px]"
+      className="fixed inset-0 z-[80] flex justify-center bg-black/30 px-2 pt-[max(.5rem,env(safe-area-inset-top))] backdrop-blur-[2px] sm:px-4 sm:pt-[10vh]"
       onMouseDown={onClose}
     >
       <div
-        className="h-fit w-full max-w-2xl overflow-hidden rounded-[24px] border border-stone-200 bg-white shadow-2xl"
+        className="h-fit max-h-[calc(100dvh_-_1rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-2xl overflow-hidden rounded-[20px] border border-stone-200 bg-white shadow-2xl sm:rounded-[24px]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4">
