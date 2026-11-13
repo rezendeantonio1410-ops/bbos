@@ -143,6 +143,8 @@ test("o login sempre oferece instalação e o service worker habilita PWA no And
   assert.match(login, /Instalar o BBOS neste tablet/);
   assert.match(login, /Instalar aplicativo/);
   assert.match(login, /Samsung Internet/);
+  assert.match(login, /requestedReturnTo !== "\/login"/);
+  assert.match(login, /window\.location\.replace\(destination\)/);
   assert.match(serviceWorker, /addEventListener\("fetch"/);
 });
 

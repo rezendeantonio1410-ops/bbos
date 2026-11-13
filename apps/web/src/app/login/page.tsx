@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   CheckCircle2,
@@ -38,7 +37,6 @@ async function fetchWithTimeout(
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -137,7 +135,9 @@ export default function LoginPage() {
       const safeReturnTo =
         requestedReturnTo &&
         requestedReturnTo.startsWith("/") &&
-        !requestedReturnTo.startsWith("//")
+        !requestedReturnTo.startsWith("//") &&
+        requestedReturnTo !== "/login" &&
+        !requestedReturnTo.startsWith("/login?")
           ? requestedReturnTo
           : null;
       const destination = isPartner
@@ -147,7 +147,11 @@ export default function LoginPage() {
         : safeReturnTo && !safeReturnTo.startsWith("/parceiro")
           ? safeReturnTo
           : "/home";
-      router.replace(destination);
+      // A full navigation is intentional here. Samsung Internet and installed
+      // Android PWAs can occasionally keep the login client tree mounted after
+      // a successful cookie-based authentication. Reloading the destination
+      // makes the browser apply the new session before rendering the BBOS.
+      window.location.replace(destination);
     } catch (cause) {
       setStatus("");
       if (cause instanceof DOMException && cause.name === "AbortError") {
