@@ -64,10 +64,10 @@ export default function MobileSessionPage() {
   const complete = data?.progress?.overall?.state === "COMPLETED";
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-20">
+    <main className="mx-auto min-h-screen max-w-2xl px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-16 sm:px-4 sm:pt-20">
       <p className="text-xs font-black uppercase tracking-[.18em] text-fuchsia-600">Cupping mobile</p>
-      <h1 className="mt-2 text-3xl font-black">{data?.session?.code ?? "Carregando sessão…"}</h1>
-      <p className="mt-2 text-sm text-slate-600">{data ? `${data.participant.name} · ${data.session.protocol}` : "Sua prova privada e rastreável."}</p>
+      <h1 className="mt-1 text-2xl font-black sm:mt-2 sm:text-3xl">{data?.session?.code ?? "Carregando sessão…"}</h1>
+      <p className="mt-1 text-xs text-slate-600 sm:mt-2 sm:text-sm">{data ? `${data.participant.name} · ${data.session.protocol}` : "Sua prova privada e rastreável."}</p>
       {complete && (
         <div className="mt-7 rounded-[2rem] border border-emerald-200 bg-emerald-50 p-6 text-center">
           <Check className="mx-auto text-emerald-700" size={34} />
@@ -75,7 +75,7 @@ export default function MobileSessionPage() {
           <p className="mt-2 text-sm text-emerald-800">Todas as amostras atribuídas foram finalizadas.</p>
         </div>
       )}
-      <div className="mt-7 space-y-3">
+      <div className="mt-4 space-y-2 sm:mt-7 sm:space-y-3">
         {data?.session?.samples?.map((item: any, index: number) => {
           const progress: any = progressBySample.get(item.sample.id);
           const state = progress?.state ?? "NOT_STARTED";
@@ -83,7 +83,7 @@ export default function MobileSessionPage() {
             ? `/cupping/mobile/session/${sessionId}/sample/${item.sample.id}/result`
             : `/cupping/mobile/session/${sessionId}/sample/${item.sample.id}/aroma`;
           return (
-            <Link key={item.sample.id} href={target} className="flex min-h-24 items-center justify-between rounded-[2rem] bg-white/80 p-5 shadow-md">
+            <Link key={item.sample.id} href={target} className="flex min-h-20 items-center justify-between rounded-2xl bg-white/80 p-4 shadow-md sm:min-h-24 sm:rounded-[2rem] sm:p-5">
               <span>
                 <small className="font-bold text-fuchsia-600">Amostra {String(index + 1).padStart(2, "0")}</small>
                 <strong className="mt-1 block text-lg">{item.sample.sampleCode}</strong>

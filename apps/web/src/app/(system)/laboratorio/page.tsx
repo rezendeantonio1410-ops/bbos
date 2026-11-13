@@ -185,24 +185,37 @@ function SampleDrawer({
     }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-forest-950/30 p-3">
-      <aside className="ml-auto flex h-full w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-xl">
-        <header className="flex items-start justify-between border-b p-6">
-          <div>
+    <div className="fixed inset-0 z-50 bg-forest-950/30 sm:p-3">
+      <aside className="ml-auto flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white shadow-xl sm:h-full sm:rounded-3xl">
+        <header className="flex shrink-0 items-start justify-between border-b px-4 pb-3 pt-[max(.75rem,env(safe-area-inset-top))] sm:p-6">
+          <div className="min-w-0 pr-3">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
               Amostra {sample.sampleNumber}
             </p>
-            <h2 className="mt-2 text-2xl font-bold">{sample.supplier.name}</h2>
-            <p className="mt-1 text-sm text-stone-500">
+            <h2 className="mt-1 truncate text-lg font-bold sm:mt-2 sm:text-2xl">{sample.supplier.name}</h2>
+            <p className="mt-0.5 truncate text-xs text-stone-500 sm:mt-1 sm:text-sm">
               {sample.receipt.receiptNumber} · lote {sample.lot.code}
             </p>
           </div>
-          <button aria-label="Fechar" onClick={close}>
+          <button aria-label="Fechar" onClick={close} className="grid size-11 shrink-0 place-items-center rounded-full border border-stone-200 bg-white">
             <X />
           </button>
         </header>
-        <main className="flex-1 overflow-y-auto p-6">
-          <Card className="p-4">
+        <main className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-4 py-3 sm:p-6">
+          <details className="group rounded-2xl border border-stone-200 bg-stone-50 sm:hidden">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-bold text-stone-700">
+              <span>Contexto do lote · {sample.receipt.netWeightKg.toLocaleString("pt-BR")} kg</span>
+              <span className="text-forest-700 group-open:hidden">Ver</span>
+              <span className="hidden text-forest-700 group-open:inline">Fechar</span>
+            </summary>
+            <div className="grid grid-cols-2 gap-2 border-t border-stone-200 px-3 py-3 text-xs">
+              <span>Compra <b className="block">{sample.contract?.purchaseNumber ?? "—"}</b></span>
+              <span>Café <b className="block">{sample.origin.species} · {sample.origin.variety ?? "—"}</b></span>
+              <span>Origem <b className="block">{sample.origin.municipality ?? "—"}/{sample.origin.state ?? "—"}</b></span>
+              <span>Safra / processo <b className="block">{sample.origin.harvest ?? "—"} · {sample.origin.process ?? "—"}</b></span>
+            </div>
+          </details>
+          <Card className="hidden p-4 sm:block">
             <p className="text-xs font-bold uppercase tracking-wide text-stone-400">
               Contexto contratado
             </p>
@@ -241,7 +254,21 @@ function SampleDrawer({
               </span>
             </div>
           </Card>
-          <Card className="mt-4 p-4">
+          <details className={`group mt-2 rounded-2xl border px-3 sm:hidden ${sample.comparison.withinContract ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+            <summary className={`flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-bold ${sample.comparison.withinContract ? "text-emerald-800" : "text-amber-900"}`}>
+              <span>{sample.comparison.withinContract ? "✓ Dentro do padrão contratado" : `${sample.comparison.issues.length} divergência(s) para revisar`}</span>
+              <span className="group-open:hidden">Detalhes</span>
+              <span className="hidden group-open:inline">Fechar</span>
+            </summary>
+            <div className="space-y-1 border-t border-current/10 py-3 text-xs text-stone-700">
+              {sample.comparison.moisture && <p>Umidade: {sample.comparison.moisture.measured}% · máximo {sample.comparison.moisture.contracted}%</p>}
+              {sample.comparison.defects && <p>Defeitos: {sample.comparison.defects.measured} · máximo {sample.comparison.defects.contracted}</p>}
+              {sample.comparison.score && <p>Pontuação: {sample.comparison.score.measured} · mínimo {sample.comparison.score.contracted}</p>}
+              {sample.comparison.screen && <p>Peneira: {sample.comparison.screen.measured} · contratada {sample.comparison.screen.contracted}</p>}
+              {sample.comparison.issues.map((issue) => <p key={issue}>• {issue}</p>)}
+            </div>
+          </details>
+          <Card className="mt-4 hidden p-4 sm:block">
             <p className="text-xs font-bold uppercase tracking-wide text-stone-400">
               Comparação automática
             </p>
@@ -290,25 +317,27 @@ function SampleDrawer({
               )}
             </div>
           </Card>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-3 sm:mt-4 sm:gap-4">
             <label className="text-xs font-semibold">
-              Umidade medida (%)
+              <span className="sm:hidden">Umidade (%)</span><span className="hidden sm:inline">Umidade medida (%)</span>
               <input
                 type="number"
                 step=".1"
                 value={moisturePercent}
                 onChange={(e) => setMoisturePercent(e.target.value)}
-                className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
+                inputMode="decimal"
+                className="mt-1 min-h-11 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:py-3 sm:text-sm"
               />
             </label>
             <label className="text-xs font-semibold">
-              Defeitos encontrados
+              <span className="sm:hidden">Defeitos</span><span className="hidden sm:inline">Defeitos encontrados</span>
               <input
                 type="number"
                 min="0"
                 value={defects}
                 onChange={(e) => setDefects(e.target.value)}
-                className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
+                inputMode="numeric"
+                className="mt-1 min-h-11 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:py-3 sm:text-sm"
               />
             </label>
             <label className="text-xs font-semibold">
@@ -316,7 +345,7 @@ function SampleDrawer({
               <input
                 value={screen}
                 onChange={(e) => setScreen(e.target.value)}
-                className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
+                className="mt-1 min-h-11 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:py-3 sm:text-sm"
               />
             </label>
             <label className="text-xs font-semibold">
@@ -326,17 +355,18 @@ function SampleDrawer({
                 step=".1"
                 value={score}
                 onChange={(e) => setScore(e.target.value)}
-                className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
+                inputMode="decimal"
+                className="mt-1 min-h-11 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:py-3 sm:text-sm"
               />
             </label>
-            <label className="text-xs font-semibold sm:col-span-2">
+            <label className="col-span-2 text-xs font-semibold">
               Decisão de qualidade
               <select
                 value={qualityStatus}
                 onChange={(e) =>
                   setQualityStatus(labDecisionForForm(e.target.value))
                 }
-                className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
+                className="mt-1 min-h-11 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:py-3 sm:text-sm"
               >
                 <option value="APPROVED">Aprovado</option>
                 <option value="APPROVED_WITH_RESTRICTION">
@@ -346,9 +376,9 @@ function SampleDrawer({
                 <option value="REJECTED">Reprovado</option>
               </select>
             </label>
-            <label className="text-xs font-semibold sm:col-span-2">
+            <label className="col-span-2 text-xs font-semibold">
               Indicação de uso na Bispo · não restritiva
-              <select value={recommendedLine} onChange={(e) => setRecommendedLine(e.target.value)} className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm">
+              <select value={recommendedLine} onChange={(e) => setRecommendedLine(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:py-3 sm:text-sm">
                 <option value="">Sem indicação definida</option>
                 <option value="GOURMET">Gourmet</option>
                 <option value="CLASSICOS">Clássicos</option>
@@ -356,16 +386,16 @@ function SampleDrawer({
                 <option value="RAROS">Raros</option>
               </select>
             </label>
-            <label className="text-xs font-semibold sm:col-span-2">
+            <label className="col-span-2 text-xs font-semibold">
               Justificativa da indicação · opcional
-              <textarea value={recommendedLineNotes} onChange={(e) => setRecommendedLineNotes(e.target.value)} className="mt-1 min-h-16 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm" placeholder="Ex.: perfil doce, chocolate, baixa acidez e boa consistência." />
+              <textarea value={recommendedLineNotes} onChange={(e) => setRecommendedLineNotes(e.target.value)} className="mt-1 min-h-14 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:min-h-16 sm:py-3 sm:text-sm" placeholder="Ex.: perfil doce, chocolate e baixa acidez." />
             </label>
-            <label className="text-xs font-semibold sm:col-span-2">
+            <label className="col-span-2 text-xs font-semibold">
               Observações técnicas
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="mt-1 min-h-24 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
+                className="mt-1 min-h-14 w-full rounded-xl border bg-stone-50 px-3 py-2 text-base sm:min-h-24 sm:py-3 sm:text-sm"
               />
             </label>
           </div>
@@ -375,14 +405,14 @@ function SampleDrawer({
             </p>
           )}
         </main>
-        <footer className="flex justify-end gap-3 border-t p-4">
+        <footer className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-2 border-t bg-white px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3 sm:flex sm:justify-end sm:gap-3 sm:p-4">
           <Button
             onClick={close}
-            className="border border-stone-200 bg-white text-stone-700"
+            className="min-h-12 border border-stone-200 bg-white px-3 text-stone-700"
           >
             Cancelar
           </Button>
-          <Button disabled={busy} onClick={submit}>
+          <Button disabled={busy} onClick={submit} className="min-h-12 justify-center px-3 text-sm">
             {busy ? "Salvando..." : qualityStatus === "APPROVED" ? "Aprovar e liberar lote" : "Concluir análise"}
           </Button>
         </footer>
