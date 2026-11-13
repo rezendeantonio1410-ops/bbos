@@ -148,6 +148,19 @@ test("o login sempre oferece instalação e o service worker habilita PWA no And
   assert.match(serviceWorker, /addEventListener\("fetch"/);
 });
 
+test("pedidos entregues não permanecem como ocorrência urgente de transporte", () => {
+  const orders = readFileSync(
+    join(__dirname, "../app/(system)/pedidos/page.tsx"),
+    "utf8",
+  );
+
+  assert.match(orders, /item\.shipment\?\.status === "EXCEPTION"/);
+  assert.match(
+    orders,
+    /!\["DELIVERED", "CANCELLED"\]\.includes\(item\.status\)/,
+  );
+});
+
 test("management domain opens the BBOS login instead of the storefront", () => {
   assert.equal(
     resolveDomainRedirect({
