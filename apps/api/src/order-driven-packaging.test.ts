@@ -135,3 +135,27 @@ test("packaging consumes the reserved WIP allocation for the same order item", (
   assert.match(migration, /"reservedKg"=GREATEST\(0,"reservedKg"-take_kg\)/);
   assert.match(migration, /Reserva de WIP torrado insuficiente/);
 });
+
+test("legacy finished stock is reconciled into traceable lots before shipment", () => {
+  const migration = source(
+    "packages/database/prisma/migrations/20261113214500_reconcile_legacy_finished_goods_lots/migration.sql",
+  );
+  assert.match(migration, /"quantityOnHand" \+ NEW\."packageQuantity"/);
+  assert.match(migration, /SUM\(lot\."quantityOnHand"\)/);
+  assert.match(
+    migration,
+    /GREATEST\([\s\S]*aggregate_units[\s\S]*tracked_units/,
+  );
+  assert.match(migration, /status\s*\)\s*VALUES[\s\S]*'LEGACY'/);
+  assert.match(migration, /BEFORE INSERT ON "FinishedGoodsMovement"/);
+});
+
+test("shipment converts a traceability database failure into an operational message", () => {
+  const orders = source("apps/api/src/sales-orders.service.ts");
+  assert.match(orders, /isFinishedGoodsLotCoverageError/);
+  assert.match(orders, /Lotes PA insuficientes\|Lote rastreável insuficiente/);
+  assert.match(
+    orders,
+    /O estoque total existe, mas os lotes rastreáveis não cobrem toda a retirada/,
+  );
+});

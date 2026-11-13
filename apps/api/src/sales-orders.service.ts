@@ -83,6 +83,13 @@ type RoastedWipReservationRow = {
   stockLineName: string;
 };
 
+function isFinishedGoodsLotCoverageError(error: unknown) {
+  return (
+    error instanceof Error &&
+    /Lotes PA insuficientes|Lote rastreável insuficiente/i.test(error.message)
+  );
+}
+
 type SalesOrderPaymentSummary = {
   salesOrderId: string;
   status: string;
@@ -2171,10 +2178,19 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (current.status !== SalesOrderStatus.SHIPPED) {
-      await this.ship(companyId, id, {
-        allowMissingCarrierLabel: true,
-        skipCustomerNotification: true,
-      });
+      try {
+        await this.ship(companyId, id, {
+          allowMissingCarrierLabel: true,
+          skipCustomerNotification: true,
+        });
+      } catch (error) {
+        if (isFinishedGoodsLotCoverageError(error)) {
+          throw new BadRequestException(
+            "O estoque total existe, mas os lotes rastreáveis não cobrem toda a retirada. Revise os lotes do produto e tente novamente.",
+          );
+        }
+        throw error;
+      }
     }
 
     const deliveredAt = new Date();
