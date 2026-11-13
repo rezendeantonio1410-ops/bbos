@@ -24,6 +24,7 @@ import { AuthService } from "./auth.service";
 import { assertCompany, requireSession } from "./auth-context";
 import { calculateWeightVariance } from "./receipts-weight";
 import { compareQuality } from "./lab-quality";
+import { isFinalLabDecision } from "./lab-analysis-decision";
 
 type ConfirmReceiptBody = {
   companyId: string;
@@ -115,8 +116,10 @@ export class ReceiptsController {
     @Req() req: Request,
   ) {
     const actor = await requireSession(req, this.auth);
-    if (!Object.values(GreenCoffeeQualityStatus).includes(body.qualityStatus))
-      throw new BadRequestException("Escolha uma decisão de qualidade válida.");
+    if (!isFinalLabDecision(body.qualityStatus))
+      throw new BadRequestException(
+        "Conclua a análise escolhendo Aprovar, Aprovar com ressalva, Bloquear ou Reprovar.",
+      );
     if (body.qualityStatus === GreenCoffeeQualityStatus.APPROVED_WITH_RESTRICTION && !body.notes?.trim())
       throw new BadRequestException("Informe a ressalva da aprovação.");
     return this.database.$transaction(async (transaction) => {
@@ -680,6 +683,10 @@ export class ReceiptsController {
     @Req() req: Request,
   ) {
     const actor = await requireSession(req, this.auth);
+    if (!isFinalLabDecision(body.qualityStatus))
+      throw new BadRequestException(
+        "Conclua a análise escolhendo Aprovar, Aprovar com ressalva, Bloquear ou Reprovar.",
+      );
     body.responsibleUserId = actor.id;
     body.responsibleName = actor.name;
     return this.database.$transaction(async (transaction) => {
