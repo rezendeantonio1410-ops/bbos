@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, Coffee, FlaskConical, GraduationCap, Layers, Plus, X } from "lucide-react";
 import { Badge, Button, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { labDecisionForForm } from "@/lib/lab-decision";
 
 type Sample = {
   id: string;
@@ -137,8 +138,8 @@ function SampleDrawer({
   close: () => void;
   reload: () => void;
 }) {
-  const [qualityStatus, setQualityStatus] = useState(
-    sample.receipt.qualityStatus,
+  const [qualityStatus, setQualityStatus] = useState(() =>
+    labDecisionForForm(sample.receipt.qualityStatus),
   );
   const [moisturePercent, setMoisturePercent] = useState(
     sample.measured.moisturePercent?.toString() ?? "",
@@ -332,13 +333,16 @@ function SampleDrawer({
               Decisão de qualidade
               <select
                 value={qualityStatus}
-                onChange={(e) => setQualityStatus(e.target.value)}
+                onChange={(e) =>
+                  setQualityStatus(labDecisionForForm(e.target.value))
+                }
                 className="mt-1 w-full rounded-xl border bg-stone-50 px-3 py-3 text-sm"
               >
                 <option value="APPROVED">Aprovado</option>
                 <option value="APPROVED_WITH_RESTRICTION">
                   Aprovado com ressalva
                 </option>
+                <option value="BLOCKED">Bloqueado</option>
                 <option value="REJECTED">Reprovado</option>
               </select>
             </label>
