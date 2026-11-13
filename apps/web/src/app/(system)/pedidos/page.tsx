@@ -536,6 +536,10 @@ const filters: Array<[string, string]> = [
 
 const overdueTerminalStatuses = new Set(["SHIPPED", "DELIVERED", "CANCELLED"]);
 
+const hasOpenDeliveryException = (order: Order) =>
+  order.shipment?.status === "EXCEPTION" &&
+  !overdueTerminalStatuses.has(order.status);
+
 const isOverdueOrder = (order: Order, now = Date.now()) => {
   if (
     !order.expectedDeliveryDate ||
@@ -724,11 +728,7 @@ export default function OrdersPage() {
   );
   const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
   const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
-  const deliveryIssues = orders.filter(
-    (item) =>
-      item.shipment?.status === "EXCEPTION" &&
-      !["DELIVERED", "CANCELLED"].includes(item.status),
-  );
+  const deliveryIssues = orders.filter(hasOpenDeliveryException);
   const overdueOrders = orders.filter((item) => isOverdueOrder(item));
   const firstDeliveryIssue = deliveryIssues[0];
   const avgTicket = commercialOrders.length
@@ -911,8 +911,7 @@ export default function OrdersPage() {
             );
             const compactShipmentCancelled =
               order.shipment?.status === "CANCELLED";
-            const compactShipmentException =
-              order.shipment?.status === "EXCEPTION";
+            const compactShipmentException = hasOpenDeliveryException(order);
             const paymentDate = formatPaymentDate(order.payment?.paidAt);
             const paymentConfirmed =
               order.payment?.status === "PAID" && Boolean(paymentDate);
@@ -3534,7 +3533,7 @@ function OrderDrawer({
     order.shipment
       ? {
           ...order.shipment,
-          hasUnresolvedDeliveryException: order.shipment.status === "EXCEPTION",
+          hasUnresolvedDeliveryException: hasOpenDeliveryException(order),
         }
       : null,
   );
@@ -3557,6 +3556,7 @@ function OrderDrawer({
     (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
   );
   const shipmentHasException =
+    !overdueTerminalStatuses.has(order.status) &&
     fulfillment?.reexpeditionStatus !== "LABEL_CREATED" &&
     (fulfillment?.status === "EXCEPTION" ||
       fulfillment?.hasUnresolvedDeliveryException === true);

@@ -154,10 +154,12 @@ test("pedidos entregues não permanecem como ocorrência urgente de transporte",
     "utf8",
   );
 
-  assert.match(orders, /item\.shipment\?\.status === "EXCEPTION"/);
+  assert.match(orders, /const hasOpenDeliveryException = \(order: Order\)/);
+  assert.match(orders, /!overdueTerminalStatuses\.has\(order\.status\)/);
+  assert.match(orders, /orders\.filter\(hasOpenDeliveryException\)/);
   assert.match(
     orders,
-    /!\["DELIVERED", "CANCELLED"\]\.includes\(item\.status\)/,
+    /const compactShipmentException = hasOpenDeliveryException\(order\)/,
   );
 });
 
