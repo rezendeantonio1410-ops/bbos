@@ -725,7 +725,9 @@ export default function OrdersPage() {
   const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
   const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
   const deliveryIssues = orders.filter(
-    (item) => item.shipment?.status === "EXCEPTION",
+    (item) =>
+      item.shipment?.status === "EXCEPTION" &&
+      !["DELIVERED", "CANCELLED"].includes(item.status),
   );
   const overdueOrders = orders.filter((item) => isOverdueOrder(item));
   const firstDeliveryIssue = deliveryIssues[0];
