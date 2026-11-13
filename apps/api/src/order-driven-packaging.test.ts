@@ -68,6 +68,21 @@ test("the confirmed legacy White Label mapping is migrated to Gourmet Essencial"
   );
 });
 
+test("the approved Gourmet White Label catalog is mapped to Essencial", () => {
+  const migration = source(
+    "packages/database/prisma/migrations/20261113205000_approve_cafe_gourmet_white_label_essencial/migration.sql",
+  );
+  assert.match(migration, /CAFE_GOURMET_WHITE_LABEL/);
+  assert.match(migration, /base_coffee\.code = 'ESSENCIAL'/);
+  assert.match(migration, /white_label_line\.code = 'GOURMET'/);
+  assert.match(migration, /base_line\.code = 'GOURMET'/);
+  assert.match(
+    migration,
+    /base_line\."companyId" = white_label_line\."companyId"/,
+  );
+  assert.match(migration, /"baseCoffeeProductId" IS NULL/);
+});
+
 test("the operational endpoint is read-only and identifies the stock as bulk", () => {
   const reservations = source("apps/api/src/order-packaging.controller.ts");
   assert.match(reservations, /@Controller\("production\/bulk-reservations"\)/);
