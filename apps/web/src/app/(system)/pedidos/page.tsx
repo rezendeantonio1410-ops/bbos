@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -1629,9 +1629,12 @@ function NewOrder({
   const [brokerCommissionPerPackage, setBrokerCommissionPerPackage] =
     useState("");
   const [showTerms, setShowTerms] = useState(true);
+  const [mobileStep, setMobileStep] = useState<1 | 2 | 3 | 4>(1);
+  const [isMobileFlow, setIsMobileFlow] = useState(false);
   const [error, setError] = useState("");
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  const formScrollRef = useRef<HTMLDivElement>(null);
   const isSample = orderType === "SAMPLE";
 
   useEffect(() => {
@@ -1645,6 +1648,14 @@ function NewOrder({
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousRootOverflow;
     };
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)");
+    const sync = () => setIsMobileFlow(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
   }, []);
 
   const orderPurposes = useMemo(
@@ -1788,6 +1799,64 @@ function NewOrder({
                               !exchangeRateDate)
                           ? "Informe a cotação da moeda para BRL e a data da cotação."
                           : "";
+
+  const mobileSteps = [
+    { id: 1 as const, label: "Cliente", tone: "bg-teal-600" },
+    { id: 2 as const, label: "Produtos", tone: "bg-violet-600" },
+    { id: 3 as const, label: "Entrega", tone: "bg-sky-600" },
+    { id: 4 as const, label: "Revisão", tone: "bg-amber-600" },
+  ];
+
+  const goToMobileStep = (step: 1 | 2 | 3 | 4) => {
+    setMobileStep(step);
+    setError("");
+    window.requestAnimationFrame(() =>
+      formScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" }),
+    );
+  };
+
+  const advanceMobileStep = () => {
+    setError("");
+    if (mobileStep === 1) {
+      if (!orderPurpose)
+        return setError("Escolha a finalidade para continuar.");
+      if (!customerId) return setError("Selecione o cliente para continuar.");
+      if (customer?.fiscalReadiness?.ready === false)
+        return setError(
+          "Complete o cadastro fiscal do cliente antes de avançar.",
+        );
+      if (isTerm && !paymentTerms)
+        return setError("Informe a condição da venda a prazo.");
+      return goToMobileStep(2);
+    }
+    if (mobileStep === 2) {
+      if (!completeLines.length)
+        return setError("Adicione ao menos um produto ao pedido.");
+      if (
+        hasInvalidSelectedLine ||
+        completeLines.some((line) => !quotes[line.id])
+      )
+        return setError("Revise quantidade e preço dos produtos.");
+      if (invalidNegotiatedLine?.pricing?.message)
+        return setError(invalidNegotiatedLine.pricing.message);
+      return goToMobileStep(3);
+    }
+    if (mobileStep === 3) {
+      if (!freightResponsibility)
+        return setError("Selecione como o pedido será entregue.");
+      if (usesPlatformShipping && !selectedShippingQuote)
+        return setError("Calcule e selecione uma opção de envio.");
+      if (
+        isDistributor &&
+        freightResponsibility === "CUSTOMER_CARRIER" &&
+        !carrierName.trim()
+      )
+        return setError("Informe a transportadora do distribuidor.");
+      if (isExport && (!incoterm.trim() || !incotermLocation.trim()))
+        return setError("Informe o Incoterm e o local da exportação.");
+      return goToMobileStep(4);
+    }
+  };
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, {
@@ -2207,180 +2276,233 @@ function NewOrder({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
-          {isSample && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
-              <p className="text-xs font-bold uppercase tracking-wider">
-                Amostra sem cobrança comercial
-              </p>
-              <p className="mt-1 text-[11px] leading-5">
-                {isExport ? (
-                  <>
-                    A amostra internacional não gera cobrança, comissão nem
-                    receita. O valor aduaneiro informado abaixo será usado
-                    somente na NF-e e nos documentos de exportação, convertido
-                    para BRL pela cotação registrada.
-                  </>
-                ) : (
-                  <>
-                    Cada pacote será registrado por{" "}
-                    <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas
-                    como valor fiscal simbólico. Esta regra vale para todos os
-                    usuários. O pedido movimenta estoque, pode gerar NF-e e
-                    expedição, mas não gera cobrança, comissão nem receita
-                    comercial.
-                  </>
-                )}
-              </p>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">
-                Antes da emissão, confirme no Bling a natureza da operação, CFOP
-                e tributação definidos pela contabilidade.
-              </p>
-            </div>
-          )}
-
-          <section className="rounded-2xl border border-forest-100 bg-forest-50/60 p-3">
-            <p className="text-xs font-bold text-forest-950">
-              1 · Finalidade do pedido
-            </p>
-            <p className="mt-1 text-[10px] text-stone-500">
-              A finalidade define quais clientes e qual tabela comercial poderão
-              ser utilizados.
-            </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {orderPurposes.map((purpose) => {
-                const total = filterCustomersByOrderPurpose(
-                  customers,
-                  purpose,
-                ).length;
-                const selected = orderPurpose === purpose;
+        {isMobileFlow && (
+          <nav
+            aria-label="Etapas do novo pedido"
+            className="shrink-0 border-b border-stone-100 bg-[#fbfaf7] px-3 py-2"
+          >
+            <ol className="grid grid-cols-4 gap-1.5">
+              {mobileSteps.map((step) => {
+                const active = mobileStep === step.id;
+                const complete = mobileStep > step.id;
                 return (
-                  <button
-                    key={purpose}
-                    type="button"
-                    onClick={() => {
-                      if (purpose !== orderPurpose) setCustomerId("");
-                      setOrderPurpose(purpose);
-                      setError("");
-                    }}
-                    className={`rounded-xl border px-3 py-3 text-left transition ${selected ? "border-forest-700 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-forest-300"}`}
-                  >
-                    <strong className="block text-xs">{purpose}</strong>
-                    <span
-                      className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}
+                  <li key={step.id}>
+                    <button
+                      type="button"
+                      disabled={step.id > mobileStep}
+                      onClick={() => goToMobileStep(step.id)}
+                      aria-current={active ? "step" : undefined}
+                      className={`flex min-h-12 w-full flex-col items-center justify-center gap-1 rounded-xl border px-1 text-[10px] font-bold transition ${
+                        active
+                          ? "border-stone-900 bg-white text-stone-950 shadow-sm"
+                          : complete
+                            ? "border-transparent bg-white text-stone-700"
+                            : "border-transparent text-stone-400"
+                      }`}
                     >
-                      {total} cliente{total === 1 ? "" : "s"}
-                    </span>
-                  </button>
+                      <span
+                        className={`grid size-5 place-items-center rounded-full text-[9px] text-white ${
+                          complete || active ? step.tone : "bg-stone-300"
+                        }`}
+                      >
+                        {complete ? <Check size={12} /> : step.id}
+                      </span>
+                      {step.label}
+                    </button>
+                  </li>
                 );
               })}
-            </div>
-          </section>
+            </ol>
+          </nav>
+        )}
 
-          <div>
-            <label
-              htmlFor="new-order-customer"
-              className="block text-xs font-semibold"
-            >
-              2 · Cliente
-            </label>
-            <select
-              id="new-order-customer"
-              disabled={!orderPurpose}
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-              className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
-            >
-              <option value="">
-                {orderPurpose
-                  ? `Selecione um cliente de ${orderPurpose}`
-                  : "Selecione primeiro a finalidade"}
-              </option>
-              {filteredCustomers.map((item) => (
-                <option
-                  key={item.id}
-                  value={item.id}
-                  disabled={item.fiscalReadiness?.ready === false}
-                >
-                  {item.name}
-                  {item.fiscalReadiness?.ready === false
-                    ? " · cadastro fiscal pendente"
-                    : ""}
+        <div
+          ref={formScrollRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-5"
+        >
+          <div
+            className={
+              isMobileFlow && mobileStep !== 1 ? "hidden" : "space-y-3"
+            }
+          >
+            {isSample && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                <p className="text-xs font-bold uppercase tracking-wider">
+                  Amostra sem cobrança comercial
+                </p>
+                <p className="mt-1 text-[11px] leading-5">
+                  {isExport ? (
+                    <>
+                      A amostra internacional não gera cobrança, comissão nem
+                      receita. O valor aduaneiro informado abaixo será usado
+                      somente na NF-e e nos documentos de exportação, convertido
+                      para BRL pela cotação registrada.
+                    </>
+                  ) : (
+                    <>
+                      Cada pacote será registrado por{" "}
+                      <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas
+                      como valor fiscal simbólico. Esta regra vale para todos os
+                      usuários. O pedido movimenta estoque, pode gerar NF-e e
+                      expedição, mas não gera cobrança, comissão nem receita
+                      comercial.
+                    </>
+                  )}
+                </p>
+                <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                  Antes da emissão, confirme no Bling a natureza da operação,
+                  CFOP e tributação definidos pela contabilidade.
+                </p>
+              </div>
+            )}
+
+            <section className="rounded-2xl border border-forest-100 bg-forest-50/60 p-3">
+              <p className="text-xs font-bold text-forest-950">
+                1 · Finalidade do pedido
+              </p>
+              <p className="mt-1 text-[10px] text-stone-500">
+                A finalidade define quais clientes e qual tabela comercial
+                poderão ser utilizados.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {orderPurposes.map((purpose) => {
+                  const total = filterCustomersByOrderPurpose(
+                    customers,
+                    purpose,
+                  ).length;
+                  const selected = orderPurpose === purpose;
+                  return (
+                    <button
+                      key={purpose}
+                      type="button"
+                      onClick={() => {
+                        if (purpose !== orderPurpose) setCustomerId("");
+                        setOrderPurpose(purpose);
+                        setError("");
+                      }}
+                      className={`rounded-xl border px-3 py-3 text-left transition ${selected ? "border-forest-700 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-forest-300"}`}
+                    >
+                      <strong className="block text-xs">{purpose}</strong>
+                      <span
+                        className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}
+                      >
+                        {total} cliente{total === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div>
+              <label
+                htmlFor="new-order-customer"
+                className="block text-xs font-semibold"
+              >
+                2 · Cliente
+              </label>
+              <select
+                id="new-order-customer"
+                disabled={!orderPurpose}
+                value={customerId}
+                onChange={(event) => setCustomerId(event.target.value)}
+                className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+              >
+                <option value="">
+                  {orderPurpose
+                    ? `Selecione um cliente de ${orderPurpose}`
+                    : "Selecione primeiro a finalidade"}
                 </option>
-              ))}
-            </select>
-            {orderPurpose && (
-              <span className="mt-1 block text-[10px] text-stone-400">
-                Exibindo somente clientes ativos de {orderPurpose}.
-              </span>
+                {filteredCustomers.map((item) => (
+                  <option
+                    key={item.id}
+                    value={item.id}
+                    disabled={item.fiscalReadiness?.ready === false}
+                  >
+                    {item.name}
+                    {item.fiscalReadiness?.ready === false
+                      ? " · cadastro fiscal pendente"
+                      : ""}
+                  </option>
+                ))}
+              </select>
+              {orderPurpose && (
+                <span className="mt-1 block text-[10px] text-stone-400">
+                  Exibindo somente clientes ativos de {orderPurpose}.
+                </span>
+              )}
+            </div>
+
+            {customer?.fiscalReadiness?.ready === false && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                <b>Cliente ainda não está pronto para NF-e.</b>
+                <p className="mt-1">
+                  Complete em Clientes:{" "}
+                  {customer.fiscalReadiness.issues.join(", ")}.
+                </p>
+              </div>
+            )}
+
+            {!isSample && (
+              <div>
+                <p className="text-xs font-semibold">Forma de pagamento</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType("CASH")}
+                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                  >
+                    À vista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType("TERM")}
+                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}
+                  >
+                    A prazo
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isTerm && (
+              <>
+                <Field label="Condição de pagamento">
+                  <select
+                    value={paymentTerms}
+                    onChange={(event) => setPaymentTerms(event.target.value)}
+                  >
+                    {paymentOptions.map((option) => (
+                      <option key={option}>{option}</option>
+                    ))}
+                  </select>
+                </Field>
+                {customerId && (
+                  <CreditContext
+                    loading={healthBusy}
+                    limit={limit}
+                    used={used}
+                    available={available}
+                    utilization={utilization}
+                    orderTotal={orderTotal}
+                    after={after}
+                    exceeds={exceeds}
+                    status={health?.creditStatus ?? customer?.creditStatus}
+                    reviewPending={health?.creditReviewPending}
+                    overdueCount={overdueCount}
+                    overdueAmount={overdueAmount}
+                    maxDaysOverdue={maxDaysOverdue}
+                  />
+                )}
+              </>
             )}
           </div>
 
-          {customer?.fiscalReadiness?.ready === false && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-              <b>Cliente ainda não está pronto para NF-e.</b>
-              <p className="mt-1">
-                Complete em Clientes:{" "}
-                {customer.fiscalReadiness.issues.join(", ")}.
-              </p>
-            </div>
-          )}
-
-          {!isSample && (
-            <div>
-              <p className="text-xs font-semibold">Forma de pagamento</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentType("CASH")}
-                  className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
-                >
-                  À vista
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentType("TERM")}
-                  className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}
-                >
-                  A prazo
-                </button>
-              </div>
-            </div>
-          )}
-
-          {isTerm && (
-            <>
-              <Field label="Condição de pagamento">
-                <select
-                  value={paymentTerms}
-                  onChange={(event) => setPaymentTerms(event.target.value)}
-                >
-                  {paymentOptions.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
-              </Field>
-              {customerId && (
-                <CreditContext
-                  loading={healthBusy}
-                  limit={limit}
-                  used={used}
-                  available={available}
-                  utilization={utilization}
-                  orderTotal={orderTotal}
-                  after={after}
-                  exceeds={exceeds}
-                  status={health?.creditStatus ?? customer?.creditStatus}
-                  reviewPending={health?.creditReviewPending}
-                  overdueCount={overdueCount}
-                  overdueAmount={overdueAmount}
-                  maxDaysOverdue={maxDaysOverdue}
-                />
-              )}
-            </>
-          )}
-
-          <section className="rounded-2xl border bg-stone-50 p-2.5">
+          <section
+            className={`rounded-2xl border bg-stone-50 p-2.5 ${
+              isMobileFlow && mobileStep !== 2 ? "hidden" : ""
+            }`}
+          >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
@@ -2658,7 +2780,11 @@ function NewOrder({
             )}
           </section>
 
-          <section className="rounded-2xl border border-stone-200 bg-white">
+          <section
+            className={`rounded-2xl border border-stone-200 bg-white ${
+              isMobileFlow && mobileStep !== 3 ? "hidden" : ""
+            }`}
+          >
             <button
               type="button"
               onClick={() => setShowTerms((value) => !value)}
@@ -3337,7 +3463,83 @@ function NewOrder({
             )}
           </section>
 
-          {isTerm && health && (
+          {isMobileFlow && mobileStep === 4 && (
+            <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+              <div className="bg-gradient-to-r from-[#123b35] via-[#155e55] to-[#0e7490] p-4 text-white">
+                <p className="text-[10px] font-bold uppercase tracking-[.18em] text-white/65">
+                  Pedido pronto para conferência
+                </p>
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">
+                      {customer?.name}
+                    </p>
+                    <p className="mt-1 text-[11px] text-white/70">
+                      {orderPurpose} · {totalPackages} pacote(s)
+                    </p>
+                  </div>
+                  <strong className="shrink-0 text-xl">
+                    {isSample ? "Amostra" : money.format(orderTotal)}
+                  </strong>
+                </div>
+              </div>
+              <div className="divide-y divide-stone-100 px-4">
+                {completeLines.map((line) => {
+                  const variant = variants.find(
+                    (candidate) =>
+                      candidate.productVariantId === line.variantId,
+                  );
+                  const pricing = pricedLines.find(
+                    (item) => item.line.id === line.id,
+                  )?.pricing;
+                  return (
+                    <div
+                      key={line.id}
+                      className="flex items-center justify-between gap-3 py-3 text-xs"
+                    >
+                      <span className="min-w-0">
+                        <b className="block truncate">{variant?.product}</b>
+                        <span className="text-stone-400">
+                          {variant
+                            ? presentationLabel(variant.presentationGrams)
+                            : ""}{" "}
+                          · {line.quantity} un.
+                        </span>
+                      </span>
+                      <b className="shrink-0">
+                        {isSample
+                          ? "Sem cobrança"
+                          : money.format(
+                              line.quantity *
+                                Number(pricing?.finalUnitPrice ?? 0),
+                            )}
+                      </b>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-2 gap-2 bg-[#fbfaf7] p-3 text-[11px]">
+                <div className="rounded-xl bg-white p-3">
+                  <span className="text-stone-400">Pagamento</span>
+                  <b className="mt-1 block">
+                    {isSample
+                      ? "Sem cobrança"
+                      : isTerm
+                        ? paymentTerms
+                        : "À vista"}
+                  </b>
+                </div>
+                <div className="rounded-xl bg-white p-3">
+                  <span className="text-stone-400">Entrega</span>
+                  <b className="mt-1 block">
+                    {freightLabels[freightResponsibility] ?? "A combinar"}
+                  </b>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {(!isMobileFlow || mobileStep === 4) && isTerm && health && (
             <p
               className={`rounded-xl px-3 py-2 text-xs ${isDelinquent ? "bg-red-50 text-red-800" : usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}
             >
@@ -3350,7 +3552,7 @@ function NewOrder({
           )}
         </div>
 
-        <footer className="shrink-0 space-y-2 border-t bg-white/95 p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-5">
+        <footer className="shrink-0 space-y-2 border-t bg-white/95 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-5 sm:pb-3">
           {error && (
             <p
               role="alert"
@@ -3359,30 +3561,60 @@ function NewOrder({
               {error}
             </p>
           )}
-          {usesPlatformShipping && selectedShippingQuote && (
-            <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
-              <span className="text-stone-500">
-                {isSample
-                  ? `Custo do envio assumido pela Bispo: ${money.format(selectedShippingQuote.priceCents / 100)}`
-                  : "Produtos + frete escolhido na plataforma"}
-              </span>
-              <b>
-                {isSample ? "Sem cobrança de frete" : money.format(orderTotal)}
-              </b>
-            </div>
-          )}
-          {saveBlockedReason && (
+          {(!isMobileFlow || mobileStep >= 3) &&
+            usesPlatformShipping &&
+            selectedShippingQuote && (
+              <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
+                <span className="text-stone-500">
+                  {isSample
+                    ? `Custo do envio assumido pela Bispo: ${money.format(selectedShippingQuote.priceCents / 100)}`
+                    : "Produtos + frete escolhido na plataforma"}
+                </span>
+                <b>
+                  {isSample
+                    ? "Sem cobrança de frete"
+                    : money.format(orderTotal)}
+                </b>
+              </div>
+            )}
+          {(!isMobileFlow || mobileStep === 4) && saveBlockedReason && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
               {saveBlockedReason}
             </p>
           )}
-          <button
-            disabled={Boolean(saveBlockedReason)}
-            onClick={() => void submit()}
-            className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40"
-          >
-            {isSample ? "Salvar pedido de amostra" : "Salvar pedido"}
-          </button>
+          <div className="flex gap-2">
+            {isMobileFlow && mobileStep > 1 && (
+              <button
+                type="button"
+                onClick={() => goToMobileStep((mobileStep - 1) as 1 | 2 | 3)}
+                className="min-h-12 shrink-0 rounded-xl border border-stone-200 bg-white px-4 text-xs font-bold text-stone-700"
+              >
+                Voltar
+              </button>
+            )}
+            <button
+              disabled={
+                (!isMobileFlow || mobileStep === 4) &&
+                Boolean(saveBlockedReason)
+              }
+              onClick={() =>
+                void (isMobileFlow && mobileStep < 4
+                  ? advanceMobileStep()
+                  : submit())
+              }
+              className="min-h-12 flex-1 rounded-xl bg-forest-900 px-4 text-xs font-bold text-white shadow-[0_8px_24px_rgba(18,59,53,.18)] disabled:opacity-40"
+            >
+              {isMobileFlow && mobileStep < 4
+                ? mobileStep === 1
+                  ? "Continuar para produtos"
+                  : mobileStep === 2
+                    ? "Continuar para entrega"
+                    : "Revisar pedido"
+                : isSample
+                  ? "Criar pedido de amostra"
+                  : "Criar pedido"}
+            </button>
+          </div>
         </footer>
       </aside>
     </div>,
@@ -3841,9 +4073,10 @@ function OrderDrawer({
   const isPickup = order.freightResponsibility === "PICKUP";
   const canFinalizeDelivery =
     canCompleteDelivery &&
-    (["INVOICED", "SHIPPED"].includes(order.status) ||
-      (order.status === "READY_TO_SHIP" &&
-        fulfillment?.fiscalStatus === "AUTHORIZED"));
+    (isPickup
+      ? ["INVOICED", "READY_TO_SHIP"].includes(order.status) &&
+        fulfillment?.fiscalStatus === "AUTHORIZED"
+      : order.status === "SHIPPED");
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote
     ? quote.officialUnitPrice * (1 - requested / 100)

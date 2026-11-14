@@ -6,8 +6,10 @@ export type PushServerStatus = {
 
 export type MobileInstallState = {
   isIos: boolean;
+  isAndroid: boolean;
   isStandalone: boolean;
   supportsPush: boolean;
+  platform: "ios" | "android" | "desktop";
 };
 
 declare global {
@@ -18,8 +20,19 @@ declare global {
 
 export function mobileInstallState(): MobileInstallState {
   if (typeof window === "undefined")
-    return { isIos: false, isStandalone: false, supportsPush: false };
-  const isIos = /iPad|iPhone|iPod/.test(window.navigator.userAgent);
+    return {
+      isIos: false,
+      isAndroid: false,
+      isStandalone: false,
+      supportsPush: false,
+      platform: "desktop",
+    };
+  const userAgent = window.navigator.userAgent;
+  const isIpadDesktopMode =
+    window.navigator.platform === "MacIntel" &&
+    window.navigator.maxTouchPoints > 1;
+  const isIos = /iPad|iPhone|iPod/.test(userAgent) || isIpadDesktopMode;
+  const isAndroid = /Android/i.test(userAgent);
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     window.navigator.standalone === true;
@@ -27,7 +40,13 @@ export function mobileInstallState(): MobileInstallState {
     "serviceWorker" in window.navigator &&
     "PushManager" in window &&
     "Notification" in window;
-  return { isIos, isStandalone, supportsPush };
+  return {
+    isIos,
+    isAndroid,
+    isStandalone,
+    supportsPush,
+    platform: isIos ? "ios" : isAndroid ? "android" : "desktop",
+  };
 }
 
 function urlBase64ToUint8Array(value: string) {

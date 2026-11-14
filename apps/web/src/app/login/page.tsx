@@ -7,12 +7,17 @@ import {
   Download,
   LockKeyhole,
   Mail,
+  Share,
   Smartphone,
 } from "lucide-react";
 import { Button } from "@bbos/ui";
 import { SYSTEM_CREATOR_CREDIT_PT } from "@bbos/shared";
 import { Logo } from "@/components/logo";
-import { registerBbosServiceWorker } from "@/lib/push-client";
+import {
+  mobileInstallState,
+  registerBbosServiceWorker,
+  type MobileInstallState,
+} from "@/lib/push-client";
 
 const API_WAKE_TIMEOUT_MS = 75000;
 const LOGIN_TIMEOUT_MS = 30000;
@@ -20,6 +25,14 @@ const LOGIN_TIMEOUT_MS = 30000;
 type BbosInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+const initialInstallState: MobileInstallState = {
+  isIos: false,
+  isAndroid: false,
+  isStandalone: false,
+  supportsPush: false,
+  platform: "desktop",
 };
 
 async function fetchWithTimeout(
@@ -44,20 +57,25 @@ export default function LoginPage() {
   const [status, setStatus] = useState("");
   const [installPrompt, setInstallPrompt] =
     useState<BbosInstallPromptEvent | null>(null);
-  const [appInstalled, setAppInstalled] = useState(false);
+  const [installState, setInstallState] = useState(initialInstallState);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
-    const standalone = window.matchMedia("(display-mode: standalone)").matches;
-    setAppInstalled(standalone);
-    if (!standalone) void registerBbosServiceWorker().catch(() => undefined);
+    const nextInstallState = mobileInstallState();
+    setInstallState(nextInstallState);
+    setShowInstallHelp(nextInstallState.isIos);
+    if (!nextInstallState.isStandalone)
+      void registerBbosServiceWorker().catch(() => undefined);
 
     const handlePrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BbosInstallPromptEvent);
     };
     const handleInstalled = () => {
-      setAppInstalled(true);
+      setInstallState((current) => ({
+        ...current,
+        isStandalone: true,
+      }));
       setInstallPrompt(null);
     };
     window.addEventListener("beforeinstallprompt", handlePrompt);
@@ -76,7 +94,8 @@ export default function LoginPage() {
     }
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
-    if (choice.outcome === "accepted") setAppInstalled(true);
+    if (choice.outcome === "accepted")
+      setInstallState((current) => ({ ...current, isStandalone: true }));
     setInstallPrompt(null);
   }
 
@@ -144,9 +163,9 @@ export default function LoginPage() {
         ? "/parceiro"
         : isAccountant
           ? "/financeiro"
-        : safeReturnTo && !safeReturnTo.startsWith("/parceiro")
-          ? safeReturnTo
-          : "/home";
+          : safeReturnTo && !safeReturnTo.startsWith("/parceiro")
+            ? safeReturnTo
+            : "/home";
       // A full navigation is intentional here. Samsung Internet and installed
       // Android PWAs can occasionally keep the login client tree mounted after
       // a successful cookie-based authentication. Reloading the destination
@@ -214,7 +233,7 @@ export default function LoginPage() {
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <div className="mb-12 lg:hidden">
-            <Logo variant="login" />
+            <Logo />
           </div>
           <p className="text-xs font-bold uppercase tracking-[.18em] text-forest-700">
             Bem-vindo
@@ -225,43 +244,78 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-stone-500">
             Entre com suas credenciais corporativas.
           </p>
-          {!appInstalled && (
-            <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
-              <div className="flex gap-3">
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-800 shadow-sm">
-                  <Smartphone size={20} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-forest-950">
-                    Instalar o BBOS neste tablet
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-stone-600">
-                    Crie o ícone do BBOS na tela inicial do Samsung.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void installApp()}
-                    className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-forest-950 px-4 text-sm font-bold text-white"
-                  >
-                    <Download size={17} /> Instalar aplicativo
-                  </button>
-                  {!installPrompt && showInstallHelp && (
-                    <div className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs leading-5 text-stone-700">
-                      <p>
-                        <b>Chrome:</b> toque em <b>⋮</b>, depois em{" "}
-                        <b>Adicionar à tela inicial</b> e <b>Instalar</b>.
-                      </p>
-                      <p className="mt-2">
-                        <b>Samsung Internet:</b> toque em <b>☰</b>, depois em{" "}
-                        <b>Adicionar página a</b> e <b>Tela inicial</b>.
-                      </p>
-                    </div>
-                  )}
+          {!installState.isStandalone &&
+            (installState.isIos || installState.isAndroid) && (
+              <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+                <div className="flex gap-3">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-800 shadow-sm">
+                    <Smartphone size={20} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-forest-950">
+                      {installState.isIos
+                        ? "Instalar o BBOS neste iPhone"
+                        : "Instalar o BBOS neste dispositivo"}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-stone-600">
+                      {installState.isIos
+                        ? "Abra como aplicativo, em tela cheia, pela Tela de Início."
+                        : "Crie o ícone do BBOS na tela inicial do Android."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        installState.isIos
+                          ? setShowInstallHelp((current) => !current)
+                          : void installApp()
+                      }
+                      className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-forest-950 px-4 text-sm font-bold text-white"
+                    >
+                      {installState.isIos ? (
+                        <Share size={17} />
+                      ) : (
+                        <Download size={17} />
+                      )}
+                      {installState.isIos
+                        ? "Como instalar no iPhone"
+                        : "Instalar aplicativo"}
+                    </button>
+                    {showInstallHelp && installState.isIos && (
+                      <ol className="mt-3 space-y-2 rounded-xl bg-white px-3 py-3 text-xs leading-5 text-stone-700">
+                        <li>
+                          <b>1.</b> Abra esta página no Safari.
+                        </li>
+                        <li>
+                          <b>2.</b> Toque em <b>Compartilhar</b>.
+                        </li>
+                        <li>
+                          <b>3.</b> Escolha <b>Adicionar à Tela de Início</b>.
+                        </li>
+                        <li>
+                          <b>4.</b> Ative <b>Abrir como App</b> e toque em{" "}
+                          <b>Adicionar</b>.
+                        </li>
+                      </ol>
+                    )}
+                    {!installState.isIos &&
+                      !installPrompt &&
+                      showInstallHelp && (
+                        <div className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs leading-5 text-stone-700">
+                          <p>
+                            <b>Chrome:</b> toque em <b>⋮</b>, depois em{" "}
+                            <b>Adicionar à tela inicial</b> e <b>Instalar</b>.
+                          </p>
+                          <p className="mt-2">
+                            <b>Samsung Internet:</b> toque em <b>☰</b>, depois
+                            em <b>Adicionar página a</b> e <b>Tela inicial</b>.
+                          </p>
+                        </div>
+                      )}
+                  </div>
                 </div>
-              </div>
-            </section>
-          )}
-          {appInstalled && (
+              </section>
+            )}
+          {installState.isStandalone && (
             <p className="mt-5 rounded-xl bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-800">
               BBOS instalado neste dispositivo.
             </p>

@@ -36,8 +36,10 @@ type MobileNotification = {
 
 const initialInstallState: MobileInstallState = {
   isIos: false,
+  isAndroid: false,
   isStandalone: false,
   supportsPush: false,
+  platform: "desktop",
 };
 
 export function MobileAppSetup() {

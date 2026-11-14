@@ -133,14 +133,17 @@ test("a tela inicial do vendedor prioriza ações comerciais amigáveis ao table
   assert.match(source, /\/clientes\?novo=1/);
 });
 
-test("o login sempre oferece instalação e o service worker habilita PWA no Android", () => {
+test("o login adapta a instalação entre iPhone e Android", () => {
   const login = readFileSync(join(__dirname, "../app/login/page.tsx"), "utf8");
   const serviceWorker = readFileSync(
     join(__dirname, "../../public/sw.js"),
     "utf8",
   );
 
-  assert.match(login, /Instalar o BBOS neste tablet/);
+  assert.match(login, /Instalar o BBOS neste iPhone/);
+  assert.match(login, /Instalar o BBOS neste dispositivo/);
+  assert.match(login, /Adicionar à Tela de Início/);
+  assert.match(login, /Abrir como App/);
   assert.match(login, /Instalar aplicativo/);
   assert.match(login, /Samsung Internet/);
   assert.match(login, /requestedReturnTo !== "\/login"/);
@@ -161,6 +164,21 @@ test("pedidos entregues não permanecem como ocorrência urgente de transporte",
     orders,
     /const compactShipmentException = hasOpenDeliveryException\(order\)/,
   );
+});
+
+test("o novo pedido usa uma jornada compacta em celular e tablet", () => {
+  const orders = readFileSync(
+    join(__dirname, "../app/(system)/pedidos/page.tsx"),
+    "utf8",
+  );
+
+  assert.match(orders, /Etapas do novo pedido/);
+  assert.match(orders, /Cliente.*Produtos.*Entrega.*Revisão/s);
+  assert.match(orders, /max-width: 1023px/);
+  assert.match(orders, /Pedido pronto para conferência/);
+  assert.match(orders, /Continuar para produtos/);
+  assert.match(orders, /Continuar para entrega/);
+  assert.match(orders, /Revisar pedido/);
 });
 
 test("management domain opens the BBOS login instead of the storefront", () => {
