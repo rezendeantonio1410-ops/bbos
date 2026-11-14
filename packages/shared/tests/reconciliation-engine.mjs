@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateReconciliationMatch } from "../dist/reconciliation-engine.js";
+import { evaluateReconciliationMatch, selectUniqueReconciliationPairs } from "../dist/reconciliation-engine.js";
 
 const base = { externalDirection: "IN", transactionDirection: "IN", externalDate: "2026-08-08", transactionDate: "2026-08-08", externalReference: "NF-100", transactionReference: "NF-100", externalCounterparty: "Cliente A", transactionCounterparty: "Cliente A" };
 
@@ -56,4 +56,30 @@ test("valor parcial preserva diferença auditável", () => {
   assert.equal(result.status, "PARTIALLY_MATCHED");
   assert.equal(result.matchedAmount, 175);
   assert.equal(result.difference, 75);
+});
+
+test("conciliação segura exige pares únicos dos dois lados", () => {
+  const result = selectUniqueReconciliationPairs(
+    ["bank-1", "bank-2", "bank-3"],
+    [
+      { itemId: "bank-1", transactionId: "book-1" },
+      { itemId: "bank-2", transactionId: "book-2" },
+      { itemId: "bank-2", transactionId: "book-3" },
+    ],
+  );
+  assert.deepEqual(result.safe, [{ itemId: "bank-1", transactionId: "book-1" }]);
+  assert.deepEqual(result.ambiguousItemIds, ["bank-2"]);
+  assert.deepEqual(result.unmatchedItemIds, ["bank-3"]);
+});
+
+test("um mesmo lançamento interno não é conciliado por ordem da lista", () => {
+  const result = selectUniqueReconciliationPairs(
+    ["bank-1", "bank-2"],
+    [
+      { itemId: "bank-1", transactionId: "book-1" },
+      { itemId: "bank-2", transactionId: "book-1" },
+    ],
+  );
+  assert.equal(result.safe.length, 0);
+  assert.deepEqual(result.ambiguousItemIds, ["bank-1", "bank-2"]);
 });

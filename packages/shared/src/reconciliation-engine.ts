@@ -32,6 +32,46 @@ export type ReconciliationMatchResult = {
   reasons: string[];
 };
 
+export type ReconciliationCandidatePair = {
+  itemId: string;
+  transactionId: string;
+};
+
+/**
+ * Keeps automatic reconciliation conservative: both sides of a proposed pair
+ * must be unique. Repeated bank values or duplicated internal titles remain in
+ * the human review queue instead of being resolved by iteration order.
+ */
+export function selectUniqueReconciliationPairs(itemIds: string[], pairs: ReconciliationCandidatePair[]) {
+  const byItem = new Map<string, Set<string>>();
+  const byTransaction = new Map<string, Set<string>>();
+  for (const pair of pairs) {
+    const itemTransactions = byItem.get(pair.itemId) ?? new Set<string>();
+    itemTransactions.add(pair.transactionId);
+    byItem.set(pair.itemId, itemTransactions);
+    const transactionItems = byTransaction.get(pair.transactionId) ?? new Set<string>();
+    transactionItems.add(pair.itemId);
+    byTransaction.set(pair.transactionId, transactionItems);
+  }
+  const safe: ReconciliationCandidatePair[] = [];
+  const ambiguousItemIds: string[] = [];
+  const unmatchedItemIds: string[] = [];
+  for (const itemId of itemIds) {
+    const transactions = [...(byItem.get(itemId) ?? [])];
+    if (!transactions.length) {
+      unmatchedItemIds.push(itemId);
+      continue;
+    }
+    const transactionId = transactions[0]!;
+    if (transactions.length !== 1 || (byTransaction.get(transactionId)?.size ?? 0) !== 1) {
+      ambiguousItemIds.push(itemId);
+      continue;
+    }
+    safe.push({ itemId, transactionId });
+  }
+  return { safe, ambiguousItemIds, unmatchedItemIds };
+}
+
 const dayMs = 24 * 60 * 60 * 1000;
 
 function normalize(value?: string | null) {

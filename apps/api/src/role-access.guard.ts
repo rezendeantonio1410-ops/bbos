@@ -141,6 +141,7 @@ const HANDLER_ROLE_POLICY: Readonly<
   },
   ReconciliationController: {
     summary: ACCOUNTING_READ,
+    control: ACCOUNTING_READ,
     pending: ACCOUNTING_READ,
     accounts: ACCOUNTING_READ,
     institutions: ACCOUNTING_READ,
@@ -150,6 +151,7 @@ const HANDLER_ROLE_POLICY: Readonly<
     create: ACCOUNTING_WRITE,
     importBankTransaction: ACCOUNTING_WRITE,
     importStatement: ACCOUNTING_WRITE,
+    safeAutoMatch: ACCOUNTING_WRITE,
     match: ACCOUNTING_WRITE,
     autoMatch: ACCOUNTING_WRITE,
     unmatch: ACCOUNTING_WRITE,
