@@ -115,37 +115,40 @@ function Wizard({
   initialPurchaseId: string;
 }) {
   const first = o.purchases.find((purchase) => purchase.id === initialPurchaseId) ?? o.purchases[0];
-  const base = (p: P) => ({
-    purchaseId: p.id,
-    supplierId: p.supplierId,
-    warehouseId: o.warehouses[0]?.id ?? "",
-    species: p.species === "ARABICA" ? "ARABICA" : "ROBUSTA_CONILON",
-    origin: p.originRegion,
-    farmName: p.farmName ?? "",
-    municipality: p.municipality ?? "",
-    state: p.state ?? "",
-    country: p.country ?? "Brasil",
-    harvest: p.harvest,
-    variety: p.variety ?? "",
-    process: p.process ?? "",
-    supplierLotCode: p.supplierLotCode ?? "",
-    packagingType: p.packagingType,
-    volumeQuantity: p.volumeQuantity,
-    nominalWeightKg: Number(p.nominalUnitWeightKg),
-    weightEntryMode: "DOCUMENTAL" as "DOCUMENTAL" | "SCALE",
-    grossWeightKg: 0,
-    tareWeightKg: 0,
-    moisturePercent: "",
-    sampleCollected: true,
-    visualCondition: "NORMAL",
-    invoiceNumber: "",
-    fiscalDocumentId: "",
-    transportDocument: "",
-    notes: "",
-    unit: "KG",
-    bagQuantity: p.volumeQuantity,
-    bagWeightKg: Number(p.nominalUnitWeightKg),
-  });
+  const base = (p: P) => {
+    const fiscalDocument = (o.fiscalDocuments ?? []).find((document) => document.purchaseIds?.includes(p.id) && document.status === "AUTHORIZED" && document.matchStatus === "MATCHED");
+    return {
+      purchaseId: p.id,
+      supplierId: p.supplierId,
+      warehouseId: o.warehouses[0]?.id ?? "",
+      species: p.species === "ARABICA" ? "ARABICA" : "ROBUSTA_CONILON",
+      origin: p.originRegion,
+      farmName: p.farmName ?? "",
+      municipality: p.municipality ?? "",
+      state: p.state ?? "",
+      country: p.country ?? "Brasil",
+      harvest: p.harvest,
+      variety: p.variety ?? "",
+      process: p.process ?? "",
+      supplierLotCode: p.supplierLotCode ?? "",
+      packagingType: p.packagingType,
+      volumeQuantity: p.volumeQuantity,
+      nominalWeightKg: Number(p.nominalUnitWeightKg),
+      weightEntryMode: "DOCUMENTAL" as "DOCUMENTAL" | "SCALE",
+      grossWeightKg: 0,
+      tareWeightKg: 0,
+      moisturePercent: "",
+      sampleCollected: true,
+      visualCondition: "NORMAL",
+      invoiceNumber: fiscalDocument?.number ?? "",
+      fiscalDocumentId: fiscalDocument?.id ?? "",
+      transportDocument: "",
+      notes: "",
+      unit: "KG",
+      bagQuantity: p.volumeQuantity,
+      bagWeightKg: Number(p.nominalUnitWeightKg),
+    };
+  };
   const [d, setD] = useState(() => base(first!)),
     [s, setS] = useState(0),
     [busy, setBusy] = useState(false),
@@ -646,6 +649,12 @@ export default function Page() {
       })
       .catch((e) => setErr(String(e)));
   useEffect(() => {
+    const requestedPurchaseId = new URLSearchParams(window.location.search).get("purchaseId");
+    if (requestedPurchaseId) {
+      setSelectedPurchaseId(requestedPurchaseId);
+      setOpen(true);
+      window.history.replaceState({}, "", "/recebimento");
+    }
     void load();
   }, []);
   const kg = useMemo(
@@ -712,7 +721,7 @@ export default function Page() {
           </Card>
         ))}
       </div>
-      {open && o && (
+      {open && o && o.purchases.length > 0 && (
         <Wizard
           o={o}
           initialPurchaseId={selectedPurchaseId}

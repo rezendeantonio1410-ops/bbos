@@ -655,16 +655,37 @@ export class GreenCoffeePurchasesController {
   @Get(":id")
   async get(@Param("id") id: string, @Req() request: any) {
     const actor = await this.sessionActor(request);
-    const row = await this.db.greenCoffeePurchase.findFirst({
-      where: { id, companyId: actor.companyId },
-      include: {
-        ...this.include,
-        notifications: true,
-        auditEvents: { orderBy: { occurredAt: "asc" } },
-      },
-    });
+    const [row, fiscalDocuments] = await Promise.all([
+      this.db.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+        include: {
+          ...this.include,
+          notifications: true,
+          auditEvents: { orderBy: { occurredAt: "asc" } },
+        },
+      }),
+      this.db.$queryRawUnsafe<any[]>(
+        `SELECT DISTINCT f.id,f.status,f.number,f.series,f."accessKey",f."issueDate",
+                f."totalAmount",f."matchStatus",f.source,f."issuerName",f."importedAt"
+           FROM "FiscalDocument" f
+           JOIN "FiscalDocumentAllocation" a ON a."fiscalDocumentId"=f.id
+          WHERE a."purchaseId"=$1
+            AND a."allocationType"='GREEN_COFFEE_PURCHASE'
+            AND f."companyId"=$2
+            AND f.direction='INBOUND'
+          ORDER BY f."issueDate" DESC NULLS LAST,f."importedAt" DESC NULLS LAST`,
+        id,
+        actor.companyId,
+      ),
+    ]);
     if (!row) throw new NotFoundException("Compra não encontrada.");
-    return this.view(row);
+    return {
+      ...this.view(row),
+      fiscalDocuments: fiscalDocuments.map((document) => ({
+        ...document,
+        totalAmount: Number(document.totalAmount ?? 0),
+      })),
+    };
   }
 
   @Get(":id/confirmation-documents")
