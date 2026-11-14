@@ -4,6 +4,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
+import Link from "next/link";
 import { CostNavigation } from "./cost-navigation";
 import { getApiBaseUrl } from "@/lib/api-url";
 
@@ -218,10 +219,29 @@ function Events({
   };
   return (
     <>
+      <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet-100 bg-violet-50 p-4 text-sm text-violet-950 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-bold">
+            Despesas gerais são lançadas no Financeiro
+          </p>
+          <p className="mt-1 text-xs leading-5 text-violet-800">
+            Use esta tela apenas para medições e custos industriais sem conta a
+            pagar. Água, energia, aluguel e demais contas entram uma única vez
+            no fluxo financeiro integrado.
+          </p>
+        </div>
+        <Link
+          href="/financeiro/pagar"
+          data-bbos-write-action
+          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-violet-900 px-4 text-xs font-bold text-white"
+        >
+          Lançar despesa
+        </Link>
+      </div>
       <Card className="mt-6 p-5">
         <Section
           title="Novo lançamento"
-          subtitle="Registre a conta usando linguagem operacional."
+          subtitle="Registre somente medições industriais que não tenham uma conta a pagar."
         />
         <form
           onSubmit={submit}
@@ -240,7 +260,10 @@ function Events({
             label="Categoria"
             values={[
               "ENERGY",
+              "WATER",
               "GAS",
+              "PACKAGING",
+              "SUPPLIES",
               "MAINTENANCE",
               "LABOR",
               "DEPRECIATION",

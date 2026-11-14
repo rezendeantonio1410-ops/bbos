@@ -52,6 +52,7 @@ test("contabilidade consulta dados sem executar mutações financeiras ou operac
   const allowedReads = [
     ["FinanceController", "summary"],
     ["FinanceController", "receivables"],
+    ["FinanceController", "expenseOptions"],
     ["ReconciliationController", "list"],
     ["CostingController", "summary"],
     ["FiscalInboundController", "list"],
@@ -71,6 +72,7 @@ test("contabilidade consulta dados sem executar mutações financeiras ou operac
 
   const deniedWrites = [
     ["FinanceController", "createPayable"],
+    ["FinanceController", "pay"],
     ["FinanceController", "receive"],
     ["ReconciliationController", "match"],
     ["CostingController", "createCostEvent"],

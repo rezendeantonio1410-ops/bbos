@@ -308,6 +308,7 @@ enum CostType {
   FREIGHT
   LABOR
   ENERGY
+  WATER
   GAS
   PACKAGING
   LABEL
@@ -2218,6 +2219,19 @@ model AccountsPayable {
   openAmount                 Decimal                         @db.Decimal(14, 2)
   status                     PayableStatus                   @default(OPEN)
   category                   String
+  competenceDate             DateTime?
+  documentType               String?
+  documentNumber             String?
+  documentUrl                String?
+  source                     String                          @default("MANUAL")
+  creationKey                String?                         @unique
+  recurrenceGroupId          String?
+  recurrenceIndex            Int?
+  recurrenceCount            Int?
+  costEventId                String?                         @unique
+  costEvent                  CostEvent?                      @relation(fields: [costEventId], references: [id], onDelete: SetNull)
+  createdById                String?
+  createdByName              String?
   paymentDate                DateTime?
   notes                      String?
   payments                   Payment[]
@@ -2229,6 +2243,9 @@ model AccountsPayable {
   updatedAt                  DateTime                        @updatedAt
 
   @@index([companyId, status, dueDate])
+  @@index([companyId, competenceDate])
+  @@index([companyId, supplierId, documentNumber])
+  @@index([recurrenceGroupId, recurrenceIndex])
   @@index([costCenterId, dueDate])
   @@index([purchaseId, dueDate])
   @@index([storefrontPartnerId, dueDate])
@@ -2483,6 +2500,7 @@ model CostEvent {
   competenceAt      DateTime?
   occurredAt        DateTime            @default(now())
   createdAt         DateTime            @default(now())
+  accountsPayable   AccountsPayable?
 
   @@index([companyId, occurredAt])
   @@index([productVariantId, occurredAt])

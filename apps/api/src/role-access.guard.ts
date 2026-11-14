@@ -56,11 +56,7 @@ const ACCOUNTING_READ: readonly BbosRole[] = [
   "FINANCE",
   "ACCOUNTANT",
 ];
-const ACCOUNTING_WRITE: readonly BbosRole[] = [
-  "ADMIN",
-  "EXECUTIVE",
-  "FINANCE",
-];
+const ACCOUNTING_WRITE: readonly BbosRole[] = ["ADMIN", "EXECUTIVE", "FINANCE"];
 
 /**
  * Server-side access matrix. Navigation visibility is only presentation; this
@@ -126,6 +122,7 @@ const HANDLER_ROLE_POLICY: Readonly<
     summary: ACCOUNTING_READ,
     receivables: ACCOUNTING_READ,
     payables: ACCOUNTING_READ,
+    expenseOptions: ACCOUNTING_READ,
     accounts: ACCOUNTING_READ,
     institutions: ACCOUNTING_READ,
     createInstitution: ACCOUNTING_WRITE,
