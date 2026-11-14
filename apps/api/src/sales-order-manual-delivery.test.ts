@@ -137,4 +137,11 @@ test("orders screen exposes explicit shipment and completion actions", () => {
   );
   assert.match(dashboard, /\/pedidos\?filtro=atrasados/);
   assert.match(dashboard, /Resolver atrasos/);
+  assert.match(dashboard, /WITH effective_shipments AS/);
+  assert.match(
+    dashboard,
+    /CASE WHEN shipment\.id=reexpedition\."replacementShipmentId" THEN 0 ELSE 1 END/,
+  );
+  assert.match(dashboard, /so\.status NOT IN \('DELIVERED','CANCELLED'\)/);
+  assert.match(dashboard, /resolved\.status='DELIVERED'/);
 });

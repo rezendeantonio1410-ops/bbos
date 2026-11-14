@@ -204,11 +204,25 @@ export class DashboardService implements OnModuleDestroy {
           detail: string | null;
         }>
       >(
-        `SELECT COALESCE(so."orderNumber",so.code) AS "orderNumber",
+        `WITH effective_shipments AS (
+           SELECT DISTINCT ON (shipment."salesOrderId") shipment.*
+             FROM "Shipment" shipment
+             LEFT JOIN LATERAL (
+               SELECT "replacementShipmentId"
+                 FROM "SalesOrderReexpedition"
+                WHERE "salesOrderId"=shipment."salesOrderId"
+                ORDER BY "attemptNumber" DESC LIMIT 1
+             ) reexpedition ON TRUE
+            WHERE shipment."companyId"=$1
+            ORDER BY shipment."salesOrderId",
+                     CASE WHEN shipment.id=reexpedition."replacementShipmentId" THEN 0 ELSE 1 END,
+                     shipment."createdAt" DESC,shipment."updatedAt" DESC
+         )
+         SELECT COALESCE(so."orderNumber",so.code) AS "orderNumber",
                 customer.name AS "customerName",
                 event.title,
                 event.detail
-           FROM "Shipment" shipment
+           FROM effective_shipments shipment
            LEFT JOIN "SalesOrder" so ON so.id=shipment."salesOrderId"
            LEFT JOIN "Customer" customer ON customer.id=so."customerId"
            LEFT JOIN LATERAL (
@@ -217,8 +231,16 @@ export class DashboardService implements OnModuleDestroy {
               WHERE "salesOrderId"=so.id AND source='CARRIER'
               ORDER BY "occurredAt" DESC LIMIT 1
            ) event ON TRUE
-          WHERE shipment."companyId"=$1
-            AND shipment.status='EXCEPTION'
+          WHERE shipment.status='EXCEPTION'
+            AND so.status NOT IN ('DELIVERED','CANCELLED')
+            AND NOT EXISTS (
+              SELECT 1
+                FROM "Shipment" resolved
+               WHERE resolved."companyId"=shipment."companyId"
+                 AND resolved."salesOrderId"=shipment."salesOrderId"
+                 AND resolved.status='DELIVERED'
+                 AND resolved."updatedAt">=shipment."updatedAt"
+            )
             AND (
               $2::boolean = FALSE
               OR (
