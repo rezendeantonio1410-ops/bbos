@@ -70,6 +70,7 @@ export class FinanceService implements OnModuleDestroy {
       receivables,
       payables,
       transactions,
+      transactionTotals,
       purchaseInstallments,
     ] = await Promise.all([
       this.database.financialAccount.findMany({
@@ -77,14 +78,27 @@ export class FinanceService implements OnModuleDestroy {
       }),
       this.database.accountsReceivable.findMany({
         where: companyId ? { companyId } : undefined,
+        include: {
+          customer: { select: { name: true } },
+          salesOrder: { select: { code: true, orderNumber: true } },
+        },
       }),
       this.database.accountsPayable.findMany({
         where: companyId ? { companyId } : undefined,
+        include: {
+          supplier: { select: { name: true } },
+          costCenter: { select: { name: true } },
+        },
       }),
       this.database.financialTransaction.findMany({
         where: companyId ? { companyId } : undefined,
         orderBy: { occurredAt: "desc" },
         take: 200,
+      }),
+      this.database.financialTransaction.groupBy({
+        by: ["type"],
+        where: companyId ? { companyId } : undefined,
+        _sum: { amount: true },
       }),
       this.database.greenCoffeePurchaseInstallment.findMany({
         where: {
@@ -109,16 +123,16 @@ export class FinanceService implements OnModuleDestroy {
         (sum, account) => sum + Number(account.openingBalance),
         0,
       ) +
-      transactions.reduce(
+      transactionTotals.reduce(
         (sum, item) =>
           sum +
           (item.type === FinancialTransactionType.RECEIPT ||
           item.type === FinancialTransactionType.TRANSFER_IN
-            ? Number(item.amount)
+            ? Number(item._sum.amount)
             : item.type === FinancialTransactionType.PAYMENT ||
                 item.type === FinancialTransactionType.TRANSFER_OUT
-              ? -Number(item.amount)
-              : Number(item.amount)),
+              ? -Number(item._sum.amount)
+              : Number(item._sum.amount)),
         0,
       );
     const overdueReceivables = receivables
@@ -165,6 +179,48 @@ export class FinanceService implements OnModuleDestroy {
           item.status === "PLANNED" && item.purchase.approvalStatus !== "DRAFT",
       )
       .reduce((sum, item) => sum + Number(item.amount), 0);
+    const receivableProjection = receivables
+      .filter(
+        (item) =>
+          item.status !== ReceivableStatus.CANCELLED &&
+          item.status !== ReceivableStatus.PAID &&
+          Number(item.openAmount) > 0,
+      )
+      .map((item) => ({
+        id: item.id,
+        document:
+          item.invoiceId ??
+          item.salesOrder?.orderNumber ??
+          item.salesOrder?.code ??
+          null,
+        counterparty: item.customer.name,
+        description: item.notes,
+        issueDate: item.issueDate,
+        dueDate: item.dueDate,
+        amount: Number(item.openAmount),
+        status: item.status,
+      }));
+    const payableProjection = payables
+      .filter(
+        (item) =>
+          item.status !== PayableStatus.CANCELLED &&
+          item.status !== PayableStatus.PAID &&
+          Number(item.openAmount) > 0,
+      )
+      .map((item) => ({
+        id: item.id,
+        document: null,
+        counterparty:
+          item.supplier?.name ??
+          item.costCenter?.name ??
+          "Sem fornecedor informado",
+        description: item.description,
+        category: item.category,
+        issueDate: item.issueDate,
+        dueDate: item.dueDate,
+        amount: Number(item.openAmount),
+        status: item.status,
+      }));
     return {
       source: "database",
       cash,
@@ -176,6 +232,8 @@ export class FinanceService implements OnModuleDestroy {
       delinquency: overdueReceivables,
       accounts,
       transactions,
+      receivableProjection,
+      payableProjection,
       greenCoffeePurchaseProjection,
     };
   }

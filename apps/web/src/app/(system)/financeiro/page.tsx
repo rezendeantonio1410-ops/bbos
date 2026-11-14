@@ -13,6 +13,11 @@ import {
 } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import {
+  buildCashFlowLines,
+  type CashFlowProjectionSource,
+  type GreenCoffeeProjectionSource,
+} from "@/lib/finance-cashflow";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -32,7 +37,9 @@ type FinanceSummary = {
   delinquency: number;
   accounts?: unknown[];
   transactions?: unknown[];
-  greenCoffeePurchaseProjection?: unknown[];
+  receivableProjection?: CashFlowProjectionSource[];
+  payableProjection?: CashFlowProjectionSource[];
+  greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
 };
 
 const emptySummary: FinanceSummary = {
@@ -45,12 +52,16 @@ const emptySummary: FinanceSummary = {
   delinquency: 0,
   accounts: [],
   transactions: [],
+  receivableProjection: [],
+  payableProjection: [],
   greenCoffeePurchaseProjection: [],
 };
 
 export default function FinancePage() {
   const [data, setData] = React.useState<FinanceSummary>(emptySummary);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = React.useState<"loading" | "ready" | "error">(
+    "loading",
+  );
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -62,7 +73,9 @@ export default function FinancePage() {
       .then(async (response) => {
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
-          throw new Error(body.message ?? "Não foi possível carregar o financeiro.");
+          throw new Error(
+            body.message ?? "Não foi possível carregar o financeiro.",
+          );
         }
         return response.json() as Promise<FinanceSummary>;
       })
@@ -71,7 +84,8 @@ export default function FinancePage() {
         setStatus("ready");
       })
       .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
         setData(emptySummary);
         setStatus("error");
       });
@@ -79,13 +93,53 @@ export default function FinancePage() {
   }, []);
 
   const cards = [
-    ["Caixa atual", money.format(data.cash), "/financeiro/fluxo-caixa", Banknote],
-    ["Contas a receber", money.format(data.receivables), "/financeiro/receber", TrendingUp],
-    ["Contas a pagar", money.format(data.payables), "/financeiro/pagar", CreditCard],
-    ["Compras previstas", money.format(data.plannedPurchases), "/compras-cafe-verde", CreditCard],
-    ["Saldo projetado", money.format(data.projectedBalance), "/financeiro/fluxo-caixa", CircleDollarSign],
-    ["Inadimplência", money.format(data.delinquency), "/financeiro/receber", TrendingUp],
+    [
+      "Caixa atual",
+      money.format(data.cash),
+      "/financeiro/fluxo-caixa",
+      Banknote,
+    ],
+    [
+      "Contas a receber",
+      money.format(data.receivables),
+      "/financeiro/receber",
+      TrendingUp,
+    ],
+    [
+      "Contas a pagar",
+      money.format(data.payables),
+      "/financeiro/pagar",
+      CreditCard,
+    ],
+    [
+      "Compras previstas",
+      money.format(data.plannedPurchases),
+      "/compras-cafe-verde",
+      CreditCard,
+    ],
+    [
+      "Saldo projetado",
+      money.format(data.projectedBalance),
+      "/financeiro/fluxo-caixa",
+      CircleDollarSign,
+    ],
+    [
+      "Inadimplência",
+      money.format(data.delinquency),
+      "/financeiro/receber",
+      TrendingUp,
+    ],
   ] as const;
+  const projection = React.useMemo(
+    () =>
+      buildCashFlowLines({
+        cash: data.cash,
+        receivables: data.receivableProjection,
+        payables: data.payableProjection,
+        purchases: data.greenCoffeePurchaseProjection,
+      }),
+    [data],
+  );
 
   return (
     <div className="mx-auto max-w-[1500px]">
@@ -116,12 +170,14 @@ export default function FinancePage() {
         </span>
       </header>
 
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <section className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
         {cards.map(([label, value, href, Icon]) => (
           <Link key={label} href={href}>
-            <Card className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+            <Card className="h-full p-3.5 transition hover:-translate-y-0.5 hover:shadow-md sm:p-4">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold text-stone-500">{label}</p>
+                <p className="text-[11px] font-semibold text-stone-500">
+                  {label}
+                </p>
                 <Icon size={15} className="text-forest-700" />
               </div>
               <p className="mt-3 truncate text-xl font-bold">{value}</p>
@@ -130,72 +186,137 @@ export default function FinancePage() {
         ))}
       </section>
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-[1.6fr_.8fr]">
-        <Card className="p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className="mt-4 grid gap-3 xl:grid-cols-[1.6fr_.8fr]">
+        <Card className="overflow-hidden p-0">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">
                 Fluxo de caixa
               </p>
-              <h2 className="mt-1 text-lg font-bold">Posição financeira atual</h2>
-              <p className="mt-2 text-xs text-stone-500">
-                Consolidado diretamente das contas, recebíveis, pagamentos e compromissos registrados no BBOs.
+              <h2 className="mt-0.5 text-lg font-bold">Próximos vencimentos</h2>
+              <p className="mt-1 text-xs text-stone-500">
+                Linhas que explicam a projeção, em ordem de vencimento.
               </p>
             </div>
-            <Link href="/financeiro/fluxo-caixa" className="text-xs font-bold text-forest-700">
-              Detalhar
+            <Link
+              href="/financeiro/fluxo-caixa"
+              className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-forest-700"
+            >
+              Ver fluxo completo <ArrowRight size={13} />
             </Link>
           </div>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Position label="Caixa" value={money.format(data.cash)} />
-            <Position label="Recebíveis" value={money.format(data.receivables)} />
-            <Position label="Pagáveis" value={money.format(data.payables)} />
-            <Position label="Projetado" value={money.format(data.projectedBalance)} />
-          </div>
-          {status === "ready" && (data.transactions?.length ?? 0) === 0 && (
-            <div className="mt-6 rounded-xl border border-dashed border-stone-200 p-6 text-center text-xs text-stone-500">
-              Ainda não há movimentações financeiras suficientes para exibir uma série histórica real.
+          {status === "loading" ? (
+            <div className="p-8 text-center text-sm text-stone-500">
+              Carregando vencimentos…
+            </div>
+          ) : projection.length === 0 ? (
+            <div className="p-8 text-center text-xs text-stone-500">
+              Nenhum título em aberto forma a projeção atual.
+            </div>
+          ) : (
+            <div>
+              {projection.slice(0, 6).map((line) => {
+                const incoming = line.kind === "RECEIVABLE";
+                return (
+                  <div
+                    key={line.id}
+                    className="grid gap-1 border-b border-stone-100 px-4 py-2.5 text-xs sm:grid-cols-[.75fr_1.25fr_1fr_.7fr] sm:items-center sm:gap-3"
+                  >
+                    <span className="font-semibold text-stone-500">
+                      {new Date(line.dueDate).toLocaleDateString("pt-BR")}
+                    </span>
+                    <span className="min-w-0 truncate font-semibold">
+                      {line.document}
+                    </span>
+                    <span className="min-w-0 truncate text-stone-500">
+                      {line.counterparty}
+                    </span>
+                    <strong
+                      className={`sm:text-right ${incoming ? "text-emerald-700" : "text-rose-700"}`}
+                    >
+                      {incoming ? "+" : "−"}
+                      {money.format(line.amount)}
+                    </strong>
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">
             Atenção financeira
           </p>
           <h2 className="mt-1 text-lg font-bold">Indicadores operacionais</h2>
           <div className="mt-5 space-y-4">
-            <Alert label="Inadimplência em aberto" value={money.format(data.delinquency)} tone="danger" />
-            <Alert label="Compras previstas" value={money.format(data.plannedPurchases)} tone="warning" />
-            <Alert label="Receita faturada ≠ caixa recebido" value="Conceitos separados" tone="neutral" />
+            <Alert
+              label="Inadimplência em aberto"
+              value={money.format(data.delinquency)}
+              tone="danger"
+            />
+            <Alert
+              label="Compras previstas"
+              value={money.format(data.plannedPurchases)}
+              tone="warning"
+            />
+            <Alert
+              label="Receita faturada ≠ caixa recebido"
+              value="Conceitos separados"
+              tone="neutral"
+            />
           </div>
-          <Link href="/financeiro/receber" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-forest-700">
+          <Link
+            href="/financeiro/receber"
+            className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-forest-700"
+          >
             Ver contas a receber <ArrowRight size={13} />
           </Link>
         </Card>
       </section>
 
-      <section className="mt-6 grid gap-3 md:grid-cols-5">
-        <Quick href="/financeiro/receber" title="Contas a receber" detail="A vencer, vencidos e pagamentos parciais" />
-        <Quick href="/financeiro/pagar" title="Contas a pagar" detail="Fornecedores e centros de custo" />
-        <Quick href="/financeiro/fluxo-caixa" title="Fluxo de caixa" detail="Realizado, projeção e movimentações" />
-        <Quick href="/financeiro/bancos-contas" title="Bancos e contas" detail="Contas permanentes, moeda, agência e saldo inicial" icon={Landmark} />
-        <Quick href="/financeiro/conciliacao" title="Conciliação" detail="Compare movimentos e confirme divergências" icon={GitCompareArrows} />
+      <section className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <Quick
+          href="/financeiro/receber"
+          title="Contas a receber"
+          detail="A vencer, vencidos e pagamentos parciais"
+        />
+        <Quick
+          href="/financeiro/pagar"
+          title="Contas a pagar"
+          detail="Fornecedores e centros de custo"
+        />
+        <Quick
+          href="/financeiro/fluxo-caixa"
+          title="Fluxo de caixa"
+          detail="Realizado, projeção e movimentações"
+        />
+        <Quick
+          href="/financeiro/bancos-contas"
+          title="Bancos e contas"
+          detail="Contas permanentes, moeda, agência e saldo inicial"
+          icon={Landmark}
+        />
+        <Quick
+          href="/financeiro/conciliacao"
+          title="Conciliação"
+          detail="Compare movimentos e confirme divergências"
+          icon={GitCompareArrows}
+        />
       </section>
     </div>
   );
 }
 
-function Position({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-[#F7F9F8] p-4">
-      <p className="text-[10px] text-stone-500">{label}</p>
-      <p className="mt-2 text-lg font-bold text-stone-900">{value}</p>
-    </div>
-  );
-}
-
-function Alert({ label, value, tone }: { label: string; value: string; tone: "danger" | "warning" | "neutral" }) {
+function Alert({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "danger" | "warning" | "neutral";
+}) {
   return (
     <div className="flex items-center justify-between border-b border-stone-100 pb-3">
       <p className="text-xs text-stone-500">{label}</p>
