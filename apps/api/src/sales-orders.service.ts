@@ -2173,8 +2173,60 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         "Pedido cancelado não pode ser concluído como entregue.",
       );
     }
+    const deliveredAt = new Date();
+    const actorName = String(input.actorName ?? "Operador BBOS").trim();
+    const reconcileShipment = async () => {
+      if (typeof (this.database as any).$executeRawUnsafe !== "function")
+        return;
+      await this.database.$executeRawUnsafe(
+        `UPDATE "Shipment"
+            SET status='DELIVERED',
+                "deliveredAt"=COALESCE("deliveredAt",$3),
+                metadata=COALESCE(metadata,'{}'::jsonb) || $4::jsonb,
+                "updatedAt"=NOW()
+          WHERE id=(
+            SELECT id FROM "Shipment"
+             WHERE "companyId"=$1 AND "salesOrderId"=$2
+             ORDER BY "updatedAt" DESC
+             LIMIT 1
+          )`,
+        companyId,
+        id,
+        deliveredAt,
+        JSON.stringify({
+          manualDeliveryConfirmedAt: deliveredAt.toISOString(),
+          manualDeliveryConfirmedBy: actorName,
+          manualDeliveryMethod: input.method,
+        }),
+      );
+    };
+    const recordReconciliation = async () =>
+      this.customerLifecycle.record(
+        id,
+        "DELIVERED",
+        "Entrega confirmada no BBOS",
+        `A entrega física foi confirmada por ${actorName}; eventuais ocorrências anteriores da transportadora permanecem apenas no histórico.`,
+        "BBOS",
+        `sales-order:delivery-reconciled:${id}`,
+        {
+          completionMethod: input.method,
+          actorName,
+          actorRole: input.actorRole ?? null,
+          deliveredAt: deliveredAt.toISOString(),
+          reconciled: true,
+        },
+      );
+
     if (current.status === SalesOrderStatus.DELIVERED) {
-      return { orderId: id, idempotent: true, status: "DELIVERED" };
+      await reconcileShipment();
+      await recordReconciliation();
+      return {
+        orderId: id,
+        idempotent: true,
+        status: "DELIVERED",
+        deliveredAt,
+        shipmentReconciled: true,
+      };
     }
 
     if (current.status !== SalesOrderStatus.SHIPPED) {
@@ -2193,7 +2245,6 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const deliveredAt = new Date();
     await this.database.salesOrder.update({
       where: { id },
       data: {
@@ -2201,9 +2252,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         deliveredAt,
       },
     });
+    await reconcileShipment();
 
     const pickup = input.method === "PICKUP";
-    const actorName = String(input.actorName ?? "Operador BBOS").trim();
     await this.customerLifecycle.record(
       id,
       "DELIVERED",
@@ -2226,6 +2277,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
       idempotent: false,
       status: "DELIVERED",
       deliveredAt,
+      shipmentReconciled: true,
     };
   }
 

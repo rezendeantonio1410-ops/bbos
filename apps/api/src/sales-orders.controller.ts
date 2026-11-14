@@ -529,7 +529,6 @@ export class SalesOrdersController {
                    AND NOT EXISTS (
                      SELECT 1 FROM "SalesOrderCustomerEvent" resolved
                       WHERE resolved."salesOrderId"=so.id
-                        AND resolved.source IN ('MELHOR_ENVIO','CARRIER')
                         AND resolved."eventType"='DELIVERED'
                         AND resolved."occurredAt">issue."occurredAt"
                    )

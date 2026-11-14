@@ -4071,12 +4071,17 @@ function OrderDrawer({
             .join(" · ")
         : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
   const isPickup = order.freightResponsibility === "PICKUP";
+  const canReconcileDeliveredException =
+    order.status === "DELIVERED" &&
+    (fulfillment?.status === "EXCEPTION" ||
+      fulfillment?.hasUnresolvedDeliveryException === true);
   const canFinalizeDelivery =
     canCompleteDelivery &&
-    (isPickup
-      ? ["INVOICED", "READY_TO_SHIP"].includes(order.status) &&
-        fulfillment?.fiscalStatus === "AUTHORIZED"
-      : order.status === "SHIPPED");
+    (canReconcileDeliveredException ||
+      (isPickup
+        ? ["INVOICED", "READY_TO_SHIP"].includes(order.status) &&
+          fulfillment?.fiscalStatus === "AUTHORIZED"
+        : order.status === "SHIPPED"));
   const requested = Number(discountPercent || 0);
   const simulatedPrice = quote
     ? quote.officialUnitPrice * (1 - requested / 100)
@@ -4876,9 +4881,11 @@ function OrderDrawer({
                     >
                       {busy
                         ? "Concluindo…"
-                        : isPickup
-                          ? "Confirmar retirada e concluir"
-                          : "Confirmar entrega e concluir"}
+                        : canReconcileDeliveredException
+                          ? "Confirmar entrega e encerrar pendência"
+                          : isPickup
+                            ? "Confirmar retirada e concluir"
+                            : "Confirmar entrega e concluir"}
                     </button>
                   )}
                 </div>

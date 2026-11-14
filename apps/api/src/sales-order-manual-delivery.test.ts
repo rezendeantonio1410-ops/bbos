@@ -8,6 +8,7 @@ import { SalesOrdersService } from "./sales-orders.service";
 test("manual delivery dispatches inventory once and closes the order with audit", async () => {
   const lifecycle: unknown[][] = [];
   const updates: any[] = [];
+  const shipmentUpdates: unknown[][] = [];
   const service = new SalesOrdersService({
     record: async (...args: unknown[]) => lifecycle.push(args),
   } as never);
@@ -23,6 +24,10 @@ test("manual delivery dispatches inventory once and closes the order with audit"
           updates.push(input);
           return input.data;
         },
+      },
+      $executeRawUnsafe: async (...args: unknown[]) => {
+        shipmentUpdates.push(args);
+        return 1;
       },
     },
   });
@@ -53,9 +58,48 @@ test("manual delivery dispatches inventory once and closes the order with audit"
   });
   assert.equal(updates[0]?.data.status, SalesOrderStatus.DELIVERED);
   assert.ok(updates[0]?.data.deliveredAt instanceof Date);
+  assert.equal(shipmentUpdates.length, 1);
+  assert.match(String(shipmentUpdates[0]?.[0]), /status='DELIVERED'/);
+  assert.match(String(shipmentUpdates[0]?.[4]), /manualDeliveryConfirmedAt/);
   assert.equal(lifecycle[0]?.[1], "DELIVERED");
   assert.equal(lifecycle[0]?.[2], "Pedido entregue");
   assert.equal((lifecycle[0]?.[6] as any)?.actorName, "José Rezende");
+});
+
+test("an already delivered order still reconciles a stale carrier exception", async () => {
+  const lifecycle: unknown[][] = [];
+  const shipmentUpdates: unknown[][] = [];
+  const service = new SalesOrdersService({
+    record: async (...args: unknown[]) => lifecycle.push(args),
+  } as never);
+
+  Object.defineProperty(service, "database", {
+    value: {
+      salesOrder: {
+        findFirst: async () => ({
+          id: "order-delivered",
+          status: SalesOrderStatus.DELIVERED,
+        }),
+      },
+      $executeRawUnsafe: async (...args: unknown[]) => {
+        shipmentUpdates.push(args);
+        return 1;
+      },
+    },
+  });
+
+  const result = await service.deliver("company-1", "order-delivered", {
+    method: "MANUAL_DELIVERY",
+    actorName: "José Rezende",
+    actorRole: "ADMIN",
+  });
+
+  assert.equal(result.status, "DELIVERED");
+  assert.equal(result.idempotent, true);
+  assert.equal(result.shipmentReconciled, true);
+  assert.equal(shipmentUpdates.length, 1);
+  assert.match(String(shipmentUpdates[0]?.[0]), /status='DELIVERED'/);
+  assert.equal(lifecycle[0]?.[2], "Entrega confirmada no BBOS");
 });
 
 test("orders screen exposes explicit shipment and completion actions", () => {
@@ -77,7 +121,8 @@ test("orders screen exposes explicit shipment and completion actions", () => {
   assert.match(page, /Confirmar retirada e concluir/);
   assert.match(page, /Confirmar entrega e concluir/);
   assert.match(page, /const canFinalizeDelivery/);
-  assert.match(page, /\["INVOICED", "SHIPPED"\]\.includes\(order\.status\)/);
+  assert.match(page, /const canReconcileDeliveredException/);
+  assert.match(page, /Confirmar entrega e encerrar pendência/);
   assert.match(page, /overflow-y-auto overscroll-contain/);
   assert.match(page, /\["OVERDUE", "Atrasados"\]/);
   assert.match(page, /searchParams\.get\("filtro"\) === "atrasados"/);

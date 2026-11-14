@@ -1641,7 +1641,6 @@ export class MelhorEnvioShipmentService
                    AND NOT EXISTS (
                      SELECT 1 FROM "SalesOrderCustomerEvent" resolved
                       WHERE resolved."salesOrderId"=so.id
-                        AND resolved.source IN ('MELHOR_ENVIO','CARRIER')
                         AND resolved."eventType"='DELIVERED'
                         AND resolved."occurredAt">issue."occurredAt"
                    )
@@ -1899,6 +1898,17 @@ export class MelhorEnvioShipmentService
     const shipment = rows[0];
     if (!shipment) return { ignored: true };
     const normalized = normalizeMelhorEnvioTrackingStatus(statusValue);
+    if (
+      shipment.metadata?.manualDeliveryConfirmedAt &&
+      normalized !== "delivered" &&
+      normalized !== "entregue"
+    ) {
+      return {
+        ignored: true,
+        reason: "manual_delivery_already_confirmed",
+        salesOrderId: shipment.salesOrderId ?? null,
+      };
+    }
     const mapping =
       normalized.includes("out_for_delivery") || normalized.includes("saiu")
         ? {
