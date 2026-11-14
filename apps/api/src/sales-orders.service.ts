@@ -841,6 +841,12 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                 event."occurredAt" AS "latestEventAt",shipment."updatedAt"
            FROM "Shipment" shipment
            LEFT JOIN LATERAL (
+             SELECT "replacementShipmentId"
+               FROM "SalesOrderReexpedition"
+              WHERE "salesOrderId"=shipment."salesOrderId"
+              ORDER BY "attemptNumber" DESC LIMIT 1
+           ) reexpedition ON TRUE
+           LEFT JOIN LATERAL (
              SELECT title,detail,"occurredAt"
                FROM "SalesOrderCustomerEvent"
               WHERE "salesOrderId"=shipment."salesOrderId" AND source='CARRIER'
@@ -848,7 +854,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
            ) event ON TRUE
           WHERE shipment.provider='MELHOR_ENVIO'
             AND shipment."salesOrderId"=ANY($1::text[])
-          ORDER BY shipment."salesOrderId",shipment."updatedAt" DESC`,
+          ORDER BY shipment."salesOrderId",
+                   CASE WHEN shipment.id=reexpedition."replacementShipmentId" THEN 0 ELSE 1 END,
+                   shipment."createdAt" DESC,shipment."updatedAt" DESC`,
         orders.map((order) => order.id),
       ),
       this.database.$queryRawUnsafe<SalesOrderPaymentSummary[]>(

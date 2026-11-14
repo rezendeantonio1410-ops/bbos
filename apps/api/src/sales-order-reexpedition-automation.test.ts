@@ -80,6 +80,10 @@ test("a tela distingue os documentos fiscais e imprime a etiqueta nova", () => {
     salesOrdersService,
     /metadata->>'reexpeditionId' AS "reexpeditionId"/,
   );
+  assert.match(
+    salesOrdersService,
+    /CASE WHEN shipment\.id=reexpedition\."replacementShipmentId" THEN 0 ELSE 1 END/,
+  );
   assert.match(ordersPage, /REEXPEDITION_READY: "Reenvio pronto"/);
   assert.match(ordersPage, /Ver devolução/);
   assert.match(ordersPage, /Ver nova saída/);
