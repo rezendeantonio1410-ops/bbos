@@ -835,7 +835,7 @@ export default function OrdersPage() {
         </button>
       )}
 
-      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
+      <section className="-mx-2.5 mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2.5 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-7">
         <Kpi label="Pedidos em aberto" value={String(open.length)} />
         <Kpi
           label="Valor em carteira"
@@ -879,18 +879,20 @@ export default function OrdersPage() {
         <Kpi label="Ticket médio" value={money.format(avgTicket)} />
       </section>
 
-      <div className="mt-7 flex flex-wrap gap-2">
-        {filters.map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setFilter(value)}
-            className={`rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}
-          >
-            {value === "OVERDUE" && overdueOrders.length > 0
-              ? `${label} (${overdueOrders.length})`
-              : label}
-          </button>
-        ))}
+      <div className="-mx-2.5 mt-5 overflow-x-auto px-2.5 pb-1 sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
+          {filters.map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setFilter(value)}
+              className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}
+            >
+              {value === "OVERDUE" && overdueOrders.length > 0
+                ? `${label} (${overdueOrders.length})`
+                : label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <section className="mt-5">
@@ -3551,6 +3553,15 @@ function OrderDrawer({
     null,
   );
   const [termApprovalNote, setTermApprovalNote] = useState("");
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   const shipmentStep = shipmentProgressIndex(fulfillment, order.status);
   const shipmentProgress = Math.round(
     (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
@@ -4142,16 +4153,24 @@ function OrderDrawer({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
+  return createPortal(
+    <div
+      data-bbos-mobile-task
+      className="fixed inset-0 z-[80] flex justify-end overflow-hidden"
+    >
       <button
         aria-label="Fechar"
         onClick={onClose}
         className="absolute inset-0 bg-black/25"
       />
-      <aside className="relative h-dvh max-h-dvh min-h-0 w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 [scrollbar-gutter:stable]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Pedido ${order.orderNumber ?? order.code}`}
+        className="relative h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-3xl overflow-x-hidden overflow-y-auto overscroll-contain bg-white px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[max(.75rem,env(safe-area-inset-top))] [scrollbar-gutter:stable] sm:p-6"
+      >
+        <div className="sticky top-[env(safe-area-inset-top)] z-20 -mx-3 flex flex-col items-start justify-between gap-3 border-b bg-white/95 px-3 pb-3 pt-1 backdrop-blur sm:static sm:mx-0 sm:flex-row sm:gap-4 sm:border-0 sm:bg-transparent sm:p-0">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold">
                 {order.orderNumber ?? order.code}
@@ -4169,7 +4188,7 @@ function OrderDrawer({
             </div>
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="grid w-full grid-cols-2 items-stretch gap-2 [&>*]:min-w-0 [&>*]:justify-center sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:[&>*]:justify-start">
             {fulfillment?.fiscalStatus === "AUTHORIZED" &&
               fiscalDocumentUrl && (
                 <a
@@ -4463,13 +4482,13 @@ function OrderDrawer({
               </section>
             )}
 
-            <div className="mt-6 space-y-2">
+            <div className="mt-5 space-y-2 sm:mt-6">
               {order.items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 rounded-xl bg-stone-50 px-3 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_70px_110px_110px] sm:gap-2"
                 >
-                  <strong>
+                  <strong className="min-w-0 break-words">
                     {item.productName}
                     <span className="ml-1 font-normal text-stone-400">
                       {item.sku}
@@ -4481,7 +4500,9 @@ function OrderDrawer({
                       order.orderType === "SAMPLE",
                     )}
                   </span>
-                  <span>{money.format(Number(item.unitPrice ?? 0))}</span>
+                  <span className="text-stone-500 sm:text-stone-900">
+                    {money.format(Number(item.unitPrice ?? 0))}
+                  </span>
                   <strong className="text-right">
                     {money.format(Number(item.totalAmount))}
                   </strong>
@@ -5437,7 +5458,8 @@ function OrderDrawer({
           </>
         )}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -5474,7 +5496,7 @@ function ClientOrderView({
       </div>
 
       <div className="mt-6 overflow-hidden rounded-2xl border bg-white">
-        <div className="grid grid-cols-[1fr_58px_100px_108px] gap-2 border-b bg-stone-50 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+        <div className="hidden grid-cols-[minmax(0,1fr)_58px_100px_108px] gap-2 border-b bg-stone-50 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-stone-400 sm:grid">
           <span>Produto</span>
           <span>{order.orderType === "SAMPLE" ? "Pacotes" : "Qtd."}</span>
           <span>{order.orderType === "SAMPLE" ? "Preço/pacote" : "Preço"}</span>
@@ -5483,9 +5505,9 @@ function ClientOrderView({
         {order.items.map((item) => (
           <div
             key={item.id}
-            className="grid grid-cols-[1fr_58px_100px_108px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b px-3 py-3 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_58px_100px_108px] sm:gap-2"
           >
-            <strong>{item.productName}</strong>
+            <strong className="min-w-0 break-words">{item.productName}</strong>
             <span>
               {order.orderType === "SAMPLE"
                 ? itemQuantityLabel(item.quantity, true)
@@ -5586,7 +5608,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="p-4">
+    <Card className="min-w-[10.5rem] flex-1 snap-start p-4 md:min-w-0">
       <p className="text-[11px] text-stone-500">{label}</p>
       <p className="mt-2 text-xl font-bold">{value}</p>
     </Card>
