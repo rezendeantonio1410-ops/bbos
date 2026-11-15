@@ -11,6 +11,21 @@ export function keepCurrentCreditDecisions<T extends { type: string }>(
   });
 }
 
+export function deliveryExceptionShipmentId(type: string) {
+  if (!type.startsWith("ORDER_DELIVERY_EXCEPTION:")) return null;
+  return type.split(":")[1] || null;
+}
+
+export function keepOpenDeliveryExceptions<T extends { type: string }>(
+  notifications: T[],
+  openShipmentIds: ReadonlySet<string>,
+) {
+  return notifications.filter((item) => {
+    const shipmentId = deliveryExceptionShipmentId(item.type);
+    return shipmentId === null || openShipmentIds.has(shipmentId);
+  });
+}
+
 export function notificationHref(type: string, purchaseId: string | null) {
   if (type.startsWith("SALES_RECEIVABLE_OVERDUE")) {
     const customerId = type.split(":")[1];

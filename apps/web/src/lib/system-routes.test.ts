@@ -181,6 +181,31 @@ test("o novo pedido usa uma jornada compacta em celular e tablet", () => {
   assert.match(orders, /Revisar pedido/);
 });
 
+test("novo pedido oferece saída segura e sempre visível no celular", () => {
+  const orders = readFileSync(
+    join(__dirname, "../app/(system)/pedidos/page.tsx"),
+    "utf8",
+  );
+
+  assert.match(orders, /Descartar este lançamento\?/);
+  assert.match(orders, /Continuar preenchendo/);
+  assert.match(orders, /Descartar e sair/);
+  assert.match(orders, /pb-\[max\(\.75rem,env\(safe-area-inset-bottom\)\)\]/);
+});
+
+test("todas as telas móveis possuem retorno global e diálogos identificam a saída", () => {
+  const shell = readFileSync(
+    join(__dirname, "../components/app-shell-v2.tsx"),
+    "utf8",
+  );
+  const styles = readFileSync(join(__dirname, "../app/vnext.css"), "utf8");
+
+  assert.match(shell, /aria-label="Abandonar esta tela e voltar"/);
+  assert.match(shell, /mobileExitHref/);
+  assert.match(styles, /button\[aria-label\^="Fechar"\]/);
+  assert.match(styles, /content: "Sair"/);
+});
+
 test("management domain opens the BBOS login instead of the storefront", () => {
   assert.equal(
     resolveDomainRedirect({

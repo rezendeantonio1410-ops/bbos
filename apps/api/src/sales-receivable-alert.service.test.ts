@@ -7,7 +7,9 @@ import {
   salesOverdueNotificationType,
 } from "./sales-receivable-alert.service";
 import {
+  deliveryExceptionShipmentId,
   keepCurrentCreditDecisions,
+  keepOpenDeliveryExceptions,
   notificationHref,
 } from "./notification-links";
 
@@ -41,6 +43,31 @@ test("notificações mostram somente a decisão de crédito atual por cliente", 
   assert.deepEqual(
     items.map((item) => item.id),
     ["new", "other", "visit"],
+  );
+});
+
+test("notificações de entrega encerradas deixam de aparecer como críticas", () => {
+  const items = [
+    {
+      id: "open",
+      type: "ORDER_DELIVERY_EXCEPTION:shipment-open:ADMIN",
+    },
+    {
+      id: "resolved",
+      type: "ORDER_DELIVERY_EXCEPTION:shipment-resolved:ADMIN",
+    },
+    { id: "credit", type: "CREDIT_REQUEST:customer-1:ADMIN:event-1" },
+  ];
+
+  assert.equal(
+    deliveryExceptionShipmentId(items[0]!.type),
+    "shipment-open",
+  );
+  assert.deepEqual(
+    keepOpenDeliveryExceptions(items, new Set(["shipment-open"])).map(
+      (item) => item.id,
+    ),
+    ["open", "credit"],
   );
 });
 

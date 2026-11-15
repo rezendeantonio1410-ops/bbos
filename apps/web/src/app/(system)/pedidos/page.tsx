@@ -659,6 +659,14 @@ export default function OrdersPage() {
     void refreshOptions();
   };
 
+  const closeNewOrder = () => {
+    setCreating(null);
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("novo")) return;
+    url.searchParams.delete("novo");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
   useEffect(() => {
     void refresh();
     const searchParams = new URLSearchParams(window.location.search);
@@ -1129,9 +1137,9 @@ export default function OrdersPage() {
           customers={customers}
           variants={variants}
           brokers={brokers}
-          onClose={() => setCreating(null)}
+          onClose={closeNewOrder}
           onCreated={async () => {
-            setCreating(null);
+            closeNewOrder();
             await refresh();
           }}
         />
@@ -1632,10 +1640,40 @@ function NewOrder({
   const [mobileStep, setMobileStep] = useState<1 | 2 | 3 | 4>(1);
   const [isMobileFlow, setIsMobileFlow] = useState(false);
   const [error, setError] = useState("");
+  const [discardConfirmationOpen, setDiscardConfirmationOpen] =
+    useState(false);
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
   const formScrollRef = useRef<HTMLDivElement>(null);
   const isSample = orderType === "SAMPLE";
+
+  const hasMeaningfulDraft = Boolean(
+    orderPurpose ||
+      customerId ||
+      lines.some(
+        (line) =>
+          line.variantId ||
+          line.quantity !== 1 ||
+          Boolean(line.discountAmount?.trim()),
+      ) ||
+      freightResponsibility ||
+      carrierName.trim() ||
+      expectedDeliveryDate ||
+      customerReference.trim() ||
+      notes.trim() ||
+      brokerId ||
+      incoterm.trim() ||
+      incotermLocation.trim() ||
+      customsDeclaredValue,
+  );
+
+  const requestClose = () => {
+    if (hasMeaningfulDraft) {
+      setDiscardConfirmationOpen(true);
+      return;
+    }
+    onClose();
+  };
 
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
@@ -2241,7 +2279,7 @@ function NewOrder({
     <div className="fixed inset-0 z-50 flex overflow-clip justify-end">
       <button
         aria-label="Fechar"
-        onClick={onClose}
+        onClick={requestClose}
         className="absolute inset-0 bg-black/25"
       />
       <aside
@@ -2268,11 +2306,13 @@ function NewOrder({
           </div>
           <button
             type="button"
+            data-mobile-exit-labeled
             aria-label="Fechar novo pedido"
-            onClick={onClose}
-            className="grid size-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"
+            onClick={requestClose}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-stone-600 hover:bg-stone-100"
           >
             <X size={19} />
+            <span className="text-xs font-bold sm:hidden">Cancelar</span>
           </button>
         </header>
 
@@ -3583,6 +3623,15 @@ function NewOrder({
             </p>
           )}
           <div className="flex gap-2">
+            {(!isMobileFlow || mobileStep === 1) && (
+              <button
+                type="button"
+                onClick={requestClose}
+                className="min-h-12 shrink-0 rounded-xl border border-stone-300 bg-white px-4 text-xs font-bold text-stone-700"
+              >
+                Cancelar
+              </button>
+            )}
             {isMobileFlow && mobileStep > 1 && (
               <button
                 type="button"
@@ -3616,6 +3665,45 @@ function NewOrder({
             </button>
           </div>
         </footer>
+
+        {discardConfirmationOpen && (
+          <div className="absolute inset-0 z-20 flex items-end bg-black/35 p-3 sm:items-center sm:justify-center">
+            <section
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="discard-order-title"
+              aria-describedby="discard-order-description"
+              className="w-full rounded-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md"
+            >
+              <h3 id="discard-order-title" className="text-lg font-bold">
+                Descartar este lançamento?
+              </h3>
+              <p
+                id="discard-order-description"
+                className="mt-2 text-sm leading-6 text-stone-600"
+              >
+                As informações preenchidas neste pedido ainda não foram salvas.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setDiscardConfirmationOpen(false)}
+                  className="min-h-12 rounded-xl border border-stone-300 bg-white px-4 text-sm font-bold text-stone-700"
+                >
+                  Continuar preenchendo
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="min-h-12 rounded-xl bg-red-700 px-4 text-sm font-bold text-white"
+                >
+                  Descartar e sair
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </aside>
     </div>,
     document.body,
