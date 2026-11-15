@@ -483,9 +483,63 @@ test("partner portal data queries are always scoped to the signed partner and co
   assert.match(source, /c\."companyId"=\$1 AND c\."partnerId"=\$2/);
   assert.match(source, /FROM "StorefrontPartnerCustomer" link/);
   assert.match(source, /so\."createdByStorefrontPartnerId"=\$2/);
+  assert.match(source, /assertPartnerOrder/);
+  assert.match(source, /orders\/:orderId\/billing\/pdf/);
+  assert.match(source, /"Cache-Control": "private, no-store"/);
   assert.match(source, /"SELLER", "SALES_MANAGER", "DISTRIBUTOR"/);
   assert.match(source, /partner\.portalAccessLevel === "SALES_MANAGER"/);
+  assert.match(source, /assertCanManageCustomerPortfolio/);
+  assert.match(source, /canCreateCustomers: \["SELLER", "SALES_MANAGER"\]/);
+  assert.match(source, /isDistributor/);
   assert.doesNotMatch(source, /salesOrders\.confirm\(/);
+});
+
+test("distributor portal is tied to one matching customer account", () => {
+  const source = readFileSync(
+    join(__dirname, "storefront-partners.controller.ts"),
+    "utf8",
+  );
+  assert.match(source, /accessLevel === "DISTRIBUTOR"/);
+  assert.match(source, /customerIds\.length !== 1/);
+  assert.match(source, /partnerTaxId !== customerTaxId/);
+  assert.match(source, /mesmo CPF\/CNPJ/);
+});
+
+test("distributor catalog is filtered and priced on the server", () => {
+  const source = readFileSync(
+    join(__dirname, "partner-portal.controller.ts"),
+    "utf8",
+  );
+  assert.match(source, /private async distributorCatalog/);
+  assert.match(source, /private async distributorVariantOptions/);
+  assert.match(source, /productVariant\.findMany/);
+  assert.match(source, /productionToOrder: true/);
+  assert.match(source, /Produção sob encomenda/);
+  assert.match(source, /sc\.type='DISTRIBUIDOR'/);
+  assert.match(source, /CustomerProductPrice/);
+  assert.match(source, /distributorCatalog\.variantIds\.has/);
+  assert.match(source, /customerProductPriceId/);
+  assert.match(source, /baseProductPriceId/);
+  assert.match(source, /Produto não liberado na lista comercial/);
+  assert.match(source, /aguardando aprovação de José ou Suzi/);
+  assert.match(source, /data desejada será confirmada/);
+});
+
+test("distributor order requires José or Suzi approval and enters production", () => {
+  const controllerSource = readFileSync(
+    join(__dirname, "sales-orders.controller.ts"),
+    "utf8",
+  );
+  const serviceSource = readFileSync(
+    join(__dirname, "sales-orders.service.ts"),
+    "utf8",
+  );
+  assert.match(controllerSource, /partnerAccessLevel === "DISTRIBUTOR"/);
+  assert.match(controllerSource, /isDesignatedTermCreditApprover\(actor\)/);
+  assert.match(controllerSource, /Somente José ou Suzi podem aprovar/);
+  assert.match(controllerSource, /Defina a data de entrega antes de aprovar/);
+  assert.match(serviceSource, /productionToOrder/);
+  assert.match(serviceSource, /SalesOrderStatus\.IN_PRODUCTION/);
 });
 
 test("every registered non-public controller has an explicit access policy", () => {

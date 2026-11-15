@@ -37,6 +37,12 @@ type Variant = {
   sku: string;
   presentationGrams: number;
   availableStock: number;
+  productionToOrder?: boolean;
+};
+type CatalogInfo = {
+  distributor: boolean;
+  exclusive: boolean;
+  productCount: number;
 };
 type Order = {
   id: string;
@@ -45,6 +51,16 @@ type Order = {
   totalAmount: number | string;
   orderedAt: string;
   customerName: string;
+  paymentType?: "CASH" | "TERM" | null;
+  paymentTermsSnapshot?: string | null;
+  receivableStatus?: string | null;
+  dueDate?: string | null;
+  receivableAmount?: number | string | null;
+  openAmount?: number | string | null;
+  paymentDate?: string | null;
+  invoiceNumber?: string | null;
+  invoiceStatus?: string | null;
+  billingAvailable?: boolean;
 };
 type Line = { id: string; productVariantId: string; quantity: number };
 type Quote = {
@@ -117,6 +133,13 @@ const creditStatusLabels: Record<string, string> = {
   APPROVED: "aprovado",
   REJECTED: "não aprovado",
 };
+const receivableStatusLabels: Record<string, string> = {
+  OPEN: "Em aberto",
+  PARTIALLY_PAID: "Pago parcialmente",
+  OVERDUE: "Vencido",
+  PAID: "Pago",
+  CANCELLED: "Cancelado",
+};
 const purposeLabel = (value: string) => purposeLabels[value] || value;
 const outcomeLabel = (value: string) => outcomeLabels[value] || value;
 const creditStatusLabel = (value?: string) =>
@@ -151,8 +174,10 @@ export function PartnerOrderWorkspace({
   orders: Order[];
   onOrderCreated: () => Promise<void>;
 }) {
+  const isDistributor = accessLevel === "DISTRIBUTOR";
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
+  const [catalog, setCatalog] = useState<CatalogInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -196,9 +221,11 @@ export function PartnerOrderWorkspace({
       const result = await portalApi<{
         customers: Customer[];
         variants: Variant[];
+        catalog: CatalogInfo;
       }>("/order-options");
       setCustomers(result.customers);
       setVariants(result.variants);
+      setCatalog(result.catalog);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -213,6 +240,14 @@ export function PartnerOrderWorkspace({
   useEffect(() => {
     void loadOptions();
   }, [loadOptions]);
+
+  useEffect(() => {
+    const distributorCustomer =
+      isDistributor && customers.length === 1 ? customers[0] : null;
+    if (!distributorCustomer) return;
+    setCustomerId(distributorCustomer.id);
+    setRelationshipCustomerId(distributorCustomer.id);
+  }, [customers, isDistributor]);
 
   const loadVisits = useCallback(async (selectedCustomerId: string) => {
     if (!selectedCustomerId) {
@@ -402,7 +437,9 @@ export function PartnerOrderWorkspace({
       setMessage(`${order.code} criado. ${order.message}`);
       setShowOrder(false);
       setLines([newLine()]);
-      setCustomerId("");
+      const distributorCustomer =
+        isDistributor && customers.length === 1 ? customers[0] : null;
+      setCustomerId(distributorCustomer?.id ?? "");
       setQuote(null);
       setCarrierName("");
       setExpectedDeliveryDate("");
@@ -436,24 +473,34 @@ export function PartnerOrderWorkspace({
                 ? "Gerente comercial · carteira completa"
                 : "Vendedor · somente sua carteira"}
           </p>
-          <h2 className="mt-1 text-2xl font-semibold">Pedidos para clientes</h2>
+          <h2 className="mt-1 text-2xl font-semibold">
+            {isDistributor
+              ? "Minhas compras na Bispo"
+              : "Pedidos para clientes"}
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-            Use clientes vinculados ao seu acesso ou cadastre um novo. O preço
-            vem da tabela oficial e o pedido segue para conferência da Bispo.
+            {isDistributor
+              ? "Faça pedidos somente para sua empresa. Os preços vêm da sua tabela e o pedido segue para conferência da Bispo."
+              : "Use clientes vinculados ao seu acesso ou cadastre um novo. O preço vem da tabela oficial e o pedido segue para conferência da Bispo."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setShowCustomer((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl border border-emerald-800 bg-white px-4 py-3 text-xs font-bold text-emerald-900"
-          >
-            <UserPlus size={15} /> Cadastrar cliente
-          </button>
+          {!isDistributor && (
+            <button
+              type="button"
+              onClick={() => setShowCustomer((value) => !value)}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-800 bg-white px-4 py-3 text-xs font-bold text-emerald-900"
+            >
+              <UserPlus size={15} /> Cadastrar cliente
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowOrder((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white"
+            disabled={
+              (isDistributor && customers.length !== 1) || !variants.length
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
           >
             <ShoppingCart size={15} /> Novo pedido
           </button>
@@ -479,7 +526,7 @@ export function PartnerOrderWorkspace({
         </p>
       )}
 
-      {showCustomer && (
+      {showCustomer && !isDistributor && (
         <form
           onSubmit={createCustomer}
           className="mt-6 grid gap-3 rounded-2xl bg-white p-4 sm:grid-cols-2"
@@ -638,55 +685,71 @@ export function PartnerOrderWorkspace({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#087568]">
-              Relacionamento comercial
+              {isDistributor ? "Conta comercial" : "Relacionamento comercial"}
             </p>
             <h3 className="mt-1 text-lg font-semibold">
-              Visitas, crédito e histórico
+              {isDistributor
+                ? "Meu cadastro e condição de compra"
+                : "Visitas, crédito e histórico"}
             </h3>
             <p className="mt-1 text-xs leading-5 text-stone-500">
-              Registre o que aconteceu no cliente e deixe a próxima ação clara
-              para toda a equipe.
+              {isDistributor
+                ? "Este é o único cadastro autorizado para seus pedidos. Solicitações de crédito continuam sujeitas à aprovação da Bispo."
+                : "Registre o que aconteceu no cliente e deixe a próxima ação clara para toda a equipe."}
             </p>
           </div>
           <History size={20} className="text-emerald-800" />
         </div>
 
-        <div className="mt-4">
-          <PortalField label="Cliente">
-            <select
-              value={relationshipCustomerId}
-              onChange={(event) => {
-                setRelationshipCustomerId(event.target.value);
-                setShowVisit(false);
-                setShowCredit(false);
-              }}
-            >
-              <option value="">Selecione o cliente</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.tradeName || customer.name}
-                  {customer.city
-                    ? ` · ${customer.city}/${customer.state || ""}`
-                    : ""}
-                </option>
-              ))}
-            </select>
-          </PortalField>
-        </div>
+        {!isDistributor && (
+          <div className="mt-4">
+            <PortalField label="Cliente">
+              <select
+                value={relationshipCustomerId}
+                onChange={(event) => {
+                  setRelationshipCustomerId(event.target.value);
+                  setShowVisit(false);
+                  setShowCredit(false);
+                }}
+              >
+                <option value="">Selecione o cliente</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.tradeName || customer.name}
+                    {customer.city
+                      ? ` · ${customer.city}/${customer.state || ""}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </PortalField>
+          </div>
+        )}
+
+        {isDistributor && customers.length !== 1 && !loading && (
+          <p className="mt-4 rounded-xl bg-amber-50 p-4 text-xs font-semibold text-amber-900">
+            O acesso do distribuidor precisa ser vinculado a um único cadastro
+            próprio pela equipe Bispo.
+          </p>
+        )}
 
         {relationshipCustomer && (
           <>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowVisit((value) => !value);
-                  setShowCredit(false);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white"
-              >
-                <CalendarDays size={15} /> Registrar visita
-              </button>
+            <div
+              className={`mt-4 grid gap-2 ${isDistributor ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+            >
+              {!isDistributor && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVisit((value) => !value);
+                    setShowCredit(false);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white"
+                >
+                  <CalendarDays size={15} /> Registrar visita
+                </button>
+              )}
               <button
                 type="button"
                 disabled={relationshipCustomer.creditReviewPending}
@@ -703,13 +766,14 @@ export function PartnerOrderWorkspace({
               </button>
               <button
                 type="button"
+                disabled={!variants.length}
                 onClick={() => {
                   setCustomerId(relationshipCustomer.id);
                   setShowOrder(true);
                   setShowVisit(false);
                   setShowCredit(false);
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-800 px-4 py-3 text-xs font-bold text-emerald-900"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-800 px-4 py-3 text-xs font-bold text-emerald-900 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <ShoppingCart size={15} /> Fazer pedido
               </button>
@@ -732,7 +796,7 @@ export function PartnerOrderWorkspace({
           </>
         )}
 
-        {showVisit && relationshipCustomer && (
+        {showVisit && relationshipCustomer && !isDistributor && (
           <form
             onSubmit={createVisit}
             className="mt-5 grid gap-3 rounded-2xl bg-[#f5f3ed] p-4 sm:grid-cols-2"
@@ -860,7 +924,7 @@ export function PartnerOrderWorkspace({
           </form>
         )}
 
-        {relationshipCustomer && (
+        {relationshipCustomer && !isDistributor && (
           <div className="mt-6 border-t border-stone-100 pt-5">
             <div className="flex items-center justify-between gap-3">
               <h4 className="text-sm font-bold">Histórico de visitas</h4>
@@ -927,37 +991,61 @@ export function PartnerOrderWorkspace({
           onSubmit={createOrder}
           className="mt-6 space-y-4 rounded-2xl bg-white p-4 sm:p-5"
         >
-          <PortalField label="Cliente liberado">
-            <select
-              value={customerId}
-              onChange={(event) => {
-                setCustomerId(event.target.value);
-                invalidateQuote();
-              }}
-              required
-            >
-              <option value="">Selecione</option>
-              {customers.map((customer) => (
-                <option
-                  key={customer.id}
-                  value={customer.id}
-                  disabled={customer.fiscalReadiness?.ready === false}
-                >
-                  {customer.tradeName || customer.name}
-                  {customer.city
-                    ? ` · ${customer.city}/${customer.state || ""}`
-                    : ""}
-                  {customer.fiscalReadiness?.ready === false
-                    ? " · cadastro fiscal pendente"
-                    : ""}
-                </option>
-              ))}
-            </select>
-          </PortalField>
+          {isDistributor && customers.length === 1 && customers[0] ? (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                Comprador
+              </p>
+              <p className="mt-1 text-sm font-bold text-emerald-950">
+                {customers[0].tradeName || customers[0].name}
+              </p>
+              <p className="mt-1 text-xs text-emerald-800">
+                Pedido exclusivo para o próprio distribuidor ·{" "}
+                {catalog?.exclusive
+                  ? `${catalog.productCount} produto(s) na sua lista exclusiva`
+                  : `${catalog?.productCount ?? 0} produto(s) na tabela Distribuidor`}
+              </p>
+            </div>
+          ) : (
+            <PortalField label="Cliente liberado">
+              <select
+                value={customerId}
+                onChange={(event) => {
+                  setCustomerId(event.target.value);
+                  invalidateQuote();
+                }}
+                required
+              >
+                <option value="">Selecione</option>
+                {customers.map((customer) => (
+                  <option
+                    key={customer.id}
+                    value={customer.id}
+                    disabled={customer.fiscalReadiness?.ready === false}
+                  >
+                    {customer.tradeName || customer.name}
+                    {customer.city
+                      ? ` · ${customer.city}/${customer.state || ""}`
+                      : ""}
+                    {customer.fiscalReadiness?.ready === false
+                      ? " · cadastro fiscal pendente"
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </PortalField>
+          )}
           {!customers.length && !loading && (
             <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-              Cadastre um cliente ou peça à equipe Bispo para liberar um cliente
-              existente.
+              {isDistributor
+                ? "Peça à equipe Bispo para vincular o cadastro da sua empresa."
+                : "Cadastre um cliente ou peça à equipe Bispo para liberar um cliente existente."}
+            </p>
+          )}
+          {!variants.length && !loading && (
+            <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+              A equipe Bispo ainda precisa liberar produtos e preços para esta
+              lista comercial.
             </p>
           )}
 
@@ -1004,7 +1092,10 @@ export function PartnerOrderWorkspace({
                       {variant.presentationGrams >= 1000
                         ? `${variant.presentationGrams / 1000} kg`
                         : `${variant.presentationGrams} g`}{" "}
-                      · estoque {variant.availableStock}
+                      ·{" "}
+                      {isDistributor
+                        ? "produção sob encomenda"
+                        : `estoque ${variant.availableStock}`}
                     </option>
                   ))}
                 </select>
@@ -1069,7 +1160,13 @@ export function PartnerOrderWorkspace({
                 />
               </PortalField>
             )}
-            <PortalField label="Entrega desejada">
+            <PortalField
+              label={
+                isDistributor
+                  ? "Data de entrega solicitada"
+                  : "Entrega desejada"
+              }
+            >
               <input
                 type="date"
                 value={expectedDeliveryDate}
@@ -1077,6 +1174,12 @@ export function PartnerOrderWorkspace({
                   setExpectedDeliveryDate(event.target.value)
                 }
               />
+              {isDistributor && (
+                <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                  A data será confirmada ou ajustada por José ou Suzi na
+                  aprovação do pedido.
+                </span>
+              )}
             </PortalField>
             <PortalField label="Referência do cliente">
               <input
@@ -1151,7 +1254,11 @@ export function PartnerOrderWorkspace({
       )}
 
       <div className="mt-7">
-        <h3 className="text-sm font-bold">Pedidos criados por este acesso</h3>
+        <h3 className="text-sm font-bold">Pedidos e pagamentos</h3>
+        <p className="mt-1 text-xs text-stone-500">
+          Acompanhe a situação do pedido, o vencimento e o saldo. A confirmação
+          do pagamento é feita pela equipe Bispo.
+        </p>
         {orders.length ? (
           <div className="mt-3 overflow-x-auto rounded-2xl bg-white">
             <table className="w-full min-w-[620px] text-left text-xs">
@@ -1162,6 +1269,8 @@ export function PartnerOrderWorkspace({
                   <th className="px-4 py-3">Data</th>
                   <th className="px-4 py-3">Total</th>
                   <th className="px-4 py-3">Situação</th>
+                  <th className="px-4 py-3">Pagamento</th>
+                  <th className="px-4 py-3">Documento</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
@@ -1179,6 +1288,48 @@ export function PartnerOrderWorkspace({
                       <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-800">
                         {statusLabel[order.status] || order.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p
+                        className={`font-bold ${order.receivableStatus === "OVERDUE" ? "text-red-700" : "text-stone-700"}`}
+                      >
+                        {receivableStatusLabels[order.receivableStatus || ""] ||
+                          (order.paymentType === "TERM"
+                            ? "Aguardando faturamento"
+                            : "À vista")}
+                      </p>
+                      {order.paymentDate ? (
+                        <p className="mt-1 text-[10px] text-emerald-700">
+                          Pago em{" "}
+                          {new Date(order.paymentDate).toLocaleDateString(
+                            "pt-BR",
+                          )}
+                        </p>
+                      ) : order.dueDate ? (
+                        <p className="mt-1 text-[10px] text-stone-500">
+                          Vence em{" "}
+                          {new Date(order.dueDate).toLocaleDateString("pt-BR")}{" "}
+                          · saldo {money.format(Number(order.openAmount || 0))}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3">
+                      {order.billingAvailable ? (
+                        <a
+                          href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
+                        >
+                          Baixar cobrança
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-stone-400">
+                          {order.invoiceNumber
+                            ? `NF ${order.invoiceNumber}`
+                            : "Ainda não disponível"}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

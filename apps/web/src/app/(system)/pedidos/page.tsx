@@ -249,6 +249,12 @@ type Order = {
     type: string;
     platformCode?: string | null;
   } | null;
+  createdByStorefrontPartner?: {
+    id: string;
+    name: string;
+    tradeName?: string | null;
+    portalAccessLevel: string;
+  } | null;
   broker?: Broker | null;
   customer: Customer;
   items: OrderItem[];
@@ -484,6 +490,7 @@ type TermCreditApproval = {
 
 const statusLabel: Record<string, string> = {
   DRAFT: "Rascunho",
+  DISTRIBUTOR_APPROVAL: "Aguardando aprovação",
   AWAITING_PAYMENT: "Aguardando Pix",
   CONFIRMED: "Confirmado",
   RESERVED: "Reservado",
@@ -502,6 +509,7 @@ const statusLabel: Record<string, string> = {
 const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
   {
     DRAFT: "neutral",
+    DISTRIBUTOR_APPROVAL: "warning",
     AWAITING_PAYMENT: "warning",
     CONFIRMED: "warning",
     RESERVED: "warning",
@@ -522,6 +530,7 @@ const filters: Array<[string, string]> = [
   ["OVERDUE", "Atrasados"],
   ["SAMPLE", "Amostras"],
   ["DRAFT", "Rascunho"],
+  ["DISTRIBUTOR_APPROVAL", "Aprovação distribuidores"],
   ["AWAITING_PAYMENT", "Aguardando Pix"],
   ["CONFIRMED", "Confirmados"],
   ["RESERVED", "Reservados"],
@@ -559,6 +568,12 @@ const overdueDays = (order: Order, now = Date.now()) => {
 };
 
 const displayStatus = (order: Order) => {
+  if (
+    order.status === "DRAFT" &&
+    order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR"
+  ) {
+    return "DISTRIBUTOR_APPROVAL";
+  }
   if (
     (order.shipment?.reexpeditionId || order.status === "DELIVERED") &&
     ["PENDING", "PURCHASED", "LABEL_READY"].includes(
@@ -664,7 +679,11 @@ export default function OrdersPage() {
     const url = new URL(window.location.href);
     if (!url.searchParams.has("novo")) return;
     url.searchParams.delete("novo");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
   };
 
   useEffect(() => {
@@ -997,6 +1016,12 @@ export default function OrdersPage() {
                             {order.salesChannel.name}
                           </span>
                         )}
+                        {order.createdByStorefrontPartner?.portalAccessLevel ===
+                          "DISTRIBUTOR" && (
+                          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-800">
+                            Sob encomenda
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-stone-500">
                         {order.customer.name}
@@ -1201,6 +1226,11 @@ function EditDraftOrder({
       ? order.paymentTermsSnapshot
       : "14 dias",
   );
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
+    order.expectedDeliveryDate
+      ? new Date(order.expectedDeliveryDate).toISOString().slice(0, 10)
+      : "",
+  );
   const [notes, setNotes] = useState(order.notes ?? "");
   const [reason, setReason] = useState("");
   const [lines, setLines] = useState<DraftOrderLine[]>(() =>
@@ -1321,6 +1351,7 @@ function EditDraftOrder({
           paymentType: isSample ? undefined : paymentType,
           paymentTerms:
             !isSample && paymentType === "TERM" ? paymentTerms : undefined,
+          expectedDeliveryDate: expectedDeliveryDate || undefined,
           notes,
           reason,
           items: validLines.map((line) => ({
@@ -1529,6 +1560,15 @@ function EditDraftOrder({
                 onChange={(event) => setNotes(event.target.value)}
               />
             </Field>
+            <Field label="Data de entrega confirmada pela Bispo">
+              <input
+                type="date"
+                value={expectedDeliveryDate}
+                onChange={(event) =>
+                  setExpectedDeliveryDate(event.target.value)
+                }
+              />
+            </Field>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <Field label="Motivo da correção (obrigatório)">
                 <textarea
@@ -1640,8 +1680,7 @@ function NewOrder({
   const [mobileStep, setMobileStep] = useState<1 | 2 | 3 | 4>(1);
   const [isMobileFlow, setIsMobileFlow] = useState(false);
   const [error, setError] = useState("");
-  const [discardConfirmationOpen, setDiscardConfirmationOpen] =
-    useState(false);
+  const [discardConfirmationOpen, setDiscardConfirmationOpen] = useState(false);
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
   const formScrollRef = useRef<HTMLDivElement>(null);
@@ -1649,22 +1688,22 @@ function NewOrder({
 
   const hasMeaningfulDraft = Boolean(
     orderPurpose ||
-      customerId ||
-      lines.some(
-        (line) =>
-          line.variantId ||
-          line.quantity !== 1 ||
-          Boolean(line.discountAmount?.trim()),
-      ) ||
-      freightResponsibility ||
-      carrierName.trim() ||
-      expectedDeliveryDate ||
-      customerReference.trim() ||
-      notes.trim() ||
-      brokerId ||
-      incoterm.trim() ||
-      incotermLocation.trim() ||
-      customsDeclaredValue,
+    customerId ||
+    lines.some(
+      (line) =>
+        line.variantId ||
+        line.quantity !== 1 ||
+        Boolean(line.discountAmount?.trim()),
+    ) ||
+    freightResponsibility ||
+    carrierName.trim() ||
+    expectedDeliveryDate ||
+    customerReference.trim() ||
+    notes.trim() ||
+    brokerId ||
+    incoterm.trim() ||
+    incotermLocation.trim() ||
+    customsDeclaredValue,
   );
 
   const requestClose = () => {
@@ -4613,6 +4652,47 @@ function OrderDrawer({
                 </div>
               </section>
             )}
+
+            {order.status === "DRAFT" &&
+              order.createdByStorefrontPartner?.portalAccessLevel ===
+                "DISTRIBUTOR" && (
+                <section className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-violet-950">
+                        Pedido de distribuidor sob encomenda
+                      </p>
+                      <p className="mt-1 max-w-2xl text-[11px] leading-5 text-violet-800">
+                        {order.createdByStorefrontPartner.tradeName ||
+                          order.createdByStorefrontPartner.name}{" "}
+                        pediu entrega em <strong>{deliveryLabel}</strong>. José
+                        ou Suzi devem revisar a data e aprovar o pedido para
+                        liberar a produção. O estoque atual não bloqueia esta
+                        aprovação.
+                      </p>
+                    </div>
+                    {canEdit && canOperate && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={onEdit}
+                          className="rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-[11px] font-bold text-violet-900"
+                        >
+                          Revisar data
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void operationalAction("confirm")}
+                          className="rounded-xl bg-violet-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                        >
+                          {busy ? "Aprovando…" : "Aprovar e liberar produção"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
 
             {displayStatus(order) === "AWAITING_PAYMENT" && (
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">

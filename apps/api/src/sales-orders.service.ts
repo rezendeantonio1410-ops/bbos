@@ -1389,11 +1389,21 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     const result = await this.database.$transaction(async (transaction) => {
       const order = await transaction.salesOrder.findFirst({
         where: { id, companyId },
-        include: { items: true },
+        include: {
+          items: true,
+          createdByStorefrontPartner: {
+            select: { portalAccessLevel: true },
+          },
+        },
       });
       if (!order) throw new NotFoundException("Pedido não encontrado.");
+      const productionToOrder =
+        order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR";
       await this.termApprovals?.assertApproved(transaction, companyId, id);
-      if (order.status === SalesOrderStatus.CONFIRMED) {
+      if (
+        order.status === SalesOrderStatus.CONFIRMED ||
+        (productionToOrder && order.status === SalesOrderStatus.IN_PRODUCTION)
+      ) {
         await this.allocateRoastedWipForOrder(transaction, companyId, id);
         await this.allocateGreenCoffeeForOrder(transaction, companyId, id);
         return { orderId: id, idempotent: true, status: order.status };
@@ -1408,14 +1418,20 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         );
       await transaction.salesOrder.update({
         where: { id },
-        data: { status: SalesOrderStatus.CONFIRMED },
+        data: {
+          status: productionToOrder
+            ? SalesOrderStatus.IN_PRODUCTION
+            : SalesOrderStatus.CONFIRMED,
+        },
       });
       await this.allocateRoastedWipForOrder(transaction, companyId, id);
       await this.allocateGreenCoffeeForOrder(transaction, companyId, id);
       return {
         orderId: id,
         idempotent: false,
-        status: SalesOrderStatus.CONFIRMED,
+        status: productionToOrder
+          ? SalesOrderStatus.IN_PRODUCTION
+          : SalesOrderStatus.CONFIRMED,
       };
     });
     await this.customerLifecycle.record(
@@ -1513,9 +1529,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         const activeGreenReservations = (
           order.greenCoffeeSalesReservations ?? []
         ).filter(
-            (reservation) =>
-              reservation.status === InventoryReservationStatus.ACTIVE,
-          );
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.ACTIVE,
+        );
         const greenItems = order.items.filter(
           (item) =>
             item.productVariant?.product?.productLine?.code === "GREEN_COFFEE",
@@ -1790,9 +1806,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         const activeGreenReservations = (
           order.greenCoffeeSalesReservations ?? []
         ).filter(
-            (reservation) =>
-              reservation.status === InventoryReservationStatus.ACTIVE,
-          );
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.ACTIVE,
+        );
         if (
           order.status === SalesOrderStatus.CANCELLED &&
           activeReservations.length === 0 &&
@@ -1909,9 +1925,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         const consumedGreenReservations = (
           order.greenCoffeeSalesReservations ?? []
         ).filter(
-            (reservation) =>
-              reservation.status === InventoryReservationStatus.CONSUMED,
-          );
+          (reservation) =>
+            reservation.status === InventoryReservationStatus.CONSUMED,
+        );
         if (
           order.status === SalesOrderStatus.SHIPPED &&
           (order.finishedGoodsMovements.length ||
@@ -2472,6 +2488,14 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
 
   private readonly orderInclude = {
     customer: true,
+    createdByStorefrontPartner: {
+      select: {
+        id: true,
+        name: true,
+        tradeName: true,
+        portalAccessLevel: true,
+      },
+    },
     broker: true,
     salesChannel: true,
     finishedProduct: true,

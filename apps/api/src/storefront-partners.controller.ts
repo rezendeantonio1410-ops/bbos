@@ -26,6 +26,9 @@ const internationalPhone = (value: unknown) => {
   return normalized;
 };
 
+const documentDigits = (value: unknown) =>
+  String(value ?? "").replace(/\D/g, "");
+
 @Controller("storefront/partners")
 export class StorefrontPartnersController {
   private readonly database = prisma;
@@ -158,7 +161,7 @@ export class StorefrontPartnersController {
     ];
     const partner = await this.database.storefrontPartner.findFirst({
       where: { id, companyId: actor.companyId },
-      select: { id: true, active: true, isSalesPartner: true },
+      select: { id: true, taxId: true, active: true, isSalesPartner: true },
     });
     if (!partner) throw new BadRequestException("Parceiro não encontrado.");
     if (!partner.active || !partner.isSalesPartner) {
@@ -166,17 +169,30 @@ export class StorefrontPartnersController {
         "Habilite a função Parceiro comercial antes de configurar o portal.",
       );
     }
-    if (customerIds.length) {
-      const countRows = await this.database.$queryRawUnsafe<any[]>(
-        `SELECT COUNT(*)::int AS count FROM "Customer"
+    const linkedCustomers = customerIds.length
+      ? await this.database.$queryRawUnsafe<any[]>(
+          `SELECT id,"taxId" FROM "Customer"
           WHERE "companyId"=$1 AND active=true AND id=ANY($2::text[])`,
-        actor.companyId,
-        customerIds,
+          actor.companyId,
+          customerIds,
+        )
+      : [];
+    if (linkedCustomers.length !== customerIds.length) {
+      throw new BadRequestException(
+        "Um ou mais clientes selecionados são inválidos ou estão inativos.",
       );
-      const count = Number(countRows[0]?.count ?? 0);
-      if (count !== customerIds.length) {
+    }
+    if (accessLevel === "DISTRIBUTOR") {
+      if (customerIds.length !== 1) {
         throw new BadRequestException(
-          "Um ou mais clientes selecionados são inválidos ou estão inativos.",
+          "Selecione somente o cadastro de cliente do próprio distribuidor.",
+        );
+      }
+      const partnerTaxId = documentDigits(partner.taxId);
+      const customerTaxId = documentDigits(linkedCustomers[0]?.taxId);
+      if (!partnerTaxId || !customerTaxId || partnerTaxId !== customerTaxId) {
+        throw new BadRequestException(
+          "O distribuidor deve ser vinculado ao próprio cadastro de cliente, com o mesmo CPF/CNPJ.",
         );
       }
     }

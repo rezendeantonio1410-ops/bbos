@@ -26,6 +26,8 @@ type PortalData = {
   capabilities: {
     canCreateCustomers: boolean;
     canCreateOrders: boolean;
+    canManageCustomerPortfolio: boolean;
+    canRequestCredit: boolean;
   };
   metrics: {
     businessCount: number;
@@ -67,6 +69,16 @@ type PortalData = {
     totalAmount: number | string;
     orderedAt: string;
     customerName: string;
+    paymentType?: "CASH" | "TERM" | null;
+    paymentTermsSnapshot?: string | null;
+    receivableStatus?: string | null;
+    dueDate?: string | null;
+    receivableAmount?: number | string | null;
+    openAmount?: number | string | null;
+    paymentDate?: string | null;
+    invoiceNumber?: string | null;
+    invoiceStatus?: string | null;
+    billingAvailable?: boolean;
   }>;
   updatedAt: string;
 };
@@ -167,10 +179,14 @@ export default function PartnerPortalPage() {
             <Logo />
             <div className="hidden border-l border-stone-200 pl-5 sm:block">
               <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
-                Portal do parceiro
+                {data?.partner.portalAccessLevel === "DISTRIBUTOR"
+                  ? "Área do distribuidor"
+                  : "Portal do representante"}
               </p>
               <p className="mt-1 text-xs text-stone-500">
-                Negócios e comissões da loja Bispo
+                {data?.partner.portalAccessLevel === "DISTRIBUTOR"
+                  ? "Compras, pagamentos e documentos"
+                  : "Clientes, visitas e pedidos"}
               </p>
             </div>
           </div>
@@ -281,9 +297,11 @@ export default function PartnerPortalPage() {
                 <p className="mt-2 text-sm text-stone-500">
                   {data.partner.portalAccessLevel === "VIEWER"
                     ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
-                    : data.partner.portalAccessLevel === "SALES_MANAGER"
-                      ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
-                      : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
+                    : data.partner.portalAccessLevel === "DISTRIBUTOR"
+                      ? "Compre da Bispo para sua empresa e acompanhe somente os próprios pedidos, vencimentos e documentos."
+                      : data.partner.portalAccessLevel === "SALES_MANAGER"
+                        ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
+                        : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
                 </p>
               </div>
               <p className="text-xs text-stone-400">
@@ -291,33 +309,37 @@ export default function PartnerPortalPage() {
               </p>
             </section>
 
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric
-                icon={ShoppingBag}
-                label="Negócios confirmados"
-                value={String(data.metrics.businessCount)}
-              />
-              <Metric
-                icon={ReceiptText}
-                label="Vendas atribuídas"
-                value={cents(data.metrics.salesCents)}
-              />
-              <Metric
-                icon={BadgeDollarSign}
-                label="Comissão gerada"
-                value={cents(data.metrics.commissionEarnedCents)}
-              />
-              <Metric
-                icon={CheckCircle2}
-                label="Comissão paga"
-                value={cents(data.metrics.commissionPaidCents)}
-              />
-              <Metric
-                icon={BadgeDollarSign}
-                label="Comissão a receber"
-                value={cents(data.metrics.commissionOpenCents)}
-              />
-            </section>
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
+              <DistributorMetrics orders={data.partnerOrders} />
+            ) : (
+              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <Metric
+                  icon={ShoppingBag}
+                  label="Negócios confirmados"
+                  value={String(data.metrics.businessCount)}
+                />
+                <Metric
+                  icon={ReceiptText}
+                  label="Vendas atribuídas"
+                  value={cents(data.metrics.salesCents)}
+                />
+                <Metric
+                  icon={BadgeDollarSign}
+                  label="Comissão gerada"
+                  value={cents(data.metrics.commissionEarnedCents)}
+                />
+                <Metric
+                  icon={CheckCircle2}
+                  label="Comissão paga"
+                  value={cents(data.metrics.commissionPaidCents)}
+                />
+                <Metric
+                  icon={BadgeDollarSign}
+                  label="Comissão a receber"
+                  value={cents(data.metrics.commissionOpenCents)}
+                />
+              </section>
+            )}
 
             {data.capabilities.canCreateOrders && (
               <PartnerOrderWorkspace
@@ -462,6 +484,48 @@ function Metric({
       </p>
       <p className="mt-1 text-2xl font-semibold">{value}</p>
     </div>
+  );
+}
+
+function DistributorMetrics({
+  orders,
+}: {
+  orders: PortalData["partnerOrders"];
+}) {
+  const open = orders.reduce(
+    (sum, order) => sum + Number(order.openAmount || 0),
+    0,
+  );
+  const overdue = orders.filter(
+    (order) => order.receivableStatus === "OVERDUE",
+  );
+  const total = orders.reduce(
+    (sum, order) => sum + Number(order.totalAmount || 0),
+    0,
+  );
+  return (
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Metric
+        icon={ShoppingBag}
+        label="Meus pedidos"
+        value={String(orders.length)}
+      />
+      <Metric
+        icon={ReceiptText}
+        label="Total em pedidos"
+        value={money.format(total)}
+      />
+      <Metric
+        icon={BadgeDollarSign}
+        label="Saldo a pagar"
+        value={money.format(open)}
+      />
+      <Metric
+        icon={CheckCircle2}
+        label="Títulos vencidos"
+        value={String(overdue.length)}
+      />
+    </section>
   );
 }
 

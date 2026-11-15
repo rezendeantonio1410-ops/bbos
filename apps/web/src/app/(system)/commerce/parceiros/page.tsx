@@ -35,7 +35,12 @@ type Partner = {
   portalAccessLevel: "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
   customerCount: number;
 };
-type CustomerOption = { id: string; name: string; tradeName?: string | null };
+type CustomerOption = {
+  id: string;
+  name: string;
+  tradeName?: string | null;
+  taxId?: string | null;
+};
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
@@ -307,7 +312,9 @@ export default function StorefrontPartnersPage() {
                     : "Consulta"}
               {partner.portalAccessLevel === "SALES_MANAGER"
                 ? " · carteira completa"
-                : ` · ${partner.customerCount ?? 0} cliente(s) liberado(s)`}
+                : partner.portalAccessLevel === "DISTRIBUTOR"
+                  ? ` · ${partner.customerCount === 1 ? "cadastro próprio vinculado" : "vínculo pendente"}`
+                  : ` · ${partner.customerCount ?? 0} cliente(s) liberado(s)`}
             </p>
             <div className="mt-4 flex flex-wrap gap-4">
               <button
@@ -556,11 +563,14 @@ export default function StorefrontPartnersPage() {
               <Field label="Nível de acesso">
                 <select
                   value={permissionLevel}
-                  onChange={(event) =>
-                    setPermissionLevel(
-                      event.target.value as Partner["portalAccessLevel"],
-                    )
-                  }
+                  onChange={(event) => {
+                    const level = event.target
+                      .value as Partner["portalAccessLevel"];
+                    setPermissionLevel(level);
+                    if (level === "DISTRIBUTOR") {
+                      setPermissionCustomerIds([]);
+                    }
+                  }}
                 >
                   <option value="VIEWER">
                     Consulta — negócios e comissões
@@ -570,7 +580,7 @@ export default function StorefrontPartnersPage() {
                     Gerente comercial — toda a carteira e equipe
                   </option>
                   <option value="DISTRIBUTOR">
-                    Distribuidor — clientes e pedidos
+                    Distribuidor — compra somente para si
                   </option>
                 </select>
               </Field>
@@ -583,11 +593,14 @@ export default function StorefrontPartnersPage() {
               ) : (
                 <div>
                   <p className="text-xs font-bold text-stone-700">
-                    Clientes já cadastrados liberados
+                    {permissionLevel === "DISTRIBUTOR"
+                      ? "Cadastro próprio do distribuidor"
+                      : "Clientes já cadastrados liberados"}
                   </p>
                   <p className="mt-1 text-[11px] text-stone-500">
-                    Vendedores e distribuidores também poderão cadastrar novos
-                    clientes, que ficarão vinculados automaticamente ao acesso.
+                    {permissionLevel === "DISTRIBUTOR"
+                      ? "Selecione exatamente um cliente com o mesmo CPF/CNPJ do parceiro. O distribuidor não poderá cadastrar ou comprar para terceiros."
+                      : "Representantes poderão cadastrar novos clientes, que ficarão vinculados automaticamente à própria carteira."}
                   </p>
                   <div className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-xl border p-3">
                     {customerOptions.map((customer) => {
@@ -600,14 +613,21 @@ export default function StorefrontPartnersPage() {
                           className="flex items-center gap-3 rounded-lg px-2 py-2 text-xs hover:bg-stone-50"
                         >
                           <input
-                            type="checkbox"
+                            type={
+                              permissionLevel === "DISTRIBUTOR"
+                                ? "radio"
+                                : "checkbox"
+                            }
                             checked={checked}
                             onChange={() =>
-                              setPermissionCustomerIds((current) =>
-                                checked
+                              setPermissionCustomerIds((current) => {
+                                if (permissionLevel === "DISTRIBUTOR") {
+                                  return checked ? [] : [customer.id];
+                                }
+                                return checked
                                   ? current.filter((id) => id !== customer.id)
-                                  : [...current, customer.id],
-                              )
+                                  : [...current, customer.id];
+                              })
                             }
                           />
                           <span>
@@ -615,6 +635,7 @@ export default function StorefrontPartnersPage() {
                               {customer.tradeName || customer.name}
                             </strong>
                             {customer.tradeName ? ` · ${customer.name}` : ""}
+                            {customer.taxId ? ` · ${customer.taxId}` : ""}
                           </span>
                         </label>
                       );
