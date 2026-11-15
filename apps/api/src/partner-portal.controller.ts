@@ -7,11 +7,15 @@ import {
   Param,
   Post,
   Req,
+  Res,
 } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { SalesOrdersService } from "./sales-orders.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
+import { loadSalesOrderBillingData } from "./sales-order-billing-data";
+import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
+import { pdfContentDisposition } from "./sales-order-pdf-download";
 
 type PartnerActor = {
   id?: string | null;
@@ -59,6 +63,14 @@ export class PartnerPortalController {
     }
   }
 
+  private assertCanManageCustomerPortfolio(partner: any) {
+    if (!["SELLER", "SALES_MANAGER"].includes(partner.portalAccessLevel)) {
+      throw new ForbiddenException(
+        "Distribuidores compram apenas para o próprio cadastro e não administram clientes.",
+      );
+    }
+  }
+
   private async assertCustomer(
     partner: any,
     companyId: string,
@@ -84,39 +96,94 @@ export class PartnerPortalController {
     return rows[0];
   }
 
+  private async assertPartnerOrder(
+    partner: any,
+    companyId: string,
+    orderId: string,
+  ) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id
+         FROM "SalesOrder" so
+        WHERE so.id=$2 AND so."companyId"=$3
+          AND (
+            $4::boolean
+            OR ($5::boolean AND EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" link
+               WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
+            ))
+            OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
+          )
+        LIMIT 1`,
+      partner.id,
+      orderId,
+      companyId,
+      partner.portalAccessLevel === "SALES_MANAGER",
+      partner.portalAccessLevel === "DISTRIBUTOR",
+    );
+    if (!rows[0]) {
+      throw new ForbiddenException(
+        "Este pedido não pertence à carteira deste distribuidor.",
+      );
+    }
+  }
+
   private async resolvePrice(
     companyId: string,
     customerId: string,
     productVariantId: string,
+    distributor = false,
   ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT pp.price,pp.currency,sc.id AS "salesChannelId",sc.name AS "salesChannelName",
-              sc.type::text AS "salesChannelType"
-         FROM "Customer" c
-         JOIN "ProductPrice" pp
-           ON pp."companyId"=c."companyId" AND pp."productVariantId"=$2
-         JOIN "SalesChannel" sc ON sc.id=pp."salesChannelId" AND sc.active=true
-        WHERE c.id=$1 AND c."companyId"=$3 AND pp.active=true
-          AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
-          AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
-          AND (
-            c.segment IS NULL
-            OR c.segment NOT ILIKE '%varejo%'
-            OR sc.code='VAREJO'
-          )
-        ORDER BY CASE
-          WHEN c.segment ILIKE '%distrib%' AND sc.type='DISTRIBUIDOR' THEN 0
-          WHEN c.segment ILIKE '%cafeter%' AND sc.type='CAFETERIA' THEN 0
-          WHEN c.segment ILIKE '%escrit%' AND sc.type='ESCRITORIO' THEN 0
-          WHEN c.segment ILIKE '%export%' AND sc.type='EXPORTACAO' THEN 0
-          WHEN c.segment ILIKE '%consum%' AND sc.code='CONSUMIDOR_FINAL' THEN 0
-          WHEN c.segment ILIKE '%varejo%' AND sc.code='VAREJO' THEN 0
-          WHEN sc.type='B2B' THEN 1 ELSE 5 END,
-          pp."validFrom" DESC NULLS LAST,pp."createdAt" DESC
-        LIMIT 1`,
+      `WITH base_price AS (
+         SELECT pp.id AS "productPriceId",pp.price AS "channelPrice",pp.currency,
+                sc.id AS "salesChannelId",sc.name AS "salesChannelName",
+                sc.type::text AS "salesChannelType",c.segment
+           FROM "Customer" c
+           JOIN "ProductPrice" pp
+             ON pp."companyId"=c."companyId" AND pp."productVariantId"=$2
+           JOIN "SalesChannel" sc ON sc.id=pp."salesChannelId" AND sc.active=true
+          WHERE c.id=$1 AND c."companyId"=$3 AND pp.active=true
+            AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
+            AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+            AND (NOT $4::boolean OR sc.type='DISTRIBUIDOR')
+            AND (
+              c.segment IS NULL
+              OR c.segment NOT ILIKE '%varejo%'
+              OR sc.code='VAREJO'
+            )
+          ORDER BY CASE
+            WHEN $4::boolean AND sc.type='DISTRIBUIDOR' THEN 0
+            WHEN c.segment ILIKE '%distrib%' AND sc.type='DISTRIBUIDOR' THEN 0
+            WHEN c.segment ILIKE '%cafeter%' AND sc.type='CAFETERIA' THEN 0
+            WHEN c.segment ILIKE '%escrit%' AND sc.type='ESCRITORIO' THEN 0
+            WHEN c.segment ILIKE '%export%' AND sc.type='EXPORTACAO' THEN 0
+            WHEN c.segment ILIKE '%consum%' AND sc.code='CONSUMIDOR_FINAL' THEN 0
+            WHEN c.segment ILIKE '%varejo%' AND sc.code='VAREJO' THEN 0
+            WHEN sc.type='B2B' THEN 1 ELSE 5 END,
+            pp."validFrom" DESC NULLS LAST,pp."createdAt" DESC
+          LIMIT 1
+       )
+       SELECT bp.*,
+              cpp.id AS "customerProductPriceId",
+              cpp.price AS "customerPrice"
+         FROM base_price bp
+         LEFT JOIN LATERAL (
+           SELECT candidate.id,candidate.price
+             FROM "CustomerProductPrice" candidate
+            WHERE candidate."companyId"=$3
+              AND candidate."customerId"=$1
+              AND candidate."productVariantId"=$2
+              AND candidate.currency=bp.currency
+              AND candidate.active=true
+              AND (candidate."validFrom" IS NULL OR candidate."validFrom" <= NOW())
+              AND (candidate."validUntil" IS NULL OR candidate."validUntil" >= NOW())
+            ORDER BY candidate."validFrom" DESC NULLS LAST,candidate."updatedAt" DESC
+            LIMIT 1
+         ) cpp ON TRUE`,
       customerId,
       productVariantId,
       companyId,
+      distributor,
     );
     if (!rows[0]) {
       throw new BadRequestException(
@@ -124,12 +191,119 @@ export class PartnerPortalController {
       );
     }
     return {
-      unitPrice: Number(rows[0].price),
+      unitPrice: Number(rows[0].customerPrice ?? rows[0].channelPrice),
       currency: rows[0].currency,
+      productPriceId: rows[0].productPriceId as string,
+      customerProductPriceId:
+        (rows[0].customerProductPriceId as string | null) ?? null,
+      pricingSource: rows[0].customerProductPriceId
+        ? ("CUSTOMER" as const)
+        : ("CHANNEL" as const),
       salesChannelId: rows[0].salesChannelId as string,
       salesChannelName: rows[0].salesChannelName as string,
       salesChannelType: rows[0].salesChannelType as string,
     };
+  }
+
+  private async distributorCatalog(
+    companyId: string,
+    customerId: string,
+  ): Promise<{ variantIds: Set<string>; exclusive: boolean }> {
+    const explicitRows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT cpp."productVariantId"
+         FROM "CustomerProductPrice" cpp
+        WHERE cpp."companyId"=$1 AND cpp."customerId"=$2 AND cpp.active=true
+          AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+          AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())`,
+      companyId,
+      customerId,
+    );
+    const exclusive = explicitRows.length > 0;
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT DISTINCT pp."productVariantId"
+         FROM "ProductPrice" pp
+         JOIN "SalesChannel" sc
+           ON sc.id=pp."salesChannelId" AND sc."companyId"=pp."companyId"
+          AND sc.active=true AND sc.type='DISTRIBUIDOR'
+        WHERE pp."companyId"=$1 AND pp.active=true
+          AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
+          AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+          AND (
+            NOT $3::boolean
+            OR EXISTS (
+              SELECT 1 FROM "CustomerProductPrice" cpp
+               WHERE cpp."companyId"=pp."companyId"
+                 AND cpp."customerId"=$2
+                 AND cpp."productVariantId"=pp."productVariantId"
+                 AND cpp.currency=pp.currency
+                 AND cpp.active=true
+                 AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+                 AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())
+            )
+          )`,
+      companyId,
+      customerId,
+      exclusive,
+    );
+    return {
+      variantIds: new Set(rows.map((row) => String(row.productVariantId))),
+      exclusive,
+    };
+  }
+
+  private async distributorVariantOptions(
+    companyId: string,
+    variantIds: Set<string>,
+  ) {
+    if (!variantIds.size) return [];
+    const variants = await this.database.productVariant.findMany({
+      where: {
+        id: { in: [...variantIds] },
+        active: true,
+        product: {
+          active: true,
+          productLine: { companyId, active: true },
+        },
+      },
+      include: {
+        product: { include: { productLine: true } },
+        finishedProducts: {
+          where: { companyId },
+          include: { warehouse: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: [{ product: { name: "asc" } }, { netWeightGrams: "asc" }],
+    });
+    return variants.map((variant) => {
+      const primaryStock = variant.finishedProducts[0] ?? null;
+      const physicalStock = variant.finishedProducts.reduce(
+        (sum, item) => sum + Number(item.quantityOnHand),
+        0,
+      );
+      const reservedStock = variant.finishedProducts.reduce(
+        (sum, item) => sum + Number(item.reservedQuantity),
+        0,
+      );
+      return {
+        productVariantId: variant.id,
+        warehouseId: primaryStock?.warehouseId ?? "",
+        warehouse: primaryStock?.warehouse.name ?? "Produção sob encomenda",
+        line: variant.product.productLine.name,
+        lineCode: variant.product.productLine.code,
+        product: variant.product.name,
+        sku: variant.sku,
+        presentationGrams: variant.netWeightGrams,
+        salesUnit: variant.salesUnit,
+        physicalStock,
+        reservedStock,
+        availableStock: Math.max(0, physicalStock - reservedStock),
+        onHand: physicalStock,
+        reserved: reservedStock,
+        available: Math.max(0, physicalStock - reservedStock),
+        productionToOrder: true,
+      };
+    });
   }
 
   private async nextOrderNumber(companyId: string) {
@@ -149,6 +323,7 @@ export class PartnerPortalController {
   async summary(@Req() request: { user?: PartnerActor }) {
     const { actor, partner } = await this.context(request);
     const isSalesManager = partner.portalAccessLevel === "SALES_MANAGER";
+    const isDistributor = partner.portalAccessLevel === "DISTRIBUTOR";
 
     const [metricsRows, coupons, businesses, partnerOrders] = await Promise.all(
       [
@@ -202,17 +377,46 @@ export class PartnerPortalController {
         ),
         this.database.$queryRawUnsafe<any[]>(
           `SELECT so.id,so.code,so.status::text AS status,so."totalAmount",so."orderedAt",
-                c.name AS "customerName"
+                so."paymentType"::text AS "paymentType",so."paymentTermsSnapshot",
+                c.name AS "customerName",ar.status::text AS "receivableStatus",
+                ar."dueDate",ar.amount AS "receivableAmount",ar."openAmount",
+                ar."paymentDate",fiscal.number AS "invoiceNumber",
+                fiscal.status::text AS "invoiceStatus",
+                (so."paymentType"='TERM' AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
+                  AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
            FROM "SalesOrder" so
            JOIN "Customer" c ON c.id=so."customerId"
+           LEFT JOIN LATERAL (
+             SELECT title.status,title."dueDate",title.amount,title."openAmount",title."paymentDate"
+               FROM "AccountsReceivable" title
+              WHERE title."salesOrderId"=so.id AND title."companyId"=so."companyId"
+              ORDER BY title."createdAt" DESC
+              LIMIT 1
+           ) ar ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT fd.number,fd.status
+               FROM "FiscalDocument" fd
+              WHERE fd."companyId"=so."companyId" AND fd."salesOrderId"=so.id
+                AND fd.direction='OUTBOUND'
+              ORDER BY fd."createdAt" DESC
+              LIMIT 1
+           ) fiscal ON TRUE
           WHERE so."companyId"=$1
-            AND ($3::boolean OR so."createdByStorefrontPartnerId"=$2)
+            AND (
+              $3::boolean
+              OR ($4::boolean AND EXISTS (
+                SELECT 1 FROM "StorefrontPartnerCustomer" link
+                 WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+              ))
+              OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
+            )
             AND so.status <> 'CANCELLED'
           ORDER BY so."orderedAt" DESC
           LIMIT 100`,
           actor.companyId,
           partner.id,
           isSalesManager,
+          isDistributor,
         ),
       ],
     );
@@ -220,10 +424,16 @@ export class PartnerPortalController {
     return {
       partner,
       capabilities: {
-        canCreateCustomers: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+        canCreateCustomers: ["SELLER", "SALES_MANAGER"].includes(
           partner.portalAccessLevel,
         ),
         canCreateOrders: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+          partner.portalAccessLevel,
+        ),
+        canManageCustomerPortfolio: ["SELLER", "SALES_MANAGER"].includes(
+          partner.portalAccessLevel,
+        ),
+        canRequestCredit: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
           partner.portalAccessLevel,
         ),
       },
@@ -272,13 +482,65 @@ export class PartnerPortalController {
       ),
       this.salesOrders.options(actor.companyId),
     ]);
+    const distributorCustomer =
+      partner.portalAccessLevel === "DISTRIBUTOR" && customers.length === 1
+        ? customers[0]
+        : null;
+    const catalog = distributorCustomer
+      ? await this.distributorCatalog(actor.companyId, distributorCustomer.id)
+      : null;
+    const variants = catalog
+      ? await this.distributorVariantOptions(
+          actor.companyId,
+          catalog.variantIds,
+        )
+      : internalOptions.variants;
     return {
       customers: customers.map((customer) => ({
         ...customer,
         fiscalReadiness: assessCustomerFiscalReadiness(customer),
       })),
-      variants: internalOptions.variants,
+      variants: variants.map((variant) => ({
+        ...variant,
+        availableStock:
+          "availableStock" in variant
+            ? variant.availableStock
+            : variant.available,
+      })),
+      catalog: {
+        distributor: Boolean(catalog),
+        exclusive: catalog?.exclusive ?? false,
+        productCount: variants.length,
+      },
     };
+  }
+
+  @Get("orders/:orderId/billing/pdf")
+  async billingPdf(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Res() response: any,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const order = await this.salesOrders.get(actor.companyId, orderId);
+    const data = await loadSalesOrderBillingData(
+      this.database,
+      order,
+      actor.companyId,
+    );
+    const pdf = buildSalesOrderBillingPdf(data);
+    const orderCode = String(order.orderNumber ?? order.code).replace(
+      /[^A-Za-z0-9_-]/g,
+      "-",
+    );
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": pdfContentDisposition(`Cobranca-${orderCode}.pdf`),
+      "Content-Length": pdf.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(pdf);
   }
 
   @Post("customers")
@@ -287,7 +549,7 @@ export class PartnerPortalController {
     @Body() body: Record<string, any>,
   ) {
     const { actor, partner } = await this.context(request);
-    this.assertCanCreateOrders(partner);
+    this.assertCanManageCustomerPortfolio(partner);
     const fiscalReadiness = assessCustomerFiscalReadiness(body);
     if (!fiscalReadiness.ready) {
       throw new BadRequestException(
@@ -370,7 +632,7 @@ export class PartnerPortalController {
     @Param("customerId") customerId: string,
   ) {
     const { actor, partner } = await this.context(request);
-    this.assertCanCreateOrders(partner);
+    this.assertCanManageCustomerPortfolio(partner);
     await this.assertCustomer(partner, actor.companyId, customerId);
     return this.database.$queryRawUnsafe<any[]>(
       `SELECT v.id,v."customerId",v."storefrontPartnerId",v."recordedByName",v."visitAt",
@@ -393,7 +655,7 @@ export class PartnerPortalController {
     @Body() body: Record<string, any>,
   ) {
     const { actor, partner } = await this.context(request);
-    this.assertCanCreateOrders(partner);
+    this.assertCanManageCustomerPortfolio(partner);
     await this.assertCustomer(partner, actor.companyId, customerId);
 
     const visitAt = new Date(String(body.visitAt ?? ""));
@@ -555,6 +817,10 @@ export class PartnerPortalController {
     const items = body.items ?? [];
     if (!items.length)
       throw new BadRequestException("Adicione ao menos um produto.");
+    const distributorCatalog =
+      partner.portalAccessLevel === "DISTRIBUTOR"
+        ? await this.distributorCatalog(actor.companyId, customerId)
+        : null;
     const quoted = [];
     let salesChannelId = "";
     for (const item of items) {
@@ -567,10 +833,19 @@ export class PartnerPortalController {
       ) {
         throw new BadRequestException("Produto ou quantidade inválida.");
       }
+      if (
+        distributorCatalog &&
+        !distributorCatalog.variantIds.has(productVariantId)
+      ) {
+        throw new BadRequestException(
+          "Produto não liberado na lista comercial deste distribuidor.",
+        );
+      }
       const price = await this.resolvePrice(
         actor.companyId,
         customerId,
         productVariantId,
+        partner.portalAccessLevel === "DISTRIBUTOR",
       );
       if (salesChannelId && salesChannelId !== price.salesChannelId) {
         throw new BadRequestException(
@@ -619,9 +894,28 @@ export class PartnerPortalController {
     const items = body.items ?? [];
     if (!items.length)
       throw new BadRequestException("Adicione ao menos um produto.");
-    const options = await this.salesOrders.options(actor.companyId);
+    const distributorCatalog =
+      partner.portalAccessLevel === "DISTRIBUTOR"
+        ? await this.distributorCatalog(actor.companyId, customerId)
+        : null;
+    const options = distributorCatalog
+      ? {
+          variants: await this.distributorVariantOptions(
+            actor.companyId,
+            distributorCatalog.variantIds,
+          ),
+        }
+      : await this.salesOrders.options(actor.companyId);
     const allowedVariants = new Map(
-      options.variants.map((variant) => [variant.productVariantId, variant]),
+      options.variants
+        .filter(
+          (variant) =>
+            !distributorCatalog ||
+            distributorCatalog.variantIds.has(
+              String(variant.productVariantId ?? ""),
+            ),
+        )
+        .map((variant) => [variant.productVariantId, variant]),
     );
     const pricedItems = [];
     let salesChannelId = "";
@@ -636,6 +930,7 @@ export class PartnerPortalController {
         actor.companyId,
         customerId,
         productVariantId,
+        partner.portalAccessLevel === "DISTRIBUTOR",
       );
       if (salesChannelId && salesChannelId !== price.salesChannelId) {
         throw new BadRequestException(
@@ -648,6 +943,16 @@ export class PartnerPortalController {
         warehouseId: variant.warehouseId,
         quantity,
         unitPrice: price.unitPrice,
+        pricingSource: price.pricingSource,
+        baseProductPriceId: price.productPriceId,
+        customerProductPriceId: price.customerProductPriceId,
+        priceSnapshot: {
+          capturedAt: new Date().toISOString(),
+          source: price.pricingSource,
+          salesChannelId: price.salesChannelId,
+          salesChannelName: price.salesChannelName,
+          officialUnitPrice: price.unitPrice,
+        },
       });
     }
     const deliveryMode =
@@ -667,6 +972,9 @@ export class PartnerPortalController {
       freight: 0,
       notes: [
         `Criado no portal por ${partner.name}.`,
+        partner.portalAccessLevel === "DISTRIBUTOR"
+          ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
+          : "",
         String(body.notes ?? "").trim(),
       ]
         .filter(Boolean)
@@ -692,7 +1000,10 @@ export class PartnerPortalController {
       code: orderNumber,
       status: "DRAFT",
       totalAmount: Number(order.totalAmount),
-      message: "Pedido enviado para conferência da equipe Bispo.",
+      message:
+        partner.portalAccessLevel === "DISTRIBUTOR"
+          ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."
+          : "Pedido enviado para conferência da equipe Bispo.",
     };
   }
 }

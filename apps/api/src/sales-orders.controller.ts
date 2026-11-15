@@ -40,6 +40,7 @@ import {
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
+import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -1316,6 +1317,7 @@ export class SalesOrdersController {
       customerId?: string;
       paymentType?: "CASH" | "TERM";
       paymentTerms?: string;
+      expectedDeliveryDate?: string;
       notes?: string;
       reason?: string;
       items?: Array<{ productVariantId?: string; quantity?: number }>;
@@ -1518,6 +1520,9 @@ export class SalesOrdersController {
           currency: currency ?? current.currency,
           paymentType,
           paymentTermsSnapshot: paymentTerms,
+          expectedDeliveryDate: body.expectedDeliveryDate
+            ? new Date(body.expectedDeliveryDate)
+            : null,
           notes: String(body.notes ?? "").trim() || null,
           subtotal,
           discount,
@@ -1848,13 +1853,29 @@ export class SalesOrdersController {
     }
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.id, so."totalAmount", so."paymentType", so."paymentTermsSnapshot",
+              so."expectedDeliveryDate", partner."portalAccessLevel"::text AS "partnerAccessLevel",
               c.id AS "customerId", c.active, c."paymentTerms", c."creditStatus", c."creditLimit"
-         FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId" WHERE so.id=$1 AND so."companyId"=$2`,
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id = so."customerId"
+         LEFT JOIN "StorefrontPartner" partner ON partner.id=so."createdByStorefrontPartnerId"
+        WHERE so.id=$1 AND so."companyId"=$2`,
       id,
       actor.companyId,
     );
     const context = rows[0];
     if (!context) return this.salesOrders.confirm(actor.companyId, id);
+    if (context.partnerAccessLevel === "DISTRIBUTOR") {
+      if (!isDesignatedTermCreditApprover(actor)) {
+        throw new ForbiddenException(
+          "Somente José ou Suzi podem aprovar pedidos de distribuidores.",
+        );
+      }
+      if (!context.expectedDeliveryDate) {
+        throw new BadRequestException(
+          "Defina a data de entrega antes de aprovar o pedido do distribuidor.",
+        );
+      }
+    }
     const saleIsTerm =
       context.paymentType === "TERM" ||
       (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
