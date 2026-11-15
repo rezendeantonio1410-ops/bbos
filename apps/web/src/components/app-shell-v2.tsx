@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  ArrowLeft,
   Bell,
   ChevronDown,
   CornerDownLeft,
@@ -219,6 +220,25 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       })),
     [sessionUser?.role],
   );
+  const mobileExitHref = useMemo(() => {
+    const defaultLanding =
+      sessionUser?.role === "ACCOUNTANT"
+        ? (mobileQuickLinks[0]?.href ?? "/financeiro")
+        : "/home";
+    if (pathname === defaultLanding) return null;
+
+    const parentRoute = navGroups
+      .flatMap((group) => group.items)
+      .filter(
+        (item) =>
+          pathname === item.href || pathname.startsWith(`${item.href}/`),
+      )
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
+    return parentRoute && parentRoute !== pathname
+      ? parentRoute
+      : defaultLanding;
+  }, [mobileQuickLinks, navGroups, pathname, sessionUser?.role]);
   const pageLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -531,6 +551,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
               >
                 <Menu size={18} />
               </button>
+              {mobileExitHref && (
+                <Link
+                  href={mobileExitHref}
+                  aria-label="Abandonar esta tela e voltar"
+                  className="inline-flex min-h-10 items-center gap-1 rounded-xl border bg-white px-2.5 text-xs font-bold text-[var(--bbos-text-secondary)] lg:hidden"
+                >
+                  <ArrowLeft size={17} />
+                  <span className="hidden min-[430px]:inline">Voltar</span>
+                </Link>
+              )}
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{currentLabel}</p>
                 <p className="hidden text-[10px] text-[var(--bbos-text-muted)] sm:block">

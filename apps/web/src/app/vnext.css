@@ -206,6 +206,31 @@
   }
 }
 
+/* Mobile dialogs must never become a dead end. Existing close controls gain a
+   textual label and a comfortable touch target even when the desktop version
+   uses only an icon. Flows with their own labelled exit can opt out. */
+@media (max-width: 639px) {
+  .bbos-system-vnext
+    [aria-modal="true"]
+    button[aria-label^="Fechar"]:not([data-mobile-exit-labeled]) {
+    display: inline-flex;
+    min-height: 44px;
+    width: auto;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding-inline: 0.75rem;
+  }
+
+  .bbos-system-vnext
+    [aria-modal="true"]
+    button[aria-label^="Fechar"]:not([data-mobile-exit-labeled])::after {
+    content: "Sair";
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+}
+
 /* Responsive operating shell: the phone is action-first and the portrait
    tablet keeps useful density without inheriting the desktop sidebar. */
 @media (max-width: 1023px) {

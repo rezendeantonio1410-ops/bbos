@@ -8,7 +8,9 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import {
+  deliveryExceptionShipmentId,
   keepCurrentCreditDecisions,
+  keepOpenDeliveryExceptions,
   notificationHref,
 } from "./notification-links";
 
@@ -18,6 +20,53 @@ type AuthenticatedRequest = {
 
 @Controller("notifications")
 export class NotificationsController {
+  private async keepOnlyOpenDeliveryExceptions(
+    notifications: any[],
+    companyId: string,
+  ) {
+    const shipmentIds = [
+      ...new Set(
+        notifications
+          .map((item) => deliveryExceptionShipmentId(item.type))
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (!shipmentIds.length) return notifications;
+
+    const openShipments = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT alert_shipment.id
+         FROM "Shipment" alert_shipment
+         LEFT JOIN "SalesOrder" so ON so.id=alert_shipment."salesOrderId"
+         LEFT JOIN "StorefrontOrder" storefront ON storefront.id=alert_shipment."storefrontOrderId"
+        WHERE alert_shipment."companyId"=$1
+          AND alert_shipment.id=ANY($2::text[])
+          AND alert_shipment.status='EXCEPTION'
+          AND (so.id IS NULL OR so.status NOT IN ('DELIVERED','CANCELLED'))
+          AND (storefront.id IS NULL OR storefront.status NOT IN ('DELIVERED','CANCELLED'))
+          AND NOT EXISTS (
+            SELECT 1
+              FROM "Shipment" resolved
+             WHERE resolved."companyId"=alert_shipment."companyId"
+               AND resolved.status='DELIVERED'
+               AND resolved."updatedAt">=alert_shipment."updatedAt"
+               AND (
+                 (alert_shipment."salesOrderId" IS NOT NULL
+                   AND resolved."salesOrderId"=alert_shipment."salesOrderId")
+                 OR
+                 (alert_shipment."storefrontOrderId" IS NOT NULL
+                   AND resolved."storefrontOrderId"=alert_shipment."storefrontOrderId")
+               )
+          )`,
+      companyId,
+      shipmentIds,
+    );
+
+    return keepOpenDeliveryExceptions(
+      notifications,
+      new Set(openShipments.map((shipment) => shipment.id)),
+    );
+  }
+
   private async visibleToSales(notifications: any[], companyId: string) {
     const shipmentIds = notifications
       .filter((item) => item.type.startsWith("ORDER_DELIVERY_EXCEPTION:"))
@@ -59,8 +108,13 @@ export class NotificationsController {
       role === "SALES"
         ? await this.visibleToSales(notifications, companyId)
         : notifications;
+    const operationallyCurrentNotifications =
+      await this.keepOnlyOpenDeliveryExceptions(
+        roleVisibleNotifications,
+        companyId,
+      );
     const visibleNotifications = keepCurrentCreditDecisions(
-      roleVisibleNotifications,
+      operationallyCurrentNotifications,
     );
     return {
       updatedAt: new Date().toISOString(),
