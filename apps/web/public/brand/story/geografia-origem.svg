@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">O lugar, a lavoura e a xícara</title>
+  <desc id="desc">Ilustração conceitual: paralelos localizam o Norte do Paraná; clima, solo, cafeeiro e trabalho humano compõem a origem.</desc>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e9f0e9"/><stop offset="1" stop-color="#f8f2e4"/></linearGradient>
+    <linearGradient id="earth" x2="0" y2="1"><stop stop-color="#9b5140"/><stop offset="1" stop-color="#613f35"/></linearGradient>
+    <linearGradient id="hill" x2="0" y2="1"><stop stop-color="#71937e"/><stop offset="1" stop-color="#325a4a"/></linearGradient>
+    <clipPath id="globe"><circle cx="204" cy="214" r="145"/></clipPath>
+  </defs>
+  <rect width="1200" height="520" rx="20" fill="url(#sky)"/>
+  <circle cx="917" cy="113" r="48" fill="#e5c466"/>
+  <circle cx="917" cy="113" r="68" fill="none" stroke="#d9bd7a" opacity=".5"/>
+  <path d="M0 315C155 268 294 316 414 288S686 235 815 278 1038 294 1200 252V520H0Z" fill="#a9bdab"/>
+  <path d="M0 353C196 296 316 362 482 323S742 268 906 320 1088 319 1200 291V520H0Z" fill="url(#hill)"/>
+  <path d="M0 392C151 362 297 397 426 371S687 330 824 366 1070 395 1200 350V520H0Z" fill="#364f3e"/>
+  <path d="M0 430C180 403 318 433 446 411S708 382 838 421 1064 423 1200 405V520H0Z" fill="url(#earth)"/>
+  <path d="M0 457C145 446 302 461 443 451S752 444 931 465 1117 462 1200 449" fill="none" stroke="#d39472" opacity=".43" stroke-width="3"/>
+  <circle cx="204" cy="214" r="147" fill="#fbf8ee" stroke="#466a5a" stroke-width="3"/>
+  <g clip-path="url(#globe)" fill="none" stroke="#88a79a" stroke-width="2">
+    <ellipse cx="204" cy="214" rx="76" ry="145"/><ellipse cx="204" cy="214" rx="130" ry="145"/>
+    <path d="M55 166H354M55 214H354M55 262H354"/>
+    <ellipse cx="204" cy="214" rx="145" ry="48"/>
+  </g>
+  <path d="M63 246H346" stroke="#af6246" stroke-width="4" stroke-dasharray="8 7"/>
+  <circle cx="248" cy="239" r="11" fill="#a64e3a" stroke="#fff" stroke-width="4"/>
+  <path d="M259 235C357 188 453 204 557 229" fill="none" stroke="#a64e3a" stroke-width="3" stroke-dasharray="5 8"/>
+  <circle cx="557" cy="229" r="7" fill="#a64e3a"/>
+  <g stroke="#e1b78e" stroke-width="5" stroke-linecap="round" fill="none">
+    <path d="M811 434V269M811 345c-27-29-63-42-93-45M811 324c22-38 57-52 91-56M811 287c-17-32-33-47-63-61"/>
+    <path d="M811 434c-29 24-47 33-74 45M811 434c27 18 46 28 76 42M811 434v57" opacity=".75"/>
+  </g>
+  <g fill="#2e674c">
+    <ellipse cx="721" cy="299" rx="44" ry="17" transform="rotate(22 721 299)"/>
+    <ellipse cx="750" cy="268" rx="40" ry="15" transform="rotate(40 750 268)"/>
+    <ellipse cx="877" cy="285" rx="43" ry="17" transform="rotate(-26 877 285)"/>
+    <ellipse cx="889" cy="260" rx="39" ry="16" transform="rotate(-42 889 260)"/>
+    <ellipse cx="775" cy="228" rx="34" ry="14" transform="rotate(52 775 228)"/>
+    <ellipse cx="847" cy="225" rx="35" ry="14" transform="rotate(-48 847 225)"/>
+  </g>
+  <g fill="#b64f3d" stroke="#e0a886" stroke-width="2"><circle cx="773" cy="325" r="12"/><circle cx="790" cy="330" r="12"/><circle cx="833" cy="303" r="12"/><circle cx="851" cy="300" r="12"/></g>
+  <path d="M950 390c50-15 104-14 152 0l-11 45c-27 19-96 21-129 0Z" fill="#f6f0e4" stroke="#e4d7c4" stroke-width="3"/>
+  <path d="M1100 393c44-5 52 40 2 46" fill="none" stroke="#e4d7c4" stroke-width="11"/>
+  <path d="M967 393c36-9 91-8 125 0" fill="none" stroke="#bb8265" stroke-width="5"/>
+  <text x="76" y="47" fill="#305949" font-family="Arial, sans-serif" font-size="17" font-weight="bold" letter-spacing="3">DO MAPA À XÍCARA</text>
+  <text x="75" y="394" fill="#fffaf0" font-family="Arial, sans-serif" font-size="20" font-weight="bold">23°26′ S</text>
+  <text x="75" y="419" fill="#f1e5d8" font-family="Arial, sans-serif" font-size="14">linha do Trópico de Capricórnio</text>
+  <text x="559" y="74" fill="#305949" font-family="Arial, sans-serif" font-size="20">Um lugar se localiza.</text>
+  <text x="559" y="102" fill="#305949" font-family="Arial, sans-serif" font-size="20">Uma origem se constrói.</text>
+</svg>

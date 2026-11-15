@@ -1,27 +1,22 @@
 import type { NextConfig } from 'next';
 
-function apiBaseUrl() {
-  const fallback = 'http://localhost:3001/api';
-  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!configured) return fallback;
-  try {
-    const url = new URL(configured);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
-    const pathname = url.pathname.replace(/\/+$/, '');
-    if (!pathname || pathname === '/') url.pathname = '/api';
-    else if (!pathname.endsWith('/api')) url.pathname = `${pathname}/api`;
-    url.search = '';
-    url.hash = '';
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return fallback;
-  }
-}
-
 const nextConfig: NextConfig = {
+  // Allow verification builds to run beside a local development server
+  // without both processes writing to the same Next.js artifacts.
+  distDir: process.env.NEXT_DIST_DIR?.trim() || '.next',
   transpilePackages: ['@bbos/ui', '@bbos/shared'],
-  async rewrites() {
-    return [{ source: '/api/:path*', destination: `${apiBaseUrl()}/:path*` }];
+  poweredByHeader: false,
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [
+        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()' },
+      ],
+    }];
   },
 };
 

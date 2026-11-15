@@ -9,26 +9,38 @@ import {
   Req,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { randomUUID } from "node:crypto";
 import {
   CostType,
   EventType,
+  InventoryReservationStatus,
   Prisma,
   ProductionPriority,
   ProductionStatus,
+  SalesOrderStatus,
 } from "@bbos/database";
 import {
+  allocateRoastStageCosts,
   calculateProductionCost,
   calculateRealProductionCost,
+  ROASTER_OPERATIONAL_USAGE_NOTE,
   type RealProductionCostInput,
 } from "@bbos/shared";
 import { ProductionService } from "./production.service";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
-import { calculateRoastMetrics } from "./production-planning";
+import {
+  calculateRoastCycleCount,
+  calculateRoastMetrics,
+  calculateRoasterUtilityCost,
+  calculateWipPackagingPlan,
+  validateRoastBatchCapacity,
+} from "./production-planning";
 
 type CreateOrderBody = {
   code: string;
-  productVariantId: string;
+  productId?: string;
+  productVariantId?: string;
   productName?: string;
   sku?: string;
   plannedWeightKg: number;
@@ -55,8 +67,9 @@ type CreateBatchBody = {
   notes?: string;
 };
 type CompleteOrderBody = {
-  warehouseId: string;
+  warehouseId?: string;
   finishedProductId?: string;
+  productVariantId?: string;
   finishedOutputKg: number;
   producedPackages: number;
   packaging: Array<{
@@ -69,9 +82,17 @@ type CompleteOrderBody = {
   }>;
   laborCost: number;
   energyCost: number;
+  gasCost?: number;
   suppliesCost: number;
   otherIndustrialCosts: number;
   standardCostPerKg: number;
+  salesOrderItemId?: string;
+};
+type CompleteWipPackagingBody = {
+  idempotencyKey?: string;
+  productVariantId?: string;
+  producedPackages?: number;
+  salesOrderItemId?: string;
 };
 type CalculateV2Body = RealProductionCostInput & {
   periodCode: string;
@@ -80,7 +101,158 @@ type CalculateV2Body = RealProductionCostInput & {
 
 @Controller("production")
 export class ProductionController {
-  constructor(private readonly production: ProductionService, private readonly auth: AuthService) {}
+  constructor(
+    private readonly production: ProductionService,
+    private readonly auth: AuthService,
+  ) {}
+
+  private async requirePackagingDemand(
+    transaction: Prisma.TransactionClient,
+    companyId: string,
+    salesOrderItemId: string | undefined,
+    productVariantId: string,
+    finishedProductId: string,
+    producedPackages: number,
+  ) {
+    const itemId = String(salesOrderItemId ?? "").trim();
+    if (!itemId)
+      throw new BadRequestException(
+        "Selecione o pedido que autorizou este empacotamento.",
+      );
+    const item = await transaction.salesOrderItem.findFirst({
+      where: {
+        id: itemId,
+        companyId,
+        productVariantId,
+        salesOrder: {
+          companyId,
+          status: {
+            in: [SalesOrderStatus.CONFIRMED, SalesOrderStatus.IN_PRODUCTION],
+          },
+        },
+      },
+      include: {
+        salesOrder: { include: { customer: true, items: true } },
+        reservations: { where: { status: InventoryReservationStatus.ACTIVE } },
+      },
+    });
+    if (!item)
+      throw new BadRequestException(
+        "O item selecionado não está aguardando embalagem para este SKU.",
+      );
+    const activeReserved = item.reservations.reduce(
+      (sum, reservation) => sum + reservation.quantity,
+      0,
+    );
+    if (activeReserved > 0)
+      throw new BadRequestException(
+        "Este item já possui uma reserva de produto acabado e requer conferência antes de produzir.",
+      );
+    const balanceRows = await transaction.$queryRaw<
+      Array<{ quantityOnHand: number; reservedQuantity: number }>
+    >`
+      SELECT "quantityOnHand", "reservedQuantity"
+        FROM "FinishedProduct"
+       WHERE id = ${finishedProductId} AND "companyId" = ${companyId}
+       FOR UPDATE
+    `;
+    const balance = balanceRows[0];
+    if (!balance)
+      throw new BadRequestException("Saldo de produto acabado não encontrado.");
+    const availableUnits = Math.max(
+      0,
+      Number(balance.quantityOnHand) - Number(balance.reservedQuantity),
+    );
+    const requiredPackages = Math.max(
+      0,
+      item.quantity - activeReserved - availableUnits,
+    );
+    if (requiredPackages <= 0)
+      throw new BadRequestException(
+        "Já existe produto acabado disponível para este pedido. Faça apenas a reserva do estoque.",
+      );
+    if (producedPackages !== requiredPackages)
+      throw new BadRequestException(
+        `Este pedido precisa de ${requiredPackages.toLocaleString("pt-BR")} pacote(s). O BBOS não permite empacotar quantidade excedente sem outro pedido.`,
+      );
+    return { item, activeReserved, availableUnits, requiredPackages };
+  }
+
+  private async reservePackagedOrderItem(
+    transaction: Prisma.TransactionClient,
+    demand: Awaited<ReturnType<ProductionController["requirePackagingDemand"]>>,
+    finishedProductId: string,
+    warehouseId: string,
+  ) {
+    const { item } = demand;
+    const previousReservation =
+      await transaction.inventoryReservation.findUnique({
+        where: { salesOrderItemId: item.id },
+      });
+    if (previousReservation?.status === InventoryReservationStatus.CONSUMED)
+      throw new BadRequestException(
+        "A reserva deste item já foi consumida e não pode ser recriada.",
+      );
+    await transaction.finishedProduct.update({
+      where: { id: finishedProductId },
+      data: {
+        reservedQuantity: {
+          increment: Math.max(0, item.quantity - demand.activeReserved),
+        },
+      },
+    });
+    const reservation = previousReservation
+      ? await transaction.inventoryReservation.update({
+          where: { id: previousReservation.id },
+          data: {
+            productVariantId: item.productVariantId,
+            finishedProductId,
+            warehouseId,
+            quantity: item.quantity,
+            status: InventoryReservationStatus.ACTIVE,
+            releasedAt: null,
+            consumedAt: null,
+          },
+        })
+      : await transaction.inventoryReservation.create({
+          data: {
+            companyId: item.companyId,
+            salesOrderId: item.salesOrderId,
+            salesOrderItemId: item.id,
+            productVariantId: item.productVariantId,
+            finishedProductId,
+            warehouseId,
+            quantity: item.quantity,
+            status: InventoryReservationStatus.ACTIVE,
+            idempotencyKey: `SALES_RESERVATION:${item.id}`,
+          },
+        });
+    const activeReservations = await transaction.inventoryReservation.count({
+      where: {
+        salesOrderId: item.salesOrderId,
+        status: InventoryReservationStatus.ACTIVE,
+      },
+    });
+    const readyForInvoice = activeReservations >= item.salesOrder.items.length;
+    if (readyForInvoice) {
+      await transaction.$executeRawUnsafe(
+        `UPDATE "SalesOrderItem"
+            SET "pickedQuantity"=quantity,"pickedAt"=NOW()
+          WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+        item.salesOrderId,
+        item.companyId,
+      );
+    }
+    await transaction.salesOrder.update({
+      where: { id: item.salesOrderId },
+      data: {
+        status: readyForInvoice
+          ? SalesOrderStatus.READY_TO_SHIP
+          : SalesOrderStatus.IN_PRODUCTION,
+      },
+    });
+    return { ...reservation, readyForInvoice };
+  }
 
   @Post("orders/:id/cost-v2")
   calculateAndSnapshotV2(
@@ -167,17 +339,76 @@ export class ProductionController {
   @Get("orders")
   async listOrders(@Req() req: Request) {
     const actor = await requireSession(req, this.auth);
-    return this.production.database.productionOrder.findMany({
-      where: { companyId: actor.companyId },
-      include: {
-        blend: true,
-        productVariant: { include: { product: { include: { productLine: true } } } },
-        consumptions: { include: { coffeeLot: true } },
-        batches: true,
-        packagingConsumptions: true,
-        finishedGoodsMovements: true,
-      },
-      orderBy: { plannedAt: "desc" },
+    const [orders, wipBalances] = await Promise.all([
+      this.production.database.productionOrder.findMany({
+        where: { companyId: actor.companyId },
+        include: {
+          blend: true,
+          productVariant: {
+            include: { product: { include: { productLine: true } } },
+          },
+          consumptions: { include: { coffeeLot: true } },
+          batches: true,
+          packagingConsumptions: true,
+          finishedGoodsMovements: true,
+          resourceUsages: {
+            include: {
+              resource: {
+                select: {
+                  code: true,
+                  name: true,
+                  energyRatePerKwh: true,
+                  gasRatePerUnit: true,
+                },
+              },
+            },
+          },
+          costEvents: {
+            orderBy: { occurredAt: "asc" },
+            select: {
+              id: true,
+              type: true,
+              amount: true,
+              description: true,
+              costCenter: { select: { code: true, name: true } },
+            },
+          },
+        },
+        orderBy: { plannedAt: "desc" },
+      }),
+      this.production.database.$queryRaw<
+        Array<{
+          productionOrderId: string;
+          availableKg: Prisma.Decimal;
+          reservedKg: Prisma.Decimal;
+          physicalKg: Prisma.Decimal;
+          availableCost: Prisma.Decimal;
+        }>
+      >`
+        SELECT
+          "productionOrderId",
+          COALESCE(SUM("availableKg"), 0) AS "physicalKg",
+          COALESCE(SUM("reservedKg"), 0) AS "reservedKg",
+          COALESCE(SUM(GREATEST("availableKg"-"reservedKg",0)), 0) AS "availableKg",
+          COALESCE(SUM("availableCost"), 0) AS "availableCost"
+        FROM "RoastedWipLot"
+        WHERE "companyId" = ${actor.companyId}
+          AND "availableKg" > 0
+        GROUP BY "productionOrderId"
+      `,
+    ]);
+    const wipByOrder = new Map(
+      wipBalances.map((item) => [item.productionOrderId, item]),
+    );
+    return orders.map((order) => {
+      const wip = wipByOrder.get(order.id);
+      return {
+        ...order,
+        wipAvailableKg: Number(wip?.availableKg ?? 0),
+        wipPhysicalKg: Number(wip?.physicalKg ?? 0),
+        wipReservedKg: Number(wip?.reservedKg ?? 0),
+        wipAvailableCost: Number(wip?.availableCost ?? 0),
+      };
     });
   }
 
@@ -185,7 +416,11 @@ export class ProductionController {
   async listAvailableLots(@Req() req: Request) {
     const actor = await requireSession(req, this.auth);
     const lots = await this.production.database.coffeeLot.findMany({
-      where: { companyId: actor.companyId, status: "APPROVED", currentWeightKg: { gt: 0 } },
+      where: {
+        companyId: actor.companyId,
+        status: "APPROVED",
+        currentWeightKg: { gt: 0 },
+      },
       include: { supplier: true, warehouse: true },
       orderBy: { receivedAt: "asc" },
     });
@@ -197,10 +432,98 @@ export class ProductionController {
       variety: lot.variety,
       availableQuantityKg: Number(lot.currentWeightKg),
       reservedQuantityKg: Number(lot.reservedWeightKg),
-      realCostPerKg: Number(lot.initialWeightKg) > 0 ? Number(lot.landedCost) / Number(lot.initialWeightKg) : 0,
+      realCostPerKg:
+        Number(lot.initialWeightKg) > 0
+          ? Number(lot.landedCost) / Number(lot.initialWeightKg)
+          : 0,
       supplier: lot.supplier.name,
       warehouse: lot.warehouse.name,
     }));
+  }
+
+  @Get("options")
+  async productionOptions(@Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const [warehouses, resources, users] = await Promise.all([
+      this.production.database.warehouse.findMany({
+        where: { companyId: actor.companyId, type: "FINISHED_GOODS" },
+        select: { id: true, code: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      this.production.database.productiveResource.findMany({
+        where: { companyId: actor.companyId, active: true },
+        select: { id: true, code: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      this.production.database.user.findMany({
+        where: { companyId: actor.companyId, active: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+    return { warehouses, resources, users };
+  }
+
+  @Get("orders/:id/packaging-demand")
+  async packagingDemand(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const order = await this.production.database.productionOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true, productVariant: { select: { productId: true } } },
+    });
+    if (!order)
+      throw new NotFoundException("Ordem de produção não encontrada.");
+    if (!order.productVariant)
+      throw new BadRequestException(
+        "A OP precisa estar vinculada a um perfil de produto.",
+      );
+    return this.production.database.$queryRawUnsafe<any[]>(
+      `WITH active_reservations AS (
+         SELECT "salesOrderItemId",SUM(quantity)::int AS reserved
+           FROM "InventoryReservation"
+          WHERE "companyId"=$1 AND status='ACTIVE'
+          GROUP BY "salesOrderItemId"
+       ), stock AS (
+         SELECT "productVariantId",SUM("quantityOnHand"-"reservedQuantity")::int AS available
+           FROM "FinishedProduct"
+          WHERE "companyId"=$1
+          GROUP BY "productVariantId"
+       ), open_items AS (
+         SELECT soi.id AS "salesOrderItemId",so.id AS "salesOrderId",
+                COALESCE(so."orderNumber",so.code) AS "orderNumber",so."orderedAt",
+                c.name AS "customerName",soi."productVariantId",soi.sku,soi."productName",
+                pv."netWeightGrams",soi.quantity,
+                COALESCE(ar.reserved,0)::int AS "reservedUnits",
+                COALESCE(st.available,0)::int AS "availableFinishedUnits",
+                GREATEST(soi.quantity-COALESCE(ar.reserved,0),0)::int AS "openUnits"
+           FROM "SalesOrderItem" soi
+           JOIN "SalesOrder" so ON so.id=soi."salesOrderId"
+           JOIN "Customer" c ON c.id=so."customerId"
+           JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+           JOIN "Product" product ON product.id=pv."productId"
+           LEFT JOIN active_reservations ar ON ar."salesOrderItemId"=soi.id
+           LEFT JOIN stock st ON st."productVariantId"=soi."productVariantId"
+          WHERE so."companyId"=$1
+            AND so.status::text IN ('CONFIRMED','IN_PRODUCTION')
+            AND COALESCE(product."baseCoffeeProductId",pv."productId")=$2
+       ), allocated AS (
+         SELECT open_items.*,
+                COALESCE(SUM("openUnits") OVER (
+                  PARTITION BY "productVariantId"
+                  ORDER BY "orderedAt","salesOrderItemId"
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ),0)::int AS "priorDemand"
+           FROM open_items
+       )
+       SELECT *,
+              GREATEST(0,"openUnits"-GREATEST(0,"availableFinishedUnits"-"priorDemand"))::int AS "requiredPackages",
+              ROUND((GREATEST(0,"openUnits"-GREATEST(0,"availableFinishedUnits"-"priorDemand"))*"netWeightGrams")::numeric/1000,3) AS "requiredKg"
+         FROM allocated
+        WHERE GREATEST(0,"openUnits"-GREATEST(0,"availableFinishedUnits"-"priorDemand")) > 0
+        ORDER BY "orderedAt","orderNumber","productName"`,
+      actor.companyId,
+      order.productVariant.productId,
+    );
   }
 
   @Get("orders/:id")
@@ -210,7 +533,9 @@ export class ProductionController {
       where: { id, companyId: actor.companyId },
       include: {
         blend: true,
-        productVariant: { include: { product: { include: { productLine: true } } } },
+        productVariant: {
+          include: { product: { include: { productLine: true } } },
+        },
         consumptions: {
           include: { coffeeLot: { include: { supplier: true } } },
         },
@@ -224,6 +549,57 @@ export class ProductionController {
     if (!order)
       throw new NotFoundException("Ordem de produção não encontrada.");
     return order;
+  }
+
+  @Get("orders/:id/utility-costs")
+  async getUtilityCosts(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const [order, resource] = await Promise.all([
+      this.production.database.productionOrder.findFirst({
+        where: { id, companyId: actor.companyId },
+        select: {
+          id: true,
+          batches: { select: { greenInputKg: true } },
+        },
+      }),
+      this.production.database.productiveResource.findFirst({
+        where: {
+          companyId: actor.companyId,
+          code: "TOR-01",
+          active: true,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          energyConsumption: true,
+          energyRatePerKwh: true,
+          gasConsumption: true,
+          gasRatePerUnit: true,
+        },
+      }),
+    ]);
+    if (!order)
+      throw new NotFoundException("Ordem de produção não encontrada.");
+    if (!resource)
+      return {
+        configured: false,
+        reason: "Configure o recurso TOR-01 para calcular energia e gás.",
+      };
+    const estimate = calculateRoasterUtilityCost({
+      batchCount: calculateRoastCycleCount(
+        order.batches.map((batch) => Number(batch.greenInputKg)),
+      ),
+      energyConsumptionKwhPerHour: Number(resource.energyConsumption),
+      energyRatePerKwh: Number(resource.energyRatePerKwh),
+      gasConsumptionKgPerHour: Number(resource.gasConsumption),
+      gasRatePerKg: Number(resource.gasRatePerUnit),
+    });
+    return {
+      configured: true,
+      resource: { id: resource.id, code: resource.code, name: resource.name },
+      ...estimate,
+    };
   }
 
   @Post("orders")
@@ -254,12 +630,22 @@ export class ProductionController {
       throw new BadRequestException("Um lote não pode ser duplicado na OP.");
     return this.production.database.$transaction(
       async (transaction) => {
-        const variant = await this.production.requireActiveVariant(
-          transaction,
-          body.productVariantId,
-        );
+        const variant = body.productId
+          ? (
+              await this.production.requireProductionProduct(
+                transaction,
+                body.productId,
+              )
+            ).variant
+          : await this.production.requireActiveVariant(
+              transaction,
+              body.productVariantId,
+            );
         const companyId = variant.product.productLine.companyId;
-        if (companyId !== actor.companyId) throw new BadRequestException("SKU não pertence à empresa da sessão.");
+        if (companyId !== actor.companyId)
+          throw new BadRequestException(
+            "SKU não pertence à empresa da sessão.",
+          );
         const lots = await transaction.coffeeLot.findMany({
           where: {
             id: { in: body.allocations.map((item) => item.coffeeLotId) },
@@ -273,7 +659,9 @@ export class ProductionController {
         for (const allocation of body.allocations) {
           const lot = lots.find((item) => item.id === allocation.coffeeLotId)!;
           if (lot.status !== "APPROVED")
-            throw new BadRequestException(`Lote ${lot.code} não está liberado pela Qualidade.`);
+            throw new BadRequestException(
+              `Lote ${lot.code} não está liberado pela Qualidade.`,
+            );
           if (Number(lot.currentWeightKg) < allocation.reservedKg)
             throw new BadRequestException(
               `Saldo insuficiente no lote ${lot.code}.`,
@@ -344,11 +732,25 @@ export class ProductionController {
   }
 
   @Post("orders/:id/batches")
-  async createBatch(@Param("id") id: string, @Body() body: CreateBatchBody, @Req() req: Request) {
+  async createBatch(
+    @Param("id") id: string,
+    @Body() body: CreateBatchBody,
+    @Req() req: Request,
+  ) {
     const actor = await requireSession(req, this.auth);
-    if (body.greenInputKg <= 0 || body.roastedOutputKg <= 0) throw new BadRequestException("Pesos da torra devem ser maiores que zero.");
+    if (body.greenInputKg <= 0 || body.roastedOutputKg <= 0)
+      throw new BadRequestException(
+        "Pesos da torra devem ser maiores que zero.",
+      );
     let loss;
-    try { loss = calculateRoastMetrics(body.greenInputKg, body.roastedOutputKg); } catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Pesos da torra inválidos."); }
+    try {
+      validateRoastBatchCapacity(body.greenInputKg);
+      loss = calculateRoastMetrics(body.greenInputKg, body.roastedOutputKg);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Pesos da torra inválidos.",
+      );
+    }
     return this.production.database.$transaction(
       async (transaction) => {
         const order = await transaction.productionOrder.findFirst({
@@ -357,6 +759,18 @@ export class ProductionController {
         });
         if (!order)
           throw new NotFoundException("Ordem de produção não encontrada.");
+        if (!(
+          order.status === ProductionStatus.RESERVED ||
+          order.status === ProductionStatus.IN_PROGRESS ||
+          order.status === ProductionStatus.ROASTED
+        ))
+          throw new BadRequestException(
+            "A OP não está disponível para registrar torra.",
+          );
+        if (new Date(body.completedAt) < new Date(body.startedAt))
+          throw new BadRequestException(
+            "O término da torra não pode ser anterior ao início.",
+          );
         const consumptionIds = order.consumptions.filter((item) =>
           body.coffeeLotIds.includes(item.coffeeLotId),
         );
@@ -364,8 +778,20 @@ export class ProductionController {
           throw new BadRequestException(
             "O batch deve utilizar lotes reservados pela OP.",
           );
-        const reservedAvailable = consumptionIds.reduce((sum, item) => sum + Number(item.reservedKg) - Number(item.consumedKg), 0);
-        if (body.greenInputKg > reservedAvailable + 0.001) throw new BadRequestException("A torra não pode consumir mais café do que o reservado pela OP.");
+        const reservedTotal = order.consumptions.reduce(
+          (sum, item) => sum + Number(item.reservedKg),
+          0,
+        );
+        const alreadyRoasted = await transaction.productionBatch.aggregate({
+          where: { productionOrderId: id },
+          _sum: { greenInputKg: true },
+        });
+        const roastedInputTotal =
+          Number(alreadyRoasted._sum.greenInputKg ?? 0) + body.greenInputKg;
+        if (roastedInputTotal > reservedTotal + 0.001)
+          throw new BadRequestException(
+            "A torra não pode consumir mais café do que o reservado pela OP.",
+          );
         const batch = await transaction.productionBatch.create({
           data: {
             companyId: order.companyId,
@@ -393,7 +819,10 @@ export class ProductionController {
           },
         });
         await transaction.productionConsumption.updateMany({
-          where: { id: { in: consumptionIds.map((item) => item.id) }, productionBatchId: null },
+          where: {
+            id: { in: consumptionIds.map((item) => item.id) },
+            productionBatchId: null,
+          },
           data: { productionBatchId: batch.id },
         });
         await transaction.industrialEvent.createMany({
@@ -424,6 +853,40 @@ export class ProductionController {
     );
   }
 
+  @Post("orders/:id/packaging/start")
+  async startPackaging(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const order = await this.production.database.productionOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      include: { batches: true, consumptions: true },
+    });
+    if (!order)
+      throw new NotFoundException("Ordem de produção não encontrada.");
+    if (!(
+      order.status === ProductionStatus.ROASTED ||
+      order.status === ProductionStatus.PACKAGING
+    ))
+      throw new BadRequestException(
+        "Registre a torra antes de iniciar a embalagem.",
+      );
+    const reservedKg = order.consumptions.reduce(
+      (sum, item) => sum + Number(item.reservedKg),
+      0,
+    );
+    const roastedInputKg = order.batches.reduce(
+      (sum, item) => sum + Number(item.greenInputKg),
+      0,
+    );
+    if (Math.abs(reservedKg - roastedInputKg) > 0.001)
+      throw new BadRequestException(
+        `Ainda faltam ${(reservedKg - roastedInputKg).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg para concluir a torra da OP.`,
+      );
+    return this.production.database.productionOrder.update({
+      where: { id },
+      data: { status: ProductionStatus.PACKAGING },
+    });
+  }
+
   @Post("orders/:id/complete")
   async completeOrder(
     @Param("id") id: string,
@@ -450,8 +913,6 @@ export class ProductionController {
         });
         if (!order)
           throw new NotFoundException("Ordem de produção não encontrada.");
-        const warehouse = await transaction.warehouse.findFirst({ where: { id: body.warehouseId, companyId: actor.companyId } });
-        if (!warehouse) throw new BadRequestException("Armazém não pertence à empresa da sessão.");
         const idempotencyKey = `PRODUCTION_IN:${order.id}`;
         const existingMovement =
           await transaction.finishedGoodsMovement.findUnique({
@@ -462,24 +923,99 @@ export class ProductionController {
           return {
             orderId: id,
             movementId: existingMovement.id,
+            productVariantId: existingMovement.productVariantId,
+            sku: existingMovement.finishedProduct.sku,
+            packageWeightG: existingMovement.finishedProduct.packageWeightG,
             idempotent: true,
             balance: {
               physicalUnits: existingMovement.finishedProduct.quantityOnHand,
-              reservedUnits:
-                existingMovement.finishedProduct.reservedQuantity,
+              reservedUnits: existingMovement.finishedProduct.reservedQuantity,
               availableUnits:
                 existingMovement.finishedProduct.quantityOnHand -
                 existingMovement.finishedProduct.reservedQuantity,
             },
           };
-        if (order.status === ProductionStatus.COMPLETED)
-          throw new BadRequestException("A OP já foi concluída.");
-        const officialVariant = order.productVariantId
+        if (!(
+          order.status === ProductionStatus.ROASTED ||
+          order.status === ProductionStatus.PACKAGING
+        ))
+          throw new BadRequestException(
+            "A OP precisa estar torrada antes do empacotamento.",
+          );
+        const reservedInputKg = order.consumptions.reduce(
+          (sum, item) => sum + Number(item.reservedKg),
+          0,
+        );
+        const roastedInputKg = order.batches.reduce(
+          (sum, item) => sum + Number(item.greenInputKg),
+          0,
+        );
+        if (Math.abs(reservedInputKg - roastedInputKg) > 0.001)
+          throw new BadRequestException(
+            "Conclua a torra de todo o café reservado antes de empacotar.",
+          );
+        const totalRoastedOutputKg = order.batches.reduce(
+          (sum, item) => sum + Number(item.roastedOutputKg),
+          0,
+        );
+        if (body.finishedOutputKg > totalRoastedOutputKg + 0.001)
+          throw new BadRequestException(
+            "O peso empacotado não pode superar o peso torrado.",
+          );
+        let warehouse = body.warehouseId
+          ? await transaction.warehouse.findFirst({
+              where: {
+                id: body.warehouseId,
+                companyId: actor.companyId,
+                type: "FINISHED_GOODS",
+              },
+            })
+          : await transaction.warehouse.findFirst({
+              where: {
+                companyId: actor.companyId,
+                type: "FINISHED_GOODS",
+              },
+              orderBy: { createdAt: "asc" },
+            });
+        if (body.warehouseId && !warehouse)
+          throw new BadRequestException(
+            "O destino informado não é um armazém de produto acabado desta empresa.",
+          );
+        if (!warehouse) {
+          warehouse = await transaction.warehouse.create({
+            data: {
+              id: randomUUID(),
+              companyId: actor.companyId,
+              name: "Produto Acabado",
+              code: "PA",
+              type: "FINISHED_GOODS",
+            },
+          });
+        }
+        const targetVariantId = body.productVariantId ?? order.productVariantId;
+        const officialVariant = targetVariantId
           ? await this.production.requireActiveVariant(
               transaction,
-              order.productVariantId,
+              targetVariantId,
             )
           : null;
+        if (
+          officialVariant &&
+          order.productVariant &&
+          (officialVariant.product.baseCoffeeProductId ??
+            officialVariant.productId) !== order.productVariant.productId
+        )
+          throw new BadRequestException(
+            "Escolha uma apresentação do mesmo produto da OP.",
+          );
+        if (officialVariant) {
+          const packedWeightKg =
+            (body.producedPackages * officialVariant.netWeightGrams) / 1000;
+          if (Math.abs(packedWeightKg - body.finishedOutputKg) > 0.01)
+            throw new BadRequestException(
+              "O peso acabado deve corresponder à quantidade e à apresentação dos pacotes.",
+            );
+        }
         const consumedCost = order.consumptions.reduce(
           (sum, item) =>
             sum + Number(item.reservedKg) * Number(item.realCostPerKg),
@@ -504,13 +1040,46 @@ export class ProductionController {
             (sum, batch) => sum + Number(batch.roastedOutputKg),
             0,
           );
-        const cost = calculateProductionCost({
+        const roaster = await transaction.productiveResource.findFirst({
+          where: {
+            companyId: order.companyId,
+            code: "TOR-01",
+            active: true,
+          },
+        });
+        const automaticUtilities =
+          roaster && order.batches.length
+            ? calculateRoasterUtilityCost({
+                batchCount: calculateRoastCycleCount(
+                  order.batches.map((batch) => Number(batch.greenInputKg)),
+                ),
+                energyConsumptionKwhPerHour: Number(roaster.energyConsumption),
+                energyRatePerKwh: Number(roaster.energyRatePerKwh),
+                gasConsumptionKgPerHour: Number(roaster.gasConsumption),
+                gasRatePerKg: Number(roaster.gasRatePerUnit),
+              })
+            : null;
+        const resolvedEnergyCost =
+          automaticUtilities?.energyCost ?? body.energyCost;
+        const resolvedGasCost =
+          automaticUtilities?.gasCost ?? body.gasCost ?? 0;
+        const roastStageAllocation = allocateRoastStageCosts({
           greenCoffeeConsumedCost: consumedCost - lossKg * averageCoffeeCost,
           roastLossCost: lossKg * averageCoffeeCost,
+          energyCost: resolvedEnergyCost,
+          gasCost: resolvedGasCost,
+          roastedOutputKg,
+          finishedOutputKg: body.finishedOutputKg,
+        });
+        const cost = calculateProductionCost({
+          greenCoffeeConsumedCost:
+            roastStageAllocation.allocatedGreenCoffeeConsumedCost,
+          roastLossCost: roastStageAllocation.allocatedRoastLossCost,
           packagingCost,
           suppliesCost: body.suppliesCost,
           laborCost: body.laborCost,
-          energyCost: body.energyCost,
+          energyCost: roastStageAllocation.allocatedEnergyCost,
+          gasCost: roastStageAllocation.allocatedGasCost,
           otherIndustrialCosts: body.otherIndustrialCosts,
           roastedOutputKg,
           finishedOutputKg: body.finishedOutputKg,
@@ -567,7 +1136,7 @@ export class ProductionController {
           ? await transaction.finishedProduct.findFirst({
               where: {
                 productVariantId: officialVariant.id,
-                warehouseId: body.warehouseId,
+                warehouseId: warehouse.id,
               },
             })
           : null;
@@ -578,7 +1147,7 @@ export class ProductionController {
               blendId: order.blendId,
               productionOrderId: order.id,
               productVariantId: officialVariant.id,
-              warehouseId: body.warehouseId,
+              warehouseId: warehouse.id,
               sku: officialVariant.sku,
               name: officialVariant.product.name,
               line: officialVariant.product.productLine.code,
@@ -595,41 +1164,75 @@ export class ProductionController {
           });
         if (!finishedProduct)
           throw new BadRequestException(
-            order.productVariantId
+            officialVariant
               ? "Não foi possível criar o saldo do SKU no armazém informado."
               : "Produto acabado legado não encontrado.",
           );
         if (
-          order.productVariantId &&
-          finishedProduct.productVariantId !== order.productVariantId
+          officialVariant &&
+          finishedProduct.productVariantId !== officialVariant.id
         )
           throw new BadRequestException(
             "O saldo de produto acabado não corresponde ao SKU da OP.",
           );
+        if (!officialVariant)
+          throw new BadRequestException(
+            "O empacotamento por pedido exige um SKU oficial ativo.",
+          );
+        const packagingDemand = await this.requirePackagingDemand(
+          transaction,
+          actor.companyId,
+          body.salesOrderItemId,
+          officialVariant.id,
+          finishedProduct.id,
+          body.producedPackages,
+        );
         const updatedBalance = await transaction.finishedProduct.update({
           where: { id: finishedProduct.id },
           data: {
             quantityOnHand: { increment: body.producedPackages },
-            productVariantId: finishedProduct.productVariantId ?? order.productVariantId,
+            productVariantId:
+              finishedProduct.productVariantId ?? officialVariant?.id,
           },
         });
+        const reservation = await this.reservePackagedOrderItem(
+          transaction,
+          packagingDemand,
+          finishedProduct.id,
+          warehouse.id,
+        );
         const movement = await transaction.finishedGoodsMovement.create({
           data: {
             companyId: order.companyId,
             productionOrderId: id,
-            productVariantId: order.productVariantId,
+            salesOrderId: packagingDemand.item.salesOrderId,
+            salesOrderItemId: packagingDemand.item.id,
+            reservationId: reservation.id,
+            productVariantId: officialVariant?.id,
             finishedProductId: finishedProduct.id,
-            warehouseId: body.warehouseId,
-            type: order.productVariantId ? "PRODUCTION_IN" : "ENTRY",
+            warehouseId: warehouse.id,
+            type: officialVariant ? "PRODUCTION_IN" : "ENTRY",
             packageQuantity: body.producedPackages,
             unit: "UN",
             totalWeightKg: body.finishedOutputKg,
-            sourceType: "PRODUCTION_ORDER",
-            sourceId: order.id,
+            sourceType: "SALES_ORDER_PACKAGING",
+            sourceId: packagingDemand.item.salesOrderId,
             idempotencyKey,
-            reason: `Conclusão da ${order.code}`,
+            reason: `Empacotamento da ${order.code} para o pedido ${packagingDemand.item.salesOrder.orderNumber ?? packagingDemand.item.salesOrder.code}`,
           },
         });
+        const roastCostPerKg = new Prisma.Decimal(
+          roastStageAllocation.roastCostPerKg,
+        );
+        await transaction.$executeRaw`
+          UPDATE "RoastedWipLot"
+          SET
+            "costPerKg" = ${roastCostPerKg},
+            "producedCost" = ROUND("producedKg" * ${roastCostPerKg}, 2),
+            "availableCost" = ROUND("availableKg" * ${roastCostPerKg}, 2),
+            "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "productionOrderId" = ${order.id}
+        `;
         const existingTypes = new Set(
           order.costEvents.map((item) => item.type),
         );
@@ -640,17 +1243,71 @@ export class ProductionController {
             active: true,
           },
         });
-        const roastingCenter = costCenters.find((item) => item.code === "IND-TOR");
-        const packagingCenter = costCenters.find((item) => item.code === "IND-EMP");
+        const roastingCenter = costCenters.find(
+          (item) => item.code === "IND-TOR",
+        );
+        const packagingCenter = costCenters.find(
+          (item) => item.code === "IND-EMP",
+        );
         if (!roastingCenter || !packagingCenter)
           throw new BadRequestException(
             "Configure os centros IND-TOR e IND-EMP antes de concluir a OP.",
           );
+        if (roaster && automaticUtilities) {
+          await transaction.productionResourceUsage.upsert({
+            where: {
+              productionOrderId_resourceId: {
+                productionOrderId: order.id,
+                resourceId: roaster.id,
+              },
+            },
+            update: {
+              machineHours: automaticUtilities.energyRuntimeHours,
+              measuredEnergy: automaticUtilities.energyKwh,
+              measuredGas: automaticUtilities.gasKg,
+              notes: ROASTER_OPERATIONAL_USAGE_NOTE,
+            },
+            create: {
+              productionOrderId: order.id,
+              resourceId: roaster.id,
+              machineHours: automaticUtilities.energyRuntimeHours,
+              measuredEnergy: automaticUtilities.energyKwh,
+              measuredGas: automaticUtilities.gasKg,
+              notes: ROASTER_OPERATIONAL_USAGE_NOTE,
+            },
+          });
+        }
         const newCosts = [
-          { type: CostType.PACKAGING, amount: packagingCost, costCenterId: packagingCenter.id, nature: "DIRECT" as const },
-          { type: CostType.LABOR, amount: body.laborCost, costCenterId: packagingCenter.id, nature: "DIRECT" as const },
-          { type: CostType.ENERGY, amount: body.energyCost, costCenterId: roastingCenter.id, nature: "INDIRECT_INDUSTRIAL" as const },
-          { type: CostType.SUPPLIES, amount: body.suppliesCost, costCenterId: packagingCenter.id, nature: "DIRECT" as const },
+          {
+            type: CostType.PACKAGING,
+            amount: packagingCost,
+            costCenterId: packagingCenter.id,
+            nature: "DIRECT" as const,
+          },
+          {
+            type: CostType.LABOR,
+            amount: body.laborCost,
+            costCenterId: packagingCenter.id,
+            nature: "DIRECT" as const,
+          },
+          {
+            type: CostType.ENERGY,
+            amount: resolvedEnergyCost,
+            costCenterId: roastingCenter.id,
+            nature: "INDIRECT_INDUSTRIAL" as const,
+          },
+          {
+            type: CostType.GAS,
+            amount: resolvedGasCost,
+            costCenterId: roastingCenter.id,
+            nature: "INDIRECT_INDUSTRIAL" as const,
+          },
+          {
+            type: CostType.SUPPLIES,
+            amount: body.suppliesCost,
+            costCenterId: packagingCenter.id,
+            nature: "DIRECT" as const,
+          },
           {
             type: CostType.OTHER,
             amount: body.otherIndustrialCosts,
@@ -663,7 +1320,7 @@ export class ProductionController {
             data: newCosts.map((item) => ({
               companyId: order.companyId,
               productionOrderId: id,
-              productVariantId: order.productVariantId,
+              productVariantId: officialVariant?.id,
               costCenterId: item.costCenterId,
               type: item.type,
               nature: item.nature,
@@ -679,18 +1336,308 @@ export class ProductionController {
             completedAt: new Date(),
           },
         });
+        const finalBalance =
+          await transaction.finishedProduct.findUniqueOrThrow({
+            where: { id: updatedBalance.id },
+          });
         return {
           orderId: id,
           movementId: movement.id,
-          productVariantId: order.productVariantId,
+          productVariantId: officialVariant?.id,
           idempotent: false,
           balance: {
-            physicalUnits: updatedBalance.quantityOnHand,
-            reservedUnits: updatedBalance.reservedQuantity,
+            physicalUnits: finalBalance.quantityOnHand,
+            reservedUnits: finalBalance.reservedQuantity,
             availableUnits:
-              updatedBalance.quantityOnHand - updatedBalance.reservedQuantity,
+              finalBalance.quantityOnHand - finalBalance.reservedQuantity,
           },
           cost,
+          utilities: automaticUtilities,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  @Post("orders/:id/packaging/complete-wip")
+  async completeWipPackaging(
+    @Param("id") id: string,
+    @Body() body: CompleteWipPackagingBody,
+    @Req() req: Request,
+  ) {
+    const actor = await requireSession(req, this.auth);
+    const requestToken = String(body?.idempotencyKey ?? "").trim();
+    if (!/^[A-Za-z0-9:_-]{8,128}$/.test(requestToken))
+      throw new BadRequestException(
+        "Informe uma chave de idempotência válida para o empacotamento.",
+      );
+    return this.production.database.$transaction(
+      async (transaction) => {
+        const idempotencyKey = `PRODUCTION_WIP_PACK:${id}:${requestToken}`;
+        const existingMovement =
+          await transaction.finishedGoodsMovement.findFirst({
+            where: { idempotencyKey, companyId: actor.companyId },
+            include: { finishedProduct: true },
+          });
+        if (existingMovement)
+          return {
+            orderId: id,
+            movementId: existingMovement.id,
+            idempotent: true,
+            productVariantId: existingMovement.productVariantId,
+            sku: existingMovement.finishedProduct.sku,
+            packageWeightG: existingMovement.finishedProduct.packageWeightG,
+            finishedOutputKg: Number(existingMovement.totalWeightKg),
+            producedPackages: existingMovement.packageQuantity,
+            balance: {
+              physicalUnits: existingMovement.finishedProduct.quantityOnHand,
+              reservedUnits: existingMovement.finishedProduct.reservedQuantity,
+              availableUnits:
+                existingMovement.finishedProduct.quantityOnHand -
+                existingMovement.finishedProduct.reservedQuantity,
+            },
+          };
+
+        const order = await transaction.productionOrder.findFirst({
+          where: { id, companyId: actor.companyId },
+          include: {
+            productVariant: {
+              include: { product: { include: { productLine: true } } },
+            },
+            packagingConsumptions: { orderBy: { createdAt: "asc" } },
+          },
+        });
+        if (!order)
+          throw new NotFoundException("Ordem de produção não encontrada.");
+        if (order.status !== ProductionStatus.COMPLETED)
+          throw new BadRequestException(
+            "O empacotamento de saldo WIP exige uma OP concluída.",
+          );
+        if (!order.productVariant)
+          throw new BadRequestException(
+            "A OP não possui uma apresentação de produto válida.",
+          );
+        const targetVariant = await this.production.requireActiveVariant(
+          transaction,
+          String(body?.productVariantId ?? order.productVariant.id).trim(),
+        );
+        if (
+          (targetVariant.product.baseCoffeeProductId ??
+            targetVariant.productId) !== order.productVariant.productId
+        )
+          throw new BadRequestException(
+            "Escolha uma apresentação do mesmo produto da OP.",
+          );
+
+        const wipLots = await transaction.$queryRaw<
+          Array<{ id: string; availableKg: Prisma.Decimal }>
+        >`
+          SELECT id, "availableKg"
+          FROM "RoastedWipLot"
+          WHERE "productionOrderId" = ${order.id}
+            AND status IN ('AVAILABLE', 'PARTIALLY_PACKED')
+            AND "availableKg" > 0
+          ORDER BY "producedAt", id
+          FOR UPDATE
+        `;
+        const availableWipKg = wipLots.reduce(
+          (sum, lot) => sum + Number(lot.availableKg),
+          0,
+        );
+        if (availableWipKg <= 0.001)
+          throw new BadRequestException(
+            "Não existe saldo de café torrado aguardando embalagem.",
+          );
+
+        let packagingPlan;
+        try {
+          packagingPlan = calculateWipPackagingPlan(
+            availableWipKg,
+            targetVariant.netWeightGrams,
+            Number(body.producedPackages),
+          );
+        } catch (error) {
+          throw new BadRequestException(
+            error instanceof Error
+              ? error.message
+              : "O saldo WIP não pode ser convertido em pacotes.",
+          );
+        }
+
+        const priorMovements = await transaction.finishedGoodsMovement.findMany(
+          {
+            where: {
+              productionOrderId: order.id,
+              companyId: actor.companyId,
+              type: "PRODUCTION_IN",
+            },
+            include: { finishedProduct: true },
+            orderBy: { occurredAt: "asc" },
+          },
+        );
+        const sourceMovement = priorMovements[0];
+        if (!sourceMovement)
+          throw new BadRequestException(
+            "A OP não possui uma entrada anterior de produto acabado.",
+          );
+        const previousPackages = priorMovements.reduce(
+          (sum, movement) => sum + movement.packageQuantity,
+          0,
+        );
+        if (previousPackages <= 0 || !order.packagingConsumptions.length)
+          throw new BadRequestException(
+            "A embalagem original da OP não foi encontrada.",
+          );
+
+        const packagingForRun = order.packagingConsumptions.map((item) => {
+          const quantity =
+            (Number(item.quantity) / previousPackages) *
+            packagingPlan.producedPackages;
+          const unitCost = Number(item.unitCost);
+          const isPrimaryPackage = item.materialType === "PACKAGE";
+          return {
+            companyId: order.companyId,
+            productionOrderId: order.id,
+            materialType: item.materialType,
+            materialName: isPrimaryPackage
+              ? `Embalagem ${targetVariant.sku}`
+              : item.materialName,
+            sku: isPrimaryPackage ? targetVariant.sku : item.sku,
+            quantity,
+            unit: item.unit,
+            unitCost,
+            totalCost: Number((quantity * unitCost).toFixed(2)),
+          };
+        });
+        await transaction.packagingConsumption.createMany({
+          data: packagingForRun,
+        });
+
+        const packagingCost = packagingForRun.reduce(
+          (sum, item) => sum + item.totalCost,
+          0,
+        );
+        if (packagingCost > 0) {
+          const packagingCenter = await transaction.costCenter.findFirst({
+            where: {
+              companyId: order.companyId,
+              code: "IND-EMP",
+              active: true,
+            },
+          });
+          await transaction.costEvent.create({
+            data: {
+              companyId: order.companyId,
+              productionOrderId: order.id,
+              productVariantId: targetVariant.id,
+              costCenterId: packagingCenter?.id,
+              type: CostType.PACKAGING,
+              nature: "DIRECT",
+              amount: packagingCost,
+              description: `${order.code} • embalagem do saldo WIP`,
+            },
+          });
+        }
+
+        let targetFinishedProduct = await transaction.finishedProduct.findFirst(
+          {
+            where: {
+              productVariantId: targetVariant.id,
+              warehouseId: sourceMovement.warehouseId,
+            },
+          },
+        );
+        if (!targetFinishedProduct) {
+          targetFinishedProduct = await transaction.finishedProduct.create({
+            data: {
+              companyId: order.companyId,
+              blendId: order.blendId,
+              productionOrderId: order.id,
+              productVariantId: targetVariant.id,
+              warehouseId: sourceMovement.warehouseId,
+              sku: targetVariant.sku,
+              name: targetVariant.product.name,
+              line: targetVariant.product.productLine.code,
+              packageWeightG: targetVariant.netWeightGrams,
+              quantityOnHand: 0,
+              reservedQuantity: 0,
+              standardPrice: 0,
+            },
+          });
+        }
+        const packagingDemand = await this.requirePackagingDemand(
+          transaction,
+          actor.companyId,
+          body.salesOrderItemId,
+          targetVariant.id,
+          targetFinishedProduct.id,
+          packagingPlan.producedPackages,
+        );
+        const updatedBalance = await transaction.finishedProduct.update({
+          where: { id: targetFinishedProduct.id },
+          data: {
+            quantityOnHand: {
+              increment: packagingPlan.producedPackages,
+            },
+          },
+        });
+        const reservation = await this.reservePackagedOrderItem(
+          transaction,
+          packagingDemand,
+          targetFinishedProduct.id,
+          sourceMovement.warehouseId,
+        );
+        const movement = await transaction.finishedGoodsMovement.create({
+          data: {
+            companyId: order.companyId,
+            productionOrderId: order.id,
+            salesOrderId: packagingDemand.item.salesOrderId,
+            salesOrderItemId: packagingDemand.item.id,
+            reservationId: reservation.id,
+            productVariantId: targetVariant.id,
+            finishedProductId: targetFinishedProduct.id,
+            warehouseId: sourceMovement.warehouseId,
+            type: "PRODUCTION_IN",
+            packageQuantity: packagingPlan.producedPackages,
+            unit: "UN",
+            totalWeightKg: packagingPlan.finishedOutputKg,
+            sourceType: "SALES_ORDER_WIP_PACKAGING",
+            sourceId: packagingDemand.item.salesOrderId,
+            idempotencyKey,
+            reason: `Empacotamento do saldo WIP da ${order.code} para o pedido ${packagingDemand.item.salesOrder.orderNumber ?? packagingDemand.item.salesOrder.code}`,
+          },
+        });
+
+        const totalFinishedOutputKg =
+          priorMovements.reduce(
+            (sum, item) => sum + Number(item.totalWeightKg),
+            0,
+          ) + packagingPlan.finishedOutputKg;
+        await transaction.productionOrder.update({
+          where: { id: order.id },
+          data: { actualOutputKg: totalFinishedOutputKg },
+        });
+
+        const finalBalance =
+          await transaction.finishedProduct.findUniqueOrThrow({
+            where: { id: updatedBalance.id },
+          });
+        return {
+          orderId: order.id,
+          movementId: movement.id,
+          productVariantId: targetVariant.id,
+          sku: targetVariant.sku,
+          packageWeightG: targetVariant.netWeightGrams,
+          idempotent: false,
+          finishedOutputKg: packagingPlan.finishedOutputKg,
+          producedPackages: packagingPlan.producedPackages,
+          packagingCost,
+          balance: {
+            physicalUnits: finalBalance.quantityOnHand,
+            reservedUnits: finalBalance.reservedQuantity,
+            availableUnits:
+              finalBalance.quantityOnHand - finalBalance.reservedQuantity,
+          },
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

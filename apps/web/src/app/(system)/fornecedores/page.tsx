@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
-import { lookupBrazilianCep } from "@/lib/brazil-address";
+import { brazilianCepDigits, formatBrazilianCep, lookupBrazilianCep } from "@/lib/brazil-address";
+import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 
 const API = `${getApiBaseUrl()}/green-coffee-purchases`;
 const input =
@@ -92,6 +93,7 @@ type Species = {
 type Unit = {
   id: string;
   name: string;
+  originType: "FARM" | "COOPERATIVE_UNIT" | "ORIGIN_UNIT";
   state: string;
   municipality?: string | null;
   ibgeCityCode?: string | null;
@@ -106,6 +108,34 @@ type Unit = {
     cultivar?: { name: string } | null;
     harvest?: string | null;
   }[];
+};
+const originTypeText: Record<Unit["originType"], string> = {
+  FARM: "Fazenda / propriedade",
+  COOPERATIVE_UNIT: "Unidade da cooperativa",
+  ORIGIN_UNIT: "Unidade de origem / recebimento",
+};
+const originVocabulary = (supplierType: string) => {
+  if (supplierType === "COOPERATIVE") return {
+    action: "Unidades e origens",
+    empty: "Nenhuma unidade ou origem vinculada à cooperativa.",
+    title: "Nova unidade ou origem da cooperativa",
+    name: "Nome da unidade ou propriedade",
+    saved: "Unidade/origem da cooperativa cadastrada.",
+  };
+  if (supplierType === "RURAL_PERSON") return {
+    action: "Fazendas",
+    empty: "Nenhuma fazenda ou propriedade cadastrada.",
+    title: "Nova fazenda ou propriedade",
+    name: "Nome da fazenda ou propriedade",
+    saved: "Fazenda/propriedade cadastrada.",
+  };
+  return {
+    action: "Unidades e origens",
+    empty: "Nenhuma unidade ou origem cadastrada.",
+    title: "Nova unidade ou origem",
+    name: "Nome da unidade ou origem",
+    saved: "Unidade/origem cadastrada.",
+  };
 };
 type Supplier = {
   id: string;
@@ -218,7 +248,6 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(data.message ?? "Não foi possível concluir a operação.");
   return data as T;
 }
-
 export default function SuppliersPage() {
   const [items, setItems] = useState<Supplier[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
@@ -254,7 +283,13 @@ export default function SuppliersPage() {
   >("idle");
   const [unitCity, setUnitCity] = useState("");
   const [unitIbgeCityCode, setUnitIbgeCityCode] = useState("");
+  const [unitCep, setUnitCep] = useState("");
+  const [unitDistrict, setUnitDistrict] = useState("");
+  const [unitAddress, setUnitAddress] = useState("");
+  const [unitComplement, setUnitComplement] = useState("");
   const [productionSpeciesId, setProductionSpeciesId] = useState("");
+  const [cultivarQuery, setCultivarQuery] = useState("");
+  const [selectedCultivarIds, setSelectedCultivarIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [contacts, setContacts] = useState<SupplierContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -268,6 +303,23 @@ export default function SuppliersPage() {
   const [contactAuthorized, setContactAuthorized] = useState(false);
   const [contactActive, setContactActive] = useState(true);
   const [contactMessage, setContactMessage] = useState("");
+  const unitCepLookup = useBrazilianCepAutofill({
+    postalCode: unitCep,
+    enabled: Boolean(unitSupplier),
+    onResolved: (result) => {
+      setUnitCep(result.postalCode);
+      setUnitState(result.state);
+      setUnitCity(result.city);
+      setUnitIbgeCityCode(result.ibgeCityCode ?? "");
+      setUnitDistrict((current) => result.district || current);
+      setUnitAddress((current) => result.address || current);
+      setUnitMunicipalities((current) =>
+        current.some((item) => item.name === result.city && item.state === result.state)
+          ? current
+          : [...current, { ibgeCode: result.ibgeCityCode ?? `cep-${result.city}`, name: result.city, state: result.state }],
+      );
+    },
+  });
 
   const load = async () => {
     const [suppliers, refs] = await Promise.all([
@@ -319,9 +371,14 @@ export default function SuppliersPage() {
     void request<Municipality[]>(
       `${API}/references/municipalities?state=${unitState}`,
     )
-      .then(setUnitMunicipalities)
+      .then((items) =>
+        setUnitMunicipalities((current) => {
+          const resolved = current.find((item) => item.name === unitCity && item.state === unitState);
+          return resolved && !items.some((item) => item.name === resolved.name) ? [...items, resolved] : items;
+        }),
+      )
       .catch(() => setUnitMunicipalities([]));
-  }, [unitState]);
+  }, [unitCity, unitState]);
   useEffect(() => {
     if (editingSupplier && supplierOpen) {
       setSupplierState(editingSupplier.state ?? "");
@@ -340,9 +397,16 @@ export default function SuppliersPage() {
   }, [editingSupplier, supplierOpen]);
   useEffect(() => {
     if (unitSupplier) {
+      setUnitState("");
       setUnitCity("");
       setUnitIbgeCityCode("");
+      setUnitCep("");
+      setUnitDistrict("");
+      setUnitAddress("");
+      setUnitComplement("");
       setProductionSpeciesId("");
+      setCultivarQuery("");
+      setSelectedCultivarIds([]);
     }
   }, [unitSupplier]);
   useEffect(() => {
@@ -366,6 +430,16 @@ export default function SuppliersPage() {
       ),
     [items, query],
   );
+  const availableCultivars = useMemo(
+    () => species.find((item) => item.id === productionSpeciesId)?.varieties ?? [],
+    [productionSpeciesId, species],
+  );
+  const visibleCultivars = useMemo(() => {
+    const term = cultivarQuery.trim().toLocaleLowerCase("pt-BR");
+    return term
+      ? availableCultivars.filter((cultivar) => cultivar.name.toLocaleLowerCase("pt-BR").includes(term))
+      : availableCultivars;
+  }, [availableCultivars, cultivarQuery]);
   const saveSupplier = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -434,6 +508,12 @@ export default function SuppliersPage() {
       setCepStatus("error");
     }
   };
+  useEffect(() => {
+    if (supplierCountry !== "Brasil") return;
+    if (supplierCep.replace(/\D/g, "").length !== 8) return;
+    const timer = window.setTimeout(() => void handleCepLookup(), 250);
+    return () => window.clearTimeout(timer);
+  }, [supplierCep, supplierCountry]);
   const saveUnit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!unitSupplier) return;
@@ -459,7 +539,7 @@ export default function SuppliersPage() {
           },
         );
       setUnitSupplier(null);
-      setMessage("Unidade/fazenda cadastrada.");
+      setMessage(originVocabulary(unitSupplier.supplierType).saved);
       await load();
     } catch (error) {
       setMessage(
@@ -661,7 +741,7 @@ export default function SuppliersPage() {
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold"
                 >
                   <Plus size={14} />
-                  Unidades/fazendas
+                  {originVocabulary(supplier.supplierType).action}
                 </button>
               </div>
             </div>
@@ -677,6 +757,9 @@ export default function SuppliersPage() {
                       · {unit.active ? "Ativa" : "Inativa"}
                     </span>
                   </p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-forest-700">
+                    {originTypeText[unit.originType] ?? "Origem"}
+                  </p>
                   <p className="mt-1 text-xs text-stone-500">
                     {unit.municipality || "—"}/{unit.state} ·{" "}
                     {unit.coffeeRegion?.name || "Região não informada"}
@@ -685,7 +768,7 @@ export default function SuppliersPage() {
               ))}
               {supplier.originUnits.length === 0 && (
                 <p className="rounded-xl border border-dashed p-4 text-sm text-stone-500">
-                  Nenhuma unidade/fazenda cadastrada.
+                  {originVocabulary(supplier.supplierType).empty}
                 </p>
               )}
             </div>
@@ -946,12 +1029,12 @@ export default function SuppliersPage() {
                     pattern="[0-9]{5}-?[0-9]{3}"
                     placeholder="00000-000"
                     value={supplierCep.replace(/(\d{5})(\d)/, "$1-$2")}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setCepStatus("idle");
                       setSupplierCep(
                         event.target.value.replace(/\D/g, "").slice(0, 8),
-                      )
-                    }
-                    onBlur={() => void handleCepLookup()}
+                      );
+                    }}
                     className={input}
                   />
                   {cepStatus !== "idle" && (
@@ -959,7 +1042,9 @@ export default function SuppliersPage() {
                       {cepStatus === "loading"
                         ? "Consultando CEP..."
                         : cepStatus === "found"
-                          ? "Endereço encontrado."
+                          ? supplierAddress || supplierDistrict
+                            ? "Endereço preenchido automaticamente."
+                            : "CEP geral: município e estado preenchidos. Informe o logradouro."
                           : cepStatus === "not-found"
                             ? "CEP não encontrado."
                             : "Serviço de CEP indisponível."}
@@ -1122,16 +1207,33 @@ export default function SuppliersPage() {
                 <p className="text-xs font-bold uppercase text-forest-700">
                   {unitSupplier.name}
                 </p>
-                <h2 className="text-xl font-bold">Nova unidade/fazenda</h2>
+                <h2 className="text-xl font-bold">{originVocabulary(unitSupplier.supplierType).title}</h2>
               </div>
               <button type="button" onClick={() => setUnitSupplier(null)}>
                 <X />
               </button>
             </div>
+            {unitSupplier.supplierType === "COOPERATIVE" && (
+              <p className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-950">
+                Cadastre a unidade local da cooperativa como <b>Unidade da cooperativa</b>. Quando houver rastreabilidade até uma propriedade produtora, cadastre-a como <b>Fazenda / propriedade</b>.
+              </p>
+            )}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <label className="text-sm font-semibold">
-                Nome da Fazenda/Unidade
+                {originVocabulary(unitSupplier.supplierType).name}
                 <input required name="name" className={input} />
+              </label>
+              <label className="text-sm font-semibold">
+                Tipo de origem
+                <select
+                  name="originType"
+                  className={input}
+                  defaultValue={unitSupplier.supplierType === "COOPERATIVE" ? "COOPERATIVE_UNIT" : unitSupplier.supplierType === "RURAL_PERSON" ? "FARM" : "ORIGIN_UNIT"}
+                >
+                  <option value="COOPERATIVE_UNIT">Unidade da cooperativa</option>
+                  <option value="FARM">Fazenda / propriedade</option>
+                  <option value="ORIGIN_UNIT">Unidade de origem / recebimento</option>
+                </select>
               </label>
               <label className="text-sm font-semibold">
                 CPF/CNPJ próprio
@@ -1208,12 +1310,20 @@ export default function SuppliersPage() {
                   inputMode="numeric"
                   pattern="[0-9]{5}-?[0-9]{3}"
                   placeholder="00000-000"
+                  autoComplete="postal-code"
+                  value={formatBrazilianCep(unitCep)}
+                  onChange={(event) => setUnitCep(brazilianCepDigits(event.target.value))}
                   className={input}
                 />
+                {unitCepLookup.statusText && (
+                  <span className={`mt-1 block text-xs ${unitCepLookup.status === "found" ? "text-emerald-700" : unitCepLookup.status === "not-found" || unitCepLookup.status === "error" ? "text-amber-700" : "text-stone-500"}`}>
+                    {unitCepLookup.statusText}
+                  </span>
+                )}
               </label>
               <label className="text-sm font-semibold">
                 Bairro / Distrito / Localidade
-                <input name="district" className={input} />
+                <input name="district" value={unitDistrict} onChange={(event) => setUnitDistrict(event.target.value)} className={input} />
               </label>
               <label className="text-sm font-semibold">
                 Região cafeeira
@@ -1230,11 +1340,11 @@ export default function SuppliersPage() {
               </label>
               <label className="text-sm font-semibold sm:col-span-2">
                 Endereço
-                <input name="address" className={input} />
+                <input name="address" value={unitAddress} onChange={(event) => setUnitAddress(event.target.value)} className={input} />
               </label>
               <label className="text-sm font-semibold sm:col-span-2">
                 Complemento
-                <input name="addressComplement" className={input} />
+                <input name="addressComplement" value={unitComplement} onChange={(event) => setUnitComplement(event.target.value)} className={input} />
               </label>
               <label className="text-sm font-semibold">
                 Área de café (ha)
@@ -1260,9 +1370,11 @@ export default function SuppliersPage() {
                   name="productionSpeciesId"
                   className={input}
                   value={productionSpeciesId}
-                  onChange={(event) =>
-                    setProductionSpeciesId(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setProductionSpeciesId(event.target.value);
+                    setCultivarQuery("");
+                    setSelectedCultivarIds([]);
+                  }}
                 >
                   <option value="">Opcional</option>
                   {species.map((item) => (
@@ -1281,32 +1393,59 @@ export default function SuppliersPage() {
                 />
               </label>
               <div className="sm:col-span-2">
-                <p className="text-sm font-semibold">
-                  Cultivares produzidas (opcional)
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(
-                    species.find((item) => item.id === productionSpeciesId)
-                      ?.varieties ?? []
-                  ).map((cultivar) => (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">
+                    Cultivares produzidas (opcional)
+                    {selectedCultivarIds.length > 0 && (
+                      <span className="ml-2 font-normal text-forest-700">
+                        {selectedCultivarIds.length} selecionada{selectedCultivarIds.length === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </p>
+                  {availableCultivars.length > 0 && (
+                    <div className="flex gap-2">
+                      <button type="button" className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold" onClick={() => setSelectedCultivarIds((current) => Array.from(new Set([...current, ...visibleCultivars.map((item) => item.id)])))}>
+                        {cultivarQuery ? "Selecionar exibidas" : "Selecionar todas"}
+                      </button>
+                      <button type="button" className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold" onClick={() => setSelectedCultivarIds([])}>
+                        Limpar
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {availableCultivars.length > 8 && (
+                  <input type="search" value={cultivarQuery} onChange={(event) => setCultivarQuery(event.target.value)} placeholder="Buscar cultivar..." className={`${input} mt-2`} />
+                )}
+                <div className="mt-2 grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50 p-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {visibleCultivars.map((cultivar) => {
+                    const selected = selectedCultivarIds.includes(cultivar.id);
+                    return (
                     <label
                       key={cultivar.id}
-                      className="rounded-lg bg-stone-50 px-2 py-1 text-xs"
+                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs ${selected ? "border-forest-700 bg-emerald-50 font-semibold text-forest-900" : "border-transparent bg-white"}`}
                     >
                       <input
                         type="checkbox"
                         name="cultivarIds"
                         value={cultivar.id}
+                        checked={selected}
+                        onChange={() => setSelectedCultivarIds((current) => selected ? current.filter((id) => id !== cultivar.id) : [...current, cultivar.id])}
                         className="mr-1"
                       />
                       {cultivar.name}
                     </label>
-                  ))}
+                    );
+                  })}
+                  {!visibleCultivars.length && (
+                    <p className="col-span-full px-2 py-3 text-xs text-stone-500">
+                      {productionSpeciesId ? "Nenhuma cultivar encontrada para esta busca." : "Selecione primeiro a espécie produzida."}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
             <button className="mt-5 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-bold text-white">
-              Salvar unidade/fazenda
+              Salvar origem
             </button>
           </form>
         </div>

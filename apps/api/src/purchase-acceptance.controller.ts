@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import {
   PayableStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   PurchaseInstallmentStatus,
   PurchaseExternalAcceptanceStatus,
 } from "@bbos/database";
@@ -24,7 +24,7 @@ const hashToken = (token: string) =>
 @Controller("purchase-acceptance")
 @Public()
 export class PurchaseAcceptanceController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   @Get(":token")
   async view(@Param("token") token: string) {

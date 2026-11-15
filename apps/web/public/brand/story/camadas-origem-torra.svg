@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">A origem em camadas: posição, clima, solo, lavoura, torra e xícara</title>
+  <desc id="desc">Ilustração conceitual de uma encosta com cafeeiros, solo vermelho sobre basalto e a passagem do grão por manejo, torra e prova. Não é um mapa nem representa valores de uma propriedade.</desc>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e7eee9"/><stop offset="1" stop-color="#fcf5e6"/></linearGradient>
+    <linearGradient id="earth" x2="0" y2="1"><stop stop-color="#aa6a4f"/><stop offset="1" stop-color="#743f35"/></linearGradient>
+  </defs>
+  <rect width="1200" height="430" rx="15" fill="url(#sky)"/>
+  <path d="M0 179C154 194 265 152 373 171S536 206 684 174 901 164 1200 201V292H0Z" fill="#bed0bd"/>
+  <path d="M0 207C174 204 261 164 398 196S581 202 693 188 957 174 1200 215V292H0Z" fill="#688c76"/>
+  <path d="M0 254C166 252 271 209 413 229S589 251 733 220 1036 219 1200 244V301H0Z" fill="#3c624d"/>
+  <path d="M0 253C166 251 271 208 413 228S589 250 733 219 1036 218 1200 243V343C930 316 804 299 640 328S301 283 0 325Z" fill="url(#earth)"/>
+  <path d="M0 324C300 282 466 357 640 328S930 317 1200 343V430H0Z" fill="#5c5148"/>
+  <g fill="#81726a" opacity=".8"><path d="M35 348l61-17 41 15-40 19zM190 369l76-17 51 20-62 16zM404 363l95-16 48 25-73 13zM608 386l68-24 91 16-44 25zM903 372l96-20 73 20-79 23z"/></g>
+  <g fill="none" stroke="#d8b391" stroke-width="4" stroke-linecap="round">
+    <path d="M313 231v-75m0 52-29-26m29 8 30-29M453 234v-71m0 45-29-26m29 9 31-27M574 242v-71m0 45-30-26m30 8 31-27M698 232v-67m0 44-29-26m29 8 29-26"/>
+  </g>
+  <g fill="#2c644b">
+    <ellipse cx="284" cy="181" rx="32" ry="12" transform="rotate(26 284 181)"/><ellipse cx="341" cy="162" rx="33" ry="12" transform="rotate(-30 341 162)"/>
+    <ellipse cx="423" cy="183" rx="31" ry="12" transform="rotate(24 423 183)"/><ellipse cx="482" cy="166" rx="33" ry="12" transform="rotate(-30 482 166)"/>
+    <ellipse cx="544" cy="190" rx="32" ry="12" transform="rotate(25 544 190)"/><ellipse cx="605" cy="171" rx="33" ry="12" transform="rotate(-29 605 171)"/>
+    <ellipse cx="671" cy="185" rx="31" ry="12" transform="rotate(25 671 185)"/><ellipse cx="727" cy="163" rx="33" ry="12" transform="rotate(-29 727 163)"/>
+  </g>
+  <g fill="#bc5945"><circle cx="304" cy="207" r="7"/><circle cx="317" cy="210" r="7"/><circle cx="447" cy="210" r="7"/><circle cx="458" cy="214" r="7"/><circle cx="570" cy="219" r="7"/><circle cx="585" cy="217" r="7"/><circle cx="692" cy="206" r="7"/></g>
+  <g fill="none" stroke="#355c4c" stroke-width="2"><path d="M79 181v-75h113"/><path d="M861 165V99h178"/><path d="M164 314v-36h116"/><path d="M707 362v-45h133"/></g>
+  <g font-family="Arial,sans-serif" fill="#25493d">
+    <text x="75" y="48" font-size="17" font-weight="700" letter-spacing="2.6">UM LUGAR, MUITAS CAMADAS</text>
+    <text x="79" y="96" font-size="18" font-weight="700">23°26′ S</text><text x="79" y="121" font-size="15">linha do trópico</text>
+    <text x="864" y="90" font-size="18" font-weight="700">Clima em movimento</text><text x="864" y="114" font-size="15">temperatura + água</text>
+  </g>
+  <g font-family="Arial,sans-serif" fill="#f9f3e8"><text x="94" y="273" font-size="17" font-weight="700">Manejo</text><text x="94" y="295" font-size="14">planta + produtor</text><text x="80" y="357" font-size="18" font-weight="700">Terra roxa</text><text x="80" y="380" font-size="15">onde o basalto deu origem ao solo</text><text x="846" y="355" font-size="17" font-weight="700">Rocha de origem</text><text x="846" y="379" font-size="15">não determina sozinha o sabor</text></g>
+</svg>

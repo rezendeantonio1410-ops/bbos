@@ -1,0 +1,95 @@
+@media (max-width: 700px) {
+  .simpleResult {
+    padding: 18px 14px 36px;
+    gap: 14px;
+  }
+
+  .resultCopy > small {
+    font-size: 7px;
+    letter-spacing: .14em;
+  }
+
+  .resultHeading {
+    max-width: 360px;
+    margin: 6px 0 8px !important;
+    font-size: 32px !important;
+    line-height: .98 !important;
+  }
+
+  .resultCopy > p {
+    max-width: 390px;
+    margin: 0 0 10px;
+    font-size: 12px;
+    line-height: 1.42;
+  }
+
+  .resultTrail {
+    margin-bottom: 8px;
+    padding: 9px;
+    border-radius: 14px;
+  }
+
+  .resultTrail > small {
+    margin-bottom: 7px;
+    font-size: 7px;
+  }
+
+  .resultTrail > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .resultTrail .trailStep {
+    min-height: 40px;
+    padding: 6px 7px;
+    border-radius: 10px;
+  }
+
+  .resultTrail .trailStep:nth-child(1) { background: #fbf6ed; }
+  .resultTrail .trailStep:nth-child(2) { background: #eef4f1; }
+  .resultTrail .trailStep:nth-child(3) { background: #f7f2e9; }
+  .resultTrail .trailStep:nth-child(4) { background: #edf3ef; }
+
+  .resultTrail .trailStep > div,
+  .resultTrail .trailStep > button {
+    gap: 7px;
+  }
+
+  .resultTrail .trailStep b {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font-size: 8px;
+  }
+
+  .resultTrail .trailStep span small {
+    font-size: 6px;
+  }
+
+  .resultTrail .trailStep strong {
+    font-size: 9px;
+    line-height: 1.15;
+  }
+
+  .bishopNote {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    gap: 9px;
+  }
+
+  .bishopNote b {
+    font-size: 9px;
+  }
+
+  .bishopNote span {
+    font-size: 9px;
+    line-height: 1.35;
+  }
+
+  .simpleProduct {
+    padding: 14px;
+    border-radius: 22px;
+    gap: 12px;
+  }
+}

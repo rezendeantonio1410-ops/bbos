@@ -1,9 +1,10 @@
 import { Controller, Get, Req, type OnModuleDestroy } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
+import { prisma } from "@bbos/database";
+import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 
 @Controller("sales-orders")
 export class SalesOrderCatalogOptionsController implements OnModuleDestroy {
-  private readonly database = new PrismaClient();
+  private readonly database = prisma;
 
   onModuleDestroy() {
     return this.database.$disconnect();
@@ -67,7 +68,16 @@ export class SalesOrderCatalogOptionsController implements OnModuleDestroy {
     }
 
     return {
-      customers,
+      customers: customers.map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        segment: customer.segment,
+        active: customer.active,
+        paymentTerms: customer.paymentTerms,
+        creditStatus: customer.creditStatus,
+        creditLimit: customer.creditLimit,
+        fiscalReadiness: assessCustomerFiscalReadiness(customer),
+      })),
       variants: variants.map((variant) => {
         const stock = byVariant.get(variant.id);
         const physicalStock = stock?.physicalStock ?? 0;

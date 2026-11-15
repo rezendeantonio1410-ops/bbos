@@ -1,0 +1,239 @@
+.signature {
+  color: #14211c;
+}
+
+.wheel {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sensory-ring);
+  box-shadow: 0 12px 30px rgba(70, 42, 24, 0.12);
+}
+
+.wheel::before {
+  position: absolute;
+  inset: 19%;
+  border: 1px solid rgba(76, 54, 38, 0.08);
+  border-radius: inherit;
+  background: #fffaf2;
+  box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.52);
+  content: "";
+}
+
+.seal {
+  position: relative;
+  z-index: 1;
+  width: 68%;
+  height: 68%;
+  border: 1px solid rgba(20, 33, 28, 0.08);
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 3px 12px rgba(20, 33, 28, 0.1);
+}
+
+.copy > small {
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.copy {
+  min-width: 0;
+}
+
+.flavors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flavors span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--flavor-color) 28%, white);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--flavor-color) 10%, white);
+  color: #442b20;
+  font-weight: 750;
+}
+
+.flavors span::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--flavor-color);
+  content: "";
+}
+
+.compact {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+}
+
+.compact .wheel {
+  width: 48px;
+  height: 48px;
+}
+
+.compact .seal {
+  width: 66%;
+  height: 66%;
+}
+
+.compact .copy > small {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(20, 33, 28, 0.58);
+}
+
+.compact .flavors {
+  display: grid;
+  gap: 2px;
+}
+
+.compact .flavors span {
+  overflow: hidden;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 8px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact .flavors span:nth-child(n + 3) {
+  display: none;
+}
+
+.full {
+  position: relative;
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--profile-a) 16%, transparent);
+  border-radius: 22px;
+  background:
+    radial-gradient(
+      circle at 7% 10%,
+      color-mix(in srgb, var(--profile-a) 16%, transparent),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 94% 92%,
+      color-mix(in srgb, var(--profile-c) 13%, transparent),
+      transparent 36%
+    ),
+    rgba(255, 252, 246, 0.7);
+}
+
+.full::before,
+.full::after {
+  position: absolute;
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.full::before {
+  top: -36px;
+  right: 18%;
+  width: 72px;
+  height: 72px;
+  background: color-mix(in srgb, var(--profile-b) 9%, transparent);
+}
+
+.full::after {
+  right: -22px;
+  bottom: -26px;
+  width: 94px;
+  height: 94px;
+  border: 1px solid color-mix(in srgb, var(--profile-d) 16%, transparent);
+}
+
+.full > * {
+  position: relative;
+  z-index: 1;
+}
+
+.full .wheel {
+  width: 176px;
+  height: 176px;
+}
+
+.full .copy > small {
+  display: block;
+  margin-bottom: 12px;
+  color: #8a5438;
+}
+
+.full .flavors span {
+  padding: 7px 10px;
+  font-size: 10px;
+}
+
+.attributes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 12px;
+  margin-top: 18px;
+}
+
+.attributes > div {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  gap: 1px 7px;
+  align-items: center;
+  padding-top: 7px;
+  border-top: 1px solid rgba(20, 33, 28, 0.11);
+}
+
+.attributes i {
+  grid-row: 1 / 3;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.attributes span {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.attributes b {
+  color: rgba(20, 33, 28, 0.58);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.full p {
+  margin: 16px 0 0;
+  color: rgba(20, 33, 28, 0.58);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .full {
+    grid-template-columns: 126px minmax(0, 1fr);
+    gap: 16px;
+    padding: 14px;
+  }
+
+  .full .wheel {
+    width: 126px;
+    height: 126px;
+  }
+
+  .attributes {
+    grid-template-columns: 1fr;
+  }
+}

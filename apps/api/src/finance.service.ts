@@ -8,13 +8,46 @@ import {
   FinancialTransactionType,
   PayableStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   ReceivableStatus,
 } from "@bbos/database";
 
+const RECEIPT_METHODS = new Set([
+  "PIX",
+  "BANK_TRANSFER",
+  "CASH",
+  "CREDIT_CARD",
+  "DEBIT_CARD",
+  "BOLETO",
+  "OTHER",
+]);
+
+function receiptDate(value?: string) {
+  const parsed = value ? new Date(value) : new Date();
+  if (Number.isNaN(parsed.getTime()))
+    throw new BadRequestException("Data do recebimento inválida.");
+  if (parsed.getTime() > Date.now() + 5 * 60 * 1000)
+    throw new BadRequestException(
+      "A data do recebimento não pode estar no futuro.",
+    );
+  return parsed;
+}
+
+function receiptAmount(value: number) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0)
+    throw new BadRequestException("Valor recebido deve ser maior que zero.");
+  const cents = Math.round(amount * 100);
+  if (Math.abs(amount * 100 - cents) > 0.000001)
+    throw new BadRequestException(
+      "Informe o valor recebido com no máximo duas casas decimais.",
+    );
+  return cents / 100;
+}
+
 @Injectable()
 export class FinanceService implements OnModuleDestroy {
-  readonly database = new PrismaClient();
+  readonly database = prisma;
   onModuleDestroy() {
     return this.database.$disconnect();
   }
@@ -25,17 +58,41 @@ export class FinanceService implements OnModuleDestroy {
       receivables,
       payables,
       transactions,
+      transactionTotals,
       purchaseInstallments,
     ] = await Promise.all([
-      this.database.financialAccount.findMany({ where: { active: true, ...(companyId ? { companyId } : {}) } }),
-      this.database.accountsReceivable.findMany({ where: companyId ? { companyId } : undefined }),
-      this.database.accountsPayable.findMany({ where: companyId ? { companyId } : undefined }),
-      this.database.financialTransaction.findMany({ where: companyId ? { companyId } : undefined,
+      this.database.financialAccount.findMany({
+        where: { active: true, ...(companyId ? { companyId } : {}) },
+      }),
+      this.database.accountsReceivable.findMany({
+        where: companyId ? { companyId } : undefined,
+        include: {
+          customer: { select: { name: true } },
+          salesOrder: { select: { code: true, orderNumber: true } },
+        },
+      }),
+      this.database.accountsPayable.findMany({
+        where: companyId ? { companyId } : undefined,
+        include: {
+          supplier: { select: { name: true } },
+          costCenter: { select: { name: true } },
+        },
+      }),
+      this.database.financialTransaction.findMany({
+        where: companyId ? { companyId } : undefined,
         orderBy: { occurredAt: "desc" },
         take: 200,
       }),
+      this.database.financialTransaction.groupBy({
+        by: ["type"],
+        where: companyId ? { companyId } : undefined,
+        _sum: { amount: true },
+      }),
       this.database.greenCoffeePurchaseInstallment.findMany({
-        where: { status: { in: ["PLANNED", "COMMITTED"] }, ...(companyId ? { purchase: { companyId } } : {}) },
+        where: {
+          status: { in: ["PLANNED", "COMMITTED"] },
+          ...(companyId ? { purchase: { companyId } } : {}),
+        },
         include: {
           purchase: {
             select: {
@@ -54,16 +111,16 @@ export class FinanceService implements OnModuleDestroy {
         (sum, account) => sum + Number(account.openingBalance),
         0,
       ) +
-      transactions.reduce(
+      transactionTotals.reduce(
         (sum, item) =>
           sum +
           (item.type === FinancialTransactionType.RECEIPT ||
           item.type === FinancialTransactionType.TRANSFER_IN
-            ? Number(item.amount)
+            ? Number(item._sum.amount)
             : item.type === FinancialTransactionType.PAYMENT ||
                 item.type === FinancialTransactionType.TRANSFER_OUT
-              ? -Number(item.amount)
-              : Number(item.amount)),
+              ? -Number(item._sum.amount)
+              : Number(item._sum.amount)),
         0,
       );
     const overdueReceivables = receivables
@@ -105,8 +162,53 @@ export class FinanceService implements OnModuleDestroy {
       externalAcceptanceStatus: item.purchase.externalAcceptanceStatus,
     }));
     const plannedPurchases = purchaseInstallments
-      .filter((item) => item.status === "PLANNED" && item.purchase.approvalStatus !== "DRAFT")
+      .filter(
+        (item) =>
+          item.status === "PLANNED" && item.purchase.approvalStatus !== "DRAFT",
+      )
       .reduce((sum, item) => sum + Number(item.amount), 0);
+    const receivableProjection = receivables
+      .filter(
+        (item) =>
+          item.status !== ReceivableStatus.CANCELLED &&
+          item.status !== ReceivableStatus.PAID &&
+          Number(item.openAmount) > 0,
+      )
+      .map((item) => ({
+        id: item.id,
+        document:
+          item.invoiceId ??
+          item.salesOrder?.orderNumber ??
+          item.salesOrder?.code ??
+          null,
+        counterparty: item.customer.name,
+        description: item.notes,
+        issueDate: item.issueDate,
+        dueDate: item.dueDate,
+        amount: Number(item.openAmount),
+        status: item.status,
+      }));
+    const payableProjection = payables
+      .filter(
+        (item) =>
+          item.status !== PayableStatus.CANCELLED &&
+          item.status !== PayableStatus.PAID &&
+          Number(item.openAmount) > 0,
+      )
+      .map((item) => ({
+        id: item.id,
+        document: null,
+        counterparty:
+          item.supplier?.name ??
+          item.costCenter?.name ??
+          "Sem fornecedor informado",
+        description: item.description,
+        category: item.category,
+        issueDate: item.issueDate,
+        dueDate: item.dueDate,
+        amount: Number(item.openAmount),
+        status: item.status,
+      }));
     return {
       source: "database",
       cash,
@@ -118,6 +220,8 @@ export class FinanceService implements OnModuleDestroy {
       delinquency: overdueReceivables,
       accounts,
       transactions,
+      receivableProjection,
+      payableProjection,
       greenCoffeePurchaseProjection,
     };
   }
@@ -138,21 +242,111 @@ export class FinanceService implements OnModuleDestroy {
   listAccounts(companyId?: string) {
     return this.database.financialAccount.findMany({
       where: { active: true, ...(companyId ? { companyId } : {}) },
+      include: { financialInstitution: true },
       orderBy: { name: "asc" },
     });
   }
-  createAccount(input: {
+
+  listInstitutions(companyId?: string) {
+    return this.database.financialInstitution.findMany({
+      where: { active: true, ...(companyId ? { companyId } : {}) },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async createInstitution(input: {
     companyId: string;
     name: string;
+    code?: string;
+    country?: string;
+  }) {
+    const name = String(input.name ?? "").trim();
+    if (!name)
+      throw new BadRequestException("Nome da instituição é obrigatório.");
+    const code = String(input.code ?? "").trim() || null;
+    const existing = await this.database.financialInstitution.findFirst({
+      where: {
+        companyId: input.companyId,
+        OR: [
+          { name: { equals: name, mode: "insensitive" } },
+          ...(code ? [{ code }] : []),
+        ],
+      },
+    });
+    if (existing) return existing;
+    return this.database.financialInstitution.create({
+      data: {
+        companyId: input.companyId,
+        name,
+        code,
+        country:
+          String(input.country ?? "BR")
+            .trim()
+            .toUpperCase() || "BR",
+      },
+    });
+  }
+
+  async createAccount(input: {
+    companyId: string;
+    financialInstitutionId?: string;
+    name: string;
     type: "CASH" | "BANK" | "DIGITAL_ACCOUNT" | "OTHER";
+    currency?: string;
+    bankCode?: string;
+    branch?: string;
+    accountNumberMasked?: string;
+    country?: string;
     openingBalance?: number;
   }) {
+    const name = String(input.name ?? "").trim();
+    if (!name) throw new BadRequestException("Nome da conta é obrigatório.");
+    let institution = null;
+    if (input.financialInstitutionId) {
+      institution = await this.database.financialInstitution.findFirst({
+        where: {
+          id: input.financialInstitutionId,
+          companyId: input.companyId,
+          active: true,
+        },
+      });
+      if (!institution)
+        throw new BadRequestException("Instituição financeira inválida.");
+    }
+    const currency =
+      String(input.currency ?? "BRL")
+        .trim()
+        .toUpperCase() || "BRL";
+    const duplicate = await this.database.financialAccount.findFirst({
+      where: {
+        companyId: input.companyId,
+        active: true,
+        name: { equals: name, mode: "insensitive" },
+      },
+    });
+    if (duplicate)
+      throw new BadRequestException(
+        "Já existe uma conta financeira ativa com este nome.",
+      );
     return this.database.financialAccount.create({
       data: {
         companyId: input.companyId,
-        name: input.name,
+        financialInstitutionId: institution?.id,
+        name,
         type: input.type,
-        openingBalance: input.openingBalance ?? 0,
+        currency,
+        bankCode:
+          String(input.bankCode ?? institution?.code ?? "").trim() || null,
+        branch: String(input.branch ?? "").trim() || null,
+        accountNumberMasked:
+          String(input.accountNumberMasked ?? "").trim() || null,
+        country:
+          String(input.country ?? institution?.country ?? "BR")
+            .trim()
+            .toUpperCase() || "BR",
+        openingBalance: Number.isFinite(Number(input.openingBalance))
+          ? Number(input.openingBalance)
+          : 0,
       },
     });
   }
@@ -188,51 +382,102 @@ export class FinanceService implements OnModuleDestroy {
     input: {
       financialAccountId: string;
       amount: number;
+      paidAt?: string;
       method?: string;
+      notes?: string;
       idempotencyKey: string;
+      recordedBy?: string;
     },
-    companyId?: string,
+    companyId: string,
   ) {
-    if (input.amount <= 0)
-      throw new BadRequestException("Valor recebido deve ser maior que zero.");
+    const amount = receiptAmount(input.amount);
+    const paidAt = receiptDate(input.paidAt);
+    const financialAccountId = String(input.financialAccountId ?? "").trim();
+    const idempotencyKey = String(input.idempotencyKey ?? "").trim();
+    const method = String(input.method ?? "BANK_TRANSFER")
+      .trim()
+      .toUpperCase();
+    const notes = String(input.notes ?? "")
+      .trim()
+      .slice(0, 500);
+    const recordedBy = String(input.recordedBy ?? "gestor autorizado")
+      .trim()
+      .slice(0, 120);
+    if (!financialAccountId)
+      throw new BadRequestException(
+        "Selecione a conta que recebeu o pagamento.",
+      );
+    if (!idempotencyKey)
+      throw new BadRequestException("Identificador da operação é obrigatório.");
+    if (!RECEIPT_METHODS.has(method))
+      throw new BadRequestException("Forma de pagamento inválida.");
     return this.database.$transaction(
       async (tx) => {
-        const item = await tx.accountsReceivable.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
+        const item = await tx.accountsReceivable.findFirst({
+          where: { id, companyId },
+        });
         if (!item)
           throw new NotFoundException("Conta a receber não encontrada.");
         const existing = await tx.payment.findUnique({
-          where: { idempotencyKey: input.idempotencyKey },
+          where: { idempotencyKey },
           include: { transaction: true },
         });
-        if (existing) return { payment: existing, idempotent: true };
-        if (input.amount > Number(item.openAmount))
+        if (existing) {
+          if (
+            existing.companyId !== companyId ||
+            existing.accountsReceivableId !== id
+          )
+            throw new BadRequestException(
+              "Identificador já utilizado em outra operação.",
+            );
+          return { payment: existing, idempotent: true };
+        }
+        if (
+          item.status === ReceivableStatus.PAID ||
+          item.status === ReceivableStatus.CANCELLED ||
+          Number(item.openAmount) <= 0
+        )
+          throw new BadRequestException(
+            "Este título não está disponível para baixa.",
+          );
+        const account = await tx.financialAccount.findFirst({
+          where: { id: financialAccountId, companyId, active: true },
+        });
+        if (!account)
+          throw new BadRequestException(
+            "Conta financeira inválida ou inativa.",
+          );
+        if (amount > Number(item.openAmount))
           throw new BadRequestException(
             "Recebimento superior ao valor em aberto.",
           );
+        const auditNote = `Baixa manual registrada por ${recordedBy}`;
         const payment = await tx.payment.create({
           data: {
             companyId: item.companyId,
             accountsReceivableId: id,
-            financialAccountId: input.financialAccountId,
-            amount: input.amount,
-            paidAt: new Date(),
-            method: input.method ?? "TRANSFER",
-            idempotencyKey: input.idempotencyKey,
+            financialAccountId,
+            amount,
+            paidAt,
+            method,
+            notes: notes ? `${auditNote}. ${notes}` : auditNote,
+            idempotencyKey,
           },
         });
         await tx.financialTransaction.create({
           data: {
             companyId: item.companyId,
-            financialAccountId: input.financialAccountId,
+            financialAccountId,
             paymentId: payment.id,
             type: FinancialTransactionType.RECEIPT,
-            amount: input.amount,
+            amount,
             category: "RECEBIMENTO",
-            description: "Recebimento de " + item.id,
+            description: `Recebimento manual ${item.invoiceId ?? item.id}`,
+            occurredAt: paidAt,
           },
         });
-        const open = Number(item.openAmount) - input.amount;
-        await tx.accountsReceivable.update({
+        const open = Math.round((Number(item.openAmount) - amount) * 100) / 100;
+        const receivable = await tx.accountsReceivable.update({
           where: { id },
           data: {
             openAmount: open,
@@ -240,10 +485,10 @@ export class FinanceService implements OnModuleDestroy {
               open === 0
                 ? ReceivableStatus.PAID
                 : ReceivableStatus.PARTIALLY_PAID,
-            paymentDate: open === 0 ? new Date() : undefined,
+            paymentDate: open === 0 ? paidAt : undefined,
           },
         });
-        return { payment, idempotent: false };
+        return { payment, receivable, idempotent: false };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -263,7 +508,9 @@ export class FinanceService implements OnModuleDestroy {
       throw new BadRequestException("Valor pago deve ser maior que zero.");
     return this.database.$transaction(
       async (tx) => {
-        const item = await tx.accountsPayable.findFirst({ where: { id, ...(companyId ? { companyId } : {}) } });
+        const item = await tx.accountsPayable.findFirst({
+          where: { id, ...(companyId ? { companyId } : {}) },
+        });
         if (!item) throw new NotFoundException("Conta a pagar não encontrada.");
         const existing = await tx.payment.findUnique({
           where: { idempotencyKey: input.idempotencyKey },

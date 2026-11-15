@@ -1,0 +1,8 @@
+/*
+ * BBOS AppShell V2 owns sidebar hierarchy, colour, descriptions and state
+ * semantically in React. The previous nth-child based enhancement was removed
+ * because it coupled meaning to visual position and could duplicate content.
+ *
+ * Keep this file as a compatibility import until the global stylesheet import
+ * is removed in a future cleanup.
+ */

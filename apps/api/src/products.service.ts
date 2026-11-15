@@ -4,6 +4,7 @@ import {
   PRODUCT_LINE_LABELS,
   PRODUCT_LINES,
   validateCreateProductSku,
+  validateCreateCatalogProduct,
   type CreateProductSkuInput,
   type CreateCatalogProductInput,
   type CreateProductVariantInput,
@@ -29,17 +30,31 @@ export class ProductsService {
   }
 
   createProduct(input: CreateCatalogProductInput, companyId: string) {
-    validateCreateProductSku(input);
+    validateCreateCatalogProduct(input);
     return this.repository.createProduct(input, companyId);
   }
 
-  createVariant(productId: string, input: CreateProductVariantInput, companyId: string) {
+  suggestNcm(companyId: string, kind: "ROASTED" | "GREEN") {
+    return this.repository.suggestNcm(companyId, kind);
+  }
+
+  createVariant(
+    productId: string,
+    input: CreateProductVariantInput,
+    companyId: string,
+  ) {
     return this.repository.createVariant(productId, input, companyId);
   }
 
   updateProduct(
     id: string,
-    input: { name?: string; description?: string; active?: boolean },
+    input: {
+      name?: string;
+      description?: string;
+      active?: boolean;
+      commercialKind?: "STANDARD" | "WHITE_LABEL";
+      baseCoffeeProductId?: string | null;
+    },
     companyId: string,
   ) {
     return this.repository.updateProduct(id, input, companyId);
@@ -47,6 +62,40 @@ export class ProductsService {
 
   updateVariant(id: string, input: { active: boolean }, companyId: string) {
     return this.repository.updateVariant(id, input, companyId);
+  }
+
+  addStorefrontImage(
+    productId: string,
+    companyId: string,
+    file: { originalname: string; mimetype: string; buffer: Buffer },
+  ) {
+    return this.repository.addStorefrontImage(productId, companyId, file);
+  }
+
+  updateStorefrontImage(
+    productId: string,
+    imageId: string,
+    companyId: string,
+    input: { isPrimary?: boolean; useInHero?: boolean; sortOrder?: number },
+  ) {
+    return this.repository.updateStorefrontImage(
+      productId,
+      imageId,
+      companyId,
+      input,
+    );
+  }
+
+  deleteStorefrontImage(productId: string, imageId: string, companyId: string) {
+    return this.repository.deleteStorefrontImage(productId, imageId, companyId);
+  }
+
+  listPublicStorefrontImages(companyId: string) {
+    return this.repository.listPublicStorefrontImages(companyId);
+  }
+
+  getPublicStorefrontImage(imageId: string, companyId: string) {
+    return this.repository.getPublicStorefrontImage(imageId, companyId);
   }
 
   getPresentationRules() {

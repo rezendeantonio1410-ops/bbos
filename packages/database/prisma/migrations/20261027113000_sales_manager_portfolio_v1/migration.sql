@@ -1,0 +1,2 @@
+ALTER TYPE "StorefrontPartnerAccessLevel"
+  ADD VALUE IF NOT EXISTS 'SALES_MANAGER';

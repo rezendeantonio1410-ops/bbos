@@ -1,0 +1,277 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AddToCartButton } from "./StorefrontCart";
+import styles from "./EditorialHero.module.css";
+import type { StorefrontImageSelection } from "@/lib/storefront-images";
+import type { StorefrontMediaAsset } from "@/lib/storefront-media";
+import { storefrontCommerce } from "./storefront-catalog";
+
+const scenes = [
+  {
+    ...storefrontCommerce("caramelo", true),
+    line: "CLÁSSICOS",
+    name: "Caramelo",
+    title: "Doce. Confortável.",
+    italic: "Equilibrado.",
+    copy: "Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem outra xícara.",
+    image: "/brand/visuals/bispo-hero-chemex-v2.png",
+    product: "/brand/products/caramelo-treated.webp",
+    notes: "Caramelo · Chocolate · Equilíbrio",
+    tone: "#F96D01",
+    crop: "center",
+    mediaSlot: "home.hero.caramelo",
+  },
+  {
+    ...storefrontCommerce("essencial", true),
+    line: "GOURMET",
+    name: "Essencial",
+    title: "Todo dia pode ter",
+    italic: "um grande café.",
+    copy: "Macio, doce e fácil de reencontrar. O cotidiano transformado em ritual.",
+    image: "/essencial.jpeg",
+    product: "/brand/products/essencial-treated.webp",
+    notes: "Macio · Doce · Fácil",
+    tone: "#E9BB00",
+    crop: "center 56%",
+    mediaSlot: "home.hero.essencial",
+  },
+  {
+    ...storefrontCommerce("intenso", true),
+    line: "GOURMET",
+    name: "Intenso",
+    title: "Mais corpo.",
+    italic: "Presença limpa.",
+    copy: "Uma xícara encorpada e direta, sem amargor agressivo e sem perder a limpeza.",
+    image: "/brand/products/intenso-treated.webp",
+    product: "/brand/products/intenso-treated.webp",
+    notes: "Corpo · Presença · Limpeza",
+    tone: "#D3A600",
+    crop: "center 48%",
+    mediaSlot: "home.hero.intenso",
+  },
+  {
+    ...storefrontCommerce("doce-de-leite", true),
+    line: "CLÁSSICOS",
+    name: "Doce de Leite",
+    title: "Doçura que lembra",
+    italic: "casa.",
+    copy: "Açúcar mascavo, doce de leite e alfajor em uma xícara macia e prolongada.",
+    image: "/brand/products/doce-de-leite-treated.webp",
+    product: "/brand/products/doce-de-leite-treated.webp",
+    notes: "Mascavo · Doce de leite · Alfajor",
+    tone: "#C66E2E",
+    crop: "center 48%",
+    mediaSlot: "home.hero.doce-de-leite",
+  },
+  {
+    ...storefrontCommerce("tangerina", true),
+    line: "CLÁSSICOS",
+    name: "Tangerina",
+    title: "Um café vivo.",
+    italic: "Fresco e luminoso.",
+    copy: "Cítrico, doce e alegre: uma porta de entrada para descobrir os cafés frutados.",
+    image: "/brand/story/parana-dia-amanhecer.webp",
+    product: null,
+    notes: "Cítrico · Doce · Fresco",
+    tone: "#E47928",
+    crop: "center",
+    mediaSlot: "home.hero.tangerina",
+  },
+  {
+    ...storefrontCommerce("singular", true),
+    line: "ÉPICOS",
+    name: "Singular",
+    title: "Novas camadas.",
+    italic: "Uma origem única.",
+    copy: "Frutado, complexo e evolutivo. Para quem encontra prazer na descoberta.",
+    image: "/brand/story/jose-origem.jpeg",
+    product: "/brand/products/singular-treated.webp",
+    notes: "Frutado · Complexo · Evolutivo",
+    tone: "#5C7D5F",
+    crop: "center 42%",
+    mediaSlot: "home.hero.singular",
+  },
+  {
+    ...storefrontCommerce("sublime", true),
+    line: "CURADORIA BISPO",
+    name: "Sublime",
+    title: "Escolhido por quem",
+    italic: "vive o café.",
+    copy: "A Bispo acompanha a origem, a produção e a prova para escolher o que chega à sua xícara.",
+    image: "/brand/story/suzi-fragrancia.jpeg",
+    product: "/brand/products/sublime-treated.webp",
+    notes: "Rapadura · Caramelo · Doçura profunda",
+    tone: "#0E191D",
+    crop: "center 35%",
+    mediaSlot: "home.hero.sublime",
+  },
+  {
+    ...storefrontCommerce("raros", true),
+    line: "RAROS",
+    name: "Raro",
+    title: "Poucas sacas.",
+    italic: "Uma história inteira.",
+    copy: "O microlote de Carlos Alexandre traduz o Norte do Paraná em uma xícara limpa e viva.",
+    image: "/brand/products/raros/alexandre-colheita.webp",
+    product: "/brand/products/raros/alexandre-colheita.webp",
+    notes: "86,5 pontos · Origem única · Safra limitada",
+    tone: "#8E2721",
+    crop: "center 72%",
+    mediaSlot: "home.hero.raro",
+  },
+] as const;
+
+export default function EditorialHero({
+  productImages = {},
+  mediaSlots = {},
+}: {
+  productImages?: StorefrontImageSelection;
+  mediaSlots?: Record<string, StorefrontMediaAsset>;
+}) {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const selectedScene = scenes[active] ?? scenes[0]!;
+  const scene = {
+    ...selectedScene,
+    product:
+      productImages[selectedScene.name]?.hero ??
+      productImages[selectedScene.name]?.primary ??
+      selectedScene.product,
+  };
+
+  useEffect(() => {
+    if (paused) return;
+    const timer = window.setInterval(
+      () => setActive((current) => (current + 1) % scenes.length),
+      6800,
+    );
+    return () => window.clearInterval(timer);
+  }, [paused]);
+
+  const move = (direction: number) => {
+    setPaused(true);
+    setActive(
+      (current) => (current + direction + scenes.length) % scenes.length,
+    );
+  };
+
+  return (
+    <section
+      id="top"
+      className={styles.hero}
+      style={{ "--scene-tone": scene.tone } as React.CSSProperties}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      aria-roledescription="carrossel"
+      aria-label="Cafés escolhidos pela Bispo"
+    >
+      <div className={styles.media} data-photo-slot={`hero-${active + 1}`}>
+        {scenes.map((item, index) => (
+          <Image
+            key={item.name}
+            className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
+            src={mediaSlots[item.mediaSlot]?.url ?? item.image}
+            alt={
+              index === active
+                ? (mediaSlots[item.mediaSlot]?.altText ??
+                  `${item.name}: uma cena da experiência Bispo Coffees`)
+                : ""
+            }
+            fill
+            priority={index === 0}
+            sizes="(max-width: 960px) 100vw, 54vw"
+            style={{ objectPosition: item.crop }}
+          />
+        ))}
+        <div className={styles.mediaShade} />
+        <div className={styles.mediaSignature}>
+          <span>ESCOLHIDO NA ORIGEM</span>
+        </div>
+        <div className={styles.controls}>
+          <button onClick={() => move(-1)} aria-label="Cena anterior">
+            <ArrowLeft />
+          </button>
+          <span>
+            {String(active + 1).padStart(2, "0")} /{" "}
+            {String(scenes.length).padStart(2, "0")}
+          </span>
+          <button onClick={() => move(1)} aria-label="Próxima cena">
+            <ArrowRight />
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.copy} aria-live="polite">
+        <div className={styles.topline}>
+          <span>{scene.line}</span>
+          <i />
+          <b>{scene.name}</b>
+        </div>
+        <h1>
+          {scene.title}
+          <br />
+          <em>{scene.italic}</em>
+        </h1>
+        <p className={styles.intro}>{scene.copy}</p>
+        <div className={styles.productStage}>
+          <div className={styles.productImage}>
+            {scene.product ? (
+              <img src={scene.product} alt={`Café ${scene.name}`} />
+            ) : (
+              <div className={styles.productPlaceholder}>
+                <small>BISPO COFFEES</small>
+                <strong>{scene.name}</strong>
+                <span>Café especial · {scene.weightGrams} g</span>
+              </div>
+            )}
+          </div>
+          <div className={styles.productReading}>
+            <small>LEITURA SENSORIAL</small>
+            <strong>{scene.notes}</strong>
+            <span>100% Arábica · Torra própria · {scene.weightGrams} g</span>
+          </div>
+        </div>
+        <div className={styles.buyRow}>
+          <div>
+            <small>a partir de</small>
+            <strong>{scene.price}</strong>
+          </div>
+          <AddToCartButton
+            product={{
+              id: scene.id,
+              name: scene.name,
+              line: scene.line,
+              notes: scene.notes,
+              priceCents: scene.priceCents,
+              weightGrams: scene.weightGrams,
+              image: scene.product ?? scene.image,
+            }}
+          >
+            Quero este café <span>→</span>
+          </AddToCartButton>
+        </div>
+        <Link className={styles.assist} href="/loja/descobrir">
+          Prefere outra sensação? Descubra o café que combina com você →
+        </Link>
+        <div className={styles.dots} aria-label="Escolher cena">
+          {scenes.map((item, index) => (
+            <button
+              key={item.name}
+              className={index === active ? styles.activeDot : ""}
+              onClick={() => {
+                setPaused(true);
+                setActive(index);
+              }}
+              aria-label={`Mostrar ${item.name}`}
+              aria-current={index === active ? "true" : undefined}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}

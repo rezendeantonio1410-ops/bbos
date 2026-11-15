@@ -20,12 +20,32 @@ export type BrazilStateSales = {
   growthPercent: number;
   customers: number;
   status: BrazilSalesStatus;
+  hasMargin?: boolean;
+  hasTarget?: boolean;
+  hasPreviousPeriod?: boolean;
   path: string;
 };
+export type BrazilStateSalesInput = {
+  stateCode: string;
+  revenue: number;
+  volumeKg: number;
+  target: number;
+  achievement: number;
+  marginPercent: number;
+  growthPercent: number;
+  customers: number;
+  status: BrazilSalesStatus;
+  hasMargin?: boolean;
+  hasTarget?: boolean;
+  hasPreviousPeriod?: boolean;
+};
 export type BrazilSalesMapProps = {
+  stateSales?: BrazilStateSalesInput[];
   onStateHover?: (state: BrazilStateSales | null) => void;
   onStateClick?: (state: BrazilStateSales) => void;
   onRegionClick?: (region: BrazilStateSales["region"]) => void;
+  detailsHref?: string | false;
+  compact?: boolean;
 };
 
 const brl = new Intl.NumberFormat("pt-BR", {
@@ -365,7 +385,7 @@ const stateData: Record<
   },
 };
 
-const states: BrazilStateSales[] = stateGeometry.map((state) => {
+const demoStates: BrazilStateSales[] = stateGeometry.map((state) => {
   const data = stateData[state.stateCode];
   const achievement = data ? (data.sales / data.target) * 100 : 0;
   return {
@@ -379,13 +399,19 @@ const states: BrazilStateSales[] = stateGeometry.map((state) => {
     growthPercent: data?.growth ?? 0,
     customers: data?.customers ?? 0,
     status: statusFrom(achievement, Boolean(data)),
+    hasMargin: Boolean(data),
+    hasTarget: Boolean(data),
+    hasPreviousPeriod: Boolean(data),
   };
 });
 
 export function BrazilSalesPanel({
+  stateSales,
   onStateHover,
   onStateClick,
   onRegionClick,
+  detailsHref = "/vendas?view=geografia",
+  compact = false,
 }: BrazilSalesMapProps) {
   const [mode, setMode] = useState<"brasil" | "states">("brasil");
   const [hovered, setHovered] = useState<BrazilStateSales | null>(null);
@@ -393,6 +419,33 @@ export function BrazilSalesPanel({
     BrazilStateSales["region"] | null
   >(null);
   const [pointer, setPointer] = useState({ x: 180, y: 90 });
+  const states = useMemo(() => {
+    if (!stateSales) return demoStates;
+    const values = new Map(
+      stateSales.map((state) => [state.stateCode.toUpperCase(), state]),
+    );
+    return stateGeometry.map((state): BrazilStateSales => {
+      const value = values.get(state.stateCode);
+      return {
+        ...state,
+        sales: value?.revenue ?? 0,
+        revenue: value?.revenue ?? 0,
+        volumeKg: value?.volumeKg ?? 0,
+        target: value?.target ?? 0,
+        achievement: value?.achievement ?? 0,
+        marginPercent: value?.marginPercent ?? 0,
+        growthPercent: value?.growthPercent ?? 0,
+        customers: value?.customers ?? 0,
+        status: value?.status ?? "no-data",
+        hasMargin: value?.hasMargin ?? false,
+        hasTarget: value?.hasTarget ?? false,
+        hasPreviousPeriod: value?.hasPreviousPeriod ?? false,
+      };
+    });
+  }, [stateSales]);
+  const hasTargets = states.some(
+    (state) => state.hasTarget && state.target > 0,
+  );
   const regions = useMemo(
     () =>
       (["Sudeste", "Sul", "Centro-Oeste", "Nordeste", "Norte"] as const).map(
@@ -400,27 +453,62 @@ export function BrazilSalesPanel({
           const items = states.filter((state) => state.region === region);
           const sales = items.reduce((sum, state) => sum + state.sales, 0);
           const target = items.reduce((sum, state) => sum + state.target, 0);
+          const volumeKg = items.reduce(
+            (sum, state) => sum + state.volumeKg,
+            0,
+          );
+          const customers = items.reduce(
+            (sum, state) => sum + state.customers,
+            0,
+          );
           const achievement = target ? (sales / target) * 100 : 0;
+          const hasMargin = items
+            .filter((state) => state.sales > 0)
+            .every((state) => state.hasMargin);
           const marginPercent = sales
             ? items.reduce(
                 (sum, state) => sum + state.marginPercent * state.sales,
                 0,
               ) / sales
             : 0;
+          const comparableSales = items
+            .filter((state) => state.hasPreviousPeriod)
+            .reduce((sum, state) => sum + state.sales, 0);
+          const growthPercent = comparableSales
+            ? items.reduce(
+                (sum, state) =>
+                  sum +
+                  (state.hasPreviousPeriod
+                    ? state.growthPercent * state.sales
+                    : 0),
+                0,
+              ) / comparableSales
+            : 0;
+          const totalSales = states.reduce(
+            (sum, state) => sum + state.sales,
+            0,
+          );
           return {
             region,
             sales,
             target,
             achievement,
             marginPercent,
-            share:
-              (sales / states.reduce((sum, state) => sum + state.sales, 0)) *
-              100,
-            status: statusFrom(achievement, sales > 0),
+            volumeKg,
+            customers,
+            growthPercent,
+            hasMargin,
+            hasPreviousPeriod: comparableSales > 0,
+            share: totalSales ? (sales / totalSales) * 100 : 0,
+            status: hasTargets
+              ? statusFrom(achievement, sales > 0)
+              : sales > 0
+                ? ("on-track" as const)
+                : ("no-data" as const),
           };
         },
       ),
-    [],
+    [hasTargets, states],
   );
   const selectRegion = (region: BrazilStateSales["region"]) => {
     setSelectedRegion(region);
@@ -460,22 +548,26 @@ export function BrazilSalesPanel({
               Estados
             </button>
           </div>
-          <Link
-            href="/vendas?view=geografia"
-            className="flex items-center gap-1 text-[9px] font-bold text-forest-700"
-          >
-            Ver detalhes <ArrowRight size={10} />
-          </Link>
+          {detailsHref && (
+            <Link
+              href={detailsHref}
+              className="flex items-center gap-1 text-[9px] font-bold text-forest-700"
+            >
+              Ver detalhes <ArrowRight size={10} />
+            </Link>
+          )}
         </div>
       </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-[40%_60%]">
+      <div
+        className={`mt-4 grid gap-4 ${compact ? "" : "lg:grid-cols-[40%_60%]"}`}
+      >
         <div className="order-2 overflow-hidden rounded-xl border lg:order-1">
           <div className="grid grid-cols-[1fr_72px_44px_64px_46px_48px] bg-stone-50 px-3 py-2 text-[8px] font-bold uppercase text-stone-400">
             <span>Região</span>
             <span>Vendas</span>
             <span>% Part.</span>
-            <span>Meta</span>
-            <span>Ating.</span>
+            <span>{hasTargets ? "Meta" : "Volume"}</span>
+            <span>{hasTargets ? "Ating." : "Cresc."}</span>
             <span>Margem</span>
           </div>
           {regions.map((item) => (
@@ -495,9 +587,21 @@ export function BrazilSalesPanel({
               </span>
               <strong>{brl.format(item.sales)}</strong>
               <span>{number.format(item.share)}%</span>
-              <span>{brl.format(item.target)}</span>
-              <strong>{number.format(item.achievement)}%</strong>
-              <span>{number.format(item.marginPercent)}%</span>
+              <span>
+                {hasTargets
+                  ? brl.format(item.target)
+                  : `${number.format(item.volumeKg)} kg`}
+              </span>
+              <strong>
+                {hasTargets
+                  ? `${number.format(item.achievement)}%`
+                  : item.hasPreviousPeriod
+                    ? `${item.growthPercent >= 0 ? "+" : ""}${number.format(item.growthPercent)}%`
+                    : "—"}
+              </strong>
+              <span>
+                {item.hasMargin ? `${number.format(item.marginPercent)}%` : "—"}
+              </span>
             </button>
           ))}
         </div>
@@ -531,7 +635,7 @@ export function BrazilSalesPanel({
                   className={`${state.sales ? "cursor-pointer" : "cursor-default"} transition-opacity hover:opacity-80`}
                   role={state.sales ? "button" : undefined}
                   tabIndex={state.sales ? 0 : undefined}
-                  aria-label={`${state.stateName}: ${state.sales ? `${number.format(state.achievement)}% da meta` : "sem dados"}`}
+                  aria-label={`${state.stateName}: ${state.sales ? brl.format(state.sales) : "sem dados"}`}
                   onMouseEnter={() => hover(state)}
                   onMouseLeave={() => hover(null)}
                   onFocus={() => hover(state)}
@@ -627,17 +731,36 @@ export function BrazilSalesPanel({
                   <strong className="text-right text-stone-900">
                     {brl.format(hovered.sales)}
                   </strong>
-                  <span>Meta</span>
-                  <strong className="text-right text-stone-900">
-                    {brl.format(hovered.target)}
-                  </strong>
-                  <span>Atingimento</span>
-                  <strong className="text-right text-stone-900">
-                    {number.format(hovered.achievement)}%
-                  </strong>
+                  {hasTargets ? (
+                    <>
+                      <span>Meta</span>
+                      <strong className="text-right text-stone-900">
+                        {brl.format(hovered.target)}
+                      </strong>
+                      <span>Atingimento</span>
+                      <strong className="text-right text-stone-900">
+                        {number.format(hovered.achievement)}%
+                      </strong>
+                    </>
+                  ) : (
+                    <>
+                      <span>Volume</span>
+                      <strong className="text-right text-stone-900">
+                        {number.format(hovered.volumeKg)} kg
+                      </strong>
+                      <span>Crescimento</span>
+                      <strong className="text-right text-stone-900">
+                        {hovered.hasPreviousPeriod
+                          ? `${hovered.growthPercent >= 0 ? "+" : ""}${number.format(hovered.growthPercent)}%`
+                          : "Sem base anterior"}
+                      </strong>
+                    </>
+                  )}
                   <span>Margem</span>
                   <strong className="text-right text-stone-900">
-                    {number.format(hovered.marginPercent)}%
+                    {hovered.hasMargin
+                      ? `${number.format(hovered.marginPercent)}%`
+                      : "Não disponível"}
                   </strong>
                   <span>Clientes</span>
                   <strong className="text-right text-stone-900">
@@ -652,12 +775,18 @@ export function BrazilSalesPanel({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-3 border-t pt-3 text-[8px] text-stone-500">
-        {[
-          ["#6f9a7a", "Acima da meta"],
-          ["#d6a24b", "Atenção"],
-          ["#c96b62", "Abaixo da meta"],
-          ["#e5e7e6", "Sem dados"],
-        ].map(([tone, label]) => (
+        {(hasTargets
+          ? [
+              ["#6f9a7a", "Acima da meta"],
+              ["#d6a24b", "Atenção"],
+              ["#c96b62", "Abaixo da meta"],
+              ["#e5e7e6", "Sem dados"],
+            ]
+          : [
+              ["#6f9a7a", "Com vendas no período"],
+              ["#e5e7e6", "Sem vendas no período"],
+            ]
+        ).map(([tone, label]) => (
           <span key={label} className="flex items-center gap-1.5">
             <i className="size-1.5 rounded-full" style={{ background: tone }} />
             {label}

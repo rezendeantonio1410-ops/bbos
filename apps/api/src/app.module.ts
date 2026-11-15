@@ -17,9 +17,11 @@ import { ProductionService } from "./production.service";
 import { SalesOrderCatalogOptionsController } from "./sales-order-catalog-options.controller";
 import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
+import { SalesOrderManualPaymentsController } from "./sales-order-manual-payments.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
 import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
+import { FinanceAssistedReconciliationController } from "./finance-assisted-reconciliation.controller";
 import { FinanceService } from "./finance.service";
 import { ReconciliationController } from "./reconciliation.controller";
 import { ReconciliationService } from "./reconciliation.service";
@@ -28,12 +30,21 @@ import { CommerceService } from "./commerce.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
+import { RoleAccessGuard } from "./role-access.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { AdminUsersController } from "./admin-users.controller";
 import { IntegrationsController } from "./integrations.controller";
+import { BlingService } from "./integrations/bling/bling.service";
+import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
+import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
+import { BlingWebhookController } from "./integrations/bling/bling-webhook.controller";
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
 import { ProductionRequirementsController } from "./production-requirements.controller";
+import {
+  OrderPackagingController,
+  OrderPackagingService,
+} from "./order-packaging.controller";
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -44,10 +55,49 @@ import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
 import { CuppingPublicController } from "./cupping-public.controller";
 import { StorefrontOrdersController } from "./storefront-orders.controller";
+import { MercadoPagoService } from "./mercado-pago.service";
+import { StorefrontShippingController } from "./storefront-shipping.controller";
+import { StorefrontShippingService } from "./storefront-shipping.service";
+import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
+import { CustomerNotificationService } from "./customer-notification.service";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
+import { SalesOrderPaymentsService } from "./sales-order-payments.service";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
+import { IntegrationWorkerService } from "./integration-worker.service";
+import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
+import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
+import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
+import { StorefrontCouponsController } from "./storefront-coupons.controller";
+import { StorefrontCouponsService } from "./storefront-coupons.service";
+import { StorefrontPartnersController } from "./storefront-partners.controller";
+import { PartnerPortalController } from "./partner-portal.controller";
+import { StorefrontCatalogController } from "./storefront-catalog.controller";
+import { StorefrontOperationsController } from "./storefront-operations.controller";
+import { FiscalInboundController } from "./fiscal-inbound.controller";
+import { FiscalInboundService } from "./fiscal-inbound.service";
+import { MarketplacesController } from "./marketplaces.controller";
+import { MarketplacesService } from "./marketplaces.service";
+import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
+import { StorefrontCustomerController } from "./storefront-customer.controller";
+import { StorefrontCustomerService } from "./storefront-customer.service";
+import {
+  AdminStorefrontMediaController,
+  PublicStorefrontMediaController,
+} from "./storefront-media.controller";
+import { StorefrontMediaService } from "./storefront-media.service";
+import { NotificationsController } from "./notifications.controller";
+import { IntelligenceController } from "./intelligence.controller";
+import { IntelligenceService } from "./intelligence.service";
+import { MobileNotificationsController } from "./mobile-notifications.controller";
+import { MobileNotificationService } from "./mobile-notification.service";
+import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
 
 @Module({
   controllers: [
     HealthController,
+    NotificationsController,
+    MobileNotificationsController,
+    IntelligenceController,
     DashboardController,
     BlendsController,
     ReceiptsController,
@@ -60,17 +110,21 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     SalesOrderCatalogOptionsController,
     SalesOrdersController,
     SalesOrderApprovalsController,
+    SalesOrderManualPaymentsController,
     FinanceController,
     FinanceSalesScheduleController,
+    FinanceAssistedReconciliationController,
     ReconciliationController,
     CommerceController,
     AuthController,
     AdminCoffeeReferenceController,
     AdminUsersController,
     IntegrationsController,
+    BlingWebhookController,
     OperationsFlowController,
     OperationsFlowActionsController,
     ProductionRequirementsController,
+    OrderPackagingController,
     BrokersController,
     CustomersController,
     CuppingController,
@@ -78,21 +132,57 @@ import { StorefrontOrdersController } from "./storefront-orders.controller";
     ProfessionalSamplesController,
     CuppingPublicController,
     StorefrontOrdersController,
+    StorefrontShippingController,
+    StorefrontFulfillmentController,
+    StorefrontCouponsController,
+    StorefrontPartnersController,
+    PartnerPortalController,
+    StorefrontCatalogController,
+    StorefrontOperationsController,
+    FiscalInboundController,
+    MarketplacesController,
+    StorefrontCustomerController,
+    AdminStorefrontMediaController,
+    PublicStorefrontMediaController,
   ],
   providers: [
     DashboardService,
+    IntelligenceService,
     ProductsService,
     ProductsRepository,
     ProductionService,
+    OrderPackagingService,
     SalesOrdersService,
     CostingService,
     FinanceService,
     ReconciliationService,
     CommerceService,
     AuthService,
+    BlingService,
+    BlingOutboxService,
+    BlingCatalogSyncService,
     UnconfiguredTaxRegistryProvider,
     UnconfiguredStateRegistrationProvider,
+    MercadoPagoService,
+    StorefrontShippingService,
+    StorefrontLifecycleService,
+    CustomerNotificationService,
+    MobileNotificationService,
+    SalesReceivableAlertService,
+    SalesOrderCustomerLifecycleService,
+    SalesOrderPaymentsService,
+    SalesOrderTermApprovalService,
+    IntegrationWorkerService,
+    MelhorEnvioShipmentService,
+    MelhorEnvioAuthService,
+    StorefrontCouponsService,
+    FiscalInboundService,
+    MarketplacesService,
+    MercadoLivreService,
+    StorefrontCustomerService,
+    StorefrontMediaService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RoleAccessGuard },
   ],
 })
 export class AppModule {}

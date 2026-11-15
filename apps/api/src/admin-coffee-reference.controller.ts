@@ -1,11 +1,11 @@
 import { ForbiddenException, Controller, Post, Req } from "@nestjs/common";
-import { PrismaClient, seedCoffeeReferences } from "@bbos/database";
+import { prisma, seedCoffeeReferences } from "@bbos/database";
 import { requireSession } from "./auth-context";
 import { AuthService } from "./auth.service";
 
 @Controller("admin/coffee-reference-data")
 export class AdminCoffeeReferenceController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 
@@ -15,7 +15,8 @@ export class AdminCoffeeReferenceController {
     if (actor.role !== "ADMIN" && actor.role !== "EXECUTIVE") {
       throw new ForbiddenException("Apenas usuários administrativos podem inicializar dados mestres.");
     }
-    await seedCoffeeReferences(this.db, true, actor.companyId);
+    // Production master-data initialization must never create staging suppliers.
+    await seedCoffeeReferences(this.db, false, actor.companyId);
     const [suppliers, species, cultivars, regions, screens] = await Promise.all([
       this.db.supplier.count({ where: { companyId: actor.companyId, active: true } }),
       this.db.coffeeSpecies.count({ where: { companyId: actor.companyId, active: true } }),

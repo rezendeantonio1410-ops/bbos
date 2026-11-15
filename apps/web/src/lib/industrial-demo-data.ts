@@ -2,6 +2,12 @@ import type { IndustrialDashboard } from '@bbos/shared';
 
 export const industrialDemoDashboard: IndustrialDashboard = {
   updatedAt: '2026-08-06T11:15:00-03:00',
+  inventory: {
+    greenAvailableKg: 42180,
+    greenReservedKg: 0,
+    greenStockValue: 1386450,
+    finishedGoodsUnits: 17860,
+  },
   metrics: [
     { id: 'efficiency', label: 'Eficiência da produção', value: '91,8%', supportingText: 'meta operacional 90%', status: 'on-track', change: 2.4 },
     { id: 'yield', label: 'Rendimento industrial', value: '84,5%', supportingText: 'meta técnica 85%', status: 'attention', change: 0.8 },

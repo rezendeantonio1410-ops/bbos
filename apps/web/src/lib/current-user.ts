@@ -3,7 +3,14 @@ export type CurrentUser = {
   name: string;
   initials: string;
   corporateTitle: string;
-  systemRole: "ADMIN" | "EXECUTIVE" | "INDUSTRIAL" | "FINANCE" | "SALES";
+  systemRole:
+    | "ADMIN"
+    | "EXECUTIVE"
+    | "INDUSTRIAL"
+    | "FINANCE"
+    | "ACCOUNTANT"
+    | "SALES"
+    | "MARKETPLACE_OPERATOR";
 };
 
 /** Mock de sessão única; a autenticação real poderá substituí-lo sem alterar os componentes. */
@@ -17,5 +24,11 @@ export const currentUser: CurrentUser = {
 
 export const availableUsers: CurrentUser[] = [
   currentUser,
-  { id: "user-suzi-ninov", name: "Suzi Ninov", initials: "SN", corporateTitle: "Sócia Administradora", systemRole: "ADMIN" },
+  {
+    id: "user-suzi-ninov",
+    name: "Suzi Ninov",
+    initials: "SN",
+    corporateTitle: "Sócia Administradora",
+    systemRole: "ADMIN",
+  },
 ];

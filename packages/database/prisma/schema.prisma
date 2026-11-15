@@ -12,7 +12,17 @@ enum UserRole {
   EXECUTIVE
   INDUSTRIAL
   FINANCE
+  ACCOUNTANT
   SALES
+  MARKETPLACE_OPERATOR
+  PARTNER
+}
+
+enum StorefrontPartnerAccessLevel {
+  VIEWER
+  SELLER
+  SALES_MANAGER
+  DISTRIBUTOR
 }
 
 enum CoffeeLotStatus {
@@ -275,6 +285,7 @@ enum InventoryReservationStatus {
 }
 
 enum ProductLineCode {
+  GREEN_COFFEE
   RAROS
   EPICOS
   CLASSICOS
@@ -399,78 +410,103 @@ enum CuppingParticipantInviteStatus {
 }
 
 model Company {
-  id                        String                       @id @default(cuid())
-  name                      String
-  tradeName                 String
-  taxId                     String                       @unique
-  currency                  String                       @default("BRL")
-  createdAt                 DateTime                     @default(now())
-  updatedAt                 DateTime                     @updatedAt
-  users                     User[]
-  suppliers                 Supplier[]
-  customers                 Customer[]
-  coffeeLots                CoffeeLot[]
-  warehouses                Warehouse[]
-  blends                    Blend[]
-  productionOrders          ProductionOrder[]
-  products                  FinishedProduct[]
-  productLines              ProductLine[]
-  salesOrders               SalesOrder[]
-  industrialEvents          IndustrialEvent[]
-  costEvents                CostEvent[]
-  productionBatches         ProductionBatch[]
-  productionConsumptions    ProductionConsumption[]
-  packagingConsumptions     PackagingConsumption[]
-  finishedGoodsMovements    FinishedGoodsMovement[]
-  salesOrderItems           SalesOrderItem[]
-  inventoryReservations     InventoryReservation[]
-  costCenters               CostCenter[]
-  productiveResources       ProductiveResource[]
-  allocationPeriods         AllocationPeriod[]
-  allocationRules           AllocationRule[]
-  costSnapshots             CostCalculationSnapshot[]
-  costTariffs               CostTariff[]
-  financialAccounts         FinancialAccount[]
-  salesChannels             SalesChannel[]
-  productPrices             ProductPrice[]
-  accountsReceivable        AccountsReceivable[]
-  accountsPayable           AccountsPayable[]
-  financialTransactions     FinancialTransaction[]
-  payments                  Payment[]
-  reconciliationItems       ReconciliationItem[]
-  reconciliationEvents      ReconciliationEvent[]
-  financialInstitutions     FinancialInstitution[]
-  bankTransactions          BankTransaction[]
-  greenCoffeeReceipts       GreenCoffeeReceipt[]
-  greenCoffeePurchases      GreenCoffeePurchase[]
-  greenCoffeeApprovals      GreenCoffeeApprovalRequest[]
-  operationalNotifications  OperationalNotification[]
-  greenCoffeeAuditEvents    GreenCoffeeAuditEvent[]
-  coffeeSpecies             CoffeeSpecies[]
-  coffeeRegions             CoffeeRegion[]
-  screenClassifications     ScreenClassification[]
-  supplierBankAccounts      SupplierBankAccount[]
-  brokers                   Broker[]
-  cuppingSessions           CuppingSession[]
-  cuppingParticipantInvites CuppingParticipantInvite[]
-  cuppingTrainingSessions   CuppingTrainingSession[]
-  professionalCoffeeSamples ProfessionalCoffeeSample[]
-  cuppingPublicSessions     CuppingPublicSession[]
+  id                           String                        @id @default(cuid())
+  name                         String
+  tradeName                    String
+  taxId                        String                        @unique
+  currency                     String                        @default("BRL")
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  users                        User[]
+  suppliers                    Supplier[]
+  customers                    Customer[]
+  coffeeLots                   CoffeeLot[]
+  warehouses                   Warehouse[]
+  blends                       Blend[]
+  productionOrders             ProductionOrder[]
+  products                     FinishedProduct[]
+  productLines                 ProductLine[]
+  salesOrders                  SalesOrder[]
+  industrialEvents             IndustrialEvent[]
+  costEvents                   CostEvent[]
+  productionBatches            ProductionBatch[]
+  productionConsumptions       ProductionConsumption[]
+  packagingConsumptions        PackagingConsumption[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  salesOrderItems              SalesOrderItem[]
+  inventoryReservations        InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  costCenters                  CostCenter[]
+  productiveResources          ProductiveResource[]
+  allocationPeriods            AllocationPeriod[]
+  allocationRules              AllocationRule[]
+  costSnapshots                CostCalculationSnapshot[]
+  costTariffs                  CostTariff[]
+  financialAccounts            FinancialAccount[]
+  salesChannels                SalesChannel[]
+  productPrices                ProductPrice[]
+  customerProductPrices        CustomerProductPrice[]
+  customerPriceEvents          CustomerProductPriceEvent[]
+  accountsReceivable           AccountsReceivable[]
+  accountsPayable              AccountsPayable[]
+  financialTransactions        FinancialTransaction[]
+  payments                     Payment[]
+  reconciliationItems          ReconciliationItem[]
+  reconciliationEvents         ReconciliationEvent[]
+  financialInstitutions        FinancialInstitution[]
+  bankTransactions             BankTransaction[]
+  greenCoffeeReceipts          GreenCoffeeReceipt[]
+  greenCoffeePurchases         GreenCoffeePurchase[]
+  greenCoffeeApprovals         GreenCoffeeApprovalRequest[]
+  operationalNotifications     OperationalNotification[]
+  mobileNotifications          MobileNotification[]
+  pushSubscriptions            PushSubscription[]
+  greenCoffeeAuditEvents       GreenCoffeeAuditEvent[]
+  coffeeSpecies                CoffeeSpecies[]
+  coffeeRegions                CoffeeRegion[]
+  screenClassifications        ScreenClassification[]
+  supplierBankAccounts         SupplierBankAccount[]
+  brokers                      Broker[]
+  storefrontPartners           StorefrontPartner[]
+  cuppingSessions              CuppingSession[]
+  cuppingParticipantInvites    CuppingParticipantInvite[]
+  cuppingTrainingSessions      CuppingTrainingSession[]
+  professionalCoffeeSamples    ProfessionalCoffeeSample[]
+  cuppingPublicSessions        CuppingPublicSession[]
+  storefrontMediaAssets        StorefrontMediaAsset[]
+  customerVisits               CustomerVisit[]
+}
+
+/// Recoverable archive for narrowly scoped production data cleanups.
+/// Entries are written by audited migrations before their source rows are removed.
+model DataCleanupArchive {
+  cleanupKey String
+  tableName  String
+  recordId   String
+  payload    Json
+  archivedAt DateTime @default(now())
+
+  @@id([cleanupKey, tableName, recordId])
 }
 
 model User {
-  id           String        @id @default(cuid())
-  companyId    String
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name         String
-  email        String        @unique
-  avatarUrl    String?
-  passwordHash String
-  role         UserRole      @default(INDUSTRIAL)
-  active       Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  sessions     AuthSession[]
+  id                  String               @id @default(cuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  email               String               @unique
+  avatarUrl           String?
+  storefrontPartnerId String?              @unique
+  storefrontPartner   StorefrontPartner?   @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
+  passwordHash        String
+  role                UserRole             @default(INDUSTRIAL)
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  sessions            AuthSession[]
+  mobileNotifications MobileNotification[]
+  pushSubscriptions   PushSubscription[]
+  customerVisits      CustomerVisit[]
 
   @@index([companyId])
 }
@@ -541,25 +577,71 @@ model Supplier {
 }
 
 model Broker {
-  id              String                @id @default(cuid())
-  companyId       String
-  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name            String
-  legalName       String?
-  tradeName       String?
-  taxId           String?
-  contactName     String?
-  phone           String?
-  email           String?
-  bankDetails     Json?
-  active          Boolean               @default(true)
-  purchases       GreenCoffeePurchase[]
-  accountsPayable AccountsPayable[]
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id                String                @id @default(cuid())
+  companyId         String
+  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  businessPartnerId String?               @unique
+  businessPartner   StorefrontPartner?    @relation("BusinessPartnerBrokerProfile", fields: [businessPartnerId], references: [id], onDelete: Cascade)
+  name              String
+  legalName         String?
+  tradeName         String?
+  taxId             String?
+  contactName       String?
+  phone             String?
+  email             String?
+  bankDetails       Json?
+  active            Boolean               @default(true)
+  purchases         GreenCoffeePurchase[]
+  salesOrders       SalesOrder[]
+  accountsPayable   AccountsPayable[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
+}
+
+model StorefrontPartner {
+  id                  String                       @id @default(cuid())
+  companyId           String
+  company             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  legalName           String?
+  tradeName           String?
+  taxId               String?
+  contactName         String?
+  phone               String?
+  email               String?
+  pixKey              String?
+  bankDetails         Json?
+  active              Boolean                      @default(true)
+  isSalesPartner      Boolean                      @default(true)
+  isSalesBroker       Boolean                      @default(false)
+  isGreenCoffeeBroker Boolean                      @default(false)
+  portalAccessLevel   StorefrontPartnerAccessLevel @default(VIEWER)
+  brokerProfile       Broker?                      @relation("BusinessPartnerBrokerProfile")
+  accountsPayable     AccountsPayable[]
+  portalUser          User?
+  customers           StorefrontPartnerCustomer[]
+  salesOrders         SalesOrder[]
+  customerVisits      CustomerVisit[]
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+
+  @@unique([companyId, taxId])
+  @@index([companyId, active])
+  @@index([companyId, isSalesPartner, isSalesBroker, isGreenCoffeeBroker, active], map: "StorefrontPartner_companyId_roles_idx")
+}
+
+model StorefrontPartnerCustomer {
+  partnerId  String
+  partner    StorefrontPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime          @default(now())
+
+  @@id([partnerId, customerId])
+  @@index([customerId])
 }
 
 model SupplierContact {
@@ -585,6 +667,7 @@ model SupplierOriginUnit {
   supplierId          String
   supplier            Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   name                String
+  originType          String                     @default("FARM")
   taxId               String?
   stateRegistration   String?
   country             String                     @default("Brasil")
@@ -632,67 +715,122 @@ model SupplierOriginProduction {
 }
 
 model Customer {
-  id                  String               @id @default(cuid())
-  companyId           String
-  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                String
-  taxId               String?
-  segment             String?
-  salesOrders         SalesOrder[]
-  accountsReceivable  AccountsReceivable[]
-  reconciliationItems ReconciliationItem[]
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                    String                      @id @default(cuid())
+  companyId             String
+  company               Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                  String
+  legalName             String?
+  tradeName             String?
+  taxId                 String?
+  countryCode           String                      @default("BR") @db.VarChar(2)
+  countryName           String                      @default("Brasil")
+  foreignTaxId          String?
+  segment               String?
+  email                 String?
+  phone                 String?
+  postalCode            String?
+  address               String?
+  addressNumber         String?
+  addressComplement     String?
+  district              String?
+  city                  String?
+  state                 String?
+  stateRegistration     String?
+  stateRegistrationType String                      @default("NOT_DECLARED")
+  paymentTerms          String?
+  active                Boolean                     @default(true)
+  creditStatus          String                      @default("NOT_ANALYZED")
+  creditLimit           Decimal                     @default(0) @db.Decimal(14, 2)
+  creditNotes           String?
+  creditReviewedAt      DateTime?
+  creditReviewedBy      String?
+  salesOrders           SalesOrder[]
+  accountsReceivable    AccountsReceivable[]
+  reconciliationItems   ReconciliationItem[]
+  storefrontPartners    StorefrontPartnerCustomer[]
+  visits                CustomerVisit[]
+  productPrices         CustomerProductPrice[]
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
 
   @@index([companyId])
+  @@index([companyId, taxId])
+}
+
+model CustomerVisit {
+  id                  String             @id @default(cuid())
+  companyId           String
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId          String
+  customer            Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  storefrontPartnerId String?
+  storefrontPartner   StorefrontPartner? @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
+  recordedByUserId    String?
+  recordedByUser      User?              @relation(fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  recordedByName      String
+  visitAt             DateTime
+  contactName         String?
+  purpose             String
+  outcome             String
+  facts               String
+  nextAction          String?
+  nextActionAt        DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([companyId, customerId, visitAt])
+  @@index([storefrontPartnerId, visitAt])
+  @@index([companyId, nextActionAt])
 }
 
 model Warehouse {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                   String
-  code                   String
-  type                   String
-  coffeeLots             CoffeeLot[]
-  finishedProducts       FinishedProduct[]
-  industrialEvents       IndustrialEvent[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  inventoryReservations  InventoryReservation[]
-  greenCoffeeReceipts    GreenCoffeeReceipt[]
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                         String
+  code                         String
+  type                         String
+  coffeeLots                   CoffeeLot[]
+  finishedProducts             FinishedProduct[]
+  industrialEvents             IndustrialEvent[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  inventoryReservations        InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  greenCoffeeReceipts          GreenCoffeeReceipt[]
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 
   @@unique([companyId, code])
 }
 
 model CoffeeLot {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplierId             String
-  supplier               Supplier                @relation(fields: [supplierId], references: [id])
-  warehouseId            String
-  warehouse              Warehouse               @relation(fields: [warehouseId], references: [id])
-  code                   String
-  origin                 String
-  harvest                String?
-  variety                String?
-  qualityScore           Decimal?                @db.Decimal(5, 2)
-  initialWeightKg        Decimal                 @db.Decimal(14, 3)
-  currentWeightKg        Decimal                 @db.Decimal(14, 3)
-  reservedWeightKg       Decimal                 @default(0) @db.Decimal(14, 3)
-  purchaseCost           Decimal                 @db.Decimal(14, 2)
-  landedCost             Decimal                 @db.Decimal(14, 2)
-  status                 CoffeeLotStatus         @default(RECEIVED)
-  blendComponents        BlendComponent[]
-  industrialEvents       IndustrialEvent[]
-  costEvents             CostEvent[]
-  productionConsumptions ProductionConsumption[]
-  receivedAt             DateTime                @default(now())
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  receipt                GreenCoffeeReceipt?
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplierId                   String
+  supplier                     Supplier                      @relation(fields: [supplierId], references: [id])
+  warehouseId                  String
+  warehouse                    Warehouse                     @relation(fields: [warehouseId], references: [id])
+  code                         String
+  origin                       String
+  harvest                      String?
+  variety                      String?
+  qualityScore                 Decimal?                      @db.Decimal(5, 2)
+  initialWeightKg              Decimal                       @db.Decimal(14, 3)
+  currentWeightKg              Decimal                       @db.Decimal(14, 3)
+  reservedWeightKg             Decimal                       @default(0) @db.Decimal(14, 3)
+  purchaseCost                 Decimal                       @db.Decimal(14, 2)
+  landedCost                   Decimal                       @db.Decimal(14, 2)
+  status                       CoffeeLotStatus               @default(RECEIVED)
+  blendComponents              BlendComponent[]
+  industrialEvents             IndustrialEvent[]
+  costEvents                   CostEvent[]
+  productionConsumptions       ProductionConsumption[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  receivedAt                   DateTime                      @default(now())
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  receipt                      GreenCoffeeReceipt?
 
   @@unique([companyId, code])
   @@index([supplierId, warehouseId])
@@ -1337,19 +1475,71 @@ model GreenCoffeeApprovalRequest {
 }
 
 model OperationalNotification {
-  id         String               @id @default(cuid())
-  companyId  String
-  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  purchaseId String?
-  purchase   GreenCoffeePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  type       String
-  title      String
-  message    String
-  targetRole String
-  readAt     DateTime?
-  createdAt  DateTime             @default(now())
+  id                  String               @id @default(cuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseId          String?
+  purchase            GreenCoffeePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  type                String
+  title               String
+  message             String
+  targetRole          String
+  readAt              DateTime?
+  mobilePushBridgedAt DateTime?
+  createdAt           DateTime             @default(now())
+  mobileNotifications MobileNotification[]
 
   @@index([companyId, readAt])
+  @@index([companyId, mobilePushBridgedAt, createdAt])
+}
+
+model PushSubscription {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint         String    @unique
+  p256dh           String
+  auth             String
+  userAgent        String?
+  enabled          Boolean   @default(true)
+  failureCount     Int       @default(0)
+  lastSuccessfulAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([companyId, enabled])
+  @@index([userId, enabled])
+}
+
+model MobileNotification {
+  id                              String                   @id @default(cuid())
+  companyId                       String
+  company                         Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId                          String
+  user                            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceOperationalNotificationId String?
+  sourceOperationalNotification   OperationalNotification? @relation(fields: [sourceOperationalNotificationId], references: [id], onDelete: SetNull)
+  idempotencyKey                  String
+  type                            String
+  title                           String
+  message                         String
+  href                            String
+  entityType                      String?
+  entityId                        String?
+  readAt                          DateTime?
+  pushSentAt                      DateTime?
+  pushAttempts                    Int                      @default(0)
+  pushError                       String?
+  createdAt                       DateTime                 @default(now())
+  updatedAt                       DateTime                 @updatedAt
+
+  @@unique([userId, idempotencyKey])
+  @@index([companyId, createdAt])
+  @@index([userId, readAt, createdAt])
+  @@index([pushSentAt, pushAttempts, createdAt])
+  @@index([sourceOperationalNotificationId])
 }
 
 model GreenCoffeeAuditEvent {
@@ -1588,132 +1778,324 @@ model ProductLine {
 }
 
 model Product {
-  id            String           @id @default(cuid())
-  productLineId String
-  productLine   ProductLine      @relation(fields: [productLineId], references: [id], onDelete: Restrict)
-  code          String
-  name          String
-  slug          String
-  description   String
-  active        Boolean          @default(true)
-  variants      ProductVariant[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                  String                   @id @default(cuid())
+  productLineId       String
+  productLine         ProductLine              @relation(fields: [productLineId], references: [id], onDelete: Restrict)
+  code                String
+  name                String
+  slug                String
+  description         String
+  active              Boolean                  @default(true)
+  commercialKind      String                   @default("STANDARD")
+  baseCoffeeProductId String?
+  baseCoffeeProduct   Product?                 @relation("WhiteLabelBaseCoffee", fields: [baseCoffeeProductId], references: [id], onDelete: Restrict)
+  whiteLabelProducts  Product[]                @relation("WhiteLabelBaseCoffee")
+  variants            ProductVariant[]
+  storefrontImages    StorefrontProductImage[]
+  mediaAssets         StorefrontMediaAsset[]
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@unique([productLineId, slug])
   @@unique([productLineId, code])
+  @@index([baseCoffeeProductId])
+}
+
+model StorefrontProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  data      Bytes
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  useInHero Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+  @@index([productId, isPrimary])
+  @@index([productId, useInHero])
+}
+
+model StorefrontMediaAsset {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  category  String
+  entityKey String?
+  placement String?
+  title     String
+  altText   String
+  caption   String?
+  credit    String?
+  fileName  String
+  mimeType  String
+  data      Bytes
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, category, active, sortOrder])
+  @@index([companyId, placement, active])
+  @@index([productId, active, sortOrder])
 }
 
 model ProductVariant {
-  id                     String                    @id @default(cuid())
-  productId              String
-  product                Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku                    String                    @unique
-  netWeightGrams         Int
-  salesUnit              String
-  active                 Boolean                   @default(true)
-  coffeeCost             Decimal                   @default(0) @db.Decimal(14, 2)
-  industrialCost         Decimal                   @default(0) @db.Decimal(14, 2)
-  packagingCost          Decimal                   @default(0) @db.Decimal(14, 2)
-  labelCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  boxCost                Decimal                   @default(0) @db.Decimal(14, 2)
-  laborCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  energyCost             Decimal                   @default(0) @db.Decimal(14, 2)
-  otherCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  totalCost              Decimal                   @default(0) @db.Decimal(14, 2)
-  unitCost               Decimal                   @default(0) @db.Decimal(14, 2)
-  marginPercent          Decimal                   @default(0) @db.Decimal(7, 3)
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
-  costSnapshots          CostCalculationSnapshot[]
-  productionOrders       ProductionOrder[]
-  finishedProducts       FinishedProduct[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  salesOrderItems        SalesOrderItem[]
-  inventoryReservations  InventoryReservation[]
-  costEvents             CostEvent[]
-  channelPrices          ProductPrice[]
+  id                           String                        @id @default(cuid())
+  productId                    String
+  product                      Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                          String                        @unique
+  netWeightGrams               Int
+  grossWeightGrams             Int                           @default(0)
+  packageWidthCm               Decimal                       @default(18) @db.Decimal(10, 2)
+  packageHeightCm              Decimal                       @default(6) @db.Decimal(10, 2)
+  packageDepthCm               Decimal                       @default(11) @db.Decimal(10, 2)
+  gtin                         String?                       @unique
+  ncm                          String                        @default("09012100") @db.VarChar(8)
+  originCode                   Int                           @default(0)
+  cest                         String?                       @db.VarChar(7)
+  productionType               String                        @default("P") @db.VarChar(1)
+  fiscalValidated              Boolean                       @default(false)
+  salesUnit                    String
+  active                       Boolean                       @default(true)
+  coffeeCost                   Decimal                       @default(0) @db.Decimal(14, 2)
+  industrialCost               Decimal                       @default(0) @db.Decimal(14, 2)
+  packagingCost                Decimal                       @default(0) @db.Decimal(14, 2)
+  labelCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  boxCost                      Decimal                       @default(0) @db.Decimal(14, 2)
+  laborCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  energyCost                   Decimal                       @default(0) @db.Decimal(14, 2)
+  otherCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  totalCost                    Decimal                       @default(0) @db.Decimal(14, 2)
+  unitCost                     Decimal                       @default(0) @db.Decimal(14, 2)
+  marginPercent                Decimal                       @default(0) @db.Decimal(7, 3)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  costSnapshots                CostCalculationSnapshot[]
+  productionOrders             ProductionOrder[]
+  finishedProducts             FinishedProduct[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  salesOrderItems              SalesOrderItem[]
+  inventoryReservations        InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  costEvents                   CostEvent[]
+  channelPrices                ProductPrice[]
+  customerPrices               CustomerProductPrice[]
 
   @@unique([productId, netWeightGrams])
   @@index([productId, active])
 }
 
 model SalesChannel {
-  id        String           @id @default(cuid())
-  companyId String
-  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code      String
-  name      String
-  type      SalesChannelType
-  active    Boolean          @default(true)
-  country   String?
-  currency  String?
-  orders    SalesOrder[]
-  prices    ProductPrice[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id                String           @id @default(cuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  type              SalesChannelType
+  active            Boolean          @default(true)
+  country           String?
+  currency          String?
+  platformCode      String?          @db.VarChar(30)
+  connectionStatus  String           @default("NOT_CONNECTED") @db.VarChar(20)
+  externalAccountId String?
+  commissionPercent Decimal?         @db.Decimal(7, 4)
+  fixedFee          Decimal?         @db.Decimal(14, 2)
+  fulfillmentMode   String?          @db.VarChar(30)
+  lastSyncedAt      DateTime?
+  settings          Json?
+  orders            SalesOrder[]
+  prices            ProductPrice[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId, active])
+  @@index([companyId, platformCode])
 }
 
 model ProductPrice {
-  id               String         @id @default(cuid())
-  companyId        String
-  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  productVariantId String
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  salesChannelId   String
-  salesChannel     SalesChannel   @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
-  currency         String
-  price            Decimal        @db.Decimal(14, 2)
-  active           Boolean        @default(true)
-  validFrom        DateTime?
-  validUntil       DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                         String           @id @default(cuid())
+  companyId                  String
+  company                    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productVariantId           String
+  productVariant             ProductVariant   @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  salesChannelId             String
+  salesChannel               SalesChannel     @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+  currency                   String
+  price                      Decimal          @db.Decimal(14, 2)
+  active                     Boolean          @default(true)
+  validFrom                  DateTime?
+  validUntil                 DateTime?
+  maxRequestDiscountPercent  Decimal          @default(0) @db.Decimal(7, 3)
+  maxApprovalDiscountPercent Decimal          @default(0) @db.Decimal(7, 3)
+  minimumPrice               Decimal?         @db.Decimal(14, 2)
+  minimumMarginPercent       Decimal?         @db.Decimal(7, 3)
+  minimumRoiPercent          Decimal?         @db.Decimal(7, 3)
+  salesOrderItems            SalesOrderItem[] @relation("SalesOrderItemBasePrice")
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 
   @@unique([productVariantId, salesChannelId, currency, validFrom])
   @@index([companyId, salesChannelId, active])
   @@index([productVariantId, active])
 }
 
-model SalesOrder {
-  id                     String                  @id @default(cuid())
+model CustomerProductPrice {
+  id               String                      @id @default(cuid())
+  companyId        String
+  company          Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId       String
+  customer         Customer                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productVariantId String
+  productVariant   ProductVariant              @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  currency         String                      @default("BRL") @db.VarChar(3)
+  price            Decimal                     @db.Decimal(14, 2)
+  active           Boolean                     @default(true)
+  validFrom        DateTime?
+  validUntil       DateTime?
+  notes            String?
+  createdByName    String?
+  salesOrderItems  SalesOrderItem[]
+  events           CustomerProductPriceEvent[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@unique([customerId, productVariantId, currency])
+  @@index([companyId, customerId, active])
+  @@index([productVariantId, active])
+}
+
+model CustomerProductPriceEvent {
+  id                     String               @id @default(cuid())
   companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerId             String
-  customer               Customer                @relation(fields: [customerId], references: [id])
-  salesChannelId         String?
-  salesChannel           SalesChannel?           @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
-  finishedProductId      String?
-  finishedProduct        FinishedProduct?        @relation(fields: [finishedProductId], references: [id])
-  code                   String
-  orderNumber            String?
-  status                 SalesOrderStatus        @default(DRAFT)
-  quantity               Int
-  unitPrice              Decimal                 @db.Decimal(14, 2)
-  totalAmount            Decimal                 @db.Decimal(14, 2)
-  orderedAt              DateTime                @default(now())
-  orderDate              DateTime?
-  expectedDeliveryDate   DateTime?
-  subtotal               Decimal?                @db.Decimal(14, 2)
-  discount               Decimal                 @default(0) @db.Decimal(14, 2)
-  freight                Decimal                 @default(0) @db.Decimal(14, 2)
-  notes                  String?
-  invoicedAt             DateTime?
-  deliveredAt            DateTime?
-  costEvents             CostEvent[]
-  items                  SalesOrderItem[]
-  reservations           InventoryReservation[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  accountsReceivable     AccountsReceivable[]
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  company                Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerProductPriceId String
+  customerProductPrice   CustomerProductPrice @relation(fields: [customerProductPriceId], references: [id], onDelete: Cascade)
+  actorId                String?
+  actorName              String
+  actorRole              String
+  action                 String               @db.VarChar(20)
+  beforeSnapshot         Json?
+  afterSnapshot          Json
+  createdAt              DateTime             @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([customerProductPriceId, createdAt])
+}
+
+model SalesOrder {
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId                   String
+  customer                     Customer                      @relation(fields: [customerId], references: [id])
+  createdByStorefrontPartnerId String?
+  createdByStorefrontPartner   StorefrontPartner?            @relation(fields: [createdByStorefrontPartnerId], references: [id], onDelete: SetNull)
+  brokerId                     String?
+  broker                       Broker?                       @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerCommissionMode         String?                       @db.VarChar(20)
+  brokerCommissionPercent      Decimal?                      @db.Decimal(7, 4)
+  brokerCommissionPerPackage   Decimal?                      @db.Decimal(14, 2)
+  brokerCommissionAmount       Decimal?                      @db.Decimal(14, 2)
+  salesChannelId               String?
+  salesChannel                 SalesChannel?                 @relation(fields: [salesChannelId], references: [id], onDelete: SetNull)
+  finishedProductId            String?
+  finishedProduct              FinishedProduct?              @relation(fields: [finishedProductId], references: [id])
+  code                         String
+  orderNumber                  String?
+  orderType                    String                        @default("COMMERCIAL") @db.VarChar(20)
+  status                       SalesOrderStatus              @default(DRAFT)
+  quantity                     Int
+  unitPrice                    Decimal                       @db.Decimal(14, 2)
+  totalAmount                  Decimal                       @db.Decimal(14, 2)
+  orderedAt                    DateTime                      @default(now())
+  orderDate                    DateTime?
+  expectedDeliveryDate         DateTime?
+  subtotal                     Decimal?                      @db.Decimal(14, 2)
+  discount                     Decimal                       @default(0) @db.Decimal(14, 2)
+  freight                      Decimal                       @default(0) @db.Decimal(14, 2)
+  notes                        String?
+  paymentType                  String                        @default("LEGACY")
+  paymentTermsSnapshot         String?
+  freightResponsibility        String?
+  carrierName                  String?
+  customerReference            String?
+  incoterm                     String?
+  incotermLocation             String?
+  currency                     String                        @default("BRL") @db.VarChar(3)
+  exchangeRateToBrl            Decimal?                      @db.Decimal(14, 6)
+  exchangeRateDate             DateTime?
+  customsDeclaredValue         Decimal?                      @db.Decimal(14, 2)
+  exportDepartureLocation      String?
+  exportDepartureState         String?                       @db.VarChar(2)
+  shippingQuoteId              String?
+  shippingProvider             String?
+  shippingServiceId            String?
+  shippingServiceName          String?
+  estimatedDeliveryDays        Int?
+  externalOrderId              String?
+  externalOrderNumber          String?
+  externalStatus               String?
+  channelGrossAmount           Decimal?                      @db.Decimal(14, 2)
+  channelFeeAmount             Decimal                       @default(0) @db.Decimal(14, 2)
+  channelFreightAmount         Decimal                       @default(0) @db.Decimal(14, 2)
+  channelNetAmount             Decimal?                      @db.Decimal(14, 2)
+  channelPayload               Json?
+  importedAt                   DateTime?
+  channelUpdatedAt             DateTime?
+  invoicedAt                   DateTime?
+  deliveredAt                  DateTime?
+  costEvents                   CostEvent[]
+  items                        SalesOrderItem[]
+  reservations                 InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  accountsReceivable           AccountsReceivable[]
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 
   @@unique([companyId, code])
+  @@unique([companyId, salesChannelId, externalOrderId])
   @@index([customerId, status])
+  @@index([companyId, orderType, status])
+  @@index([createdByStorefrontPartnerId, orderedAt])
+  @@index([brokerId])
   @@index([salesChannelId, status])
+  @@index([companyId, importedAt])
+}
+
+model SalesOrderTermApproval {
+  id              String    @id
+  companyId       String
+  salesOrderId    String    @unique
+  customerId      String
+  reason          String    @default("DELINQUENT_CUSTOMER")
+  orderAmount     Decimal   @db.Decimal(14, 2)
+  overdueAmount   Decimal   @db.Decimal(14, 2)
+  overdueCount    Int
+  maxDaysOverdue  Int
+  status          String    @default("PENDING")
+  requestedById   String?
+  requestedByName String
+  requestedByRole String?
+  requestedAt     DateTime  @default(now())
+  decidedById     String?
+  decidedByName   String?
+  decidedByRole   String?
+  decisionNote    String?
+  decidedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([companyId, status, requestedAt])
+  @@index([customerId, requestedAt])
 }
 
 model FinancialAccount {
@@ -1825,6 +2207,8 @@ model AccountsPayable {
   supplier                   Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   brokerId                   String?
   broker                     Broker?                         @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  storefrontPartnerId        String?
+  storefrontPartner          StorefrontPartner?              @relation(fields: [storefrontPartnerId], references: [id], onDelete: SetNull)
   costCenterId               String?
   costCenter                 CostCenter?                     @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   description                String
@@ -1847,6 +2231,7 @@ model AccountsPayable {
   @@index([companyId, status, dueDate])
   @@index([costCenterId, dueDate])
   @@index([purchaseId, dueDate])
+  @@index([storefrontPartnerId, dueDate])
 }
 
 model Payment {
@@ -1863,11 +2248,17 @@ model Payment {
   paidAt               DateTime
   method               String
   notes                String?
+  source               String                @default("FINANCE") @db.VarChar(40)
+  reference            String?               @db.VarChar(180)
+  recordedById         String?
+  recordedByName       String?               @db.VarChar(120)
+  recordedByRole       String?               @db.VarChar(40)
   idempotencyKey       String                @unique
   transaction          FinancialTransaction?
   createdAt            DateTime              @default(now())
 
   @@index([companyId, paidAt])
+  @@index([companyId, source, paidAt])
 }
 
 model FinancialTransaction {
@@ -1949,28 +2340,37 @@ model ReconciliationEvent {
 }
 
 model SalesOrderItem {
-  id                     String                  @id @default(cuid())
-  companyId              String
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  salesOrderId           String
-  salesOrder             SalesOrder              @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  productVariantId       String
-  productVariant         ProductVariant          @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
-  productName            String
-  sku                    String
-  quantity               Int
-  pickedQuantity         Int                     @default(0)
-  pickedAt               DateTime?
-  unitPrice              Decimal                 @db.Decimal(14, 2)
-  discount               Decimal                 @default(0) @db.Decimal(14, 2)
-  totalAmount            Decimal                 @db.Decimal(14, 2)
-  reservations           InventoryReservation[]
-  finishedGoodsMovements FinishedGoodsMovement[]
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                           String                        @id @default(cuid())
+  companyId                    String
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesOrderId                 String
+  salesOrder                   SalesOrder                    @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productVariantId             String
+  productVariant               ProductVariant                @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  productName                  String
+  sku                          String
+  quantity                     Int
+  pickedQuantity               Int                           @default(0)
+  pickedAt                     DateTime?
+  unitPrice                    Decimal                       @db.Decimal(14, 2)
+  discount                     Decimal                       @default(0) @db.Decimal(14, 2)
+  totalAmount                  Decimal                       @db.Decimal(14, 2)
+  pricingSource                String                        @default("CHANNEL") @db.VarChar(20)
+  baseProductPriceId           String?
+  baseProductPrice             ProductPrice?                 @relation("SalesOrderItemBasePrice", fields: [baseProductPriceId], references: [id], onDelete: SetNull)
+  customerProductPriceId       String?
+  customerProductPrice         CustomerProductPrice?         @relation(fields: [customerProductPriceId], references: [id], onDelete: SetNull)
+  priceSnapshot                Json?
+  reservations                 InventoryReservation[]
+  greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
+  finishedGoodsMovements       FinishedGoodsMovement[]
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 
   @@index([salesOrderId])
   @@index([productVariantId])
+  @@index([baseProductPriceId])
+  @@index([customerProductPriceId])
 }
 
 model InventoryReservation {
@@ -1999,6 +2399,34 @@ model InventoryReservation {
   @@index([productVariantId, status])
   @@index([salesOrderId, status])
   @@index([finishedProductId, status])
+}
+
+model GreenCoffeeSalesReservation {
+  id               String                     @id @default(cuid())
+  companyId        String
+  company          Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesOrderId     String
+  salesOrder       SalesOrder                 @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem             @relation(fields: [salesOrderItemId], references: [id], onDelete: Restrict)
+  productVariantId String
+  productVariant   ProductVariant             @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  coffeeLotId      String
+  coffeeLot        CoffeeLot                  @relation(fields: [coffeeLotId], references: [id], onDelete: Restrict)
+  warehouseId      String
+  warehouse        Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantityKg       Decimal                    @db.Decimal(14, 3)
+  status           InventoryReservationStatus @default(ACTIVE)
+  idempotencyKey   String                     @unique
+  releasedAt       DateTime?
+  consumedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@unique([salesOrderItemId, coffeeLotId])
+  @@index([salesOrderId, status])
+  @@index([coffeeLotId, status])
+  @@index([productVariantId, status])
 }
 
 model IndustrialEvent {

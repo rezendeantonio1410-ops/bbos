@@ -1,0 +1,38 @@
+export const protectedSystemPrefixes = [
+  "/home",
+  "/aplicativo",
+  "/dashboard",
+  "/dashboard-industrial",
+  "/blends",
+  "/cafe-verde",
+  "/clientes",
+  "/atendimento",
+  "/recebimento",
+  "/compras-cafe-verde",
+  "/compras-cafe-verde-v2",
+  "/corretores",
+  "/laboratorio",
+  "/estoque",
+  "/producao",
+  "/financeiro",
+  "/custos",
+  "/pedidos",
+  "/vendas",
+  "/exportacoes",
+  "/commerce",
+  "/bi",
+  "/produtos",
+  "/fornecedores",
+  "/integracoes",
+  "/notas-entrada",
+  "/perfil",
+  "/sobre",
+  "/usuarios",
+  "/parceiro",
+] as const;
+
+export function isProtectedSystemPath(pathname: string) {
+  return protectedSystemPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}

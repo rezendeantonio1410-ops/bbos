@@ -1,0 +1,14 @@
+.page {
+  --ink: #0e191d;
+  --paper: #ebebeb;
+  --line: #d5dcda;
+  background: var(--paper) !important;
+  color: var(--ink);
+  font-family: var(--font-inter);
+}
+.page :global(header) { background: rgba(255,255,255,.97) !important; }
+.page :global(h1),.page :global(h2) { font-family: var(--font-manrope); font-weight: 300; }
+.page :global([class*="journeyStage"]) { background: #fff !important; border-color: #d5dcda !important; border-radius: 12px !important; box-shadow: none !important; }
+.page :global([class*="bispoWhisper"]),.page :global([class*="feedback"]) { background: #e0eae9 !important; border-radius: 8px !important; }
+.page :global([class*="humanCta"]),.page :global([class*="price_"]) button,.page :global([class*="feedback"]) button { border-radius: 4px !important; background: #0e191d !important; }
+.page :global([class*="productCard"]) { border-color: #d5dcda !important; border-radius: 12px !important; box-shadow: none !important; }

@@ -19,7 +19,7 @@ import {
   GreenCoffeeSupplierType,
   PayableStatus,
   Prisma,
-  PrismaClient,
+  prisma,
   PurchaseApprovalStatus,
   PurchaseInstallmentStatus,
   PurchaseOperationalStatus,
@@ -31,6 +31,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuthService } from "./auth.service";
+import { publicAppUrl } from "./public-app-url";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
 import {
   calculateBrokerCommission,
@@ -232,7 +233,7 @@ const contractLabel = (value?: unknown) => {
 
 @Controller("green-coffee-purchases")
 export class GreenCoffeePurchasesController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
   constructor(
     private readonly auth: AuthService,
     private readonly taxRegistry: UnconfiguredTaxRegistryProvider,
@@ -654,16 +655,37 @@ export class GreenCoffeePurchasesController {
   @Get(":id")
   async get(@Param("id") id: string, @Req() request: any) {
     const actor = await this.sessionActor(request);
-    const row = await this.db.greenCoffeePurchase.findFirst({
-      where: { id, companyId: actor.companyId },
-      include: {
-        ...this.include,
-        notifications: true,
-        auditEvents: { orderBy: { occurredAt: "asc" } },
-      },
-    });
+    const [row, fiscalDocuments] = await Promise.all([
+      this.db.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+        include: {
+          ...this.include,
+          notifications: true,
+          auditEvents: { orderBy: { occurredAt: "asc" } },
+        },
+      }),
+      this.db.$queryRawUnsafe<any[]>(
+        `SELECT DISTINCT f.id,f.status,f.number,f.series,f."accessKey",f."issueDate",
+                f."totalAmount",f."matchStatus",f.source,f."issuerName",f."importedAt"
+           FROM "FiscalDocument" f
+           JOIN "FiscalDocumentAllocation" a ON a."fiscalDocumentId"=f.id
+          WHERE a."purchaseId"=$1
+            AND a."allocationType"='GREEN_COFFEE_PURCHASE'
+            AND f."companyId"=$2
+            AND f.direction='INBOUND'
+          ORDER BY f."issueDate" DESC NULLS LAST,f."importedAt" DESC NULLS LAST`,
+        id,
+        actor.companyId,
+      ),
+    ]);
     if (!row) throw new NotFoundException("Compra não encontrada.");
-    return this.view(row);
+    return {
+      ...this.view(row),
+      fiscalDocuments: fiscalDocuments.map((document) => ({
+        ...document,
+        totalAmount: Number(document.totalAmount ?? 0),
+      })),
+    };
   }
 
   @Get(":id/confirmation-documents")
@@ -864,6 +886,9 @@ export class GreenCoffeePurchasesController {
               id: body.brokerId,
               companyId: actor.companyId,
               active: true,
+              businessPartner: {
+                is: { active: true, isGreenCoffeeBroker: true },
+              },
             },
           });
           if (!broker)
@@ -1284,6 +1309,15 @@ export class GreenCoffeePurchasesController {
       throw new BadRequestException(
         "Nome da unidade e Estado são obrigatórios.",
       );
+    const defaultOriginType =
+      supplier.supplierType === "COOPERATIVE"
+        ? "COOPERATIVE_UNIT"
+        : supplier.supplierType === "RURAL_PERSON"
+          ? "FARM"
+          : "ORIGIN_UNIT";
+    const originType = String(body.originType || defaultOriginType);
+    if (!["FARM", "COOPERATIVE_UNIT", "ORIGIN_UNIT"].includes(originType))
+      throw new BadRequestException("Tipo de origem inválido.");
     const region = body.coffeeRegionId
       ? await this.db.coffeeRegion.findFirst({
           where: {
@@ -1302,6 +1336,7 @@ export class GreenCoffeePurchasesController {
       data: {
         supplierId,
         name: body.name.trim(),
+        originType,
         taxId: body.taxId || null,
         stateRegistration: body.stateRegistration || null,
         state: body.state,
@@ -1354,6 +1389,7 @@ export class GreenCoffeePurchasesController {
     }
     const allowed = [
       "name",
+      "originType",
       "taxId",
       "stateRegistration",
       "state",
@@ -1374,6 +1410,13 @@ export class GreenCoffeePurchasesController {
     const data = Object.fromEntries(
       Object.entries(body).filter(([key]) => allowed.includes(key)),
     );
+    if (
+      data.originType !== undefined &&
+      !["FARM", "COOPERATIVE_UNIT", "ORIGIN_UNIT"].includes(
+        String(data.originType),
+      )
+    )
+      throw new BadRequestException("Tipo de origem inválido.");
     if (data.postalCode !== undefined)
       data.postalCode = normalizePostalCode(data.postalCode);
     return this.db.supplierOriginUnit.update({ where: { id: unitId }, data });
@@ -1468,6 +1511,9 @@ export class GreenCoffeePurchasesController {
               id: body.brokerId,
               companyId: body.companyId,
               active: true,
+              businessPartner: {
+                is: { active: true, isGreenCoffeeBroker: true },
+              },
             },
             select: { id: true },
           });
@@ -1876,12 +1922,7 @@ export class GreenCoffeePurchasesController {
           },
         },
       });
-      const base =
-        process.env.PUBLIC_APP_URL ??
-        process.env.PUBLIC_WEB_URL ??
-        process.env.WEB_URL?.split(",")[0] ??
-        "http://localhost:3000";
-      const url = `${base.replace(/\/$/, "")}/aceite-compra/${token}`;
+      const url = `${publicAppUrl()}/aceite-compra/${token}`;
       const message = `Olá, ${contact}.\n\nA Bispo Coffees disponibilizou a Ficha de Compra ${purchase.purchaseNumber} para sua conferência.\n\nAcesse o link abaixo para revisar as condições e confirmar seu aceite:\n\n${url}\n\nBispo Coffees`;
       return {
         acceptanceId: acceptance.id,

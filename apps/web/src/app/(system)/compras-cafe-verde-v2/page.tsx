@@ -118,11 +118,17 @@ export default function PurchaseFormV2Page() {
   const [cultivarId, setCultivarId] = useState("");
   const [supplierContacts, setSupplierContacts] = useState<Contact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState("");
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactRole, setNewContactRole] = useState("");
+  const [newContactWhatsapp, setNewContactWhatsapp] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
   const [harvest, setHarvest] = useState(currentHarvest());
-  const [packagingType, setPackagingType] = useState("BAG_30_KG");
+  const [packagingType, setPackagingType] = useState("BAG_60_KG");
   const [volumes, setVolumes] = useState(1);
-  const [unitWeight, setUnitWeight] = useState(30);
-  const [priceKg, setPriceKg] = useState(0);
+  const [unitWeight, setUnitWeight] = useState(60);
+  const [pricePerBag, setPricePerBag] = useState(0);
   const [brokerId, setBrokerId] = useState("");
   const [brokerCommissionPercent, setBrokerCommissionPercent] = useState(0);
   const [paymentTermType, setPaymentTermType] = useState("CASH");
@@ -140,7 +146,7 @@ export default function PurchaseFormV2Page() {
   useEffect(() => {
     void Promise.all([
       req<Options>(`${ROOT}/receipts/options`),
-      req<Broker[]>(`${ROOT}/brokers`),
+      req<Broker[]>(`${ROOT}/brokers?role=GREEN_COFFEE`),
       fetchSessionIdentity(ROOT),
     ])
       .then(([currentOptions, currentBrokers, identity]) => {
@@ -207,6 +213,39 @@ export default function PurchaseFormV2Page() {
       .catch(() => setSupplierContacts([]));
   }, [supplierId, references?.suppliers]);
 
+  const createContact = async () => {
+    if (!supplierId || !newContactName.trim() || savingContact) return;
+    setSavingContact(true);
+    setError("");
+    try {
+      const created = await req<Contact>(`${API}/suppliers/${supplierId}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newContactName.trim(),
+          role: newContactRole.trim() || undefined,
+          whatsapp: newContactWhatsapp.trim() || undefined,
+          email: newContactEmail.trim() || undefined,
+          isPrimary: supplierContacts.length === 0,
+          canConfirmBusiness: true,
+          active: true,
+        }),
+      });
+      setSupplierContacts((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSelectedContactId(created.id);
+      setShowNewContact(false);
+      setNewContactName("");
+      setNewContactRole("");
+      setNewContactWhatsapp("");
+      setNewContactEmail("");
+      setMessage(`Contato ${created.name} cadastrado e selecionado.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o contato.");
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
   useEffect(() => {
     if (paymentTermType === "CASH") setInstallmentCount(1);
   }, [paymentTermType]);
@@ -221,7 +260,8 @@ export default function PurchaseFormV2Page() {
   const cultivar = availableCultivars.find((item) => item.id === cultivarId);
   const selectedContact = supplierContacts.find((item) => item.id === selectedContactId);
   const totalWeight = volumes * unitWeight;
-  const totalValue = totalWeight * priceKg;
+  const priceKg = unitWeight > 0 ? pricePerBag / unitWeight : 0;
+  const totalValue = volumes * pricePerBag;
   const selectedBroker = brokers.find((item) => item.id === brokerId);
   const brokerCommissionAmount = Math.round(totalValue * brokerCommissionPercent) / 100;
   const totalOperationCost = totalValue + brokerCommissionAmount;
@@ -239,7 +279,7 @@ export default function PurchaseFormV2Page() {
     });
   }, [daysAfterPurchase, firstDueDate, installmentCount, paymentTermType, totalValue]);
 
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>, action: "SUBMIT" | "APPROVE" = "SUBMIT") => {
     event.preventDefault();
     if (submitting || submittedNumber) return;
     setError("");
@@ -256,7 +296,7 @@ export default function PurchaseFormV2Page() {
           professionalSampleId: approvedSample?.id,
           originUnitId: originUnit.id,
           idempotencyKey: crypto.randomUUID(),
-          action: "SUBMIT",
+          action,
           department: "COMPRAS",
           approverName: form.get("approverName"),
           purchasedAt: new Date().toISOString(),
@@ -299,8 +339,8 @@ export default function PurchaseFormV2Page() {
       });
       setSubmittedPurchaseId(result.id);
       setSubmittedNumber(result.purchaseNumber);
-      setSubmittedStatus(result.approvalStatus ?? result.status ?? "PENDING_APPROVAL");
-      setMessage(`${result.purchaseNumber} enviada para aprovação.`);
+      setSubmittedStatus(result.approvalStatus ?? result.status ?? (action === "APPROVE" ? "APPROVED" : "PENDING_APPROVAL"));
+      setMessage(action === "APPROVE" ? `${result.purchaseNumber} registrada como compra já realizada. Aprovação comercial dispensada pela alçada do usuário.` : `${result.purchaseNumber} enviada para aprovação.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Falha ao salvar compra.");
     } finally {
@@ -340,8 +380,9 @@ export default function PurchaseFormV2Page() {
           <div className="rounded-xl border bg-stone-50 p-4 sm:col-span-2 lg:col-span-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-xs font-bold uppercase text-stone-500">Contato comercial</p><b className="mt-1 block text-sm">{selectedContact?.name ?? "Nenhum contato autorizado selecionado"}</b><p className="text-xs text-stone-500">{selectedContact?.role ?? ""}{selectedContact?.whatsapp ? ` · ${selectedContact.whatsapp}` : selectedContact?.email ? ` · ${selectedContact.email}` : ""}</p></div>
-              <select className="rounded-lg border bg-white px-3 py-2 text-xs" value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}><option value="">Selecionar contato</option>{supplierContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select>
+              <div className="flex flex-wrap gap-2"><select className="rounded-lg border bg-white px-3 py-2 text-xs" value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}><option value="">Selecionar contato</option>{supplierContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.canConfirmBusiness ? " ✓" : ""}</option>)}</select><button type="button" onClick={() => setShowNewContact((value) => !value)} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-forest-700">+ Cadastrar contato</button></div>
             </div>
+            {showNewContact && <div className="mt-3 grid gap-2 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Nome *"><input className={input} value={newContactName} onChange={(e) => setNewContactName(e.target.value)} /></Field><Field label="Função"><input className={input} value={newContactRole} onChange={(e) => setNewContactRole(e.target.value)} /></Field><Field label="WhatsApp"><input className={input} value={newContactWhatsapp} onChange={(e) => setNewContactWhatsapp(e.target.value)} /></Field><Field label="E-mail"><input type="email" className={input} value={newContactEmail} onChange={(e) => setNewContactEmail(e.target.value)} /></Field><div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2"><button type="button" onClick={() => setShowNewContact(false)} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">Cancelar</button><button type="button" disabled={!newContactName.trim() || savingContact} onClick={() => void createContact()} className="rounded-lg bg-forest-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{savingContact ? "Salvando..." : "Salvar e selecionar"}</button></div></div>}
           </div>
         </Section>
 
@@ -356,14 +397,15 @@ export default function PurchaseFormV2Page() {
 
         <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
           <Field label="Acondicionamento"><select className={input} value={packagingType} onChange={(e) => { const next = e.target.value; setPackagingType(next); const weight = packagingWeights[next] ?? null; if (weight !== null) setUnitWeight(weight); }}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
-          <Field label="Número de volumes"><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
+          <Field label={packagingType === "BAG_60_KG" ? "Quantidade de sacas" : "Número de volumes"}><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
           <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" className={input} value={unitWeight} readOnly={packagingWeights[packagingType] !== null} onChange={(e) => setUnitWeight(Number(e.target.value))} /></Field>
           <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" min="0" step=".01" defaultValue="0" className={input} /></Field>
           <Metric label="Peso total contratado" value={`${totalWeight.toLocaleString("pt-BR")} kg`} />
         </Section>
 
         <Section title="D · Comercial" tone="commercial" icon={Handshake}>
-          <Field label="Preço/kg"><input required type="number" min=".01" step=".01" className={input} value={priceKg || ""} onChange={(e) => setPriceKg(Number(e.target.value))} /></Field>
+          <Field label={packagingType === "BAG_60_KG" ? "Preço por saca de 60 kg" : "Preço por volume"}><input required type="number" min=".01" step=".01" className={input} value={pricePerBag || ""} onChange={(e) => setPricePerBag(Number(e.target.value))} /></Field>
+          <Metric label="Equivalente fiscal" value={`${brl(priceKg)}/kg`} />
           <Metric label="Valor total da compra" value={brl(totalValue)} />
           <Field label="Entrega prevista"><input name="expectedAt" type="date" className={input} /></Field>
           <Field label="Condição de pagamento"><select className={input} value={paymentTermType} onChange={(e) => setPaymentTermType(e.target.value)}><option value="CASH">À vista</option><option value="DAYS_AFTER_PURCHASE">X dias</option><option value="FIXED_DATE">Data definida</option><option value="INSTALLMENTS">Parcelado</option><option value="ADVANCE_AND_BALANCE">Antecipado + saldo</option><option value="AFTER_RECEIPT">Após recebimento</option><option value="CUSTOM">Customizado</option></select></Field>
@@ -390,7 +432,7 @@ export default function PurchaseFormV2Page() {
             <Summary label="Origem" value={`${originUnit?.name ?? "—"} · ${harvest}`} />
             <Summary label="Café" value={`${species?.name ?? "—"} · ${cultivar?.name ?? "—"}`} />
             <Summary label="Quantidade" value={`${volumes} × ${unitWeight} kg = ${totalWeight} kg`} />
-            <Summary label="Comercial" value={`${brl(priceKg)}/kg · ${brl(totalValue)}`} />
+            <Summary label="Comercial" value={`${brl(pricePerBag)}/saca · ${brl(priceKg)}/kg · ${brl(totalValue)}`} />
             <Summary label="Corretagem" value={selectedBroker ? `${selectedBroker.name} · ${brokerCommissionPercent.toFixed(2)}% · ${brl(brokerCommissionAmount)}` : "Sem corretor"} />
             <Summary label="Custo total da operação" value={brl(totalOperationCost)} />
             <Summary label="Valor ao fornecedor" value={brl(totalValue)} />
@@ -405,7 +447,7 @@ export default function PurchaseFormV2Page() {
 
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Link href="/compras-cafe-verde" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Cancelar</Link>
-          <Button type="submit" disabled={submitting || Boolean(submittedNumber)} aria-disabled={submitting || Boolean(submittedNumber)}>{submitting ? "Enviando..." : submittedNumber ? "✓ Enviada para aprovação" : "Enviar para aprovação"}</Button>
+          <button type="button" disabled={submitting || Boolean(submittedNumber)} onClick={(event) => { const form = event.currentTarget.closest("form"); if (form) void submit({ preventDefault: () => undefined, currentTarget: form } as unknown as React.FormEvent<HTMLFormElement>, "APPROVE"); }} className="min-h-11 rounded-xl border border-forest-800 bg-white px-4 text-sm font-bold text-forest-900 disabled:opacity-50">{submitting ? "Registrando..." : "Compra já realizada · Tenho NF"}</button>\n          <Button type="submit" disabled={submitting || Boolean(submittedNumber)} aria-disabled={submitting || Boolean(submittedNumber)}>{submitting ? "Enviando..." : submittedNumber ? "✓ Registrada" : "Enviar para aprovação"}</Button>
         </div>
       </form>
     </div>

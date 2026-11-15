@@ -37,6 +37,19 @@ function upstreamHeaders(request: NextRequest) {
   if (authorization) headers.set("authorization", authorization);
   if (accept) headers.set("accept", accept);
   if (userAgent) headers.set("user-agent", userAgent);
+
+  for (const name of [
+    "x-storefront-order-token",
+    "x-bbos-webhook-secret",
+    "x-me-signature",
+    "x-signature",
+    "x-request-id",
+    "x-idempotency-key",
+  ]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+
   headers.set("x-forwarded-host", request.nextUrl.host);
   headers.set("x-forwarded-proto", request.nextUrl.protocol.replace(":", ""));
   return headers;
@@ -48,8 +61,10 @@ async function fetchUpstream(
   method: string,
   body: ArrayBuffer | undefined,
 ) {
+  // Free Render services can take 50+ seconds to wake. Keep the proxy alive
+  // long enough so the first BBOS access does not fail during a cold start.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 70000);
   try {
     return await fetch(target, {
       method,
@@ -86,6 +101,25 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
     try {
       const response = await fetchUpstream(request, target, method, body);
+
+      // Backward-compatible OAuth handoff: older API revisions returned
+      // { authorizationUrl } as JSON, while newer ones return a 302 directly.
+      // Normalize both shapes here so /api/integrations/bling/connect always
+      // behaves as a browser redirect from the BBOS app domain.
+      if (
+        method === "GET" &&
+        path.join("/") === "integrations/bling/connect" &&
+        response.ok &&
+        response.headers.get("content-type")?.includes("application/json")
+      ) {
+        const payload = await response.clone().json().catch(() => null) as
+          | { authorizationUrl?: string }
+          | null;
+        if (payload?.authorizationUrl) {
+          return NextResponse.redirect(payload.authorizationUrl, 302);
+        }
+      }
+
       const responseHeaders = new Headers(response.headers);
       responseHeaders.delete("content-encoding");
       responseHeaders.delete("content-length");

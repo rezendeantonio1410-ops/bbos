@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
@@ -53,7 +54,9 @@ type Opt = {
   users: O[];
   purchases: P[];
   currentUser?: SessionIdentity;
+  fiscalDocuments?: FiscalDocument[];
 };
+type FiscalDocument = { id: string; number: string | null; accessKey: string; status: string; issuerName: string | null; totalAmount: string | number | null; matchStatus: string; purchaseIds: string[] };
 type Row = {
   id: string;
   receiptNumber: string;
@@ -112,40 +115,45 @@ function Wizard({
   initialPurchaseId: string;
 }) {
   const first = o.purchases.find((purchase) => purchase.id === initialPurchaseId) ?? o.purchases[0];
-  const base = (p: P) => ({
-    purchaseId: p.id,
-    supplierId: p.supplierId,
-    warehouseId: o.warehouses[0]?.id ?? "",
-    species: p.species === "ARABICA" ? "ARABICA" : "ROBUSTA_CONILON",
-    origin: p.originRegion,
-    farmName: p.farmName ?? "",
-    municipality: p.municipality ?? "",
-    state: p.state ?? "",
-    country: p.country ?? "Brasil",
-    harvest: p.harvest,
-    variety: p.variety ?? "",
-    process: p.process ?? "",
-    supplierLotCode: p.supplierLotCode ?? "",
-    packagingType: p.packagingType,
-    volumeQuantity: p.volumeQuantity,
-    nominalWeightKg: Number(p.nominalUnitWeightKg),
-    grossWeightKg: 0,
-    tareWeightKg: 0,
-    moisturePercent: "",
-    sampleCollected: true,
-    visualCondition: "NORMAL",
-    invoiceNumber: "",
-    transportDocument: "",
-    notes: "",
-    unit: "KG",
-    bagQuantity: p.volumeQuantity,
-    bagWeightKg: Number(p.nominalUnitWeightKg),
-  });
+  const base = (p: P) => {
+    const fiscalDocument = (o.fiscalDocuments ?? []).find((document) => document.purchaseIds?.includes(p.id) && document.status === "AUTHORIZED" && document.matchStatus === "MATCHED");
+    return {
+      purchaseId: p.id,
+      supplierId: p.supplierId,
+      warehouseId: o.warehouses[0]?.id ?? "",
+      species: p.species === "ARABICA" ? "ARABICA" : "ROBUSTA_CONILON",
+      origin: p.originRegion,
+      farmName: p.farmName ?? "",
+      municipality: p.municipality ?? "",
+      state: p.state ?? "",
+      country: p.country ?? "Brasil",
+      harvest: p.harvest,
+      variety: p.variety ?? "",
+      process: p.process ?? "",
+      supplierLotCode: p.supplierLotCode ?? "",
+      packagingType: p.packagingType,
+      volumeQuantity: p.volumeQuantity,
+      nominalWeightKg: Number(p.nominalUnitWeightKg),
+      weightEntryMode: "DOCUMENTAL" as "DOCUMENTAL" | "SCALE",
+      grossWeightKg: 0,
+      tareWeightKg: 0,
+      moisturePercent: "",
+      sampleCollected: true,
+      visualCondition: "NORMAL",
+      invoiceNumber: fiscalDocument?.number ?? "",
+      fiscalDocumentId: fiscalDocument?.id ?? "",
+      transportDocument: "",
+      notes: "",
+      unit: "KG",
+      bagQuantity: p.volumeQuantity,
+      bagWeightKg: Number(p.nominalUnitWeightKg),
+    };
+  };
   const [d, setD] = useState(() => base(first!)),
     [s, setS] = useState(0),
     [busy, setBusy] = useState(false),
     [err, setErr] = useState("");
-  const net = Math.max(0, Number(d.grossWeightKg) - Number(d.tareWeightKg));
+  const net = d.weightEntryMode === "DOCUMENTAL" ? Number(d.volumeQuantity) * Number(d.nominalWeightKg) : Math.max(0, Number(d.grossWeightKg) - Number(d.tareWeightKg));
   const set = (k: keyof typeof d, v: (typeof d)[keyof typeof d]) => setD((x) => ({ ...x, [k]: v }));
   const submit = async () => {
     setBusy(true);
@@ -157,6 +165,8 @@ function Wizard({
           ...d,
           idempotencyKey: crypto.randomUUID(),
           netWeightKg: net,
+          grossWeightKg: d.weightEntryMode === "DOCUMENTAL" ? undefined : d.grossWeightKg,
+          tareWeightKg: d.weightEntryMode === "DOCUMENTAL" ? undefined : d.tareWeightKg,
           qualityStatus: "AWAITING_ANALYSIS",
           moisturePercent: d.moisturePercent
             ? Number(d.moisturePercent)
@@ -170,6 +180,8 @@ function Wizard({
     }
   };
   const purchase = o.purchases.find((p) => p.id === d.purchaseId);
+  const purchaseFiscalDocuments = (o.fiscalDocuments ?? []).filter((document) => document.purchaseIds?.includes(d.purchaseId) && document.status === "AUTHORIZED");
+  const selectedFiscalDocument = purchaseFiscalDocuments.find((document) => document.id === d.fiscalDocumentId);
   const contractedKg = Number(purchase?.contractedWeightKg ?? 0);
   const receivedAfterKg = Number(purchase?.receivedKg ?? 0) + net;
   const differenceKg = receivedAfterKg - contractedKg;
@@ -367,6 +379,13 @@ function Wizard({
             )}
             {s === 2 && (
               <>
+                <div className="sm:col-span-2 rounded-xl border border-stone-200 bg-stone-50 p-4">
+                  <p className="text-xs font-semibold">Base do peso de entrada</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <button type="button" onClick={() => set("weightEntryMode", "DOCUMENTAL")} className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold ${d.weightEntryMode === "DOCUMENTAL" ? "border-forest-700 bg-emerald-50 text-forest-900" : "bg-white"}`}>Quantidade fiscal / nominal<span className="mt-1 block text-xs font-normal text-stone-500">Volumes × peso nominal. Use quando a entrada física já ocorreu e o peso está documentado.</span></button>
+                    <button type="button" onClick={() => set("weightEntryMode", "SCALE")} className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold ${d.weightEntryMode === "SCALE" ? "border-forest-700 bg-emerald-50 text-forest-900" : "bg-white"}`}>Pesagem em balança<span className="mt-1 block text-xs font-normal text-stone-500">Peso bruto real − tara.</span></button>
+                  </div>
+                </div>
                 <F
                   l="Acondicionamento"
                   c={
@@ -408,32 +427,36 @@ function Wizard({
                     />
                   }
                 />
-                <F
-                  l="Peso bruto real"
-                  c={
-                    <input
-                      type="number"
-                      className={css}
-                      value={d.grossWeightKg || ""}
-                      onChange={(e) =>
-                        set("grossWeightKg", Number(e.target.value))
+                {d.weightEntryMode === "SCALE" && (
+                  <>
+                    <F
+                      l="Peso bruto real"
+                      c={
+                        <input
+                          type="number"
+                          className={css}
+                          value={d.grossWeightKg || ""}
+                          onChange={(e) =>
+                            set("grossWeightKg", Number(e.target.value))
+                          }
+                        />
                       }
                     />
-                  }
-                />
-                <F
-                  l="Tara"
-                  c={
-                    <input
-                      type="number"
-                      className={css}
-                      value={d.tareWeightKg || ""}
-                      onChange={(e) =>
-                        set("tareWeightKg", Number(e.target.value))
+                    <F
+                      l="Tara"
+                      c={
+                        <input
+                          type="number"
+                          className={css}
+                          value={d.tareWeightKg || ""}
+                          onChange={(e) =>
+                            set("tareWeightKg", Number(e.target.value))
+                          }
+                        />
                       }
                     />
-                  }
-                />
+                  </>
+                )}
                 <Card className="bg-forest-950 p-4 text-white">
                   <small>Peso líquido oficial</small>
                   <b className="block text-xl">{net} kg</b>
@@ -514,17 +537,7 @@ function Wizard({
                 <div className="sm:col-span-2 rounded-xl bg-stone-50 p-4">
                   <b>Compra vinculada:</b> {purchase?.purchaseNumber}
                 </div>
-                <F
-                  l="Nota Fiscal · XML/PDF"
-                  c={
-                    <input
-                      className={css}
-                      value={d.invoiceNumber}
-                      onChange={(e) => set("invoiceNumber", e.target.value)}
-                      placeholder="Número ou referência do arquivo"
-                    />
-                  }
-                />
+                <div className="sm:col-span-2"><F l="NF-e capturada e conciliada" c={<select className={css} value={d.fiscalDocumentId} onChange={(e) => set("fiscalDocumentId", e.target.value)}><option value="">Receber com pendência fiscal</option>{purchaseFiscalDocuments.map((document) => <option key={document.id} value={document.id}>NF-e {document.number ?? "identificada"} · {document.issuerName ?? "emitente"} · {Number(document.totalAmount ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</option>)}</select>}/>{selectedFiscalDocument ? <p className="mt-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">XML autorizado encontrado · chave {selectedFiscalDocument.accessKey}</p> : <p className="mt-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Sem uma NF-e vinculada, o recebimento será registrado com pendência fiscal. <Link href="/notas-entrada" className="font-bold underline">Abrir Notas de entrada</Link></p>}</div>
                 <F
                   l="CT-e / MDF-e / transporte"
                   c={
@@ -627,14 +640,21 @@ export default function Page() {
     Promise.all([
       req<Opt>(`${API}/options`, { credentials: "include" }),
       req<Row[]>(API, { credentials: "include" }),
+      req<{ documents: FiscalDocument[] }>(`${ROOT}/fiscal-inbound`, { credentials: "include" }),
       fetchSessionIdentity(ROOT),
       ])
-      .then(async ([a, b, identity]) => {
-        setO({ ...a, currentUser: identity });
+      .then(async ([a, b, fiscal, identity]) => {
+        setO({ ...a, currentUser: identity, fiscalDocuments: fiscal.documents });
         setRows(b);
       })
       .catch((e) => setErr(String(e)));
   useEffect(() => {
+    const requestedPurchaseId = new URLSearchParams(window.location.search).get("purchaseId");
+    if (requestedPurchaseId) {
+      setSelectedPurchaseId(requestedPurchaseId);
+      setOpen(true);
+      window.history.replaceState({}, "", "/recebimento");
+    }
     void load();
   }, []);
   const kg = useMemo(
@@ -701,7 +721,7 @@ export default function Page() {
           </Card>
         ))}
       </div>
-      {open && o && (
+      {open && o && o.purchases.length > 0 && (
         <Wizard
           o={o}
           initialPurchaseId={selectedPurchaseId}

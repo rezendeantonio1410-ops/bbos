@@ -1,0 +1,180 @@
+.choiceTrail {
+  margin: 0 0 22px;
+  padding: 14px 16px;
+  border: 1px solid #e3ded6;
+  border-radius: 18px;
+  background: #ffffffa8;
+  box-shadow: 0 10px 30px #2d1c1209;
+}
+
+.choiceTrail > small {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .16em;
+  opacity: .48;
+}
+
+.choiceTrail > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+}
+
+.trailStep {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+}
+
+.trailStep > div,
+.trailStep > button {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #ece7df;
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.trailStep > button { cursor: pointer; }
+.trailStep > button:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+
+.trailStep b {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 1px solid #d7d0c6;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  font-size: 9px;
+}
+
+.trailStep span { min-width: 0; display: grid; gap: 2px; }
+.trailStep span small { font-size: 7px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; opacity: .45; }
+.trailStep strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 750; }
+.trailStep > i { align-self: center; margin: 0 -3px 0 1px; color: #b7afa5; font-size: 11px; font-style: normal; }
+.trailDone b { border-color: #173c2e; background: #173c2e; color: #fff; }
+.trailCurrent b { box-shadow: 0 0 0 5px #173c2e14; }
+.trailCurrent strong { color: #173c2e; }
+.trailCoffee { flex: .75; }
+.trailCoffee b { border-color: #173c2e; background: #173c2e; color: #fff; }
+.trailCoffee strong { color: #173c2e; }
+
+.resultHeading {
+  max-width: 620px;
+  font-size: clamp(38px, 4vw, 56px) !important;
+  line-height: 1 !important;
+}
+
+.resultTrail > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.resultTrail .trailStep {
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid #ece7df;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.resultTrail .trailStep > i { display: none; }
+.resultTrail .trailStep strong { white-space: normal; line-height: 1.25; }
+
+.matchReason {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f1f5ef;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.matchReason > small { width: 100%; font-size: 7px; font-weight: 850; letter-spacing: .13em; color: #173c2e; }
+.matchReason span { font-size: 9px; font-weight: 750; }
+.matchReason i { font-size: 9px; font-style: normal; opacity: .35; }
+
+.versatileChoice { grid-column: 1 / -1; min-height: 108px !important; }
+
+.grindGuide {
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px solid #ded8cf;
+  border-radius: 14px;
+  background: #fffdf9;
+}
+
+.grindGuide > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  align-items: end;
+}
+
+.grindGuide > div small {
+  grid-column: 1 / -1;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .13em;
+  color: #173c2e;
+}
+
+.grindGuide > div strong { font-size: 16px; }
+.grindGuide > div b { font-size: 11px; color: #173c2e; }
+.grindGuide > p { margin: 8px 0 0; font-size: 9px; line-height: 1.45; opacity: .7; }
+.grindGuide em { font-style: normal; font-weight: 800; }
+.grindGuide footer { margin-top: 9px; padding-top: 8px; border-top: 1px solid #ece7df; font-size: 8px; line-height: 1.4; }
+.grindGuide footer span { margin-right: 5px; font-weight: 900; letter-spacing: .08em; color: #173c2e; }
+
+@media (max-width: 700px) {
+  .choiceTrail { padding: 10px; margin-bottom: 13px; overflow: hidden; }
+  .choiceTrail > small { margin-bottom: 7px; }
+  .choiceTrail > div { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .trailStep { display: block; }
+  .trailStep > div,
+  .trailStep > button { min-height: 54px; gap: 6px; padding: 6px; }
+  .trailStep > i { display: none; }
+  .trailStep b { width: 23px; height: 23px; flex-basis: 23px; }
+  .trailStep span { display: grid; }
+  .trailStep span small { font-size: 6px; }
+  .trailStep strong { max-width: none; font-size: 8px; line-height: 1.15; white-space: normal; }
+  .trailCoffee { display: none; }
+  .resultHeading { font-size: 36px !important; }
+  .resultTrail > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .resultTrail .trailStep {
+    display: flex;
+    min-height: 58px;
+    padding: 7px 9px;
+  }
+  .resultTrail .trailStep > div,
+  .resultTrail .trailStep > button {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .resultTrail .trailStep span { display: grid; }
+  .resultTrail .trailStep strong { max-width: none; }
+  .versatileChoice { min-height: 100px !important; }
+  .grindGuide > div strong { font-size: 14px; }
+  .matchReason { padding: 10px; }
+}

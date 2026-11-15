@@ -6,6 +6,12 @@ import { Public } from './auth.guard';
 export class HealthController {
   @Get()
   check() {
-    return { status: 'ok', service: 'bbos-api', scope: 'industry', timestamp: new Date().toISOString() };
+    return {
+      status: 'ok',
+      service: process.env.RENDER_SERVICE_NAME ?? 'bbos-api',
+      release: process.env.RENDER_GIT_COMMIT?.slice(0, 12) ?? process.env.BBOS_RELEASE ?? 'local',
+      scope: 'coffee-operating-system',
+      timestamp: new Date().toISOString(),
+    };
   }
 }

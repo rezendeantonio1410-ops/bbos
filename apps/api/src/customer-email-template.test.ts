@@ -1,0 +1,182 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  renderCustomerAccessEmail,
+  renderCustomerEmail,
+  renderOperationsOrderEmail,
+  renderPartnerOrderConfirmedEmail,
+} from "./customer-email-template";
+
+test("renders the approved Bispo transactional email with escaped order data", () => {
+  const html = renderCustomerEmail(
+    {
+      title: "Pagamento confirmado",
+      detail: "Seu pagamento foi aprovado.",
+      eventType: "PAYMENT_CONFIRMED",
+      orderCode: "WEB-20260919-ABC123",
+      trackingUrl: "https://app.bispocoffees.com.br/loja/pedido/1?token=secure",
+      customer: { name: "José Rezende" },
+      delivery: {
+        street: "Rua Caracas",
+        number: "1255",
+        complement: "ap. 1305",
+        district: "Santa Rosa",
+        city: "Londrina",
+        state: "PR",
+        postalCode: "86050070",
+      },
+      items: [
+        {
+          name: "Caramelo",
+          quantity: 1,
+          grind: "Grãos",
+          unitPriceCents: 6800,
+          totalCents: 6800,
+          weightGrams: 500,
+        },
+      ],
+      subtotalCents: 6800,
+      shippingCents: 1590,
+      totalCents: 8390,
+      shippingServiceName: "PAC",
+      carrierName: "Correios",
+      estimatedDeliveryDays: 4,
+    },
+    {
+      logoUrl: "https://cdn.example/logo.png",
+      sealUrl: "https://cdn.example/seal.jpg",
+    },
+  );
+
+  assert.match(html, /Seu café já começou/);
+  assert.match(html, /Selo Bispo True Coffee/);
+  assert.match(html, /Caramelo e chocolate/);
+  assert.match(html, /R\$&nbsp;83,90|R\$\s83,90/);
+  assert.match(html, /86050-070/);
+  assert.match(html, /Acompanhar meu pedido/);
+  assert.doesNotMatch(html, /undefined/);
+});
+
+test("escapes customer-controlled content", () => {
+  const html = renderCustomerEmail(
+    {
+      title: "Pedido recebido",
+      detail: "<script>alert(1)</script>",
+      orderCode: "WEB-1",
+      customer: { name: "<b>José</b>" },
+    },
+    {
+      logoUrl: "https://cdn.example/logo.png",
+      sealUrl: "https://cdn.example/seal.jpg",
+    },
+  );
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /&lt;b&gt;José&lt;\/b&gt;/);
+});
+
+test("renders the access code with the approved transactional identity", () => {
+  const html = renderCustomerAccessEmail(
+    { code: "123456", expiresInMinutes: 10 },
+    {
+      logoUrl: "https://cdn.example/logo.png",
+      sealUrl: "https://cdn.example/seal.jpg",
+    },
+  );
+  assert.match(html, /Selo Bispo True Coffee/);
+  assert.match(html, /Sua relação com o café/);
+  assert.match(html, /123456/);
+  assert.match(html, /José &amp; Suzi/);
+  assert.doesNotMatch(html, /undefined/);
+});
+
+test("renders the paid order preparation email for the Bispo team", () => {
+  const html = renderOperationsOrderEmail(
+    {
+      orderCode: "WEB-20261004-ABC123",
+      eventType: "PAYMENT_CONFIRMED",
+      trackingUrl:
+        "https://loja.bispocoffees.com.br/loja/pedido/order-1?token=secure",
+      customer: {
+        name: "José Rezende",
+        phone: "43999999999",
+        email: "jose@example.com",
+      },
+      delivery: {
+        street: "Rua Caracas",
+        number: "1255",
+        city: "Londrina",
+        state: "PR",
+        postalCode: "86050070",
+      },
+      items: [
+        {
+          name: "Caramelo",
+          quantity: 2,
+          grind: "Grãos",
+          totalCents: 13600,
+        },
+      ],
+      totalCents: 15100,
+    },
+    {
+      logoUrl: "https://cdn.example/logo.png",
+      sealUrl: "https://cdn.example/seal.jpg",
+    },
+  );
+
+  assert.match(html, /Pedido liberado/);
+  assert.match(html, /Preparar/);
+  assert.match(html, /Caramelo/);
+  assert.match(html, /José Rezende/);
+  assert.match(html, /jose@example\.com/);
+  assert.match(html, /Abrir pedido/);
+  assert.doesNotMatch(html, /undefined/);
+});
+
+test("renders the confirmed order and commission for the sales partner", () => {
+  const html = renderPartnerOrderConfirmedEmail(
+    {
+      partnerName: "Gustavo <Nivov>",
+      orderCode: "B-2026-000123",
+      customerName: "Cliente & Companhia",
+      orderDate: "2026-10-12T15:00:00.000Z",
+      paymentTerms: "À vista",
+      freightResponsibility: "PICKUP",
+      packageQuantity: 37,
+      commissionMode: "PER_PACKAGE",
+      commissionPerPackageCents: 250,
+      commissionAmountCents: 9250,
+      totalCents: 172200,
+      subtotalCents: 172200,
+      discountCents: 0,
+      freightCents: 0,
+      items: [
+        {
+          name: "Café Gourmet White Label",
+          quantity: 37,
+          totalCents: 172200,
+        },
+      ],
+    },
+    {
+      logoUrl: "https://cdn.example/logo.png",
+      sealUrl: "https://cdn.example/seal.jpg",
+    },
+  );
+
+  assert.match(html, /Pedido confirmado/);
+  assert.match(html, /Prezado\(a\) Gustavo &lt;Nivov&gt;/);
+  assert.match(html, /Comissão referente a este pedido/);
+  assert.match(html, /Cópia do pedido do cliente/);
+  assert.match(html, /Pedido-B-2026-000123\.pdf/);
+  assert.match(html, /Atenciosamente/);
+  assert.match(html, /B-2026-000123/);
+  assert.match(html, /37 pacotes/);
+  assert.match(html, /R\$&nbsp;2,50|R\$\s2,50/);
+  assert.match(html, /R\$&nbsp;92,50|R\$\s92,50/);
+  assert.match(html, /Cliente &amp; Companhia/);
+  assert.match(html, /Gustavo/);
+  assert.doesNotMatch(html, /<Nivov>/);
+  assert.doesNotMatch(html, /undefined/);
+});

@@ -1,3 +1,5 @@
+import { prisma } from "@bbos/database";
+import { normalizeCustomerPhone } from "@bbos/shared";
 import {
   BadRequestException,
   Body,
@@ -10,19 +12,42 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import { PrismaClient } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService } from "./auth.service";
+import {
+  assessCustomerFiscalReadiness,
+  customerFiscalReadinessMessage,
+} from "./customer-fiscal-readiness";
+import { parseCustomerVisitInput } from "./customer-visit-input";
+import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 
-const CREDIT_STATUSES = ["NOT_ANALYZED", "UNDER_REVIEW", "APPROVED", "REJECTED"] as const;
+const CREDIT_STATUSES = [
+  "NOT_ANALYZED",
+  "UNDER_REVIEW",
+  "APPROVED",
+  "REJECTED",
+] as const;
 const isCashTerm = (value: unknown) => {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return !normalized || normalized === "à vista" || normalized === "a vista";
+};
+const optionalText = (value: unknown) => {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+};
+const internationalPhone = (value: unknown) => {
+  try {
+    return normalizeCustomerPhone(value);
+  } catch {
+    throw new BadRequestException("Informe um celular válido com DDD.");
+  }
 };
 
 @Controller("customers")
 export class CustomersController {
-  private readonly db = new PrismaClient();
+  private readonly db = prisma;
 
   constructor(private readonly auth: AuthService) {}
 
@@ -35,7 +60,14 @@ export class CustomersController {
   private async health(companyId: string, customerId?: string) {
     return this.db.$queryRawUnsafe<any[]>(
       `SELECT c.id,
-              COALESCE(SUM(CASE WHEN ar.status NOT IN ('PAID','CANCELLED') THEN ar."openAmount" ELSE 0 END),0)::numeric AS "openReceivables",
+              (
+                COALESCE(SUM(CASE WHEN ar.status NOT IN ('PAID','CANCELLED') THEN ar."openAmount" ELSE 0 END),0)
+                + COALESCE((SELECT SUM(pending."totalAmount") FROM "SalesOrder" pending
+                             WHERE pending."customerId"=c.id
+                               AND pending."paymentType"='TERM'
+                               AND pending.status IN ('CONFIRMED','RESERVED','PICKING','READY_TO_SHIP','INVOICED','IN_PRODUCTION','SHIPPED')
+                               AND NOT EXISTS (SELECT 1 FROM "AccountsReceivable" ar2 WHERE ar2."salesOrderId"=pending.id)),0)
+              )::numeric AS "openReceivables",
               COALESCE(SUM(CASE WHEN ar.status NOT IN ('PAID','CANCELLED') AND ar."dueDate" < NOW() AND ar."openAmount" > 0 THEN ar."openAmount" ELSE 0 END),0)::numeric AS "overdueAmount",
               COUNT(CASE WHEN ar.status NOT IN ('PAID','CANCELLED') AND ar."dueDate" < NOW() AND ar."openAmount" > 0 THEN 1 END)::int AS "overdueCount",
               COALESCE(MAX(CASE WHEN ar.status NOT IN ('PAID','CANCELLED') AND ar."dueDate" < NOW() AND ar."openAmount" > 0 THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - ar."dueDate"))/86400) END),0)::int AS "maxDaysOverdue"
@@ -56,33 +88,45 @@ export class CustomersController {
     const availableCredit = Math.max(0, creditLimit - openReceivables);
 
     let health = "HEALTHY";
-    let guidance = customer.creditStatus === "APPROVED"
-      ? `Crédito vigente de ${creditLimit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Disponível ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
-      : "Cliente apto para compras à vista.";
+    let guidance =
+      customer.creditStatus === "APPROVED"
+        ? `Crédito vigente de ${creditLimit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Disponível ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
+        : "Cliente apto para compras à vista.";
     if (overdueCount > 0) {
       health = maxDaysOverdue >= 30 ? "BLOCKED" : "ATTENTION";
-      guidance = maxDaysOverdue >= 30
-        ? `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Venda a prazo exige análise.`
-        : `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Revise antes de vender a prazo.`;
-    } else if (customer.creditStatus === "APPROVED" && customer.creditReviewPending) {
+      guidance =
+        maxDaysOverdue >= 30
+          ? `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Venda a prazo exige análise.`
+          : `Há ${overdueCount} título(s) vencido(s), com atraso de até ${maxDaysOverdue} dias. Revise antes de vender a prazo.`;
+    } else if (
+      customer.creditStatus === "APPROVED" &&
+      customer.creditReviewPending
+    ) {
       health = "HEALTHY";
       guidance = `Crédito vigente continua válido (${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} disponível). Há uma revisão de limite em análise.`;
     } else if (customer.creditStatus === "UNDER_REVIEW") {
       health = "ATTENTION";
-      guidance = "Primeira análise de crédito pendente. Compras à vista continuam liberadas.";
+      guidance =
+        "Primeira análise de crédito pendente. Compras à vista continuam liberadas.";
     } else if (customer.creditStatus === "REJECTED") {
       health = "BLOCKED";
-      guidance = "Crédito não aprovado. Compras à vista continuam liberadas; venda a prazo permanece bloqueada.";
+      guidance =
+        "Crédito não aprovado. Compras à vista continuam liberadas; venda a prazo permanece bloqueada.";
     } else if (customer.creditStatus === "NOT_ANALYZED") {
       health = "INFO";
-      guidance = "Cliente apto para compras à vista. Para comprar a prazo, solicite aprovação de crédito.";
+      guidance =
+        "Cliente apto para compras à vista. Para comprar a prazo, solicite aprovação de crédito.";
     }
 
     return {
       ...customer,
+      fiscalReadiness: assessCustomerFiscalReadiness(customer),
       creditReviewPending: Boolean(customer.creditReviewPending),
       cashPurchaseAllowed: customer.active !== false,
-      termPurchaseAllowed: customer.active !== false && customer.creditStatus === "APPROVED" && overdueCount === 0,
+      termPurchaseAllowed:
+        customer.active !== false &&
+        customer.creditStatus === "APPROVED" &&
+        overdueCount === 0,
       financialHealth: {
         health,
         guidance,
@@ -100,8 +144,10 @@ export class CustomersController {
     const actor = await this.actor(request);
     const [customers, health] = await Promise.all([
       this.db.$queryRawUnsafe<any[]>(
-        `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId", c.segment,
-                c.email, c.phone, c."postalCode", c.address, c.district, c.city, c.state,
+        `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId",
+                c."countryCode", c."countryName", c."foreignTaxId", c.segment,
+                c.email, c.phone, c."postalCode", c.address, c."addressNumber", c."addressComplement",
+                c.district, c.city, c.state, c."stateRegistration", c."stateRegistrationType",
                 c."paymentTerms", c.active, c."creditStatus", c."creditLimit", c."creditNotes",
                 c."creditReviewedAt", c."creditReviewedBy", c."createdAt", c."updatedAt",
                 EXISTS (
@@ -127,14 +173,26 @@ export class CustomersController {
       this.health(actor.companyId),
     ]);
     const byId = new Map(health.map((item) => [item.id, item]));
-    return customers.map((customer) => this.decorate(customer, byId.get(customer.id)));
+    return customers.map((customer) => {
+      const decorated = this.decorate(customer, byId.get(customer.id));
+      if (actor.role !== "SALES") return decorated;
+      const salesView = { ...decorated };
+      delete salesView.creditNotes;
+      delete salesView.creditReviewedBy;
+      return salesView;
+    });
   }
 
   @Get(":id/health")
   async getHealth(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
-    const customer = (await this.db.$queryRawUnsafe<any[]>(
-      `SELECT c.id, c.name, c."tradeName", c.active, c."creditStatus", c."creditLimit", c."paymentTerms",
+    const customer = (
+      await this.db.$queryRawUnsafe<any[]>(
+        `SELECT c.id, c.name, c."legalName", c."tradeName", c."taxId",
+              c."countryCode", c."countryName", c."foreignTaxId", c."postalCode", c.address,
+              c."addressNumber", c."addressComplement", c.district, c.city, c.state,
+              c."stateRegistration", c."stateRegistrationType",
+              c.active, c."creditStatus", c."creditLimit", c."paymentTerms",
               EXISTS (
                 SELECT 1 FROM "CustomerCreditEvent" req
                  WHERE req."customerId"=c.id AND req."companyId"=c."companyId" AND req."eventType"='REQUEST'
@@ -144,8 +202,11 @@ export class CustomersController {
                         AND dec."createdAt" > req."createdAt"
                    )
               ) AS "creditReviewPending"
-         FROM "Customer" c WHERE c.id=$1 AND c."companyId"=$2`, id, actor.companyId,
-    ))[0];
+         FROM "Customer" c WHERE c.id=$1 AND c."companyId"=$2`,
+        id,
+        actor.companyId,
+      )
+    )[0];
     if (!customer) throw new NotFoundException("Cliente não encontrado.");
     const financial = (await this.health(actor.companyId, id))[0];
     return this.decorate(customer, financial);
@@ -154,9 +215,11 @@ export class CustomersController {
   @Get(":id/credit-history")
   async creditHistory(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
-    const customer = await this.db.customer.findFirst({ where: { id, companyId: actor.companyId } });
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId },
+    });
     if (!customer) throw new NotFoundException("Cliente não encontrado.");
-    return this.db.$queryRawUnsafe<any[]>(
+    const events = await this.db.$queryRawUnsafe<any[]>(
       `SELECT id, "eventType", "requestedLimit", "requestedTerms", "monthlyVolume", rationale,
               "decisionStatus", "decidedLimit", "decisionTerms", notes,
               "actorId", "actorName", "actorRole", "createdAt"
@@ -166,50 +229,246 @@ export class CustomersController {
       actor.companyId,
       id,
     );
+    if (actor.role !== "SALES") return events;
+    return events.map((event) => {
+      const salesView = { ...event };
+      delete salesView.notes;
+      delete salesView.actorId;
+      delete salesView.actorName;
+      delete salesView.actorRole;
+      return salesView;
+    });
+  }
+
+  @Get(":id/sales-history")
+  async salesHistory(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT so.id,COALESCE(so."orderNumber",so.code) AS "orderNumber",
+              so.status::text AS status,so."orderedAt",so."totalAmount",so."paymentType",
+              so."paymentTermsSnapshot",ar.status::text AS "paymentStatus",ar."dueDate",
+              ar."openAmount",ar."paymentDate",
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'productName',item."productName",'sku',item.sku,'quantity',item.quantity,
+                  'unitPrice',item."unitPrice",'totalAmount',item."totalAmount"
+                ) ORDER BY item."createdAt")
+                  FROM "SalesOrderItem" item
+                 WHERE item."salesOrderId"=so.id
+              ),'[]'::json) AS items
+         FROM "SalesOrder" so
+         LEFT JOIN "AccountsReceivable" ar
+           ON ar."salesOrderId"=so.id AND ar."companyId"=so."companyId"
+        WHERE so."companyId"=$1 AND so."customerId"=$2
+          AND (
+            NOT $3::boolean
+            OR (
+              so."externalOrderId" IS NULL
+              AND so."importedAt" IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM "SalesChannel" channel
+                 WHERE channel.id=so."salesChannelId"
+                   AND (channel.type::text='ECOMMERCE' OR channel."platformCode" IS NOT NULL)
+              )
+            )
+          )
+        ORDER BY so."orderedAt" DESC,so."createdAt" DESC
+        LIMIT 200`,
+      actor.companyId,
+      id,
+      actor.role === "SALES",
+    );
+  }
+
+  @Get(":id/visits")
+  async visitHistory(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT v.id,v."recordedByName",v."visitAt",v."contactName",v.purpose,v.outcome,
+              v.facts,v."nextAction",v."nextActionAt",v."createdAt",
+              partner.name AS "partnerName"
+         FROM "CustomerVisit" v
+         LEFT JOIN "StorefrontPartner" partner ON partner.id=v."storefrontPartnerId"
+        WHERE v."companyId"=$1 AND v."customerId"=$2
+        ORDER BY v."visitAt" DESC,v."createdAt" DESC
+        LIMIT 200`,
+      actor.companyId,
+      id,
+    );
+  }
+
+  @Get("visits/recent")
+  async recentVisits(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.db.$queryRawUnsafe<any[]>(
+      `SELECT v.id,v."customerId",v."recordedByName",v."visitAt",v."contactName",
+              v.purpose,v.outcome,v.facts,v."nextAction",v."nextActionAt",v."createdAt",
+              c.name AS "customerName",c."tradeName" AS "customerTradeName"
+         FROM "CustomerVisit" v
+         JOIN "Customer" c ON c.id=v."customerId" AND c."companyId"=v."companyId"
+        WHERE v."companyId"=$1
+        ORDER BY v."visitAt" DESC,v."createdAt" DESC
+        LIMIT 300`,
+      actor.companyId,
+    );
+  }
+
+  @Post(":id/visits")
+  async createVisit(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const actor = await this.actor(request);
+    const customer = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId, active: true },
+      select: { id: true },
+    });
+    if (!customer) {
+      throw new NotFoundException("Cliente ativo não encontrado.");
+    }
+
+    const input = parseCustomerVisitInput(body);
+    const visitId = randomUUID();
+    await this.db.$executeRawUnsafe(
+      `INSERT INTO "CustomerVisit"
+        (id,"companyId","customerId","recordedByUserId","recordedByName",
+         "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
+      visitId,
+      actor.companyId,
+      id,
+      actor.id ?? null,
+      actor.name,
+      input.visitAt,
+      input.contactName,
+      input.purpose,
+      input.outcome,
+      input.facts,
+      input.nextAction,
+      input.nextActionAt,
+    );
+    return { id: visitId, ok: true };
   }
 
   @Post()
   async create(@Req() request: any, @Body() body: Record<string, any>) {
     const actor = await this.actor(request);
-    const name = String(body.name ?? body.tradeName ?? body.legalName ?? "").trim();
-    if (!name) throw new BadRequestException("Nome do cliente é obrigatório.");
-    const taxId = body.taxId ? String(body.taxId).trim() : null;
+    const fiscalReadiness = assessCustomerFiscalReadiness({
+      ...body,
+      name: body.name ?? body.tradeName ?? body.legalName,
+    });
+    const fiscalError = customerFiscalReadinessMessage({
+      ...body,
+      name: body.name ?? body.tradeName ?? body.legalName,
+    });
+    if (fiscalError) throw new BadRequestException(fiscalError);
+    const fiscal = fiscalReadiness.normalized;
+    const name = fiscal.name;
+    const taxId = fiscal.taxId;
     if (taxId) {
-      const duplicate = await this.db.customer.findFirst({ where: { companyId: actor.companyId, taxId } });
-      if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
+      const duplicate = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1
+            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$2
+          LIMIT 1`,
+        actor.companyId,
+        taxId,
+      );
+      if (duplicate[0])
+        throw new BadRequestException(
+          "CPF/CNPJ já cadastrado para esta empresa.",
+        );
+    }
+    if (fiscal.isForeign && fiscal.foreignTaxId) {
+      const duplicate = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1 AND UPPER("countryCode")=$2
+            AND UPPER(COALESCE("foreignTaxId",''))=UPPER($3)
+          LIMIT 1`,
+        actor.companyId,
+        fiscal.countryCode,
+        fiscal.foreignTaxId,
+      );
+      if (duplicate[0]) {
+        throw new BadRequestException(
+          "Identificação fiscal estrangeira já cadastrada para este país.",
+        );
+      }
     }
     const paymentTerms = body.paymentTerms?.trim() || "À vista";
-    const initialCreditStatus = isCashTerm(paymentTerms) ? "NOT_ANALYZED" : "UNDER_REVIEW";
+    const initialCreditStatus = isCashTerm(paymentTerms)
+      ? "NOT_ANALYZED"
+      : "UNDER_REVIEW";
     const id = randomUUID();
     const rows = await this.db.$queryRawUnsafe<any[]>(
       `INSERT INTO "Customer"
-        (id, "companyId", name, "legalName", "tradeName", "taxId", segment,
-         email, phone, "postalCode", address, district, city, state,
+        (id, "companyId", name, "legalName", "tradeName", "taxId", "countryCode", "countryName", "foreignTaxId", segment,
+         email, phone, "postalCode", address, "addressNumber", "addressComplement", district, city, state,
+         "stateRegistration", "stateRegistrationType",
          "paymentTerms", active, "creditStatus", "creditLimit", "createdAt", "updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,0,NOW(),NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,0,NOW(),NOW())
        RETURNING *`,
-      id, actor.companyId, name,
-      body.legalName?.trim() || null, body.tradeName?.trim() || null, taxId,
-      body.segment?.trim() || null, body.email?.trim() || null, body.phone?.trim() || null,
-      body.postalCode?.trim() || null, body.address?.trim() || null, body.district?.trim() || null,
-      body.city?.trim() || null, body.state?.trim() || null, paymentTerms,
-      body.active !== false, initialCreditStatus,
+      id,
+      actor.companyId,
+      name,
+      fiscal.legalName || null,
+      body.tradeName?.trim() || null,
+      taxId || null,
+      fiscal.countryCode,
+      fiscal.countryName,
+      fiscal.foreignTaxId || null,
+      optionalText(body.segment),
+      optionalText(body.email),
+      internationalPhone(body.phone),
+      fiscal.postalCode,
+      fiscal.address,
+      fiscal.addressNumber,
+      fiscal.addressComplement || null,
+      fiscal.district,
+      fiscal.city,
+      fiscal.state,
+      fiscal.stateRegistration || null,
+      fiscal.stateRegistrationType,
+      paymentTerms,
+      body.active !== false,
+      initialCreditStatus,
     );
     return this.decorate(rows[0], null);
   }
 
   @Post(":id/credit-request")
-  async requestCredit(@Param("id") id: string, @Req() request: any, @Body() body: Record<string, any>) {
+  async requestCredit(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Record<string, any>,
+  ) {
     const actor = await this.actor(request);
-    const customer = (await this.db.$queryRawUnsafe<any[]>(
-      `SELECT id, "companyId", "creditStatus", "creditLimit", "paymentTerms" FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
-      id,
-      actor.companyId,
-    ))[0];
+    const customer = (
+      await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id,name,"companyId","creditStatus","creditLimit","paymentTerms"
+           FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+      )
+    )[0];
     if (!customer) throw new NotFoundException("Cliente não encontrado.");
 
-    const pending = (await this.db.$queryRawUnsafe<any[]>(
-      `SELECT EXISTS (
+    const pending = (
+      await this.db.$queryRawUnsafe<any[]>(
+        `SELECT EXISTS (
          SELECT 1 FROM "CustomerCreditEvent" req
           WHERE req."customerId"=$1 AND req."companyId"=$2 AND req."eventType"='REQUEST'
             AND NOT EXISTS (
@@ -218,33 +477,60 @@ export class CustomersController {
                  AND dec."createdAt" > req."createdAt"
             )
        ) AS pending`,
-      id,
-      actor.companyId,
-    ))[0]?.pending;
-    if (pending) throw new BadRequestException("Já existe uma solicitação de crédito aguardando decisão.");
+        id,
+        actor.companyId,
+      )
+    )[0]?.pending;
+    if (pending)
+      throw new BadRequestException(
+        "Já existe uma solicitação de crédito aguardando decisão.",
+      );
 
     const requestedLimit = Number(body.requestedLimit ?? 0);
     if (!Number.isFinite(requestedLimit) || requestedLimit <= 0) {
-      throw new BadRequestException("Informe um limite de crédito solicitado maior que zero.");
+      throw new BadRequestException(
+        "Informe um limite de crédito solicitado maior que zero.",
+      );
     }
     const requestedTerms = String(body.requestedTerms ?? "").trim();
-    if (!requestedTerms) throw new BadRequestException("Informe a condição de pagamento solicitada.");
-    const monthlyVolume = body.monthlyVolume === undefined || body.monthlyVolume === "" ? null : Number(body.monthlyVolume);
-    if (monthlyVolume !== null && (!Number.isFinite(monthlyVolume) || monthlyVolume < 0)) {
+    if (!requestedTerms)
+      throw new BadRequestException(
+        "Informe a condição de pagamento solicitada.",
+      );
+    const monthlyVolume =
+      body.monthlyVolume === undefined || body.monthlyVolume === ""
+        ? null
+        : Number(body.monthlyVolume);
+    if (
+      monthlyVolume !== null &&
+      (!Number.isFinite(monthlyVolume) || monthlyVolume < 0)
+    ) {
       throw new BadRequestException("Volume mensal estimado inválido.");
     }
     const rationale = String(body.rationale ?? "").trim();
-    if (!rationale) throw new BadRequestException("Informe a justificativa da solicitação de crédito.");
+    if (!rationale)
+      throw new BadRequestException(
+        "Informe a justificativa da solicitação de crédito.",
+      );
 
     const keepsCurrentApproval = customer.creditStatus === "APPROVED";
+    const requestEventId = randomUUID();
     await this.db.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(
         `INSERT INTO "CustomerCreditEvent"
           (id, "companyId", "customerId", "eventType", "requestedLimit", "requestedTerms", "monthlyVolume", rationale,
            "actorId", "actorName", "actorRole", "createdAt")
          VALUES ($1,$2,$3,'REQUEST',$4,$5,$6,$7,$8,$9,$10,NOW())`,
-        randomUUID(), actor.companyId, id, requestedLimit, requestedTerms, monthlyVolume, rationale,
-        actor.id ?? null, actor.name, actor.role ?? null,
+        requestEventId,
+        actor.companyId,
+        id,
+        requestedLimit,
+        requestedTerms,
+        monthlyVolume,
+        rationale,
+        actor.id ?? null,
+        actor.name,
+        actor.role ?? null,
       );
       if (!keepsCurrentApproval) {
         await tx.$executeRawUnsafe(
@@ -254,44 +540,167 @@ export class CustomersController {
           actor.companyId,
         );
       }
+      const notificationMessage = `${actor.name} solicitou ${requestedLimit.toLocaleString(
+        "pt-BR",
+        { style: "currency", currency: "BRL" },
+      )} de crédito para ${customer.name}, na condição ${requestedTerms}.`;
+      for (const targetRole of ["ADMIN", "EXECUTIVE"]) {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "OperationalNotification"
+            (id,"companyId",type,title,message,"targetRole","createdAt")
+           VALUES ($1,$2,$3,'Crédito aguardando decisão',$4,$5,NOW())`,
+          randomUUID(),
+          actor.companyId,
+          `CREDIT_REQUEST:${id}:${targetRole}:${requestEventId}`,
+          notificationMessage,
+          targetRole,
+        );
+      }
     });
 
-    return { ok: true, status: keepsCurrentApproval ? "APPROVED" : "UNDER_REVIEW", creditReviewPending: true };
+    return {
+      ok: true,
+      status: keepsCurrentApproval ? "APPROVED" : "UNDER_REVIEW",
+      creditReviewPending: true,
+    };
   }
 
   @Patch(":id")
-  async update(@Param("id") id: string, @Req() request: any, @Body() body: Record<string, any>) {
+  async update(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Record<string, any>,
+  ) {
     const actor = await this.actor(request);
-    const existing = await this.db.customer.findFirst({ where: { id, companyId: actor.companyId } });
+    const existing = await this.db.customer.findFirst({
+      where: { id, companyId: actor.companyId },
+    });
     if (!existing) throw new NotFoundException("Cliente não encontrado.");
-    const current = (await this.db.$queryRawUnsafe<any[]>(`SELECT * FROM "Customer" WHERE id=$1 AND "companyId"=$2`, id, actor.companyId))[0];
-    const name = String(body.name ?? current.name).trim();
-    if (!name) throw new BadRequestException("Nome do cliente é obrigatório.");
-    const taxId = body.taxId === undefined ? current.taxId : (body.taxId ? String(body.taxId).trim() : null);
-    if (taxId && taxId !== current.taxId) {
-      const duplicate = await this.db.customer.findFirst({ where: { companyId: actor.companyId, taxId, NOT: { id } } });
-      if (duplicate) throw new BadRequestException("CPF/CNPJ já cadastrado para esta empresa.");
+    const current = (
+      await this.db.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+      )
+    )[0];
+    const fiscalReadiness = assessCustomerFiscalReadiness({
+      name: body.name === undefined ? current.name : body.name,
+      legalName:
+        body.legalName === undefined ? current.legalName : body.legalName,
+      taxId: body.taxId === undefined ? current.taxId : body.taxId,
+      countryCode:
+        body.countryCode === undefined ? current.countryCode : body.countryCode,
+      countryName:
+        body.countryName === undefined ? current.countryName : body.countryName,
+      foreignTaxId:
+        body.foreignTaxId === undefined
+          ? current.foreignTaxId
+          : body.foreignTaxId,
+      postalCode:
+        body.postalCode === undefined ? current.postalCode : body.postalCode,
+      address: body.address === undefined ? current.address : body.address,
+      addressNumber:
+        body.addressNumber === undefined
+          ? current.addressNumber
+          : body.addressNumber,
+      addressComplement:
+        body.addressComplement === undefined
+          ? current.addressComplement
+          : body.addressComplement,
+      district: body.district === undefined ? current.district : body.district,
+      city: body.city === undefined ? current.city : body.city,
+      state: body.state === undefined ? current.state : body.state,
+      stateRegistration:
+        body.stateRegistration === undefined
+          ? current.stateRegistration
+          : body.stateRegistration,
+      stateRegistrationType:
+        body.stateRegistrationType === undefined
+          ? current.stateRegistrationType
+          : body.stateRegistrationType,
+    });
+    if (!fiscalReadiness.ready) {
+      throw new BadRequestException(
+        `Complete o cadastro fiscal do cliente antes de salvar: ${fiscalReadiness.issues.join(", ")}.`,
+      );
     }
-    const paymentTerms = body.paymentTerms === undefined ? current.paymentTerms : (body.paymentTerms?.trim() || "À vista");
+    const fiscal = fiscalReadiness.normalized;
+    const name = fiscal.name;
+    const taxId = fiscal.taxId;
+    if (taxId && taxId !== current.taxId) {
+      const duplicate = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1 AND id<>$2
+            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$3
+          LIMIT 1`,
+        actor.companyId,
+        id,
+        taxId,
+      );
+      if (duplicate[0])
+        throw new BadRequestException(
+          "CPF/CNPJ já cadastrado para esta empresa.",
+        );
+    }
+    if (fiscal.isForeign && fiscal.foreignTaxId) {
+      const duplicate = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1 AND id<>$2 AND UPPER("countryCode")=$3
+            AND UPPER(COALESCE("foreignTaxId",''))=UPPER($4)
+          LIMIT 1`,
+        actor.companyId,
+        id,
+        fiscal.countryCode,
+        fiscal.foreignTaxId,
+      );
+      if (duplicate[0]) {
+        throw new BadRequestException(
+          "Identificação fiscal estrangeira já cadastrada para este país.",
+        );
+      }
+    }
+    const paymentTerms =
+      body.paymentTerms === undefined
+        ? current.paymentTerms
+        : body.paymentTerms?.trim() || "À vista";
     const needsCreditApproval = !isCashTerm(paymentTerms);
-    const nextCreditStatus = needsCreditApproval && current.creditStatus !== "APPROVED" ? "UNDER_REVIEW" : current.creditStatus;
+    const nextCreditStatus =
+      needsCreditApproval && current.creditStatus !== "APPROVED"
+        ? "UNDER_REVIEW"
+        : current.creditStatus;
     const rows = await this.db.$queryRawUnsafe<any[]>(
-      `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6, segment=$7,
-         email=$8, phone=$9, "postalCode"=$10, address=$11, district=$12, city=$13, state=$14,
-         "paymentTerms"=$15, active=$16, "creditStatus"=$17, "updatedAt"=NOW()
+      `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6,
+         "countryCode"=$7, "countryName"=$8, "foreignTaxId"=$9, segment=$10,
+         email=$11, phone=$12, "postalCode"=$13, address=$14, "addressNumber"=$15,
+         "addressComplement"=$16, district=$17, city=$18, state=$19,
+         "stateRegistration"=$20, "stateRegistrationType"=$21,
+         "paymentTerms"=$22, active=$23, "creditStatus"=$24, "updatedAt"=NOW()
        WHERE id=$1 AND "companyId"=$2 RETURNING *`,
-      id, actor.companyId, name,
-      body.legalName === undefined ? current.legalName : (body.legalName?.trim() || null),
-      body.tradeName === undefined ? current.tradeName : (body.tradeName?.trim() || null),
-      taxId,
-      body.segment === undefined ? current.segment : (body.segment?.trim() || null),
-      body.email === undefined ? current.email : (body.email?.trim() || null),
-      body.phone === undefined ? current.phone : (body.phone?.trim() || null),
-      body.postalCode === undefined ? current.postalCode : (body.postalCode?.trim() || null),
-      body.address === undefined ? current.address : (body.address?.trim() || null),
-      body.district === undefined ? current.district : (body.district?.trim() || null),
-      body.city === undefined ? current.city : (body.city?.trim() || null),
-      body.state === undefined ? current.state : (body.state?.trim() || null),
+      id,
+      actor.companyId,
+      name,
+      fiscal.legalName || null,
+      body.tradeName === undefined
+        ? current.tradeName
+        : body.tradeName?.trim() || null,
+      taxId || null,
+      fiscal.countryCode,
+      fiscal.countryName,
+      fiscal.foreignTaxId || null,
+      body.segment === undefined
+        ? current.segment
+        : body.segment?.trim() || null,
+      body.email === undefined ? current.email : body.email?.trim() || null,
+      body.phone === undefined ? current.phone : internationalPhone(body.phone),
+      fiscal.postalCode,
+      fiscal.address,
+      fiscal.addressNumber,
+      fiscal.addressComplement || null,
+      fiscal.district,
+      fiscal.city,
+      fiscal.state,
+      fiscal.stateRegistration || null,
+      fiscal.stateRegistrationType,
       paymentTerms,
       body.active === undefined ? current.active : Boolean(body.active),
       nextCreditStatus,
@@ -301,26 +710,41 @@ export class CustomersController {
   }
 
   @Patch(":id/credit")
-  async credit(@Param("id") id: string, @Req() request: any, @Body() body: Record<string, any>) {
+  async credit(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Record<string, any>,
+  ) {
     const actor = await this.actor(request);
-    if (!["ADMIN", "EXECUTIVE", "FINANCE"].includes(actor.role)) {
-      throw new UnauthorizedException("A análise de crédito é restrita à administração/financeiro.");
+    if (!isDesignatedTermCreditApprover(actor)) {
+      throw new UnauthorizedException(
+        "Somente José ou Suzi podem aprovar ou rejeitar crédito.",
+      );
     }
     const status = String(body.status ?? "").toUpperCase();
-    if (!CREDIT_STATUSES.includes(status as any)) throw new BadRequestException("Status de crédito inválido.");
+    if (!CREDIT_STATUSES.includes(status as any))
+      throw new BadRequestException("Status de crédito inválido.");
     const limit = Number(body.creditLimit ?? 0);
-    if (!Number.isFinite(limit) || limit < 0) throw new BadRequestException("Limite de crédito inválido.");
+    if (!Number.isFinite(limit) || limit < 0)
+      throw new BadRequestException("Limite de crédito inválido.");
     const decisionTerms = String(body.paymentTerms ?? "").trim() || null;
     const notes = String(body.notes ?? "").trim() || null;
 
     let updated: any;
+    const decisionEventId = randomUUID();
     await this.db.$transaction(async (tx) => {
       const rows = await tx.$queryRawUnsafe<any[]>(
         `UPDATE "Customer" SET "creditStatus"=$3, "creditLimit"=$4, "creditNotes"=$5,
            "creditReviewedAt"=NOW(), "creditReviewedBy"=$6,
            "paymentTerms"=COALESCE($7,"paymentTerms"), "updatedAt"=NOW()
          WHERE id=$1 AND "companyId"=$2 RETURNING *`,
-        id, actor.companyId, status, limit, notes, actor.name, decisionTerms,
+        id,
+        actor.companyId,
+        status,
+        limit,
+        notes,
+        actor.name,
+        decisionTerms,
       );
       if (!rows.length) throw new NotFoundException("Cliente não encontrado.");
       updated = rows[0];
@@ -329,8 +753,31 @@ export class CustomersController {
           (id, "companyId", "customerId", "eventType", "decisionStatus", "decidedLimit", "decisionTerms", notes,
            "actorId", "actorName", "actorRole", "createdAt")
          VALUES ($1,$2,$3,'DECISION',$4,$5,$6,$7,$8,$9,$10,NOW())`,
-        randomUUID(), actor.companyId, id, status, limit, decisionTerms, notes,
-        actor.id ?? null, actor.name, actor.role ?? null,
+        decisionEventId,
+        actor.companyId,
+        id,
+        status,
+        limit,
+        decisionTerms,
+        notes,
+        actor.id ?? null,
+        actor.name,
+        actor.role ?? null,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "OperationalNotification"
+          (id,"companyId",type,title,message,"targetRole","createdAt")
+         VALUES ($1,$2,$3,$4,$5,'SALES',NOW())`,
+        randomUUID(),
+        actor.companyId,
+        `CREDIT_DECISION:${id}:${decisionEventId}`,
+        status === "APPROVED"
+          ? "Crédito aprovado"
+          : "Decisão de crédito registrada",
+        `${actor.name} definiu o crédito de ${updated.name} como ${status === "APPROVED" ? "aprovado" : status === "REJECTED" ? "reprovado" : "em análise"}, com limite de ${limit.toLocaleString(
+          "pt-BR",
+          { style: "currency", currency: "BRL" },
+        )}.`,
       );
     });
 
