@@ -22,6 +22,8 @@ import { BlingOutboxService } from "./integrations/bling/bling-outbox.service";
 import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
 import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.service";
+import { MercadoPagoService } from "./mercado-pago.service";
+import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -38,7 +40,139 @@ export class IntegrationsController {
     private readonly blingCatalogSync: BlingCatalogSyncService,
     private readonly melhorEnvioAuth: MelhorEnvioAuthService,
     private readonly mercadoLivre: MercadoLivreService,
+    private readonly mercadoPago: MercadoPagoService,
   ) {}
+
+  @Get("overview")
+  async overview(@Req() request: any) {
+    const actor = await this.actor(request);
+    const [integrations, queueRows, webhookRows, customers] =
+      await Promise.all([
+        this.database
+          .$queryRawUnsafe<any[]>(
+            `SELECT provider,status,"providerAccountId","connectedAt","lastSyncAt","lastError","tokenExpiresAt"
+               FROM "ExternalIntegration"
+              WHERE "companyId"=$1`,
+            actor.companyId,
+          )
+          .catch(() => []),
+        this.database
+          .$queryRawUnsafe<any[]>(
+            `SELECT provider,
+                    COUNT(*) FILTER (WHERE status IN ('PENDING','PROCESSING'))::int AS pending,
+                    COUNT(*) FILTER (WHERE status='FAILED')::int AS failed
+               FROM "IntegrationOutbox"
+              WHERE "companyId"=$1
+              GROUP BY provider`,
+            actor.companyId,
+          )
+          .catch(() => []),
+        this.database
+          .$queryRawUnsafe<any[]>(
+            `SELECT provider,
+                    COUNT(*) FILTER (WHERE status='ERROR')::int AS errors,
+                    MAX("receivedAt") AS "lastReceivedAt"
+               FROM "IntegrationWebhookEvent"
+              WHERE "companyId"=$1
+              GROUP BY provider`,
+            actor.companyId,
+          )
+          .catch(() => []),
+        this.database.$queryRawUnsafe<any[]>(
+          `SELECT id,name,"legalName","taxId","countryCode","countryName","foreignTaxId",
+                  "postalCode",address,"addressNumber",
+                  "addressComplement",district,city,state,"stateRegistration","stateRegistrationType"
+             FROM "Customer"
+            WHERE "companyId"=$1 AND active=TRUE
+            ORDER BY name ASC`,
+          actor.companyId,
+        ),
+      ]);
+
+    const integrationByProvider = new Map(
+      integrations.map((item) => [String(item.provider), item]),
+    );
+    const queueByProvider = new Map(
+      queueRows.map((item) => [String(item.provider), item]),
+    );
+    const webhooksByProvider = new Map(
+      webhookRows.map((item) => [String(item.provider), item]),
+    );
+    const bling = blingReadiness();
+    const mercadoLivre = this.mercadoLivre.readiness();
+    const melhorEnvio = this.melhorEnvioAuth.readiness();
+
+    const provider = (
+      code: string,
+      configured: boolean,
+      missingEnvironment: string[] = [],
+      forcedStatus?: string,
+    ) => {
+      const connection = integrationByProvider.get(code) ?? {};
+      const queue = queueByProvider.get(code) ?? {};
+      const webhooks = webhooksByProvider.get(code) ?? {};
+      return {
+        provider: code,
+        configured,
+        missingEnvironment,
+        connection: {
+          status:
+            forcedStatus ??
+            connection.status ??
+            (configured ? "DISCONNECTED" : "NOT_CONFIGURED"),
+          providerAccountId: connection.providerAccountId ?? null,
+          connectedAt: connection.connectedAt ?? null,
+          lastSyncAt: connection.lastSyncAt ?? null,
+          lastError: connection.lastError ?? null,
+          tokenExpiresAt: connection.tokenExpiresAt ?? null,
+        },
+        activity: {
+          pending: Number(queue.pending ?? 0),
+          failed: Number(queue.failed ?? 0),
+          webhookErrors: Number(webhooks.errors ?? 0),
+          lastWebhookAt: webhooks.lastReceivedAt ?? null,
+        },
+      };
+    };
+
+    const fiscalItems = customers.map((customer) => {
+      const readiness = assessCustomerFiscalReadiness(customer);
+      return {
+        id: customer.id,
+        name: customer.name,
+        taxId: customer.taxId,
+        ready: readiness.ready,
+        issues: readiness.issues,
+      };
+    });
+    const pendingCustomers = fiscalItems.filter((item) => !item.ready);
+
+    return {
+      providers: [
+        provider("BLING", bling.configured, bling.missingEnvironment),
+        provider("MERCADO_LIVRE", mercadoLivre.configured),
+        provider(
+          "MELHOR_ENVIO",
+          melhorEnvio.configured,
+          melhorEnvio.missingEnvironment,
+          melhorEnvio.usingStaticToken ? "CONNECTED" : undefined,
+        ),
+        provider(
+          "MERCADO_PAGO",
+          this.mercadoPago.configured(),
+          [],
+          this.mercadoPago.configured() ? "CONNECTED" : "NOT_CONFIGURED",
+        ),
+      ],
+      customerFiscalReadiness: {
+        total: fiscalItems.length,
+        ready: fiscalItems.length - pendingCustomers.length,
+        pending: pendingCustomers.length,
+        items: pendingCustomers,
+      },
+      checkedAt: new Date().toISOString(),
+    };
+  }
 
   @Get("mercado-livre/status")
   async mercadoLivreStatus(@Req() request: any) {
@@ -127,7 +261,8 @@ export class IntegrationsController {
       Array<{ companyId: string }>
     >(
       `SELECT "companyId" FROM "ExternalIntegration"
-        WHERE provider='MERCADO_LIVRE' AND status='CONNECTED' AND "providerAccountId"=$1 LIMIT 1`,
+        WHERE provider='MERCADO_LIVRE' AND status IN ('CONNECTED','ERROR')
+          AND "providerAccountId"=$1 LIMIT 1`,
       userId,
     );
     const companyId = rows[0]?.companyId;
@@ -154,12 +289,24 @@ export class IntegrationsController {
       JSON.stringify(payload),
     );
     if (inserted > 0) {
-      await this.mercadoLivre.ingestOrderResource(companyId, resource);
-      await this.database.$executeRawUnsafe(
-        `UPDATE "IntegrationWebhookEvent" SET status='PROCESSED',"processedAt"=NOW()
-          WHERE provider='MERCADO_LIVRE' AND "providerEventId"=$1`,
-        providerEventId,
-      );
+      try {
+        await this.mercadoLivre.ingestOrderResource(companyId, resource);
+        await this.database.$executeRawUnsafe(
+          `UPDATE "IntegrationWebhookEvent" SET status='PROCESSED',
+            "processedAt"=NOW(),"lastError"=NULL
+            WHERE provider='MERCADO_LIVRE' AND "providerEventId"=$1`,
+          providerEventId,
+        );
+      } catch (error) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "IntegrationWebhookEvent" SET status='ERROR',
+            "processedAt"=NOW(),"lastError"=$2
+            WHERE provider='MERCADO_LIVRE' AND "providerEventId"=$1`,
+          providerEventId,
+          error instanceof Error ? error.message : String(error),
+        );
+        return { accepted: true, duplicate: false, processing: "ERROR" };
+      }
     }
     return { accepted: true, duplicate: inserted === 0 };
   }
@@ -183,6 +330,7 @@ export class IntegrationsController {
   @Public()
   @Get("melhor-envio/callback")
   async melhorEnvioCallback(
+    @Res() response: any,
     @Query("code") code?: string,
     @Query("state") state?: string,
   ) {
@@ -191,7 +339,13 @@ export class IntegrationsController {
         "Callback OAuth do Melhor Envio incompleto.",
       );
     try {
-      return await this.melhorEnvioAuth.completeAuthorization(code, state);
+      await this.melhorEnvioAuth.completeAuthorization(code, state);
+      const webUrl = process.env.WEB_URL?.split(",")[0]?.trim();
+      return response.redirect(
+        webUrl
+          ? `${webUrl.replace(/\/$/, "")}/integracoes?connected=melhor-envio`
+          : "/integracoes?connected=melhor-envio",
+      );
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error
@@ -295,13 +449,20 @@ export class IntegrationsController {
   @Public()
   @Get("bling/callback")
   async blingCallback(
+    @Res() response: any,
     @Query("code") code?: string,
     @Query("state") state?: string,
   ) {
     if (!code || !state)
       throw new BadRequestException("Callback OAuth do Bling incompleto.");
     try {
-      return await this.blingService.completeAuthorization(code, state);
+      await this.blingService.completeAuthorization(code, state);
+      const webUrl = process.env.WEB_URL?.split(",")[0]?.trim();
+      return response.redirect(
+        webUrl
+          ? `${webUrl.replace(/\/$/, "")}/integracoes?connected=bling`
+          : "/integracoes?connected=bling",
+      );
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error
@@ -365,6 +526,22 @@ export class IntegrationsController {
   async companyFiscalProfile(@Req() request: any) {
     const actor = await this.actor(request);
     return this.blingCatalogSync.companyFiscalProfile(actor.companyId);
+  }
+
+  @Get("bling/operation-natures")
+  async blingOperationNatures(@Req() request: any) {
+    const actor = await this.actor(request);
+    try {
+      return {
+        items: await this.blingCatalogSync.operationNatures(actor.companyId),
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error
+          ? error.message
+          : "Falha ao consultar as naturezas de operação do Bling.",
+      );
+    }
   }
 
   @Patch("bling/fiscal-profile")
@@ -440,15 +617,34 @@ export class IntegrationsController {
   @Post("bling/sales-orders/:id/retry-invoice")
   async retryInvoice(@Req() request: any, @Param("id") id: string) {
     const actor = await this.actor(request);
-    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) throw new UnauthorizedException("O reprocessamento fiscal é restrito à gestão.");
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role))
+      throw new UnauthorizedException(
+        "O reprocessamento fiscal é restrito à gestão.",
+      );
     return this.blingOutbox.retrySalesOrderInvoice(actor.companyId, id);
   }
 
   @Post("bling/sales-orders/:id/reset-cancelled-invoice")
   async resetCancelledInvoice(@Req() request: any, @Param("id") id: string) {
     const actor = await this.actor(request);
-    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) throw new UnauthorizedException("A regularização fiscal é restrita à gestão.");
-    return this.blingOutbox.resetCancelledSalesOrderInvoice(actor.companyId, id);
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role))
+      throw new UnauthorizedException(
+        "A regularização fiscal é restrita à gestão.",
+      );
+    return this.blingOutbox.resetCancelledSalesOrderInvoice(
+      actor.companyId,
+      id,
+    );
+  }
+
+  @Post("bling/sales-orders/:id/reset-missing-invoice")
+  async resetMissingInvoice(@Req() request: any, @Param("id") id: string) {
+    const actor = await this.actor(request);
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role))
+      throw new UnauthorizedException(
+        "A regularização fiscal é restrita à gestão.",
+      );
+    return this.blingOutbox.resetMissingSalesOrderInvoice(actor.companyId, id);
   }
 
   @Post("bling/process-next")

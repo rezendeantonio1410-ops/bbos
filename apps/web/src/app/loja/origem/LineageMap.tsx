@@ -21,7 +21,7 @@ const steps = [
     "MERCADO",
     "desde 2015 · mundo",
     "Origem e mercado",
-    "Em 2015, José cofundou a Capricornio Coffees. Esse trabalho ajudou a conectar cafés do Paraná e de São Paulo, próximos ao Trópico de Capricórnio, a importadores e torrefadores em mais de 40 países — na Europa, nos Estados Unidos, na Austrália, em Hong Kong, no Japão, na China e em outros mercados.",
+    "Em 2015, José cofundou a Capricornio Coffees. O trabalho ajudou a conectar cafés do Paraná e de São Paulo, próximos ao Trópico de Capricórnio, a importadores e torrefadores de diferentes países.",
   ],
   [
     "bispo",
@@ -39,7 +39,7 @@ export default function LineageMap() {
         <p className={styles.kicker}>PESSOAS · TERRITÓRIO</p>
         <h2>Conhecer um lugar leva tempo.</h2>
         <p>
-          Suzi e José aparecem aqui apenas como parte dessa leitura construída
+          José e Suzi aparecem aqui apenas como parte dessa leitura construída
           no campo. Toque somente se quiser conhecer os rastros.
         </p>
       </header>

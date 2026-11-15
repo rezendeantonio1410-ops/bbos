@@ -1,10 +1,12 @@
 export const protectedSystemPrefixes = [
   "/home",
+  "/aplicativo",
   "/dashboard",
   "/dashboard-industrial",
   "/blends",
   "/cafe-verde",
   "/clientes",
+  "/atendimento",
   "/recebimento",
   "/compras-cafe-verde",
   "/compras-cafe-verde-v2",
@@ -26,6 +28,7 @@ export const protectedSystemPrefixes = [
   "/perfil",
   "/sobre",
   "/usuarios",
+  "/parceiro",
 ] as const;
 
 export function isProtectedSystemPath(pathname: string) {

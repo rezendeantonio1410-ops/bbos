@@ -56,7 +56,8 @@ export class AdminStorefrontMediaController {
     @Body() input: Record<string, string>,
     @Req() request: Request,
   ) {
-    if (!file) throw new BadRequestException("Selecione uma imagem para enviar.");
+    if (!file)
+      throw new BadRequestException("Selecione uma imagem para enviar.");
     const actor = await this.actor(request);
     return this.media.create(actor.companyId, input, file);
   }
@@ -73,8 +74,10 @@ export class AdminStorefrontMediaController {
 
   private async actor(request: Request) {
     const actor = await requireSession(request, this.auth);
-    if (!["ADMIN", "EXECUTIVE", "SALES"].includes(actor.role)) {
-      throw new ForbiddenException("Seu perfil não pode administrar as imagens da loja.");
+    if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) {
+      throw new ForbiddenException(
+        "Seu perfil não pode administrar as imagens da loja.",
+      );
     }
     return actor;
   }
@@ -89,7 +92,10 @@ export class PublicStorefrontMediaController {
   private async companyId() {
     const configured = process.env.STOREFRONT_COMPANY_ID?.trim();
     if (configured) return configured;
-    const companies = await this.database.company.findMany({ select: { id: true }, take: 2 });
+    const companies = await this.database.company.findMany({
+      select: { id: true },
+      take: 2,
+    });
     if (companies.length !== 1) {
       throw new BadRequestException("A empresa da loja não está configurada.");
     }

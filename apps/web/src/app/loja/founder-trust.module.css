@@ -38,12 +38,8 @@
   object-position: center 30%;
 }
 
-.portrait:first-child img {
-  object-position: 48% center;
-}
-.portrait:nth-child(2) img {
-  object-position: 58% center;
-}
+.portrait:first-child img { object-position: 58% center; }
+.portrait:nth-child(2) img { object-position: 48% center; }
 
 .portrait figcaption {
   position: absolute;
@@ -123,27 +119,8 @@
 }
 
 .primary {
-  position: relative;
   color: #fff !important;
   background: #0d1d17;
-  padding-inline: 38px !important;
-  text-align: center;
-}
-
-.primary::after {
-  content: "→";
-  position: absolute;
-  right: 17px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.section .actions .primary {
-  width: max-content;
-  min-width: 214px;
-  height: auto;
-  display: inline-flex;
-  white-space: nowrap;
 }
 
 .secondary {
@@ -191,25 +168,10 @@
 
   .actions {
     display: grid;
-    width: 100%;
-    grid-template-columns: minmax(0, 1fr);
-    justify-content: stretch !important;
   }
 
-  .section .actions .primary,
-  .section .actions .secondary {
+  .primary,
+  .secondary {
     width: 100% !important;
-    min-width: 0;
-    height: auto !important;
-    min-height: 50px;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 46px !important;
-    font-size: 11px !important;
-    line-height: 1.2;
-    letter-spacing: 0.075em;
-    text-align: center;
-    white-space: normal;
   }
 }

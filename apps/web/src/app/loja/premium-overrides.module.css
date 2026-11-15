@@ -1,10 +1,6 @@
-.footer.footer {
+.footer {
   grid-template-columns: 1.4fr 0.7fr 0.7fr 0.9fr;
   border-top: 1px solid rgb(13 29 23 / 8%);
-}
-
-.mobileMenu {
-  display: none;
 }
 
 .buyRow button:disabled {
@@ -14,18 +10,17 @@
 }
 
 .conversionShelf {
-  padding: clamp(36px, 3.6vw, 52px) clamp(24px, 6vw, 96px) 0;
-  background: linear-gradient(180deg, #f5f2ec 0, #fbfaf7 210px);
+  padding: clamp(58px, 7vw, 96px) clamp(24px, 6vw, 96px) 0;
+  background: #fbfaf7;
   color: #0d1d17;
 }
 
 .conversionIntro {
   display: grid;
-  grid-template-columns: minmax(0, 620px) minmax(280px, 420px);
-  gap: clamp(42px, 5vw, 82px);
-  align-items: center;
-  justify-content: start;
-  margin-bottom: clamp(26px, 2.4vw, 36px);
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.7fr);
+  gap: 48px;
+  align-items: end;
+  margin-bottom: 32px;
 }
 
 .conversionIntro small,
@@ -38,41 +33,38 @@
 }
 
 .conversionIntro h2 {
-  max-width: 600px;
+  max-width: 760px;
   margin: 9px 0 0;
-  font: 440 clamp(30px, 3.8vw, 54px)/0.98 var(--font-manrope);
+  font: 440 clamp(30px, 4.2vw, 58px)/0.98 var(--font-manrope);
   letter-spacing: -0.045em;
 }
 
 .conversionIntro p {
-  max-width: 400px;
+  max-width: 430px;
   margin: 0;
   color: rgb(13 29 23 / 67%);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
 .featuredGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(8px, 0.7vw, 12px);
-  background: transparent;
+  border: 1px solid rgb(13 29 23 / 11%);
+  background: #fff;
 }
 
 .featuredCard {
   --featured-tone: #7b6147;
   display: grid;
-  grid-template-columns: minmax(148px, 0.92fr) minmax(0, 1.28fr);
-  min-height: 260px;
+  grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr);
+  min-height: 270px;
   overflow: hidden;
-  border: 1px solid rgb(13 29 23 / 10%);
-  border-top: 5px solid var(--featured-tone);
-  background: #fff;
-  box-shadow: 0 14px 36px rgb(13 29 23 / 4%);
+  border-top: 3px solid var(--featured-tone);
 }
 
 .featuredCard + .featuredCard {
-  border-left: 1px solid rgb(13 29 23 / 10%);
+  border-left: 1px solid rgb(13 29 23 / 11%);
 }
 
 .featuredVisual {
@@ -86,7 +78,7 @@
 
 .featuredVisual img {
   width: 100%;
-  height: 184px;
+  height: 210px;
   object-fit: contain;
   filter: drop-shadow(0 14px 14px rgb(13 29 23 / 14%));
   transition: transform 0.35s ease;
@@ -106,8 +98,7 @@
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  padding: 24px 22px;
-  background: color-mix(in srgb, var(--featured-tone) 5%, #fff);
+  padding: 27px 24px;
 }
 
 .featuredCopy h3 {
@@ -117,7 +108,7 @@
 }
 
 .featuredCopy p {
-  min-height: 42px;
+  min-height: 46px;
   margin: 8px 0;
   color: rgb(13 29 23 / 70%);
   font-size: 11px;
@@ -134,18 +125,7 @@
 .featuredCopy > div {
   display: grid;
   gap: 12px;
-  margin-top: 14px;
-}
-
-.preparationProof {
-  display: block;
-  margin-top: 10px;
-  color: rgb(13 29 23 / 65%) !important;
-  font-size: 8.5px !important;
-  font-weight: 650 !important;
-  letter-spacing: 0.015em !important;
-  line-height: 1.45;
-  text-transform: none !important;
+  margin-top: 20px;
 }
 
 .featuredCopy strong {
@@ -193,122 +173,6 @@
   display: flex;
   height: 100%;
   flex-direction: column;
-}
-
-.catalogCard :global([class*="catalogFallback"]) b {
-  font-family: var(--font-manrope);
-  font-weight: 450;
-  letter-spacing: -0.025em;
-}
-
-.ritualVisual {
-  isolation: isolate;
-  background: #111914 !important;
-}
-
-.ritualVisual.ritualVisual::after {
-  position: absolute;
-  inset: 34% 0 0;
-  z-index: 1;
-  width: auto;
-  height: auto;
-  display: block !important;
-  background: linear-gradient(180deg, transparent, rgb(8 13 10 / 70%));
-  filter: none;
-}
-
-.ritualScene {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: none !important;
-}
-
-.ritualPack {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  z-index: 3;
-  width: 76px;
-  height: 100px;
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-  padding: 5px;
-  border: 1px solid rgb(255 255 255 / 45%);
-  background: rgb(255 255 255 / 88%);
-  box-shadow: 0 14px 30px rgb(4 9 6 / 22%);
-  backdrop-filter: blur(10px);
-}
-
-.ritualPack img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.catalogCard:hover .ritualPack img {
-  transform: none !important;
-}
-
-.ritualLabel {
-  position: absolute;
-  left: 16px;
-  bottom: 17px;
-  z-index: 3;
-  max-width: calc(100% - 120px);
-  color: #fff;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-}
-
-.selectionProof {
-  display: block;
-  margin-top: 12px;
-  color: rgb(13 29 23 / 54%) !important;
-  font-size: 8px !important;
-  font-weight: 760 !important;
-  letter-spacing: 0.11em !important;
-  line-height: 1.4;
-}
-
-.rareProofs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 17px 0 2px;
-  padding: 0;
-  border-block: 1px solid rgb(13 29 23 / 10%);
-}
-
-.rareProofs > div {
-  min-width: 0;
-  padding: 11px 12px 11px 0;
-}
-
-.rareProofs > div + div {
-  padding-left: 12px;
-  border-left: 1px solid rgb(13 29 23 / 10%);
-}
-
-.rareProofs dt {
-  margin-bottom: 4px;
-  color: rgb(13 29 23 / 48%);
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.rareProofs dd {
-  margin: 0;
-  color: #0d1d17;
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 1.35;
 }
 
 .catalogMeta {
@@ -368,17 +232,13 @@
 }
 
 @media (max-width: 1050px) {
-  .conversionIntro {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.72fr);
-  }
-
   .featuredGrid {
     grid-template-columns: 1fr;
   }
 
   .featuredCard {
-    grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
-    min-height: 250px;
+    grid-template-columns: 200px 1fr;
+    min-height: 230px;
   }
 
   .featuredCard + .featuredCard {
@@ -400,96 +260,15 @@
     padding: 16px 20px;
     border-top: 1px solid rgb(13 29 23 / 9%);
   }
-
-  .footer.footer {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .footer.footer > :first-child {
-    grid-column: 1 / -1;
-  }
 }
 
 @media (max-width: 600px) {
-  .desktopNav {
-    display: none !important;
-  }
-
-  .mobileMenu {
-    position: relative;
-    display: block;
-  }
-
-  .mobileMenu > button {
-    width: 33px;
-    height: 33px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    color: #0d1d17;
-    background: transparent;
-  }
-
-  .mobileMenu > button svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .mobileMenu > nav {
-    position: absolute;
-    top: calc(100% + 12px);
-    right: 0;
-    z-index: 60;
-    width: min(310px, calc(100vw - 28px));
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-auto-flow: row;
-    padding: 9px;
-    border: 1px solid rgb(13 29 23 / 11%);
-    border-radius: 12px;
-    background: rgb(255 255 255 / 98%);
-    box-shadow: 0 22px 54px rgb(13 29 23 / 18%);
-    backdrop-filter: blur(16px);
-  }
-
-  .mobileMenu.mobileMenu > nav a {
-    width: 100% !important;
-    min-width: 0;
-    height: auto !important;
-    min-height: 46px;
-    display: flex !important;
-    align-items: center;
-    box-sizing: border-box;
-    padding: 0 13px;
-    border-bottom: 1px solid rgb(13 29 23 / 7%);
-    color: #0d1d17;
-    font-size: 11px;
-    font-weight: 720;
-    letter-spacing: 0.035em;
-    text-decoration: none;
-    justify-self: stretch;
-    white-space: nowrap;
-    word-break: normal;
-    overflow-wrap: normal;
-  }
-
-  .mobileMenu > nav a:last-child {
-    border-bottom: 0;
-  }
-
-  .footer.footer {
+  .footer {
     grid-template-columns: 1fr;
   }
 
-  .footer.footer > :first-child {
-    grid-column: auto;
-  }
-
   .conversionShelf {
-    display: block;
-    padding: 34px 20px 0;
+    padding: 46px 18px 0;
   }
 
   .conversionIntro {
@@ -502,34 +281,9 @@
     font-size: 34px;
   }
 
-  .featuredGrid {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    border: 0;
-    background: transparent;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-  }
-
-  .featuredGrid::-webkit-scrollbar {
-    display: none;
-  }
-
   .featuredCard {
-    flex: 0 0 min(84vw, 330px);
     grid-template-columns: 112px 1fr;
-    min-height: 238px;
-    border: 1px solid rgb(13 29 23 / 11%);
-    border-top: 4px solid var(--featured-tone);
-    background: #fff;
-    scroll-snap-align: center;
-  }
-
-  .featuredCard + .featuredCard {
-    border: 1px solid rgb(13 29 23 / 11%);
-    border-top: 4px solid var(--featured-tone);
-    box-shadow: none;
+    min-height: 230px;
   }
 
   .featuredVisual {
@@ -541,7 +295,7 @@
   }
 
   .featuredCopy {
-    padding: 22px 15px;
+    padding: 22px 16px;
   }
 
   .featuredCopy h3 {
@@ -554,8 +308,6 @@
 
   .purchaseAssurances {
     grid-template-columns: 1fr;
-    margin-top: 10px;
-    border-top: 1px solid rgb(13 29 23 / 11%);
   }
 
   .purchaseAssurances > span {
@@ -567,32 +319,5 @@
   .purchaseAssurances > a {
     grid-column: auto;
     border-top: 0;
-  }
-
-  .ritualPack {
-    right: 10px;
-    bottom: 10px;
-    width: 66px;
-    height: 86px;
-  }
-
-  .ritualLabel {
-    left: 12px;
-    bottom: 13px;
-    max-width: calc(100% - 98px);
-  }
-
-  .rareProofs {
-    grid-template-columns: 1fr;
-  }
-
-  .rareProofs > div {
-    padding: 9px 0;
-  }
-
-  .rareProofs > div + div {
-    padding-left: 0;
-    border-top: 1px solid rgb(13 29 23 / 8%);
-    border-left: 0;
   }
 }

@@ -6,14 +6,12 @@ import authority from "../authority.module.css";
 import brand from "../brand-review.module.css";
 import storyBrand from "./brand.module.css";
 import storyNav from "../story-navigation.module.css";
-import premium from "../premium-overrides.module.css";
-import MobileStoreMenu from "../MobileStoreMenu";
-import { getStorefrontOrigin } from "@/lib/storefront-url";
+import { loadStorefrontMedia } from "@/lib/storefront-media";
 
 export const metadata: Metadata = {
-  title: "Suzi Ninov e José Rezende — fundadores da Bispo Coffees",
+  title: "José Rezende e Suzi Ninov — fundadores",
   description:
-    "Duas histórias que começaram muito antes da Bispo Coffees e hoje se encontram no campo, na qualidade, na prova, na torra e no mercado.",
+    "Conheça José Rezende e Suzi Ninov: campo, qualidade, prova, torra e mercado internacional antes de cada escolha da Bispo Coffees.",
   alternates: { canonical: "/loja/sobre" },
 };
 
@@ -23,13 +21,12 @@ const founderStructuredData = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Bispo Coffees",
-  url: getStorefrontOrigin(),
+  url: "https://loja.bispocoffees.com.br",
   founder: [
     {
       "@type": "Person",
       name: "José Antônio Rezende da Silva",
       alternateName: ["José Rezende", "Bispo"],
-      jobTitle: "Empresário e cofundador da Bispo Coffees",
       knowsAbout: [
         "café especial",
         "avaliação sensorial",
@@ -42,7 +39,6 @@ const founderStructuredData = {
       "@type": "Person",
       name: "Suzete Ninov",
       alternateName: "Suzi Ninov",
-      jobTitle: "Empresária e cofundadora da Bispo Coffees",
       knowsAbout: [
         "cafeicultura",
         "nutrição de plantas",
@@ -54,7 +50,8 @@ const founderStructuredData = {
   ],
 };
 
-export default function SobrePage() {
+export default async function SobrePage() {
+  const media = await loadStorefrontMedia();
   return (
     <main className={`${styles.page} ${brand.storefront} ${storyBrand.page}`}>
       <script
@@ -78,7 +75,7 @@ export default function SobrePage() {
           />
         </Link>
         <nav
-          className={`${styles.nav} ${storyNav.nav} ${premium.desktopNav}`}
+          className={`${styles.nav} ${storyNav.nav}`}
           aria-label="Navegação principal"
         >
           <Link href="/loja#cafes">Cafés</Link>
@@ -89,36 +86,30 @@ export default function SobrePage() {
           </Link>
           <Link href="/loja/origem">A geografia na xícara</Link>
         </nav>
-        <div className={storyBrand.shopControl}>
-          <Link
-            className={storyBrand.shopLink}
-            href="/loja#cafes"
-            aria-label="Ver cafés"
-          >
-            Ver cafés ↗
+        <div className={styles.actions}>
+          <Link href="/loja#cafes" aria-label="Ver cafés">
+            Ver cafés
           </Link>
-          <MobileStoreMenu />
         </div>
       </header>
 
       <section className={authority.peopleLayer}>
         <div className={authority.peopleLead}>
-          <p>DOIS FUNDADORES · UMA ESCOLHA</p>
-          <h1>A Bispo é o encontro de Suzi e José.</h1>
+          <p>O BISPO · A BISPO</p>
+          <h1>O Bispo é José. A Bispo é José e Suzi.</h1>
           <span>
-            Muito antes de existir a Bispo, Suzi e José já tinham histórias
-            próprias no campo, na cafeicultura e no mercado. A marca leva um
-            apelido da trajetória de José, mas nasce do encontro entre duas
-            experiências inteiras.
+            O apelido nasceu da trajetória de José no café. A marca nasce do
+            encontro dessa história com a experiência própria de Suzi — dois
+            fundadores, duas leituras e uma escolha compartilhada.
           </span>
         </div>
         <div className={authority.peopleMarks}>
-          <article className={authority.personCard}>
-            <small>EMPRESÁRIA · COFUNDADORA · CAMPO DESDE 2007</small>
-            <strong>Suzi Ninov</strong>
+          <article className={authority.personPrimary}>
+            <small>CAMPO DESDE 2003 · MERCADO INTERNACIONAL DESDE 2015</small>
+            <strong>José Rezende</strong>
             <span>
-              Empresária e cofundadora da Bispo Coffees. Conecta manejo,
-              fertilidade, produtividade e qualidade em cada escolha.
+              Q-Grader e cofundador da Capricornio Coffees, conecta produtores,
+              prova, torra e mercado.
             </span>
           </article>
           <div className={authority.thread}>
@@ -127,12 +118,12 @@ export default function SobrePage() {
             <i />
             <i />
           </div>
-          <article className={authority.personCard}>
-            <small>EMPRESÁRIO · COFUNDADOR · CAMPO DESDE 2003</small>
-            <strong>José Rezende</strong>
+          <article className={authority.personSecondary}>
+            <small>PARANÁ DESDE 2007 · PLANTA · NUTRIÇÃO · PRODUÇÃO</small>
+            <strong>Suzi Ninov</strong>
             <span>
-              Empresário e cofundador da Bispo Coffees. Q-Grader, conecta
-              produtores, prova, torra e mercado.
+              Cofundadora, conecta manejo, fertilidade, produtividade e
+              qualidade em cada escolha.
             </span>
           </article>
         </div>
@@ -140,29 +131,40 @@ export default function SobrePage() {
         <div className={authority.fieldStory}>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/editorial/real/suzi-cuidado-na-planta.jpg"
-              alt="Suzi Ninov observando uma planta de café na lavoura"
+              src={
+                media.slots["about.jose.field"]?.url ??
+                "/brand/story/jose-origem.jpeg"
+              }
+              alt={
+                media.slots["about.jose.field"]?.altText ??
+                "José Rezende examinando um cafeeiro na origem"
+              }
               fill
-              sizes="(max-width: 560px) 82vw, 50vw"
+              sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 62vw"
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
-              <span>SUZI · CAMPO</span>
-              <strong>O cuidado reconhece o potencial antes da xícara.</strong>
+              <span>JOSÉ · ORIGEM</span>
+              <strong>A qualidade começa perto de quem produz.</strong>
             </figcaption>
           </figure>
           <figure className={authority.fieldShot}>
             <Image
-              src="/brand/founders/jose-rezende-prova-191.jpg"
-              alt="José Rezende avaliando um café durante uma prova Bispo"
+              src={
+                media.slots["about.suzi.cupping"]?.url ??
+                "/brand/story/suzi-fragrancia.jpeg"
+              }
+              alt={
+                media.slots["about.suzi.cupping"]?.altText ??
+                "Suzi Ninov avaliando a fragrância do café"
+              }
               fill
-              sizes="(max-width: 560px) 82vw, 50vw"
-              style={{ objectPosition: "center 22%" }}
+              sizes="(max-width: 560px) 82vw, (max-width: 900px) 50vw, 38vw"
             />
             <i className={authority.fieldVeil} />
             <figcaption className={authority.fieldCaption}>
-              <span>JOSÉ · PROVA</span>
-              <strong>A qualidade se confirma na xícara.</strong>
+              <span>SUZI · CRITÉRIO</span>
+              <strong>O cuidado reconhece o potencial antes da xícara.</strong>
             </figcaption>
           </figure>
         </div>
@@ -182,32 +184,30 @@ export default function SobrePage() {
           aria-label="Marcos da trajetória dos fundadores"
         >
           <li>
-            <b>MUITO ANTES DA BISPO</b>
+            <b>2003</b>
+            <span>José inicia o trabalho continuado com produtores.</span>
+          </li>
+          <li>
+            <b>2007</b>
             <span>
-              Suzi cresce em um sítio no Rio Grande do Sul. José cresce em
-              uma família de produtores no Norte do Paraná.
+              Suzi inicia seu trabalho com cafeicultura no Paraná, aproximando
+              nutrição, solo, manejo e café.
             </span>
           </li>
           <li>
-            <b>2003 · 2007</b>
+            <b>2010</b>
+            <span>José conquista a certificação Q-Grader.</span>
+          </li>
+          <li>
+            <b>2015</b>
             <span>
-              José inicia o trabalho continuado com produtores. Suzi passa a
-              atuar com cafeicultura no Paraná.
+              José cofunda a Capricornio e amplia o acesso ao mercado
+              internacional.
             </span>
           </li>
           <li>
-            <b>2010 · 2017</b>
-            <span>
-              José se torna Q-Grader e cofundador da Capricornio. O trabalho de
-              campo de Suzi contribui para uma conquista nacional de qualidade.
-            </span>
-          </li>
-          <li>
-            <b>2024 · BISPO</b>
-            <span>
-              Duas trajetórias anteriores à marca se encontram em uma escolha
-              compartilhada.
-            </span>
+            <b>2024</b>
+            <span>José e Suzi reúnem suas leituras no projeto Longitude.</span>
           </li>
         </ol>
 
@@ -234,22 +234,19 @@ export default function SobrePage() {
           </article>
           <article>
             <small>02 · SUZI NINOV</small>
-            <h3>Do campo à construção empresarial</h3>
+            <h3>A qualidade antes da prova</h3>
             <p>
-              Empresária e cofundadora da Bispo Coffees, Suzi foi criada no
-              campo, no Rio Grande do Sul, e trabalha com cafeicultura no Paraná
-              desde 2007. Sua história profissional começou muito antes da
-              marca: ao lado de produtores, construiu experiência na leitura da
-              planta, no manejo da fertilidade, na nutrição e no uso responsável
-              dos recursos do solo.
+              Criada no campo, no Rio Grande do Sul, Suzi trabalha com
+              cafeicultura no Paraná desde 2007. Sua atuação técnica acontece ao
+              lado de produtores, na leitura da planta, no manejo da
+              fertilidade, na nutrição e no uso responsável dos recursos do
+              solo. Qualidade e produtividade são tratadas como resultado de
+              acompanhamento, não de uma intervenção isolada na colheita.
             </p>
             <p>
-              Esse acompanhamento também se traduziu em reconhecimento
-              nacional: em 2017, um dos cafés desenvolvidos junto a produtores
-              atendidos por Suzi alcançou o primeiro lugar em sua categoria em
-              um concurso de qualidade. Mais do que uma premiação isolada, o
-              resultado expressa a continuidade entre manejo, nutrição,
-              produtividade e qualidade na xícara.
+              Entre os produtores acompanhados por Suzi está a família Rosseto.
+              Em 2017, Wagner Rosseto alcançou o primeiro lugar nacional na
+              categoria Natural da primeira edição do Concurso NossoCafé Yara.
             </p>
             <blockquote className={authority.suziPrinciple}>
               <p>
@@ -271,15 +268,25 @@ export default function SobrePage() {
               entregar na xícara.
             </p>
             <p>
-              A experiência construída por Suzi e José entre lavouras, prova,
-              sustentabilidade e mercados internacionais chega agora à xícara.
-              Cafés brasileiros escolhidos com o mesmo rigor aplicado às origens
-              apresentadas ao mundo — torrados para revelar identidade, não para
-              escondê-la.
+              “Bispo” é como José é conhecido há anos, mas a marca só é inteira
+              porque carrega também o conhecimento e a presença de Suzi. O nome
+              é singular; o critério é dos dois. O complexo fica com eles. Para
+              quem compra, ficam uma escolha clara e uma xícara que vale
+              reencontrar.
             </p>
           </article>
         </div>
 
+        <div className={authority.documentaryNote}>
+          <p>
+            A experiência construída por José e Suzi entre lavouras, prova,
+            sustentabilidade e mercados internacionais chega agora à xícara.
+            Cafés brasileiros escolhidos com o mesmo rigor aplicado às origens
+            apresentadas ao mundo — torrados para revelar identidade, não para
+            escondê-la.
+          </p>
+          <b>DO CAFÉ VERDE À SUA XÍCARA</b>
+        </div>
         <section
           className={authority.evidence}
           aria-labelledby="rastro-publico"
@@ -294,59 +301,57 @@ export default function SobrePage() {
           </header>
           <div className={authority.evidenceGrid}>
             <article>
-              <small>JOSÉ · 2011–2018</small>
-              <strong>Da assistência na origem ao mercado.</strong>
+              <small>2015 · FUNDAÇÃO</small>
+              <strong>José entre os fundadores da Capricornio.</strong>
               <p>
-                Registros externos acompanham José na assistência técnica, na
-                prova, na criação da Capricornio e na conexão com compradores.
+                A imprensa setorial registra a criação da exportadora e a
+                proposta dos cafés do Trópico de Capricórnio.
               </p>
-              <div className={authority.evidenceLinks}>
-                <a
-                  href="https://revistacafeicultura.com.br/do-tropico-de-capricornio-para-as-xicaras-mais-nobres/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Revista Cafeicultura ↗
-                </a>
-                <a
-                  href="https://www.sistemafaep.org.br/wp-content/uploads/2018/06/BI-1437_2.pdf"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Sistema FAEP ↗
-                </a>
-                <a
-                  href="https://www.laminita.com/farms-mills/juarez-colatino-barros"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Hacienda La Minita ↗
-                </a>
-              </div>
+              <a
+                href="https://revistacafeicultura.com.br/do-tropico-de-capricornio-para-as-xicaras-mais-nobres/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Revista Cafeicultura ↗
+              </a>
             </article>
             <article>
-              <small>SUZI · CAMPO E QUALIDADE</small>
-              <strong>Do acompanhamento técnico ao reconhecimento.</strong>
+              <small>2018 · PRODUTORES</small>
+              <strong>Qualidade ligada a orientação e valor.</strong>
               <p>
-                Em 2017, um café desenvolvido com acompanhamento técnico de
-                Suzi conquistou o primeiro lugar nacional em sua categoria.
+                A FAEP registra José como Q-Grader e um programa de longo prazo
+                que orientava produtores e remunerava qualidade.
               </p>
-              <div className={authority.evidenceLinks}>
-                <a
-                  href="https://www.yarabrasil.com.br/sobre-yara/concurso-nossocafe/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Registro da premiação · 2017 ↗
-                </a>
-              </div>
+              <a
+                href="https://www.sistemafaep.org.br/wp-content/uploads/2018/06/BI-1437_2.pdf"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Sistema FAEP ↗
+              </a>
             </article>
             <article>
-              <small>SUZI + JOSÉ · EUROPA</small>
-              <strong>As duas trajetórias apresentadas juntas.</strong>
+              <small>2011–2015 · CAMPO AO MERCADO</small>
+              <strong>“Bispo” citado por um produtor parceiro.</strong>
               <p>
-                Cafés do Paraná são apresentados no mercado europeu como parte
-                de um projeto conduzido por Suzi e José.
+                A Hacienda La Minita registra a assistência técnica de José
+                desde 2011 e o acesso ao mercado de maior valor pela Capricornio
+                em 2015.
+              </p>
+              <a
+                href="https://www.laminita.com/farms-mills/juarez-colatino-barros"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Hacienda La Minita ↗
+              </a>
+            </article>
+            <article>
+              <small>EUROPA · JOSÉ + SUZI</small>
+              <strong>Os dois apresentados juntos na origem.</strong>
+              <p>
+                A Kolibri vende na Europa um café do Paraná e identifica o
+                projeto como conduzido por José e Suzi.
               </p>
               <div className={authority.evidenceLinks}>
                 <a
@@ -365,6 +370,26 @@ export default function SobrePage() {
                 </a>
               </div>
             </article>
+            <article>
+              <small>2017 · FAMÍLIA ROSSETO</small>
+              <strong>
+                Do trabalho na produção ao reconhecimento nacional.
+              </strong>
+              <p>
+                Em 2017, Wagner Rosseto conquistou o primeiro lugar nacional na
+                categoria Natural da primeira edição do Concurso NossoCafé
+                Yara.
+              </p>
+              <div className={authority.evidenceLinks}>
+                <a
+                  href="https://www.yarabrasil.com.br/sobre-yara/concurso-nossocafe/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Yara · 2017 ↗
+                </a>
+              </div>
+            </article>
           </div>
         </section>
         <Link className={authority.peopleLink} href="/loja#cafes">
@@ -372,7 +397,7 @@ export default function SobrePage() {
         </Link>
       </section>
       <section className={styles.valueStrip}>
-        <span>Suzi + José.</span>
+        <span>José + Suzi.</span>
         <span>Origem brasileira.</span>
         <span>Padrão Brasil e Europa.</span>
         <span>Do campo à xícara.</span>

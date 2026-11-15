@@ -32,6 +32,16 @@ test("pedido interno restringe cliente Varejo ao canal VAREJO", () => {
   );
 });
 
+test("portal de parceiros aplica a mesma separação de preços", () => {
+  const controller = source("partner-portal.controller.ts");
+  assert.match(controller, /c\.segment NOT ILIKE '%varejo%'/);
+  assert.match(controller, /OR sc\.code='VAREJO'/);
+  assert.doesNotMatch(
+    controller,
+    /c\.segment ILIKE '%varejo%'\) AND sc\.type='ECOMMERCE'/,
+  );
+});
+
 test("migração cria somente a tabela Varejo com os oito preços oficiais", () => {
   assert.match(migration, /sc\.code = 'VAREJO'/);
   assert.match(migration, /'GOU-ESS-500', 55\.00/);

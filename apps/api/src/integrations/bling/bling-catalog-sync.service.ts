@@ -2,6 +2,17 @@ import { Injectable } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { createHash } from "node:crypto";
 import { BlingService } from "./bling.service";
+import {
+  resolveSampleFiscalRoute,
+  SAMPLE_CFOP_INTER,
+  SAMPLE_CFOP_INTRA,
+  SAMPLE_FISCAL_POLICY_VERSION,
+} from "../../sample-fiscal-route";
+import { resolveExportFiscalRoute } from "../../export-fiscal-route";
+import {
+  REEXPEDITION_FISCAL_POLICY_VERSION,
+  resolveReexpeditionFiscalRoute,
+} from "../../reexpedition-fiscal-route";
 
 function stableId(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -22,7 +33,6 @@ export const BLING_CATALOG_PRICE_BY_SLUG: Readonly<Record<string, number>> = {
   "white-label-frutado": 27.5,
   "white-label-raro": 38,
 };
-const BLING_CATALOG_SLUGS = Object.keys(BLING_CATALOG_PRICE_BY_SLUG);
 
 type CompanyFiscalProfile = {
   taxRegime: "LUCRO_REAL";
@@ -33,6 +43,28 @@ type CompanyFiscalProfile = {
   cstCofins?: string | null;
   cfopIntra?: string | null;
   cfopInter?: string | null;
+  sampleCfopIntra: typeof SAMPLE_CFOP_INTRA;
+  sampleCfopInter: typeof SAMPLE_CFOP_INTER;
+  sampleNatureOperationId?: string | null;
+  sampleNatureOperationName?: string | null;
+  sampleValidatedByAccountant: boolean;
+  sampleFiscalPolicyVersion: typeof SAMPLE_FISCAL_POLICY_VERSION;
+  exportCfop?: string | null;
+  exportNatureOperationId?: string | null;
+  exportNatureOperationName?: string | null;
+  exportDepartureLocation?: string | null;
+  exportDepartureState?: string | null;
+  exportValidatedByAccountant: boolean;
+  exportSampleCfop?: string | null;
+  exportSampleNatureOperationId?: string | null;
+  exportSampleNatureOperationName?: string | null;
+  exportSampleValidatedByAccountant: boolean;
+  reexpeditionReturnNatureOperationId?: string | null;
+  reexpeditionReturnNatureOperationName?: string | null;
+  reexpeditionOutboundNatureOperationId?: string | null;
+  reexpeditionOutboundNatureOperationName?: string | null;
+  reexpeditionValidatedByAccountant: boolean;
+  reexpeditionFiscalPolicyVersion: typeof REEXPEDITION_FISCAL_POLICY_VERSION;
   notes?: string | null;
   validatedByAccountant: boolean;
 };
@@ -50,6 +82,10 @@ type FiscalProfile = {
   tipoProducao: "P" | "T";
   descricaoCurta: string;
   cest?: string | null;
+  gtin?: string | null;
+  largura: number;
+  altura: number;
+  profundidade: number;
 };
 
 @Injectable()
@@ -58,16 +94,64 @@ export class BlingCatalogSyncService {
 
   constructor(private readonly bling: BlingService) {}
 
-  private async localCatalog() {
-    const placeholders = BLING_CATALOG_SLUGS.map((_, index) => `$${index + 1}`).join(",");
+  private async localCatalog(companyId: string) {
     return this.database.$queryRawUnsafe<any[]>(
-      `SELECT p.slug,p.name,pv.id AS "variantId",pv.sku,pv."netWeightGrams"
+      `SELECT p.slug,p.name,pl.code AS "lineCode",pv.id AS "variantId",pv.sku,pv."netWeightGrams",
+              pv."grossWeightGrams",pv."packageWidthCm",pv."packageHeightCm",pv."packageDepthCm",
+              pv.gtin,pv.ncm,pv."originCode",pv.cest,pv."productionType",pv."fiscalValidated",pv."salesUnit",
+              COALESCE((
+                SELECT pp.price
+                  FROM "ProductPrice" pp
+                  JOIN "SalesChannel" sc ON sc.id=pp."salesChannelId"
+                 WHERE pp."companyId"=$1
+                   AND pp."productVariantId"=pv.id
+                   AND pp.active=true
+                   AND sc.code='CONSUMIDOR_FINAL'
+                   AND pp."validFrom" <= NOW()
+                   AND (pp."validUntil" IS NULL OR pp."validUntil" > NOW())
+                 ORDER BY pp."validFrom" DESC,pp."updatedAt" DESC
+                 LIMIT 1
+              ),0) AS "catalogPrice"
          FROM "Product" p
          JOIN "ProductVariant" pv ON pv."productId"=p.id
+         JOIN "ProductLine" pl ON pl.id=p."productLineId"
         WHERE p.active=true AND pv.active=true
-          AND p.slug IN (${placeholders})
+          AND pl."companyId"=$1
+          AND NULLIF(TRIM(pv.sku),'') IS NOT NULL
         ORDER BY p.slug,pv."netWeightGrams"`,
-      ...BLING_CATALOG_SLUGS,
+      companyId,
+    );
+  }
+
+  private catalogKey(row: any) {
+    return String(row?.variantId ?? "").trim();
+  }
+
+  private mapForCatalogRow(maps: any[], row: any) {
+    const variantId = this.catalogKey(row);
+    const sku = String(row?.sku ?? "")
+      .trim()
+      .toUpperCase();
+    const slug = String(row?.slug ?? "").trim();
+    return (
+      maps.find((map) => String(map.internalKey) === variantId) ??
+      maps.find(
+        (map) => String(map?.metadata?.productVariantId ?? "") === variantId,
+      ) ??
+      maps.find(
+        (map) =>
+          sku &&
+          String(map?.metadata?.sku ?? "")
+            .trim()
+            .toUpperCase() === sku,
+      ) ??
+      maps.find(
+        (map) =>
+          String(map.internalKey) === slug &&
+          (!map?.metadata?.sku ||
+            String(map.metadata.sku).trim().toUpperCase() === sku),
+      ) ??
+      null
     );
   }
 
@@ -81,7 +165,11 @@ export class BlingCatalogSyncService {
     );
   }
 
-  private async getResourceMap(companyId: string, resourceType: string, internalKey: string) {
+  private async getResourceMap(
+    companyId: string,
+    resourceType: string,
+    internalKey: string,
+  ) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT "internalKey","externalId",metadata
          FROM "IntegrationResourceMap"
@@ -118,8 +206,19 @@ export class BlingCatalogSyncService {
     );
   }
 
-  private async saveMap(companyId: string, slug: string, externalId: string, metadata: unknown) {
-    return this.saveResourceMap(companyId, "STOREFRONT_PRODUCT", slug, externalId, metadata);
+  private async saveMap(
+    companyId: string,
+    row: any,
+    externalId: string,
+    metadata: unknown,
+  ) {
+    return this.saveResourceMap(
+      companyId,
+      "STOREFRONT_PRODUCT",
+      this.catalogKey(row),
+      externalId,
+      metadata,
+    );
   }
 
   private defaultCompanyFiscalProfile(): CompanyFiscalProfile {
@@ -132,41 +231,221 @@ export class BlingCatalogSyncService {
       cstCofins: null,
       cfopIntra: null,
       cfopInter: null,
-      notes: "CST, CFOP e alíquotas devem ser validados com a contabilidade antes da primeira NF-e real.",
+      sampleCfopIntra: SAMPLE_CFOP_INTRA,
+      sampleCfopInter: SAMPLE_CFOP_INTER,
+      sampleNatureOperationId: null,
+      sampleNatureOperationName: null,
+      sampleValidatedByAccountant: false,
+      sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
+      exportCfop: null,
+      exportNatureOperationId: null,
+      exportNatureOperationName: null,
+      exportDepartureLocation: null,
+      exportDepartureState: "PR",
+      exportValidatedByAccountant: false,
+      exportSampleCfop: null,
+      exportSampleNatureOperationId: null,
+      exportSampleNatureOperationName: null,
+      exportSampleValidatedByAccountant: false,
+      reexpeditionReturnNatureOperationId: null,
+      reexpeditionReturnNatureOperationName: null,
+      reexpeditionOutboundNatureOperationId: null,
+      reexpeditionOutboundNatureOperationName: null,
+      reexpeditionValidatedByAccountant: false,
+      reexpeditionFiscalPolicyVersion: REEXPEDITION_FISCAL_POLICY_VERSION,
+      notes:
+        "CST, CFOP e alíquotas devem ser validados com a contabilidade antes da primeira NF-e real.",
       validatedByAccountant: false,
     };
   }
 
   async companyFiscalProfile(companyId: string) {
-    const row = await this.getResourceMap(companyId, "COMPANY_FISCAL_PROFILE", "company");
+    const row = await this.getResourceMap(
+      companyId,
+      "COMPANY_FISCAL_PROFILE",
+      "company",
+    );
+    const metadata =
+      row?.metadata && typeof row.metadata === "object" ? row.metadata : {};
+    const usesCurrentSamplePolicy =
+      metadata.sampleFiscalPolicyVersion === SAMPLE_FISCAL_POLICY_VERSION;
+    const usesCurrentReexpeditionPolicy =
+      metadata.reexpeditionFiscalPolicyVersion ===
+      REEXPEDITION_FISCAL_POLICY_VERSION;
     return {
       ...this.defaultCompanyFiscalProfile(),
-      ...(row?.metadata && typeof row.metadata === "object" ? row.metadata : {}),
+      ...metadata,
       taxRegime: "LUCRO_REAL",
       pisCofinsRegime: "NAO_CUMULATIVO",
+      sampleCfopIntra: SAMPLE_CFOP_INTRA,
+      sampleCfopInter: SAMPLE_CFOP_INTER,
+      sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
+      sampleValidatedByAccountant:
+        usesCurrentSamplePolicy &&
+        Boolean(metadata.sampleValidatedByAccountant),
+      reexpeditionFiscalPolicyVersion: REEXPEDITION_FISCAL_POLICY_VERSION,
+      reexpeditionValidatedByAccountant:
+        usesCurrentReexpeditionPolicy &&
+        Boolean(metadata.reexpeditionValidatedByAccountant),
     } as CompanyFiscalProfile;
   }
 
-  async saveCompanyFiscalProfile(companyId: string, patch: Record<string, unknown>) {
+  async saveCompanyFiscalProfile(
+    companyId: string,
+    patch: Record<string, unknown>,
+  ) {
     const current = await this.companyFiscalProfile(companyId);
     const next: CompanyFiscalProfile = {
       ...current,
       ...patch,
       taxRegime: "LUCRO_REAL",
       pisCofinsRegime: "NAO_CUMULATIVO",
-      state: String(patch.state ?? current.state ?? "PR").trim().toUpperCase(),
-      cstIcms: patch.cstIcms == null ? current.cstIcms ?? null : String(patch.cstIcms).trim() || null,
-      cstPis: patch.cstPis == null ? current.cstPis ?? null : String(patch.cstPis).trim() || null,
-      cstCofins: patch.cstCofins == null ? current.cstCofins ?? null : String(patch.cstCofins).trim() || null,
-      cfopIntra: patch.cfopIntra == null ? current.cfopIntra ?? null : String(patch.cfopIntra).trim() || null,
-      cfopInter: patch.cfopInter == null ? current.cfopInter ?? null : String(patch.cfopInter).trim() || null,
-      notes: patch.notes == null ? current.notes ?? null : String(patch.notes).trim() || null,
-      validatedByAccountant: Boolean(patch.validatedByAccountant ?? current.validatedByAccountant),
+      state: String(patch.state ?? current.state ?? "PR")
+        .trim()
+        .toUpperCase(),
+      cstIcms:
+        patch.cstIcms == null
+          ? (current.cstIcms ?? null)
+          : String(patch.cstIcms).trim() || null,
+      cstPis:
+        patch.cstPis == null
+          ? (current.cstPis ?? null)
+          : String(patch.cstPis).trim() || null,
+      cstCofins:
+        patch.cstCofins == null
+          ? (current.cstCofins ?? null)
+          : String(patch.cstCofins).trim() || null,
+      cfopIntra:
+        patch.cfopIntra == null
+          ? (current.cfopIntra ?? null)
+          : String(patch.cfopIntra).trim() || null,
+      cfopInter:
+        patch.cfopInter == null
+          ? (current.cfopInter ?? null)
+          : String(patch.cfopInter).trim() || null,
+      sampleCfopIntra: SAMPLE_CFOP_INTRA,
+      sampleCfopInter: SAMPLE_CFOP_INTER,
+      sampleNatureOperationId:
+        patch.sampleNatureOperationId == null
+          ? (current.sampleNatureOperationId ?? null)
+          : String(patch.sampleNatureOperationId).replace(/\D/g, "") || null,
+      sampleNatureOperationName:
+        patch.sampleNatureOperationName == null
+          ? (current.sampleNatureOperationName ?? null)
+          : String(patch.sampleNatureOperationName).trim() || null,
+      sampleValidatedByAccountant: Boolean(
+        patch.sampleValidatedByAccountant ??
+        current.sampleValidatedByAccountant,
+      ),
+      sampleFiscalPolicyVersion: SAMPLE_FISCAL_POLICY_VERSION,
+      exportCfop:
+        patch.exportCfop == null
+          ? (current.exportCfop ?? null)
+          : String(patch.exportCfop).replace(/\D/g, "") || null,
+      exportNatureOperationId:
+        patch.exportNatureOperationId == null
+          ? (current.exportNatureOperationId ?? null)
+          : String(patch.exportNatureOperationId).replace(/\D/g, "") || null,
+      exportNatureOperationName:
+        patch.exportNatureOperationName == null
+          ? (current.exportNatureOperationName ?? null)
+          : String(patch.exportNatureOperationName).trim() || null,
+      exportDepartureLocation:
+        patch.exportDepartureLocation == null
+          ? (current.exportDepartureLocation ?? null)
+          : String(patch.exportDepartureLocation).trim() || null,
+      exportDepartureState: String(
+        patch.exportDepartureState ?? current.exportDepartureState ?? "PR",
+      )
+        .trim()
+        .toUpperCase(),
+      exportValidatedByAccountant: Boolean(
+        patch.exportValidatedByAccountant ??
+        current.exportValidatedByAccountant,
+      ),
+      exportSampleCfop:
+        patch.exportSampleCfop == null
+          ? (current.exportSampleCfop ?? null)
+          : String(patch.exportSampleCfop).replace(/\D/g, "") || null,
+      exportSampleNatureOperationId:
+        patch.exportSampleNatureOperationId == null
+          ? (current.exportSampleNatureOperationId ?? null)
+          : String(patch.exportSampleNatureOperationId).replace(/\D/g, "") ||
+            null,
+      exportSampleNatureOperationName:
+        patch.exportSampleNatureOperationName == null
+          ? (current.exportSampleNatureOperationName ?? null)
+          : String(patch.exportSampleNatureOperationName).trim() || null,
+      exportSampleValidatedByAccountant: Boolean(
+        patch.exportSampleValidatedByAccountant ??
+        current.exportSampleValidatedByAccountant,
+      ),
+      reexpeditionReturnNatureOperationId:
+        patch.reexpeditionReturnNatureOperationId == null
+          ? (current.reexpeditionReturnNatureOperationId ?? null)
+          : String(patch.reexpeditionReturnNatureOperationId).replace(/\D/g, "") || null,
+      reexpeditionReturnNatureOperationName:
+        patch.reexpeditionReturnNatureOperationName == null
+          ? (current.reexpeditionReturnNatureOperationName ?? null)
+          : String(patch.reexpeditionReturnNatureOperationName).trim() || null,
+      reexpeditionOutboundNatureOperationId:
+        patch.reexpeditionOutboundNatureOperationId == null
+          ? (current.reexpeditionOutboundNatureOperationId ?? null)
+          : String(patch.reexpeditionOutboundNatureOperationId).replace(/\D/g, "") || null,
+      reexpeditionOutboundNatureOperationName:
+        patch.reexpeditionOutboundNatureOperationName == null
+          ? (current.reexpeditionOutboundNatureOperationName ?? null)
+          : String(patch.reexpeditionOutboundNatureOperationName).trim() || null,
+      reexpeditionValidatedByAccountant: Boolean(
+        patch.reexpeditionValidatedByAccountant ??
+        current.reexpeditionValidatedByAccountant,
+      ),
+      reexpeditionFiscalPolicyVersion: REEXPEDITION_FISCAL_POLICY_VERSION,
+      notes:
+        patch.notes == null
+          ? (current.notes ?? null)
+          : String(patch.notes).trim() || null,
+      validatedByAccountant: Boolean(
+        patch.validatedByAccountant ?? current.validatedByAccountant,
+      ),
     };
     if (!/^[A-Z]{2}$/.test(next.state)) throw new Error("UF fiscal inválida.");
     for (const value of [next.cfopIntra, next.cfopInter]) {
-      if (value && !/^\d{4}$/.test(value)) throw new Error("CFOP deve conter 4 dígitos.");
+      if (value && !/^\d{4}$/.test(value))
+        throw new Error("CFOP deve conter 4 dígitos.");
     }
+    if (next.sampleValidatedByAccountant && !next.sampleNatureOperationId) {
+      throw new Error(
+        "Selecione a natureza de operação de amostra do Bling antes de confirmar a validação contábil.",
+      );
+    }
+    if (next.exportCfop && !/^7\d{3}$/.test(next.exportCfop)) {
+      throw new Error("CFOP de exportação deve ter 4 dígitos e iniciar por 7.");
+    }
+    if (next.exportSampleCfop && !/^7\d{3}$/.test(next.exportSampleCfop)) {
+      throw new Error(
+        "CFOP de amostra internacional deve ter 4 dígitos e iniciar por 7.",
+      );
+    }
+    if (
+      next.exportDepartureState &&
+      !/^[A-Z]{2}$/.test(next.exportDepartureState)
+    ) {
+      throw new Error("UF de embarque inválida.");
+    }
+    if (next.exportValidatedByAccountant) resolveExportFiscalRoute(next);
+    if (next.exportSampleValidatedByAccountant) {
+      resolveExportFiscalRoute({
+        exportCfop: next.exportSampleCfop,
+        exportNatureOperationId: next.exportSampleNatureOperationId,
+        exportNatureOperationName: next.exportSampleNatureOperationName,
+        exportDepartureLocation: next.exportDepartureLocation,
+        exportDepartureState: next.exportDepartureState,
+        exportValidatedByAccountant: next.exportSampleValidatedByAccountant,
+      });
+    }
+    if (next.reexpeditionValidatedByAccountant)
+      resolveReexpeditionFiscalRoute(next);
     await this.saveResourceMap(
       companyId,
       "COMPANY_FISCAL_PROFILE",
@@ -174,24 +453,111 @@ export class BlingCatalogSyncService {
       companyId,
       next,
     );
+    if (next.reexpeditionValidatedByAccountant) {
+      await this.database.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "IntegrationOutbox" o
+              SET status='PENDING',attempts=0,"lastError"=NULL,"nextAttemptAt"=NULL,"updatedAt"=NOW()
+             FROM "SalesOrderReexpedition" re
+            WHERE re."companyId"=$1 AND re.status='CONFIGURATION_REQUIRED'
+              AND o."aggregateId"=re.id
+              AND o."eventType"='SALES_ORDER_REEXPEDITION_REQUESTED'`,
+          companyId,
+        );
+        await transaction.$executeRawUnsafe(
+          `UPDATE "SalesOrderReexpedition"
+              SET status='QUEUED',"lastError"=NULL,"updatedAt"=NOW()
+            WHERE "companyId"=$1 AND status='CONFIGURATION_REQUIRED'`,
+          companyId,
+        );
+      });
+    }
     return next;
+  }
+
+  async sampleFiscalRoute(companyId: string, destinationState: unknown) {
+    return resolveSampleFiscalRoute(
+      await this.companyFiscalProfile(companyId),
+      destinationState,
+    );
+  }
+
+  async exportFiscalRoute(
+    companyId: string,
+    orderType: "COMMERCIAL" | "SAMPLE" = "COMMERCIAL",
+  ) {
+    const profile = await this.companyFiscalProfile(companyId);
+    if (orderType === "SAMPLE") {
+      return resolveExportFiscalRoute({
+        exportCfop: profile.exportSampleCfop,
+        exportNatureOperationId: profile.exportSampleNatureOperationId,
+        exportNatureOperationName: profile.exportSampleNatureOperationName,
+        exportDepartureLocation: profile.exportDepartureLocation,
+        exportDepartureState: profile.exportDepartureState,
+        exportValidatedByAccountant: profile.exportSampleValidatedByAccountant,
+      });
+    }
+    return resolveExportFiscalRoute(profile);
+  }
+
+  async reexpeditionFiscalRoute(companyId: string) {
+    return resolveReexpeditionFiscalRoute(
+      await this.companyFiscalProfile(companyId),
+    );
+  }
+
+  async operationNatures(companyId: string) {
+    const response = await this.bling.request(
+      companyId,
+      "/naturezas-operacoes?pagina=1&limite=100",
+      { method: "GET" },
+    );
+    const rows = Array.isArray(response?.data) ? response.data : [];
+    return rows
+      .map((row: any) => ({
+        id: String(row?.id ?? "").replace(/\D/g, ""),
+        name: String(
+          row?.descricao ?? row?.nome ?? row?.description ?? "",
+        ).trim(),
+        type: row?.tipo ?? row?.type ?? null,
+      }))
+      .filter((row: { id: string; name: string }) => row.id && row.name)
+      .sort((left: { name: string }, right: { name: string }) =>
+        left.name.localeCompare(right.name, "pt-BR"),
+      );
   }
 
   private defaultProfile(row: any): FiscalProfile {
     const kg = Math.max(0.001, Number(row.netWeightGrams ?? 0) / 1000);
+    const grossKg = Math.max(kg, Number(row.grossWeightGrams ?? 0) / 1000);
+    const governedPrice = Number(row.catalogPrice ?? 0);
     return {
-      ncm: DEFAULT_NCM,
-      origem: 0,
-      unidade: "UN",
-      preco: BLING_CATALOG_PRICE_BY_SLUG[String(row.slug)] ?? 0,
+      ncm:
+        String(row.ncm ?? "").replace(/\D/g, "") ||
+        (row.lineCode === "GREEN_COFFEE" ? "09011110" : DEFAULT_NCM),
+      origem: Number.isInteger(Number(row.originCode))
+        ? Number(row.originCode)
+        : 0,
+      unidade: row.salesUnit === "KG" ? "KG" : "UN",
+      preco:
+        governedPrice > 0
+          ? governedPrice
+          : (BLING_CATALOG_PRICE_BY_SLUG[String(row.slug)] ?? 0),
       pesoLiquido: kg,
-      pesoBruto: kg,
+      pesoBruto: grossKg,
       tipo: "P",
       situacao: "A",
       formato: "S",
-      tipoProducao: "P",
-      descricaoCurta: `${row.name} — café torrado`,
-      cest: null,
+      tipoProducao: row.productionType === "T" ? "T" : "P",
+      descricaoCurta:
+        row.lineCode === "GREEN_COFFEE"
+          ? `${row.name} — café verde`
+          : `${row.name} — café torrado`,
+      cest: row.cest ? String(row.cest).replace(/\D/g, "") : null,
+      gtin: row.gtin ? String(row.gtin).replace(/\D/g, "") : null,
+      largura: Number(row.packageWidthCm ?? 0),
+      altura: Number(row.packageHeightCm ?? 0),
+      profundidade: Number(row.packageDepthCm ?? 0),
     };
   }
 
@@ -202,32 +568,72 @@ export class BlingCatalogSyncService {
       ...base,
       ...source,
       ncm: String(source.ncm ?? base.ncm).replace(/\D/g, ""),
-      origem: Number.isInteger(Number(source.origem)) ? Number(source.origem) : base.origem,
-      unidade: String(source.unidade ?? base.unidade).trim().toUpperCase(),
-      preco: Number.isFinite(Number(source.preco)) ? Number(source.preco) : base.preco,
-      pesoLiquido: Number.isFinite(Number(source.pesoLiquido)) ? Number(source.pesoLiquido) : base.pesoLiquido,
-      pesoBruto: Number.isFinite(Number(source.pesoBruto)) ? Number(source.pesoBruto) : base.pesoBruto,
+      origem: Number.isInteger(Number(source.origem))
+        ? Number(source.origem)
+        : base.origem,
+      unidade: String(source.unidade ?? base.unidade)
+        .trim()
+        .toUpperCase(),
+      preco: Number.isFinite(Number(source.preco))
+        ? Number(source.preco)
+        : base.preco,
+      pesoLiquido: Number.isFinite(Number(source.pesoLiquido))
+        ? Number(source.pesoLiquido)
+        : base.pesoLiquido,
+      pesoBruto: Number.isFinite(Number(source.pesoBruto))
+        ? Number(source.pesoBruto)
+        : base.pesoBruto,
       tipo: "P",
       formato: "S",
       situacao: source.situacao === "I" ? "I" : "A",
       tipoProducao: source.tipoProducao === "T" ? "T" : "P",
-      descricaoCurta: String(source.descricaoCurta ?? base.descricaoCurta).trim(),
+      descricaoCurta: String(
+        source.descricaoCurta ?? base.descricaoCurta,
+      ).trim(),
       cest: source.cest ? String(source.cest).replace(/\D/g, "") : null,
+      gtin: source.gtin ? String(source.gtin).replace(/\D/g, "") : base.gtin,
+      largura: Number.isFinite(Number(source.largura))
+        ? Number(source.largura)
+        : base.largura,
+      altura: Number.isFinite(Number(source.altura))
+        ? Number(source.altura)
+        : base.altura,
+      profundidade: Number.isFinite(Number(source.profundidade))
+        ? Number(source.profundidade)
+        : base.profundidade,
     };
   }
 
   private validateProfile(profile: FiscalProfile) {
-    if (!/^\d{8}$/.test(profile.ncm)) throw new Error("NCM deve conter exatamente 8 dígitos.");
-    if (!Number.isInteger(profile.origem) || profile.origem < 0 || profile.origem > 8) {
+    if (!/^\d{8}$/.test(profile.ncm))
+      throw new Error("NCM deve conter exatamente 8 dígitos.");
+    if (
+      !Number.isInteger(profile.origem) ||
+      profile.origem < 0 ||
+      profile.origem > 8
+    ) {
       throw new Error("Origem fiscal deve ser um código entre 0 e 8.");
     }
-    if (profile.cest && !/^\d{7}$/.test(profile.cest)) throw new Error("CEST deve conter 7 dígitos.");
-    if (!profile.unidade || profile.unidade.length > 6) throw new Error("Unidade fiscal inválida.");
-    if (!Number.isFinite(profile.preco) || profile.preco < 0) throw new Error("Preço de venda inválido.");
-    if (!Number.isFinite(profile.pesoLiquido) || profile.pesoLiquido <= 0) throw new Error("Peso líquido inválido.");
-    if (!Number.isFinite(profile.pesoBruto) || profile.pesoBruto < profile.pesoLiquido) {
+    if (profile.cest && !/^\d{7}$/.test(profile.cest))
+      throw new Error("CEST deve conter 7 dígitos.");
+    if (!profile.unidade || profile.unidade.length > 6)
+      throw new Error("Unidade fiscal inválida.");
+    if (!Number.isFinite(profile.preco) || profile.preco < 0)
+      throw new Error("Preço de venda inválido.");
+    if (!Number.isFinite(profile.pesoLiquido) || profile.pesoLiquido <= 0)
+      throw new Error("Peso líquido inválido.");
+    if (
+      !Number.isFinite(profile.pesoBruto) ||
+      profile.pesoBruto < profile.pesoLiquido
+    ) {
       throw new Error("Peso bruto não pode ser menor que o peso líquido.");
     }
+    if (
+      [profile.largura, profile.altura, profile.profundidade].some(
+        (value) => !Number.isFinite(value) || value <= 0,
+      )
+    )
+      throw new Error("Dimensões do produto inválidas para o Bling.");
   }
 
   private productPayload(row: any, profile: FiscalProfile) {
@@ -242,12 +648,19 @@ export class BlingCatalogSyncService {
       unidade: profile.unidade,
       pesoLiquido: profile.pesoLiquido,
       pesoBruto: profile.pesoBruto,
+      ...(profile.gtin ? { gtin: profile.gtin } : {}),
       volumes: 1,
       itensPorCaixa: 1,
       tipoProducao: profile.tipoProducao,
       condicao: 0,
       freteGratis: false,
       marca: "Bispo Coffees",
+      dimensoes: {
+        largura: profile.largura,
+        altura: profile.altura,
+        profundidade: profile.profundidade,
+        unidadeMedida: 1,
+      },
       observacoes: `Criado e governado pelo BBOS · SKU ${row.sku}`,
       tributacao: {
         origem: profile.origem,
@@ -272,20 +685,125 @@ export class BlingCatalogSyncService {
     return products;
   }
 
+  async syncVariant(companyId: string, variantId: string) {
+    const local = await this.localCatalog(companyId);
+    const row = local.find(
+      (item) => this.catalogKey(item) === String(variantId),
+    );
+    if (!row)
+      throw new Error("Produto BBOS não encontrado para sincronização.");
+    if (!row.fiscalValidated)
+      throw new Error(
+        "Sincronização bloqueada: confirme a validação fiscal do produto.",
+      );
+
+    const [profileMaps, productMaps, companyProfile] = await Promise.all([
+      this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE"),
+      this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
+      this.companyFiscalProfile(companyId),
+    ]);
+    const profile = this.normalizeProfile(
+      row,
+      this.mapForCatalogRow(profileMaps, row)?.metadata,
+    );
+    this.validateProfile(profile);
+    await this.saveResourceMap(
+      companyId,
+      "STOREFRONT_PRODUCT_PROFILE",
+      this.catalogKey(row),
+      this.catalogKey(row),
+      profile,
+    );
+
+    const currentMap = this.mapForCatalogRow(productMaps, row);
+    if (currentMap?.externalId) {
+      const detail = await this.bling.request(
+        companyId,
+        `/produtos/${encodeURIComponent(String(currentMap.externalId))}`,
+        { method: "GET" },
+      );
+      const existing = detail?.data ?? detail ?? {};
+      await this.bling.request(
+        companyId,
+        `/produtos/${encodeURIComponent(String(currentMap.externalId))}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            ...existing,
+            ...this.productPayload(row, profile),
+            id: Number(currentMap.externalId),
+            tributacao: {
+              ...(existing?.tributacao ?? {}),
+              origem: profile.origem,
+              ncm: profile.ncm,
+              ...(profile.cest ? { cest: profile.cest } : {}),
+            },
+          }),
+        },
+      );
+      return { action: "UPDATED", blingProductId: currentMap.externalId };
+    }
+
+    const sku = String(row.sku ?? "")
+      .trim()
+      .toUpperCase();
+    const exactMatches = (await this.fetchBlingProducts(companyId)).filter(
+      (product) =>
+        String(product?.codigo ?? "")
+          .trim()
+          .toUpperCase() === sku,
+    );
+    if (exactMatches.length > 1)
+      throw new Error(
+        `Sincronização bloqueada: existem ${exactMatches.length} produtos com o SKU ${sku} no Bling.`,
+      );
+    if (exactMatches[0]?.id) {
+      const externalId = String(exactMatches[0].id);
+      await this.saveMap(companyId, row, externalId, {
+        sku,
+        productVariantId: row.variantId,
+        source: "SKU_EXACT_MATCH_DURING_AUTOMATIC_SYNC",
+      });
+      return { action: "LINKED", blingProductId: externalId };
+    }
+
+    const result = await this.bling.request(companyId, "/produtos", {
+      method: "POST",
+      body: JSON.stringify(this.productPayload(row, profile)),
+    });
+    const externalId = String(result?.data?.id ?? result?.id ?? "").trim();
+    if (!externalId) throw new Error("Bling criou o produto sem retornar ID.");
+    await this.saveMap(companyId, row, externalId, {
+      sku,
+      productVariantId: row.variantId,
+      source: "CREATED_BY_BBOS_AUTOMATIC_SYNC",
+      fiscalProfile: profile,
+      companyFiscalProfile: {
+        taxRegime: companyProfile.taxRegime,
+        pisCofinsRegime: companyProfile.pisCofinsRegime,
+      },
+    });
+    return { action: "CREATED", blingProductId: externalId };
+  }
+
   async status(companyId: string) {
     const [local, maps] = await Promise.all([
-      this.localCatalog(),
+      this.localCatalog(companyId),
       this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
     ]);
-    const bySlug = new Map(maps.map((row) => [String(row.internalKey), row]));
-    const items = local.map((row) => ({
-      slug: row.slug,
-      name: row.name,
-      sku: row.sku,
-      weightGrams: Number(row.netWeightGrams),
-      mapped: Boolean(bySlug.get(String(row.slug))?.externalId),
-      blingProductId: bySlug.get(String(row.slug))?.externalId ?? null,
-    }));
+    const items = local.map((row) => {
+      const mapping = this.mapForCatalogRow(maps, row);
+      return {
+        catalogKey: this.catalogKey(row),
+        variantId: row.variantId,
+        slug: row.slug,
+        name: row.name,
+        sku: row.sku,
+        weightGrams: Number(row.netWeightGrams),
+        mapped: Boolean(mapping?.externalId),
+        blingProductId: mapping?.externalId ?? null,
+      };
+    });
     return {
       total: items.length,
       mapped: items.filter((item) => item.mapped).length,
@@ -296,41 +814,74 @@ export class BlingCatalogSyncService {
   }
 
   async profiles(companyId: string) {
-    const [local, profileMaps, productMaps, companyProfile] = await Promise.all([
-      this.localCatalog(),
-      this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE"),
-      this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
-      this.companyFiscalProfile(companyId),
-    ]);
-    const profiles = new Map(profileMaps.map((row) => [String(row.internalKey), row]));
-    const products = new Map(productMaps.map((row) => [String(row.internalKey), row]));
-
+    const [local, profileMaps, productMaps, companyProfile] = await Promise.all(
+      [
+        this.localCatalog(companyId),
+        this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE"),
+        this.resourceMaps(companyId, "STOREFRONT_PRODUCT"),
+        this.companyFiscalProfile(companyId),
+      ],
+    );
     return {
       defaultNcm: DEFAULT_NCM,
       companyProfile,
-      items: local.map((row) => ({
-        slug: row.slug,
-        name: row.name,
-        sku: row.sku,
-        mapped: Boolean(products.get(String(row.slug))?.externalId),
-        blingProductId: products.get(String(row.slug))?.externalId ?? null,
-        profile: this.normalizeProfile(row, profiles.get(String(row.slug))?.metadata),
-      })),
+      items: local.map((row) => {
+        const productMap = this.mapForCatalogRow(productMaps, row);
+        const profileMap = this.mapForCatalogRow(profileMaps, row);
+        return {
+          catalogKey: this.catalogKey(row),
+          variantId: row.variantId,
+          slug: row.slug,
+          name: row.name,
+          sku: row.sku,
+          mapped: Boolean(productMap?.externalId),
+          blingProductId: productMap?.externalId ?? null,
+          profile: this.normalizeProfile(row, profileMap?.metadata),
+        };
+      }),
     };
   }
 
-  async saveProfile(companyId: string, slug: string, patch: Record<string, unknown>) {
-    const local = await this.localCatalog();
-    const row = local.find((item) => String(item.slug) === slug);
+  async saveProfile(
+    companyId: string,
+    catalogKey: string,
+    patch: Record<string, unknown>,
+  ) {
+    const local = await this.localCatalog(companyId);
+    const direct = local.find(
+      (item) => this.catalogKey(item) === String(catalogKey),
+    );
+    const legacyMatches = local.filter(
+      (item) => String(item.slug) === String(catalogKey),
+    );
+    const row =
+      direct ?? (legacyMatches.length === 1 ? legacyMatches[0] : null);
     if (!row) throw new Error("Produto BBOS não encontrado.");
 
-    const current = await this.getResourceMap(companyId, "STOREFRONT_PRODUCT_PROFILE", slug);
-    const next = this.normalizeProfile(row, { ...(current?.metadata ?? {}), ...patch });
+    const profileMaps = await this.resourceMaps(
+      companyId,
+      "STOREFRONT_PRODUCT_PROFILE",
+    );
+    const current = this.mapForCatalogRow(profileMaps, row);
+    const next = this.normalizeProfile(row, {
+      ...(current?.metadata ?? {}),
+      ...patch,
+    });
     this.validateProfile(next);
 
-    await this.saveResourceMap(companyId, "STOREFRONT_PRODUCT_PROFILE", slug, slug, next);
+    await this.saveResourceMap(
+      companyId,
+      "STOREFRONT_PRODUCT_PROFILE",
+      this.catalogKey(row),
+      this.catalogKey(row),
+      next,
+    );
 
-    const productMap = await this.getResourceMap(companyId, "STOREFRONT_PRODUCT", slug);
+    const productMaps = await this.resourceMaps(
+      companyId,
+      "STOREFRONT_PRODUCT",
+    );
+    const productMap = this.mapForCatalogRow(productMaps, row);
     if (productMap?.externalId) {
       const currentRemote = await this.bling.request(
         companyId,
@@ -359,7 +910,8 @@ export class BlingCatalogSyncService {
     }
 
     return {
-      slug,
+      catalogKey: this.catalogKey(row),
+      slug: row.slug,
       profile: next,
       syncedToBling: Boolean(productMap?.externalId),
       blingProductId: productMap?.externalId ?? null,
@@ -367,13 +919,15 @@ export class BlingCatalogSyncService {
   }
 
   async reconcile(companyId: string) {
-    const local = await this.localCatalog();
+    const local = await this.localCatalog(companyId);
     const remote = await this.fetchBlingProducts(companyId);
 
     const remoteBySku = new Map<string, any>();
     const duplicateSkus = new Set<string>();
     for (const product of remote) {
-      const sku = String(product?.codigo ?? "").trim().toUpperCase();
+      const sku = String(product?.codigo ?? "")
+        .trim()
+        .toUpperCase();
       if (!sku) continue;
       if (remoteBySku.has(sku)) duplicateSkus.add(sku);
       else remoteBySku.set(sku, product);
@@ -384,28 +938,50 @@ export class BlingCatalogSyncService {
     const ambiguous: any[] = [];
 
     for (const row of local) {
-      const sku = String(row.sku ?? "").trim().toUpperCase();
+      const sku = String(row.sku ?? "")
+        .trim()
+        .toUpperCase();
       if (!sku) {
-        missing.push({ slug: row.slug, name: row.name, sku: null, reason: "LOCAL_SKU_MISSING" });
+        missing.push({
+          slug: row.slug,
+          name: row.name,
+          sku: null,
+          reason: "LOCAL_SKU_MISSING",
+        });
         continue;
       }
       if (duplicateSkus.has(sku)) {
-        ambiguous.push({ slug: row.slug, name: row.name, sku, reason: "DUPLICATE_SKU_IN_BLING" });
+        ambiguous.push({
+          slug: row.slug,
+          name: row.name,
+          sku,
+          reason: "DUPLICATE_SKU_IN_BLING",
+        });
         continue;
       }
       const product = remoteBySku.get(sku);
       const externalId = String(product?.id ?? "").trim();
       if (!externalId) {
-        missing.push({ slug: row.slug, name: row.name, sku, reason: "NOT_FOUND_IN_BLING" });
+        missing.push({
+          slug: row.slug,
+          name: row.name,
+          sku,
+          reason: "NOT_FOUND_IN_BLING",
+        });
         continue;
       }
-      await this.saveMap(companyId, String(row.slug), externalId, {
+      await this.saveMap(companyId, row, externalId, {
         sku,
         productVariantId: row.variantId,
         blingName: product?.nome ?? null,
         source: "SKU_EXACT_MATCH",
       });
-      matched.push({ slug: row.slug, name: row.name, sku, blingProductId: externalId });
+      matched.push({
+        slug: row.slug,
+        name: row.name,
+        sku,
+        blingProductId: externalId,
+      });
     }
 
     return {
@@ -415,23 +991,34 @@ export class BlingCatalogSyncService {
       matched,
       missing,
       ambiguous,
-      ready: missing.length === 0 && ambiguous.length === 0 && matched.length === local.length,
+      ready:
+        missing.length === 0 &&
+        ambiguous.length === 0 &&
+        matched.length === local.length,
     };
   }
 
   async createMissing(companyId: string) {
-    const local = await this.localCatalog();
+    const local = await this.localCatalog(companyId);
     const remote = await this.fetchBlingProducts(companyId);
     const remoteBySku = new Map<string, any>();
 
     for (const product of remote) {
-      const sku = String(product?.codigo ?? "").trim().toUpperCase();
+      const sku = String(product?.codigo ?? "")
+        .trim()
+        .toUpperCase();
       if (sku && !remoteBySku.has(sku)) remoteBySku.set(sku, product);
     }
 
-    const profileMaps = await this.resourceMaps(companyId, "STOREFRONT_PRODUCT_PROFILE");
-    const profiles = new Map(profileMaps.map((row) => [String(row.internalKey), row]));
+    const profileMaps = await this.resourceMaps(
+      companyId,
+      "STOREFRONT_PRODUCT_PROFILE",
+    );
     const companyProfile = await this.companyFiscalProfile(companyId);
+    const productMaps = await this.resourceMaps(
+      companyId,
+      "STOREFRONT_PRODUCT",
+    );
 
     const created: any[] = [];
     const linkedExisting: any[] = [];
@@ -439,41 +1026,58 @@ export class BlingCatalogSyncService {
 
     for (const row of local) {
       const slug = String(row.slug);
-      const sku = String(row.sku ?? "").trim().toUpperCase();
+      const sku = String(row.sku ?? "")
+        .trim()
+        .toUpperCase();
       if (!sku) {
         failed.push({ slug, name: row.name, reason: "LOCAL_SKU_MISSING" });
         continue;
       }
 
-      const alreadyMapped = await this.getResourceMap(companyId, "STOREFRONT_PRODUCT", slug);
+      const alreadyMapped = this.mapForCatalogRow(productMaps, row);
       if (alreadyMapped?.externalId) continue;
 
       const existing = remoteBySku.get(sku);
       if (existing?.id) {
         const externalId = String(existing.id);
-        await this.saveMap(companyId, slug, externalId, {
+        await this.saveMap(companyId, row, externalId, {
           sku,
           productVariantId: row.variantId,
           blingName: existing.nome ?? null,
           source: "SKU_EXACT_MATCH_DURING_CREATE",
         });
-        linkedExisting.push({ slug, name: row.name, sku, blingProductId: externalId });
+        linkedExisting.push({
+          slug,
+          name: row.name,
+          sku,
+          blingProductId: externalId,
+        });
         continue;
       }
 
       try {
-        const profile = this.normalizeProfile(row, profiles.get(slug)?.metadata);
+        const profile = this.normalizeProfile(
+          row,
+          this.mapForCatalogRow(profileMaps, row)?.metadata,
+        );
         this.validateProfile(profile);
-        await this.saveResourceMap(companyId, "STOREFRONT_PRODUCT_PROFILE", slug, slug, profile);
+        await this.saveResourceMap(
+          companyId,
+          "STOREFRONT_PRODUCT_PROFILE",
+          this.catalogKey(row),
+          this.catalogKey(row),
+          profile,
+        );
 
         const result = await this.bling.request(companyId, "/produtos", {
           method: "POST",
           body: JSON.stringify(this.productPayload(row, profile)),
         });
         const externalId = String(result?.data?.id ?? result?.id ?? "").trim();
-        if (!externalId) throw new Error("Bling criou o produto sem retornar ID.");
+        if (!externalId)
+          throw new Error("Bling criou o produto sem retornar ID.");
 
-        await this.saveMap(companyId, slug, externalId, {
+        await this.saveMap(companyId, row, externalId, {
           sku,
           productVariantId: row.variantId,
           blingName: row.name,
@@ -484,7 +1088,13 @@ export class BlingCatalogSyncService {
             pisCofinsRegime: companyProfile.pisCofinsRegime,
           },
         });
-        created.push({ slug, name: row.name, sku, blingProductId: externalId, profile });
+        created.push({
+          slug,
+          name: row.name,
+          sku,
+          blingProductId: externalId,
+          profile,
+        });
       } catch (error) {
         failed.push({
           slug,

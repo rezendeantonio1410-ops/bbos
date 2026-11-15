@@ -13,7 +13,8 @@ import {
   Flame,
   Gauge,
   PackageCheck,
-  Plus,
+  PackageOpen,
+  Play,
   Scale,
   Target,
   X,
@@ -21,18 +22,20 @@ import {
 import { Badge, Button, Card } from "@bbos/ui";
 import {
   calculateProductionCost,
+  ROASTER_OPERATIONAL_GREEN_LOAD_KG,
   type ProductionAlert,
   type ProductionOrderStatus,
   type ProductionOrderView,
 } from "@bbos/shared";
 import {
   PRODUCT_LINE_LABELS,
-  PRODUCT_LINES,
+  ROASTED_PRODUCT_LINES,
   type CatalogProduct,
   type ProductLine,
 } from "@bbos/shared/product-presentation";
 import { loadProductCatalog } from "@/lib/product-catalog-api";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { buildProductionCostInput } from "@/lib/production-cost-input";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -40,6 +43,21 @@ const brl = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+const preciseNumber = new Intl.NumberFormat("pt-BR", {
+  maximumFractionDigits: 4,
+});
+const decimalCurrency = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const parseBrlInput = (value: string) => {
+  const sanitized = value.replace(/[^\d,.-]/g, "");
+  const normalized = sanitized.includes(",")
+    ? sanitized.replace(/\./g, "").replace(",", ".")
+    : sanitized;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
 const status: Record<
   ProductionOrderStatus,
   { label: string; tone: "neutral" | "success" | "warning" | "danger" }
@@ -55,6 +73,276 @@ const status: Record<
 };
 const field =
   "mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-forest-700";
+
+const isProductionProfile = (item: CatalogProduct) => {
+  const normalizedName = item.name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  return (
+    item.active &&
+    (ROASTED_PRODUCT_LINES as readonly ProductLine[]).includes(item.line) &&
+    !normalizedName.includes("white label") &&
+    !normalizedName.includes("private label") &&
+    !normalizedName.includes("marca branca")
+  );
+};
+
+type ProductionOptions = {
+  warehouses: Array<{ id: string; code: string; name: string }>;
+  resources: Array<{ id: string; code: string; name: string }>;
+  users: Array<{ id: string; name: string }>;
+};
+
+type PackagingDemand = {
+  salesOrderItemId: string;
+  salesOrderId: string;
+  orderNumber: string;
+  customerName: string;
+  productVariantId: string;
+  sku: string;
+  productName: string;
+  netWeightGrams: number;
+  quantity: number;
+  requiredPackages: number;
+  requiredKg: string | number;
+};
+
+type UtilityCostEstimate = {
+  configured: boolean;
+  resource?: { id: string; code: string; name: string };
+  batchCount?: number;
+  operationalLoadKg?: number;
+  roastMinutesPerBatch?: number;
+  coolingMinutesPerBatch?: number;
+  cycleMinutesPerBatch?: number;
+  energyCostPerBatch?: number;
+  gasCostPerBatch?: number;
+  totalCostPerBatch?: number;
+  energyKwh?: number;
+  gasKg?: number;
+  energyCost?: number;
+  gasCost?: number;
+  totalCost?: number;
+};
+
+const statusFromApi = (value: unknown): ProductionOrderStatus => {
+  const normalized = String(value ?? "PLANNED").toUpperCase();
+  const values: Record<string, ProductionOrderStatus> = {
+    PLANNED: "planned",
+    RESERVED: "reserved",
+    IN_PROGRESS: "in-production",
+    ROASTED: "roasted",
+    PACKAGING: "packaging",
+    COMPLETED: "completed",
+    BLOCKED: "blocked",
+    CANCELLED: "cancelled",
+  };
+  return values[normalized] ?? "planned";
+};
+
+const traceabilityForStatus = (current: ProductionOrderStatus) => {
+  const stage =
+    current === "completed"
+      ? 3
+      : current === "roasted" || current === "packaging"
+        ? 2
+        : current === "in-production"
+          ? 1
+          : 0;
+  return ["Ordem gerada", "Torra", "Empacotamento", "Produto acabado"].map(
+    (label, index) => ({
+      id: `${label}-${index}`,
+      label,
+      detail:
+        index < stage
+          ? "Concluído"
+          : index === stage
+            ? current === "completed"
+              ? "Concluído"
+              : "Etapa atual"
+            : "Próxima etapa",
+      status:
+        index < stage || current === "completed"
+          ? ("complete" as const)
+          : index === stage
+            ? ("current" as const)
+            : ("future" as const),
+    }),
+  );
+};
+
+const mapProductionOrder = (
+  row: Record<string, unknown>,
+): ProductionOrderView => {
+  const consumptions = Array.isArray(row.consumptions)
+    ? (row.consumptions as Array<Record<string, unknown>>)
+    : [];
+  const batches = Array.isArray(row.batches)
+    ? (row.batches as Array<Record<string, unknown>>)
+    : [];
+  const packagingConsumptions = Array.isArray(row.packagingConsumptions)
+    ? (row.packagingConsumptions as Array<Record<string, unknown>>)
+    : [];
+  const costEvents = Array.isArray(row.costEvents)
+    ? (row.costEvents as Array<Record<string, unknown>>)
+    : [];
+  const resourceUsages = Array.isArray(row.resourceUsages)
+    ? (row.resourceUsages as Array<Record<string, unknown>>)
+    : [];
+  const finishedMovements = Array.isArray(row.finishedGoodsMovements)
+    ? (row.finishedGoodsMovements as Array<Record<string, unknown>>)
+    : [];
+  const variant = row.productVariant as
+    | {
+        id?: string;
+        netWeightGrams?: number;
+        sku?: string;
+        product?: {
+          id?: string;
+          productLine?: { code?: ProductLine };
+        };
+      }
+    | undefined;
+  const plannedQuantity = Number(row.plannedWeightKg ?? 0);
+  const packageWeightG = Number(variant?.netWeightGrams ?? 500);
+  const producedPackages = finishedMovements.reduce(
+    (sum, item) => sum + Number(item.packageQuantity ?? 0),
+    0,
+  );
+  const finishedOutputKg = finishedMovements.reduce(
+    (sum, item) => sum + Number(item.totalWeightKg ?? 0),
+    0,
+  );
+  const currentStatus = statusFromApi(row.status);
+  const roastedOutputKg = batches.reduce(
+    (sum, batch) => sum + Number(batch.roastedOutputKg ?? 0),
+    0,
+  );
+  const costs = buildProductionCostInput({
+    consumptions,
+    batches,
+    packagingConsumptions,
+    costEvents,
+    roastedOutputKg,
+    finishedOutputKg,
+    producedPackages,
+    sku: String(row.sku ?? "—"),
+  });
+  return {
+    id: String(row.id),
+    code: String(row.code),
+    productId: variant?.product?.id,
+    productVariantId:
+      String(variant?.id ?? row.productVariantId ?? "") || undefined,
+    productLine:
+      variant?.product?.productLine?.code === "GREEN_COFFEE"
+        ? undefined
+        : variant?.product?.productLine?.code,
+    product: String(row.productName ?? "Produto não definido"),
+    sku: String(row.sku ?? variant?.sku ?? "—"),
+    plannedQuantity,
+    producedQuantity: finishedOutputKg || Number(row.actualOutputKg ?? 0),
+    unit: String(row.unit ?? "kg"),
+    plannedAt: String(row.plannedAt ?? ""),
+    startedAt: row.startedAt ? String(row.startedAt) : undefined,
+    completedAt: row.completedAt ? String(row.completedAt) : undefined,
+    responsible: String(row.responsible ?? "—"),
+    priority: String(
+      row.priority ?? "normal",
+    ).toLowerCase() as ProductionOrderView["priority"],
+    status: currentStatus,
+    blendName: String(
+      (row.blend as { name?: string } | undefined)?.name ?? "Café único",
+    ),
+    allocations: consumptions.map((item) => {
+      const lot = item.coffeeLot as
+        { id?: string; code?: string; origin?: string } | undefined;
+      return {
+        lotId: String(lot?.id ?? item.coffeeLotId),
+        lotCode: String(lot?.code ?? item.coffeeLotId),
+        origin: String(lot?.origin ?? "—"),
+        reservedKg: Number(item.reservedKg ?? 0),
+        consumedKg: Number(item.consumedKg ?? 0),
+        percentage: Number(item.percentage ?? 0),
+        realCostPerKg: Number(item.realCostPerKg ?? 0),
+      };
+    }),
+    batches: batches.map((batch) => ({
+      id: String(batch.id),
+      code: String(batch.code),
+      machine: String(batch.machine),
+      operator: String(batch.operator),
+      lotCode: "—",
+      greenInputKg: Number(batch.greenInputKg),
+      roastedOutputKg: Number(batch.roastedOutputKg),
+      lossKg: Number(batch.lossKg),
+      lossPercent: Number(batch.lossPercent),
+      startedAt: String(batch.startedAt),
+      completedAt: String(batch.completedAt),
+      notes: batch.notes ? String(batch.notes) : undefined,
+    })),
+    packaging: {
+      packageWeightG,
+      plannedPackages: Math.floor((plannedQuantity * 1000) / packageWeightG),
+      producedPackages,
+      lossPackages: Math.max(
+        0,
+        Math.floor((plannedQuantity * 1000) / packageWeightG) -
+          producedPackages,
+      ),
+      packagingName: String(
+        packagingConsumptions[0]?.materialName ?? `Embalagem ${row.sku ?? ""}`,
+      ),
+      packagingUnitCost: Number(packagingConsumptions[0]?.unitCost ?? 0),
+      labelsCost: 0,
+      boxesCost: 0,
+      otherSuppliesCost: 0,
+    },
+    costs,
+    wipAvailableKg: Number(row.wipAvailableKg ?? 0),
+    wipAvailableCost: Number(row.wipAvailableCost ?? 0),
+    resourceUsages: resourceUsages.map((item) => {
+      const resource = item.resource as Record<string, unknown> | undefined;
+      return {
+        resourceCode: String(resource?.code ?? "—"),
+        resourceName: String(resource?.name ?? "Recurso produtivo"),
+        machineHours: Number(item.machineHours ?? 0),
+        measuredEnergyKwh: Number(item.measuredEnergy ?? 0),
+        measuredGasKg: Number(item.measuredGas ?? 0),
+        energyRatePerKwh: Number(resource?.energyRatePerKwh ?? 0),
+        gasRatePerKg: Number(resource?.gasRatePerUnit ?? 0),
+        notes: item.notes ? String(item.notes) : undefined,
+      };
+    }),
+    traceability: traceabilityForStatus(currentStatus),
+  };
+};
+
+const fetchProductionOrders = async () => {
+  const response = await fetch(`${getApiBaseUrl()}/production/orders`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok)
+    throw new Error("Não foi possível atualizar as ordens de produção.");
+  const rows = (await response.json()) as Array<Record<string, unknown>>;
+  return rows.map(mapProductionOrder);
+};
+
+const readApiError = async (response: Response, fallback: string) => {
+  const payload = (await response.json().catch(() => ({}))) as {
+    message?: string | string[];
+  };
+  return Array.isArray(payload.message)
+    ? payload.message.join(" ")
+    : (payload.message ?? fallback);
+};
+
+const localDateTimeValue = (date: Date) => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+};
 
 function SummaryCard({
   label,
@@ -95,40 +383,57 @@ function NewOrderWizard({
 }) {
   const [step, setStep] = useState(0);
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
-  const [line, setLine] = useState<ProductLine>(PRODUCT_LINES[0]);
+  const [line, setLine] = useState<ProductLine>(ROASTED_PRODUCT_LINES[0]);
   const [productId, setProductId] = useState("");
-  const [productVariantId, setProductVariantId] = useState("");
-  const productsForLine = catalog.filter(
-    (item) => item.line === line && item.active,
+  const productionProfiles = catalog.filter(isProductionProfile);
+  const productsForLine = productionProfiles.filter(
+    (item) => item.line === line,
   );
   const catalogProduct =
     productsForLine.find((item) => item.id === productId) ?? productsForLine[0];
   const product = catalogProduct?.name ?? "";
   const variantsForProduct =
     catalogProduct?.skus.filter((item) => item.active) ?? [];
-  const selectedVariant =
-    variantsForProduct.find((item) => item.id === productVariantId) ??
-    variantsForProduct[0];
+  const selectedVariant = [...variantsForProduct].sort(
+    (left, right) => right.packageWeightG - left.packageWeightG,
+  )[0];
   const sku = selectedVariant?.sku ?? "";
   useEffect(() => {
     void loadProductCatalog().then(({ products }) => {
-      if (!products.length) return;
-      const first = products[0]!;
+      const eligible = products.filter(isProductionProfile);
+      if (!eligible.length) return;
+      const first = eligible[0]!;
       setCatalog(products);
       setLine(first.line);
       setProductId(first.id);
-      setProductVariantId(first.skus[0]?.id ?? "");
     });
   }, []);
   const [quantity, setQuantity] = useState(240);
-  const [date, setDate] = useState("2026-08-08");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [responsible, setResponsible] = useState("");
   const [mode, setMode] = useState<"single" | "blend">("single");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
-  const [available, setAvailable] = useState<Array<{ id: string; code: string; origin: string; availableQuantityKg: number; realCostPerKg: number; supplier: string; warehouse: string }>>([]);
+  const [creating, setCreating] = useState(false);
+  const [available, setAvailable] = useState<
+    Array<{
+      id: string;
+      code: string;
+      origin: string;
+      availableQuantityKg: number;
+      realCostPerKg: number;
+      supplier: string;
+      warehouse: string;
+    }>
+  >([]);
   useEffect(() => {
-    void fetch(`${getApiBaseUrl()}/production/available-lots`, { credentials: "include", cache: "no-store" })
-      .then((response) => response.ok ? response.json() as Promise<typeof available> : [])
+    void fetch(`${getApiBaseUrl()}/production/available-lots`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<typeof available>) : [],
+      )
       .then(setAvailable)
       .catch(() => setAvailable([]));
   }, []);
@@ -137,7 +442,7 @@ function NewOrderWizard({
     0,
   );
   const stages = [
-    "Produto",
+    "Linha e perfil",
     "Quantidade",
     "Data",
     "Café / Blend",
@@ -146,10 +451,12 @@ function NewOrderWizard({
   ];
   const next = () => {
     setError("");
-    if (step === 0 && !selectedVariant)
-      return setError("Selecione uma apresentação/SKU ativa do catálogo.");
+    if (step === 0 && (!catalogProduct || !selectedVariant))
+      return setError("Selecione uma linha e um perfil de café válidos.");
     if (step === 1 && quantity <= 0)
       return setError("Informe uma quantidade maior que zero.");
+    if (step === 2 && !responsible.trim())
+      return setError("Informe o responsável pela produção.");
     if (step === 4 && Math.abs(allocated - quantity) > 0.001)
       return setError(
         `A reserva deve totalizar ${number.format(quantity)} kg.`,
@@ -164,7 +471,9 @@ function NewOrderWizard({
     else setSelected((current) => ({ ...current, [lotId]: value }));
     setError("");
   };
-  const confirm = () => {
+  const confirm = async () => {
+    if (creating) return;
+    setError("");
     if (Math.abs(allocated - quantity) > 0.001)
       return setError(
         "A soma das reservas deve ser igual à quantidade planejada.",
@@ -186,77 +495,78 @@ function NewOrderWizard({
       ) > 0.01
     )
       return setError("A participação dos lotes deve somar 100%.");
-    void onCreate({
-      id: `op-${Date.now()}`,
-      code: "OP-NOVA",
-      productVariantId: selectedVariant?.id,
-      product,
-      sku,
-      plannedQuantity: quantity,
-      producedQuantity: 0,
-      unit: "kg",
-      plannedAt: date,
-      responsible: "A definir",
-      priority: "normal",
-      status: "reserved",
-      blendName:
-        mode === "single"
-          ? `Café único — ${allocations[0]?.origin}`
-          : "Blend operacional",
-      allocations,
-      batches: [],
-      packaging: {
-        packageWeightG: selectedVariant?.packageWeightG ?? 500,
-        plannedPackages: Math.round(
-          (quantity * 1000) / (selectedVariant?.packageWeightG ?? 500),
-        ),
-        producedPackages: 0,
-        lossPackages: 0,
-        packagingName: `Embalagem ${sku}`,
-        packagingUnitCost: 2.75,
-        labelsCost: 0,
-        boxesCost: 0,
-        otherSuppliesCost: 0,
-      },
-      costs: {
-        greenCoffeeConsumedCost: allocations.reduce(
-          (sum, item) => sum + item.reservedKg * item.realCostPerKg,
-          0,
-        ),
-        roastLossCost: 0,
-        packagingCost: 0,
-        suppliesCost: 0,
-        laborCost: 0,
-        energyCost: 0,
-        otherIndustrialCosts: 0,
-        roastedOutputKg: quantity * 0.845,
-        finishedOutputKg: quantity * 0.83,
-        producedPackages: Math.max(1, Math.round(quantity * 2 * 0.83)),
-        standardCostPerKg: 58,
+    setCreating(true);
+    try {
+      await onCreate({
+        id: `op-${Date.now()}`,
+        code: "OP-NOVA",
+        productId: catalogProduct?.id,
+        productVariantId: selectedVariant?.id,
+        productLine: line === "GREEN_COFFEE" ? undefined : line,
+        product,
         sku,
-        sourceCostEventIds: [],
-      },
-      traceability: [
-        "Fornecedor",
-        "Recebimento",
-        "Lote verde",
-        "OP",
-        "Torra",
-        "Blend",
-        "Embalagem",
-        "Produto acabado",
-      ].map((label, index) => ({
-        id: `${Date.now()}-${index}`,
-        label,
-        detail:
-          index < 3
-            ? "Concluído"
-            : index === 3
-              ? "Etapa atual"
-              : "Próxima etapa",
-        status: index < 3 ? "complete" : index === 3 ? "current" : "future",
-      })),
-    });
+        plannedQuantity: quantity,
+        producedQuantity: 0,
+        unit: "kg",
+        plannedAt: date,
+        responsible: responsible.trim(),
+        priority: "normal",
+        status: "reserved",
+        blendName:
+          mode === "single"
+            ? `Café único — ${allocations[0]?.origin}`
+            : "Blend operacional",
+        allocations,
+        batches: [],
+        costs: {
+          greenCoffeeConsumedCost: allocations.reduce(
+            (sum, item) => sum + item.reservedKg * item.realCostPerKg,
+            0,
+          ),
+          roastLossCost: 0,
+          packagingCost: 0,
+          suppliesCost: 0,
+          laborCost: 0,
+          energyCost: 0,
+          gasCost: 0,
+          otherIndustrialCosts: 0,
+          roastedOutputKg: quantity * 0.845,
+          finishedOutputKg: quantity * 0.83,
+          producedPackages: Math.max(1, Math.round(quantity * 2 * 0.83)),
+          standardCostPerKg: 58,
+          sku,
+          sourceCostEventIds: [],
+        },
+        traceability: [
+          "Fornecedor",
+          "Recebimento",
+          "Lote verde",
+          "OP",
+          "Torra",
+          "Blend",
+          "Embalagem",
+          "Produto acabado",
+        ].map((label, index) => ({
+          id: `${Date.now()}-${index}`,
+          label,
+          detail:
+            index < 3
+              ? "Concluído"
+              : index === 3
+                ? "Etapa atual"
+                : "Próxima etapa",
+          status: index < 3 ? "complete" : index === 3 ? "current" : "future",
+        })),
+      });
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível criar e reservar a ordem de produção.",
+      );
+    } finally {
+      setCreating(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-4 backdrop-blur-sm">
@@ -286,7 +596,7 @@ function NewOrderWizard({
         </div>
         <div className="min-h-72 py-8">
           {step === 0 && (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-xs font-semibold">
                 Linha
                 <select
@@ -294,15 +604,15 @@ function NewOrderWizard({
                   onChange={(e) => {
                     const nextLine = e.target.value as ProductLine;
                     const nextProduct = catalog.find(
-                      (item) => item.line === nextLine,
+                      (item) =>
+                        item.line === nextLine && isProductionProfile(item),
                     );
                     setLine(nextLine);
                     setProductId(nextProduct?.id ?? "");
-                    setProductVariantId(nextProduct?.skus[0]?.id ?? "");
                   }}
                   className={field}
                 >
-                  {PRODUCT_LINES.map((item) => (
+                  {ROASTED_PRODUCT_LINES.map((item) => (
                     <option key={item} value={item}>
                       {PRODUCT_LINE_LABELS[item]}
                     </option>
@@ -310,7 +620,7 @@ function NewOrderWizard({
                 </select>
               </label>
               <label className="text-xs font-semibold">
-                Produto
+                Café / Perfil
                 <select
                   value={catalogProduct?.id ?? ""}
                   onChange={(event) => {
@@ -318,7 +628,7 @@ function NewOrderWizard({
                       (item) => item.id === event.target.value,
                     );
                     setProductId(event.target.value);
-                    setProductVariantId(next?.skus[0]?.id ?? "");
+                    if (!next) setError("Selecione um perfil válido.");
                   }}
                   className={field}
                   disabled={!productsForLine.length}
@@ -333,37 +643,16 @@ function NewOrderWizard({
                   ))}
                 </select>
               </label>
-              <label className="text-xs font-semibold">
-                SKU / Apresentação
-                <select
-                  value={selectedVariant?.id ?? ""}
-                  onChange={(event) =>
-                    setProductVariantId(event.target.value)
-                  }
-                  className={field}
-                  disabled={!variantsForProduct.length}
-                >
-                  {!variantsForProduct.length && (
-                    <option value="">Nenhum SKU ativo</option>
-                  )}
-                  {variantsForProduct.map((variant) => (
-                    <option key={variant.id} value={variant.id}>
-                      {variant.sku} •{" "}
-                      {variant.packageWeightG === 1000
-                        ? "1 kg"
-                        : `${variant.packageWeightG} g`}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {selectedVariant && (
-                <div className="sm:col-span-3 rounded-xl bg-stone-50 px-4 py-3 text-xs text-stone-600">
-                  <strong className="text-stone-900">{product}</strong> • {sku} •{" "}
-                  {selectedVariant.packageWeightG === 1000
-                    ? "1 kg"
-                    : `${selectedVariant.packageWeightG} g`} • unidade{" "}
-                  {selectedVariant.commercialUnit} •{" "}
-                  <span className="text-emerald-700">Ativo</span>
+                <div className="sm:col-span-2 rounded-xl bg-forest-50 px-4 py-3 text-xs text-forest-800">
+                  <strong>
+                    {PRODUCT_LINE_LABELS[line]} · {product}
+                  </strong>
+                  <span className="mt-1 block text-stone-600">
+                    A torra será controlada em kg e ficará no estoque a granel.
+                    A embalagem de 250 g, 500 g ou 1 kg será definida somente
+                    pelo pedido.
+                  </span>
                 </div>
               )}
             </div>
@@ -381,15 +670,26 @@ function NewOrderWizard({
             </label>
           )}
           {step === 2 && (
-            <label className="mx-auto block max-w-sm text-xs font-semibold">
-              Data planejada
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className={field}
-              />
-            </label>
+            <div className="mx-auto grid max-w-2xl gap-4 sm:grid-cols-2">
+              <label className="text-xs font-semibold">
+                Data planejada
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className={field}
+                />
+              </label>
+              <label className="text-xs font-semibold">
+                Responsável
+                <input
+                  value={responsible}
+                  onChange={(event) => setResponsible(event.target.value)}
+                  placeholder="Nome do responsável"
+                  className={field}
+                />
+              </label>
+            </div>
           )}
           {step === 3 && (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -423,7 +723,11 @@ function NewOrderWizard({
           )}
           {step === 4 && (
             <div className="space-y-3">
-              {!available.length && <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">Nenhum lote aprovado com saldo disponível.</p>}
+              {!available.length && (
+                <p className="rounded-xl bg-stone-50 p-4 text-xs text-stone-500">
+                  Nenhum lote aprovado com saldo disponível.
+                </p>
+              )}
               {available.map((lot) => (
                 <div
                   key={lot.id}
@@ -472,10 +776,11 @@ function NewOrderWizard({
           {step === 5 && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Card className="p-5">
-                <p className="text-xs text-stone-400">Produto</p>
+                <p className="text-xs text-stone-400">Linha e perfil</p>
                 <p className="mt-2 font-bold">{product}</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  {sku} • {number.format(quantity)} kg • {date}
+                  {PRODUCT_LINE_LABELS[line]} • {number.format(quantity)} kg a
+                  granel • {date}
                 </p>
               </Card>
               <Card className="p-5">
@@ -490,7 +795,10 @@ function NewOrderWizard({
             </div>
           )}
           {error && (
-            <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+            <p
+              role="alert"
+              className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700"
+            >
               {error}
             </p>
           )}
@@ -502,10 +810,980 @@ function NewOrderWizard({
           >
             {step ? "Voltar" : "Cancelar"}
           </button>
-          <Button onClick={step === 5 ? confirm : next}>
-            {step === 5 ? "Confirmar e reservar" : "Continuar"}
+          <Button
+            type="button"
+            aria-busy={creating}
+            disabled={creating}
+            onClick={step === 5 ? () => void confirm() : next}
+          >
+            {step === 5
+              ? creating
+                ? "Criando e reservando…"
+                : "Confirmar e reservar"
+              : "Continuar"}
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RoastRegistration({
+  order,
+  onDone,
+  onCancel,
+}: {
+  order: ProductionOrderView;
+  onDone: (message: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const reservedKg = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg,
+    0,
+  );
+  const alreadyRoastedKg = order.batches.reduce(
+    (sum, item) => sum + item.greenInputKg,
+    0,
+  );
+  const remainingKg = Math.max(0, reservedKg - alreadyRoastedKg);
+  const suggestedGreenInputKg = Math.min(
+    remainingKg,
+    ROASTER_OPERATIONAL_GREEN_LOAD_KG,
+  );
+  const now = new Date();
+  const [code, setCode] = useState(
+    `TOR-${order.code.replace(/^OP-/, "")}-${String(order.batches.length + 1).padStart(2, "0")}`,
+  );
+  const [machine, setMachine] = useState("Torrador 01");
+  const [operator, setOperator] = useState(order.responsible);
+  const [greenInputKg, setGreenInputKg] = useState(suggestedGreenInputKg);
+  const [roastedOutputKg, setRoastedOutputKg] = useState(
+    Number((suggestedGreenInputKg * 0.85).toFixed(3)),
+  );
+  const [startedAt, setStartedAt] = useState(
+    localDateTimeValue(new Date(now.getTime() - 60 * 60_000)),
+  );
+  const [completedAt, setCompletedAt] = useState(localDateTimeValue(now));
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const lossPercent =
+    greenInputKg > 0
+      ? ((greenInputKg - roastedOutputKg) / greenInputKg) * 100
+      : 0;
+  const submit = async () => {
+    setError("");
+    if (!code.trim() || !machine.trim() || !operator.trim())
+      return setError("Informe batch, torrador e operador.");
+    if (
+      greenInputKg <= 0 ||
+      greenInputKg > ROASTER_OPERATIONAL_GREEN_LOAD_KG ||
+      greenInputKg > remainingKg + 0.001 ||
+      roastedOutputKg <= 0 ||
+      roastedOutputKg > greenInputKg
+    )
+      return setError("Revise os pesos verde e torrado informados.");
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/production/orders/${order.id}/batches`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            code: code.trim(),
+            machine: machine.trim(),
+            operator: operator.trim(),
+            greenInputKg,
+            roastedOutputKg,
+            startedAt: new Date(startedAt).toISOString(),
+            completedAt: new Date(completedAt).toISOString(),
+            coffeeLotIds: order.allocations.map((item) => item.lotId),
+            notes: notes.trim() || undefined,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiError(response, "Não foi possível registrar a torra."),
+        );
+      await onDone(
+        `Torra registrada: ${number.format(greenInputKg)} kg verdes → ${number.format(roastedOutputKg)} kg torrados.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível registrar a torra.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-amber-800">
+            Etapa 2 · Torra
+          </p>
+          <h3 className="mt-1 text-lg font-bold">
+            Registrar resultado da torra
+          </h3>
+          <p className="mt-1 text-xs text-stone-500">
+            Restam {number.format(remainingKg)} kg reservados nesta OP. Carga
+            operacional: até {ROASTER_OPERATIONAL_GREEN_LOAD_KG} kg de café
+            verde por batelada.
+          </p>
+        </div>
+        <button onClick={onCancel} className="rounded-xl border bg-white p-2">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold">
+          Código do batch
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Torrador
+          <input
+            value={machine}
+            onChange={(e) => setMachine(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Operador
+          <input
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Café verde utilizado (kg)
+          <input
+            type="number"
+            min="0.001"
+            max={Math.min(remainingKg, ROASTER_OPERATIONAL_GREEN_LOAD_KG)}
+            step="0.001"
+            value={greenInputKg}
+            onChange={(e) => setGreenInputKg(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Café torrado obtido (kg)
+          <input
+            type="number"
+            min="0.001"
+            max={greenInputKg}
+            step="0.001"
+            value={roastedOutputKg}
+            onChange={(e) => setRoastedOutputKg(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <div className="rounded-xl bg-white p-4 text-xs">
+          <span className="text-stone-500">Perda calculada</span>
+          <strong className="mt-1 block text-lg text-amber-800">
+            {number.format(Math.max(0, lossPercent))}%
+          </strong>
+        </div>
+        <label className="text-xs font-semibold">
+          Início
+          <input
+            type="datetime-local"
+            value={startedAt}
+            onChange={(e) => setStartedAt(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Término
+          <input
+            type="datetime-local"
+            value={completedAt}
+            onChange={(e) => setCompletedAt(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold sm:col-span-2">
+          Observações
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Opcional"
+            className={field}
+          />
+        </label>
+      </div>
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-semibold text-stone-500"
+        >
+          Cancelar
+        </button>
+        <Button disabled={busy} onClick={() => void submit()}>
+          {busy ? "Registrando…" : "Confirmar torra"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PackagingRegistration({
+  order,
+  onDone,
+  onCancel,
+}: {
+  order: ProductionOrderView;
+  onDone: (message: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [packagingOptions, setPackagingOptions] = useState<
+    Array<{ id: string; sku: string; packageWeightG: number }>
+  >([
+    {
+      id: order.productVariantId ?? "",
+      sku: order.sku,
+      packageWeightG: order.packaging?.packageWeightG ?? 500,
+    },
+  ]);
+  const [selectedVariantId, setSelectedVariantId] = useState(
+    order.productVariantId ?? "",
+  );
+  const [demands, setDemands] = useState<PackagingDemand[]>([]);
+  const [salesOrderItemId, setSalesOrderItemId] = useState("");
+  const selectedDemand = demands.find(
+    (item) => item.salesOrderItemId === salesOrderItemId,
+  );
+  const selectedVariant =
+    packagingOptions.find((item) => item.id === selectedVariantId) ??
+    packagingOptions[0]!;
+  const packageWeightG = selectedVariant.packageWeightG;
+  const roastedKg = order.batches.reduce(
+    (sum, item) => sum + item.roastedOutputKg,
+    0,
+  );
+  const suggestedPackages = selectedDemand?.requiredPackages ?? 0;
+  const [options, setOptions] = useState<ProductionOptions>({
+    warehouses: [],
+    resources: [],
+    users: [],
+  });
+  const [warehouseId, setWarehouseId] = useState("");
+  const [producedPackages, setProducedPackages] = useState(suggestedPackages);
+  const [materialName, setMaterialName] = useState(`Embalagem ${order.sku}`);
+  const [packagingUnitCost, setPackagingUnitCost] = useState(2.8);
+  const [packagingUnitCostInput, setPackagingUnitCostInput] = useState("2,80");
+  const [laborCost, setLaborCost] = useState(0);
+  const [energyCost, setEnergyCost] = useState(0);
+  const [gasCost, setGasCost] = useState(0);
+  const [suppliesCost, setSuppliesCost] = useState(0);
+  const [otherIndustrialCosts, setOtherIndustrialCosts] = useState(0);
+  const [standardCostPerKg, setStandardCostPerKg] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [utilityEstimate, setUtilityEstimate] =
+    useState<UtilityCostEstimate | null>(null);
+  const [error, setError] = useState("");
+  const finishedOutputKg = (producedPackages * packageWeightG) / 1000;
+  useEffect(() => {
+    let active = true;
+    void loadProductCatalog()
+      .then(({ products }) => {
+        if (!active) return;
+        const product = products.find((item) =>
+          item.skus.some((sku) => sku.id === order.productVariantId),
+        );
+        const availableFormats =
+          product?.skus
+            .filter((sku) => sku.active)
+            .map((sku) => ({
+              id: sku.id,
+              sku: sku.sku,
+              packageWeightG: sku.packageWeightG,
+            })) ?? [];
+        if (availableFormats.length) {
+          setPackagingOptions(availableFormats);
+          setSelectedVariantId((current) =>
+            availableFormats.some((item) => item.id === current)
+              ? current
+              : availableFormats[0]!.id,
+          );
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [order.productVariantId]);
+  useEffect(() => {
+    setProducedPackages(suggestedPackages);
+    setMaterialName(`Embalagem ${selectedVariant.sku}`);
+  }, [selectedVariant.sku, suggestedPackages]);
+  useEffect(() => {
+    const api = getApiBaseUrl();
+    void Promise.all([
+      fetch(`${api}/production/options`, {
+        credentials: "include",
+        cache: "no-store",
+      }).then((response) =>
+        response.ok
+          ? (response.json() as Promise<ProductionOptions>)
+          : { warehouses: [], resources: [], users: [] },
+      ),
+      fetch(`${api}/production/orders/${order.id}/packaging/start`, {
+        method: "POST",
+        credentials: "include",
+      }),
+      fetch(`${api}/production/orders/${order.id}/utility-costs`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`${api}/production/orders/${order.id}/packaging-demand`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+    ])
+      .then(
+        async ([
+          loadedOptions,
+          transition,
+          utilityResponse,
+          demandResponse,
+        ]) => {
+          if (!transition.ok)
+            throw new Error(
+              await readApiError(
+                transition,
+                "Não foi possível iniciar o empacotamento.",
+              ),
+            );
+          setOptions(loadedOptions);
+          setWarehouseId(loadedOptions.warehouses[0]?.id ?? "");
+          const loadedDemands = demandResponse.ok
+            ? ((await demandResponse.json()) as PackagingDemand[])
+            : [];
+          setDemands(loadedDemands);
+          const firstDemand = loadedDemands[0];
+          if (firstDemand) {
+            setSalesOrderItemId(firstDemand.salesOrderItemId);
+            setSelectedVariantId(firstDemand.productVariantId);
+            setProducedPackages(firstDemand.requiredPackages);
+          }
+          if (utilityResponse.ok) {
+            const estimate =
+              (await utilityResponse.json()) as UtilityCostEstimate;
+            setUtilityEstimate(estimate);
+            if (estimate.configured) {
+              setEnergyCost(
+                Number(Number(estimate.energyCost ?? 0).toFixed(2)),
+              );
+              setGasCost(Number(Number(estimate.gasCost ?? 0).toFixed(2)));
+            }
+          }
+          setReady(true);
+        },
+      )
+      .catch((caught) =>
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Não foi possível iniciar o empacotamento.",
+        ),
+      );
+  }, [order.id]);
+  const submit = async () => {
+    setError("");
+    if (!selectedDemand)
+      return setError(
+        "Selecione um pedido confirmado que esteja aguardando embalagem.",
+      );
+    if (!Number.isSafeInteger(producedPackages) || producedPackages <= 0)
+      return setError("Informe uma quantidade inteira de pacotes.");
+    if (finishedOutputKg > roastedKg + 0.001)
+      return setError(
+        "A quantidade de pacotes supera o café torrado disponível.",
+      );
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/production/orders/${order.id}/complete`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            warehouseId: warehouseId || undefined,
+            productVariantId: selectedVariant.id,
+            salesOrderItemId: selectedDemand.salesOrderItemId,
+            finishedOutputKg,
+            producedPackages,
+            packaging: [
+              {
+                materialType: "PACKAGE",
+                materialName:
+                  materialName.trim() || `Embalagem ${selectedVariant.sku}`,
+                sku: selectedVariant.sku,
+                quantity: producedPackages,
+                unit: "UN",
+                unitCost: packagingUnitCost,
+              },
+            ],
+            laborCost,
+            energyCost,
+            gasCost,
+            suppliesCost,
+            otherIndustrialCosts,
+            standardCostPerKg,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiError(
+            response,
+            "Não foi possível concluir o empacotamento.",
+          ),
+        );
+      await onDone(
+        `Pedido ${selectedDemand.orderNumber}: ${producedPackages.toLocaleString("pt-BR")} pacotes de ${packageWeightG} g (${selectedVariant.sku}) produzidos e reservados. O saldo torrado permanece disponível em kg para os próximos pedidos.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível concluir o empacotamento.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-2xl border border-forest-200 bg-forest-50/50 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
+            Etapa 3 · Empacotamento
+          </p>
+          <h3 className="mt-1 text-lg font-bold">
+            Transformar em produto acabado
+          </h3>
+          <p className="mt-1 text-xs text-stone-500">
+            {number.format(roastedKg)} kg torrados disponíveis · pacotes de{" "}
+            {packageWeightG} g
+          </p>
+        </div>
+        <button onClick={onCancel} className="rounded-xl border bg-white p-2">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold sm:col-span-2">
+          Pedido que autorizou a embalagem
+          <select
+            value={salesOrderItemId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              const demand = demands.find(
+                (item) => item.salesOrderItemId === nextId,
+              );
+              setSalesOrderItemId(nextId);
+              if (demand) {
+                setSelectedVariantId(demand.productVariantId);
+                setProducedPackages(demand.requiredPackages);
+              }
+            }}
+            className={field}
+          >
+            <option value="">Selecione o pedido</option>
+            {demands.map((item) => (
+              <option key={item.salesOrderItemId} value={item.salesOrderItemId}>
+                {item.orderNumber} · {item.customerName} ·{" "}
+                {item.requiredPackages} pacote(s) · {item.sku}
+              </option>
+            ))}
+          </select>
+          {!demands.length && (
+            <span className="mt-2 block rounded-xl bg-amber-50 p-3 font-normal text-amber-900">
+              Não há pedido confirmado aguardando embalagem. Os{" "}
+              {number.format(roastedKg)} kg continuam no estoque torrado.
+            </span>
+          )}
+        </label>
+        <label className="text-xs font-semibold">
+          Formato do pacote
+          <select
+            value={selectedVariant.id}
+            disabled={Boolean(selectedDemand)}
+            onChange={(event) => setSelectedVariantId(event.target.value)}
+            className={field}
+          >
+            {packagingOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.packageWeightG === 1000
+                  ? "1 kg"
+                  : `${item.packageWeightG} g`}{" "}
+                · {item.sku}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold">
+          Quantidade de pacotes
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={producedPackages}
+            readOnly={Boolean(selectedDemand)}
+            onChange={(e) => setProducedPackages(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <div className="rounded-xl bg-white p-4 text-xs">
+          <span className="text-stone-500">Peso acabado</span>
+          <strong className="mt-1 block text-lg">
+            {number.format(finishedOutputKg)} kg
+          </strong>
+        </div>
+        <label className="text-xs font-semibold">
+          Destino
+          <select
+            value={warehouseId}
+            onChange={(e) => setWarehouseId(e.target.value)}
+            className={field}
+          >
+            {!options.warehouses.length && (
+              <option value="">Produto Acabado · automático</option>
+            )}
+            {options.warehouses.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold">
+          Material de embalagem
+          <input
+            value={materialName}
+            onChange={(e) => setMaterialName(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs font-semibold">
+          Custo unitário da embalagem
+          <span className="relative block">
+            <span className="pointer-events-none absolute left-3 top-1/2 mt-1 -translate-y-1/2 text-sm font-semibold text-stone-500">
+              R$
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={packagingUnitCostInput}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => {
+                const value = event.target.value;
+                setPackagingUnitCostInput(value);
+                setPackagingUnitCost(parseBrlInput(value));
+              }}
+              onBlur={() =>
+                setPackagingUnitCostInput(
+                  decimalCurrency.format(packagingUnitCost),
+                )
+              }
+              placeholder="0,00"
+              aria-label="Custo unitário da embalagem em reais"
+              className={`${field} pl-10`}
+            />
+          </span>
+        </label>
+        <label className="text-xs font-semibold">
+          Mão de obra
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={laborCost}
+            onChange={(e) => setLaborCost(Number(e.target.value))}
+            className={field}
+          />
+        </label>
+        <details className="sm:col-span-2 rounded-xl border bg-white p-4">
+          <summary className="cursor-pointer text-xs font-semibold">
+            Outros custos da produção
+          </summary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <label className="text-xs font-semibold">
+              Energia
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={energyCost}
+                onChange={(e) => setEnergyCost(Number(e.target.value))}
+                readOnly={utilityEstimate?.configured}
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Gás GLP
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={gasCost}
+                onChange={(e) => setGasCost(Number(e.target.value))}
+                readOnly={utilityEstimate?.configured}
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Insumos
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={suppliesCost}
+                onChange={(e) => setSuppliesCost(Number(e.target.value))}
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Outros
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={otherIndustrialCosts}
+                onChange={(e) =>
+                  setOtherIndustrialCosts(Number(e.target.value))
+                }
+                className={field}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              Custo padrão/kg
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={standardCostPerKg}
+                onChange={(e) => setStandardCostPerKg(Number(e.target.value))}
+                className={field}
+              />
+            </label>
+            {utilityEstimate?.configured && (
+              <div className="rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs text-forest-900 sm:col-span-3">
+                <strong>
+                  Cálculo automático · {utilityEstimate.resource?.name}
+                </strong>
+                <p className="mt-1 text-forest-800">
+                  Referência operacional: até{" "}
+                  {utilityEstimate.operationalLoadKg ??
+                    ROASTER_OPERATIONAL_GREEN_LOAD_KG}{" "}
+                  kg de café verde por batelada ·{" "}
+                  {utilityEstimate.roastMinutesPerBatch} min de torra +{" "}
+                  {utilityEstimate.coolingMinutesPerBatch} min de resfriamento.
+                </p>
+                <p className="mt-1 text-forest-800">
+                  Custo por batelada: energia{" "}
+                  {brl.format(Number(utilityEstimate.energyCostPerBatch ?? 0))}{" "}
+                  + gás{" "}
+                  {brl.format(Number(utilityEstimate.gasCostPerBatch ?? 0))} ={" "}
+                  {brl.format(Number(utilityEstimate.totalCostPerBatch ?? 0))}.
+                </p>
+                <p className="mt-1 text-forest-800">
+                  Esta OP: {utilityEstimate.batchCount} batelada(s) · consumo
+                  total de{" "}
+                  {number.format(Number(utilityEstimate.energyKwh ?? 0))} kWh +{" "}
+                  {number.format(Number(utilityEstimate.gasKg ?? 0))} kg de GLP
+                  = {brl.format(Number(utilityEstimate.totalCost ?? 0))}.
+                </p>
+              </div>
+            )}
+          </div>
+        </details>
+      </div>
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          {error}
+        </p>
+      )}
+      <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
+        O café torrado será baixado somente pelo peso exigido pelo pedido
+        selecionado. O restante continuará no estoque torrado em quilogramas,
+        sem conversão automática para 250 g, 500 g ou 1 kg.
+      </p>
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-semibold text-stone-500"
+        >
+          Cancelar
+        </button>
+        <Button
+          disabled={busy || !ready || !selectedDemand}
+          onClick={() => void submit()}
+        >
+          {busy ? "Concluindo…" : ready ? "Registrar entrada" : "Preparando…"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RemainingWipPackaging({
+  order,
+  onDone,
+  onCancel,
+}: {
+  order: ProductionOrderView;
+  onDone: (message: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [packagingOptions, setPackagingOptions] = useState<
+    Array<{ id: string; sku: string; packageWeightG: number }>
+  >([
+    {
+      id: order.productVariantId ?? "",
+      sku: order.sku,
+      packageWeightG: order.packaging?.packageWeightG ?? 500,
+    },
+  ]);
+  const [selectedVariantId, setSelectedVariantId] = useState(
+    order.productVariantId ?? "",
+  );
+  const [packageQuantityInput, setPackageQuantityInput] = useState("");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void loadProductCatalog()
+      .then(({ products }) => {
+        if (!active) return;
+        const product = products.find((item) =>
+          item.skus.some((sku) => sku.id === order.productVariantId),
+        );
+        const options =
+          product?.skus
+            .filter((sku) => sku.active)
+            .map((sku) => ({
+              id: sku.id,
+              sku: sku.sku,
+              packageWeightG: sku.packageWeightG,
+            })) ?? [];
+        if (options.length) {
+          setPackagingOptions(options);
+          setSelectedVariantId((current) =>
+            options.some((item) => item.id === current)
+              ? current
+              : options[0]!.id,
+          );
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoadingOptions(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [order.productVariantId]);
+  const selectedVariant =
+    packagingOptions.find((item) => item.id === selectedVariantId) ??
+    packagingOptions[0]!;
+  const packageWeightG = selectedVariant.packageWeightG;
+  const remainingWipKg = Math.max(
+    0,
+    order.wipAvailableKg ??
+      order.costs.roastedOutputKg - order.costs.finishedOutputKg,
+  );
+  const maxProducedPackages = Math.floor(
+    (remainingWipKg * 1000 + 0.001) / packageWeightG,
+  );
+  const producedPackages = Number(packageQuantityInput);
+  const finishedOutputKg =
+    Number.isFinite(producedPackages) && producedPackages > 0
+      ? (producedPackages * packageWeightG) / 1000
+      : 0;
+  const remainingAfterKg = Math.max(0, remainingWipKg - finishedOutputKg);
+  const packagingUnitCost = order.packaging?.packagingUnitCost ?? 0;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const isPackable =
+    Number.isSafeInteger(producedPackages) &&
+    producedPackages > 0 &&
+    producedPackages <= maxProducedPackages;
+
+  useEffect(() => {
+    setPackageQuantityInput(String(maxProducedPackages));
+  }, [maxProducedPackages, selectedVariantId]);
+
+  const submit = async () => {
+    setError("");
+    if (!isPackable)
+      return setError(
+        "Informe uma quantidade inteira de pacotes dentro do saldo WIP disponível.",
+      );
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/production/orders/${order.id}/packaging/complete-wip`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            productVariantId: selectedVariant.id,
+            producedPackages,
+            idempotencyKey,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiError(
+            response,
+            "Não foi possível empacotar o saldo WIP.",
+          ),
+        );
+      const result = (await response.json()) as {
+        producedPackages?: number;
+        finishedOutputKg?: number;
+        sku?: string;
+        packageWeightG?: number;
+      };
+      await onDone(
+        `Empacotamento registrado: ${Number(result.finishedOutputKg ?? finishedOutputKg).toLocaleString("pt-BR")} kg em ${Number(result.producedPackages ?? producedPackages).toLocaleString("pt-BR")} pacotes de ${Number(result.packageWeightG ?? packageWeightG).toLocaleString("pt-BR")} g (${result.sku ?? selectedVariant.sku}). O saldo WIP restante continua disponível para outro formato.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível empacotar o saldo WIP.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-emerald-700">
+            Continuação do empacotamento
+          </p>
+          <h3 className="mt-1 text-lg font-bold">Empacotar saldo WIP</h3>
+          <p className="mt-1 text-xs text-stone-600">
+            A torra já foi concluída. Confirme esta etapa somente depois de
+            empacotar fisicamente o saldo abaixo.
+          </p>
+        </div>
+        <button onClick={onCancel} className="rounded-xl border bg-white p-2">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="block text-xs font-semibold text-stone-700">
+          Formato do pacote
+          <select
+            className={field}
+            value={selectedVariant.id}
+            disabled={busy || loadingOptions}
+            onChange={(event) => setSelectedVariantId(event.target.value)}
+          >
+            {packagingOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.packageWeightG === 1000
+                  ? "1 kg"
+                  : `${item.packageWeightG} g`}{" "}
+                · {item.sku}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-stone-700">
+          Quantidade de pacotes
+          <input
+            className={field}
+            type="number"
+            min="1"
+            max={maxProducedPackages}
+            step="1"
+            value={packageQuantityInput}
+            disabled={busy || loadingOptions}
+            onChange={(event) => setPackageQuantityInput(event.target.value)}
+          />
+          <span className="mt-1 block font-normal text-stone-500">
+            Máximo neste formato: {number.format(maxProducedPackages)} pacotes.
+          </span>
+        </label>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-4">
+        <SummaryCard
+          label="Saldo torrado"
+          value={`${number.format(remainingWipKg)} kg`}
+          icon={Flame}
+        />
+        <SummaryCard
+          label="Entrada escolhida"
+          value={`${number.format(finishedOutputKg)} kg`}
+          icon={PackageOpen}
+        />
+        <SummaryCard
+          label="Saldo após entrada"
+          value={`${number.format(remainingAfterKg)} kg`}
+          icon={Scale}
+        />
+        <SummaryCard
+          label="Embalagem estimada"
+          value={brl.format(
+            (Number.isFinite(producedPackages) ? producedPackages : 0) *
+              packagingUnitCost,
+          )}
+          icon={CircleDollarSign}
+        />
+      </div>
+      <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">
+        Esta entrada gerará {number.format(producedPackages || 0)} pacotes no
+        SKU {selectedVariant.sku}, totalizando {number.format(finishedOutputKg)}
+        {" kg"}. O saldo não selecionado continuará no WIP para ser empacotado
+        em outro formato. Energia, gás e café não serão lançados novamente.
+      </p>
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-semibold text-stone-500"
+        >
+          Cancelar
+        </button>
+        <Button disabled={busy || !isPackable} onClick={() => void submit()}>
+          {busy
+            ? "Confirmando…"
+            : `Confirmar ${number.format(producedPackages || 0)} pacotes · ${number.format(finishedOutputKg)} kg`}
+        </Button>
       </div>
     </div>
   );
@@ -515,19 +1793,146 @@ function OrderDrawer({
   order,
   alert,
   onClose,
+  onChanged,
 }: {
   order: ProductionOrderView;
   alert?: ProductionAlert;
   onClose: () => void;
+  onChanged: (message: string) => Promise<void>;
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
-  const cost = calculateProductionCost(order.costs);
+  const [action, setAction] = useState<"roast" | "pack" | "pack-wip" | null>(
+    null,
+  );
+  const reservedKg = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg,
+    0,
+  );
+  const roastedInputKg = order.batches.reduce(
+    (sum, item) => sum + item.greenInputKg,
+    0,
+  );
+  const remainingRoastKg = Math.max(0, reservedKg - roastedInputKg);
+  const remainingWipKg = Math.max(
+    0,
+    order.wipAvailableKg ??
+      order.costs.roastedOutputKg - order.costs.finishedOutputKg,
+  );
+  const canRoast =
+    ["reserved", "in-production", "roasted"].includes(order.status) &&
+    remainingRoastKg > 0.001;
+  const canPack =
+    ["roasted", "packaging"].includes(order.status) &&
+    order.batches.length > 0 &&
+    remainingRoastKg <= 0.001;
+  const canPackWip = order.status === "completed" && remainingWipKg > 0.001;
+  const cost =
+    order.costs.roastedOutputKg > 0 &&
+    order.costs.finishedOutputKg > 0 &&
+    order.costs.producedPackages > 0
+      ? calculateProductionCost(order.costs)
+      : null;
+  const greenCoffeeInputKg = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg,
+    0,
+  );
+  const totalGreenCoffeeCost = order.allocations.reduce(
+    (sum, item) => sum + item.reservedKg * item.realCostPerKg,
+    0,
+  );
+  const greenCoffeeCost =
+    order.costs.greenCoffeeConsumedCost + order.costs.roastLossCost;
+  const averageGreenCoffeeCost =
+    greenCoffeeInputKg > 0 ? totalGreenCoffeeCost / greenCoffeeInputKg : 0;
+  const finishedShareRatio =
+    order.costs.roastedOutputKg > 0
+      ? order.costs.finishedOutputKg / order.costs.roastedOutputKg
+      : 1;
+  const finishedSharePercent = finishedShareRatio * 100;
+  const allocatedRoastStageCost =
+    greenCoffeeCost + order.costs.energyCost + order.costs.gasCost;
+  const roastCostPerKg =
+    order.costs.finishedOutputKg > 0
+      ? allocatedRoastStageCost / order.costs.finishedOutputKg
+      : 0;
+  const remainingWipCost =
+    order.wipAvailableCost ?? remainingWipKg * roastCostPerKg;
+  const roastLossKg = order.batches.reduce(
+    (sum, batch) => sum + batch.lossKg,
+    0,
+  );
+  const energyUsage = (order.resourceUsages ?? []).reduce(
+    (sum, item) => sum + item.measuredEnergyKwh,
+    0,
+  );
+  const gasUsage = (order.resourceUsages ?? []).reduce(
+    (sum, item) => sum + item.measuredGasKg,
+    0,
+  );
+  const primaryResource = order.resourceUsages?.[0];
+  const costComponents = cost
+    ? [
+        {
+          label: "Café verde alocado ao produto acabado",
+          detail: `${number.format(finishedSharePercent)}% do custo de ${number.format(greenCoffeeInputKg)} kg × ${brl.format(averageGreenCoffeeCost)}/kg`,
+          source: "Lotes da OP",
+          amount: greenCoffeeCost,
+        },
+        {
+          label: "Embalagens",
+          detail: `${order.packaging?.producedPackages ?? 0} un. × ${brl.format(order.packaging?.packagingUnitCost ?? 0)}`,
+          source: "Empacotamento",
+          amount: order.costs.packagingCost,
+        },
+        {
+          label: "Mão de obra",
+          detail: "Valor informado no fechamento da OP",
+          source: "Empacotamento",
+          amount: order.costs.laborCost,
+        },
+        {
+          label: "Energia",
+          detail:
+            energyUsage > 0
+              ? `${preciseNumber.format(energyUsage)} kWh × ${brl.format(primaryResource?.energyRatePerKwh ?? 0)}/kWh · ${number.format(finishedSharePercent)}% alocado`
+              : "Consumo do recurso produtivo",
+          source: primaryResource?.resourceName ?? "Custos industriais",
+          amount: order.costs.energyCost,
+        },
+        {
+          label: "Gás",
+          detail:
+            gasUsage > 0
+              ? `${preciseNumber.format(gasUsage)} kg × ${brl.format(primaryResource?.gasRatePerKg ?? 0)}/kg · ${number.format(finishedSharePercent)}% alocado`
+              : "Consumo do recurso produtivo",
+          source: primaryResource?.resourceName ?? "Custos industriais",
+          amount: order.costs.gasCost,
+        },
+        {
+          label: "Insumos",
+          detail: "Materiais adicionais da produção",
+          source: "Empacotamento",
+          amount: order.costs.suppliesCost,
+        },
+        {
+          label: "Outros custos industriais",
+          detail: "Custos complementares vinculados à OP",
+          source: "Custos industriais",
+          amount: order.costs.otherIndustrialCosts,
+        },
+      ]
+    : [];
+  const activeCostComponents = costComponents.filter(
+    (component) => component.amount > 0.004,
+  );
+  const missingCostComponents = costComponents
+    .filter((component) => component.amount <= 0.004)
+    .map((component) => component.label.toLocaleLowerCase("pt-BR"));
   const sections = [
     "Resumo",
     "Produção",
     "Lotes",
     "Torra",
-    "Blend",
     "Embalagem",
     "Custos",
     "Rastreabilidade",
@@ -551,7 +1956,10 @@ function OrderDrawer({
             </div>
             <h2 className="mt-3 text-xl font-bold">{order.product}</h2>
             <p className="mt-1 text-xs text-stone-500">
-              {order.sku} • {order.responsible}
+              {order.productLine
+                ? PRODUCT_LINE_LABELS[order.productLine]
+                : "Perfil de café"}{" "}
+              • café torrado a granel • {order.responsible}
             </p>
           </div>
           <button onClick={onClose} className="rounded-xl border p-2">
@@ -569,6 +1977,100 @@ function OrderDrawer({
             </a>
           ))}
         </nav>
+        <section className="mt-5 rounded-2xl border bg-stone-50 p-4">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              {
+                label: "1. Ordem gerada",
+                detail: `${number.format(reservedKg)} kg reservados`,
+                complete: true,
+                current: order.status === "reserved",
+                icon: Check,
+              },
+              {
+                label: "2. Torra",
+                detail:
+                  remainingRoastKg > 0.001
+                    ? `${number.format(remainingRoastKg)} kg pendentes`
+                    : `${number.format(order.costs.roastedOutputKg)} kg torrados`,
+                complete: order.batches.length > 0 && remainingRoastKg <= 0.001,
+                current: canRoast,
+                icon: Flame,
+              },
+              {
+                label: "3. Empacotar",
+                detail: canPackWip
+                  ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos · ${number.format(remainingWipKg)} kg WIP pendentes`
+                  : order.status === "completed"
+                    ? `${order.packaging?.producedPackages ?? 0} pacotes concluídos`
+                    : "Entrada no produto acabado",
+                complete:
+                  order.status === "completed" && remainingWipKg <= 0.001,
+                current: canPack || canPackWip || order.status === "packaging",
+                icon: PackageOpen,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.label}
+                  className={`rounded-xl border p-3 ${item.complete ? "border-emerald-200 bg-emerald-50" : item.current ? "border-amber-200 bg-amber-50" : "bg-white"}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      size={15}
+                      className={
+                        item.complete
+                          ? "text-emerald-700"
+                          : item.current
+                            ? "text-amber-700"
+                            : "text-stone-300"
+                      }
+                    />
+                    <strong className="text-xs">{item.label}</strong>
+                  </div>
+                  <p className="mt-2 text-[10px] text-stone-500">
+                    {item.detail}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          {!action && (canRoast || canPack || canPackWip) && (
+            <div className="mt-4 flex justify-end gap-2">
+              {(canPack || canPackWip) && (
+                <Link
+                  href="/producao/controle"
+                  className="inline-flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <PackageOpen size={15} />
+                  Ver reservas no café a granel
+                </Link>
+              )}
+              {canRoast && (
+                <Button
+                  onClick={() => setAction("roast")}
+                  className="flex items-center gap-2"
+                >
+                  <Flame size={15} />
+                  Registrar torra
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
+        {action === "roast" && (
+          <div className="mt-5">
+            <RoastRegistration
+              order={order}
+              onCancel={() => setAction(null)}
+              onDone={async (successMessage) => {
+                await onChanged(successMessage);
+                setAction(null);
+              }}
+            />
+          </div>
+        )}
         <div className="mt-5 space-y-7">
           <section
             id="op-Resumo"
@@ -651,12 +2153,7 @@ function OrderDrawer({
                         {batch.code} • {batch.machine}
                       </strong>
                       <Badge
-                        tone={
-                          batch.lossPercent >
-                          0
-                            ? "warning"
-                            : "success"
-                        }
+                        tone={batch.lossPercent > 0 ? "warning" : "success"}
                       >
                         Perda {number.format(batch.lossPercent)}%
                       </Badge>
@@ -698,42 +2195,150 @@ function OrderDrawer({
                   icon={PackageCheck}
                 />
                 <SummaryCard
-                  label="Perdas"
+                  label="Diferença do plano"
                   value={`${order.packaging.lossPackages} un.`}
                   icon={AlertTriangle}
+                  tone={order.packaging.lossPackages > 0 ? "warning" : "normal"}
                 />
               </div>
+            )}
+            {order.packaging && order.packaging.lossPackages > 0 && (
+              <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                Esta diferença compara o planejado com o produzido. Não
+                representa, por si só, embalagens descartadas.
+              </p>
             )}
           </section>
           <section id="op-Custos">
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">
               Custo real da OP
             </h3>
-            <div className="mt-3 rounded-2xl bg-forest-950 p-5 text-white">
-              <p className="text-xs text-white/50">Custo total</p>
-              <p className="mt-1 text-2xl font-bold">
-                {brl.format(cost.totalCost)}
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
-                <span>
-                  Custo/kg acabado
-                  <br />
-                  <strong>{brl.format(cost.costPerFinishedKg)}</strong>
-                </span>
-                <span>
-                  Custo/pacote
-                  <br />
-                  <strong>{brl.format(cost.costPerPackage)}</strong>
-                </span>
-                <span>
-                  Desvio padrão
-                  <br />
-                  <strong>
-                    {number.format(cost.standardCostDeviationPercent)}%
-                  </strong>
-                </span>
+            {cost ? (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                <div className="bg-forest-950 p-5 text-white">
+                  <p className="text-xs text-white/60">
+                    Custo do produto acabado
+                  </p>
+                  <p className="mt-1 text-3xl font-bold tracking-tight">
+                    {brl.format(cost.totalCost)}
+                  </p>
+                  <div className="mt-5 grid gap-4 text-xs sm:grid-cols-3">
+                    <span>
+                      <span className="text-white/60">Custo/kg acabado</span>
+                      <br />
+                      <strong className="text-sm">
+                        {brl.format(cost.costPerFinishedKg)}
+                      </strong>
+                    </span>
+                    <span>
+                      <span className="text-white/60">Custo/pacote</span>
+                      <br />
+                      <strong className="text-sm">
+                        {brl.format(cost.costPerPackage)}
+                      </strong>
+                    </span>
+                    <span>
+                      <span className="text-white/60">
+                        {order.costs.standardCostPerKg > 0
+                          ? "Desvio do padrão"
+                          : "Custo padrão"}
+                      </span>
+                      <br />
+                      <strong className="text-sm">
+                        {order.costs.standardCostPerKg > 0
+                          ? `${number.format(cost.standardCostDeviationPercent)}%`
+                          : "Não configurado"}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-stone-900">
+                        Memória de cálculo
+                      </h4>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Valores incorporados aos pacotes concluídos nesta OP.
+                      </p>
+                    </div>
+                    <Badge tone="success">
+                      {activeCostComponents.length} componentes
+                    </Badge>
+                  </div>
+                  <div className="mt-4 divide-y divide-stone-100">
+                    {activeCostComponents.map((component) => (
+                      <div
+                        key={component.label}
+                        className="flex items-start justify-between gap-4 py-3 first:pt-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-stone-800">
+                            {component.label}
+                          </p>
+                          <p className="mt-0.5 text-xs text-stone-500">
+                            {component.detail}
+                          </p>
+                          <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-forest-700">
+                            Origem: {component.source}
+                          </p>
+                        </div>
+                        <strong className="shrink-0 text-sm text-stone-900">
+                          {brl.format(component.amount)}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                  {remainingWipKg > 0.001 && (
+                    <div className="mt-3 flex items-start justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-950">
+                      <div>
+                        <strong>Café torrado em processo (WIP)</strong>
+                        <p className="mt-1 text-emerald-800">
+                          {number.format(remainingWipKg)} kg ×{" "}
+                          {brl.format(roastCostPerKg)}/kg. Este saldo não está
+                          incluído no custo do produto acabado acima.
+                        </p>
+                      </div>
+                      <strong className="shrink-0 text-sm">
+                        {brl.format(remainingWipCost)}
+                      </strong>
+                    </div>
+                  )}
+                  {roastLossKg > 0 && (
+                    <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                      <strong>Perda real de torra:</strong>{" "}
+                      {number.format(roastLossKg)} kg. A parcela de{" "}
+                      {brl.format(order.costs.roastLossCost)} atribuída aos
+                      pacotes já está incluída em “Café verde alocado ao produto
+                      acabado”.
+                    </div>
+                  )}
+                  {missingCostComponents.length > 0 && (
+                    <p className="mt-3 text-[11px] text-stone-500">
+                      Sem valor lançado: {missingCostComponents.join(", ")}.
+                    </p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-4 border-t pt-4 text-xs font-semibold text-forest-700">
+                    <Link
+                      href="/custos/lancamentos"
+                      className="inline-flex items-center gap-1"
+                    >
+                      Ver lançamentos <ChevronRight size={13} />
+                    </Link>
+                    <Link
+                      href="/custos/maquinas"
+                      className="inline-flex items-center gap-1"
+                    >
+                      Ver máquinas e tarifas <ChevronRight size={13} />
+                    </Link>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="mt-3 rounded-xl bg-stone-50 p-4 text-xs text-stone-500">
+                O custo real será consolidado após o empacotamento.
+              </p>
+            )}
           </section>
           <section id="op-Rastreabilidade">
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">
@@ -816,22 +2421,51 @@ export default function ProductionPage() {
   const summary = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const month = today.slice(0, 7);
-    const plannedTodayKg = orders.filter((order) => order.plannedAt.slice(0, 10) === today).reduce((sum, order) => sum + order.plannedQuantity, 0);
-    const producedTodayKg = orders.filter((order) => order.completedAt?.slice(0, 10) === today).reduce((sum, order) => sum + order.producedQuantity, 0);
-    const openOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
-    const inProgressOrders = orders.filter((order) => ["in-production", "roasted", "packaging"].includes(order.status)).length;
-    const monthOrders = orders.filter((order) => order.plannedAt.startsWith(month));
-    const monthlyProducedKg = monthOrders.reduce((sum, order) => sum + order.producedQuantity, 0);
-    const losses = orders.flatMap((order) => order.batches).map((batch) => batch.lossPercent);
-    const averageRoastLossPercent = losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : null;
-    return { plannedTodayKg, producedTodayKg, openOrders, inProgressOrders, delayedOrders: 0, efficiencyPercent: null, averageRoastLossPercent, averageRealCostPerKg: null, monthlyProducedKg, monthlyTargetKg: null };
+    const plannedTodayKg = orders
+      .filter((order) => order.plannedAt.slice(0, 10) === today)
+      .reduce((sum, order) => sum + order.plannedQuantity, 0);
+    const producedTodayKg = orders
+      .filter((order) => order.completedAt?.slice(0, 10) === today)
+      .reduce((sum, order) => sum + order.producedQuantity, 0);
+    const openOrders = orders.filter(
+      (order) => !["completed", "cancelled"].includes(order.status),
+    ).length;
+    const inProgressOrders = orders.filter((order) =>
+      ["in-production", "roasted", "packaging"].includes(order.status),
+    ).length;
+    const monthOrders = orders.filter((order) =>
+      order.plannedAt.startsWith(month),
+    );
+    const monthlyProducedKg = monthOrders.reduce(
+      (sum, order) => sum + order.producedQuantity,
+      0,
+    );
+    const losses = orders
+      .flatMap((order) => order.batches)
+      .map((batch) => batch.lossPercent);
+    const averageRoastLossPercent = losses.length
+      ? losses.reduce((sum, value) => sum + value, 0) / losses.length
+      : null;
+    return {
+      plannedTodayKg,
+      producedTodayKg,
+      openOrders,
+      inProgressOrders,
+      delayedOrders: 0,
+      efficiencyPercent: null,
+      averageRoastLossPercent,
+      averageRealCostPerKg: null,
+      monthlyProducedKg,
+      monthlyTargetKg: null,
+    };
   }, [orders]);
-  useEffect(() => { void fetch(`${getApiBaseUrl()}/production/orders`, { credentials: "include" }).then((response) => response.ok ? response.json() : []).then((rows: Array<Record<string, unknown>>) => setOrders(rows.map((row) => {
-    const consumptions = Array.isArray(row.consumptions) ? row.consumptions as Array<Record<string, unknown>> : [];
-    const batches = Array.isArray(row.batches) ? row.batches as Array<Record<string, unknown>> : [];
-    const plannedQuantity = Number(row.plannedWeightKg ?? 0);
-    return { id: String(row.id), code: String(row.code), product: String(row.productName ?? "Produto não definido"), sku: String(row.sku ?? "—"), plannedQuantity, producedQuantity: Number(row.actualOutputKg ?? 0), unit: String(row.unit ?? "kg"), plannedAt: String(row.plannedAt ?? ""), startedAt: row.startedAt ? String(row.startedAt) : undefined, completedAt: row.completedAt ? String(row.completedAt) : undefined, responsible: String(row.responsible ?? "—"), priority: String(row.priority ?? "normal").toLowerCase() as ProductionOrderView["priority"], status: String(row.status ?? "PLANNED").toLowerCase().replace("_", "-") as ProductionOrderView["status"], blendName: String((row.blend as { name?: string } | undefined)?.name ?? "—"), allocations: consumptions.map((item) => { const lot = item.coffeeLot as { id?: string; code?: string; origin?: string } | undefined; return { lotId: String(lot?.id ?? item.coffeeLotId), lotCode: String(lot?.code ?? item.coffeeLotId), origin: String(lot?.origin ?? "—"), reservedKg: Number(item.reservedKg ?? 0), consumedKg: Number(item.consumedKg ?? 0), percentage: Number(item.percentage ?? 0), realCostPerKg: Number(item.realCostPerKg ?? 0) }; }), batches: batches.map((batch) => ({ id: String(batch.id), code: String(batch.code), machine: String(batch.machine), operator: String(batch.operator), lotCode: "—", greenInputKg: Number(batch.greenInputKg), roastedOutputKg: Number(batch.roastedOutputKg), lossKg: Number(batch.lossKg), lossPercent: Number(batch.lossPercent), startedAt: String(batch.startedAt), completedAt: String(batch.completedAt), notes: batch.notes ? String(batch.notes) : undefined })), packaging: undefined, costs: { greenCoffeeConsumedCost: 0, roastLossCost: 0, packagingCost: 0, suppliesCost: 0, laborCost: 0, energyCost: 0, otherIndustrialCosts: 0, roastedOutputKg: Number(row.actualOutputKg ?? 0), finishedOutputKg: 0, producedPackages: 0, totalCost: 0, costPerKg: 0, standardCostPerKg: 0, sku: String(row.sku ?? "—"), sourceCostEventIds: [] }, traceability: [] } as ProductionOrderView;
-  }))).catch(() => setOrders([])); }, []);
+  useEffect(() => {
+    void fetchProductionOrders()
+      .then(setOrders)
+      .catch(() => setOrders([]));
+    if (new URLSearchParams(window.location.search).get("nova") === "1")
+      setWizard(true);
+  }, []);
   const cards = useMemo(
     () => [
       {
@@ -858,18 +2492,27 @@ export default function ProductionPage() {
       },
       {
         label: "Eficiência industrial",
-        value: summary.efficiencyPercent == null ? "Sem dados" : `${number.format(summary.efficiencyPercent)}%`,
+        value:
+          summary.efficiencyPercent == null
+            ? "Sem dados"
+            : `${number.format(summary.efficiencyPercent)}%`,
         icon: Gauge,
       },
       {
         label: "Perda média de torra",
-        value: summary.averageRoastLossPercent == null ? "Sem dados" : `${number.format(summary.averageRoastLossPercent)}%`,
+        value:
+          summary.averageRoastLossPercent == null
+            ? "Sem dados"
+            : `${number.format(summary.averageRoastLossPercent)}%`,
         icon: Flame,
         tone: "warning" as const,
       },
       {
         label: "Custo médio/kg",
-        value: summary.averageRealCostPerKg == null ? "Sem dados" : brl.format(summary.averageRealCostPerKg),
+        value:
+          summary.averageRealCostPerKg == null
+            ? "Sem dados"
+            : brl.format(summary.averageRealCostPerKg),
         icon: CircleDollarSign,
       },
       {
@@ -879,18 +2522,66 @@ export default function ProductionPage() {
       },
       {
         label: "Meta do mês",
-        value: summary.monthlyTargetKg == null ? "Sem dados" : `${number.format(summary.monthlyTargetKg)} kg`,
+        value:
+          summary.monthlyTargetKg == null
+            ? "Sem dados"
+            : `${number.format(summary.monthlyTargetKg)} kg`,
         icon: Target,
       },
     ],
     [summary],
   );
   const monthlyTargetKg = summary.monthlyTargetKg;
+  const refreshOrders = async (successMessage?: string) => {
+    try {
+      const refreshed = await fetchProductionOrders();
+      setOrders(refreshed);
+      setSelected((current) =>
+        current
+          ? (refreshed.find((order) => order.id === current.id) ?? null)
+          : null,
+      );
+      if (successMessage) setMessage(successMessage);
+    } catch {
+      if (successMessage)
+        setMessage(
+          `${successMessage} Atualize a página para recarregar os dados.`,
+        );
+    }
+  };
   const create = async (order: ProductionOrderView) => {
-    const response = await fetch(`${getApiBaseUrl()}/production/orders`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: `OP-${Date.now()}`, productVariantId: order.productVariantId, productName: order.product, sku: order.sku, plannedWeightKg: order.plannedQuantity, plannedAt: order.plannedAt, responsible: order.responsible, blendId: undefined, allocations: order.allocations.map((item) => ({ coffeeLotId: item.lotId, reservedKg: item.reservedKg, percentage: item.percentage })) }) });
-    if (!response.ok) { setMessage("Não foi possível criar a ordem. Verifique os lotes e o saldo disponível."); return; }
-    const created = await response.json() as Record<string, unknown>;
-    setOrders((current) => [{ ...order, id: String(created.id), code: String(created.code) }, ...current]);
+    setMessage("");
+    const response = await fetch(`${getApiBaseUrl()}/production/orders`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        code: `OP-${Date.now()}`,
+        productId: order.productId,
+        productVariantId: order.productVariantId,
+        productName: order.product,
+        sku: order.sku,
+        plannedWeightKg: order.plannedQuantity,
+        plannedAt: order.plannedAt,
+        responsible: order.responsible,
+        blendId: undefined,
+        allocations: order.allocations.map((item) => ({
+          coffeeLotId: item.lotId,
+          reservedKg: item.reservedKg,
+          percentage: item.percentage,
+        })),
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        await readApiError(
+          response,
+          "Não foi possível criar a ordem. Verifique os lotes e o saldo disponível.",
+        ),
+      );
+    }
+    const created = (await response.json()) as Record<string, unknown>;
+    await refreshOrders();
     setWizard(false);
     setMessage(
       `${String(created.code)} criada e ${number.format(order.plannedQuantity)} kg reservados no estoque disponível.`,
@@ -922,8 +2613,8 @@ export default function ProductionPage() {
             onClick={() => setWizard(true)}
             className="flex items-center justify-center gap-2 px-5 py-3"
           >
-            <Plus size={16} />
-            Nova OP
+            <Play size={16} />
+            Iniciar produção
           </Button>
         </div>
       </div>
@@ -938,6 +2629,44 @@ export default function ProductionPage() {
           </button>
         </div>
       )}
+      <section className="mt-7 grid overflow-hidden rounded-2xl border bg-white sm:grid-cols-4">
+        {[
+          {
+            label: "1. Gerar ordem",
+            detail: "Escolher produto, volume e lote",
+            icon: Target,
+          },
+          {
+            label: "2. Torrar",
+            detail: "Registrar entrada, saída e perda",
+            icon: Flame,
+          },
+          {
+            label: "3. Empacotar",
+            detail: "Informar pacotes e custos",
+            icon: PackageOpen,
+          },
+          {
+            label: "4. Produto acabado",
+            detail: "Entrada automática no estoque",
+            icon: PackageCheck,
+          },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.label}
+              className="border-b p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+            >
+              <div className="flex items-center gap-2 text-forest-700">
+                <Icon size={15} />
+                <strong className="text-xs">{item.label}</strong>
+              </div>
+              <p className="mt-2 text-[11px] text-stone-500">{item.detail}</p>
+            </div>
+          );
+        })}
+      </section>
       <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {cards.map((card) => (
           <SummaryCard key={card.label} {...card} />
@@ -952,7 +2681,11 @@ export default function ProductionPage() {
               </p>
               <h2 className="mt-1 text-lg font-bold">Produção mensal</h2>
             </div>
-            <strong>{monthlyTargetKg != null && monthlyTargetKg > 0 ? `${number.format((summary.monthlyProducedKg / monthlyTargetKg) * 100)}%` : "Sem dados"}</strong>
+            <strong>
+              {monthlyTargetKg != null && monthlyTargetKg > 0
+                ? `${number.format((summary.monthlyProducedKg / monthlyTargetKg) * 100)}%`
+                : "Sem dados"}
+            </strong>
           </div>
           <div className="mt-6 h-3 overflow-hidden rounded-full bg-stone-100">
             <div
@@ -966,12 +2699,18 @@ export default function ProductionPage() {
             <span>
               {number.format(summary.monthlyProducedKg)} kg realizados
             </span>
-            <span>{summary.monthlyTargetKg == null ? "Sem meta cadastrada" : `${number.format(summary.monthlyTargetKg)} kg meta`}</span>
+            <span>
+              {summary.monthlyTargetKg == null
+                ? "Sem meta cadastrada"
+                : `${number.format(summary.monthlyTargetKg)} kg meta`}
+            </span>
           </div>
         </Card>
         <Card className="border-dashed p-6">
           <p className="text-sm font-bold">Alertas de produção</p>
-          <p className="mt-2 text-xs leading-5 text-stone-500">Sem dados reais de alertas para o período.</p>
+          <p className="mt-2 text-xs leading-5 text-stone-500">
+            Sem dados reais de alertas para o período.
+          </p>
         </Card>
       </section>
       <section className="mt-8">
@@ -982,6 +2721,18 @@ export default function ProductionPage() {
           <h2 className="mt-1 text-lg font-bold">Fluxo operacional</h2>
         </div>
         <div className="mt-4 space-y-3">
+          {!orders.length && (
+            <Card className="border-dashed p-8 text-center">
+              <Factory className="mx-auto text-stone-300" size={24} />
+              <p className="mt-3 text-sm font-semibold">
+                Nenhuma ordem de produção
+              </p>
+              <p className="mt-1 text-xs text-stone-500">
+                Inicie uma produção para reservar o café verde e acompanhar as
+                etapas.
+              </p>
+            </Card>
+          )}
           {orders.map((order) => (
             <button
               key={order.id}
@@ -1001,7 +2752,10 @@ export default function ProductionPage() {
                       {order.product}
                     </p>
                     <p className="mt-1 text-xs text-stone-400">
-                      {order.sku} • {order.blendName}
+                      {order.productLine
+                        ? PRODUCT_LINE_LABELS[order.productLine]
+                        : "Perfil de café"}{" "}
+                      • {order.blendName} • a granel
                     </p>
                   </div>
                   <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">
@@ -1049,6 +2803,9 @@ export default function ProductionPage() {
           order={selected}
           alert={undefined}
           onClose={() => setSelected(null)}
+          onChanged={async (successMessage) => {
+            await refreshOrders(successMessage);
+          }}
         />
       )}
     </div>

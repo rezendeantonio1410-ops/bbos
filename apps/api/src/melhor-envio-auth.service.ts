@@ -19,6 +19,34 @@ const DEFAULT_SCOPES = [
 export class MelhorEnvioAuthService {
   private readonly database = prisma;
 
+  readiness() {
+    const required = {
+      MELHOR_ENVIO_CLIENT_ID: process.env.MELHOR_ENVIO_CLIENT_ID?.trim(),
+      MELHOR_ENVIO_CLIENT_SECRET:
+        process.env.MELHOR_ENVIO_CLIENT_SECRET?.trim(),
+      MELHOR_ENVIO_REDIRECT_URI:
+        process.env.MELHOR_ENVIO_REDIRECT_URI?.trim(),
+      INTEGRATION_TOKEN_ENCRYPTION_KEY: (
+        process.env.MELHOR_ENVIO_TOKEN_ENCRYPTION_KEY ||
+        process.env.BLING_TOKEN_ENCRYPTION_KEY ||
+        process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY
+      )?.trim(),
+    };
+    const usingStaticToken = Boolean(
+      process.env.MELHOR_ENVIO_ACCESS_TOKEN?.trim(),
+    );
+    const missingEnvironment = Object.entries(required)
+      .filter(([, value]) => !value)
+      .map(([key]) => key);
+
+    return {
+      configured: usingStaticToken || missingEnvironment.length === 0,
+      missingEnvironment: usingStaticToken ? [] : missingEnvironment,
+      callbackUrl: process.env.MELHOR_ENVIO_REDIRECT_URI?.trim() ?? null,
+      usingStaticToken,
+    };
+  }
+
   private config() {
     const clientId = process.env.MELHOR_ENVIO_CLIENT_ID?.trim();
     const clientSecret = process.env.MELHOR_ENVIO_CLIENT_SECRET?.trim();

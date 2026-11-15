@@ -24,6 +24,7 @@ const routeContext: Record<string, RouteContext> = {
   "/produtos": { title: "Produtos", intro: "Posso conectar produto, estoque, custo, preço e demanda para apoiar decisões sem esconder a origem dos números.", prompts: ["Qual produto merece atenção?", "Existe risco de ruptura?", "O preço e a margem estão coerentes?"] },
   "/laboratorio": { title: "Laboratório", intro: "Posso orientar a próxima etapa de qualidade, cupping, aprovação e rastreabilidade sem substituir a decisão técnica.", prompts: ["O que está aguardando prova?", "Qual amostra exige decisão?", "Existe lote bloqueado por qualidade?"] },
   "/clientes": { title: "Clientes", intro: "Posso ajudar a entender carteira, crédito, comportamento e próxima melhor ação comercial.", prompts: ["Quem merece contato hoje?", "Há cliente em risco?", "Qual próxima ação comercial?"] },
+  "/atendimento": { title: "Atendimento", intro: "Posso ajudar a organizar visitas, relatos e próximas ações da carteira comercial.", prompts: ["Quem precisa de retorno?", "Quais ações estão vencidas?", "Resuma os últimos atendimentos."] },
   "/pedidos": { title: "Pedidos", intro: "Posso apontar pendências, riscos e o caminho mais curto até a expedição.", prompts: ["Qual pedido está travado?", "O que precisa ser resolvido agora?", "Há risco de atraso?"] },
   "/vendas": { title: "Vendas", intro: "Posso interpretar desempenho, tendência, mix, margem e oportunidades.", prompts: ["O que explica as vendas?", "Qual produto merece foco?", "Como está a margem?"] },
   "/commerce": { title: "Commerce", intro: "Posso conectar loja, pedidos, estoque e operação para antecipar problemas no canal digital.", prompts: ["A loja está saudável?", "Existe pedido online em atenção?", "O que falta integrar?"] },
@@ -49,7 +50,7 @@ export function BbosAssistant() {
   const [input, setInput] = React.useState("");
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [sending, setSending] = React.useState(false);
-  const isSystem = pathname === "/home" || pathname === "/dashboard" || pathname === "/dashboard-industrial" || pathname.startsWith("/cafe-verde") || pathname.startsWith("/producao") || pathname.startsWith("/clientes") || pathname.startsWith("/pedidos") || pathname.startsWith("/vendas") || pathname.startsWith("/commerce") || pathname.startsWith("/financeiro") || pathname.startsWith("/produtos") || pathname.startsWith("/blends") || pathname.startsWith("/laboratorio") || pathname.startsWith("/custos") || pathname.startsWith("/exportacoes") || pathname.startsWith("/bi");
+  const isSystem = pathname === "/home" || pathname === "/dashboard" || pathname === "/dashboard-industrial" || pathname.startsWith("/cafe-verde") || pathname.startsWith("/producao") || pathname.startsWith("/clientes") || pathname.startsWith("/atendimento") || pathname.startsWith("/pedidos") || pathname.startsWith("/vendas") || pathname.startsWith("/commerce") || pathname.startsWith("/financeiro") || pathname.startsWith("/produtos") || pathname.startsWith("/blends") || pathname.startsWith("/laboratorio") || pathname.startsWith("/custos") || pathname.startsWith("/exportacoes") || pathname.startsWith("/bi");
 
   React.useEffect(() => { setMessages([{ role: "assistant", text: context.intro }]); }, [pathname, context.intro]);
 

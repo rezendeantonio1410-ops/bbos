@@ -17,6 +17,7 @@ import { ProductionService } from "./production.service";
 import { SalesOrderCatalogOptionsController } from "./sales-order-catalog-options.controller";
 import { SalesOrdersController } from "./sales-orders.controller";
 import { SalesOrderApprovalsController } from "./sales-order-approvals.controller";
+import { SalesOrderManualPaymentsController } from "./sales-order-manual-payments.controller";
 import { SalesOrdersService } from "./sales-orders.service";
 import { FinanceController } from "./finance.controller";
 import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
@@ -40,6 +41,10 @@ import { BlingWebhookController } from "./integrations/bling/bling-webhook.contr
 import { OperationsFlowController } from "./operations-flow.controller";
 import { OperationsFlowActionsController } from "./operations-flow-actions.controller";
 import { ProductionRequirementsController } from "./production-requirements.controller";
+import {
+  OrderPackagingController,
+  OrderPackagingService,
+} from "./order-packaging.controller";
 import { APP_GUARD } from "@nestjs/core";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
@@ -57,6 +62,7 @@ import { StorefrontLifecycleService } from "./storefront-lifecycle.service";
 import { CustomerNotificationService } from "./customer-notification.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { IntegrationWorkerService } from "./integration-worker.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { StorefrontFulfillmentController } from "./storefront-fulfillment.controller";
@@ -64,6 +70,7 @@ import { MelhorEnvioAuthService } from "./melhor-envio-auth.service";
 import { StorefrontCouponsController } from "./storefront-coupons.controller";
 import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontPartnersController } from "./storefront-partners.controller";
+import { PartnerPortalController } from "./partner-portal.controller";
 import { StorefrontCatalogController } from "./storefront-catalog.controller";
 import { StorefrontOperationsController } from "./storefront-operations.controller";
 import { FiscalInboundController } from "./fiscal-inbound.controller";
@@ -81,11 +88,15 @@ import { StorefrontMediaService } from "./storefront-media.service";
 import { NotificationsController } from "./notifications.controller";
 import { IntelligenceController } from "./intelligence.controller";
 import { IntelligenceService } from "./intelligence.service";
+import { MobileNotificationsController } from "./mobile-notifications.controller";
+import { MobileNotificationService } from "./mobile-notification.service";
+import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
 
 @Module({
   controllers: [
     HealthController,
     NotificationsController,
+    MobileNotificationsController,
     IntelligenceController,
     DashboardController,
     BlendsController,
@@ -99,6 +110,7 @@ import { IntelligenceService } from "./intelligence.service";
     SalesOrderCatalogOptionsController,
     SalesOrdersController,
     SalesOrderApprovalsController,
+    SalesOrderManualPaymentsController,
     FinanceController,
     FinanceSalesScheduleController,
     FinanceAssistedReconciliationController,
@@ -112,6 +124,7 @@ import { IntelligenceService } from "./intelligence.service";
     OperationsFlowController,
     OperationsFlowActionsController,
     ProductionRequirementsController,
+    OrderPackagingController,
     BrokersController,
     CustomersController,
     CuppingController,
@@ -123,6 +136,7 @@ import { IntelligenceService } from "./intelligence.service";
     StorefrontFulfillmentController,
     StorefrontCouponsController,
     StorefrontPartnersController,
+    PartnerPortalController,
     StorefrontCatalogController,
     StorefrontOperationsController,
     FiscalInboundController,
@@ -137,6 +151,7 @@ import { IntelligenceService } from "./intelligence.service";
     ProductsService,
     ProductsRepository,
     ProductionService,
+    OrderPackagingService,
     SalesOrdersService,
     CostingService,
     FinanceService,
@@ -152,8 +167,11 @@ import { IntelligenceService } from "./intelligence.service";
     StorefrontShippingService,
     StorefrontLifecycleService,
     CustomerNotificationService,
+    MobileNotificationService,
+    SalesReceivableAlertService,
     SalesOrderCustomerLifecycleService,
     SalesOrderPaymentsService,
+    SalesOrderTermApprovalService,
     IntegrationWorkerService,
     MelhorEnvioShipmentService,
     MelhorEnvioAuthService,

@@ -132,9 +132,9 @@ const cartProductStories: Record<string, StoreProductStory> = {
   },
   raros: {
     promise:
-      "Um pequeno lote de Carlos Alexandre Siqueira, eleito por Suzi e José entre os cafés provados ao longo das últimas safras.",
+      "Um pequeno lote de Carlos Alexandre Siqueira, eleito por José e Suzi entre os cafés provados ao longo das últimas safras.",
     founderNote:
-      "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, Suzi e José escolheram este pequeno lote como uma raridade Bispo.",
+      "A Suzi acompanha o trabalho do Alexandre há três anos. Nesta safra, José e Suzi escolheram este pequeno lote como uma raridade Bispo.",
     bestFor:
       "Degustar com atenção, presentear e conhecer a expressão do Norte do Paraná.",
     brew: "Coado, com água filtrada e preparo cuidadoso.",
@@ -147,7 +147,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     line: "GOURMET",
     notes: "Macio · Doce · Fácil",
     ...storefrontCommerce("essencial"),
-    image: "/brand/products/real/essencial-frontal.jpg",
+    image: "/brand/products/essencial-treated.webp",
     story: cartProductStories.essencial,
   },
   caramelo: {
@@ -155,7 +155,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     line: "CLÁSSICOS",
     notes: "Caramelo · Chocolate · Equilíbrio",
     ...storefrontCommerce("caramelo"),
-    image: "/brand/products/real/caramelo-frontal.jpg",
+    image: "/brand/products/caramelo-treated.webp",
     story: cartProductStories.caramelo,
   },
   singular: {
@@ -163,7 +163,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     line: "ÉPICOS",
     notes: "Frutado · Complexo · Evolutivo",
     ...storefrontCommerce("singular"),
-    image: "/brand/products/real/singular-frontal.jpg",
+    image: "/brand/products/singular-treated.webp",
     story: cartProductStories.singular,
   },
   sublime: {
@@ -171,7 +171,7 @@ const cartRecommendationProducts: Record<string, StoreProduct> = {
     line: "ÉPICOS",
     notes: "Rapadura · Caramelo · Doçura profunda",
     ...storefrontCommerce("sublime"),
-    image: "/brand/products/real/sublime-frontal.jpg",
+    image: "/brand/products/sublime-treated.webp",
     story: cartProductStories.sublime,
   },
 };
@@ -216,7 +216,7 @@ function CartItemStory({ item }: { item: CartItem }) {
           </div>
         </dl>
         <blockquote>
-          “{story.founderNote}”<cite>Suzi e José · origem e prova</cite>
+          “{story.founderNote}”<cite>José e Suzi · curadoria Bispo</cite>
         </blockquote>
       </div>
     </details>
@@ -292,14 +292,11 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     "singular",
     "sublime",
   ];
-  const recommendations =
-    currentItemIds.size < 2
-      ? [...new Set(recommendationIds)]
-          .filter((id) => !currentItemIds.has(id))
-          .map((id) => cartRecommendationProducts[id])
-          .filter((product): product is StoreProduct => Boolean(product))
-          .slice(0, 2)
-      : [];
+  const recommendations = [...new Set(recommendationIds)]
+    .filter((id) => !currentItemIds.has(id))
+    .map((id) => cartRecommendationProducts[id])
+    .filter((product): product is StoreProduct => Boolean(product))
+    .slice(0, 2);
   const add = (product: StoreProduct) => {
     const normalizedProduct = normalizeCartProduct(product);
     if (!normalizedProduct) return;
@@ -558,10 +555,10 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                     </section>
                   )}
                   <section className={styles.bispo}>
-                    <small>ESCOLHA BISPO</small>
+                    <small>CURADORIA BISPO</small>
                     <h3>Uma escolha para querer outra xícara.</h3>
                     <p>
-                      <Check /> Escolhido por Suzi e José, da origem à xícara.
+                      <Check /> Escolhido por José e Suzi, da origem à xícara.
                     </p>
                   </section>
                   <section className={styles.choice}>

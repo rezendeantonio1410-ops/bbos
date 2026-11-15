@@ -73,10 +73,19 @@ export default async function ProductDetailPage({
         />
         <Metric
           icon={CircleDollarSign}
-          label="Margem"
-          value={`${number.format(product.marginPercent)}%`}
+          label="Preço médio"
+          value={currency.format(
+            product.skus.length
+              ? product.skus.reduce((sum, sku) => sum + sku.retailPrice, 0) /
+                  product.skus.length
+              : 0,
+          )}
         />
-        <Metric icon={CircleDollarSign} label="Custo médio" value="R$ 24,80" />
+        <Metric
+          icon={CircleDollarSign}
+          label="Desconto máximo"
+          value={`${number.format(Math.max(0, ...product.skus.map((sku) => sku.maxDiscountPercent)))}%`}
+        />
         <Metric
           icon={Factory}
           label="Produção"
@@ -96,9 +105,14 @@ export default async function ProductDetailPage({
           </Badge>
         </div>
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          {product.skus.map((sku, index) => {
-            const unitCost = 18.4 + index * 8.2;
-            const price = unitCost / (1 - product.marginPercent / 100);
+          {product.skus.map((sku) => {
+            const syncTone =
+              sku.blingSync?.state === "SYNCED"
+                ? "success"
+                : sku.blingSync?.state === "PENDING_VALIDATION" ||
+                    sku.blingSync?.state === "RETRYING"
+                  ? "warning"
+                  : "neutral";
             return (
               <Card key={sku.id} className="p-5">
                 <div className="flex justify-between">
@@ -120,48 +134,63 @@ export default async function ProductDetailPage({
                   </div>
                   <Badge tone="success">Ativo</Badge>
                 </div>
-                <div className="mt-5 grid grid-cols-3 gap-3 text-[10px] text-stone-500">
+                <div className="mt-5 grid grid-cols-2 gap-3 text-[10px] text-stone-500 sm:grid-cols-4">
                   <span>
-                    Custo
+                    Preço base
                     <br />
                     <strong className="text-xs text-stone-900">
-                      {currency.format(unitCost)}
+                      {currency.format(sku.retailPrice)}
                     </strong>
                   </span>
                   <span>
-                    Preço
+                    Preço mínimo
                     <br />
                     <strong className="text-xs text-stone-900">
-                      {currency.format(price)}
+                      {currency.format(sku.minimumPrice)}
                     </strong>
                   </span>
                   <span>
-                    Estoque
+                    Desconto máximo
                     <br />
                     <strong className="text-xs text-stone-900">
-                      {sku.stockUnits} un.
+                      {number.format(sku.maxDiscountPercent)}%
                     </strong>
                   </span>
                   <span>
-                    Vendas
+                    Peso líquido / bruto
                     <br />
                     <strong className="text-xs text-stone-900">
-                      {currency.format(sku.salesAmount)}
+                      {formatWeight(sku.packageWeightG)} /{" "}
+                      {formatWeight(sku.grossWeightG)}
                     </strong>
                   </span>
                   <span>
-                    Margem
+                    NCM
                     <br />
                     <strong className="text-xs text-stone-900">
-                      {number.format(product.marginPercent)}%
+                      {sku.ncm}
                     </strong>
                   </span>
                   <span>
-                    Peso
+                    Origem fiscal
                     <br />
                     <strong className="text-xs text-stone-900">
-                      {sku.packageWeightG} g
+                      Código {sku.originCode}
                     </strong>
+                  </span>
+                  <span>
+                    GTIN / EAN
+                    <br />
+                    <strong className="text-xs text-stone-900">
+                      {sku.gtin || "Não informado"}
+                    </strong>
+                  </span>
+                  <span>
+                    Integração
+                    <br />
+                    <Badge tone={syncTone}>
+                      {sku.blingSync?.label ?? "Ainda não enviado"}
+                    </Badge>
                   </span>
                 </div>
                 <Link
@@ -194,4 +223,8 @@ function Metric({
       <p className="mt-1 text-lg font-bold">{value}</p>
     </Card>
   );
+}
+
+function formatWeight(grams: number) {
+  return grams >= 1000 ? `${number.format(grams / 1000)} kg` : `${grams} g`;
 }

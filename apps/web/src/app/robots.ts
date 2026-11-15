@@ -1,5 +1,4 @@
 import type { MetadataRoute } from "next";
-import { getStorefrontOrigin } from "@/lib/storefront-url";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -17,6 +16,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: `${getStorefrontOrigin()}/sitemap.xml`,
+    sitemap: "https://loja.bispocoffees.com.br/sitemap.xml",
   };
 }

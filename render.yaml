@@ -12,6 +12,16 @@ services:
         value: production
       - key: BBOS_BACKGROUND_JOBS_ENABLED
         value: "true"
+      - key: WEB_PUSH_ENABLED
+        sync: false
+      - key: WEB_PUSH_ENABLED_AT
+        sync: false
+      - key: WEB_PUSH_VAPID_PUBLIC_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_PRIVATE_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_SUBJECT
+        value: mailto:jrezende@bispocoffees.com.br
       - key: DATABASE_URL
         fromDatabase:
           name: bbos-postgres-staging

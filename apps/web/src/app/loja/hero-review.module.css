@@ -42,12 +42,10 @@
 }
 
 .editorialProductPhoto {
-  position: absolute !important;
-  inset: -6% 5%;
-  width: 90% !important;
-  height: 112% !important;
-  object-fit: contain !important;
-  object-position: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 54% !important;
   filter: none !important;
 }
 

@@ -2,14 +2,20 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Req,
+  Res,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { Prisma, UserRole } from "@bbos/database";
+import { calculateSalesLineDiscount } from "@bbos/shared";
 import {
   SalesOrdersService,
   type CreateSalesOrderInput,
@@ -18,14 +24,29 @@ import { AuthService } from "./auth.service";
 import { StorefrontShippingService } from "./storefront-shipping.service";
 import { MelhorEnvioShipmentService } from "./melhor-envio-shipment.service";
 import { resolveSalesOrderDeliveryPolicy } from "./sales-order-delivery-policy";
+import {
+  resolveSalesOrderType,
+  SAMPLE_FISCAL_PACKAGE_VALUE,
+  sampleFiscalSubtotalCents,
+  sampleShippingPackages,
+} from "./sales-order-sample-policy";
+import { customerFiscalReadinessMessage } from "./customer-fiscal-readiness";
+import { BlingCatalogSyncService } from "./integrations/bling/bling-catalog-sync.service";
+import {
+  buildSalesOrderPdfDownload,
+  pdfContentDisposition,
+} from "./sales-order-pdf-download";
+
+import { loadSalesOrderBillingData } from "./sales-order-billing-data";
+import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
+import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 
 const isCashTerm = (value: unknown) => {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return !normalized || normalized === "à vista" || normalized === "a vista";
-};
-const termDays = (value: unknown) => {
-  const match = String(value ?? "").match(/(\d+)/);
-  return match ? Math.max(0, Number(match[1])) : 0;
 };
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
@@ -37,13 +58,22 @@ type SalesOrderCommercialTerms = {
   customerReference?: string;
   incoterm?: string;
   incotermLocation?: string;
+  currency?: string;
+  exchangeRateToBrl?: number;
+  exchangeRateDate?: string;
+  customsDeclaredValue?: number;
   shippingQuoteId?: string;
   destinationPostalCode?: string;
   packageWidthCm?: number;
   packageHeightCm?: number;
   packageLengthCm?: number;
   packageCount?: number;
-  packages?: Array<{ widthCm: number; heightCm: number; lengthCm: number; weightGrams?: number }>;
+  packages?: Array<{
+    widthCm: number;
+    heightCm: number;
+    lengthCm: number;
+    weightGrams?: number;
+  }>;
   brokerId?: string;
   brokerCommissionMode?: "PERCENTAGE" | "PER_PACKAGE";
   brokerCommissionPercent?: number;
@@ -57,6 +87,8 @@ export class SalesOrdersController {
     private readonly auth: AuthService,
     private readonly shipping: StorefrontShippingService,
     private readonly shipment: MelhorEnvioShipmentService,
+    private readonly blingCatalogSync: BlingCatalogSyncService,
+    private readonly termApprovals: SalesOrderTermApprovalService,
   ) {}
 
   private async actor(request: any) {
@@ -68,7 +100,34 @@ export class SalesOrdersController {
   private async actorForOrder(request: any, id: string) {
     const actor = await this.actor(request);
     await this.salesOrders.get(actor.companyId, id);
+    await this.assertOrderVisibleToActor(actor, id);
     return actor;
+  }
+
+  private async assertOrderVisibleToActor(actor: any, id: string) {
+    if (actor.role !== UserRole.SALES) return;
+    const visible = await this.salesOrders.database.salesOrder.findFirst({
+      where: {
+        id,
+        companyId: actor.companyId,
+        externalOrderId: null,
+        importedAt: null,
+        OR: [
+          { salesChannelId: null },
+          {
+            salesChannel: {
+              is: { type: { not: "ECOMMERCE" }, platformCode: null },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!visible) {
+      throw new ForbiddenException(
+        "Pedidos do site e de plataformas são restritos à administração e aos operadores autorizados.",
+      );
+    }
   }
 
   private async nextOrderNumber(companyId: string) {
@@ -85,42 +144,66 @@ export class SalesOrdersController {
     return `${prefix}${String(next).padStart(6, "0")}`;
   }
 
-  private async resolveInternalPrice(companyId: string, customerId: string, productVariantId: string) {
+  private async resolveInternalPrice(
+    companyId: string,
+    customerId: string,
+    productVariantId: string,
+  ) {
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT pp.id AS "productPriceId", pp.price, pp.currency,
-              pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
-              pp."minimumPrice", pp."minimumMarginPercent", pp."minimumRoiPercent",
-              sc.id AS "salesChannelId", sc.name AS "salesChannelName", sc.type AS "salesChannelType",
-              pv."unitCost", c.segment
-         FROM "Customer" c
-         JOIN "ProductPrice" pp
-           ON pp."companyId" = c."companyId"
-          AND pp."productVariantId" = $2
-         JOIN "SalesChannel" sc ON sc.id = pp."salesChannelId" AND sc.active = true
-         JOIN "ProductVariant" pv ON pv.id = pp."productVariantId"
-        WHERE c.id = $1
-          AND c."companyId" = $3
-          AND pp.active = true
-          AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
-          AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
-          AND (
-            c.segment IS NULL
-            OR c.segment NOT ILIKE '%varejo%'
-            OR sc.code = 'VAREJO'
-          )
-        ORDER BY CASE
-          WHEN c.segment ILIKE '%distrib%' AND sc.type = 'DISTRIBUIDOR' THEN 0
-          WHEN c.segment ILIKE '%cafeter%' AND sc.type = 'CAFETERIA' THEN 0
-          WHEN c.segment ILIKE '%escrit%' AND sc.type = 'ESCRITORIO' THEN 0
-          WHEN c.segment ILIKE '%export%' AND sc.type = 'EXPORTACAO' THEN 0
-          WHEN c.segment ILIKE '%consum%' AND sc.code = 'CONSUMIDOR_FINAL' THEN 0
-          WHEN c.segment ILIKE '%varejo%' AND sc.code = 'VAREJO' THEN 0
-          WHEN sc.type = 'B2B' THEN 1
-          ELSE 5
-        END,
-        pp."validFrom" DESC NULLS LAST,
-        pp."createdAt" DESC
-        LIMIT 1`,
+      `WITH base_price AS (
+         SELECT pp.id AS "productPriceId", pp.price AS "channelPrice", pp.currency,
+                pp."maxRequestDiscountPercent", pp."maxApprovalDiscountPercent",
+                pp."minimumPrice", pp."minimumMarginPercent", pp."minimumRoiPercent",
+                sc.id AS "salesChannelId", sc.name AS "salesChannelName", sc.type AS "salesChannelType",
+                pv."unitCost", c.segment
+           FROM "Customer" c
+           JOIN "ProductPrice" pp
+             ON pp."companyId" = c."companyId"
+            AND pp."productVariantId" = $2
+           JOIN "SalesChannel" sc ON sc.id = pp."salesChannelId" AND sc.active = true
+           JOIN "ProductVariant" pv ON pv.id = pp."productVariantId"
+          WHERE c.id = $1
+            AND c."companyId" = $3
+            AND pp.active = true
+            AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
+            AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+            AND (
+              c.segment IS NULL
+              OR c.segment NOT ILIKE '%varejo%'
+              OR sc.code = 'VAREJO'
+            )
+          ORDER BY CASE
+            WHEN c.segment ILIKE '%distrib%' AND sc.type = 'DISTRIBUIDOR' THEN 0
+            WHEN c.segment ILIKE '%cafeter%' AND sc.type = 'CAFETERIA' THEN 0
+            WHEN c.segment ILIKE '%escrit%' AND sc.type = 'ESCRITORIO' THEN 0
+            WHEN c.segment ILIKE '%export%' AND sc.type = 'EXPORTACAO' THEN 0
+            WHEN c.segment ILIKE '%consum%' AND sc.code = 'CONSUMIDOR_FINAL' THEN 0
+            WHEN c.segment ILIKE '%varejo%' AND sc.code = 'VAREJO' THEN 0
+            WHEN sc.type = 'B2B' THEN 1
+            ELSE 5
+          END,
+          pp."validFrom" DESC NULLS LAST,
+          pp."createdAt" DESC
+          LIMIT 1
+       )
+       SELECT bp.*,
+              cpp.id AS "customerProductPriceId",
+              cpp.price AS "customerPrice",
+              cpp.notes AS "customerPriceNotes"
+         FROM base_price bp
+         LEFT JOIN LATERAL (
+           SELECT candidate.id, candidate.price, candidate.notes
+             FROM "CustomerProductPrice" candidate
+            WHERE candidate."companyId"=$3
+              AND candidate."customerId"=$1
+              AND candidate."productVariantId"=$2
+              AND candidate.currency=bp.currency
+              AND candidate.active=true
+              AND (candidate."validFrom" IS NULL OR candidate."validFrom" <= NOW())
+              AND (candidate."validUntil" IS NULL OR candidate."validUntil" >= NOW())
+            ORDER BY candidate."validFrom" DESC NULLS LAST, candidate."updatedAt" DESC
+            LIMIT 1
+         ) cpp ON TRUE`,
       customerId,
       productVariantId,
       companyId,
@@ -133,7 +216,12 @@ export class SalesOrdersController {
     }
     return {
       productPriceId: row.productPriceId as string,
-      officialUnitPrice: Number(row.price),
+      customerProductPriceId:
+        (row.customerProductPriceId as string | null) ?? null,
+      pricingSource: row.customerProductPriceId ? "CUSTOMER" : "CHANNEL",
+      officialUnitPrice: Number(row.customerPrice ?? row.channelPrice),
+      channelUnitPrice: Number(row.channelPrice),
+      customerPriceNotes: (row.customerPriceNotes as string | null) ?? null,
       currency: row.currency as string,
       salesChannelId: row.salesChannelId as string,
       salesChannelName: row.salesChannelName as string,
@@ -141,8 +229,12 @@ export class SalesOrdersController {
       maxRequestDiscountPercent: Number(row.maxRequestDiscountPercent ?? 0),
       maxApprovalDiscountPercent: Number(row.maxApprovalDiscountPercent ?? 0),
       minimumPrice: row.minimumPrice == null ? null : Number(row.minimumPrice),
-      minimumMarginPercent: row.minimumMarginPercent == null ? null : Number(row.minimumMarginPercent),
-      minimumRoiPercent: row.minimumRoiPercent == null ? null : Number(row.minimumRoiPercent),
+      minimumMarginPercent:
+        row.minimumMarginPercent == null
+          ? null
+          : Number(row.minimumMarginPercent),
+      minimumRoiPercent:
+        row.minimumRoiPercent == null ? null : Number(row.minimumRoiPercent),
       unitCost: Number(row.unitCost ?? 0),
       segment: row.segment as string | null,
     };
@@ -150,7 +242,11 @@ export class SalesOrdersController {
 
   @Get()
   async list(@Req() request: any) {
-    return this.salesOrders.list((await this.actor(request)).companyId);
+    const actor = await this.actor(request);
+    return this.salesOrders.list(
+      actor.companyId,
+      actor.role === UserRole.SALES,
+    );
   }
 
   @Get("options")
@@ -161,7 +257,9 @@ export class SalesOrdersController {
 
   @Get("next-number")
   async nextNumber(@Req() request: any) {
-    return { number: await this.nextOrderNumber((await this.actor(request)).companyId) };
+    return {
+      number: await this.nextOrderNumber((await this.actor(request)).companyId),
+    };
   }
 
   @Get("quote")
@@ -171,11 +269,19 @@ export class SalesOrdersController {
     @Query("productVariantId") productVariantId: string,
     @Query("quantity") rawQuantity = "1",
   ) {
-    if (!customerId || !productVariantId) throw new BadRequestException("Cliente e produto são obrigatórios para cotar.");
+    if (!customerId || !productVariantId)
+      throw new BadRequestException(
+        "Cliente e produto são obrigatórios para cotar.",
+      );
     const quantity = Number(rawQuantity);
-    if (!Number.isSafeInteger(quantity) || quantity <= 0) throw new BadRequestException("Quantidade inválida.");
+    if (!Number.isSafeInteger(quantity) || quantity <= 0)
+      throw new BadRequestException("Quantidade inválida.");
     const actor = await this.actor(request);
-    const price = await this.resolveInternalPrice(actor.companyId, customerId, productVariantId);
+    const price = await this.resolveInternalPrice(
+      actor.companyId,
+      customerId,
+      productVariantId,
+    );
     return {
       ...price,
       quantity,
@@ -193,39 +299,73 @@ export class SalesOrdersController {
   @Post("shipping-quotes")
   async shippingQuotes(
     @Req() request: any,
-    @Body() body: {
+    @Body()
+    body: {
+      orderType?: string;
       customerId?: string;
       productVariantId?: string;
       quantity?: number;
-      items?: Array<{ productVariantId?: string; quantity?: number }>;
+      items?: Array<{
+        productVariantId?: string;
+        quantity?: number;
+        negotiatedUnitPrice?: number;
+      }>;
       packageWidthCm?: number;
       packageHeightCm?: number;
       packageLengthCm?: number;
       packageCount?: number;
-      packages?: Array<{ widthCm?: number; heightCm?: number; lengthCm?: number; weightGrams?: number }>;
+      packages?: Array<{
+        widthCm?: number;
+        heightCm?: number;
+        lengthCm?: number;
+        weightGrams?: number;
+      }>;
     },
   ) {
     const actor = await this.actor(request);
+    const isSample = resolveSalesOrderType(body.orderType) === "SAMPLE";
     const customerId = String(body.customerId ?? "").trim();
     const requestedItems = body.items?.length
       ? body.items.map((item) => ({
           productVariantId: String(item.productVariantId ?? "").trim(),
           quantity: Number(item.quantity ?? 0),
+          negotiatedUnitPrice:
+            item.negotiatedUnitPrice == null
+              ? undefined
+              : Number(item.negotiatedUnitPrice),
         }))
-      : [{
-          productVariantId: String(body.productVariantId ?? "").trim(),
-          quantity: Number(body.quantity ?? 0),
-        }];
+      : [
+          {
+            productVariantId: String(body.productVariantId ?? "").trim(),
+            quantity: Number(body.quantity ?? 0),
+            negotiatedUnitPrice: undefined,
+          },
+        ];
     if (
-      !customerId || !requestedItems.length ||
-      requestedItems.some((item) => !item.productVariantId || !Number.isSafeInteger(item.quantity) || item.quantity <= 0)
+      !customerId ||
+      !requestedItems.length ||
+      requestedItems.some(
+        (item) =>
+          !item.productVariantId ||
+          !Number.isSafeInteger(item.quantity) ||
+          item.quantity <= 0,
+      )
     ) {
-      throw new BadRequestException("Cliente, produtos e quantidades são obrigatórios para cotar o frete.");
+      throw new BadRequestException(
+        "Cliente, produtos e quantidades são obrigatórios para cotar o frete.",
+      );
     }
-    if (new Set(requestedItems.map((item) => item.productVariantId)).size !== requestedItems.length) {
-      throw new BadRequestException("Agrupe o mesmo produto em um único item antes de cotar o frete.");
+    if (
+      new Set(requestedItems.map((item) => item.productVariantId)).size !==
+      requestedItems.length
+    ) {
+      throw new BadRequestException(
+        "Agrupe o mesmo produto em um único item antes de cotar o frete.",
+      );
     }
-    const productVariantIds = requestedItems.map((item) => item.productVariantId);
+    const productVariantIds = requestedItems.map(
+      (item) => item.productVariantId,
+    );
     const [customer, variants] = await Promise.all([
       this.salesOrders.database.$queryRawUnsafe<any[]>(
         `SELECT id, "companyId", "postalCode" FROM "Customer" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
@@ -233,28 +373,71 @@ export class SalesOrdersController {
         actor.companyId,
       ),
       this.salesOrders.database.productVariant.findMany({
-        where: { id: { in: productVariantIds }, product: { productLine: { companyId: actor.companyId } } },
+        where: {
+          id: { in: productVariantIds },
+          product: { productLine: { companyId: actor.companyId } },
+        },
         select: { id: true, netWeightGrams: true },
       }),
     ]);
     const postalCode = String(customer[0]?.postalCode ?? "").replace(/\D/g, "");
     if (postalCode.length !== 8) {
-      throw new BadRequestException("Cadastre um CEP válido no cliente antes de cotar o frete.");
+      throw new BadRequestException(
+        "Cadastre um CEP válido no cliente antes de cotar o frete.",
+      );
     }
-    if (variants.length !== requestedItems.length) throw new BadRequestException("Um ou mais produtos não foram encontrados para esta empresa.");
-    const weights = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
+    if (variants.length !== requestedItems.length)
+      throw new BadRequestException(
+        "Um ou mais produtos não foram encontrados para esta empresa.",
+      );
+    const weights = new Map(
+      variants.map((variant) => [variant.id, variant.netWeightGrams]),
+    );
     let subtotalCents = 0;
     let weightGrams = 0;
     let salesChannelId = "";
     for (const item of requestedItems) {
-      const price = await this.resolveInternalPrice(actor.companyId, customerId, item.productVariantId);
+      const price = await this.resolveInternalPrice(
+        actor.companyId,
+        customerId,
+        item.productVariantId,
+      );
       if (salesChannelId && salesChannelId !== price.salesChannelId) {
-        throw new BadRequestException("Os produtos precisam usar a mesma tabela comercial.");
+        throw new BadRequestException(
+          "Os produtos precisam usar a mesma tabela comercial.",
+        );
       }
       salesChannelId = price.salesChannelId;
-      subtotalCents += Math.round(price.officialUnitPrice * item.quantity * 100);
-      weightGrams += Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
+      const negotiated = calculateSalesLineDiscount({
+        officialUnitPrice: price.officialUnitPrice,
+        finalUnitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : item.negotiatedUnitPrice,
+        maxDiscountPercent:
+          actor.role === UserRole.ADMIN || actor.role === UserRole.EXECUTIVE
+            ? null
+            : price.maxRequestDiscountPercent,
+        minimumPrice: isSample ? null : price.minimumPrice,
+        unitCost: isSample ? null : price.unitCost,
+        minimumMarginPercent: isSample ? null : price.minimumMarginPercent,
+        minimumRoiPercent: isSample ? null : price.minimumRoiPercent,
+      });
+      if (!negotiated.valid) throw new BadRequestException(negotiated.message);
+      const effectiveUnitPrice =
+        negotiated.discountAmount > 0 &&
+        actor.role !== UserRole.ADMIN &&
+        actor.role !== UserRole.EXECUTIVE
+          ? price.officialUnitPrice
+          : negotiated.finalUnitPrice;
+      subtotalCents += isSample
+        ? sampleFiscalSubtotalCents(item.quantity)
+        : Math.round(effectiveUnitPrice * item.quantity * 100);
+      weightGrams +=
+        Number(weights.get(item.productVariantId) ?? 0) * item.quantity;
     }
+    const samplePackages = isSample
+      ? sampleShippingPackages(weightGrams)
+      : undefined;
     const result = await this.shipping.quote(
       actor.companyId,
       {
@@ -265,15 +448,23 @@ export class SalesOrdersController {
         packageHeightCm: body.packageHeightCm,
         packageLengthCm: body.packageLengthCm,
         packageCount: body.packageCount,
-        packages: body.packages?.map((item) => ({
-          widthCm: Number(item.widthCm),
-          heightCm: Number(item.heightCm),
-          lengthCm: Number(item.lengthCm),
-          weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
-        })),
+        packages:
+          samplePackages ??
+          body.packages?.map((item) => ({
+            widthCm: Number(item.widthCm),
+            heightCm: Number(item.heightCm),
+            lengthCm: Number(item.lengthCm),
+            weightGrams:
+              item.weightGrams == null ? undefined : Number(item.weightGrams),
+          })),
       },
       { allowFreeShipping: false, includeAllServices: true },
     );
+    if (isSample && result.provider !== "MELHOR_ENVIO") {
+      throw new ServiceUnavailableException(
+        "O Melhor Envio precisa estar ativo para pesquisar o envio da amostra.",
+      );
+    }
     return { ...result, postalCode };
   }
 
@@ -293,8 +484,15 @@ export class SalesOrdersController {
   @Get(":id/fulfillment")
   async fulfillment(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
-    const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT s.*,
+    const [rows, trackingEvents] = await Promise.all([
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT s.*,
+              s.metadata->>'authorization_code' AS "authorizationCode",
+              COALESCE(
+                s.metadata#>>'{files,1,pdf}',
+                s.metadata#>>'{order_snapshot,files,1,pdf}',
+                s."labelUrl"
+              ) AS "printableLabelUrl",
               f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId",
               f.number AS "fiscalNumber",
@@ -302,29 +500,145 @@ export class SalesOrdersController {
               f."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "fiscalDanfeUrl",
               f."payloadSnapshot"#>>'{blingNfe,xml}' AS "fiscalXmlUrl",
               f."payloadSnapshot"->>'sefazStatusCode' AS "sefazStatusCode",
-              f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage"
+              f."payloadSnapshot"->>'sefazMessage' AS "sefazMessage",
+              o.status::text AS "invoiceQueueStatus",
+              o."lastError" AS "invoiceQueueError",
+              o."updatedAt" AS "invoiceQueueUpdatedAt",
+              re.id AS "reexpeditionId",
+              re.status AS "reexpeditionStatus",
+              re."attemptNumber" AS "reexpeditionAttemptNumber",
+              re."preparedAt" AS "reexpeditionPreparedAt",
+              re."preparedByName" AS "reexpeditionPreparedByName",
+              re."addressSnapshot" AS "reexpeditionAddressSnapshot",
+              re.reason AS "reexpeditionReason",
+              re."lastError" AS "reexpeditionLastError",
+              re."completedAt" AS "reexpeditionCompletedAt",
+              original_fiscal.number AS "reexpeditionOriginalFiscalNumber",
+              original_fiscal."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "reexpeditionOriginalFiscalPdfUrl",
+              original_fiscal."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "reexpeditionOriginalFiscalDanfeUrl",
+              return_fiscal.number AS "reexpeditionReturnFiscalNumber",
+              return_fiscal."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "reexpeditionReturnFiscalPdfUrl",
+              return_fiscal."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "reexpeditionReturnFiscalDanfeUrl",
+              replacement_fiscal.number AS "reexpeditionReplacementFiscalNumber",
+              replacement_fiscal."payloadSnapshot"#>>'{blingNfe,linkPDF}' AS "reexpeditionReplacementFiscalPdfUrl",
+              replacement_fiscal."payloadSnapshot"#>>'{blingNfe,linkDanfe}' AS "reexpeditionReplacementFiscalDanfeUrl",
+              EXISTS (
+                SELECT 1 FROM "SalesOrderCustomerEvent" issue
+                 WHERE issue."salesOrderId"=so.id
+                   AND issue.source IN ('MELHOR_ENVIO','CARRIER')
+                   AND issue."eventType" IN ('UNDELIVERED','RETURNED','PAUSED','SUSPENDED')
+                   AND NOT EXISTS (
+                     SELECT 1 FROM "SalesOrderCustomerEvent" resolved
+                      WHERE resolved."salesOrderId"=so.id
+                        AND resolved.source IN ('MELHOR_ENVIO','CARRIER')
+                        AND resolved."eventType"='DELIVERED'
+                        AND resolved."occurredAt">issue."occurredAt"
+                   )
+              ) AS "hasUnresolvedDeliveryException"
          FROM "SalesOrder" so
          LEFT JOIN LATERAL (
            SELECT * FROM "FiscalDocument"
             WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
             ORDER BY "createdAt" DESC LIMIT 1
          ) f ON TRUE
-         LEFT JOIN "Shipment" s ON s."salesOrderId"=so.id
+         LEFT JOIN LATERAL (
+           SELECT status,"lastError","updatedAt"
+             FROM "IntegrationOutbox"
+            WHERE "aggregateId"=so.id
+              AND "eventType"='SALES_ORDER_INVOICE_REQUESTED'
+            ORDER BY "createdAt" DESC LIMIT 1
+         ) o ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT * FROM "SalesOrderReexpedition"
+            WHERE "salesOrderId"=so.id
+            ORDER BY "attemptNumber" DESC LIMIT 1
+         ) re ON TRUE
+         LEFT JOIN "FiscalDocument" original_fiscal
+           ON original_fiscal.id=re."originalFiscalDocumentId"
+         LEFT JOIN "FiscalDocument" return_fiscal
+           ON return_fiscal.id=re."returnFiscalDocumentId"
+         LEFT JOIN "FiscalDocument" replacement_fiscal
+           ON replacement_fiscal.id=re."replacementFiscalDocumentId"
+         LEFT JOIN LATERAL (
+           SELECT * FROM "Shipment"
+            WHERE "salesOrderId"=so.id
+            ORDER BY CASE WHEN id=re."replacementShipmentId" THEN 0 ELSE 1 END,
+                     "createdAt" DESC
+            LIMIT 1
+         ) s ON TRUE
         WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
-      id,
-      actor.companyId,
-    );
-    return rows[0] ?? null;
+        id,
+        actor.companyId,
+      ),
+      this.salesOrders.database.$queryRawUnsafe<any[]>(
+        `SELECT "eventType",title,detail,source,metadata,"occurredAt"
+           FROM "SalesOrderCustomerEvent"
+          WHERE "salesOrderId"=$1
+            AND "companyId"=$2
+            AND source IN ('MELHOR_ENVIO','CARRIER')
+          ORDER BY "occurredAt" DESC`,
+        id,
+        actor.companyId,
+      ),
+    ]);
+    if (!rows[0]) return null;
+    if (actor.role !== UserRole.SALES) return { ...rows[0], trackingEvents };
+    const fulfillment = rows[0];
+    return {
+      status: fulfillment.status,
+      carrierName: fulfillment.carrierName,
+      serviceName: fulfillment.serviceName,
+      trackingCode: fulfillment.trackingCode,
+      trackingUrl: fulfillment.trackingUrl,
+      latestEventTitle: fulfillment.latestEventTitle,
+      latestEventDetail: fulfillment.latestEventDetail,
+      latestEventAt: fulfillment.latestEventAt,
+      updatedAt: fulfillment.updatedAt,
+      fiscalStatus: fulfillment.fiscalStatus,
+      fiscalNumber: fulfillment.fiscalNumber,
+      hasUnresolvedDeliveryException:
+        fulfillment.hasUnresolvedDeliveryException,
+      trackingEvents,
+    };
   }
 
   @Post(":id/requote-shipping")
-  async requoteShipping(@Param("id") id: string, @Body() body: { packages?: Array<{ weight: number; length: number; width: number; height: number }> }, @Req() request: any) {
+  async requoteShipping(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      packages?: Array<{
+        weight: number;
+        length: number;
+        width: number;
+        height: number;
+      }>;
+    },
+    @Req() request: any,
+  ) {
     await this.actorForOrder(request, id);
     return this.shipment.requoteForSalesOrder(id, body?.packages);
   }
 
   @Post(":id/requote-shipping/select")
-  async selectRequoteShipping(@Param("id") id: string, @Body() body: { serviceId: string; serviceName: string; carrierName: string; priceCents: number; deliveryDays?: number; packages?: Array<{ weight: number; length: number; width: number; height: number }> }, @Req() request: any) {
+  async selectRequoteShipping(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      serviceId: string;
+      serviceName: string;
+      carrierName: string;
+      priceCents: number;
+      deliveryDays?: number;
+      packages?: Array<{
+        weight: number;
+        length: number;
+        width: number;
+        height: number;
+      }>;
+    },
+    @Req() request: any,
+  ) {
     await this.actorForOrder(request, id);
     return this.shipment.selectRequoteForSalesOrder(id, body);
   }
@@ -335,104 +649,472 @@ export class SalesOrdersController {
     return this.shipment.createLabelForSalesOrder(id);
   }
 
+  @Post(":id/reexpedition/prepare")
+  async prepareReexpedition(
+    @Param("id") id: string,
+    @Body() body: { returnConfirmed?: boolean; reason?: string },
+    @Req() request: any,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.EXECUTIVE) {
+      throw new ForbiddenException(
+        "Somente José, Suzi ou um administrador autorizado pode confirmar a devolução e preparar o reenvio.",
+      );
+    }
+    return this.shipment.prepareReexpeditionForSalesOrder(
+      id,
+      { id: actor.id, companyId: actor.companyId, name: actor.name },
+      body,
+    );
+  }
+
   @Get(":id")
   async get(@Param("id") id: string, @Req() request: any) {
-    return this.salesOrders.get((await this.actor(request)).companyId, id);
+    const actor = await this.actorForOrder(request, id);
+    return this.salesOrders.get(actor.companyId, id);
+  }
+
+  @Get(":id/pdf")
+  async pdf(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Res() response: any,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    const order: any = await this.salesOrders.get(actor.companyId, id);
+    const approvals = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT "acceptedByName","acceptedAt"
+         FROM "SalesOrderCustomerApproval"
+        WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='APPROVED'
+        ORDER BY "acceptedAt" DESC NULLS LAST,"createdAt" DESC
+        LIMIT 1`,
+      order.id,
+      actor.companyId,
+    );
+    const { body: pdf, fileName } = buildSalesOrderPdfDownload(
+      order,
+      approvals[0],
+    );
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": pdfContentDisposition(fileName),
+      "Content-Length": pdf.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(pdf);
+  }
+
+  @Get(":id/billing/pdf")
+  async billingPdf(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Res() response: any,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    const order = await this.salesOrders.get(actor.companyId, id);
+    const data = await loadSalesOrderBillingData(
+      this.salesOrders.database,
+      order,
+      actor.companyId,
+    );
+    const pdf = buildSalesOrderBillingPdf(data);
+    const orderCode = String(order.orderNumber ?? order.code).replace(
+      /[^A-Za-z0-9_-]/g,
+      "-",
+    );
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": pdfContentDisposition(`Cobranca-${orderCode}.pdf`),
+      "Content-Length": pdf.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(pdf);
   }
 
   @Post()
-  async create(@Req() request: any, @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms) {
+  async create(
+    @Req() request: any,
+    @Body() body: CreateSalesOrderInput & SalesOrderCommercialTerms,
+  ) {
     const actor = await this.actor(request);
-    const paymentType = String(body.paymentType ?? "CASH").toUpperCase();
-    if (!["CASH", "TERM"].includes(paymentType)) throw new BadRequestException("Forma de pagamento inválida.");
-    const paymentTerms = paymentType === "TERM" ? String(body.paymentTerms ?? "").trim() : "À vista";
-    if (paymentType === "TERM" && !paymentTerms) throw new BadRequestException("Informe a condição de pagamento da venda a prazo.");
-    if (!body.customerId || !body.items?.length) throw new BadRequestException("Cliente e itens são obrigatórios.");
+    const orderType = resolveSalesOrderType(body.orderType);
+    const isSample = orderType === "SAMPLE";
+    const paymentType = isSample
+      ? "SAMPLE"
+      : String(body.paymentType ?? "CASH").toUpperCase();
+    if (!isSample && !["CASH", "TERM"].includes(paymentType))
+      throw new BadRequestException("Forma de pagamento inválida.");
+    const paymentTerms = isSample
+      ? "Sem cobrança · amostra"
+      : paymentType === "TERM"
+        ? String(body.paymentTerms ?? "").trim()
+        : "À vista";
+    if (paymentType === "TERM" && !paymentTerms)
+      throw new BadRequestException(
+        "Informe a condição de pagamento da venda a prazo.",
+      );
+    if (!body.customerId || !body.items?.length)
+      throw new BadRequestException("Cliente e itens são obrigatórios.");
 
-    const freightResponsibility = String(body.freightResponsibility ?? "").trim().toUpperCase();
+    const freightResponsibility = String(body.freightResponsibility ?? "")
+      .trim()
+      .toUpperCase();
     if (!freightResponsibility) {
-      throw new BadRequestException("Selecione quem será responsável pelo frete.");
+      throw new BadRequestException(
+        "Selecione quem será responsável pelo frete.",
+      );
     }
-    if (!["BISPO", "CUSTOMER", "CUSTOMER_CARRIER", "PICKUP"].includes(freightResponsibility)) {
+    if (
+      !["BISPO", "CUSTOMER", "CUSTOMER_CARRIER", "PICKUP"].includes(
+        freightResponsibility,
+      )
+    ) {
       throw new BadRequestException("Responsabilidade do frete inválida.");
     }
+    if (isSample) body.freight = 0;
 
     const pricedItems = [] as CreateSalesOrderInput["items"];
+    const negotiatedDiscounts: Array<{
+      productVariantId: string;
+      productPriceId: string;
+      quantity: number;
+      officialUnitPrice: number;
+      requestedUnitPrice: number;
+      discountPercent: number;
+      discountAmount: number;
+      status: "APPROVED" | "PENDING";
+    }> = [];
+    const canApproveDiscount =
+      actor.role === UserRole.ADMIN || actor.role === UserRole.EXECUTIVE;
     let resolvedChannelId: string | undefined;
     let resolvedChannelType: string | undefined;
+    let resolvedCurrency: string | undefined;
     for (const item of body.items) {
-      const price = await this.resolveInternalPrice(actor.companyId, body.customerId, item.productVariantId);
+      const price = await this.resolveInternalPrice(
+        actor.companyId,
+        body.customerId,
+        item.productVariantId,
+      );
       if (resolvedChannelId && resolvedChannelId !== price.salesChannelId) {
-        throw new BadRequestException("Os itens do pedido precisam pertencer ao mesmo canal/tabela comercial.");
+        throw new BadRequestException(
+          "Os itens do pedido precisam pertencer ao mesmo canal/tabela comercial.",
+        );
       }
       resolvedChannelId = price.salesChannelId;
       resolvedChannelType = price.salesChannelType;
-      pricedItems.push({ ...item, unitPrice: price.officialUnitPrice });
+      const itemCurrency = String(price.currency ?? "BRL")
+        .trim()
+        .toUpperCase();
+      if (resolvedCurrency && resolvedCurrency !== itemCurrency) {
+        throw new BadRequestException(
+          "Os itens do pedido precisam usar a mesma moeda.",
+        );
+      }
+      resolvedCurrency = itemCurrency;
+      const negotiated = calculateSalesLineDiscount({
+        officialUnitPrice: price.officialUnitPrice,
+        finalUnitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : item.negotiatedUnitPrice,
+        maxDiscountPercent: canApproveDiscount
+          ? null
+          : price.maxRequestDiscountPercent,
+        minimumPrice: isSample ? null : price.minimumPrice,
+        unitCost: isSample ? null : price.unitCost,
+        minimumMarginPercent: isSample ? null : price.minimumMarginPercent,
+        minimumRoiPercent: isSample ? null : price.minimumRoiPercent,
+      });
+      if (!negotiated.valid) throw new BadRequestException(negotiated.message);
+      const discountStatus = canApproveDiscount ? "APPROVED" : "PENDING";
+      const effectiveUnitPrice =
+        negotiated.discountAmount > 0 && !canApproveDiscount
+          ? price.officialUnitPrice
+          : negotiated.finalUnitPrice;
+      if (!isSample && negotiated.discountAmount > 0) {
+        negotiatedDiscounts.push({
+          productVariantId: item.productVariantId,
+          productPriceId: price.productPriceId,
+          quantity: item.quantity,
+          officialUnitPrice: negotiated.officialUnitPrice,
+          requestedUnitPrice: negotiated.finalUnitPrice,
+          discountPercent: negotiated.discountPercent,
+          discountAmount: roundMoney(negotiated.discountAmount * item.quantity),
+          status: discountStatus,
+        });
+      }
+      pricedItems.push({
+        ...item,
+        unitPrice: isSample ? SAMPLE_FISCAL_PACKAGE_VALUE : effectiveUnitPrice,
+        pricingSource: isSample
+          ? "SAMPLE"
+          : (price.pricingSource as "CHANNEL" | "CUSTOMER"),
+        baseProductPriceId: isSample ? undefined : price.productPriceId,
+        customerProductPriceId: isSample ? null : price.customerProductPriceId,
+        priceSnapshot: {
+          capturedAt: new Date().toISOString(),
+          source: isSample ? "SAMPLE" : price.pricingSource,
+          baseProductPriceId: isSample ? null : price.productPriceId,
+          customerProductPriceId: isSample
+            ? null
+            : price.customerProductPriceId,
+          channelUnitPrice: price.channelUnitPrice,
+          effectiveUnitPrice: isSample
+            ? SAMPLE_FISCAL_PACKAGE_VALUE
+            : effectiveUnitPrice,
+          officialUnitPrice: price.officialUnitPrice,
+          negotiatedUnitPrice:
+            negotiated.discountAmount > 0
+              ? negotiated.finalUnitPrice
+              : price.officialUnitPrice,
+          discountAmount: negotiated.discountAmount,
+          discountPercent: negotiated.discountPercent,
+          discountApprovalStatus:
+            negotiated.discountAmount > 0 ? discountStatus : null,
+          discountAuthorizedBy:
+            negotiated.discountAmount > 0 && canApproveDiscount
+              ? actor.name
+              : null,
+          currency: price.currency,
+          salesChannelId: price.salesChannelId,
+          salesChannelName: price.salesChannelName,
+        },
+      });
     }
-    const incoterm = resolvedChannelType === "EXPORTACAO" ? (String(body.incoterm ?? "").trim().toUpperCase() || null) : null;
-    const incotermLocation = resolvedChannelType === "EXPORTACAO" ? (String(body.incotermLocation ?? "").trim() || null) : null;
-    if (resolvedChannelType === "EXPORTACAO" && (!incoterm || !incotermLocation)) {
-      throw new BadRequestException("Pedidos de exportação exigem Incoterm e local nomeado.");
+    if (actor.role === UserRole.SALES && resolvedChannelType === "EXPORTACAO") {
+      throw new ForbiddenException(
+        "O perfil de vendedor não cria pedidos de exportação.",
+      );
+    }
+    const incoterm =
+      resolvedChannelType === "EXPORTACAO"
+        ? String(body.incoterm ?? "")
+            .trim()
+            .toUpperCase() || null
+        : null;
+    const incotermLocation =
+      resolvedChannelType === "EXPORTACAO"
+        ? String(body.incotermLocation ?? "").trim() || null
+        : null;
+    if (
+      resolvedChannelType === "EXPORTACAO" &&
+      (!incoterm || !incotermLocation)
+    ) {
+      throw new BadRequestException(
+        "Pedidos de exportação exigem Incoterm e local nomeado.",
+      );
+    }
+    const isExport = resolvedChannelType === "EXPORTACAO";
+    if (
+      isSample &&
+      !isExport &&
+      !["BISPO", "PICKUP"].includes(freightResponsibility)
+    ) {
+      throw new BadRequestException(
+        "Pedido de amostra nacional deve ter frete por conta da Bispo ou retirada na empresa.",
+      );
+    }
+    const customsDeclaredValue =
+      isSample && isExport ? Number(body.customsDeclaredValue) : undefined;
+    if (
+      isSample &&
+      isExport &&
+      (!Number.isFinite(customsDeclaredValue) ||
+        Number(customsDeclaredValue) <= 0)
+    ) {
+      throw new BadRequestException(
+        "A amostra internacional exige valor aduaneiro declarado positivo.",
+      );
+    }
+    let exportRoute:
+      | Awaited<ReturnType<BlingCatalogSyncService["exportFiscalRoute"]>>
+      | undefined;
+    let exchangeRateToBrl: number | undefined;
+    let exchangeRateDate: string | undefined;
+    if (resolvedChannelType === "EXPORTACAO") {
+      const customer = await this.salesOrders.database.customer.findFirst({
+        where: { id: body.customerId, companyId: actor.companyId },
+        select: { countryCode: true },
+      });
+      if (!customer || customer.countryCode === "BR") {
+        throw new BadRequestException(
+          "Pedidos de exportação exigem um cliente cadastrado como estrangeiro.",
+        );
+      }
+      try {
+        exportRoute = await this.blingCatalogSync.exportFiscalRoute(
+          actor.companyId,
+          orderType === "SAMPLE" ? "SAMPLE" : "COMMERCIAL",
+        );
+      } catch (cause) {
+        throw new BadRequestException(
+          cause instanceof Error
+            ? cause.message
+            : "A rota fiscal de exportação não está configurada.",
+        );
+      }
+      exchangeRateToBrl = Number(
+        resolvedCurrency === "BRL" ? 1 : body.exchangeRateToBrl,
+      );
+      exchangeRateDate =
+        String(body.exchangeRateDate ?? "").trim() ||
+        (resolvedCurrency === "BRL"
+          ? new Date().toISOString().slice(0, 10)
+          : "");
+      if (
+        !Number.isFinite(exchangeRateToBrl) ||
+        exchangeRateToBrl <= 0 ||
+        !exchangeRateDate ||
+        Number.isNaN(new Date(exchangeRateDate).getTime())
+      ) {
+        throw new BadRequestException(
+          "Pedidos em moeda estrangeira exigem cotação para BRL e data da cotação.",
+        );
+      }
     }
     const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
       salesChannelType: resolvedChannelType,
       freightResponsibility,
       carrierName: body.carrierName,
     });
-    if (!deliveryPolicy.valid) throw new BadRequestException(deliveryPolicy.message);
+    if (!deliveryPolicy.valid)
+      throw new BadRequestException(deliveryPolicy.message);
+    const usesPlatformShipping =
+      deliveryPolicy.usesPlatformShipping ||
+      (isSample && !isExport && freightResponsibility === "BISPO");
 
-    const brokerId = String(body.brokerId ?? "").trim() || undefined;
-    const brokerCommissionMode = brokerId ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase() : undefined;
-    if (brokerCommissionMode && !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)) {
+    if (isSample && String(body.brokerId ?? "").trim()) {
+      throw new BadRequestException(
+        "Pedido de amostra não pode gerar comissão comercial.",
+      );
+    }
+    const brokerId = isSample
+      ? undefined
+      : String(body.brokerId ?? "").trim() || undefined;
+    const brokerCommissionMode = brokerId
+      ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase()
+      : undefined;
+    if (
+      brokerCommissionMode &&
+      !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)
+    ) {
       throw new BadRequestException("Modalidade de comissão inválida.");
     }
-    const brokerCommissionPercent = brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(body.brokerCommissionPercent ?? 0) : 0;
-    const brokerCommissionPerPackage = brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(body.brokerCommissionPerPackage ?? 0) : 0;
-    if (!Number.isFinite(brokerCommissionPercent) || brokerCommissionPercent < 0 || brokerCommissionPercent > 100) {
-      throw new BadRequestException("A comissão percentual deve estar entre 0% e 100%.");
+    const brokerCommissionPercent =
+      brokerId && brokerCommissionMode === "PERCENTAGE"
+        ? Number(body.brokerCommissionPercent ?? 0)
+        : 0;
+    const brokerCommissionPerPackage =
+      brokerId && brokerCommissionMode === "PER_PACKAGE"
+        ? Number(body.brokerCommissionPerPackage ?? 0)
+        : 0;
+    if (
+      !Number.isFinite(brokerCommissionPercent) ||
+      brokerCommissionPercent < 0 ||
+      brokerCommissionPercent > 100
+    ) {
+      throw new BadRequestException(
+        "A comissão percentual deve estar entre 0% e 100%.",
+      );
     }
-    if (!Number.isFinite(brokerCommissionPerPackage) || brokerCommissionPerPackage < 0) {
-      throw new BadRequestException("O valor da comissão por pacote não pode ser negativo.");
+    if (
+      !Number.isFinite(brokerCommissionPerPackage) ||
+      brokerCommissionPerPackage < 0
+    ) {
+      throw new BadRequestException(
+        "O valor da comissão por pacote não pode ser negativo.",
+      );
     }
-    if (!brokerId && (Number(body.brokerCommissionPercent ?? 0) > 0 || Number(body.brokerCommissionPerPackage ?? 0) > 0)) {
-      throw new BadRequestException("Selecione o corretor para registrar a comissão.");
+    if (
+      !brokerId &&
+      (Number(body.brokerCommissionPercent ?? 0) > 0 ||
+        Number(body.brokerCommissionPerPackage ?? 0) > 0)
+    ) {
+      throw new BadRequestException(
+        "Selecione o corretor para registrar a comissão.",
+      );
     }
-    const commissionBase = pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) - Number(body.discount ?? 0);
-    const commissionPackageQuantity = pricedItems.reduce((sum, item) => sum + item.quantity, 0);
+    const commissionBase =
+      pricedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0,
+      ) - Number(body.discount ?? 0);
+    const commissionPackageQuantity = pricedItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
     const brokerCommissionAmount = brokerId
-      ? roundMoney(brokerCommissionMode === "PER_PACKAGE"
-        ? commissionPackageQuantity * brokerCommissionPerPackage
-        : Math.max(0, commissionBase) * brokerCommissionPercent / 100)
+      ? roundMoney(
+          brokerCommissionMode === "PER_PACKAGE"
+            ? commissionPackageQuantity * brokerCommissionPerPackage
+            : (Math.max(0, commissionBase) * brokerCommissionPercent) / 100,
+        )
       : 0;
 
     let shippingQuote: any = null;
-    if (deliveryPolicy.usesPlatformShipping) {
+    if (usesPlatformShipping) {
       if (!body.shippingQuoteId || !body.destinationPostalCode) {
-        throw new BadRequestException("Calcule e selecione o frete do distribuidor antes de salvar o pedido.");
+        throw new BadRequestException(
+          isSample
+            ? "Pesquise e selecione o envio da amostra pelo Melhor Envio antes de salvar o pedido."
+            : "Calcule e selecione o frete do distribuidor antes de salvar o pedido.",
+        );
       }
       const variants = await this.salesOrders.database.productVariant.findMany({
         where: { id: { in: pricedItems.map((item) => item.productVariantId) } },
         select: { id: true, netWeightGrams: true },
       });
-      const weightById = new Map(variants.map((variant) => [variant.id, variant.netWeightGrams]));
-      const subtotalCents = Math.round(pricedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) * 100);
-      const weightGrams = pricedItems.reduce((sum, item) => sum + item.quantity * Number(weightById.get(item.productVariantId) ?? 0), 0);
-      shippingQuote = await this.shipping.validateQuote(actor.companyId, body.shippingQuoteId, {
-        postalCode: body.destinationPostalCode,
-        subtotalCents,
-        weightGrams,
-        packageWidthCm: body.packageWidthCm,
-        packageHeightCm: body.packageHeightCm,
-        packageLengthCm: body.packageLengthCm,
-        packageCount: body.packageCount,
-        packages: body.packages?.map((item) => ({
-          widthCm: Number(item.widthCm),
-          heightCm: Number(item.heightCm),
-          lengthCm: Number(item.lengthCm),
-          weightGrams: item.weightGrams == null ? undefined : Number(item.weightGrams),
-        })),
-      });
-      body.freight = Number(shippingQuote.customerPriceCents) / 100;
+      const weightById = new Map(
+        variants.map((variant) => [variant.id, variant.netWeightGrams]),
+      );
+      const subtotalCents = isSample
+        ? sampleFiscalSubtotalCents(
+            pricedItems.reduce((sum, item) => sum + item.quantity, 0),
+          )
+        : Math.round(
+            pricedItems.reduce(
+              (sum, item) => sum + item.quantity * item.unitPrice,
+              0,
+            ) * 100,
+          );
+      const weightGrams = pricedItems.reduce(
+        (sum, item) =>
+          sum +
+          item.quantity * Number(weightById.get(item.productVariantId) ?? 0),
+        0,
+      );
+      const samplePackages = isSample
+        ? sampleShippingPackages(weightGrams)
+        : undefined;
+      shippingQuote = await this.shipping.validateQuote(
+        actor.companyId,
+        body.shippingQuoteId,
+        {
+          postalCode: body.destinationPostalCode,
+          subtotalCents,
+          weightGrams,
+          packageWidthCm: body.packageWidthCm,
+          packageHeightCm: body.packageHeightCm,
+          packageLengthCm: body.packageLengthCm,
+          packageCount: body.packageCount,
+          packages:
+            samplePackages ??
+            body.packages?.map((item) => ({
+              widthCm: Number(item.widthCm),
+              heightCm: Number(item.heightCm),
+              lengthCm: Number(item.lengthCm),
+              weightGrams:
+                item.weightGrams == null ? undefined : Number(item.weightGrams),
+            })),
+        },
+      );
+      if (isSample && shippingQuote.provider !== "MELHOR_ENVIO") {
+        throw new BadRequestException(
+          "A amostra deve usar uma cotação válida do Melhor Envio.",
+        );
+      }
+      body.freight = isSample
+        ? 0
+        : Number(shippingQuote.customerPriceCents) / 100;
     } else if (deliveryPolicy.forceFreightZero) {
       body.freight = 0;
     }
@@ -442,24 +1124,104 @@ export class SalesOrdersController {
       ...body,
       code: orderNumber,
       orderNumber,
+      orderType,
       salesChannelId: resolvedChannelId,
+      currency: resolvedCurrency ?? "BRL",
+      exchangeRateToBrl,
+      exchangeRateDate,
+      customsDeclaredValue,
+      exportDepartureLocation: exportRoute?.departureLocation,
+      exportDepartureState: exportRoute?.departureState,
       brokerId,
-      brokerCommissionMode: brokerId ? brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE" : undefined,
-      brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : undefined,
-      brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : undefined,
+      brokerCommissionMode: brokerId
+        ? (brokerCommissionMode as "PERCENTAGE" | "PER_PACKAGE")
+        : undefined,
+      brokerCommissionPercent:
+        brokerId && brokerCommissionMode === "PERCENTAGE"
+          ? brokerCommissionPercent
+          : undefined,
+      brokerCommissionPerPackage:
+        brokerId && brokerCommissionMode === "PER_PACKAGE"
+          ? brokerCommissionPerPackage
+          : undefined,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : undefined,
+      discount: isSample ? 0 : body.discount,
       items: pricedItems,
       notes: String(body.notes ?? "").trim() || undefined,
       expectedDeliveryDate: body.expectedDeliveryDate || undefined,
     });
 
-    const carrierName = shippingQuote?.carrierName
-      ?? deliveryPolicy.carrierName;
-    const shippingProvider = shippingQuote?.provider
-      ?? deliveryPolicy.shippingProvider;
-    const shippingServiceName = shippingQuote?.serviceName
-      ?? deliveryPolicy.shippingServiceName;
-    const customerReference = String(body.customerReference ?? "").trim() || null;
+    const recordedDiscountRequests: Array<{
+      id: string;
+      salesOrderItemId: string;
+      status: "APPROVED" | "PENDING";
+      officialUnitPrice: number;
+      requestedUnitPrice: number;
+      discountAmount: number;
+      discountPercent: number;
+    }> = [];
+    if (negotiatedDiscounts.length) {
+      await this.salesOrders.database.$transaction(async (transaction) => {
+        for (const discount of negotiatedDiscounts) {
+          const orderItem = order.items.find(
+            (item) => item.productVariantId === discount.productVariantId,
+          );
+          if (!orderItem)
+            throw new BadRequestException(
+              "Não foi possível vincular o desconto ao item do pedido.",
+            );
+          const requestId = randomUUID();
+          const approved = discount.status === "APPROVED";
+          await transaction.$executeRawUnsafe(
+            `INSERT INTO "SalesDiscountRequest"
+              (id,"companyId","salesOrderId","salesOrderItemId","productPriceId",
+               "officialUnitPrice","requestedUnitPrice","discountPercent","discountAmount",
+               rationale,status,"requestedById","requestedByName","requestedByRole",
+               "decidedById","decidedByName","decidedByRole","decisionNote","createdAt","decidedAt")
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW(),
+               CASE WHEN $11='APPROVED' THEN NOW() ELSE NULL END)`,
+            requestId,
+            actor.companyId,
+            order.id,
+            orderItem.id,
+            discount.productPriceId,
+            discount.officialUnitPrice,
+            discount.requestedUnitPrice,
+            discount.discountPercent,
+            discount.discountAmount,
+            "Preço final negociado informado no cadastro do pedido.",
+            discount.status,
+            actor.id,
+            actor.name,
+            actor.role,
+            approved ? actor.id : null,
+            approved ? actor.name : null,
+            approved ? actor.role : null,
+            approved
+              ? "Autorização administrativa registrada no cadastro do pedido."
+              : null,
+          );
+          recordedDiscountRequests.push({
+            id: requestId,
+            salesOrderItemId: orderItem.id,
+            status: discount.status,
+            officialUnitPrice: discount.officialUnitPrice,
+            requestedUnitPrice: discount.requestedUnitPrice,
+            discountAmount: discount.discountAmount,
+            discountPercent: discount.discountPercent,
+          });
+        }
+      });
+    }
+
+    const carrierName =
+      shippingQuote?.carrierName ?? deliveryPolicy.carrierName;
+    const shippingProvider =
+      shippingQuote?.provider ?? deliveryPolicy.shippingProvider;
+    const shippingServiceName =
+      shippingQuote?.serviceName ?? deliveryPolicy.shippingServiceName;
+    const customerReference =
+      String(body.customerReference ?? "").trim() || null;
     await this.salesOrders.database.$executeRawUnsafe(
       `UPDATE "SalesOrder"
           SET "paymentType"=$2,
@@ -493,10 +1255,25 @@ export class SalesOrdersController {
 
     if (shippingQuote) {
       await this.salesOrders.database.$executeRawUnsafe(
-        `UPDATE "ShippingQuote" SET status='USED', "usedAt"=NOW(), "updatedAt"=NOW() WHERE id=$1 AND status='VALID'`,
+        `UPDATE "ShippingQuote"
+            SET status='USED',
+                "customerPriceCents"=CASE WHEN $2 THEN 0 ELSE "customerPriceCents" END,
+                "usedAt"=NOW(),
+                "updatedAt"=NOW()
+          WHERE id=$1 AND status='VALID'`,
         shippingQuote.id,
+        isSample,
       );
     }
+
+    const termApproval =
+      paymentType === "TERM"
+        ? await this.termApprovals.ensureForOrder(
+            actor.companyId,
+            order.id,
+            actor,
+          )
+        : null;
 
     return {
       ...order,
@@ -517,10 +1294,327 @@ export class SalesOrdersController {
       estimatedDeliveryDays: shippingQuote?.deliveryDays ?? null,
       brokerId: brokerId ?? null,
       brokerCommissionMode: brokerId ? brokerCommissionMode : null,
-      brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? brokerCommissionPercent : null,
-      brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? brokerCommissionPerPackage : null,
+      brokerCommissionPercent:
+        brokerId && brokerCommissionMode === "PERCENTAGE"
+          ? brokerCommissionPercent
+          : null,
+      brokerCommissionPerPackage:
+        brokerId && brokerCommissionMode === "PER_PACKAGE"
+          ? brokerCommissionPerPackage
+          : null,
       brokerCommissionAmount: brokerId ? brokerCommissionAmount : null,
+      discountRequests: recordedDiscountRequests,
+      termApproval,
     };
+  }
+
+  @Patch(":id/draft")
+  async editDraft(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body()
+    body: {
+      customerId?: string;
+      paymentType?: "CASH" | "TERM";
+      paymentTerms?: string;
+      expectedDeliveryDate?: string;
+      notes?: string;
+      reason?: string;
+      items?: Array<{ productVariantId?: string; quantity?: number }>;
+    },
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!["ADMIN", "EXECUTIVE", "SALES"].includes(actor.role))
+      throw new UnauthorizedException(
+        "A edição de pedidos é restrita à administração, diretoria e equipe comercial.",
+      );
+    const reason = String(body.reason ?? "").trim();
+    if (reason.length < 5)
+      throw new BadRequestException(
+        "Informe o motivo da correção para a trilha de auditoria.",
+      );
+    const current = await this.salesOrders.database.salesOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      include: { items: true, reservations: true },
+    });
+    if (!current) throw new BadRequestException("Pedido não encontrado.");
+    if (current.status !== "DRAFT")
+      throw new BadRequestException(
+        "Somente pedidos em rascunho podem ser editados. Após aceite, reserva ou faturamento, use um fluxo formal de alteração.",
+      );
+    if (current.reservations.length)
+      throw new BadRequestException(
+        "O pedido já possui reserva de estoque e não pode ser editado diretamente.",
+      );
+    const accepted = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT id FROM "SalesOrderCustomerApproval"
+        WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='APPROVED'
+        LIMIT 1`,
+      id,
+      actor.companyId,
+    );
+    if (accepted.length)
+      throw new BadRequestException(
+        "O cliente já aceitou este pedido. A correção exige um novo documento e nova autorização.",
+      );
+
+    const customerId = String(body.customerId ?? "").trim();
+    const submittedItems = Array.isArray(body.items) ? body.items : [];
+    if (!customerId || !submittedItems.length)
+      throw new BadRequestException("Cliente e itens são obrigatórios.");
+    const customer = await this.salesOrders.database.customer.findFirst({
+      where: { id: customerId, companyId: actor.companyId, active: true },
+      select: { id: true },
+    });
+    if (!customer)
+      throw new BadRequestException("Cliente ativo não encontrado.");
+
+    const isSample = current.orderType === "SAMPLE";
+    const paymentType = isSample
+      ? "SAMPLE"
+      : String(body.paymentType ?? "CASH").toUpperCase();
+    if (!isSample && !["CASH", "TERM"].includes(paymentType))
+      throw new BadRequestException("Forma de pagamento inválida.");
+    const paymentTerms = isSample
+      ? "Sem cobrança · amostra"
+      : paymentType === "TERM"
+        ? String(body.paymentTerms ?? "").trim()
+        : "À vista";
+    if (paymentType === "TERM" && !paymentTerms)
+      throw new BadRequestException(
+        "Informe a condição de pagamento da venda a prazo.",
+      );
+
+    const pricedItems: CreateSalesOrderInput["items"] = [];
+    let salesChannelId: string | undefined;
+    let salesChannelType: string | undefined;
+    let currency: string | undefined;
+    for (const submitted of submittedItems) {
+      const productVariantId = String(submitted.productVariantId ?? "").trim();
+      const quantity = Number(submitted.quantity);
+      if (!productVariantId || !Number.isSafeInteger(quantity) || quantity <= 0)
+        throw new BadRequestException("Produto ou quantidade inválida.");
+      const price = await this.resolveInternalPrice(
+        actor.companyId,
+        customerId,
+        productVariantId,
+      );
+      if (salesChannelId && salesChannelId !== price.salesChannelId)
+        throw new BadRequestException(
+          "Os itens precisam pertencer ao mesmo canal/tabela comercial.",
+        );
+      salesChannelId = price.salesChannelId;
+      salesChannelType = price.salesChannelType;
+      const itemCurrency = String(price.currency ?? "BRL").toUpperCase();
+      if (currency && currency !== itemCurrency)
+        throw new BadRequestException("Os itens precisam usar a mesma moeda.");
+      currency = itemCurrency;
+      pricedItems.push({
+        productVariantId,
+        warehouseId: "",
+        quantity,
+        unitPrice: isSample
+          ? SAMPLE_FISCAL_PACKAGE_VALUE
+          : price.officialUnitPrice,
+        pricingSource: isSample
+          ? "SAMPLE"
+          : (price.pricingSource as "CHANNEL" | "CUSTOMER"),
+        baseProductPriceId: isSample ? undefined : price.productPriceId,
+        customerProductPriceId: isSample ? null : price.customerProductPriceId,
+        priceSnapshot: {
+          capturedAt: new Date().toISOString(),
+          source: isSample ? "SAMPLE" : price.pricingSource,
+          baseProductPriceId: isSample ? null : price.productPriceId,
+          customerProductPriceId: isSample
+            ? null
+            : price.customerProductPriceId,
+          channelUnitPrice: price.channelUnitPrice,
+          effectiveUnitPrice: isSample
+            ? SAMPLE_FISCAL_PACKAGE_VALUE
+            : price.officialUnitPrice,
+          currency: price.currency,
+          salesChannelId: price.salesChannelId,
+          salesChannelName: price.salesChannelName,
+        },
+      });
+    }
+    if (actor.role === UserRole.SALES && salesChannelType === "EXPORTACAO") {
+      throw new ForbiddenException(
+        "O perfil de vendedor não edita pedidos de exportação.",
+      );
+    }
+    const deliveryPolicy = resolveSalesOrderDeliveryPolicy({
+      salesChannelType,
+      freightResponsibility: String(current.freightResponsibility ?? ""),
+      carrierName: current.carrierName ?? undefined,
+    });
+    if (!deliveryPolicy.valid)
+      throw new BadRequestException(
+        "A troca de cliente alterou o canal comercial e tornou o frete incompatível. Crie um novo pedido ou revise o frete.",
+      );
+    const subtotal = roundMoney(
+      pricedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0,
+      ),
+    );
+    const freight = Number(current.freight ?? 0);
+    const discount = isSample ? 0 : Number(current.discount ?? 0);
+    const totalAmount = roundMoney(subtotal - discount + freight);
+    const totalQuantity = pricedItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    const variants = await this.salesOrders.database.productVariant.findMany({
+      where: {
+        id: { in: pricedItems.map((item) => item.productVariantId) },
+        product: { productLine: { companyId: actor.companyId } },
+      },
+      include: { product: true },
+    });
+    const variantById = new Map(variants.map((item) => [item.id, item]));
+    if (
+      variantById.size !==
+      new Set(pricedItems.map((item) => item.productVariantId)).size
+    )
+      throw new BadRequestException(
+        "Um ou mais produtos não estão disponíveis.",
+      );
+
+    await this.salesOrders.database.$transaction(async (transaction) => {
+      const locked = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT status::text FROM "SalesOrder"
+          WHERE id=$1 AND "companyId"=$2 FOR UPDATE`,
+        id,
+        actor.companyId,
+      );
+      if (locked[0]?.status !== "DRAFT")
+        throw new BadRequestException(
+          "O pedido deixou de ser rascunho e não pode mais ser editado.",
+        );
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+      );
+      await transaction.$executeRawUnsafe(
+        `UPDATE "SalesOrderCustomerApproval"
+            SET status='REVOKED',"revokedAt"=NOW(),"updatedAt"=NOW()
+          WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status IN ('PENDING','VIEWED')`,
+        id,
+        actor.companyId,
+      );
+      await transaction.$executeRawUnsafe(
+        `DELETE FROM "SalesOrderTermApproval" WHERE "salesOrderId"=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+      );
+      await transaction.salesOrderItem.deleteMany({
+        where: { salesOrderId: id, companyId: actor.companyId },
+      });
+      const updated = await transaction.salesOrder.update({
+        where: { id },
+        data: {
+          customerId,
+          salesChannelId,
+          currency: currency ?? current.currency,
+          paymentType,
+          paymentTermsSnapshot: paymentTerms,
+          expectedDeliveryDate: body.expectedDeliveryDate
+            ? new Date(body.expectedDeliveryDate)
+            : null,
+          notes: String(body.notes ?? "").trim() || null,
+          subtotal,
+          discount,
+          freight,
+          totalAmount,
+          quantity: totalQuantity,
+          unitPrice: pricedItems[0]?.unitPrice ?? 0,
+          items: {
+            create: pricedItems.map((item) => {
+              const variant = variantById.get(item.productVariantId)!;
+              return {
+                companyId: actor.companyId,
+                productVariantId: item.productVariantId,
+                productName: variant.product.name,
+                sku: variant.sku,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalAmount: roundMoney(item.quantity * item.unitPrice),
+                pricingSource: item.pricingSource ?? "CHANNEL",
+                baseProductPriceId: item.baseProductPriceId,
+                customerProductPriceId: item.customerProductPriceId,
+                priceSnapshot: item.priceSnapshot as Prisma.InputJsonValue,
+              };
+            }),
+          },
+        },
+        include: { items: true },
+      });
+      const beforeSnapshot = JSON.stringify({
+        ...current,
+        totalAmount: Number(current.totalAmount),
+        subtotal: Number(current.subtotal ?? 0),
+        discount: Number(current.discount),
+        freight: Number(current.freight),
+      });
+      const afterSnapshot = JSON.stringify({
+        ...updated,
+        totalAmount: Number(updated.totalAmount),
+        subtotal: Number(updated.subtotal ?? 0),
+        discount: Number(updated.discount),
+        freight: Number(updated.freight),
+      });
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "SalesOrderEditAudit"
+          (id,"companyId","salesOrderId","actorId","actorName","actorRole",reason,"beforeSnapshot","afterSnapshot","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,NOW())`,
+        randomUUID(),
+        actor.companyId,
+        id,
+        actor.id,
+        actor.name,
+        actor.role,
+        reason,
+        beforeSnapshot,
+        afterSnapshot,
+      );
+    });
+
+    const termApproval =
+      paymentType === "TERM"
+        ? await this.termApprovals.ensureForOrder(actor.companyId, id, actor)
+        : null;
+    return {
+      order: await this.salesOrders.get(actor.companyId, id),
+      termApproval,
+      message:
+        "Pedido corrigido com auditoria. Links anteriores foram revogados.",
+    };
+  }
+
+  @Get(":id/term-approval")
+  async termApproval(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
+    return this.termApprovals.ensureForOrder(actor.companyId, id, actor);
+  }
+
+  @Post(":id/term-approval/decision")
+  async decideTermApproval(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { decision?: "APPROVE" | "REJECT"; note?: string },
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!body.decision || !["APPROVE", "REJECT"].includes(body.decision))
+      throw new BadRequestException("Decisão financeira inválida.");
+    return this.termApprovals.decide(
+      actor.companyId,
+      id,
+      actor,
+      body.decision,
+      body.note,
+    );
   }
 
   @Get(":id/discount-requests")
@@ -537,11 +1631,16 @@ export class SalesOrdersController {
   async requestDiscount(
     @Param("id") id: string,
     @Req() request: any,
-    @Body() body: { salesOrderItemId: string; discountPercent: number; rationale: string },
+    @Body()
+    body: {
+      salesOrderItemId: string;
+      discountPercent: number;
+      rationale: string;
+    },
   ) {
-    const actor = await this.actor(request);
+    const actor = await this.actorForOrder(request, id);
     const itemRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT soi.id, soi.quantity, soi."productVariantId", so."customerId", so."companyId", so.status
+      `SELECT soi.id, soi.quantity, soi."productVariantId", so."customerId", so."companyId", so.status, so."orderType"
          FROM "SalesOrderItem" soi
          JOIN "SalesOrder" so ON so.id = soi."salesOrderId"
         WHERE so.id=$1 AND soi.id=$2`,
@@ -550,43 +1649,97 @@ export class SalesOrdersController {
     );
     const item = itemRows[0];
     if (!item) throw new BadRequestException("Item do pedido não encontrado.");
-    if (item.companyId !== actor.companyId) throw new UnauthorizedException("Pedido fora da empresa do usuário.");
-    if (item.status !== "DRAFT") throw new BadRequestException("Desconto só pode ser solicitado enquanto o pedido está em rascunho.");
+    if (item.companyId !== actor.companyId)
+      throw new UnauthorizedException("Pedido fora da empresa do usuário.");
+    if (item.status !== "DRAFT")
+      throw new BadRequestException(
+        "Desconto só pode ser solicitado enquanto o pedido está em rascunho.",
+      );
+    if (item.orderType === "SAMPLE")
+      throw new BadRequestException(
+        "Pedido de amostra usa valor fiscal fixo e não aceita desconto comercial.",
+      );
 
     const discountPercent = Number(body.discountPercent);
     const rationale = String(body.rationale ?? "").trim();
-    if (!Number.isFinite(discountPercent) || discountPercent <= 0) throw new BadRequestException("Informe um desconto maior que zero.");
-    if (!rationale) throw new BadRequestException("Justifique a solicitação de desconto.");
-    const price = await this.resolveInternalPrice(actor.companyId, item.customerId, item.productVariantId);
+    if (!Number.isFinite(discountPercent) || discountPercent <= 0)
+      throw new BadRequestException("Informe um desconto maior que zero.");
+    if (!rationale)
+      throw new BadRequestException("Justifique a solicitação de desconto.");
+    const price = await this.resolveInternalPrice(
+      actor.companyId,
+      item.customerId,
+      item.productVariantId,
+    );
     if (discountPercent > price.maxRequestDiscountPercent) {
-      throw new BadRequestException(`Desconto máximo solicitável nesta tabela: ${price.maxRequestDiscountPercent.toFixed(2)}%.`);
+      throw new BadRequestException(
+        `Desconto máximo solicitável nesta tabela: ${price.maxRequestDiscountPercent.toFixed(2)}%.`,
+      );
     }
-    const requestedUnitPrice = roundMoney(price.officialUnitPrice * (1 - discountPercent / 100));
-    if (price.minimumPrice !== null && requestedUnitPrice < price.minimumPrice) {
-      throw new BadRequestException(`Preço mínimo permitido nesta tabela: R$ ${price.minimumPrice.toFixed(2)}.`);
+    const requestedUnitPrice = roundMoney(
+      price.officialUnitPrice * (1 - discountPercent / 100),
+    );
+    if (
+      price.minimumPrice !== null &&
+      requestedUnitPrice < price.minimumPrice
+    ) {
+      throw new BadRequestException(
+        `Preço mínimo permitido nesta tabela: R$ ${price.minimumPrice.toFixed(2)}.`,
+      );
     }
-    const marginPercent = requestedUnitPrice > 0 ? ((requestedUnitPrice - price.unitCost) / requestedUnitPrice) * 100 : -Infinity;
-    const roiPercent = price.unitCost > 0 ? ((requestedUnitPrice - price.unitCost) / price.unitCost) * 100 : Infinity;
-    if (price.minimumMarginPercent !== null && marginPercent < price.minimumMarginPercent) {
-      throw new BadRequestException(`Desconto bloqueado: margem resultante ${marginPercent.toFixed(1)}% abaixo do mínimo ${price.minimumMarginPercent.toFixed(1)}%.`);
+    const marginPercent =
+      requestedUnitPrice > 0
+        ? ((requestedUnitPrice - price.unitCost) / requestedUnitPrice) * 100
+        : -Infinity;
+    const roiPercent =
+      price.unitCost > 0
+        ? ((requestedUnitPrice - price.unitCost) / price.unitCost) * 100
+        : Infinity;
+    if (
+      price.minimumMarginPercent !== null &&
+      marginPercent < price.minimumMarginPercent
+    ) {
+      throw new BadRequestException(
+        `Desconto bloqueado: margem resultante ${marginPercent.toFixed(1)}% abaixo do mínimo ${price.minimumMarginPercent.toFixed(1)}%.`,
+      );
     }
-    if (price.minimumRoiPercent !== null && roiPercent < price.minimumRoiPercent) {
-      throw new BadRequestException(`Desconto bloqueado: ROI resultante ${roiPercent.toFixed(1)}% abaixo do mínimo ${price.minimumRoiPercent.toFixed(1)}%.`);
+    if (
+      price.minimumRoiPercent !== null &&
+      roiPercent < price.minimumRoiPercent
+    ) {
+      throw new BadRequestException(
+        `Desconto bloqueado: ROI resultante ${roiPercent.toFixed(1)}% abaixo do mínimo ${price.minimumRoiPercent.toFixed(1)}%.`,
+      );
     }
     const pending = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT id FROM "SalesDiscountRequest" WHERE "salesOrderItemId"=$1 AND status='PENDING' LIMIT 1`,
       item.id,
     );
-    if (pending.length) throw new BadRequestException("Já existe uma solicitação de desconto pendente para este item.");
+    if (pending.length)
+      throw new BadRequestException(
+        "Já existe uma solicitação de desconto pendente para este item.",
+      );
 
     const requestId = randomUUID();
     await this.salesOrders.database.$executeRawUnsafe(
       `INSERT INTO "SalesDiscountRequest"
         (id,"companyId","salesOrderId","salesOrderItemId","productPriceId","officialUnitPrice","requestedUnitPrice","discountPercent","discountAmount",rationale,status,"requestedById","requestedByName","requestedByRole","createdAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING',$11,$12,$13,NOW())`,
-      requestId, actor.companyId, id, item.id, price.productPriceId, price.officialUnitPrice,
-      requestedUnitPrice, discountPercent, roundMoney((price.officialUnitPrice - requestedUnitPrice) * item.quantity),
-      rationale, actor.id, actor.name, actor.role,
+      requestId,
+      actor.companyId,
+      id,
+      item.id,
+      price.productPriceId,
+      price.officialUnitPrice,
+      requestedUnitPrice,
+      discountPercent,
+      roundMoney(
+        (price.officialUnitPrice - requestedUnitPrice) * item.quantity,
+      ),
+      rationale,
+      actor.id,
+      actor.name,
+      actor.role,
     );
     return {
       id: requestId,
@@ -609,7 +1762,9 @@ export class SalesOrdersController {
   ) {
     const actor = await this.actor(request);
     if (!["ADMIN", "EXECUTIVE"].includes(actor.role)) {
-      throw new UnauthorizedException("A aprovação de desconto é restrita à administração/diretoria.");
+      throw new UnauthorizedException(
+        "A aprovação de desconto é restrita à administração/diretoria.",
+      );
     }
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT dr.*, pp."maxApprovalDiscountPercent", so.status AS "orderStatus", soi.quantity
@@ -622,14 +1777,28 @@ export class SalesOrdersController {
       id,
     );
     const discount = rows[0];
-    if (!discount) throw new BadRequestException("Solicitação de desconto não encontrada.");
-    if (discount.companyId !== actor.companyId) throw new UnauthorizedException("Solicitação fora da empresa do usuário.");
-    if (discount.status !== "PENDING") throw new BadRequestException("Esta solicitação já foi decidida.");
+    if (!discount)
+      throw new BadRequestException("Solicitação de desconto não encontrada.");
+    if (discount.companyId !== actor.companyId)
+      throw new UnauthorizedException(
+        "Solicitação fora da empresa do usuário.",
+      );
+    if (discount.status !== "PENDING")
+      throw new BadRequestException("Esta solicitação já foi decidida.");
     const approve = body.decision === "APPROVE";
-    if (approve && Number(discount.discountPercent) > Number(discount.maxApprovalDiscountPercent ?? 0)) {
-      throw new BadRequestException(`A tabela permite aprovação somente até ${Number(discount.maxApprovalDiscountPercent ?? 0).toFixed(2)}%.`);
+    if (
+      approve &&
+      Number(discount.discountPercent) >
+        Number(discount.maxApprovalDiscountPercent ?? 0)
+    ) {
+      throw new BadRequestException(
+        `A tabela permite aprovação somente até ${Number(discount.maxApprovalDiscountPercent ?? 0).toFixed(2)}%.`,
+      );
     }
-    if (approve && discount.orderStatus !== "DRAFT") throw new BadRequestException("O pedido precisa estar em rascunho para aplicar desconto.");
+    if (approve && discount.orderStatus !== "DRAFT")
+      throw new BadRequestException(
+        "O pedido precisa estar em rascunho para aplicar desconto.",
+      );
 
     await this.salesOrders.database.$transaction(async (tx) => {
       if (approve) {
@@ -656,7 +1825,11 @@ export class SalesOrdersController {
             SET status=$2, "decidedById"=$3, "decidedByName"=$4, "decidedByRole"=$5,
                 "decisionNote"=$6, "decidedAt"=NOW()
           WHERE id=$1`,
-        requestId, approve ? "APPROVED" : "REJECTED", actor.id, actor.name, actor.role,
+        requestId,
+        approve ? "APPROVED" : "REJECTED",
+        actor.id,
+        actor.name,
+        actor.role,
         String(body.note ?? "").trim() || null,
       );
     });
@@ -666,57 +1839,171 @@ export class SalesOrdersController {
   @Post(":id/confirm")
   async confirm(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
-    const pendingDiscounts = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+    const pendingDiscounts = await this.salesOrders.database.$queryRawUnsafe<
+      any[]
+    >(
       `SELECT COUNT(*)::int AS count FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND "companyId"=$2 AND status='PENDING'`,
       id,
       actor.companyId,
     );
     if (Number(pendingDiscounts[0]?.count ?? 0) > 0) {
-      throw new BadRequestException("O pedido possui solicitação de desconto pendente de aprovação.");
+      throw new BadRequestException(
+        "O pedido possui solicitação de desconto pendente de aprovação.",
+      );
     }
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT so.id, so."totalAmount", so."paymentType", so."paymentTermsSnapshot",
+              so."expectedDeliveryDate", partner."portalAccessLevel"::text AS "partnerAccessLevel",
               c.id AS "customerId", c.active, c."paymentTerms", c."creditStatus", c."creditLimit"
-         FROM "SalesOrder" so JOIN "Customer" c ON c.id = so."customerId" WHERE so.id=$1 AND so."companyId"=$2`, id, actor.companyId,
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id = so."customerId"
+         LEFT JOIN "StorefrontPartner" partner ON partner.id=so."createdByStorefrontPartnerId"
+        WHERE so.id=$1 AND so."companyId"=$2`,
+      id,
+      actor.companyId,
     );
     const context = rows[0];
     if (!context) return this.salesOrders.confirm(actor.companyId, id);
-    const saleIsTerm = context.paymentType === "TERM" || (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
+    if (context.partnerAccessLevel === "DISTRIBUTOR") {
+      if (!isDesignatedTermCreditApprover(actor)) {
+        throw new ForbiddenException(
+          "Somente José ou Suzi podem aprovar pedidos de distribuidores.",
+        );
+      }
+      if (!context.expectedDeliveryDate) {
+        throw new BadRequestException(
+          "Defina a data de entrega antes de aprovar o pedido do distribuidor.",
+        );
+      }
+    }
+    const saleIsTerm =
+      context.paymentType === "TERM" ||
+      (context.paymentType === "LEGACY" && !isCashTerm(context.paymentTerms));
     if (saleIsTerm) {
-      if (!context.active) throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
-      if (context.creditStatus !== "APPROVED") throw new BadRequestException("Venda a prazo bloqueada: o cliente não possui crédito vigente aprovado.");
-      const exposureRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-        `SELECT COALESCE(SUM("openAmount"),0)::numeric AS total FROM "AccountsReceivable" WHERE "customerId"=$1 AND status NOT IN ('PAID','CANCELLED')`, context.customerId,
+      if (!context.active)
+        throw new BadRequestException(
+          "Cliente inativo. O pedido não pode ser confirmado.",
+        );
+      if (context.creditStatus !== "APPROVED")
+        throw new BadRequestException(
+          "Venda a prazo bloqueada: o cliente não possui crédito vigente aprovado.",
+        );
+      const exposureRows = await this.salesOrders.database.$queryRawUnsafe<
+        any[]
+      >(
+        `SELECT COALESCE(SUM("openAmount"),0)::numeric AS total FROM "AccountsReceivable" WHERE "customerId"=$1 AND status NOT IN ('PAID','CANCELLED')`,
+        context.customerId,
       );
       const usedCredit = Number(exposureRows[0]?.total ?? 0);
       const creditLimit = Number(context.creditLimit ?? 0);
       const availableCredit = Math.max(0, creditLimit - usedCredit);
       const orderTotal = Number(context.totalAmount ?? 0);
-      if (orderTotal > availableCredit) throw new BadRequestException(`Venda a prazo bloqueada: pedido de ${orderTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} excede o crédito disponível de ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`);
+      if (orderTotal > availableCredit)
+        throw new BadRequestException(
+          `Venda a prazo bloqueada: pedido de ${orderTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} excede o crédito disponível de ${availableCredit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`,
+        );
     }
     return this.salesOrders.confirm(actor.companyId, id);
   }
 
   @Post(":id/reserve")
-  async reserve(@Param("id") id: string, @Body() body: { warehouseByVariant?: Record<string, string> }, @Req() request: any) { return this.salesOrders.reserve((await this.actorForOrder(request, id)).companyId, id, body.warehouseByVariant); }
+  async reserve(
+    @Param("id") id: string,
+    @Body() body: { warehouseByVariant?: Record<string, string> },
+    @Req() request: any,
+  ) {
+    return this.salesOrders.reserve(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      body.warehouseByVariant,
+    );
+  }
   @Post(":id/cancel")
-  async cancel(@Param("id") id: string, @Req() request: any) { return this.salesOrders.cancel((await this.actorForOrder(request, id)).companyId, id); }
+  async cancel(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.cancel(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+    );
+  }
   @Post(":id/ship")
-  async ship(@Param("id") id: string, @Req() request: any) { return this.salesOrders.ship((await this.actorForOrder(request, id)).companyId, id); }
+  async ship(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.ship(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+    );
+  }
+  @Post(":id/deliver")
+  async deliver(
+    @Param("id") id: string,
+    @Body() body: { method?: "PICKUP" | "MANUAL_DELIVERY" },
+    @Req() request: any,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    const method = body.method;
+    if (!method || !["PICKUP", "MANUAL_DELIVERY"].includes(method)) {
+      throw new BadRequestException(
+        "Informe se o pedido foi retirado ou entregue.",
+      );
+    }
+    return this.salesOrders.deliver(actor.companyId, id, {
+      method,
+      actorName: actor.name,
+      actorRole: actor.role,
+    });
+  }
   @Post(":id/picking")
-  async picking(@Param("id") id: string, @Req() request: any) { return this.salesOrders.transition((await this.actorForOrder(request, id)).companyId, id, "PICKING"); }
+  async picking(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.transition(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      "PICKING",
+    );
+  }
   @Post(":id/ready-to-ship")
-  async readyToShip(@Param("id") id: string, @Req() request: any) { return this.salesOrders.transition((await this.actorForOrder(request, id)).companyId, id, "READY_TO_SHIP"); }
+  async readyToShip(@Param("id") id: string, @Req() request: any) {
+    return this.salesOrders.transition(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      "READY_TO_SHIP",
+    );
+  }
   @Post(":id/picking/confirm")
-  async confirmPicking(@Param("id") id: string, @Body() body: { pickedByItem: Record<string, number> }, @Req() request: any) { return this.salesOrders.confirmPicking((await this.actorForOrder(request, id)).companyId, id, body.pickedByItem); }
+  async confirmPicking(
+    @Param("id") id: string,
+    @Body() body: { pickedByItem: Record<string, number> },
+    @Req() request: any,
+  ) {
+    return this.salesOrders.confirmPicking(
+      (await this.actorForOrder(request, id)).companyId,
+      id,
+      body.pickedByItem,
+    );
+  }
 
   @Post(":id/invoice")
   async invoice(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actorForOrder(request, id);
+    const customerRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
+      `SELECT c.name,c."legalName",c."taxId",c."countryCode",c."countryName",c."foreignTaxId",
+              c."postalCode",c.address,c."addressNumber",
+              c."addressComplement",c.district,c.city,c.state,c."stateRegistration",c."stateRegistrationType"
+         FROM "SalesOrder" so
+         JOIN "Customer" c ON c.id=so."customerId"
+        WHERE so.id=$1 AND so."companyId"=$2 LIMIT 1`,
+      id,
+      actor.companyId,
+    );
+    const customerFiscalError = customerFiscalReadinessMessage(
+      customerRows[0] ?? {},
+    );
+    if (customerFiscalError) throw new BadRequestException(customerFiscalError);
     const fiscalRows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
-      `SELECT so.status::text AS "orderStatus",f.status::text AS "fiscalStatus",
+      `SELECT so.status::text AS "orderStatus",so."orderType"::text AS "orderType",
+              sc.type::text AS "salesChannelType",
+              f.status::text AS "fiscalStatus",
               f."externalId" AS "fiscalExternalId"
          FROM "SalesOrder" so
+         LEFT JOIN "SalesChannel" sc ON sc.id=so."salesChannelId"
          LEFT JOIN LATERAL (
            SELECT status, "externalId" FROM "FiscalDocument"
             WHERE "salesOrderId"=so.id AND direction='OUTBOUND'
@@ -726,37 +2013,68 @@ export class SalesOrdersController {
       id,
       actor.companyId,
     );
-    const rejectedRetry =
-      fiscalRows[0]?.orderStatus === "INVOICED" &&
-      fiscalRows[0]?.fiscalStatus === "REJECTED";
+    const orderStatus = String(fiscalRows[0]?.orderStatus ?? "");
+    const fiscalStatus = String(fiscalRows[0]?.fiscalStatus ?? "");
+    const fiscalExternalId = String(
+      fiscalRows[0]?.fiscalExternalId ?? "",
+    ).trim();
+    if (!fiscalRows[0]) throw new BadRequestException("Pedido não encontrado.");
+    if (fiscalStatus === "AUTHORIZED") {
+      return {
+        orderId: id,
+        idempotent: true,
+        status: "INVOICED",
+        fiscalStatus,
+        fiscalDispatch: "AUTHORIZED",
+      };
+    }
+    if (!["READY_TO_SHIP", "INVOICED"].includes(orderStatus)) {
+      throw new BadRequestException(
+        "O pedido precisa estar pronto para expedição antes do faturamento.",
+      );
+    }
+    if (
+      String(fiscalRows[0]?.orderType ?? "") === "SAMPLE" &&
+      String(fiscalRows[0]?.salesChannelType ?? "") !== "EXPORTACAO"
+    ) {
+      try {
+        await this.blingCatalogSync.sampleFiscalRoute(
+          actor.companyId,
+          customerRows[0]?.state,
+        );
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error
+            ? error.message
+            : "Emissão de amostra bloqueada por configuração fiscal incompleta.",
+        );
+      }
+    }
+    if (fiscalStatus === "CANCELLED") {
+      throw new BadRequestException(
+        "A NF-e foi cancelada no Bling. Regularize o documento antes de solicitar nova emissão.",
+      );
+    }
+    const rejectedRetry = ["REJECTED", "ERROR"].includes(fiscalStatus);
     const invalidSentRetry =
-      fiscalRows[0]?.orderStatus === "INVOICED" &&
-      fiscalRows[0]?.fiscalStatus === "SENT" &&
-      (!String(fiscalRows[0]?.fiscalExternalId ?? "").trim() ||
-        String(fiscalRows[0]?.fiscalExternalId).trim() === "0");
+      fiscalStatus === "SENT" &&
+      (!fiscalExternalId || fiscalExternalId === "0");
     const fiscalRetry = rejectedRetry || invalidSentRetry;
-    const result = fiscalRetry
-      ? { orderId: id, idempotent: true, status: "INVOICED", fiscalRetry: true }
-      : await this.salesOrders.transition(actor.companyId, id, "INVOICED");
+    const alreadyRequested =
+      ["PENDING", "READY", "SENT"].includes(fiscalStatus) && !invalidSentRetry;
+    const result = {
+      orderId: id,
+      idempotent: alreadyRequested,
+      status: orderStatus,
+      fiscalStatus: alreadyRequested ? fiscalStatus : "PENDING",
+      fiscalRetry,
+    };
     const rows = await this.salesOrders.database.$queryRawUnsafe<any[]>(
       `SELECT "companyId","paymentType","paymentTermsSnapshot" FROM "SalesOrder" WHERE id=$1 AND "companyId"=$2`,
       id,
       actor.companyId,
     );
     const payment = rows[0];
-    if (payment && payment.paymentType !== "LEGACY") {
-      const days =
-        payment.paymentType === "CASH"
-          ? 0
-          : termDays(payment.paymentTermsSnapshot);
-      await this.salesOrders.database.$executeRawUnsafe(
-        `UPDATE "AccountsReceivable"
-            SET "dueDate" = "issueDate" + ($2::int * INTERVAL '1 day'), "updatedAt"=NOW()
-          WHERE "salesOrderId"=$1`,
-        id,
-        days,
-      );
-    }
     if (payment?.companyId) {
       const idempotencyKey = `bling:sales-order-invoice:${id}`;
       await this.salesOrders.database.$executeRawUnsafe(
@@ -775,9 +2093,12 @@ export class SalesOrdersController {
         id,
         JSON.stringify({ salesOrderId: id }),
         idempotencyKey,
-        fiscalRetry,
+        fiscalRetry || !alreadyRequested,
       );
     }
-    return { ...result, fiscalDispatch: "QUEUED" };
+    return {
+      ...result,
+      fiscalDispatch: alreadyRequested ? "ALREADY_REQUESTED" : "QUEUED",
+    };
   }
 }

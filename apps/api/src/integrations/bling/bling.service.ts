@@ -208,7 +208,10 @@ export class BlingService {
         continue;
       }
 
-      throw new Error(`Bling API ${response.status}: ${JSON.stringify(payload)}`);
+      const method = String(init.method ?? "GET").toUpperCase();
+      throw new Error(
+        `Bling API ${response.status} (${method} ${path}): ${JSON.stringify(payload)}`,
+      );
     }
 
     throw new Error("Bling API indisponível após novas tentativas.");

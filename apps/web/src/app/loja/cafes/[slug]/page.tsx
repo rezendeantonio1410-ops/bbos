@@ -98,16 +98,16 @@ export default async function MicrolotPage({ params }: PageProps) {
             </Link>
             <div className={styles.packageStage}>
               <span className={styles.edition}>EDIÇÃO LIMITADA</span>
-              <Image
-                className={styles.packagePhoto}
-                src="/brand/products/real/raro-frontal.jpg"
-                width={1200}
-                height={1800}
-                sizes="(max-width: 600px) 196px, 270px"
-                alt="Embalagem do microlote Bispo Raro"
-                priority
-              />
-              <p>Microlote rastreável · embalagem de 250 g.</p>
+              <div
+                className={styles.packagePlaceholder}
+                aria-label="Espaço reservado para a fotografia da embalagem do Raro"
+              >
+                <small>EDIÇÃO LIMITADA</small>
+                <span>BISPO</span>
+                <b>Raro</b>
+                <em>250 g</em>
+              </div>
+              <p>Espaço reservado para a fotografia oficial da embalagem.</p>
             </div>
             <div className={styles.heroPhotos}>
               <figure>
@@ -289,17 +289,23 @@ export default async function MicrolotPage({ params }: PageProps) {
         <section id="escolha" className={styles.curatorship}>
           <div className={styles.founderPhotos}>
             <Image
+              src="/brand/founders/jose-rezende.jpg"
+              alt="José Rezende"
+              width={180}
+              height={240}
+            />
+            <Image
               src="/brand/founders/suzi-ninov.jpg"
-              alt="Suzi Ninov durante a prova e seleção do microlote"
-              width={340}
-              height={300}
+              alt="Suzi Ninov"
+              width={180}
+              height={240}
             />
           </div>
           <div>
             <small>A ESCOLHA BISPO</small>
             <h2>Três anos de acompanhamento. Um pequeno lote escolhido.</h2>
             <blockquote>“{product.story.founderNote}”</blockquote>
-            <p>Suzi e José · origem e prova</p>
+            <p>José e Suzi · curadoria Bispo</p>
           </div>
         </section>
 

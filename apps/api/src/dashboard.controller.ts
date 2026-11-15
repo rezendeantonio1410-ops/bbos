@@ -7,8 +7,11 @@ export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
   @Get("home")
-  home(@Req() request: { user?: { companyId: string } }) {
-    return this.dashboard.home(request.user!.companyId);
+  home(@Req() request: { user?: { companyId: string; role: string } }) {
+    return this.dashboard.home(
+      request.user!.companyId,
+      request.user!.role === "SALES",
+    );
   }
 
   @Get("industrial")

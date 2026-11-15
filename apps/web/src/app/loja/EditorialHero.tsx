@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { AddToCartButton } from "./StorefrontCart";
 import styles from "./EditorialHero.module.css";
 import type { StorefrontImageSelection } from "@/lib/storefront-images";
-import { realProductImages } from "./real-product-images";
+import type { StorefrontMediaAsset } from "@/lib/storefront-media";
 import { storefrontCommerce } from "./storefront-catalog";
 
 const scenes = [
@@ -18,14 +18,26 @@ const scenes = [
     title: "Doce. Confortável.",
     italic: "Equilibrado.",
     copy: "Caramelo e chocolate. Doce na medida. Daqueles cafés que pedem outra xícara.",
-    // Regra de marca: a abertura deve sempre manter a foto de José e Suzi.
-    image: "/brand/editorial/real/suzi-jose-conversa-118.jpg",
-    alt: "Suzi Ninov e José Rezende conversando durante uma prova de cafés Bispo",
-    signature: "SUZI + JOSÉ · ESCOLHA E PROVA",
-    product: realProductImages.Caramelo,
+    image: "/brand/visuals/bispo-hero-chemex-v2.png",
+    product: "/brand/products/caramelo-treated.webp",
     notes: "Caramelo · Chocolate · Equilíbrio",
-    tone: "#C86424",
-    crop: "46% center",
+    tone: "#F96D01",
+    crop: "center",
+    mediaSlot: "home.hero.caramelo",
+  },
+  {
+    ...storefrontCommerce("essencial", true),
+    line: "GOURMET",
+    name: "Essencial",
+    title: "Todo dia pode ter",
+    italic: "um grande café.",
+    copy: "Macio, doce e fácil de reencontrar. O cotidiano transformado em ritual.",
+    image: "/essencial.jpeg",
+    product: "/brand/products/essencial-treated.webp",
+    notes: "Macio · Doce · Fácil",
+    tone: "#E9BB00",
+    crop: "center 56%",
+    mediaSlot: "home.hero.essencial",
   },
   {
     ...storefrontCommerce("intenso", true),
@@ -34,13 +46,12 @@ const scenes = [
     title: "Mais corpo.",
     italic: "Presença limpa.",
     copy: "Uma xícara encorpada e direta, sem amargor agressivo e sem perder a limpeza.",
-    image: "/brand/editorial/real/jose-prova.jpg",
-    alt: "José Rezende avaliando cafés durante uma prova Bispo",
-    signature: "JOSÉ · PROVA E PRECISÃO",
-    product: realProductImages.Intenso,
+    image: "/brand/products/intenso-treated.webp",
+    product: "/brand/products/intenso-treated.webp",
     notes: "Corpo · Presença · Limpeza",
-    tone: "#A77924",
-    crop: "center 50%",
+    tone: "#D3A600",
+    crop: "center 48%",
+    mediaSlot: "home.hero.intenso",
   },
   {
     ...storefrontCommerce("doce-de-leite", true),
@@ -49,14 +60,12 @@ const scenes = [
     title: "Doçura que lembra",
     italic: "casa.",
     copy: "Açúcar mascavo, doce de leite e alfajor em uma xícara macia e prolongada.",
-    // Regra de marca: preservar esta foto de Suzi e José, salvo ordem expressa.
-    image: "/brand/editorial/real/suzi-jose-servir-60.jpg",
-    alt: "José Rezende servindo café para Suzi Ninov durante uma prova Bispo",
-    signature: "SUZI + JOSÉ · PROVA E RITUAL",
-    product: realProductImages["Doce de Leite"],
+    image: "/brand/products/doce-de-leite-treated.webp",
+    product: "/brand/products/doce-de-leite-treated.webp",
     notes: "Mascavo · Doce de leite · Alfajor",
-    tone: "#B66B35",
+    tone: "#C66E2E",
     crop: "center 48%",
+    mediaSlot: "home.hero.doce-de-leite",
   },
   {
     ...storefrontCommerce("tangerina", true),
@@ -65,13 +74,12 @@ const scenes = [
     title: "Um café vivo.",
     italic: "Fresco e luminoso.",
     copy: "Cítrico, doce e alegre: uma porta de entrada para descobrir os cafés frutados.",
-    image: "/brand/editorial/real/banner-tangerina-70.jpg",
-    alt: "José Rezende preparando café com embalagens Bispo",
-    signature: "CAMPO · FRUTO E FRESCOR",
-    product: realProductImages.Tangerina,
+    image: "/brand/story/parana-dia-amanhecer.webp",
+    product: null,
     notes: "Cítrico · Doce · Fresco",
     tone: "#E47928",
-    crop: "center 58%",
+    crop: "center",
+    mediaSlot: "home.hero.tangerina",
   },
   {
     ...storefrontCommerce("singular", true),
@@ -80,43 +88,26 @@ const scenes = [
     title: "Novas camadas.",
     italic: "Uma origem única.",
     copy: "Frutado, complexo e evolutivo. Para quem encontra prazer na descoberta.",
-    image: "/brand/editorial/real/banner-singular-34.jpg",
-    alt: "Café Singular Bispo com Chemex e taça",
-    signature: "SUZI + JOSÉ · PROVA E RITUAL",
-    product: realProductImages.Singular,
+    image: "/brand/story/jose-origem.jpeg",
+    product: "/brand/products/singular-treated.webp",
     notes: "Frutado · Complexo · Evolutivo",
     tone: "#5C7D5F",
-    crop: "center 50%",
+    crop: "center 42%",
+    mediaSlot: "home.hero.singular",
   },
   {
     ...storefrontCommerce("sublime", true),
-    line: "ÉPICOS",
+    line: "CURADORIA BISPO",
     name: "Sublime",
     title: "Escolhido por quem",
     italic: "vive o café.",
-    copy: "Suzi prova cada perfil com rigor e sensibilidade para escolher o que merece chegar à sua xícara.",
-    image: "/brand/editorial/real/suzi-aroma.jpg",
-    alt: "Suzi Ninov avaliando o aroma de cafés em uma prova Bispo",
-    signature: "SUZI · PROVA E CRITÉRIO",
-    product: realProductImages.Sublime,
+    copy: "A Bispo acompanha a origem, a produção e a prova para escolher o que chega à sua xícara.",
+    image: "/brand/story/suzi-fragrancia.jpeg",
+    product: "/brand/products/sublime-treated.webp",
     notes: "Rapadura · Caramelo · Doçura profunda",
-    tone: "#5C7D5F",
-    crop: "center 48%",
-  },
-  {
-    ...storefrontCommerce("essencial", true),
-    line: "GOURMET",
-    name: "Essencial",
-    title: "O cuidado de sempre.",
-    italic: "Já moído.",
-    copy: "Macio e equilibrado, pronto para preparar com facilidade.",
-    image: "/brand/editorial/real/preparo-agua.jpg",
-    alt: "Água sendo servida para preparar café Bispo",
-    signature: "CUIDADO EM CADA PREPARO",
-    product: realProductImages.Essencial,
-    notes: "Macio · Doce · Fácil",
-    tone: "#C39A24",
-    crop: "center 54%",
+    tone: "#0E191D",
+    crop: "center 35%",
+    mediaSlot: "home.hero.sublime",
   },
   {
     ...storefrontCommerce("raros", true),
@@ -125,53 +116,44 @@ const scenes = [
     title: "Poucas sacas.",
     italic: "Uma história inteira.",
     copy: "O microlote de Carlos Alexandre traduz o Norte do Paraná em uma xícara limpa e viva.",
-    image: "/brand/editorial/real/caderno-carlos-alexandre-colheita.jpg",
-    alt: "Carlos Alexandre exibindo a colheita de um microlote no Norte do Paraná",
-    signature: "CARLOS ALEXANDRE · ORIGEM E SAFRA",
-    product: realProductImages.Raro,
+    image: "/brand/products/raros/alexandre-colheita.webp",
+    product: "/brand/products/raros/alexandre-colheita.webp",
     notes: "86,5 pontos · Origem única · Safra limitada",
     tone: "#8E2721",
     crop: "center 72%",
+    mediaSlot: "home.hero.raro",
   },
 ] as const;
 
 export default function EditorialHero({
   productImages = {},
+  mediaSlots = {},
 }: {
   productImages?: StorefrontImageSelection;
+  mediaSlots?: Record<string, StorefrontMediaAsset>;
 }) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [interacted, setInteracted] = useState(false);
   const selectedScene = scenes[active] ?? scenes[0]!;
   const scene = {
     ...selectedScene,
     product:
-      realProductImages[selectedScene.name] ??
       productImages[selectedScene.name]?.hero ??
       productImages[selectedScene.name]?.primary ??
       selectedScene.product,
   };
-  const preparations = Math.floor(scene.weightGrams / 20);
-  const pricePerPreparation =
-    scene.line === "GOURMET"
-      ? null
-      : (scene.priceCents / 100 / preparations).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        });
 
   useEffect(() => {
-    if (paused || interacted) return;
+    if (paused) return;
     const timer = window.setInterval(
       () => setActive((current) => (current + 1) % scenes.length),
-      8200,
+      6800,
     );
     return () => window.clearInterval(timer);
-  }, [interacted, paused]);
+  }, [paused]);
 
   const move = (direction: number) => {
-    setInteracted(true);
+    setPaused(true);
     setActive(
       (current) => (current + direction + scenes.length) % scenes.length,
     );
@@ -188,20 +170,26 @@ export default function EditorialHero({
       aria-label="Cafés escolhidos pela Bispo"
     >
       <div className={styles.media} data-photo-slot={`hero-${active + 1}`}>
-        <Image
-          key={scene.id}
-          className={`${styles.sceneImage} ${styles.activeImage}`}
-          src={scene.image}
-          alt={scene.alt}
-          fill
-          priority={active === 0}
-          sizes="(max-width: 960px) 100vw, 54vw"
-          style={{ objectPosition: scene.crop }}
-          unoptimized
-        />
+        {scenes.map((item, index) => (
+          <Image
+            key={item.name}
+            className={`${styles.sceneImage} ${index === active ? styles.activeImage : ""}`}
+            src={mediaSlots[item.mediaSlot]?.url ?? item.image}
+            alt={
+              index === active
+                ? (mediaSlots[item.mediaSlot]?.altText ??
+                  `${item.name}: uma cena da experiência Bispo Coffees`)
+                : ""
+            }
+            fill
+            priority={index === 0}
+            sizes="(max-width: 960px) 100vw, 54vw"
+            style={{ objectPosition: item.crop }}
+          />
+        ))}
         <div className={styles.mediaShade} />
         <div className={styles.mediaSignature}>
-          <span>{scene.signature}</span>
+          <span>ESCOLHIDO NA ORIGEM</span>
         </div>
         <div className={styles.controls}>
           <button onClick={() => move(-1)} aria-label="Cena anterior">
@@ -231,7 +219,15 @@ export default function EditorialHero({
         <p className={styles.intro}>{scene.copy}</p>
         <div className={styles.productStage}>
           <div className={styles.productImage}>
-            <img src={scene.product} alt={`Café ${scene.name}`} />
+            {scene.product ? (
+              <img src={scene.product} alt={`Café ${scene.name}`} />
+            ) : (
+              <div className={styles.productPlaceholder}>
+                <small>BISPO COFFEES</small>
+                <strong>{scene.name}</strong>
+                <span>Café especial · {scene.weightGrams} g</span>
+              </div>
+            )}
           </div>
           <div className={styles.productReading}>
             <small>LEITURA SENSORIAL</small>
@@ -243,11 +239,6 @@ export default function EditorialHero({
           <div>
             <small>a partir de</small>
             <strong>{scene.price}</strong>
-            {pricePerPreparation ? (
-              <span className={styles.preparationValue}>
-                {preparations} preparos de 20 g · ≈ {pricePerPreparation} cada
-              </span>
-            ) : null}
           </div>
           <AddToCartButton
             product={{
@@ -257,14 +248,14 @@ export default function EditorialHero({
               notes: scene.notes,
               priceCents: scene.priceCents,
               weightGrams: scene.weightGrams,
-              image: scene.product,
+              image: scene.product ?? scene.image,
             }}
           >
             Quero este café <span>→</span>
           </AddToCartButton>
         </div>
         <Link className={styles.assist} href="/loja/descobrir">
-          Ainda não é o seu? Encontre o café que combina com você →
+          Prefere outra sensação? Descubra o café que combina com você →
         </Link>
         <div className={styles.dots} aria-label="Escolher cena">
           {scenes.map((item, index) => (
@@ -272,7 +263,7 @@ export default function EditorialHero({
               key={item.name}
               className={index === active ? styles.activeDot : ""}
               onClick={() => {
-                setInteracted(true);
+                setPaused(true);
                 setActive(index);
               }}
               aria-label={`Mostrar ${item.name}`}

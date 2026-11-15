@@ -4,6 +4,7 @@ import {
   Boxes,
   Calculator,
   CircleDollarSign,
+  ClipboardList,
   Factory,
   FlaskConical,
   Gauge,
@@ -19,7 +20,9 @@ import {
   Settings,
   Ship,
   ShoppingBag,
+  Smartphone,
   UsersRound,
+  Warehouse,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -28,6 +31,7 @@ export type BbosRole =
   | "EXECUTIVE"
   | "INDUSTRIAL"
   | "FINANCE"
+  | "ACCOUNTANT"
   | "SALES"
   | "MARKETPLACE_OPERATOR";
 
@@ -41,12 +45,7 @@ export type BbosNavItem = {
 };
 
 export type BbosNavGroup = {
-  id:
-    | "overview"
-    | "commercial"
-    | "international"
-    | "operations"
-    | "management";
+  id: "overview" | "commercial" | "international" | "operations" | "management";
   label: string;
   description: string;
   alwaysOpen?: boolean;
@@ -62,13 +61,13 @@ const ALL: BbosRole[] = [
   "SALES",
 ];
 const LEADERSHIP: BbosRole[] = ["ADMIN", "EXECUTIVE"];
-const MARKETPLACE: BbosRole[] = [
-  "ADMIN",
-  "EXECUTIVE",
-  "SALES",
+const ACCOUNTING: BbosRole[] = ["ADMIN", "EXECUTIVE", "FINANCE", "ACCOUNTANT"];
+const MARKETPLACE: BbosRole[] = ["ADMIN", "EXECUTIVE", "MARKETPLACE_OPERATOR"];
+const KNOWN_ROLES = new Set<BbosRole>([
+  ...ALL,
+  "ACCOUNTANT",
   "MARKETPLACE_OPERATOR",
-];
-const KNOWN_ROLES = new Set<BbosRole>([...ALL, "MARKETPLACE_OPERATOR"]);
+]);
 
 export const bbosNavigation: BbosNavGroup[] = [
   {
@@ -85,6 +84,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: House,
         roles: ALL,
         keywords: ["inicio", "hoje", "atenção"],
+      },
+      {
+        href: "/aplicativo",
+        label: "Aplicativo",
+        description: "Alertas de provas e atenções no iPhone",
+        icon: Smartphone,
+        roles: LEADERSHIP,
+        keywords: ["iphone", "aplicativo", "notificacao", "push"],
       },
       {
         href: "/dashboard",
@@ -115,15 +122,30 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Clientes",
         description: "Cadastro, crédito e relacionamento",
         icon: UsersRound,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
         keywords: ["cliente", "credito"],
+      },
+      {
+        href: "/atendimento",
+        label: "Atendimento",
+        description: "Visitas, relatos e próximas ações",
+        icon: ClipboardList,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["visita", "relato", "vendedor", "follow-up"],
       },
       {
         href: "/pedidos",
         label: "Pedidos",
         description: "Cotação, promessa, reserva e entrega",
         icon: ShoppingBag,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        roles: [
+          "ADMIN",
+          "EXECUTIVE",
+          "SALES",
+          "FINANCE",
+          "INDUSTRIAL",
+          "ACCOUNTANT",
+        ],
         keywords: ["pedido", "venda", "estoque"],
       },
       {
@@ -131,7 +153,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Vendas",
         description: "Desempenho e carteira comercial",
         icon: BarChart3,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE"],
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
         keywords: ["faturamento", "receita"],
       },
       {
@@ -139,7 +161,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Commerce",
         description: "Canais, preços e governança",
         icon: Globe2,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        roles: ["ADMIN", "EXECUTIVE"],
         keywords: ["preco", "canal", "tabela"],
       },
       {
@@ -155,7 +177,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Biblioteca da marca",
         description: "Fundadores, provas, origem e vitrines",
         icon: Images,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        roles: ["ADMIN", "EXECUTIVE"],
         keywords: ["foto", "imagem", "fundadores", "prova", "origem", "loja"],
       },
     ],
@@ -171,7 +193,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Central de exportações",
         description: "Carteira, logística e documentos",
         icon: Ship,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "INDUSTRIAL"],
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
         keywords: [
           "exportacao",
           "internacional",
@@ -215,6 +237,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["op", "torra", "batch", "empacotamento"],
       },
       {
+        href: "/estoque",
+        label: "Estoque",
+        description: "Café verde, torrado e produto acabado",
+        icon: Warehouse,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["saldo", "torrado", "granel", "produto acabado"],
+      },
+      {
         href: "/blends",
         label: "Blends",
         description: "Receitas e composição de lotes",
@@ -227,7 +257,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Produtos",
         description: "SKU, apresentação, custo e disponibilidade",
         icon: PackageCheck,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "SALES"],
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
         keywords: ["sku", "pacote", "acabado"],
       },
     ],
@@ -243,7 +273,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Notas de entrada",
         description: "Captura, classificação e alocação fiscal",
         icon: FileInput,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE", "ACCOUNTANT"],
         keywords: [
           "nfe",
           "nota fiscal",
@@ -259,7 +289,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Financeiro",
         description: "Receber, pagar, caixa e conciliar",
         icon: CircleDollarSign,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE"],
+        roles: ACCOUNTING,
         keywords: ["caixa", "receber", "pagar"],
       },
       {
@@ -267,16 +297,24 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Custos",
         description: "Custo real, margem e retorno",
         icon: Calculator,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL", "ACCOUNTANT"],
         keywords: ["margem", "roi", "custeio"],
       },
       {
         href: "/integracoes",
         label: "Integrações",
-        description: "Bling, fiscal, filas e webhooks",
+        description: "Bling, marketplaces, pagamentos e fretes",
         icon: PlugZap,
         roles: LEADERSHIP,
-        keywords: ["bling", "fiscal", "nfe", "webhook"],
+        keywords: [
+          "bling",
+          "fiscal",
+          "nfe",
+          "webhook",
+          "mercado livre",
+          "melhor envio",
+          "mercado pago",
+        ],
       },
       {
         href: "/usuarios",
@@ -309,29 +347,53 @@ export function navigationForRole(role?: string | null) {
     .filter((group) => group.items.length > 0);
 }
 
+const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
+  ADMIN: ["/home", "/pedidos", "/estoque", "/financeiro"],
+  EXECUTIVE: ["/home", "/pedidos", "/estoque", "/dashboard"],
+  INDUSTRIAL: ["/home", "/producao", "/estoque", "/dashboard-industrial"],
+  FINANCE: ["/home", "/pedidos", "/financeiro", "/notas-entrada"],
+  ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
+  SALES: ["/home", "/clientes", "/atendimento", "/pedidos"],
+  MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
+};
+
+export function mobileNavigationForRole(role?: string | null) {
+  if (!role || !KNOWN_ROLES.has(role as BbosRole)) return [];
+  const items = navigationForRole(role).flatMap((group) => group.items);
+  const priority = mobileRoutePriority[role as BbosRole] ?? [];
+  return priority.flatMap((href) => {
+    const item = items.find((candidate) => candidate.href === href);
+    return item ? [item] : [];
+  });
+}
+
 export const toneClasses = {
   green: {
-    text: "text-[#087568]",
-    dot: "bg-[#087568]",
-    soft: "bg-[#EAF6F2]",
-    active: "bg-[#EAF6F2] text-[#123B35] shadow-[inset_3px_0_0_#087568]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
   blue: {
-    text: "text-[#3E73A8]",
-    dot: "bg-[#3E73A8]",
-    soft: "bg-[#EEF5FB]",
-    active: "bg-[#EEF5FB] text-[#244F79] shadow-[inset_3px_0_0_#3E73A8]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
   amber: {
-    text: "text-[#B87518]",
-    dot: "bg-[#C8923E]",
-    soft: "bg-[#FFF6E6]",
-    active: "bg-[#FFF6E6] text-[#795019] shadow-[inset_3px_0_0_#C8923E]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
   violet: {
-    text: "text-[#6D4FA3]",
-    dot: "bg-[#6D4FA3]",
-    soft: "bg-[#F4F0FB]",
-    active: "bg-[#F4F0FB] text-[#523B7C] shadow-[inset_3px_0_0_#6D4FA3]",
+    text: "text-[var(--bbos-coffee-green)]",
+    dot: "bg-[var(--bbos-coffee-green)]",
+    soft: "bg-[var(--bbos-surface-subtle)]",
+    active:
+      "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)] shadow-[inset_3px_0_0_var(--bbos-coffee-green)]",
   },
 } as const;

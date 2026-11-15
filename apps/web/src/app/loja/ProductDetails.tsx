@@ -42,13 +42,6 @@ type Props = {
 
 export default function ProductDetails({ product, story, detailHref, detailLabel = "Conhecer este café →" }: Props) {
   const [open, setOpen] = useState(false);
-  const pricePerPreparation =
-    product.line === "GOURMET"
-      ? null
-      : (product.priceCents / 100 / (product.weightGrams / 20)).toLocaleString(
-          "pt-BR",
-          { style: "currency", currency: "BRL" },
-        );
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +70,7 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
           <button className={styles.backdrop} type="button" aria-label="Fechar detalhes" onClick={() => setOpen(false)} />
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={`story-${product.id}`}>
             <header className={styles.header}>
-              <span>ESCOLHA BISPO · {product.line}</span>
+              <span>CURADORIA BISPO · {product.line}</span>
               <button type="button" onClick={() => setOpen(false)} aria-label="Fechar detalhes"><X /></button>
             </header>
 
@@ -91,14 +84,7 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
                 <strong>{product.notes}</strong>
                 <p>{story.promise}</p>
                 <div className={styles.quickBuy}>
-                  <span>
-                    <b>{product.priceLabel}</b> · {product.weightLabel}
-                    {pricePerPreparation ? (
-                      <small className={styles.preparationValue}>
-                        20 g por preparo · ≈ {pricePerPreparation} cada
-                      </small>
-                    ) : null}
-                  </span>
+                  <span><b>{product.priceLabel}</b> · {product.weightLabel}</span>
                   <AddToCartButton product={{ ...product, story }}>Comprar agora →</AddToCartButton>
                 </div>
               </div>
@@ -200,13 +186,13 @@ export default function ProductDetails({ product, story, detailHref, detailLabel
               )}
 
               <blockquote className={styles.founders}>
-                <img src="/brand/founders/suzi-ninov.jpg" alt="Suzi Ninov" />
                 <img src="/brand/founders/jose-rezende.jpg" alt="José Rezende" />
-                <div><small>POR QUE ELE ESTÁ AQUI</small><p>“{story.founderNote}”</p><cite>Suzi e José · origem e prova</cite></div>
+                <img src="/brand/founders/suzi-ninov.jpg" alt="Suzi Ninov" />
+                <div><small>POR QUE ELE ESTÁ AQUI</small><p>“{story.founderNote}”</p><cite>José e Suzi · curadoria Bispo</cite></div>
               </blockquote>
 
               <figure className={styles.origin}>
-                <img src="/brand/editorial/real/jose-suzi-prova.jpg" alt="Suzi Ninov e José Rezende avaliando cafés em prova" />
+                <img src="/brand/story/jose-origem.jpeg" alt="Seleção de café na origem pela Bispo" />
                 <figcaption><small>DA ORIGEM À XÍCARA</small><b>Escolhido, provado e torrado para preservar sua identidade.</b></figcaption>
               </figure>
             </div>

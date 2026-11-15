@@ -1,9 +1,10 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { Prisma, prisma, ProfessionalSampleSource, ProfessionalSampleStatus } from "@bbos/database";
+import { Prisma, prisma, ProfessionalSampleSource, ProfessionalSampleStatus, UserRole } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { CUPPING_ATTRIBUTES, scoreCuppingAttributes } from "./cupping-score";
+import { MobileNotificationService } from "./mobile-notification.service";
 
 type SampleBody = {
   source?: ProfessionalSampleSource;
@@ -31,7 +32,7 @@ type SampleBody = {
 @Controller("professional-samples")
 export class ProfessionalSamplesController {
   private readonly db = prisma;
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService, private readonly mobileNotifications: MobileNotificationService) {}
 
   @Get("options")
   async options(@Req() request: Request) {
@@ -75,7 +76,19 @@ export class ProfessionalSamplesController {
     const year = new Date().getFullYear();
     const sequence = (await this.db.professionalCoffeeSample.count({ where: { companyId: actor.companyId, createdAt: { gte: new Date(`${year}-01-01`) } } })) + 1;
     const code = `AM-${year}-${String(sequence).padStart(6, "0")}`;
-    return this.db.professionalCoffeeSample.create({ data: { companyId: actor.companyId, source, code, status: ProfessionalSampleStatus.RECEIVED, supplierId: body.supplierId, originUnitId: body.originUnitId, contactName: body.contactName?.trim() || undefined, country: body.country?.trim() || undefined, state: body.state?.trim() || undefined, municipality: body.municipality?.trim() || undefined, region: body.region?.trim() || undefined, harvest: body.harvest?.trim() || undefined, species: body.species?.trim() || undefined, cultivar: body.cultivar?.trim() || undefined, process: body.process?.trim() || undefined, screen: body.screen?.trim() || undefined, informedDefects: body.informedDefects, informedMoisture: body.informedMoisture, supplierLotCode: body.supplierLotCode?.trim() || undefined, receivedAt: body.receivedAt ? new Date(body.receivedAt) : new Date(), notes: body.notes?.trim() || undefined, receiptId: body.receiptId, sourceSampleId: body.sourceSampleId, createdById: actor.id, createdByName: actor.name } });
+    const sample = await this.db.professionalCoffeeSample.create({ data: { companyId: actor.companyId, source, code, status: ProfessionalSampleStatus.RECEIVED, supplierId: body.supplierId, originUnitId: body.originUnitId, contactName: body.contactName?.trim() || undefined, country: body.country?.trim() || undefined, state: body.state?.trim() || undefined, municipality: body.municipality?.trim() || undefined, region: body.region?.trim() || undefined, harvest: body.harvest?.trim() || undefined, species: body.species?.trim() || undefined, cultivar: body.cultivar?.trim() || undefined, process: body.process?.trim() || undefined, screen: body.screen?.trim() || undefined, informedDefects: body.informedDefects, informedMoisture: body.informedMoisture, supplierLotCode: body.supplierLotCode?.trim() || undefined, receivedAt: body.receivedAt ? new Date(body.receivedAt) : new Date(), notes: body.notes?.trim() || undefined, receiptId: body.receiptId, sourceSampleId: body.sourceSampleId, createdById: actor.id, createdByName: actor.name } });
+    void this.mobileNotifications.queueForRoles({
+      companyId: actor.companyId,
+      roles: [UserRole.ADMIN, UserRole.EXECUTIVE],
+      idempotencyKey: `professional-sample:${sample.id}:received`,
+      type: "PROFESSIONAL_SAMPLE_RECEIVED",
+      title: "Nova amostra para provar",
+      message: `${sample.code} foi recebida e aguarda avaliação sensorial.`,
+      href: `/laboratorio/cupping-profissional/${sample.id}`,
+      entityType: "PROFESSIONAL_COFFEE_SAMPLE",
+      entityId: sample.id,
+    }).catch(() => undefined);
+    return sample;
   }
 
   @Patch(":id/evaluation")

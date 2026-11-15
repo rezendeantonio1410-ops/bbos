@@ -4,6 +4,7 @@ export * from "./cupping-mobile.js";
 export * from "./cupping-scoring.js";
 export * from "./system-identity.js";
 export * from "./storefront-catalog.js";
+export * from "./sales-line-discount.js";
 export type PerformanceStatus = "on-track" | "attention" | "off-track";
 
 export type ExecutiveMetric = {
@@ -70,6 +71,7 @@ export type SalesMapLevel =
 export type SalesMapNode = {
   id: string;
   level: SalesMapLevel;
+  code?: string;
   name: string;
   revenue: number;
   volumeKg: number;
@@ -79,6 +81,11 @@ export type SalesMapNode = {
   attainment: number;
   salesShare: number;
   status: PerformanceStatus;
+  orderCount?: number;
+  customerCount?: number;
+  hasMargin?: boolean;
+  hasTarget?: boolean;
+  hasPreviousPeriod?: boolean;
   children?: SalesMapNode[];
 };
 
@@ -534,6 +541,7 @@ export type ProductionCostInput = {
   suppliesCost: number;
   laborCost: number;
   energyCost: number;
+  gasCost: number;
   otherIndustrialCosts: number;
   roastedOutputKg: number;
   finishedOutputKg: number;
@@ -552,6 +560,17 @@ export type ProductionCostResult = {
   standardCostDeviationAmount: number;
   standardCostDeviationPercent: number;
   sourceCostEventIds: string[];
+};
+
+export type ProductionResourceUsageRecord = {
+  resourceCode: string;
+  resourceName: string;
+  machineHours: number;
+  measuredEnergyKwh: number;
+  measuredGasKg: number;
+  energyRatePerKwh: number;
+  gasRatePerKg: number;
+  notes?: string;
 };
 
 export type ProductionAlert = {
@@ -574,7 +593,9 @@ export type ProductionAlert = {
 export type ProductionOrderView = {
   id: string;
   code: string;
+  productId?: string;
   productVariantId?: string;
+  productLine?: "RAROS" | "EPICOS" | "CLASSICOS" | "GOURMET";
   product: string;
   sku: string;
   plannedQuantity: number;
@@ -591,6 +612,9 @@ export type ProductionOrderView = {
   batches: ProductionBatchRecord[];
   packaging?: PackagingRecord;
   costs: ProductionCostInput;
+  wipAvailableKg?: number;
+  wipAvailableCost?: number;
+  resourceUsages?: ProductionResourceUsageRecord[];
   traceability: Array<{
     id: string;
     label: string;
@@ -632,3 +656,5 @@ export const BRL = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   maximumFractionDigits: 0,
 });
+
+export * from "./brazil-mobile.js";

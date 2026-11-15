@@ -6,6 +6,7 @@ export type SessionIdentity = {
   role: string;
   active: boolean;
   avatarUrl?: string | null;
+  storefrontPartnerId?: string | null;
 };
 
 export type SessionErrorKind = "unauthenticated" | "unavailable";
@@ -49,43 +50,81 @@ export async function fetchSessionIdentity(
     try {
       return await fetchSessionAttempt(apiRoot, timeoutMs);
     } catch (cause) {
-      const error = cause instanceof SessionError
-        ? cause
-        : new SessionError("unavailable", "Não foi possível conectar ao BBOS.", true);
-      if (error.kind === "unauthenticated" || !error.retryable || attempt === retryDelaysMs.length - 1) {
+      const error =
+        cause instanceof SessionError
+          ? cause
+          : new SessionError(
+              "unavailable",
+              "Não foi possível conectar ao BBOS.",
+              true,
+            );
+      if (
+        error.kind === "unauthenticated" ||
+        !error.retryable ||
+        attempt === retryDelaysMs.length - 1
+      ) {
         throw error;
       }
       lastError = error;
-      console.warn("[BBOS] transient session failure; retrying", { attempt: attempt + 1, status: error.status });
+      console.warn("[BBOS] transient session failure; retrying", {
+        attempt: attempt + 1,
+        status: error.status,
+      });
     }
   }
-  throw lastError ?? new SessionError("unavailable", "Não foi possível conectar ao BBOS.");
+  throw (
+    lastError ??
+    new SessionError("unavailable", "Não foi possível conectar ao BBOS.")
+  );
 }
 
-async function fetchSessionAttempt(apiRoot: string, timeoutMs: number): Promise<SessionIdentity> {
+async function fetchSessionAttempt(
+  apiRoot: string,
+  timeoutMs: number,
+): Promise<SessionIdentity> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
-    response = await fetch(`${apiRoot}/auth/me`, { credentials: "include", signal: controller.signal });
+    response = await fetch(`${apiRoot}/auth/me`, {
+      credentials: "include",
+      signal: controller.signal,
+    });
   } catch {
-    throw new SessionError("unavailable", "Não foi possível conectar ao BBOS.", true);
+    throw new SessionError(
+      "unavailable",
+      "Não foi possível conectar ao BBOS.",
+      true,
+    );
   } finally {
     clearTimeout(timeout);
   }
   if (response.status === 401 || response.status === 403) {
-    throw new SessionError("unauthenticated", "Sessão não autenticada ou expirada.");
+    throw new SessionError(
+      "unauthenticated",
+      "Sessão não autenticada ou expirada.",
+    );
   }
   const payload = await response.json().catch(() => ({}));
   const user = payload?.user as SessionIdentity | undefined;
   if (!response.ok) {
-    const retryable = response.status === 502 || response.status === 503 || response.status === 504;
-    const error = new SessionError("unavailable", "Não foi possível conectar ao BBOS.", retryable);
+    const retryable =
+      response.status === 502 ||
+      response.status === 503 ||
+      response.status === 504;
+    const error = new SessionError(
+      "unavailable",
+      "Não foi possível conectar ao BBOS.",
+      retryable,
+    );
     (error as SessionError & { status?: number }).status = response.status;
     throw error;
   }
   if (!user?.id || !user.companyId || user.active === false) {
-    throw new SessionError("unauthenticated", "Sessão não autenticada ou expirada.");
+    throw new SessionError(
+      "unauthenticated",
+      "Sessão não autenticada ou expirada.",
+    );
   }
   return user;
 }

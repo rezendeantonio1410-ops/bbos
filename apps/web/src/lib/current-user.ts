@@ -8,6 +8,7 @@ export type CurrentUser = {
     | "EXECUTIVE"
     | "INDUSTRIAL"
     | "FINANCE"
+    | "ACCOUNTANT"
     | "SALES"
     | "MARKETPLACE_OPERATOR";
 };

@@ -1,21 +1,20 @@
 .open.storyCta.readMore {
-  display: inline-flex;
-  width: max-content;
-  min-height: 0;
-  margin-top: 15px;
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 16px;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-bottom: 1px solid rgba(14, 25, 29, 0.24);
-  border-radius: 0;
-  background: transparent !important;
+  border: 1px solid rgba(14, 25, 29, 0.24);
+  border-radius: 999px;
+  background: #fff !important;
   color: #0e191d !important;
-  padding: 0 0 5px;
+  padding: 10px 14px;
   text-decoration: none;
-  transition: border-color 0.2s ease, color 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .open.storyCta.readMore:hover {
   border-color: #0e191d;
-  background: transparent !important;
+  background: #f7f2ea !important;
 }

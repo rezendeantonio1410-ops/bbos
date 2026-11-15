@@ -152,7 +152,7 @@ const products = {
     line: "GOURMET",
     ...storefrontCommerce("essencial"),
     profile: "Macio · Doce · Fácil",
-    image: "/brand/products/real/essencial-frontal.jpg",
+    image: "/brand/products/essencial-treated.webp",
     copy: "Uma xícara tranquila e versátil para fazer parte da rotina.",
   },
   intenso: {
@@ -160,7 +160,7 @@ const products = {
     line: "GOURMET",
     ...storefrontCommerce("intenso"),
     profile: "Corpo · Presença · Limpeza",
-    image: "/brand/products/real/intenso-frontal.jpg",
+    image: "/brand/products/intenso-treated.webp",
     copy: "Mais intensidade, sem esconder a limpeza e o equilíbrio.",
   },
   caramelo: {
@@ -168,7 +168,7 @@ const products = {
     line: "CLÁSSICOS",
     ...storefrontCommerce("caramelo"),
     profile: "Caramelo · Chocolate · Equilíbrio",
-    image: "/brand/products/real/caramelo-frontal.jpg",
+    image: "/brand/products/caramelo-treated.webp",
     copy: "Doçura reconhecível e conforto desde o primeiro gole.",
   },
   doce: {
@@ -176,7 +176,7 @@ const products = {
     line: "CLÁSSICOS",
     ...storefrontCommerce("doce-de-leite"),
     profile: "Mascavo · Doce de leite · Alfajor",
-    image: "/brand/products/real/doce-de-leite-frontal.jpg",
+    image: "/brand/products/doce-de-leite-treated.webp",
     copy: "Uma xícara gulosa, macia e cheia de referências afetivas.",
   },
   singular: {
@@ -184,7 +184,7 @@ const products = {
     line: "ÉPICOS",
     ...storefrontCommerce("singular"),
     profile: "Frutado · Complexo · Evolutivo",
-    image: "/brand/products/real/singular-frontal.jpg",
+    image: "/brand/products/singular-treated.webp",
     copy: "Frutado, complexo e evolutivo: uma xícara que muda enquanto esfria e recompensa a atenção.",
   },
   sublime: {
@@ -192,16 +192,16 @@ const products = {
     line: "ÉPICOS",
     ...storefrontCommerce("sublime"),
     profile: "Rapadura · Caramelo · Doçura profunda",
-    image: "/brand/products/real/sublime-frontal.jpg",
+    image: "/brand/products/sublime-treated.webp",
     copy: "Doçura profunda e corpo envolvente para um ritual sem pressa.",
   },
 };
 
 const lineColors = {
-  GOURMET: { background: "#C39A24", foreground: "#102018" },
-  CLÁSSICOS: { background: "#C86424", foreground: "#102018" },
+  GOURMET: { background: "#E9BB00", foreground: "#102018" },
+  CLÁSSICOS: { background: "#F96D01", foreground: "#102018" },
   ÉPICOS: { background: "#5C7D5F", foreground: "#FFFFFF" },
-  RAROS: { background: "#8C3E37", foreground: "#FFFFFF" },
+  RAROS: { background: "#9D3B35", foreground: "#FFFFFF" },
 } as const;
 
 export default function Page() {

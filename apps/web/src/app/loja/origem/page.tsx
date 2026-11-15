@@ -5,13 +5,12 @@ import styles from "../page.module.css";
 import brand from "../brand-review.module.css";
 import origin from "./page.module.css";
 import storyNav from "../story-navigation.module.css";
-import premium from "../premium-overrides.module.css";
-import MobileStoreMenu from "../MobileStoreMenu";
 import GeoAtlasInteractive from "./GeoAtlasInteractive";
 import RoastMindMap from "./RoastMindMap";
 import CupMindMap from "./CupMindMap";
 import LineageMap from "./LineageMap";
 import HistoryPath from "./HistoryPath";
+import { loadStorefrontMedia } from "@/lib/storefront-media";
 
 export const metadata: Metadata = {
   title: "A geografia também está na xícara",
@@ -76,7 +75,8 @@ function OriginIcon({ kind }: { kind: OriginSymbol }) {
 
 export const revalidate = 300;
 
-export default function OrigemPage() {
+export default async function OrigemPage() {
+  const media = await loadStorefrontMedia();
   return (
     <main className={`${styles.page} ${brand.storefront} ${origin.page}`}>
       <div className={styles.commerceBar}>
@@ -98,7 +98,7 @@ export default function OrigemPage() {
           />
         </Link>
         <nav
-          className={`${styles.nav} ${storyNav.nav} ${premium.desktopNav}`}
+          className={`${styles.nav} ${storyNav.nav}`}
           aria-label="Navegação principal"
         >
           <Link href="/loja#cafes">Cafés</Link>
@@ -109,12 +109,9 @@ export default function OrigemPage() {
             A geografia na xícara
           </Link>
         </nav>
-        <div className={origin.shopControl}>
-          <Link className={origin.shopLink} href="/loja#cafes">
-            Ver cafés ↗
-          </Link>
-          <MobileStoreMenu />
-        </div>
+        <Link className={origin.headerShop} href="/loja#cafes">
+          Ver cafés ↗
+        </Link>
       </header>
 
       <article>
@@ -147,40 +144,48 @@ export default function OrigemPage() {
           <div className={origin.peopleIntro}>
             <p className={origin.kicker}>DOIS OLHARES, UMA ESCOLHA</p>
             <h2>O lugar importa. Quem o interpreta também.</h2>
-            <p>
-              As histórias de Suzi e José começaram muito antes da Bispo. Cada
-              um chegou à marca com uma trajetória própria, construída em
-              territórios, trabalhos e experiências diferentes.
-            </p>
           </div>
           <div className={origin.peopleGrid}>
             <article>
               <div className={origin.portrait}>
                 <Image
-                  src="/brand/editorial/real/suzi-marislra-lavoura-wide.jpg"
-                  alt="Suzi Ninov orientando Marislra em uma lavoura de café"
+                  src={
+                    media.slots["origin.suzi"]?.url ??
+                    "/brand/story/suzi-fragrancia.jpeg"
+                  }
+                  alt={
+                    media.slots["origin.suzi"]?.altText ??
+                    "Suzi Ninov avaliando o café"
+                  }
                   fill
                   sizes="(max-width: 700px) 100vw, 50vw"
-                  style={{ objectPosition: "center 56%" }}
                 />
               </div>
               <div>
                 <span>SUZI NINOV · CAMPO E DESENVOLVIMENTO</span>
                 <h3>O cuidado começa na planta.</h3>
                 <p>
-                  Criada em um sítio no interior do Rio Grande do Sul, Suzi
-                  construiu sua história muito antes da Bispo e trabalha com
-                  cafeicultura no Paraná desde 2007. Empresária e cofundadora da
-                  Bispo Coffees, acompanha ao lado de produtores a nutrição, a
-                  fertilidade, o manejo e o desenvolvimento da lavoura.
+                  Criada em uma fazenda no interior do Rio Grande do Sul, Suzi
+                  trabalha com cafeicultura no Paraná desde 2007. Ao lado de
+                  produtores, acompanha nutrição, fertilidade, manejo e
+                  desenvolvimento da lavoura: tratar o cafeeiro como um
+                  organismo vivo, cuidar dos recursos do solo e buscar
+                  produtividade com qualidade. Essa leitura de campo passou pelo
+                  projeto Longitude e hoje participa de cada escolha da Bispo.
                 </p>
               </div>
             </article>
             <article>
               <div className={origin.portrait}>
                 <Image
-                  src="/brand/editorial/real/jose-prova.jpg"
-                  alt="José Rezende avaliando o aroma de um café em prova"
+                  src={
+                    media.slots["origin.jose"]?.url ??
+                    "/brand/story/jose-origem.jpeg"
+                  }
+                  alt={
+                    media.slots["origin.jose"]?.altText ??
+                    "José Rezende observando um cafeeiro"
+                  }
                   fill
                   sizes="(max-width: 700px) 100vw, 50vw"
                 />
@@ -190,10 +195,11 @@ export default function OrigemPage() {
                 <h3>Da origem para o mundo.</h3>
                 <p>
                   Filho de produtores do Norte do Paraná, José trabalha com
-                  cafeicultores desde 2003 e construiu sua história muito antes
-                  da Bispo. Tornou-se Q-Grader em 2010 e, em 2015, cofundou a
-                  Capricornio Coffees, ampliando a conexão entre cafés do
-                  Trópico de Capricórnio e compradores internacionais.
+                  cafeicultores desde 2003 e tornou-se Q-Grader em 2010. Em
+                  2015, cofundou a Capricornio Coffees e ampliou a conexão entre
+                  cafés do Trópico de Capricórnio e compradores internacionais.
+                  Na Bispo, prova os lotes e desenvolve perfis de torra a partir
+                  da identidade de cada café.
                 </p>
               </div>
             </article>
@@ -509,7 +515,7 @@ export default function OrigemPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Kolibri · Suzi e José no Paraná
+                  Kolibri · José e Suzi no Paraná
                 </a>
                 .
               </p>

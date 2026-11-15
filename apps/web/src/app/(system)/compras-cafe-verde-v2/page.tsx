@@ -146,7 +146,7 @@ export default function PurchaseFormV2Page() {
   useEffect(() => {
     void Promise.all([
       req<Options>(`${ROOT}/receipts/options`),
-      req<Broker[]>(`${ROOT}/brokers`),
+      req<Broker[]>(`${ROOT}/brokers?role=GREEN_COFFEE`),
       fetchSessionIdentity(ROOT),
     ])
       .then(([currentOptions, currentBrokers, identity]) => {

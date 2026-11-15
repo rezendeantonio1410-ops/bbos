@@ -15,8 +15,9 @@ import {
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { CostNavigation } from "@/components/cost-navigation";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const API = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api"}/costing`;
+const API = `${getApiBaseUrl()}/costing`;
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",

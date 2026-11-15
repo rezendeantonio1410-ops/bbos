@@ -1,0 +1,1009 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  Post,
+  Req,
+  Res,
+} from "@nestjs/common";
+import { prisma } from "@bbos/database";
+import { randomUUID } from "node:crypto";
+import { SalesOrdersService } from "./sales-orders.service";
+import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
+import { loadSalesOrderBillingData } from "./sales-order-billing-data";
+import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
+import { pdfContentDisposition } from "./sales-order-pdf-download";
+
+type PartnerActor = {
+  id?: string | null;
+  name?: string | null;
+  companyId: string;
+  role: string;
+  storefrontPartnerId?: string | null;
+};
+
+@Controller("partner-portal")
+export class PartnerPortalController {
+  private readonly database = prisma;
+
+  constructor(private readonly salesOrders: SalesOrdersService) {}
+
+  private async context(request: { user?: PartnerActor }) {
+    const actor = request.user;
+    if (!actor || actor.role !== "PARTNER" || !actor.storefrontPartnerId) {
+      throw new ForbiddenException("Acesso restrito ao parceiro de venda.");
+    }
+    const partners = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,name,"contactName",email,phone,"pixKey",active,"portalAccessLevel"::text AS "portalAccessLevel"
+         FROM "StorefrontPartner"
+        WHERE id=$1 AND "companyId"=$2
+        LIMIT 1`,
+      actor.storefrontPartnerId,
+      actor.companyId,
+    );
+    const partner = partners[0];
+    if (!partner || !partner.active) {
+      throw new ForbiddenException("O acesso deste parceiro está inativo.");
+    }
+    return { actor, partner };
+  }
+
+  private assertCanCreateOrders(partner: any) {
+    if (
+      !["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+        partner.portalAccessLevel,
+      )
+    ) {
+      throw new ForbiddenException(
+        "Seu nível de acesso permite apenas consultar negócios e comissões.",
+      );
+    }
+  }
+
+  private assertCanManageCustomerPortfolio(partner: any) {
+    if (!["SELLER", "SALES_MANAGER"].includes(partner.portalAccessLevel)) {
+      throw new ForbiddenException(
+        "Distribuidores compram apenas para o próprio cadastro e não administram clientes.",
+      );
+    }
+  }
+
+  private async assertCustomer(
+    partner: any,
+    companyId: string,
+    customerId: string,
+  ) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT c.id,c.name,c."tradeName",c.segment,c.active,c."postalCode",c."creditStatus",c."creditLimit",c."paymentTerms"
+         FROM "Customer" c
+        WHERE c.id=$2 AND c."companyId"=$3
+          AND ($4::boolean OR EXISTS (
+            SELECT 1 FROM "StorefrontPartnerCustomer" link
+             WHERE link."partnerId"=$1 AND link."customerId"=c.id
+          ))
+        LIMIT 1`,
+      partner.id,
+      customerId,
+      companyId,
+      partner.portalAccessLevel === "SALES_MANAGER",
+    );
+    if (!rows[0] || !rows[0].active) {
+      throw new BadRequestException("Cliente não liberado para este parceiro.");
+    }
+    return rows[0];
+  }
+
+  private async assertPartnerOrder(
+    partner: any,
+    companyId: string,
+    orderId: string,
+  ) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id
+         FROM "SalesOrder" so
+        WHERE so.id=$2 AND so."companyId"=$3
+          AND (
+            $4::boolean
+            OR ($5::boolean AND EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" link
+               WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
+            ))
+            OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
+          )
+        LIMIT 1`,
+      partner.id,
+      orderId,
+      companyId,
+      partner.portalAccessLevel === "SALES_MANAGER",
+      partner.portalAccessLevel === "DISTRIBUTOR",
+    );
+    if (!rows[0]) {
+      throw new ForbiddenException(
+        "Este pedido não pertence à carteira deste distribuidor.",
+      );
+    }
+  }
+
+  private async resolvePrice(
+    companyId: string,
+    customerId: string,
+    productVariantId: string,
+    distributor = false,
+  ) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `WITH base_price AS (
+         SELECT pp.id AS "productPriceId",pp.price AS "channelPrice",pp.currency,
+                sc.id AS "salesChannelId",sc.name AS "salesChannelName",
+                sc.type::text AS "salesChannelType",c.segment
+           FROM "Customer" c
+           JOIN "ProductPrice" pp
+             ON pp."companyId"=c."companyId" AND pp."productVariantId"=$2
+           JOIN "SalesChannel" sc ON sc.id=pp."salesChannelId" AND sc.active=true
+          WHERE c.id=$1 AND c."companyId"=$3 AND pp.active=true
+            AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
+            AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+            AND (NOT $4::boolean OR sc.type='DISTRIBUIDOR')
+            AND (
+              c.segment IS NULL
+              OR c.segment NOT ILIKE '%varejo%'
+              OR sc.code='VAREJO'
+            )
+          ORDER BY CASE
+            WHEN $4::boolean AND sc.type='DISTRIBUIDOR' THEN 0
+            WHEN c.segment ILIKE '%distrib%' AND sc.type='DISTRIBUIDOR' THEN 0
+            WHEN c.segment ILIKE '%cafeter%' AND sc.type='CAFETERIA' THEN 0
+            WHEN c.segment ILIKE '%escrit%' AND sc.type='ESCRITORIO' THEN 0
+            WHEN c.segment ILIKE '%export%' AND sc.type='EXPORTACAO' THEN 0
+            WHEN c.segment ILIKE '%consum%' AND sc.code='CONSUMIDOR_FINAL' THEN 0
+            WHEN c.segment ILIKE '%varejo%' AND sc.code='VAREJO' THEN 0
+            WHEN sc.type='B2B' THEN 1 ELSE 5 END,
+            pp."validFrom" DESC NULLS LAST,pp."createdAt" DESC
+          LIMIT 1
+       )
+       SELECT bp.*,
+              cpp.id AS "customerProductPriceId",
+              cpp.price AS "customerPrice"
+         FROM base_price bp
+         LEFT JOIN LATERAL (
+           SELECT candidate.id,candidate.price
+             FROM "CustomerProductPrice" candidate
+            WHERE candidate."companyId"=$3
+              AND candidate."customerId"=$1
+              AND candidate."productVariantId"=$2
+              AND candidate.currency=bp.currency
+              AND candidate.active=true
+              AND (candidate."validFrom" IS NULL OR candidate."validFrom" <= NOW())
+              AND (candidate."validUntil" IS NULL OR candidate."validUntil" >= NOW())
+            ORDER BY candidate."validFrom" DESC NULLS LAST,candidate."updatedAt" DESC
+            LIMIT 1
+         ) cpp ON TRUE`,
+      customerId,
+      productVariantId,
+      companyId,
+      distributor,
+    );
+    if (!rows[0]) {
+      throw new BadRequestException(
+        "Produto sem preço vigente para o canal comercial deste cliente.",
+      );
+    }
+    return {
+      unitPrice: Number(rows[0].customerPrice ?? rows[0].channelPrice),
+      currency: rows[0].currency,
+      productPriceId: rows[0].productPriceId as string,
+      customerProductPriceId:
+        (rows[0].customerProductPriceId as string | null) ?? null,
+      pricingSource: rows[0].customerProductPriceId
+        ? ("CUSTOMER" as const)
+        : ("CHANNEL" as const),
+      salesChannelId: rows[0].salesChannelId as string,
+      salesChannelName: rows[0].salesChannelName as string,
+      salesChannelType: rows[0].salesChannelType as string,
+    };
+  }
+
+  private async distributorCatalog(
+    companyId: string,
+    customerId: string,
+  ): Promise<{ variantIds: Set<string>; exclusive: boolean }> {
+    const explicitRows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT cpp."productVariantId"
+         FROM "CustomerProductPrice" cpp
+        WHERE cpp."companyId"=$1 AND cpp."customerId"=$2 AND cpp.active=true
+          AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+          AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())`,
+      companyId,
+      customerId,
+    );
+    const exclusive = explicitRows.length > 0;
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT DISTINCT pp."productVariantId"
+         FROM "ProductPrice" pp
+         JOIN "SalesChannel" sc
+           ON sc.id=pp."salesChannelId" AND sc."companyId"=pp."companyId"
+          AND sc.active=true AND sc.type='DISTRIBUIDOR'
+        WHERE pp."companyId"=$1 AND pp.active=true
+          AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
+          AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
+          AND (
+            NOT $3::boolean
+            OR EXISTS (
+              SELECT 1 FROM "CustomerProductPrice" cpp
+               WHERE cpp."companyId"=pp."companyId"
+                 AND cpp."customerId"=$2
+                 AND cpp."productVariantId"=pp."productVariantId"
+                 AND cpp.currency=pp.currency
+                 AND cpp.active=true
+                 AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+                 AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())
+            )
+          )`,
+      companyId,
+      customerId,
+      exclusive,
+    );
+    return {
+      variantIds: new Set(rows.map((row) => String(row.productVariantId))),
+      exclusive,
+    };
+  }
+
+  private async distributorVariantOptions(
+    companyId: string,
+    variantIds: Set<string>,
+  ) {
+    if (!variantIds.size) return [];
+    const variants = await this.database.productVariant.findMany({
+      where: {
+        id: { in: [...variantIds] },
+        active: true,
+        product: {
+          active: true,
+          productLine: { companyId, active: true },
+        },
+      },
+      include: {
+        product: { include: { productLine: true } },
+        finishedProducts: {
+          where: { companyId },
+          include: { warehouse: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: [{ product: { name: "asc" } }, { netWeightGrams: "asc" }],
+    });
+    return variants.map((variant) => {
+      const primaryStock = variant.finishedProducts[0] ?? null;
+      const physicalStock = variant.finishedProducts.reduce(
+        (sum, item) => sum + Number(item.quantityOnHand),
+        0,
+      );
+      const reservedStock = variant.finishedProducts.reduce(
+        (sum, item) => sum + Number(item.reservedQuantity),
+        0,
+      );
+      return {
+        productVariantId: variant.id,
+        warehouseId: primaryStock?.warehouseId ?? "",
+        warehouse: primaryStock?.warehouse.name ?? "Produção sob encomenda",
+        line: variant.product.productLine.name,
+        lineCode: variant.product.productLine.code,
+        product: variant.product.name,
+        sku: variant.sku,
+        presentationGrams: variant.netWeightGrams,
+        salesUnit: variant.salesUnit,
+        physicalStock,
+        reservedStock,
+        availableStock: Math.max(0, physicalStock - reservedStock),
+        onHand: physicalStock,
+        reserved: reservedStock,
+        available: Math.max(0, physicalStock - reservedStock),
+        productionToOrder: true,
+      };
+    });
+  }
+
+  private async nextOrderNumber(companyId: string) {
+    const year = new Date().getFullYear();
+    const prefix = `P-${year}-`;
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(MAX(RIGHT(COALESCE("orderNumber",code),6)::int),0)+1 AS next
+         FROM "SalesOrder"
+        WHERE "companyId"=$1 AND COALESCE("orderNumber",code) LIKE $2`,
+      companyId,
+      `${prefix}%`,
+    );
+    return `${prefix}${String(Math.max(1, Number(rows[0]?.next ?? 1))).padStart(6, "0")}`;
+  }
+
+  @Get("summary")
+  async summary(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    const isSalesManager = partner.portalAccessLevel === "SALES_MANAGER";
+    const isDistributor = partner.portalAccessLevel === "DISTRIBUTOR";
+
+    const [metricsRows, coupons, businesses, partnerOrders] = await Promise.all(
+      [
+        this.database.$queryRawUnsafe<any[]>(
+          `SELECT
+            COUNT(r.id) FILTER (WHERE r.status <> 'CANCELLED')::int AS "businessCount",
+            COALESCE(SUM(r."netSubtotalCents") FILTER (WHERE r.status <> 'CANCELLED'),0)::int AS "salesCents",
+            COALESCE(SUM(r."commissionCents") FILTER (WHERE r.status <> 'CANCELLED'),0)::int AS "commissionEarnedCents",
+            COALESCE(ROUND(SUM(ap.amount) FILTER (WHERE ap.status='PAID') * 100),0)::int AS "commissionPaidCents",
+            COALESCE(ROUND(SUM(ap."openAmount") FILTER (WHERE ap.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')) * 100),0)::int AS "commissionOpenCents"
+           FROM "StorefrontPartner" partner
+           LEFT JOIN "StorefrontCouponRedemption" r
+             ON r."partnerId"=partner.id AND r."companyId"=partner."companyId"
+           LEFT JOIN "AccountsPayable" ap
+             ON ap."storefrontPartnerId"=partner.id
+            AND ap.category='COMISSAO_CUPOM'
+            AND ap."brokerCommissionPayableKey"=('coupon:' || r.id)
+          WHERE partner.id=$1 AND partner."companyId"=$2`,
+          partner.id,
+          actor.companyId,
+        ),
+        this.database.$queryRawUnsafe<any[]>(
+          `SELECT c.id,c.code,c.description,c."discountType",c."discountValue",
+                c."commissionType",c."commissionValue",c."commissionBasis",
+                c."usageLimit",c."usageCount",c."validFrom",c."validUntil",c.active,
+                COUNT(r.id) FILTER (WHERE r.status <> 'CANCELLED')::int AS "confirmedUses",
+                COALESCE(SUM(r."commissionCents") FILTER (WHERE r.status <> 'CANCELLED'),0)::int AS "commissionCents"
+           FROM "StorefrontCoupon" c
+           LEFT JOIN "StorefrontCouponRedemption" r ON r."couponId"=c.id
+          WHERE c."companyId"=$1 AND c."partnerId"=$2
+          GROUP BY c.id
+          ORDER BY c."createdAt" DESC`,
+          actor.companyId,
+          partner.id,
+        ),
+        this.database.$queryRawUnsafe<any[]>(
+          `SELECT r.id,r."couponCode",r."grossSubtotalCents",r."discountCents",
+                r."netSubtotalCents",r."commissionCents",r.status,r."createdAt",
+                so.code AS "orderCode",ap.status AS "payableStatus",
+                COALESCE(ROUND(ap."openAmount" * 100),0)::int AS "commissionOpenCents",
+                ap."paymentDate" AS "commissionPaidAt"
+           FROM "StorefrontCouponRedemption" r
+           JOIN "StorefrontOrder" so ON so.id=r."storefrontOrderId"
+           LEFT JOIN "AccountsPayable" ap
+             ON ap."brokerCommissionPayableKey"=('coupon:' || r.id)
+          WHERE r."companyId"=$1 AND r."partnerId"=$2 AND r.status <> 'CANCELLED'
+          ORDER BY r."createdAt" DESC
+          LIMIT 100`,
+          actor.companyId,
+          partner.id,
+        ),
+        this.database.$queryRawUnsafe<any[]>(
+          `SELECT so.id,so.code,so.status::text AS status,so."totalAmount",so."orderedAt",
+                so."paymentType"::text AS "paymentType",so."paymentTermsSnapshot",
+                c.name AS "customerName",ar.status::text AS "receivableStatus",
+                ar."dueDate",ar.amount AS "receivableAmount",ar."openAmount",
+                ar."paymentDate",fiscal.number AS "invoiceNumber",
+                fiscal.status::text AS "invoiceStatus",
+                (so."paymentType"='TERM' AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
+                  AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
+           FROM "SalesOrder" so
+           JOIN "Customer" c ON c.id=so."customerId"
+           LEFT JOIN LATERAL (
+             SELECT title.status,title."dueDate",title.amount,title."openAmount",title."paymentDate"
+               FROM "AccountsReceivable" title
+              WHERE title."salesOrderId"=so.id AND title."companyId"=so."companyId"
+              ORDER BY title."createdAt" DESC
+              LIMIT 1
+           ) ar ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT fd.number,fd.status
+               FROM "FiscalDocument" fd
+              WHERE fd."companyId"=so."companyId" AND fd."salesOrderId"=so.id
+                AND fd.direction='OUTBOUND'
+              ORDER BY fd."createdAt" DESC
+              LIMIT 1
+           ) fiscal ON TRUE
+          WHERE so."companyId"=$1
+            AND (
+              $3::boolean
+              OR ($4::boolean AND EXISTS (
+                SELECT 1 FROM "StorefrontPartnerCustomer" link
+                 WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+              ))
+              OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
+            )
+            AND so.status <> 'CANCELLED'
+          ORDER BY so."orderedAt" DESC
+          LIMIT 100`,
+          actor.companyId,
+          partner.id,
+          isSalesManager,
+          isDistributor,
+        ),
+      ],
+    );
+
+    return {
+      partner,
+      capabilities: {
+        canCreateCustomers: ["SELLER", "SALES_MANAGER"].includes(
+          partner.portalAccessLevel,
+        ),
+        canCreateOrders: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+          partner.portalAccessLevel,
+        ),
+        canManageCustomerPortfolio: ["SELLER", "SALES_MANAGER"].includes(
+          partner.portalAccessLevel,
+        ),
+        canRequestCredit: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+          partner.portalAccessLevel,
+        ),
+      },
+      metrics: metricsRows[0] ?? {
+        businessCount: 0,
+        salesCents: 0,
+        commissionEarnedCents: 0,
+        commissionPaidCents: 0,
+        commissionOpenCents: 0,
+      },
+      coupons,
+      businesses,
+      partnerOrders,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  @Get("order-options")
+  async orderOptions(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    const [customers, internalOptions] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT c.id,c.name,c."legalName",c."tradeName",c."taxId",c.segment,c."postalCode",
+                c.address,c."addressNumber",c."addressComplement",c.district,c.city,c.state,
+                c."stateRegistration",c."stateRegistrationType",c."creditStatus",c."creditLimit",c."paymentTerms",
+                EXISTS (
+                  SELECT 1 FROM "CustomerCreditEvent" req
+                   WHERE req."customerId"=c.id AND req."companyId"=c."companyId" AND req."eventType"='REQUEST'
+                     AND NOT EXISTS (
+                       SELECT 1 FROM "CustomerCreditEvent" dec
+                        WHERE dec."customerId"=c.id AND dec."companyId"=c."companyId" AND dec."eventType"='DECISION'
+                          AND dec."createdAt" > req."createdAt"
+                     )
+                ) AS "creditReviewPending"
+           FROM "Customer" c
+          WHERE c."companyId"=$2 AND c.active=true
+            AND ($3::boolean OR EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" link
+               WHERE link."partnerId"=$1 AND link."customerId"=c.id
+            ))
+          ORDER BY c.name ASC`,
+        partner.id,
+        actor.companyId,
+        partner.portalAccessLevel === "SALES_MANAGER",
+      ),
+      this.salesOrders.options(actor.companyId),
+    ]);
+    const distributorCustomer =
+      partner.portalAccessLevel === "DISTRIBUTOR" && customers.length === 1
+        ? customers[0]
+        : null;
+    const catalog = distributorCustomer
+      ? await this.distributorCatalog(actor.companyId, distributorCustomer.id)
+      : null;
+    const variants = catalog
+      ? await this.distributorVariantOptions(
+          actor.companyId,
+          catalog.variantIds,
+        )
+      : internalOptions.variants;
+    return {
+      customers: customers.map((customer) => ({
+        ...customer,
+        fiscalReadiness: assessCustomerFiscalReadiness(customer),
+      })),
+      variants: variants.map((variant) => ({
+        ...variant,
+        availableStock:
+          "availableStock" in variant
+            ? variant.availableStock
+            : variant.available,
+      })),
+      catalog: {
+        distributor: Boolean(catalog),
+        exclusive: catalog?.exclusive ?? false,
+        productCount: variants.length,
+      },
+    };
+  }
+
+  @Get("orders/:orderId/billing/pdf")
+  async billingPdf(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Res() response: any,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const order = await this.salesOrders.get(actor.companyId, orderId);
+    const data = await loadSalesOrderBillingData(
+      this.database,
+      order,
+      actor.companyId,
+    );
+    const pdf = buildSalesOrderBillingPdf(data);
+    const orderCode = String(order.orderNumber ?? order.code).replace(
+      /[^A-Za-z0-9_-]/g,
+      "-",
+    );
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": pdfContentDisposition(`Cobranca-${orderCode}.pdf`),
+      "Content-Length": pdf.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(pdf);
+  }
+
+  @Post("customers")
+  async createCustomer(
+    @Req() request: { user?: PartnerActor },
+    @Body() body: Record<string, any>,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanManageCustomerPortfolio(partner);
+    const fiscalReadiness = assessCustomerFiscalReadiness(body);
+    if (!fiscalReadiness.ready) {
+      throw new BadRequestException(
+        `Complete o cadastro fiscal do cliente: ${fiscalReadiness.issues.join(", ")}.`,
+      );
+    }
+    const fiscal = fiscalReadiness.normalized;
+    const name = fiscal.name;
+    const taxId = fiscal.taxId;
+    const email =
+      String(body.email ?? "")
+        .trim()
+        .toLowerCase() || null;
+    const phoneRaw = String(body.phone ?? "").trim();
+    const phone = phoneRaw ? `+${phoneRaw.replace(/\D/g, "")}` : null;
+    const postalCode = fiscal.postalCode;
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+      throw new BadRequestException("Informe um e-mail válido.");
+    }
+    if (phone && !/^\+[1-9]\d{7,14}$/.test(phone)) {
+      throw new BadRequestException(
+        "Informe o telefone no padrão internacional.",
+      );
+    }
+    if (taxId) {
+      const duplicate = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1
+            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$2
+          LIMIT 1`,
+        actor.companyId,
+        taxId,
+      );
+      if (duplicate[0]) {
+        throw new BadRequestException(
+          "Este cliente já está cadastrado. Solicite à equipe Bispo a vinculação ao seu acesso.",
+        );
+      }
+    }
+    const customerId = randomUUID();
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "Customer"
+          (id,"companyId",name,"legalName","tradeName","taxId",segment,email,phone,"postalCode",
+           address,"addressNumber","addressComplement",district,city,state,"stateRegistration","stateRegistrationType",
+           "paymentTerms",active,"creditStatus","creditLimit","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'À vista',true,'NOT_ANALYZED',0,NOW(),NOW())`,
+        customerId,
+        actor.companyId,
+        name,
+        fiscal.legalName || null,
+        String(body.tradeName ?? "").trim() || null,
+        taxId || null,
+        String(body.segment ?? "B2B").trim() || "B2B",
+        email,
+        phone,
+        postalCode,
+        fiscal.address,
+        fiscal.addressNumber,
+        fiscal.addressComplement || null,
+        fiscal.district,
+        fiscal.city,
+        fiscal.state,
+        fiscal.stateRegistration || null,
+        fiscal.stateRegistrationType,
+      );
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "StorefrontPartnerCustomer" ("partnerId","customerId","createdAt")
+         VALUES ($1,$2,NOW())`,
+        partner.id,
+        customerId,
+      );
+    });
+    return { id: customerId, name, tradeName: body.tradeName || null };
+  }
+
+  @Get("customers/:customerId/visits")
+  async customerVisits(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanManageCustomerPortfolio(partner);
+    await this.assertCustomer(partner, actor.companyId, customerId);
+    return this.database.$queryRawUnsafe<any[]>(
+      `SELECT v.id,v."customerId",v."storefrontPartnerId",v."recordedByName",v."visitAt",
+              v."contactName",v.purpose,v.outcome,v.facts,v."nextAction",v."nextActionAt",
+              v."createdAt",c.name AS "customerName",c."tradeName" AS "customerTradeName"
+         FROM "CustomerVisit" v
+         JOIN "Customer" c ON c.id=v."customerId" AND c."companyId"=v."companyId"
+        WHERE v."companyId"=$1 AND v."customerId"=$2
+        ORDER BY v."visitAt" DESC,v."createdAt" DESC
+        LIMIT 100`,
+      actor.companyId,
+      customerId,
+    );
+  }
+
+  @Post("customers/:customerId/visits")
+  async createCustomerVisit(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanManageCustomerPortfolio(partner);
+    await this.assertCustomer(partner, actor.companyId, customerId);
+
+    const visitAt = new Date(String(body.visitAt ?? ""));
+    if (Number.isNaN(visitAt.getTime())) {
+      throw new BadRequestException("Informe a data e a hora da visita.");
+    }
+    const purpose = String(body.purpose ?? "").trim();
+    const outcome = String(body.outcome ?? "").trim();
+    const facts = String(body.facts ?? "").trim();
+    if (!purpose)
+      throw new BadRequestException("Informe o objetivo da visita.");
+    if (!outcome)
+      throw new BadRequestException("Informe o resultado da visita.");
+    if (facts.length < 3) {
+      throw new BadRequestException(
+        "Registre os principais fatos que aconteceram na visita.",
+      );
+    }
+    const nextActionAtRaw = String(body.nextActionAt ?? "").trim();
+    const nextActionAt = nextActionAtRaw ? new Date(nextActionAtRaw) : null;
+    if (nextActionAt && Number.isNaN(nextActionAt.getTime())) {
+      throw new BadRequestException("A data da próxima ação é inválida.");
+    }
+    const visitId = randomUUID();
+    const recordedByName =
+      String(actor.name ?? "").trim() ||
+      String(partner.contactName ?? partner.name).trim() ||
+      "Vendedor";
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "CustomerVisit"
+        (id,"companyId","customerId","storefrontPartnerId","recordedByUserId","recordedByName",
+         "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,
+      visitId,
+      actor.companyId,
+      customerId,
+      partner.id,
+      actor.id ?? null,
+      recordedByName,
+      visitAt,
+      String(body.contactName ?? "").trim() || null,
+      purpose,
+      outcome,
+      facts,
+      String(body.nextAction ?? "").trim() || null,
+      nextActionAt,
+    );
+    return { id: visitId, ok: true };
+  }
+
+  @Post("customers/:customerId/credit-request")
+  async requestCustomerCredit(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    const customer = await this.assertCustomer(
+      partner,
+      actor.companyId,
+      customerId,
+    );
+    const pending = (
+      await this.database.$queryRawUnsafe<any[]>(
+        `SELECT EXISTS (
+           SELECT 1 FROM "CustomerCreditEvent" req
+            WHERE req."customerId"=$1 AND req."companyId"=$2 AND req."eventType"='REQUEST'
+              AND NOT EXISTS (
+                SELECT 1 FROM "CustomerCreditEvent" dec
+                 WHERE dec."customerId"=$1 AND dec."companyId"=$2 AND dec."eventType"='DECISION'
+                   AND dec."createdAt" > req."createdAt"
+              )
+         ) AS pending`,
+        customerId,
+        actor.companyId,
+      )
+    )[0]?.pending;
+    if (pending) {
+      throw new BadRequestException(
+        "Já existe uma solicitação de crédito aguardando decisão.",
+      );
+    }
+    const requestedLimit = Number(body.requestedLimit ?? 0);
+    if (!Number.isFinite(requestedLimit) || requestedLimit <= 0) {
+      throw new BadRequestException(
+        "Informe um limite de crédito solicitado maior que zero.",
+      );
+    }
+    const requestedTerms = String(body.requestedTerms ?? "").trim();
+    if (!requestedTerms) {
+      throw new BadRequestException(
+        "Informe a condição de pagamento solicitada.",
+      );
+    }
+    const monthlyVolume =
+      body.monthlyVolume === undefined || body.monthlyVolume === ""
+        ? null
+        : Number(body.monthlyVolume);
+    if (
+      monthlyVolume !== null &&
+      (!Number.isFinite(monthlyVolume) || monthlyVolume < 0)
+    ) {
+      throw new BadRequestException("Volume mensal estimado inválido.");
+    }
+    const rationale = String(body.rationale ?? "").trim();
+    if (!rationale) {
+      throw new BadRequestException(
+        "Informe a justificativa da solicitação de crédito.",
+      );
+    }
+    const keepsCurrentApproval = customer.creditStatus === "APPROVED";
+    await this.database.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `INSERT INTO "CustomerCreditEvent"
+          (id,"companyId","customerId","eventType","requestedLimit","requestedTerms","monthlyVolume",rationale,
+           "actorId","actorName","actorRole","createdAt")
+         VALUES ($1,$2,$3,'REQUEST',$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        randomUUID(),
+        actor.companyId,
+        customerId,
+        requestedLimit,
+        requestedTerms,
+        monthlyVolume,
+        rationale,
+        actor.id ?? null,
+        String(actor.name ?? partner.contactName ?? partner.name),
+        "VENDEDOR",
+      );
+      if (!keepsCurrentApproval) {
+        await transaction.$executeRawUnsafe(
+          `UPDATE "Customer" SET "creditStatus"='UNDER_REVIEW',"updatedAt"=NOW()
+            WHERE id=$1 AND "companyId"=$2`,
+          customerId,
+          actor.companyId,
+        );
+      }
+    });
+    return {
+      ok: true,
+      status: keepsCurrentApproval ? "APPROVED" : "UNDER_REVIEW",
+      creditReviewPending: true,
+    };
+  }
+
+  @Post("quote")
+  async quote(
+    @Req() request: { user?: PartnerActor },
+    @Body()
+    body: {
+      customerId?: string;
+      items?: Array<{ productVariantId?: string; quantity?: number }>;
+    },
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    const customerId = String(body.customerId ?? "").trim();
+    await this.assertCustomer(partner, actor.companyId, customerId);
+    const items = body.items ?? [];
+    if (!items.length)
+      throw new BadRequestException("Adicione ao menos um produto.");
+    const distributorCatalog =
+      partner.portalAccessLevel === "DISTRIBUTOR"
+        ? await this.distributorCatalog(actor.companyId, customerId)
+        : null;
+    const quoted = [];
+    let salesChannelId = "";
+    for (const item of items) {
+      const productVariantId = String(item.productVariantId ?? "").trim();
+      const quantity = Number(item.quantity ?? 0);
+      if (
+        !productVariantId ||
+        !Number.isSafeInteger(quantity) ||
+        quantity <= 0
+      ) {
+        throw new BadRequestException("Produto ou quantidade inválida.");
+      }
+      if (
+        distributorCatalog &&
+        !distributorCatalog.variantIds.has(productVariantId)
+      ) {
+        throw new BadRequestException(
+          "Produto não liberado na lista comercial deste distribuidor.",
+        );
+      }
+      const price = await this.resolvePrice(
+        actor.companyId,
+        customerId,
+        productVariantId,
+        partner.portalAccessLevel === "DISTRIBUTOR",
+      );
+      if (salesChannelId && salesChannelId !== price.salesChannelId) {
+        throw new BadRequestException(
+          "Os produtos precisam usar a mesma tabela comercial.",
+        );
+      }
+      salesChannelId = price.salesChannelId;
+      quoted.push({
+        productVariantId,
+        quantity,
+        ...price,
+        totalAmount: Math.round(price.unitPrice * quantity * 100) / 100,
+      });
+    }
+    return {
+      items: quoted,
+      totalAmount:
+        Math.round(
+          quoted.reduce((sum, item) => sum + item.totalAmount, 0) * 100,
+        ) / 100,
+    };
+  }
+
+  @Post("orders")
+  async createOrder(
+    @Req() request: { user?: PartnerActor },
+    @Body()
+    body: {
+      customerId?: string;
+      items?: Array<{
+        productVariantId?: string;
+        warehouseId?: string;
+        quantity?: number;
+      }>;
+      deliveryMode?: "PICKUP" | "CUSTOMER_CARRIER";
+      carrierName?: string;
+      expectedDeliveryDate?: string;
+      customerReference?: string;
+      notes?: string;
+    },
+  ) {
+    const { actor, partner } = await this.context(request);
+    this.assertCanCreateOrders(partner);
+    const customerId = String(body.customerId ?? "").trim();
+    await this.assertCustomer(partner, actor.companyId, customerId);
+    const items = body.items ?? [];
+    if (!items.length)
+      throw new BadRequestException("Adicione ao menos um produto.");
+    const distributorCatalog =
+      partner.portalAccessLevel === "DISTRIBUTOR"
+        ? await this.distributorCatalog(actor.companyId, customerId)
+        : null;
+    const options = distributorCatalog
+      ? {
+          variants: await this.distributorVariantOptions(
+            actor.companyId,
+            distributorCatalog.variantIds,
+          ),
+        }
+      : await this.salesOrders.options(actor.companyId);
+    const allowedVariants = new Map(
+      options.variants
+        .filter(
+          (variant) =>
+            !distributorCatalog ||
+            distributorCatalog.variantIds.has(
+              String(variant.productVariantId ?? ""),
+            ),
+        )
+        .map((variant) => [variant.productVariantId, variant]),
+    );
+    const pricedItems = [];
+    let salesChannelId = "";
+    for (const item of items) {
+      const productVariantId = String(item.productVariantId ?? "").trim();
+      const quantity = Number(item.quantity ?? 0);
+      const variant = allowedVariants.get(productVariantId);
+      if (!variant || !Number.isSafeInteger(quantity) || quantity <= 0) {
+        throw new BadRequestException("Produto ou quantidade inválida.");
+      }
+      const price = await this.resolvePrice(
+        actor.companyId,
+        customerId,
+        productVariantId,
+        partner.portalAccessLevel === "DISTRIBUTOR",
+      );
+      if (salesChannelId && salesChannelId !== price.salesChannelId) {
+        throw new BadRequestException(
+          "Os produtos precisam usar a mesma tabela comercial.",
+        );
+      }
+      salesChannelId = price.salesChannelId;
+      pricedItems.push({
+        productVariantId,
+        warehouseId: variant.warehouseId,
+        quantity,
+        unitPrice: price.unitPrice,
+        pricingSource: price.pricingSource,
+        baseProductPriceId: price.productPriceId,
+        customerProductPriceId: price.customerProductPriceId,
+        priceSnapshot: {
+          capturedAt: new Date().toISOString(),
+          source: price.pricingSource,
+          salesChannelId: price.salesChannelId,
+          salesChannelName: price.salesChannelName,
+          officialUnitPrice: price.unitPrice,
+        },
+      });
+    }
+    const deliveryMode =
+      body.deliveryMode === "CUSTOMER_CARRIER" ? "CUSTOMER_CARRIER" : "PICKUP";
+    const carrierName = String(body.carrierName ?? "").trim();
+    if (deliveryMode === "CUSTOMER_CARRIER" && !carrierName) {
+      throw new BadRequestException(
+        "Informe a transportadora escolhida pelo cliente.",
+      );
+    }
+    const orderNumber = await this.nextOrderNumber(actor.companyId);
+    const order = await this.salesOrders.create(actor.companyId, {
+      code: orderNumber,
+      orderNumber,
+      customerId,
+      salesChannelId,
+      freight: 0,
+      notes: [
+        `Criado no portal por ${partner.name}.`,
+        partner.portalAccessLevel === "DISTRIBUTOR"
+          ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
+          : "",
+        String(body.notes ?? "").trim(),
+      ]
+        .filter(Boolean)
+        .join(" "),
+      expectedDeliveryDate: body.expectedDeliveryDate || undefined,
+      items: pricedItems,
+    });
+    await this.database.$executeRawUnsafe(
+      `UPDATE "SalesOrder"
+          SET "createdByStorefrontPartnerId"=$2,"paymentType"='CASH',
+              "paymentTermsSnapshot"='À vista',"freightResponsibility"=$3,
+              "carrierName"=$4,"customerReference"=$5,"updatedAt"=NOW()
+        WHERE id=$1 AND "companyId"=$6`,
+      order.id,
+      partner.id,
+      deliveryMode,
+      carrierName || null,
+      String(body.customerReference ?? "").trim() || null,
+      actor.companyId,
+    );
+    return {
+      id: order.id,
+      code: orderNumber,
+      status: "DRAFT",
+      totalAmount: Number(order.totalAmount),
+      message:
+        partner.portalAccessLevel === "DISTRIBUTOR"
+          ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."
+          : "Pedido enviado para conferência da equipe Bispo.",
+    };
+  }
+}

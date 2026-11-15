@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -77,6 +78,10 @@ type IntegrationStatus = {
     connectedAt?: string | null;
     lastError?: string | null;
   };
+  actionRequired?: {
+    code: string;
+    message: string;
+  } | null;
 };
 type Session = { user?: { role?: string } };
 type Operator = {
@@ -152,8 +157,15 @@ export default function MarketplacesPage() {
     void load();
   }, [load]);
 
-  const connected = integration?.connection.status === "CONNECTED";
+  const requiresAuthorization =
+    integration?.actionRequired?.code === "ORDERS_PERMISSION_REQUIRED";
+  const connected =
+    integration?.connection.status === "CONNECTED" && !requiresAuthorization;
   const management = ["ADMIN", "EXECUTIVE"].includes(role);
+  const connectedChannelCount = dashboard.channels.filter(
+    (channel) => channel.connectionStatus === "CONNECTED",
+  ).length;
+  const pendingChannelCount = dashboard.channels.length - connectedChannelCount;
 
   const sync = async () => {
     setSyncing(true);
@@ -220,12 +232,12 @@ export default function MarketplacesPage() {
       <header className="mt-5 flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#087568]">
-            <Store size={14} /> BBOS Marketplaces
+            <Store size={14} /> BBOS Commerce
           </p>
-          <h1 className="mt-2 text-3xl font-bold">Gestão de marketplaces</h1>
+          <h1 className="mt-2 text-3xl font-bold">Gestão de canais de venda</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#626B69]">
-            Pedidos, anúncios, estoque, taxas e repasses em uma operação única —
-            com acesso controlado para parceiros externos.
+            Loja Bispo e marketplaces compartilham o estoque, com pedidos, taxas
+            e repasses separados por canal.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -246,7 +258,10 @@ export default function MarketplacesPage() {
               disabled={!integration?.configured}
               className="inline-flex items-center gap-2 rounded-xl bg-[#FFE600] px-4 py-3 text-xs font-extrabold text-[#2D3277] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Conectar Mercado Livre <ExternalLink size={14} />
+              {requiresAuthorization
+                ? "Reconectar Mercado Livre"
+                : "Conectar Mercado Livre"} {" "}
+              <ExternalLink size={14} />
             </button>
           ) : null}
         </div>
@@ -264,6 +279,16 @@ export default function MarketplacesPage() {
             O conector está pronto. Falta cadastrar no ambiente as credenciais
             do aplicativo Mercado Livre e a URL de retorno para liberar a
             autorização.
+          </span>
+        </div>
+      )}
+      {requiresAuthorization && (
+        <div className="mt-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
+          <AlertTriangle size={18} className="shrink-0" />
+          <span>
+            <strong>Mercado Livre exige nova autorização.</strong> {" "}
+            {integration?.actionRequired?.message} As vendas já notificadas
+            serão recuperadas automaticamente depois da reconexão.
           </span>
         </div>
       )}
@@ -292,8 +317,10 @@ export default function MarketplacesPage() {
         <Metric
           icon={AlertTriangle}
           label="Erros de sincronização"
-          value={String(dashboard.summary.errors)}
-          attention={dashboard.summary.errors > 0}
+          value={String(
+            dashboard.summary.errors + (requiresAuthorization ? 1 : 0),
+          )}
+          attention={dashboard.summary.errors > 0 || requiresAuthorization}
         />
       </section>
 
@@ -311,52 +338,101 @@ export default function MarketplacesPage() {
               e repasse.
             </p>
           </div>
-          <Badge tone={connected ? "success" : "warning"}>
-            {connected ? "Mercado Livre conectado" : "Conexão pendente"}
+          <Badge
+            tone={
+              loading || !dashboard.channels.length
+                ? "neutral"
+                : pendingChannelCount
+                  ? "warning"
+                  : "success"
+            }
+          >
+            {loading
+              ? "Carregando canais"
+              : channelConnectionSummary(
+                  connectedChannelCount,
+                  pendingChannelCount,
+                )}
           </Badge>
         </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {dashboard.channels.map((channel) => (
-            <Card key={channel.id} className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <span
-                  className={`grid size-11 place-items-center rounded-2xl ${channel.platformCode === "MERCADO_LIVRE" ? "bg-[#FFE600] text-[#2D3277]" : "bg-[#F0F2F1] text-[#315D55]"}`}
-                >
-                  <Store size={19} />
-                </span>
-                <Badge
-                  tone={
-                    channel.connectionStatus === "CONNECTED"
-                      ? "success"
-                      : "neutral"
-                  }
-                >
-                  {statusLabel(channel.connectionStatus)}
-                </Badge>
-              </div>
-              <h3 className="mt-4 text-base font-bold">{channel.name}</h3>
-              <p className="mt-1 text-[10px] text-[#7A8381]">
-                {channel.lastSyncedAt
-                  ? `Atualizado ${dateTime(channel.lastSyncedAt)}`
-                  : "Ainda sem sincronização"}
-              </p>
-              <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[#F7F8F6] p-3">
-                <SmallMetric label="Pedidos" value={String(channel.orders)} />
-                <SmallMetric
-                  label="Pendentes"
-                  value={String(channel.pending)}
-                />
-                <SmallMetric label="Taxas" value={money.format(channel.fees)} />
-                <SmallMetric
-                  label="Líquido"
-                  value={money.format(channel.net)}
-                />
-              </div>
-            </Card>
-          ))}
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {dashboard.channels.map((channel) => {
+            const isBispoStore = channel.platformCode === "BISPO_STORE";
+            const channelNeedsAuthorization =
+              channel.platformCode === "MERCADO_LIVRE" &&
+              requiresAuthorization;
+
+            return (
+              <Card
+                key={channel.id}
+                className={
+                  isBispoStore ? "border-[#C8DCD6] bg-[#FBFDFC] p-5" : "p-5"
+                }
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span
+                    className={`grid size-11 place-items-center overflow-hidden rounded-2xl ${isBispoStore ? "relative bg-[#14201D] text-white" : channel.platformCode === "MERCADO_LIVRE" ? "bg-[#FFE600] text-[#2D3277]" : "bg-[#F0F2F1] text-[#315D55]"}`}
+                  >
+                    {isBispoStore ? (
+                      <Image
+                        src="/brand/logo/bispo-seal-black.jpg"
+                        alt=""
+                        width={613}
+                        height={613}
+                        aria-hidden="true"
+                        className="absolute left-1/2 top-1/2 size-[76px] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover invert"
+                      />
+                    ) : (
+                      <Store size={19} />
+                    )}
+                  </span>
+                  <Badge
+                    tone={
+                      channelNeedsAuthorization
+                        ? "warning"
+                        : channel.connectionStatus === "CONNECTED"
+                        ? "success"
+                        : "neutral"
+                    }
+                  >
+                    {channelNeedsAuthorization
+                      ? "Ação necessária"
+                      : statusLabel(channel.connectionStatus)}
+                  </Badge>
+                </div>
+                <h3 className="mt-4 text-base font-bold">
+                  {isBispoStore ? "Loja Bispo" : channel.name}
+                </h3>
+                <p className="mt-1 min-h-8 text-[10px] leading-4 text-[#7A8381]">
+                  {isBispoStore
+                    ? "Canal próprio · integrado diretamente ao BBOS"
+                    : channelNeedsAuthorization
+                      ? "Reconecte para liberar a leitura das vendas"
+                    : channel.lastSyncedAt
+                      ? `Atualizado ${dateTime(channel.lastSyncedAt)}`
+                      : "Ainda sem sincronização"}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[#F7F8F6] p-3">
+                  <SmallMetric label="Pedidos" value={String(channel.orders)} />
+                  <SmallMetric
+                    label="Pendentes"
+                    value={String(channel.pending)}
+                  />
+                  <SmallMetric
+                    label="Taxas"
+                    value={money.format(channel.fees)}
+                  />
+                  <SmallMetric
+                    label="Líquido"
+                    value={money.format(channel.net)}
+                  />
+                </div>
+              </Card>
+            );
+          })}
           {!dashboard.channels.length && !loading && (
             <p className="text-xs text-[#7A8381]">
-              Nenhum marketplace disponível para este acesso.
+              Nenhum canal de venda disponível para este acesso.
             </p>
           )}
         </div>
@@ -579,11 +655,13 @@ export default function MarketplacesPage() {
                 className="mt-1 block w-full rounded-xl border border-[#DDE6E3] px-3 py-2.5 text-xs font-semibold normal-case tracking-normal"
               >
                 <option value="">Selecione</option>
-                {dashboard.channels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    {channel.name}
-                  </option>
-                ))}
+                {dashboard.channels
+                  .filter((channel) => channel.platformCode !== "BISPO_STORE")
+                  .map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </option>
+                  ))}
               </select>
             </label>
             <button
@@ -669,6 +747,13 @@ function statusLabel(status: string) {
       } as Record<string, string>
     )[status] ?? status
   );
+}
+function channelConnectionSummary(connected: number, pending: number) {
+  if (!connected && !pending) return "Nenhum canal configurado";
+  if (!pending) {
+    return `${connected} canal${connected === 1 ? "" : "is"} conectado${connected === 1 ? "" : "s"}`;
+  }
+  return `${connected} conectado${connected === 1 ? "" : "s"} · ${pending} pendente${pending === 1 ? "" : "s"}`;
 }
 function inboxLabel(status: string) {
   return (

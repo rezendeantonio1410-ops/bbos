@@ -11,7 +11,9 @@ const preferredPurposeOrder = [
 ];
 
 export function orderPurposeKey(value: string | null | undefined) {
-  return String(value ?? "").trim().toLocaleLowerCase("pt-BR");
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
 }
 
 export function listOrderPurposes<T extends SegmentedCustomer>(customers: T[]) {

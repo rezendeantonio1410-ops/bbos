@@ -11,14 +11,10 @@ import layers from "./layers.module.css";
 import brand from "./brand-review.module.css";
 import storyNav from "./story-navigation.module.css";
 import premium from "./premium-overrides.module.css";
-import caderno from "./caderno-teaser.module.css";
 import ScrollToTopOnLoad from "./ScrollToTopOnLoad";
 import EditorialHero from "./EditorialHero";
-import CoffeeLineExplorer from "./CoffeeLineExplorer";
-import MobileStoreMenu from "./MobileStoreMenu";
 import ProductDetails, { type ProductStory } from "./ProductDetails";
 import { alexandreMicrolot } from "./microlots";
-import { realProductImages } from "./real-product-images";
 import { storefrontCommerce } from "./storefront-catalog";
 import { loadStorefrontImages } from "@/lib/storefront-images";
 import { loadStorefrontMedia } from "@/lib/storefront-media";
@@ -34,14 +30,14 @@ const products = [
     line: "GOURMET",
     notes: "Macio · Doce · Fácil",
     ...storefrontCommerce("essencial"),
-    tone: "#C39A24",
-    image: realProductImages.Essencial,
-    tag: "preparo simples",
+    tone: "#E9BB00",
+    image: "/brand/products/essencial-treated.webp",
+    tag: "para todo dia",
     story: {
       promise:
-        "Macio, doce e equilibrado, já moído para preparar com facilidade.",
+        "Um café fácil de gostar: macio, doce e equilibrado para acompanhar a rotina sem cansar o paladar.",
       description:
-        "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. Uma escolha segura para quem prefere uma xícara macia e simplicidade bem-feita.",
+        "A doçura aparece com delicadeza e o corpo é leve o bastante para mais de uma xícara. É uma escolha segura para quem está começando no café especial ou quer simplicidade bem-feita todos os dias.",
       founderNote:
         "Escolhemos o Essencial para ser aquela xícara honesta e confortável que funciona de manhã, à tarde e com diferentes preparos.",
       bestFor: "rotina, café da manhã e quem prefere uma xícara macia",
@@ -59,8 +55,8 @@ const products = [
     line: "GOURMET",
     notes: "Corpo · Presença · Limpeza",
     ...storefrontCommerce("intenso"),
-    tone: "#C39A24",
-    image: realProductImages.Intenso,
+    tone: "#E9BB00",
+    image: "/brand/products/intenso-treated.webp",
     tag: "mais corpo",
     story: {
       promise:
@@ -84,8 +80,8 @@ const products = [
     line: "CLÁSSICOS",
     notes: "Caramelo · Chocolate · Equilíbrio",
     ...storefrontCommerce("caramelo"),
-    tone: "#C86424",
-    image: realProductImages.Caramelo,
+    tone: "#F96D01",
+    image: "/brand/products/caramelo-treated.webp",
     tag: "conforto",
     story: {
       promise:
@@ -109,8 +105,8 @@ const products = [
     line: "CLÁSSICOS",
     notes: "Mascavo · Doce de leite · Alfajor",
     ...storefrontCommerce("doce-de-leite"),
-    tone: "#C86424",
-    image: realProductImages["Doce de Leite"],
+    tone: "#F96D01",
+    image: "/brand/products/doce-de-leite-treated.webp",
     tag: "doçura",
     story: {
       promise:
@@ -134,8 +130,8 @@ const products = [
     line: "CLÁSSICOS",
     notes: "Cítrico · Doce · Fresco",
     ...storefrontCommerce("tangerina"),
-    tone: "#C86424",
-    image: realProductImages.Tangerina,
+    tone: "#F96D01",
+    image: null,
     tag: "frescor",
     story: {
       promise:
@@ -160,7 +156,7 @@ const products = [
     notes: "Frutado · Complexo · Evolutivo",
     ...storefrontCommerce("singular"),
     tone: "#5C7D5F",
-    image: realProductImages.Singular,
+    image: "/brand/products/singular-treated.webp",
     tag: "descoberta",
     story: {
       promise:
@@ -185,7 +181,7 @@ const products = [
     notes: "Rapadura · Caramelo · Doçura profunda",
     ...storefrontCommerce("sublime"),
     tone: "#5C7D5F",
-    image: realProductImages.Sublime,
+    image: "/brand/products/sublime-treated.webp",
     tag: "experiência",
     story: {
       promise:
@@ -208,28 +204,28 @@ const products = [
 ];
 const collections = [
   {
+    name: "Gourmet",
+    eyebrow: "Para começar",
+    copy: "Perfis macios e doces para a xícara de todos os dias.",
+    tone: "#E9BB00",
+  },
+  {
     name: "Clássicos",
-    eyebrow: "O café para todos os dias",
-    copy: "Doçura, corpo e equilíbrio na medida certa.",
-    tone: "#C86424",
+    eyebrow: "A linha de conforto",
+    copy: "Doçura reconhecível, corpo e equilíbrio.",
+    tone: "#F96D01",
   },
   {
     name: "Épicos",
-    eyebrow: "Para descobrir novas camadas",
-    copy: "Aromas marcantes e sabores que evoluem na xícara.",
+    eyebrow: "Para explorar",
+    copy: "Lotes de maior complexidade e leitura sensorial mais longa.",
     tone: "#5C7D5F",
   },
   {
     name: "Raros",
-    eyebrow: "Safras que não se repetem",
-    copy: "Microlotes singulares, selecionados em volumes limitados.",
-    tone: "#8C3E37",
-  },
-  {
-    name: "Gourmet",
-    eyebrow: "O cuidado Bispo, já moído",
-    copy: "Maciez e equilíbrio para preparar com facilidade.",
-    tone: "#C39A24",
+    eyebrow: "Edições limitadas",
+    copy: "Microlotes selecionados em volumes pequenos e safras específicas.",
+    tone: "#FF0000",
   },
 ] as const;
 
@@ -239,58 +235,12 @@ const collectionId = (name: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()}`;
 
-const preparationProof = (product: {
-  line: string;
-  priceCents: number;
-  weight: string;
-}) => {
-  if (product.line === "GOURMET") return null;
-
-  const weightGrams = Number.parseInt(product.weight, 10);
-  const preparations = weightGrams / 20;
-  const pricePerPreparation = product.priceCents / 100 / preparations;
-  const preparationCount = Number.isInteger(preparations)
-    ? `${preparations} preparos de 20 g`
-    : "12 a 13 preparos de 20 g";
-
-  return `${preparationCount} · ≈ ${pricePerPreparation.toLocaleString(
-    "pt-BR",
-    {
-      style: "currency",
-      currency: "BRL",
-    },
-  )} cada`;
-};
-
-const catalogRituals: Record<
-  string,
-  {
-    src: string;
-    alt: string;
-    label: string;
-    objectPosition?: string;
-  }
-> = {
-  Sublime: {
-    src: "/brand/editorial/real/sublime-ritual.jpg",
-    alt: "Cena de preparo e ritual do café Sublime",
-    label: "PAUSA SEM PRESSA",
-    objectPosition: "center",
-  },
-  Raro: {
-    src: "/brand/editorial/real/raro-rastreabilidade.jpg",
-    alt: "Verso da embalagem Bispo Raro com a rastreabilidade do microlote",
-    label: "ORIGEM IDENTIFICADA",
-    objectPosition: "center 56%",
-  },
-};
-
 export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Cafés especiais brasileiros",
   description:
-    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e seleção de Suzi e José.",
+    "Escolha por perfil sensorial entre cafés especiais brasileiros com torra própria, origem transparente e curadoria de José e Suzi.",
   alternates: { canonical: "/loja" },
   openGraph: {
     title: "Bispo Coffees — cafés escolhidos, não apenas vendidos",
@@ -305,27 +255,24 @@ export default async function LojaPage() {
   ]);
   const catalogProducts = products.map((product) => ({
     ...product,
-    image:
-      realProductImages[product.name] ??
-      storefrontImages[product.name]?.primary ??
-      product.image,
+    image: storefrontImages[product.name]?.primary ?? product.image,
   }));
   const featuredGuidance: Record<string, { eyebrow: string; reason: string }> =
     {
+      Essencial: {
+        eyebrow: "PARA TODO DIA",
+        reason: "Macio e equilibrado para começar pelo conforto.",
+      },
       Caramelo: {
         eyebrow: "DOÇURA RECONHECÍVEL",
-        reason: "Doce e acolhedor, para a xícara que vira ritual.",
+        reason: "Caramelo e chocolate em uma xícara acolhedora.",
       },
       Sublime: {
         eyebrow: "MAIS PROFUNDIDADE",
-        reason: "Denso e contemplativo, para beber sem pressa.",
-      },
-      Singular: {
-        eyebrow: "NOVAS CAMADAS",
-        reason: "Frutado e evolutivo, para transformar a pausa em descoberta.",
+        reason: "Uma experiência longa, densa e contemplativa.",
       },
     };
-  const featuredProducts = ["Caramelo", "Singular", "Sublime"]
+  const featuredProducts = ["Essencial", "Caramelo", "Sublime"]
     .map((name) => catalogProducts.find((product) => product.name === name))
     .filter((product): product is (typeof catalogProducts)[number] =>
       Boolean(product),
@@ -355,7 +302,7 @@ export default async function LojaPage() {
             />
           </a>
           <nav
-            className={`${styles.nav} ${storyNav.nav} ${premium.desktopNav}`}
+            className={`${styles.nav} ${storyNav.nav}`}
             aria-label="Navegação principal"
           >
             <a href="#cafes">Cafés</a>
@@ -380,11 +327,13 @@ export default async function LojaPage() {
               <UserRound aria-hidden="true" />
             </Link>
             <CartButton />
-            <MobileStoreMenu />
           </div>
         </header>
 
-        <EditorialHero productImages={storefrontImages} />
+        <EditorialHero
+          productImages={storefrontImages}
+          mediaSlots={mediaLibrary.slots}
+        />
 
         <section
           className={premium.conversionShelf}
@@ -392,12 +341,14 @@ export default async function LojaPage() {
         >
           <header className={premium.conversionIntro}>
             <div>
-              <small>ESCOLHA PELO DESEJO</small>
-              <h2 id="comece-por-aqui">Um café para chamar de seu.</h2>
+              <small>COMECE POR AQUI</small>
+              <h2 id="comece-por-aqui">
+                Três escolhas para comprar sem dúvida.
+              </h2>
             </div>
             <p>
-              Três maneiras de desejar a próxima xícara — do conforto de todos
-              os dias à profundidade que pede tempo.
+              Escolha pelo momento. A linha Gourmet chega moída; as demais
+              linhas são enviadas em grãos.
             </p>
           </header>
           <div className={premium.featuredGrid}>
@@ -432,11 +383,6 @@ export default async function LojaPage() {
                     <h3>{product.name}</h3>
                     <p>{guidance.reason}</p>
                     <span>{product.notes}</span>
-                    {preparationProof(product) ? (
-                      <small className={premium.preparationProof}>
-                        {preparationProof(product)}
-                      </small>
-                    ) : null}
                     <div>
                       <strong>
                         {product.price} <small>· {product.weight}</small>
@@ -453,7 +399,7 @@ export default async function LojaPage() {
                           story: product.story,
                         }}
                       >
-                        Levar {product.name} →
+                        Escolher {product.name} →
                       </AddToCartButton>
                     </div>
                   </div>
@@ -463,14 +409,16 @@ export default async function LojaPage() {
           </div>
           <div className={premium.purchaseAssurances}>
             <span>
-              <b>Escolhido por Suzi e José</b>
-              <small>Origem, prova e critério em cada perfil</small>
+              <b>Formato definido por linha</b>
+              <small>Gourmet moído · demais em grãos</small>
             </span>
             <span>
-              <b>Valor que chega à xícara</b>
-              <small>100% Arábica · torra própria · até 25 preparos</small>
+              <b>Receber regularmente</b>
+              <small>Sem cobrança automática</small>
             </span>
-            <Link href="/loja/sobre">Conheça quem escolhe com você →</Link>
+            <Link href="/loja/descobrir">
+              Ainda em dúvida? Descubra o seu →
+            </Link>
           </div>
         </section>
 
@@ -478,241 +426,183 @@ export default async function LojaPage() {
           id="cafes"
           className={`${styles.productsSection} ${journey.productsSection}`}
         >
-          <div className={`${styles.sectionHeader} ${layers.catalogPageIntro}`}>
+          <div className={styles.sectionHeader}>
             <div>
-              <small>QUATRO LINHAS</small>
-              <h2>Encontre o seu Bispo.</h2>
+              <small>ESCOLHA O SEU CAFÉ</small>
+              <h2>Escolha pelo perfil.</h2>
             </div>
             <p>
-              Da xícara equilibrada às experiências mais raras, cada linha
-              traduz uma maneira de viver o café.
+              Compare os perfis e escolha sua próxima xícara. Se ainda estiver
+              em dúvida, use o guia sensorial.
             </p>
           </div>
-          <div id="camadas" className={layers.lineExplorerAnchor}>
-            <CoffeeLineExplorer
-              lines={collections.map((collection) => ({
-                name: collection.name,
-                slug: collectionId(collection.name).replace("camada-", ""),
-                eyebrow: collection.eyebrow,
-                copy: collection.copy,
-                format: collection.name === "Gourmet" ? "Moído" : "Em grãos",
-                tone: collection.tone,
-              }))}
-            >
-              {collections.map((collection) => {
-                const collectionProducts = catalogProducts.filter(
-                  (product) => product.line === collection.name.toUpperCase(),
-                );
+          <nav
+            id="camadas"
+            className={layers.filter}
+            aria-label="Linhas de cafés"
+          >
+            {collections.map((collection) => (
+              <a
+                key={collection.name}
+                href={`#${collectionId(collection.name)}`}
+              >
+                {collection.name}
+              </a>
+            ))}
+          </nav>
+          {collections.map((collection) => {
+            const collectionProducts = catalogProducts.filter(
+              (product) => product.line === collection.name.toUpperCase(),
+            );
 
-                return (
-                  <div
-                    key={collection.name}
-                    id={collectionId(collection.name)}
-                    className={layers.catalogLayer}
-                    style={
-                      { "--layer-tone": collection.tone } as React.CSSProperties
-                    }
-                  >
-                    <header className={layers.catalogHeader}>
-                      <div>
-                        <small>{collection.eyebrow}</small>
-                        <h3>{collection.name}</h3>
-                      </div>
-                      <p>{collection.copy}</p>
-                    </header>
-                    {collectionProducts.length ? (
-                      <div
-                        className={`${styles.productGrid} ${layers.mobileProductGrid} ${
-                          collectionProducts.length === 1
-                            ? layers.oneProduct
-                            : collectionProducts.length === 2
-                              ? layers.twoProducts
-                              : ""
-                        }`}
-                      >
-                        {collectionProducts.map((p) => {
-                          const ritual = catalogRituals[p.name];
-
-                          return (
-                            <article
-                              key={p.name}
-                              id={p.name.toLowerCase().replaceAll(" ", "-")}
-                              className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard} ${layers.mobileProductCard}`}
-                              style={
-                                { "--tone": p.tone } as React.CSSProperties
-                              }
-                            >
-                              <div
-                                className={`${styles.productVisual} ${ritual ? premium.ritualVisual : ""}`}
-                                data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
-                              >
-                                {ritual ? (
-                                  <>
-                                    <img
-                                      src={ritual.src}
-                                      alt={ritual.alt}
-                                      className={premium.ritualScene}
-                                      style={{
-                                        objectPosition: ritual.objectPosition,
-                                      }}
-                                      decoding="async"
-                                    />
-                                    {p.image ? (
-                                      <span
-                                        className={premium.ritualPack}
-                                        aria-hidden="true"
-                                      >
-                                        <img
-                                          src={p.image}
-                                          alt=""
-                                          decoding="async"
-                                        />
-                                      </span>
-                                    ) : null}
-                                    <span className={premium.ritualLabel}>
-                                      {ritual.label}
-                                    </span>
-                                  </>
-                                ) : p.image ? (
-                                  <img
-                                    src={p.image}
-                                    alt={`Embalagem Bispo ${p.name}`}
-                                    className={`${styles.productPhoto} ${review.editorialProductPhoto} ${p.name === "Raro" ? layers.rareProductPhoto : ""}`}
-                                    decoding="async"
-                                  />
-                                ) : p.name === "Raro" ? (
-                                  <div
-                                    className={tight.catalogFallback}
-                                    aria-label="Foto do microlote Raro em atualização"
-                                  >
-                                    <span>MICROLOTE</span>
-                                    <b>Raro</b>
-                                    <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
-                                  </div>
-                                ) : (
-                                  <div className={tight.catalogFallback}>
-                                    <span>BISPO</span>
-                                    <b>{p.name}</b>
-                                    <small>SAFRA ATUAL · {p.weight}</small>
-                                  </div>
-                                )}
-                                <small>{p.tag}</small>
-                              </div>
-                              <div
-                                className={`${styles.productMeta} ${premium.catalogMeta}`}
-                              >
-                                <p>{p.line}</p>
-                                <h3>{p.name}</h3>
-                                <span>{p.notes}</span>
-                                {p.name === "Raro" ? (
-                                  <dl className={premium.rareProofs}>
-                                    <div>
-                                      <dt>Produtor</dt>
-                                      <dd>Carlos Alexandre</dd>
-                                    </div>
-                                    <div>
-                                      <dt>Origem</dt>
-                                      <dd>São Jerônimo · 990 m</dd>
-                                    </div>
-                                    <div>
-                                      <dt>Seleção</dt>
-                                      <dd>Suzi + José · 86,5 pts</dd>
-                                    </div>
-                                  </dl>
-                                ) : (
-                                  <small className={premium.selectionProof}>
-                                    SELEÇÃO BISPO · SUZI + JOSÉ
-                                  </small>
-                                )}
-                                <ProductDetails
-                                  product={{
-                                    id: p.id,
-                                    name: p.name,
-                                    line: p.line,
-                                    notes: p.notes,
-                                    priceCents: p.priceCents,
-                                    weightGrams: p.weightGrams,
-                                    image: p.image,
-                                    priceLabel: p.price,
-                                    weightLabel: p.weight,
-                                    tag: p.tag,
-                                    tone: p.tone,
-                                  }}
-                                  story={{
-                                    ...p.story,
-                                    proofImages: (
-                                      mediaLibrary.productProofs[
-                                        p.name === "Raro"
-                                          ? "raros"
-                                          : p.name
-                                              .toLowerCase()
-                                              .replaceAll(" ", "-")
-                                      ] ?? []
-                                    ).map((photo) => ({
-                                      src: photo.url,
-                                      alt: photo.altText,
-                                      caption: photo.caption ?? photo.title,
-                                    })),
-                                  }}
-                                  detailHref={
-                                    p.name === "Raro"
-                                      ? `/loja/cafes/${alexandreMicrolot.slug}`
-                                      : undefined
-                                  }
-                                  detailLabel={
-                                    p.name === "Raro"
-                                      ? "Conhecer este lote →"
-                                      : "Ver detalhes →"
-                                  }
-                                />
-                                {preparationProof(p) ? (
-                                  <small className={premium.preparationProof}>
-                                    {preparationProof(p)}
-                                  </small>
-                                ) : null}
-                                <div
-                                  className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
-                                >
-                                  <strong>
-                                    {p.price} <small>· {p.weight}</small>
-                                  </strong>
-                                  <AddToCartButton
-                                    product={{
-                                      id: p.id,
-                                      name: p.name,
-                                      line: p.line,
-                                      notes: p.notes,
-                                      priceCents: p.priceCents,
-                                      weightGrams: p.weightGrams,
-                                      image: p.image,
-                                      story: p.story,
-                                    }}
-                                  >
-                                    Adicionar à sacola
-                                  </AddToCartButton>
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className={layers.rareNote}>
-                        <span>EDIÇÕES LIMITADAS · 250 G</span>
-                        <strong>
-                          Os Raros aparecem quando a safra revela algo
-                          extraordinário.
-                        </strong>
-                        <Link href="/loja/descobrir">
-                          Descobrir meu perfil →
-                        </Link>
-                      </div>
-                    )}
+            return (
+              <div
+                key={collection.name}
+                id={collectionId(collection.name)}
+                className={layers.catalogLayer}
+                style={
+                  { "--layer-tone": collection.tone } as React.CSSProperties
+                }
+              >
+                <header className={layers.catalogHeader}>
+                  <div>
+                    <small>{collection.eyebrow}</small>
+                    <h3>{collection.name}</h3>
                   </div>
-                );
-              })}
-            </CoffeeLineExplorer>
-          </div>
+                  <p>{collection.copy}</p>
+                </header>
+                {collectionProducts.length ? (
+                  <div
+                    className={`${styles.productGrid} ${
+                      collectionProducts.length === 1
+                        ? layers.oneProduct
+                        : collectionProducts.length === 2
+                          ? layers.twoProducts
+                          : ""
+                    }`}
+                  >
+                    {collectionProducts.map((p) => (
+                      <article
+                        key={p.name}
+                        id={p.name.toLowerCase().replaceAll(" ", "-")}
+                        className={`${styles.productCard} ${journey.productCard} ${premium.catalogCard}`}
+                        style={{ "--tone": p.tone } as React.CSSProperties}
+                      >
+                        <div
+                          className={styles.productVisual}
+                          data-photo-slot={`product-${p.name.toLowerCase().replaceAll(" ", "-")}`}
+                        >
+                          {p.image ? (
+                            <img
+                              src={p.image}
+                              alt={
+                                p.name === "Raro"
+                                  ? "Cerejas maduras do microlote Raro"
+                                  : `Embalagem Bispo ${p.name}`
+                              }
+                              className={`${styles.productPhoto} ${review.editorialProductPhoto}`}
+                            />
+                          ) : p.name === "Raro" ? (
+                            <div
+                              className={tight.catalogFallback}
+                              aria-label="Foto do microlote Raro em atualização"
+                            >
+                              <span>MICROLOTE</span>
+                              <b>Raro</b>
+                              <small>FOTO DO LOTE EM ATUALIZAÇÃO</small>
+                            </div>
+                          ) : (
+                            <div className={tight.catalogFallback}>
+                              <span>BISPO</span>
+                              <b>{p.name}</b>
+                              <small>SAFRA ATUAL · {p.weight}</small>
+                            </div>
+                          )}
+                          <small>{p.tag}</small>
+                        </div>
+                        <div
+                          className={`${styles.productMeta} ${premium.catalogMeta}`}
+                        >
+                          <p>{p.line}</p>
+                          <h3>{p.name}</h3>
+                          <span>{p.notes}</span>
+                          <ProductDetails
+                            product={{
+                              id: p.id,
+                              name: p.name,
+                              line: p.line,
+                              notes: p.notes,
+                              priceCents: p.priceCents,
+                              weightGrams: p.weightGrams,
+                              image: p.image,
+                              priceLabel: p.price,
+                              weightLabel: p.weight,
+                              tag: p.tag,
+                              tone: p.tone,
+                            }}
+                            story={{
+                              ...p.story,
+                              proofImages: (
+                                mediaLibrary.productProofs[
+                                  p.name === "Raro"
+                                    ? "raros"
+                                    : p.name.toLowerCase().replaceAll(" ", "-")
+                                ] ?? []
+                              ).map((photo) => ({
+                                src: photo.url,
+                                alt: photo.altText,
+                                caption: photo.caption ?? photo.title,
+                              })),
+                            }}
+                            detailHref={
+                              p.name === "Raro"
+                                ? `/loja/cafes/${alexandreMicrolot.slug}`
+                                : undefined
+                            }
+                            detailLabel={
+                              p.name === "Raro"
+                                ? "Conhecer este lote →"
+                                : undefined
+                            }
+                          />
+                          <div
+                            className={`${styles.buyRow} ${premium.buyRow} ${premium.catalogBuyRow}`}
+                          >
+                            <strong>
+                              {p.price} <small>· {p.weight}</small>
+                            </strong>
+                            <AddToCartButton
+                              product={{
+                                id: p.id,
+                                name: p.name,
+                                line: p.line,
+                                notes: p.notes,
+                                priceCents: p.priceCents,
+                                weightGrams: p.weightGrams,
+                                image: p.image,
+                                story: p.story,
+                              }}
+                            >
+                              Adicionar à sacola
+                            </AddToCartButton>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={layers.rareNote}>
+                    <span>EDIÇÕES LIMITADAS · 250 G</span>
+                    <strong>
+                      Os Raros aparecem quando a safra revela algo
+                      extraordinário.
+                    </strong>
+                    <Link href="/loja/descobrir">Descobrir meu perfil →</Link>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <div className={`${styles.allProducts} ${premium.catalogEnd}`}>
             <Link href="/loja/descobrir">
               Não sabe qual escolher? Descubra o seu →
@@ -727,55 +617,45 @@ export default async function LojaPage() {
           <div className={founder.photos}>
             <figure className={founder.portrait}>
               <img
-                src="/brand/founders/suzi-ninov.jpg"
-                alt="Suzi Ninov avaliando um café em prova"
+                src={
+                  mediaLibrary.slots["founder.jose.portrait"]?.url ??
+                  "/brand/founders/jose-rezende.jpg"
+                }
+                alt={
+                  mediaLibrary.slots["founder.jose.portrait"]?.altText ??
+                  "José Rezende avaliando um café"
+                }
               />
-              <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
+              <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
             </figure>
             <figure className={founder.portrait}>
               <img
-                src="/brand/founders/jose-rezende.jpg"
-                alt="José Rezende avaliando o aroma de um café em prova"
+                src={
+                  mediaLibrary.slots["founder.suzi.portrait"]?.url ??
+                  "/brand/founders/suzi-ninov.jpg"
+                }
+                alt={
+                  mediaLibrary.slots["founder.suzi.portrait"]?.altText ??
+                  "Suzi Ninov avaliando um café"
+                }
               />
-              <figcaption>JOSÉ · ORIGEM E PROVA</figcaption>
+              <figcaption>SUZI · CRITÉRIO E CUIDADO</figcaption>
             </figure>
           </div>
           <div
             className={`${tight.foundersCopy} ${journey.foundersCopy} ${founder.copy}`}
           >
-            <small>QUEM ESTÁ POR TRÁS</small>
-            <h2>Café escolhido por quem vive o café.</h2>
+            <small>NOSSA HISTÓRIA</small>
+            <h2>Escolha construída na origem.</h2>
             <p className={founder.sharedStory}>
-              Duas histórias que começaram muito antes da Bispo se encontram
-              aqui. Suzi e José reúnem campo, produção, prova e torra para que
-              cada xícara chegue com identidade, constância e história.
+              A Bispo reúne experiência de campo, produção, prova, torra e
+              mercado para selecionar cafés com identidade e constância.
             </p>
             <div className={founder.actions}>
               <Link className={founder.primary} href="/loja/sobre">
-                Conhecer Suzi, José e a Bispo
+                Conhecer nossa história →
               </Link>
             </div>
-          </div>
-        </section>
-
-        <section
-          className={caderno.section}
-          aria-labelledby="caderno-home-title"
-        >
-          <div className={caderno.image}>
-            <Image
-              src="/brand/editorial/real/jose-suzi-prova.jpg"
-              alt="Suzi Ninov e José Rezende durante uma prova de cafés"
-              fill
-              sizes="(max-width: 760px) 100vw, 57vw"
-            />
-            <span>CENAS DE ORIGEM, PROVA E RITUAL</span>
-          </div>
-          <div className={caderno.copy}>
-            <small>CADERNO BISPO</small>
-            <h2 id="caderno-home-title">Do campo ao laboratório.</h2>
-            <p>Veja o que acontece antes de um café se tornar Bispo.</p>
-            <Link href="/loja/caderno">Abrir o Caderno →</Link>
           </div>
         </section>
 
@@ -801,7 +681,6 @@ export default async function LojaPage() {
             <Link href="/loja/descobrir">Descubra o seu café</Link>
             <Link href="/loja/sobre">Sobre a Bispo</Link>
             <Link href="/loja/origem">A geografia na xícara</Link>
-            <Link href="/loja/caderno">Caderno Bispo</Link>
           </div>
           <div className={styles.footerNav}>
             <strong>Comprar</strong>
@@ -814,9 +693,6 @@ export default async function LojaPage() {
             <Link href="/loja/termos-de-compra">Termos de compra</Link>
             <a href="mailto:pedidos@bispocoffees.com.br">
               pedidos@bispocoffees.com.br
-            </a>
-            <a href="https://bispocorp.com" target="_blank" rel="noreferrer">
-              Bispo Corp · B2B e exportação
             </a>
           </div>
           <div className={styles.footerBottom}>

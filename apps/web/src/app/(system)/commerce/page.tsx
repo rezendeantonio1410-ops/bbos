@@ -12,8 +12,9 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
+import { getApiBaseUrl } from "@/lib/api-url";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+const API = getApiBaseUrl();
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -283,7 +284,7 @@ export default function CommercePage() {
             href="/commerce/parceiros"
             className="rounded-xl border border-[#087568] px-4 py-2.5 text-xs font-bold text-[#087568]"
           >
-            Parceiros de venda
+            Parceiros de negócios
           </Link>
           <Link
             href="/commerce/cupons"

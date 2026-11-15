@@ -1,18 +1,19 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { CoffeeLotStatus, CuppingDecision, CuppingSessionStatus, Prisma, prisma } from "@bbos/database";
+import { CoffeeLotStatus, CuppingDecision, CuppingSessionStatus, Prisma, prisma, UserRole } from "@bbos/database";
 import { createHash, randomBytes } from "node:crypto";
 import * as QRCode from "qrcode";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import { CUPPING_ATTRIBUTES, scoreCuppingAttributes } from "./cupping-score";
+import { MobileNotificationService } from "./mobile-notification.service";
 
 const hashParticipantInvite = (token: string) => createHash("sha256").update(token).digest("hex");
 
 @Controller("cupping")
 export class CuppingController {
   private readonly database = prisma;
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService, private readonly mobileNotifications: MobileNotificationService) {}
 
   /** Issue a participant-scoped invite for the authenticated V1 flow. */
   @Post("sessions/:id/participants/:participantId/invite")
@@ -71,6 +72,19 @@ export class CuppingController {
       const extra = await this.database.greenCoffeeLabSample.findFirst({ where: { id: sampleId, receipt: { companyId: actor.companyId } } });
       if (extra) await this.database.cuppingSessionSample.create({ data: { sessionId: session.id, sourceType: "GREEN_COFFEE_LAB_SAMPLE", sourceId: extra.id, sampleId: extra.id, position: index + 2 } });
     }
+    const participantIds = [...new Set(body.participantIds ?? [])];
+    const notification = {
+      companyId: actor.companyId,
+      idempotencyKey: `cupping-session:${session.id}:opened`,
+      type: "CUPPING_SESSION_OPENED",
+      title: "Há uma prova esperando por você",
+      message: `${session.code} está pronta para avaliação.`,
+      href: `/cupping/mobile/session/${session.id}`,
+      entityType: "CUPPING_SESSION",
+      entityId: session.id,
+    };
+    if (participantIds.length) void this.mobileNotifications.queue({ ...notification, userIds: participantIds }).catch(() => undefined);
+    else void this.mobileNotifications.queueForRoles({ ...notification, roles: [UserRole.ADMIN, UserRole.EXECUTIVE] }).catch(() => undefined);
     return session;
   }
 

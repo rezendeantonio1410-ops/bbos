@@ -12,24 +12,64 @@ import {
   CreditCard,
   Eye,
   PackageCheck,
+  PackagePlus,
+  Pencil,
   Plus,
+  Printer,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Trash2,
+  Truck,
   X,
 } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
+import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
 import {
   filterCustomersByOrderPurpose,
   listOrderPurposes,
+  orderPurposeKey,
 } from "@/lib/order-purpose-filter";
+import {
+  hasInvalidSelectedOrderDraftLine,
+  isCompleteOrderDraftLine,
+} from "@/lib/order-draft-lines";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
-const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const formatPostalCode = (value: string) => value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
-const paymentOptions = ["7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "45 dias", "60 dias"];
+const money = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+const SAMPLE_FISCAL_PACKAGE_VALUE = 1;
+const itemQuantityLabel = (quantity: number, sample: boolean) =>
+  sample
+    ? `${quantity} ${quantity === 1 ? "pacote" : "pacotes"}`
+    : `${quantity} un.`;
+const presentationLabel = (grams: number) =>
+  grams >= 1000 ? `${grams / 1000} kg` : `${grams} g`;
+const formatPostalCode = (value: string) =>
+  value.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2");
+const formatPaymentDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+};
+const paymentOptions = [
+  "7 dias",
+  "14 dias",
+  "21 dias",
+  "28 dias",
+  "30 dias",
+  "45 dias",
+  "60 dias",
+];
 const freightLabels: Record<string, string> = {
   BISPO: "Frete negociado pela Bispo",
   CUSTOMER: "Cotação pela plataforma Bispo",
@@ -57,9 +97,19 @@ type Customer = {
   paymentTerms?: string | null;
   creditStatus?: "NOT_ANALYZED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
   creditLimit?: string | number;
+  fiscalReadiness?: { ready: boolean; issues: string[] };
 };
 
 type Broker = { id: string; name: string; tradeName?: string | null };
+
+type BusinessPartnerBroker = {
+  name: string;
+  tradeName?: string | null;
+  active: boolean;
+  isSalesBroker: boolean;
+  brokerId?: string | null;
+  brokerActive?: boolean | null;
+};
 
 type CustomerHealth = {
   creditStatus?: string;
@@ -68,11 +118,17 @@ type CustomerHealth = {
   financialHealth: {
     openReceivables: number;
     availableCredit: number;
+    overdueAmount: number;
+    overdueCount: number;
+    maxDaysOverdue: number;
   };
 };
 
 type Quote = {
   officialUnitPrice: number;
+  channelUnitPrice: number;
+  pricingSource: "CUSTOMER" | "CHANNEL";
+  currency: string;
   salesChannelName: string;
   salesChannelType: string;
   totalAmount: number;
@@ -111,6 +167,7 @@ type DraftOrderLine = {
   id: string;
   variantId: string;
   quantity: number;
+  discountAmount?: string;
 };
 
 type PackageBox = {
@@ -121,12 +178,16 @@ type PackageBox = {
   weightKg: string;
 };
 
-const randomId = () => typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+const randomId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
 
 const newDraftLine = (): DraftOrderLine => ({
   id: randomId(),
   variantId: "",
   quantity: 1,
+  discountAmount: "",
 });
 
 const newPackageBox = (source?: Partial<PackageBox>): PackageBox => ({
@@ -152,6 +213,7 @@ type Order = {
   id: string;
   code: string;
   orderNumber?: string;
+  orderType?: "COMMERCIAL" | "SAMPLE";
   status: string;
   totalAmount: string;
   freight?: string | number;
@@ -169,12 +231,30 @@ type Order = {
   customerReference?: string | null;
   incoterm?: string | null;
   incotermLocation?: string | null;
+  currency?: string | null;
+  customsDeclaredValue?: string | number | null;
   notes?: string | null;
   brokerId?: string | null;
   brokerCommissionMode?: string | null;
   brokerCommissionPercent?: string | number | null;
   brokerCommissionPerPackage?: string | number | null;
   brokerCommissionAmount?: string | number | null;
+  fiscalStatus?: string | null;
+  fiscalExternalId?: string | null;
+  fiscalNumber?: string | null;
+  salesChannel?: {
+    id: string;
+    code: string;
+    name: string;
+    type: string;
+    platformCode?: string | null;
+  } | null;
+  createdByStorefrontPartner?: {
+    id: string;
+    name: string;
+    tradeName?: string | null;
+    portalAccessLevel: string;
+  } | null;
   broker?: Broker | null;
   customer: Customer;
   items: OrderItem[];
@@ -185,15 +265,51 @@ type Order = {
     serviceName?: string | null;
     trackingCode?: string | null;
     authorizationCode?: string | null;
+    reexpeditionId?: string | null;
+    latestEventTitle?: string | null;
+    latestEventDetail?: string | null;
+    latestEventAt?: string | null;
     updatedAt: string;
   } | null;
   payment?: {
     status: string;
-    method: string;
+    method?: string | null;
     amountCents: number;
     expiresAt?: string | null;
     paidAt?: string | null;
   } | null;
+};
+
+type ManualPixInfo = {
+  eligible: boolean;
+  paid: boolean;
+  orderStatus: string;
+  amount: number;
+  accounts: Array<{
+    id: string;
+    name: string;
+    type: string;
+    currency: string;
+    financialInstitution?: { name: string } | null;
+  }>;
+  approval?: {
+    source: string;
+    method: string;
+    amount: number;
+    paidAt: string;
+    reference?: string | null;
+    recordedByName?: string | null;
+    recordedByRole?: string | null;
+    financialAccountName?: string | null;
+    manual: boolean;
+  } | null;
+};
+
+const localDateTimeValue = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
 };
 
 const shipmentStatusLabel: Record<string, string> = {
@@ -211,17 +327,117 @@ type ShipmentInfo = {
   id?: string | null;
   status?: string | null;
   labelUrl?: string | null;
+  printableLabelUrl?: string | null;
   trackingCode?: string | null;
+  authorizationCode?: string | null;
   trackingUrl?: string | null;
   externalId?: string | null;
   fiscalStatus?: string | null;
+  fiscalExternalId?: string | null;
   fiscalNumber?: string | null;
   fiscalPdfUrl?: string | null;
   fiscalDanfeUrl?: string | null;
   fiscalXmlUrl?: string | null;
   sefazStatusCode?: string | null;
   sefazMessage?: string | null;
+  invoiceQueueStatus?: string | null;
+  invoiceQueueError?: string | null;
+  invoiceQueueUpdatedAt?: string | null;
+  hasUnresolvedDeliveryException?: boolean;
+  reexpeditionId?: string | null;
+  reexpeditionStatus?: string | null;
+  reexpeditionAttemptNumber?: number | null;
+  reexpeditionPreparedAt?: string | null;
+  reexpeditionPreparedByName?: string | null;
+  reexpeditionReason?: string | null;
+  reexpeditionLastError?: string | null;
+  reexpeditionCompletedAt?: string | null;
+  reexpeditionOriginalFiscalNumber?: string | null;
+  reexpeditionOriginalFiscalPdfUrl?: string | null;
+  reexpeditionOriginalFiscalDanfeUrl?: string | null;
+  reexpeditionReturnFiscalNumber?: string | null;
+  reexpeditionReturnFiscalPdfUrl?: string | null;
+  reexpeditionReturnFiscalDanfeUrl?: string | null;
+  reexpeditionReplacementFiscalNumber?: string | null;
+  reexpeditionReplacementFiscalPdfUrl?: string | null;
+  reexpeditionReplacementFiscalDanfeUrl?: string | null;
+  reexpeditionAddressSnapshot?: {
+    address?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state_abbr?: string;
+    postal_code?: string;
+  } | null;
+  trackingEvents?: Array<{
+    eventType: string;
+    title: string;
+    detail: string;
+    source: string;
+    metadata?: Record<string, unknown> | null;
+    occurredAt: string;
+  }>;
 };
+
+function shipmentTrackingUrl(shipment?: ShipmentInfo | null) {
+  if (!shipment) return null;
+  const code = shipment.authorizationCode || shipment.trackingCode;
+  const provided = shipment.trackingUrl?.trim();
+  if (provided && !/\/rastreio\/?$/i.test(provided)) return provided;
+  if (!code) return provided || null;
+  return `https://www.melhorrastreio.com.br/rastreio/${encodeURIComponent(code)}`;
+}
+
+const shipmentProgressSteps = [
+  { label: "Etiqueta", detail: "Preparada", icon: PackagePlus },
+  { label: "Postagem", detail: "Recebida", icon: PackageCheck },
+  { label: "Trânsito", detail: "A caminho", icon: Truck },
+  { label: "Entrega", detail: "Em rota", icon: Clock3 },
+  { label: "Destino", detail: "Entregue", icon: Check },
+] as const;
+
+function shipmentProgressIndex(
+  shipment?: ShipmentInfo | null,
+  orderStatus?: string,
+) {
+  const statusIndex: Record<string, number> = {
+    PENDING: 0,
+    PURCHASED: 0,
+    LABEL_READY: 0,
+    IN_TRANSIT: 2,
+    OUT_FOR_DELIVERY: 3,
+    DELIVERED: 4,
+  };
+  const eventIndex: Record<string, number> = {
+    LABEL_CREATED: 0,
+    LABEL_PENDING: 0,
+    LABEL_RELEASED: 0,
+    LABEL_GENERATED: 0,
+    SHIPMENT_CREATED: 0,
+    RECEIVED: 1,
+    SHIPPED: 2,
+    OUT_FOR_DELIVERY: 3,
+    DELIVERED: 4,
+  };
+  // A remessa mais recente é a fonte da verdade quando existe. Isso evita que
+  // uma reexpedição recém-etiquetada herde o status comercial DELIVERED da
+  // remessa anterior do mesmo pedido.
+  const commercialIndex = shipment?.status
+    ? 0
+    : orderStatus === "DELIVERED"
+      ? 4
+      : orderStatus === "SHIPPED"
+        ? 2
+        : 0;
+  return Math.max(
+    statusIndex[String(shipment?.status ?? "")] ?? 0,
+    commercialIndex,
+    ...(shipment?.trackingEvents ?? []).map(
+      (event) => eventIndex[event.eventType] ?? 0,
+    ),
+  );
+}
 
 type PostingAgency = {
   id: string;
@@ -244,8 +460,6 @@ type PostingAgencyResponse = {
   agencies: PostingAgency[];
 };
 
-
-
 type DiscountRequest = {
   id: string;
   salesOrderItemId: string;
@@ -257,105 +471,312 @@ type DiscountRequest = {
   requestedByName: string;
 };
 
+type TermCreditApproval = {
+  requiresApproval: boolean;
+  status: "NOT_REQUIRED" | "PENDING" | "APPROVED" | "REJECTED";
+  approvalId?: string | null;
+  orderAmount: number;
+  overdueAmount: number;
+  overdueCount: number;
+  maxDaysOverdue: number;
+  requestedByName?: string | null;
+  requestedAt?: string | null;
+  decidedByName?: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
+  canDecide: boolean;
+  approverLabel: string;
+};
+
 const statusLabel: Record<string, string> = {
   DRAFT: "Rascunho",
+  DISTRIBUTOR_APPROVAL: "Aguardando aprovação",
   AWAITING_PAYMENT: "Aguardando Pix",
   CONFIRMED: "Confirmado",
   RESERVED: "Reservado",
+  IN_PRODUCTION: "Aguardando embalagem",
   PICKING: "Separação",
-  READY_TO_SHIP: "Pronto para expedição",
+  READY_TO_SHIP: "Pronto para emitir NF-e",
   INVOICED: "Faturado",
+  INVOICE_REQUESTED: "Faturamento solicitado",
+  INVOICE_ERROR: "Erro na NF-e",
+  REEXPEDITION_READY: "Reenvio pronto",
   SHIPPED: "Expedido",
   DELIVERED: "Entregue",
   CANCELLED: "Cancelado",
 };
 
-const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> = {
-  DRAFT: "neutral",
-  AWAITING_PAYMENT: "warning",
-  CONFIRMED: "warning",
-  RESERVED: "warning",
-  PICKING: "warning",
-  READY_TO_SHIP: "success",
-  INVOICED: "success",
-  SHIPPED: "success",
-  DELIVERED: "success",
-  CANCELLED: "danger",
-};
+const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
+  {
+    DRAFT: "neutral",
+    DISTRIBUTOR_APPROVAL: "warning",
+    AWAITING_PAYMENT: "warning",
+    CONFIRMED: "warning",
+    RESERVED: "warning",
+    IN_PRODUCTION: "warning",
+    PICKING: "warning",
+    READY_TO_SHIP: "success",
+    INVOICED: "success",
+    INVOICE_REQUESTED: "warning",
+    INVOICE_ERROR: "danger",
+    REEXPEDITION_READY: "success",
+    SHIPPED: "success",
+    DELIVERED: "success",
+    CANCELLED: "danger",
+  };
 
 const filters: Array<[string, string]> = [
   ["ALL", "Todos"],
+  ["OVERDUE", "Atrasados"],
+  ["SAMPLE", "Amostras"],
   ["DRAFT", "Rascunho"],
+  ["DISTRIBUTOR_APPROVAL", "Aprovação distribuidores"],
   ["AWAITING_PAYMENT", "Aguardando Pix"],
   ["CONFIRMED", "Confirmados"],
   ["RESERVED", "Reservados"],
+  ["IN_PRODUCTION", "Aguardando embalagem"],
   ["PICKING", "Separação"],
-  ["READY_TO_SHIP", "Prontos"],
+  ["READY_TO_SHIP", "Prontos para NF-e"],
+  ["INVOICE_REQUESTED", "Emissão NF-e"],
   ["INVOICED", "Faturados"],
   ["SHIPPED", "Expedidos"],
   ["DELIVERED", "Concluídos"],
 ];
 
-const displayStatus = (order: Order) =>
-  order.status === "DRAFT" && ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(order.payment?.status ?? "")
-    ? "AWAITING_PAYMENT"
-    : order.status;
+const overdueTerminalStatuses = new Set(["SHIPPED", "DELIVERED", "CANCELLED"]);
+
+const hasOpenDeliveryException = (order: Order) =>
+  order.shipment?.status === "EXCEPTION" &&
+  !overdueTerminalStatuses.has(order.status);
+
+const isOverdueOrder = (order: Order, now = Date.now()) => {
+  if (
+    !order.expectedDeliveryDate ||
+    overdueTerminalStatuses.has(order.status)
+  ) {
+    return false;
+  }
+  const expected = new Date(order.expectedDeliveryDate).getTime();
+  return Number.isFinite(expected) && expected < now;
+};
+
+const overdueDays = (order: Order, now = Date.now()) => {
+  if (!order.expectedDeliveryDate) return 0;
+  const expected = new Date(order.expectedDeliveryDate).getTime();
+  if (!Number.isFinite(expected)) return 0;
+  return Math.max(1, Math.ceil((now - expected) / 86_400_000));
+};
+
+const displayStatus = (order: Order) => {
+  if (
+    order.status === "DRAFT" &&
+    order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR"
+  ) {
+    return "DISTRIBUTOR_APPROVAL";
+  }
+  if (
+    (order.shipment?.reexpeditionId || order.status === "DELIVERED") &&
+    ["PENDING", "PURCHASED", "LABEL_READY"].includes(
+      order.shipment?.status ?? "",
+    )
+  ) {
+    return "REEXPEDITION_READY";
+  }
+  if (
+    ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
+      order.payment?.status ?? "",
+    )
+  ) {
+    return "AWAITING_PAYMENT";
+  }
+  if (
+    ["READY_TO_SHIP", "INVOICED"].includes(order.status) &&
+    ["PENDING", "READY", "SENT"].includes(order.fiscalStatus ?? "")
+  ) {
+    return "INVOICE_REQUESTED";
+  }
+  if (
+    ["READY_TO_SHIP", "INVOICED"].includes(order.status) &&
+    (order.fiscalStatus === "REJECTED" ||
+      (order.fiscalStatus === "ERROR" && Boolean(order.fiscalExternalId)))
+  ) {
+    return "INVOICE_ERROR";
+  }
+  return order.status;
+};
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<StockOption[]>([]);
   const [brokers, setBrokers] = useState<Broker[]>([]);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"COMMERCIAL" | "SAMPLE" | null>(
+    null,
+  );
+  const [editing, setEditing] = useState<Order | null>(null);
+  const [userRole, setUserRole] = useState("");
+  const [canEditOrders, setCanEditOrders] = useState(false);
+  const [canOperateOrders, setCanOperateOrders] = useState(false);
+  const [canCompleteDelivery, setCanCompleteDelivery] = useState(false);
+  const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
+  const refreshOptions = async () => {
+    const [response, partnersResponse] = await Promise.all([
+      fetch(`${salesOrdersApi()}/options`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`${getApiBaseUrl()}/storefront/partners`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+    ]);
+    if (!response.ok) return;
+    const options = await response.json();
+    const partnerBrokers: Broker[] = partnersResponse.ok
+      ? ((await partnersResponse.json()) as BusinessPartnerBroker[])
+          .filter(
+            (partner) =>
+              partner.active &&
+              partner.isSalesBroker &&
+              partner.brokerActive &&
+              partner.brokerId,
+          )
+          .map((partner) => ({
+            id: partner.brokerId!,
+            name: partner.name,
+            tradeName: partner.tradeName,
+          }))
+      : [];
+    setCustomers(options.customers);
+    setVariants(options.variants);
+    setBrokers(
+      partnerBrokers.length ? partnerBrokers : (options.brokers ?? []),
+    );
+  };
+
   const refresh = async () => {
     const API = salesOrdersApi();
-    const [ordersResponse, optionsResponse] = await Promise.all([
+    const [ordersResponse] = await Promise.all([
       fetch(API, { credentials: "include", cache: "no-store" }),
-      fetch(`${API}/options`, { credentials: "include", cache: "no-store" }),
+      refreshOptions(),
     ]);
 
     if (ordersResponse.ok) setOrders(await ordersResponse.json());
-    if (optionsResponse.ok) {
-      const options = await optionsResponse.json();
-      setCustomers(options.customers);
-      setVariants(options.variants);
-      setBrokers(options.brokers ?? []);
-    }
+  };
+
+  const openNewOrder = (type: "COMMERCIAL" | "SAMPLE") => {
+    setCreating(type);
+    void refreshOptions();
+  };
+
+  const closeNewOrder = () => {
+    setCreating(null);
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("novo")) return;
+    url.searchParams.delete("novo");
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
   };
 
   useEffect(() => {
     void refresh();
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("novo") === "1") {
+      setCreating("COMMERCIAL");
+    }
+    if (searchParams.get("filtro") === "atrasados") {
+      setFilter("OVERDUE");
+    }
+    void fetch(`${getApiBaseUrl()}/auth/me`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        setUserRole(String(payload?.user?.role ?? ""));
+        setCanEditOrders(
+          ["ADMIN", "EXECUTIVE", "SALES"].includes(payload?.user?.role),
+        );
+        setCanOperateOrders(
+          ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"].includes(
+            payload?.user?.role,
+          ),
+        );
+        setCanCompleteDelivery(
+          ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE", "SALES"].includes(
+            payload?.user?.role,
+          ),
+        );
+        setCanPrepareReexpedition(
+          ["ADMIN", "EXECUTIVE"].includes(payload?.user?.role),
+        );
+      })
+      .catch(() => {
+        setUserRole("");
+        setCanEditOrders(false);
+        setCanOperateOrders(false);
+        setCanCompleteDelivery(false);
+        setCanPrepareReexpedition(false);
+      });
     const timer = window.setInterval(() => {
-      void fetch(salesOrdersApi(), { credentials: "include", cache: "no-store" })
-        .then(async (response) => { if (response.ok) setOrders(await response.json()); })
+      void fetch(salesOrdersApi(), {
+        credentials: "include",
+        cache: "no-store",
+      })
+        .then(async (response) => {
+          if (response.ok) setOrders(await response.json());
+        })
         .catch(() => undefined);
     }, 60000);
     return () => window.clearInterval(timer);
   }, []);
 
   const visible = useMemo(
-    () => (filter === "ALL" ? orders : orders.filter((item) => displayStatus(item) === filter)),
+    () =>
+      filter === "ALL"
+        ? orders
+        : filter === "OVERDUE"
+          ? orders.filter((item) => isOverdueOrder(item))
+          : filter === "SAMPLE"
+            ? orders.filter((item) => item.orderType === "SAMPLE")
+            : orders.filter((item) => displayStatus(item) === filter),
     [orders, filter],
   );
-  const open = orders.filter((item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status));
-  const avgTicket = orders.length
-    ? orders.reduce((sum, item) => sum + Number(item.totalAmount), 0) / orders.length
+  const open = orders.filter(
+    (item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status),
+  );
+  const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
+  const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
+  const deliveryIssues = orders.filter(hasOpenDeliveryException);
+  const overdueOrders = orders.filter((item) => isOverdueOrder(item));
+  const firstDeliveryIssue = deliveryIssues[0];
+  const avgTicket = commercialOrders.length
+    ? commercialOrders.reduce(
+        (sum, item) => sum + Number(item.totalAmount),
+        0,
+      ) / commercialOrders.length
     : 0;
 
   const action = async (order: Order, endpoint: string) => {
     setBusy(order.id + endpoint);
     setMessage("");
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/${endpoint}`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/${endpoint}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      },
+    );
     const result = await response.json().catch(() => ({}));
     setMessage(
       response.ok
@@ -383,22 +804,105 @@ export default function OrdersPage() {
             <Sparkles size={13} /> Comercial inteligente
           </p>
           <h1 className="mt-1 text-3xl font-bold">Pedidos</h1>
-          <p className="mt-2 text-sm text-stone-500">O BBOS acompanha cliente, preço, crédito e estoque antes de a venda avançar.</p>
+          <p className="mt-2 text-sm text-stone-500">
+            O BBOS acompanha cliente, preço, crédito e estoque antes de a venda
+            avançar.
+          </p>
         </div>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
-          <Plus size={15} /> Novo pedido
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            data-bbos-write-action
+            onClick={() => openNewOrder("SAMPLE")}
+            className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950"
+          >
+            <PackagePlus size={15} /> Novo pedido de amostra
+          </button>
+          <button
+            data-bbos-write-action
+            onClick={() => openNewOrder("COMMERCIAL")}
+            className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white"
+          >
+            <Plus size={15} /> Novo pedido
+          </button>
+        </div>
       </header>
 
-      {message && <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">{message}</div>}
+      {message && (
+        <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">
+          {message}
+        </div>
+      )}
 
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+      {firstDeliveryIssue && (
+        <button
+          type="button"
+          onClick={() => setSelected(firstDeliveryIssue)}
+          className="mt-5 flex w-full items-start gap-3 rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-left shadow-[0_10px_30px_rgba(185,28,28,.12)]"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-600 text-white">
+            <ShieldAlert size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <strong className="block text-sm text-red-950">
+              {deliveryIssues.length === 1
+                ? "1 entrega exige ação imediata"
+                : `${deliveryIssues.length} entregas exigem ação imediata`}
+            </strong>
+            <span className="mt-1 block text-xs leading-5 text-red-800">
+              {firstDeliveryIssue.orderNumber ?? firstDeliveryIssue.code} ·{" "}
+              {firstDeliveryIssue.customer.name}:{" "}
+              {firstDeliveryIssue.shipment?.latestEventTitle ??
+                "problema informado pela transportadora"}
+              .
+            </span>
+            <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-700">
+              Abrir pedido e resolver <ChevronRight size={12} />
+            </span>
+          </span>
+        </button>
+      )}
+
+      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <Kpi label="Pedidos em aberto" value={String(open.length)} />
-        <Kpi label="Valor em carteira" value={money.format(open.reduce((sum, item) => sum + Number(item.totalAmount), 0))} />
-        <Kpi label="Aguardando Pix" value={String(orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT").length)} />
-        <Kpi label="Pedidos reservados" value={String(orders.filter((item) => ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
-        <Kpi label="Aguardando estoque" value={String(orders.filter((item) => item.status === "CONFIRMED").length)} />
-        <Kpi label="Prontos para expedição" value={String(orders.filter((item) => ["READY_TO_SHIP", "INVOICED"].includes(item.status)).length)} />
+        <Kpi
+          label="Valor em carteira"
+          value={money.format(
+            commercialOpen.reduce(
+              (sum, item) => sum + Number(item.totalAmount),
+              0,
+            ),
+          )}
+        />
+        <Kpi
+          label="Aguardando Pix"
+          value={String(
+            orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT")
+              .length,
+          )}
+        />
+        <Kpi
+          label="Pedidos reservados"
+          value={String(
+            orders.filter((item) =>
+              ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(
+                item.status,
+              ),
+            ).length,
+          )}
+        />
+        <Kpi
+          label="Aguardando estoque"
+          value={String(
+            orders.filter((item) => item.status === "CONFIRMED").length,
+          )}
+        />
+        <Kpi
+          label="Prontos para emitir NF-e"
+          value={String(
+            orders.filter((item) => displayStatus(item) === "READY_TO_SHIP")
+              .length,
+          )}
+        />
         <Kpi label="Ticket médio" value={money.format(avgTicket)} />
       </section>
 
@@ -409,7 +913,9 @@ export default function OrdersPage() {
             onClick={() => setFilter(value)}
             className={`rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}
           >
-            {label}
+            {value === "OVERDUE" && overdueOrders.length > 0
+              ? `${label} (${overdueOrders.length})`
+              : label}
           </button>
         ))}
       </div>
@@ -417,54 +923,231 @@ export default function OrdersPage() {
       <section className="mt-5">
         <div className="mb-3 flex justify-between">
           <h2 className="text-lg font-semibold">Pedidos recentes</h2>
-          <span className="text-xs text-stone-400">{visible.length} pedidos</span>
+          <span className="text-xs text-stone-400">
+            {visible.length} pedidos
+          </span>
         </div>
         <div className="space-y-3">
-          {visible.map((order) => (
-            <Card key={order.id} className="p-4">
-              <button onClick={() => setSelected(order)} className="w-full text-left">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-[12rem]">
-                    <strong>{order.orderNumber ?? order.code}</strong>
-                    <p className="text-xs text-stone-500">{order.customer.name}</p>
-                  </div>
-                  {order.shipment && (
-                    <div className="min-w-0 flex-1 text-xs sm:text-center">
-                      <span className="font-semibold text-forest-900">
-                        {shipmentStatusLabel[order.shipment.status] ?? "Frete em acompanhamento"}
-                      </span>
-                      <span className="text-stone-500"> · {order.shipment.carrierName ?? "Melhor Envio"}</span>
-                      {(order.shipment.authorizationCode || order.shipment.trackingCode) && (
-                        <p className="mt-1 text-[11px] text-stone-600">
-                          Rastreio {order.shipment.authorizationCode ?? order.shipment.trackingCode}
-                          {order.shipment.authorizationCode && order.shipment.trackingCode && order.shipment.authorizationCode !== order.shipment.trackingCode
-                            ? ` · ${order.shipment.trackingCode}` : ""}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-stone-400">
-                        Sincronizado {new Date(order.shipment.updatedAt).toLocaleString("pt-BR")}
+          {visible.map((order) => {
+            const compactShipmentStep = shipmentProgressIndex(
+              order.shipment,
+              order.status,
+            );
+            const compactShipmentProgress = Math.round(
+              ((compactShipmentStep + 1) / shipmentProgressSteps.length) * 100,
+            );
+            const compactShipmentCancelled =
+              order.shipment?.status === "CANCELLED";
+            const compactShipmentException = hasOpenDeliveryException(order);
+            const paymentDate = formatPaymentDate(order.payment?.paidAt);
+            const paymentConfirmed =
+              order.payment?.status === "PAID" && Boolean(paymentDate);
+            const overdue = isOverdueOrder(order);
+            const daysLate = overdue ? overdueDays(order) : 0;
+
+            return (
+              <Card
+                key={order.id}
+                className={`p-4 ${
+                  compactShipmentException
+                    ? "border-2 border-red-300 bg-red-50/35 shadow-[0_10px_30px_rgba(185,28,28,.10)]"
+                    : overdue
+                      ? "border-2 border-amber-300 bg-amber-50/25"
+                      : ""
+                }`}
+              >
+                {compactShipmentException && (
+                  <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-600 px-3 py-2.5 text-white">
+                    <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wide">
+                        Pendência crítica na entrega
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-4 text-red-50">
+                        {order.shipment?.latestEventTitle ??
+                          "A transportadora informou um problema."}
+                        {order.shipment?.latestEventDetail
+                          ? ` — ${order.shipment.latestEventDetail}`
+                          : " Abra o pedido para verificar e agir."}
                       </p>
                     </div>
-                  )}
-                  <div className="ml-auto flex items-center gap-2">
-                    <Status status={displayStatus(order)} />
-                    <strong>{money.format(Number(order.totalAmount))}</strong>
-                    <ChevronRight size={16} />
                   </div>
-                </div>
-              </button>
-              <div className="mt-3 flex gap-2">
-                <OrderPdfLink orderNumber={order.orderNumber ?? order.code} compact provisional={order.status === "DRAFT"} />
-                {["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && (
-                  <button disabled={!!busy} onClick={() => void action(order, "cancel")} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
                 )}
-              </div>
-            </Card>
-          ))}
+                {overdue && !compactShipmentException && (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-100/70 px-3 py-2.5 text-amber-950">
+                    <div className="flex items-center gap-2">
+                      <Clock3 size={16} className="shrink-0" />
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide">
+                          Pedido atrasado
+                        </p>
+                        <p className="mt-0.5 text-[11px]">
+                          Prazo vencido há {daysLate}{" "}
+                          {daysLate === 1 ? "dia" : "dias"}.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(order)}
+                      className="inline-flex min-h-10 items-center gap-1 rounded-xl bg-amber-950 px-3 text-[10px] font-black text-white"
+                    >
+                      Abrir e resolver <ChevronRight size={12} />
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => setSelected(order)}
+                  className="w-full text-left"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-[12rem]">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong>{order.orderNumber ?? order.code}</strong>
+                        {order.orderType === "SAMPLE" && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                            Amostra
+                          </span>
+                        )}
+                        {order.salesChannel?.name && (
+                          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-stone-600">
+                            {order.salesChannel.name}
+                          </span>
+                        )}
+                        {order.createdByStorefrontPartner?.portalAccessLevel ===
+                          "DISTRIBUTOR" && (
+                          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-800">
+                            Sob encomenda
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-stone-500">
+                        {order.customer.name}
+                      </p>
+                      {paymentConfirmed && (
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+                          <Check size={12} strokeWidth={3} /> Pagamento feito em{" "}
+                          {paymentDate}
+                        </span>
+                      )}
+                    </div>
+                    {order.shipment && (
+                      <div className="min-w-0 flex-1 text-xs sm:text-center">
+                        <span className="font-semibold text-forest-900">
+                          {shipmentStatusLabel[order.shipment.status] ??
+                            "Frete em acompanhamento"}
+                        </span>
+                        <span className="text-stone-500">
+                          {" "}
+                          · {order.shipment.carrierName ?? "Melhor Envio"}
+                        </span>
+                        {(order.shipment.authorizationCode ||
+                          order.shipment.trackingCode) && (
+                          <p className="mt-1 text-[11px] text-stone-600">
+                            Rastreio{" "}
+                            {order.shipment.authorizationCode ??
+                              order.shipment.trackingCode}
+                            {order.shipment.authorizationCode &&
+                            order.shipment.trackingCode &&
+                            order.shipment.authorizationCode !==
+                              order.shipment.trackingCode
+                              ? ` · ${order.shipment.trackingCode}`
+                              : ""}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-stone-400">
+                          Sincronizado{" "}
+                          {new Date(order.shipment.updatedAt).toLocaleString(
+                            "pt-BR",
+                          )}
+                        </p>
+                        <div className="mx-auto mt-2 flex max-w-[19rem] items-center gap-2">
+                          <div
+                            className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-stone-100"
+                            aria-label={`Evolução do envio: ${compactShipmentProgress}%`}
+                          >
+                            <div
+                              className={`h-full rounded-full transition-[width] duration-700 ${
+                                compactShipmentCancelled
+                                  ? "bg-red-500"
+                                  : compactShipmentException
+                                    ? "bg-amber-500"
+                                    : "bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500"
+                              }`}
+                              style={{ width: `${compactShipmentProgress}%` }}
+                            />
+                          </div>
+                          <span
+                            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wide ${
+                              compactShipmentCancelled
+                                ? "bg-red-50 text-red-700"
+                                : compactShipmentException
+                                  ? "bg-amber-50 text-amber-800"
+                                  : "bg-emerald-50 text-emerald-800"
+                            }`}
+                          >
+                            {compactShipmentCancelled
+                              ? "Cancelado"
+                              : compactShipmentException
+                                ? "Atenção"
+                                : (shipmentProgressSteps[compactShipmentStep]
+                                    ?.detail ?? "Preparando")}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="ml-auto flex items-center gap-2">
+                      <Status status={displayStatus(order)} />
+                      <strong>{money.format(Number(order.totalAmount))}</strong>
+                      <ChevronRight size={16} />
+                    </div>
+                  </div>
+                </button>
+                <div className="mt-3 flex gap-2">
+                  {order.status === "DRAFT" && canEditOrders && (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(order)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-xs font-semibold text-forest-800"
+                    >
+                      <Pencil size={13} /> Editar pedido
+                    </button>
+                  )}
+                  {order.paymentType === "TERM" &&
+                    order.orderType !== "SAMPLE" &&
+                    order.fiscalStatus === "AUTHORIZED" && (
+                      <OrderBillingPdfButton
+                        orderId={order.id}
+                        orderNumber={order.orderNumber ?? order.code}
+                      />
+                    )}
+                  <OrderPdfLink
+                    orderId={order.id}
+                    compact
+                    provisional={order.status === "DRAFT"}
+                  />
+                  {canOperateOrders &&
+                    ["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
+                      order.status,
+                    ) && (
+                      <button
+                        disabled={!!busy}
+                        onClick={() => void action(order, "cancel")}
+                        className="rounded-lg border px-3 py-2 text-xs"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                </div>
+              </Card>
+            );
+          })}
           {!visible.length && (
             <Card className="py-14 text-center">
               <PackageCheck className="mx-auto text-stone-300" />
-              <p className="mt-3 text-sm font-semibold">Nenhum pedido neste filtro</p>
+              <p className="mt-3 text-sm font-semibold">
+                Nenhum pedido neste filtro
+              </p>
             </Card>
           )}
         </div>
@@ -472,12 +1155,28 @@ export default function OrdersPage() {
 
       {creating && (
         <NewOrder
+          orderType={creating}
+          actorRole={userRole}
           customers={customers}
           variants={variants}
           brokers={brokers}
-          onClose={() => setCreating(false)}
+          onClose={closeNewOrder}
           onCreated={async () => {
-            setCreating(false);
+            closeNewOrder();
+            await refresh();
+          }}
+        />
+      )}
+
+      {editing && (
+        <EditDraftOrder
+          order={editing}
+          customers={customers}
+          variants={variants}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            setMessage("Pedido corrigido e registrado na auditoria.");
             await refresh();
           }}
         />
@@ -488,13 +1187,448 @@ export default function OrdersPage() {
           order={selected}
           onClose={() => setSelected(null)}
           onChanged={() => refreshSelected(selected.id)}
+          canEdit={canEditOrders && selected.status === "DRAFT"}
+          canOperate={canOperateOrders}
+          canCompleteDelivery={canCompleteDelivery}
+          canPrepareReexpedition={canPrepareReexpedition}
+          onEdit={() => {
+            setEditing(selected);
+            setSelected(null);
+          }}
         />
       )}
     </div>
   );
 }
 
-function NewOrder({ customers, variants, brokers, onClose, onCreated }: { customers: Customer[]; variants: StockOption[]; brokers: Broker[]; onClose: () => void; onCreated: () => Promise<void> }) {
+function EditDraftOrder({
+  order,
+  customers,
+  variants,
+  onClose,
+  onSaved,
+}: {
+  order: Order;
+  customers: Customer[];
+  variants: StockOption[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const isSample = order.orderType === "SAMPLE";
+  const [customerId, setCustomerId] = useState(order.customer.id);
+  const [paymentType, setPaymentType] = useState<"CASH" | "TERM">(
+    order.paymentType === "TERM" ? "TERM" : "CASH",
+  );
+  const [paymentTerms, setPaymentTerms] = useState(
+    order.paymentTermsSnapshot && order.paymentTermsSnapshot !== "À vista"
+      ? order.paymentTermsSnapshot
+      : "14 dias",
+  );
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
+    order.expectedDeliveryDate
+      ? new Date(order.expectedDeliveryDate).toISOString().slice(0, 10)
+      : "",
+  );
+  const [notes, setNotes] = useState(order.notes ?? "");
+  const [reason, setReason] = useState("");
+  const [lines, setLines] = useState<DraftOrderLine[]>(() =>
+    order.items.map((item) => ({
+      id: item.id,
+      variantId: item.productVariantId,
+      quantity: item.quantity,
+    })),
+  );
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [quoteBusy, setQuoteBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const validLines = lines.filter(isCompleteOrderDraftLine);
+    if (!customerId || !validLines.length) {
+      setQuotes({});
+      return () => controller.abort();
+    }
+    if (isSample) {
+      setQuotes(
+        Object.fromEntries(
+          validLines.map((line) => [
+            line.id,
+            {
+              officialUnitPrice: SAMPLE_FISCAL_PACKAGE_VALUE,
+              channelUnitPrice: SAMPLE_FISCAL_PACKAGE_VALUE,
+              pricingSource: "CHANNEL" as const,
+              currency: "BRL",
+              salesChannelName: "Amostra",
+              salesChannelType: "SAMPLE",
+              totalAmount: line.quantity * SAMPLE_FISCAL_PACKAGE_VALUE,
+              discountPolicy: {
+                maxRequestPercent: 0,
+                maxApprovalPercent: 0,
+                minimumPrice: null,
+                minimumMarginPercent: null,
+                minimumRoiPercent: null,
+              },
+            },
+          ]),
+        ),
+      );
+      return () => controller.abort();
+    }
+    setQuoteBusy(true);
+    void Promise.all(
+      validLines.map(async (line) => {
+        const params = new URLSearchParams({
+          customerId,
+          productVariantId: line.variantId,
+          quantity: String(line.quantity),
+        });
+        const response = await fetch(
+          `${salesOrdersApi()}/quote?${params.toString()}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok)
+          throw new Error("Produto sem preço válido para o cliente.");
+        return [line.id, (await response.json()) as Quote] as const;
+      }),
+    )
+      .then((entries) => setQuotes(Object.fromEntries(entries)))
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setQuotes({});
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Não foi possível recalcular os preços.",
+        );
+      })
+      .finally(() => setQuoteBusy(false));
+    return () => controller.abort();
+  }, [customerId, lines, isSample]);
+
+  const validLines = lines.filter(isCompleteOrderDraftLine);
+  const subtotal = validLines.reduce(
+    (sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0),
+    0,
+  );
+  const canSave =
+    Boolean(customerId) &&
+    validLines.length === lines.length &&
+    validLines.length > 0 &&
+    validLines.every((line) => quotes[line.id]) &&
+    reason.trim().length >= 5 &&
+    !quoteBusy &&
+    !saving;
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canSave) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/draft`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          paymentType: isSample ? undefined : paymentType,
+          paymentTerms:
+            !isSample && paymentType === "TERM" ? paymentTerms : undefined,
+          expectedDeliveryDate: expectedDeliveryDate || undefined,
+          notes,
+          reason,
+          items: validLines.map((line) => ({
+            productVariantId: line.variantId,
+            quantity: line.quantity,
+          })),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(
+          payload.message ?? "Não foi possível corrigir o pedido.",
+        );
+      await onSaved();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível corrigir o pedido.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex justify-end bg-black/25">
+      <button
+        className="absolute inset-0"
+        aria-label="Fechar"
+        onClick={onClose}
+      />
+      <aside className="relative flex h-dvh w-full max-w-3xl flex-col overflow-hidden border-l bg-white shadow-2xl">
+        <header className="flex items-start justify-between border-b px-5 py-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-forest-700">
+              Correção controlada
+            </p>
+            <h2 className="mt-1 text-xl font-bold">
+              Editar {order.orderNumber ?? order.code}
+            </h2>
+            <p className="mt-1 text-xs text-stone-500">
+              Permitido somente no rascunho. Preços serão recalculados e a
+              alteração ficará auditada.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 hover:bg-stone-100"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+            <Field label="Cliente">
+              <select
+                value={customerId}
+                onChange={(event) => setCustomerId(event.target.value)}
+              >
+                {customers.map((customer) => (
+                  <option
+                    key={customer.id}
+                    value={customer.id}
+                    disabled={customer.fiscalReadiness?.ready === false}
+                  >
+                    {customer.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {!isSample && (
+              <section className="rounded-2xl border p-4">
+                <p className="text-xs font-bold">Pagamento</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {(["CASH", "TERM"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPaymentType(value)}
+                      className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === value ? "border-forest-300 bg-forest-50 text-forest-900" : "text-stone-600"}`}
+                    >
+                      {value === "CASH" ? "À vista" : "A prazo"}
+                    </button>
+                  ))}
+                </div>
+                {paymentType === "TERM" && (
+                  <Field label="Condição de pagamento">
+                    <select
+                      value={paymentTerms}
+                      onChange={(event) => setPaymentTerms(event.target.value)}
+                    >
+                      {paymentOptions.map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+              </section>
+            )}
+
+            <section className="rounded-2xl border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold">Produtos e quantidades</p>
+                  <p className="mt-1 text-[10px] text-stone-500">
+                    O BBOS usa novamente a tabela vigente do cliente.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLines((current) => [...current, newDraftLine()])
+                  }
+                  className="inline-flex items-center gap-1 rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white"
+                >
+                  <Plus size={12} /> Produto
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {lines.map((line) => (
+                  <div
+                    key={line.id}
+                    className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-[1fr_90px_110px_36px] sm:items-end"
+                  >
+                    <Field label="Produto / apresentação">
+                      <select
+                        value={line.variantId}
+                        onChange={(event) =>
+                          setLines((current) =>
+                            current.map((item) =>
+                              item.id === line.id
+                                ? { ...item, variantId: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">Selecione</option>
+                        {variants.map((variant) => (
+                          <option
+                            key={variant.productVariantId}
+                            value={variant.productVariantId}
+                          >
+                            {variant.line} · {variant.product} ·{" "}
+                            {presentationLabel(variant.presentationGrams)}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Quantidade">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={line.quantity}
+                        onChange={(event) =>
+                          setLines((current) =>
+                            current.map((item) =>
+                              item.id === line.id
+                                ? {
+                                    ...item,
+                                    quantity: Number(event.target.value),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                    <div className="pb-2 text-right text-xs font-bold">
+                      {quotes[line.id]
+                        ? money.format(quotes[line.id]!.totalAmount)
+                        : quoteBusy
+                          ? "Calculando…"
+                          : "—"}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={lines.length === 1}
+                      onClick={() =>
+                        setLines((current) =>
+                          current.filter((item) => item.id !== line.id),
+                        )
+                      }
+                      className="grid size-9 place-items-center rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-30"
+                      aria-label="Remover produto"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-between border-t pt-3 text-sm">
+                <span className="text-stone-500">Subtotal recalculado</span>
+                <strong>{money.format(subtotal)}</strong>
+              </div>
+            </section>
+
+            <Field label="Observações do pedido">
+              <textarea
+                rows={3}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </Field>
+            <Field label="Data de entrega confirmada pela Bispo">
+              <input
+                type="date"
+                value={expectedDeliveryDate}
+                onChange={(event) =>
+                  setExpectedDeliveryDate(event.target.value)
+                }
+              />
+            </Field>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <Field label="Motivo da correção (obrigatório)">
+                <textarea
+                  required
+                  minLength={5}
+                  rows={2}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder="Ex.: quantidade informada incorretamente pelo comercial"
+                />
+              </Field>
+              <p className="mt-2 text-[10px] text-amber-900/75">
+                O sistema registra usuário, data, motivo e os dados
+                antes/depois. Links de aceite anteriores serão revogados.
+              </p>
+            </div>
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                {error}
+              </div>
+            )}
+          </div>
+          <footer className="flex justify-end gap-2 border-t bg-white p-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border px-5 py-3 text-xs font-bold"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!canSave}
+              className="rounded-xl bg-forest-900 px-5 py-3 text-xs font-bold text-white disabled:opacity-40"
+            >
+              {saving ? "Salvando correção…" : "Salvar correção"}
+            </button>
+          </footer>
+        </form>
+      </aside>
+    </div>,
+    document.body,
+  );
+}
+
+function NewOrder({
+  orderType,
+  actorRole,
+  customers,
+  variants,
+  brokers,
+  onClose,
+  onCreated,
+}: {
+  orderType: "COMMERCIAL" | "SAMPLE";
+  actorRole: string;
+  customers: Customer[];
+  variants: StockOption[];
+  brokers: Broker[];
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
   const [orderNumber, setOrderNumber] = useState("Gerando…");
   const [orderPurpose, setOrderPurpose] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -502,37 +1636,100 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const [paymentTerms, setPaymentTerms] = useState("14 dias");
   const [lines, setLines] = useState<DraftOrderLine[]>(() => [newDraftLine()]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
-  const [lineQuoteErrors, setLineQuoteErrors] = useState<Record<string, string>>({});
+  const [lineQuoteErrors, setLineQuoteErrors] = useState<
+    Record<string, string>
+  >({});
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
-  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>([]);
+  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuoteOption[]>(
+    [],
+  );
   const [shippingQuoteId, setShippingQuoteId] = useState("");
   const [shippingPostalCode, setShippingPostalCode] = useState("");
-  const [shippingSummary, setShippingSummary] = useState<ShippingSummary | null>(null);
+  const [shippingSummary, setShippingSummary] =
+    useState<ShippingSummary | null>(null);
   const [shippingSort, setShippingSort] = useState<"PRICE" | "TIME">("PRICE");
   const [customPackage, setCustomPackage] = useState(false);
-  const [packageBoxes, setPackageBoxes] = useState<PackageBox[]>(() => [newPackageBox()]);
+  const [packageBoxes, setPackageBoxes] = useState<PackageBox[]>(() => [
+    newPackageBox(),
+  ]);
   const [shippingBusy, setShippingBusy] = useState(false);
   const [shippingError, setShippingError] = useState("");
-  const [freightResponsibility, setFreightResponsibility] = useState<"" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP">("");
+  const [freightResponsibility, setFreightResponsibility] = useState<
+    "" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP"
+  >("");
   const [carrierName, setCarrierName] = useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [customerReference, setCustomerReference] = useState("");
   const [notes, setNotes] = useState("");
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
+  const [exchangeRateToBrl, setExchangeRateToBrl] = useState("");
+  const [exchangeRateDate, setExchangeRateDate] = useState("");
+  const [customsDeclaredValue, setCustomsDeclaredValue] = useState("");
   const [brokerId, setBrokerId] = useState("");
-  const [brokerCommissionMode, setBrokerCommissionMode] = useState<"PERCENTAGE" | "PER_PACKAGE">("PERCENTAGE");
+  const [brokerCommissionMode, setBrokerCommissionMode] = useState<
+    "PERCENTAGE" | "PER_PACKAGE"
+  >("PERCENTAGE");
   const [brokerCommissionPercent, setBrokerCommissionPercent] = useState("");
-  const [brokerCommissionPerPackage, setBrokerCommissionPerPackage] = useState("");
+  const [brokerCommissionPerPackage, setBrokerCommissionPerPackage] =
+    useState("");
   const [showTerms, setShowTerms] = useState(true);
   const [error, setError] = useState("");
+  const [discardConfirmationOpen, setDiscardConfirmationOpen] = useState(false);
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  const isSample = orderType === "SAMPLE";
+
+  const hasMeaningfulDraft = Boolean(
+    orderPurpose ||
+    customerId ||
+    lines.some(
+      (line) =>
+        line.variantId ||
+        line.quantity !== 1 ||
+        Boolean(line.discountAmount?.trim()),
+    ) ||
+    freightResponsibility ||
+    carrierName.trim() ||
+    expectedDeliveryDate ||
+    customerReference.trim() ||
+    notes.trim() ||
+    brokerId ||
+    incoterm.trim() ||
+    incotermLocation.trim() ||
+    customsDeclaredValue,
+  );
+
+  const requestClose = () => {
+    if (hasMeaningfulDraft) {
+      setDiscardConfirmationOpen(true);
+      return;
+    }
+    onClose();
+  };
+
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+    };
+  }, []);
 
   const orderPurposes = useMemo(
-    () => listOrderPurposes(customers),
-    [customers],
+    () =>
+      listOrderPurposes(customers).filter((purpose) => {
+        if (actorRole !== "SALES") return true;
+        const key = orderPurposeKey(purpose);
+        return !key.includes("e-commerce") && !key.includes("export");
+      }),
+    [actorRole, customers],
   );
   const filteredCustomers = useMemo(
     () => filterCustomersByOrderPurpose(customers, orderPurpose),
@@ -542,42 +1739,136 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
     (candidate) => candidate.id === customerId,
   );
   const completeLines = useMemo(
-    () => lines.filter((line) => line.variantId && Number.isSafeInteger(line.quantity) && line.quantity > 0),
+    () => lines.filter(isCompleteOrderDraftLine),
     [lines],
   );
-  const firstQuote = completeLines.length ? quotes[completeLines[0]!.id] : undefined;
+  const hasInvalidSelectedLine = hasInvalidSelectedOrderDraftLine(lines);
+  const firstQuote = completeLines.length
+    ? quotes[completeLines[0]!.id]
+    : undefined;
+  const canApproveNegotiatedPrice = ["ADMIN", "EXECUTIVE"].includes(actorRole);
+  const pricedLines = completeLines.map((line) => {
+    const quote = quotes[line.id];
+    return {
+      line,
+      pricing: quote
+        ? calculateSalesLineDiscount({
+            officialUnitPrice: isSample
+              ? SAMPLE_FISCAL_PACKAGE_VALUE
+              : quote.officialUnitPrice,
+            discountAmount: isSample ? 0 : line.discountAmount,
+            maxDiscountPercent: canApproveNegotiatedPrice
+              ? null
+              : quote.discountPolicy.maxRequestPercent,
+            minimumPrice: quote.discountPolicy.minimumPrice,
+          })
+        : null,
+    };
+  });
+  const invalidNegotiatedLine = pricedLines.find(
+    ({ pricing }) => pricing && !pricing.valid,
+  );
   const isDistributor = firstQuote?.salesChannelType === "DISTRIBUIDOR";
-  const usesPlatformShipping = isDistributor && freightResponsibility === "CUSTOMER";
-  const selectedShippingQuote = shippingQuotes.find((option) => option.id === shippingQuoteId);
+  const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
+  const usesPlatformShipping =
+    (isSample && !isExport && freightResponsibility === "BISPO") ||
+    (!isSample && isDistributor && freightResponsibility === "CUSTOMER");
+  const selectedShippingQuote = shippingQuotes.find(
+    (option) => option.id === shippingQuoteId,
+  );
   const sortedShippingQuotes = useMemo(
-    () => [...shippingQuotes].sort((a, b) => shippingSort === "PRICE" ? a.priceCents - b.priceCents : a.deliveryDays - b.deliveryDays),
+    () =>
+      [...shippingQuotes].sort((a, b) =>
+        shippingSort === "PRICE"
+          ? a.priceCents - b.priceCents
+          : a.deliveryDays - b.deliveryDays,
+      ),
     [shippingQuotes, shippingSort],
   );
-  const freightAmount = usesPlatformShipping ? Number(selectedShippingQuote?.priceCents ?? 0) / 100 : 0;
-  const productsTotal = completeLines.reduce((sum, line) => sum + Number(quotes[line.id]?.totalAmount ?? 0), 0);
+  const freightAmount =
+    usesPlatformShipping && !isSample
+      ? Number(selectedShippingQuote?.priceCents ?? 0) / 100
+      : 0;
+  const productsTotal = completeLines.reduce((sum, line) => {
+    const pricing = pricedLines.find(
+      (item) => item.line.id === line.id,
+    )?.pricing;
+    return sum + line.quantity * Number(pricing?.finalUnitPrice ?? 0);
+  }, 0);
   const totalWeightGrams = completeLines.reduce((sum, line) => {
-    const variant = variants.find((candidate) => candidate.productVariantId === line.variantId);
+    const variant = variants.find(
+      (candidate) => candidate.productVariantId === line.variantId,
+    );
     return sum + Number(variant?.presentationGrams ?? 0) * line.quantity;
   }, 0);
   const orderTotal = productsTotal + freightAmount;
-  const totalPackages = completeLines.reduce((sum, line) => sum + line.quantity, 0);
+  const totalPackages = completeLines.reduce(
+    (sum, line) => sum + line.quantity,
+    0,
+  );
   const brokerCommission = brokerId
     ? brokerCommissionMode === "PER_PACKAGE"
       ? totalPackages * Number(brokerCommissionPerPackage || 0)
-      : productsTotal * Number(brokerCommissionPercent || 0) / 100
+      : (productsTotal * Number(brokerCommissionPercent || 0)) / 100
     : 0;
-  const isTerm = paymentType === "TERM";
-  const isExport = firstQuote?.salesChannelType === "EXPORTACAO";
+  const isTerm = !isSample && paymentType === "TERM";
+  const orderCurrency = firstQuote?.currency?.toUpperCase() || "BRL";
   const used = Number(health?.financialHealth?.openReceivables ?? 0);
   const limit = Number(health?.creditLimit ?? customer?.creditLimit ?? 0);
-  const available = Number(health?.financialHealth?.availableCredit ?? Math.max(0, limit - used));
+  const available = Number(
+    health?.financialHealth?.availableCredit ?? Math.max(0, limit - used),
+  );
   const utilization = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   const after = Math.max(0, available - orderTotal);
   const exceeds = isTerm && orderTotal > available;
-  const usesPixFallback = isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
+  const overdueCount = Number(health?.financialHealth?.overdueCount ?? 0);
+  const overdueAmount = Number(health?.financialHealth?.overdueAmount ?? 0);
+  const maxDaysOverdue = Number(health?.financialHealth?.maxDaysOverdue ?? 0);
+  const isDelinquent = isTerm && (overdueCount > 0 || overdueAmount > 0.005);
+  const usesPixFallback =
+    isTerm && health && (health.creditStatus !== "APPROVED" || exceeds);
+  const saveBlockedReason = !completeLines.length
+    ? "Adicione ao menos um produto ao pedido."
+    : hasInvalidSelectedLine
+      ? "Revise a quantidade dos produtos selecionados."
+      : quoteBusy
+        ? "Aguarde a consulta dos preços."
+        : completeLines.some((line) => !quotes[line.id])
+          ? "Há produto sem preço vigente. Revise os itens destacados."
+          : invalidNegotiatedLine?.pricing?.message
+            ? invalidNegotiatedLine.pricing.message
+            : isTerm && !paymentTerms
+              ? "Informe a condição da venda a prazo."
+              : !freightResponsibility
+                ? "Selecione quem será responsável pelo frete."
+                : usesPlatformShipping && !selectedShippingQuote
+                  ? isSample
+                    ? "Pesquise e selecione o envio da amostra."
+                    : "Calcule e selecione uma opção de frete."
+                  : isDistributor &&
+                      freightResponsibility === "CUSTOMER_CARRIER" &&
+                      !carrierName.trim()
+                    ? "Informe a transportadora indicada pelo distribuidor."
+                    : isExport && (!incoterm.trim() || !incotermLocation.trim())
+                      ? "Informe o Incoterm e o local nomeado da exportação."
+                      : isSample &&
+                          isExport &&
+                          (!customsDeclaredValue ||
+                            Number(customsDeclaredValue) <= 0)
+                        ? "Informe o valor aduaneiro declarado da amostra."
+                        : isExport &&
+                            orderCurrency !== "BRL" &&
+                            (!exchangeRateToBrl ||
+                              Number(exchangeRateToBrl) <= 0 ||
+                              !exchangeRateDate)
+                          ? "Informe a cotação da moeda para BRL e a data da cotação."
+                          : "";
 
   useEffect(() => {
-    void fetch(`${salesOrdersApi()}/next-number`, { credentials: "include", cache: "no-store" })
+    void fetch(`${salesOrdersApi()}/next-number`, {
+      credentials: "include",
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         const data = await response.json();
@@ -600,10 +1891,19 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       setHealth(null);
       return;
     }
-    const selectedCustomer = customers.find((candidate) => candidate.id === customerId);
-    if (selectedCustomer?.paymentTerms && selectedCustomer.paymentTerms !== "À vista") setPaymentTerms(selectedCustomer.paymentTerms);
+    const selectedCustomer = customers.find(
+      (candidate) => candidate.id === customerId,
+    );
+    if (
+      selectedCustomer?.paymentTerms &&
+      selectedCustomer.paymentTerms !== "À vista"
+    )
+      setPaymentTerms(selectedCustomer.paymentTerms);
     setHealthBusy(true);
-    void fetch(`/api/customers/${customerId}/health`, { credentials: "include", cache: "no-store" })
+    void fetch(`/api/customers/${customerId}/health`, {
+      credentials: "include",
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         setHealth(await response.json());
@@ -622,39 +1922,80 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
     let cancelled = false;
     setQuoteBusy(true);
     setQuoteError("");
-    void Promise.all(completeLines.map(async (line) => {
-      try {
-        const params = new URLSearchParams({ customerId, productVariantId: line.variantId, quantity: String(line.quantity) });
-        const response = await fetch(`${salesOrdersApi()}/quote?${params.toString()}`, { credentials: "include", cache: "no-store" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.message ?? "Preço interno não encontrado.");
-        return { id: line.id, quote: payload as Quote, error: "" };
-      } catch (cause) {
-        return { id: line.id, quote: null, error: cause instanceof Error ? cause.message : "Preço interno não encontrado." };
-      }
-    }))
+    void Promise.all(
+      completeLines.map(async (line) => {
+        try {
+          const params = new URLSearchParams({
+            customerId,
+            productVariantId: line.variantId,
+            quantity: String(line.quantity),
+          });
+          const response = await fetch(
+            `${salesOrdersApi()}/quote?${params.toString()}`,
+            { credentials: "include", cache: "no-store" },
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok)
+            throw new Error(payload.message ?? "Preço interno não encontrado.");
+          return { id: line.id, quote: payload as Quote, error: "" };
+        } catch (cause) {
+          return {
+            id: line.id,
+            quote: null,
+            error:
+              cause instanceof Error
+                ? cause.message
+                : "Preço interno não encontrado.",
+          };
+        }
+      }),
+    )
       .then((results) => {
         if (!cancelled) {
-          setQuotes(results.reduce<Record<string, Quote>>((acc, result) => {
-            if (result.quote) acc[result.id] = result.quote;
-            return acc;
-          }, {}));
-          setLineQuoteErrors(Object.fromEntries(results.filter((result) => result.error).map((result) => [result.id, result.error])));
-          setQuoteError(results.some((result) => result.error) ? "Existem produtos sem preço vigente. Verifique os itens destacados." : "");
+          setQuotes(
+            results.reduce<Record<string, Quote>>((acc, result) => {
+              if (result.quote) acc[result.id] = result.quote;
+              return acc;
+            }, {}),
+          );
+          setLineQuoteErrors(
+            Object.fromEntries(
+              results
+                .filter((result) => result.error)
+                .map((result) => [result.id, result.error]),
+            ),
+          );
+          setQuoteError(
+            results.some((result) => result.error)
+              ? "Existem produtos sem preço vigente. Verifique os itens destacados."
+              : "",
+          );
         }
       })
-      .finally(() => { if (!cancelled) setQuoteBusy(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setQuoteBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [customerId, completeLines]);
 
   useEffect(() => {
     if (!customPackage) {
       const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
-      setPackageBoxes((current) => Array.from({ length: suggested }, (_, index) =>
-        current[index]
-          ? { ...current[index]!, widthCm: "35", heightCm: "22", lengthCm: "11", weightKg: "" }
-          : newPackageBox(),
-      ));
+      setPackageBoxes((current) =>
+        Array.from({ length: suggested }, (_, index) =>
+          current[index]
+            ? {
+                ...current[index]!,
+                widthCm: "35",
+                heightCm: "22",
+                lengthCm: "11",
+                weightKg: "",
+              }
+            : newPackageBox(),
+        ),
+      );
     }
   }, [customPackage, totalWeightGrams]);
 
@@ -667,14 +2008,14 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   }, [customerId, lines, customPackage, packageBoxes]);
 
   useEffect(() => {
-    setFreightResponsibility("");
+    setFreightResponsibility(isSample ? "BISPO" : "");
     setCarrierName("");
     setShippingQuotes([]);
     setShippingQuoteId("");
     setShippingPostalCode("");
     setShippingSummary(null);
     setShippingError("");
-  }, [customerId, firstQuote?.salesChannelType]);
+  }, [customerId, firstQuote?.salesChannelType, isSample]);
 
   useEffect(() => {
     if (usesPlatformShipping) return;
@@ -690,22 +2031,38 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       const kg = Number(box.weightKg);
       return Number.isFinite(kg) && kg > 0 ? Math.round(kg * 1000) : 0;
     });
-    const explicitTotal = explicitWeightGrams.reduce((sum, value) => sum + value, 0);
+    const explicitTotal = explicitWeightGrams.reduce(
+      (sum, value) => sum + value,
+      0,
+    );
     const missing = explicitWeightGrams.filter((value) => value <= 0).length;
-    const automaticWeight = missing > 0
-      ? Math.max(1, Math.ceil(Math.max(0, totalWeightGrams - explicitTotal) / missing))
-      : 0;
+    const automaticWeight =
+      missing > 0
+        ? Math.max(
+            1,
+            Math.ceil(Math.max(0, totalWeightGrams - explicitTotal) / missing),
+          )
+        : 0;
 
     return packageBoxes.map((box, index) => ({
       widthCm: Number(box.widthCm),
       heightCm: Number(box.heightCm),
       lengthCm: Number(box.lengthCm),
-      weightGrams: (explicitWeightGrams[index] ?? 0) > 0 ? (explicitWeightGrams[index] ?? 0) : automaticWeight,
+      weightGrams:
+        (explicitWeightGrams[index] ?? 0) > 0
+          ? (explicitWeightGrams[index] ?? 0)
+          : automaticWeight,
     }));
   };
 
   const calculateShipping = async () => {
-    if (!customerId || !completeLines.length || completeLines.some((line) => !quotes[line.id])) return;
+    if (
+      !customerId ||
+      !completeLines.length ||
+      completeLines.some((line) => !quotes[line.id]) ||
+      invalidNegotiatedLine
+    )
+      return;
     setShippingBusy(true);
     setShippingError("");
     setShippingQuotes([]);
@@ -716,19 +2073,34 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          orderType,
           customerId,
-          items: completeLines.map((line) => ({ productVariantId: line.variantId, quantity: line.quantity })),
-          packages: shippingPackages(),
+          items: completeLines.map((line) => ({
+            productVariantId: line.variantId,
+            quantity: line.quantity,
+            negotiatedUnitPrice:
+              line.discountAmount?.trim() === ""
+                ? undefined
+                : pricedLines.find((item) => item.line.id === line.id)?.pricing
+                    ?.finalUnitPrice,
+          })),
+          packages: isSample ? undefined : shippingPackages(),
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message ?? "Não foi possível cotar o frete.");
+      if (!response.ok)
+        throw new Error(payload.message ?? "Não foi possível cotar o frete.");
       setShippingQuotes(payload.options ?? []);
       setShippingPostalCode(payload.postalCode ?? "");
       setShippingSummary(payload.summary ?? null);
-      if (payload.options?.length === 1) setShippingQuoteId(payload.options[0].id);
+      if (payload.options?.length === 1)
+        setShippingQuoteId(payload.options[0].id);
     } catch (cause) {
-      setShippingError(cause instanceof Error ? cause.message : "Não foi possível cotar o frete.");
+      setShippingError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível cotar o frete.",
+      );
     } finally {
       setShippingBusy(false);
     }
@@ -737,15 +2109,57 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
   const submit = async () => {
     setError("");
     if (!orderPurpose) return setError("Selecione a finalidade do pedido.");
-    if (!customerId || !completeLines.length) return setError("Selecione o cliente e ao menos um produto.");
-    if (completeLines.length !== lines.length || completeLines.some((line) => !quotes[line.id])) return setError("Todos os itens precisam de produto, quantidade e preço vigente.");
-    if (isTerm && !paymentTerms) return setError("Informe a condição da venda a prazo.");
-    if (!freightResponsibility) return setError("Selecione quem será responsável pelo frete.");
-    if (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) {
-      return setError("Calcule e selecione uma opção de frete para o distribuidor.");
+    if (!customerId || !completeLines.length)
+      return setError("Selecione o cliente e ao menos um produto.");
+    if (
+      hasInvalidSelectedLine ||
+      completeLines.some((line) => !quotes[line.id])
+    )
+      return setError(
+        "Todos os itens precisam de produto, quantidade e preço vigente.",
+      );
+    if (invalidNegotiatedLine?.pricing?.message)
+      return setError(invalidNegotiatedLine.pricing.message);
+    if (isTerm && !paymentTerms)
+      return setError("Informe a condição da venda a prazo.");
+    if (!freightResponsibility)
+      return setError("Selecione quem será responsável pelo frete.");
+    if (usesPlatformShipping && !selectedShippingQuote) {
+      return setError(
+        isSample
+          ? "Pesquise e selecione o envio da amostra pelo Melhor Envio."
+          : "Calcule e selecione uma opção de frete para o distribuidor.",
+      );
     }
-    if (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim()) {
+    if (
+      isDistributor &&
+      freightResponsibility === "CUSTOMER_CARRIER" &&
+      !carrierName.trim()
+    ) {
       return setError("Informe a transportadora indicada pelo distribuidor.");
+    }
+    if (isExport && (!incoterm.trim() || !incotermLocation.trim())) {
+      return setError("Informe o Incoterm e o local nomeado da exportação.");
+    }
+    if (
+      isSample &&
+      isExport &&
+      (!customsDeclaredValue || Number(customsDeclaredValue) <= 0)
+    ) {
+      return setError(
+        "Informe um valor aduaneiro declarado positivo para a amostra.",
+      );
+    }
+    if (
+      isExport &&
+      orderCurrency !== "BRL" &&
+      (!exchangeRateToBrl ||
+        Number(exchangeRateToBrl) <= 0 ||
+        !exchangeRateDate)
+    ) {
+      return setError(
+        "Informe a cotação da moeda para BRL e a data da cotação.",
+      );
     }
 
     const response = await fetch(salesOrdersApi(), {
@@ -755,65 +2169,167 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
       body: JSON.stringify({
         code: orderNumber,
         orderNumber,
+        orderType,
         customerId,
-        paymentType,
-        paymentTerms: isTerm ? paymentTerms : "À vista",
+        paymentType: isSample ? "SAMPLE" : paymentType,
+        paymentTerms: isSample
+          ? "Sem cobrança · amostra"
+          : isTerm
+            ? paymentTerms
+            : "À vista",
         freightResponsibility,
-        carrierName: usesPlatformShipping ? selectedShippingQuote?.carrierName : carrierName.trim() || undefined,
+        carrierName: usesPlatformShipping
+          ? selectedShippingQuote?.carrierName
+          : carrierName.trim() || undefined,
         freight: freightAmount,
-        shippingQuoteId: usesPlatformShipping ? selectedShippingQuote?.id : undefined,
-        destinationPostalCode: usesPlatformShipping ? shippingPostalCode || undefined : undefined,
-        packages: usesPlatformShipping ? shippingPackages() : undefined,
+        shippingQuoteId: usesPlatformShipping
+          ? selectedShippingQuote?.id
+          : undefined,
+        destinationPostalCode: usesPlatformShipping
+          ? shippingPostalCode || undefined
+          : undefined,
+        packages:
+          usesPlatformShipping && !isSample ? shippingPackages() : undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
         customerReference,
         notes,
         incoterm: isExport ? incoterm : undefined,
         incotermLocation: isExport ? incotermLocation : undefined,
-        brokerId: brokerId || undefined,
-        brokerCommissionMode: brokerId ? brokerCommissionMode : undefined,
-        brokerCommissionPercent: brokerId && brokerCommissionMode === "PERCENTAGE" ? Number(brokerCommissionPercent || 0) : undefined,
-        brokerCommissionPerPackage: brokerId && brokerCommissionMode === "PER_PACKAGE" ? Number(brokerCommissionPerPackage || 0) : undefined,
+        currency: isExport ? orderCurrency : undefined,
+        exchangeRateToBrl:
+          isExport && orderCurrency !== "BRL"
+            ? Number(exchangeRateToBrl)
+            : isExport
+              ? 1
+              : undefined,
+        exchangeRateDate: isExport ? exchangeRateDate : undefined,
+        customsDeclaredValue:
+          isSample && isExport ? Number(customsDeclaredValue) : undefined,
+        brokerId: !isSample && brokerId ? brokerId : undefined,
+        brokerCommissionMode:
+          !isSample && brokerId ? brokerCommissionMode : undefined,
+        brokerCommissionPercent:
+          !isSample && brokerId && brokerCommissionMode === "PERCENTAGE"
+            ? Number(brokerCommissionPercent || 0)
+            : undefined,
+        brokerCommissionPerPackage:
+          !isSample && brokerId && brokerCommissionMode === "PER_PACKAGE"
+            ? Number(brokerCommissionPerPackage || 0)
+            : undefined,
         items: completeLines.map((line) => {
-          const variant = variants.find((candidate) => candidate.productVariantId === line.variantId)!;
+          const variant = variants.find(
+            (candidate) => candidate.productVariantId === line.variantId,
+          )!;
           return {
             productVariantId: variant.productVariantId,
             warehouseId: variant.warehouseId,
             quantity: line.quantity,
-            unitPrice: quotes[line.id]!.officialUnitPrice,
+            unitPrice: isSample
+              ? SAMPLE_FISCAL_PACKAGE_VALUE
+              : quotes[line.id]!.officialUnitPrice,
+            negotiatedUnitPrice:
+              isSample || line.discountAmount?.trim() === ""
+                ? undefined
+                : pricedLines.find((item) => item.line.id === line.id)?.pricing
+                    ?.finalUnitPrice,
           };
         }),
       }),
     });
 
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) return setError(result.message ?? "Não foi possível criar o pedido.");
+    if (!response.ok)
+      return setError(result.message ?? "Não foi possível criar o pedido.");
     await onCreated();
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside role="dialog" aria-modal="true" aria-labelledby="new-order-title" className="relative flex h-dvh w-full max-w-6xl flex-col overflow-hidden border-l bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex overflow-clip justify-end">
+      <button
+        aria-label="Fechar"
+        onClick={requestClose}
+        className="absolute inset-0 bg-black/25"
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-order-title"
+        className="relative flex h-dvh max-h-dvh min-h-0 w-full max-w-6xl flex-col overflow-clip overscroll-none border-l bg-white shadow-2xl"
+      >
         <header className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">Novo pedido</h2>
-            <span className="shrink-0 text-xs font-semibold text-stone-500">{orderNumber}</span>
+            <h2 id="new-order-title" className="shrink-0 text-lg font-bold">
+              {isSample ? "Novo pedido de amostra" : "Novo pedido"}
+            </h2>
+            <span className="shrink-0 text-xs font-semibold text-stone-500">
+              {orderNumber}
+            </span>
             <span className="min-w-0 truncate text-xs text-stone-500">
-              <b className="text-stone-800">Finalidade:</b> {orderPurpose || "selecione"}
+              <b className="text-stone-800">Finalidade:</b>{" "}
+              {orderPurpose || "selecione"}
               <span className="mx-2 text-stone-300">·</span>
-              <b className="text-stone-800">Comprador:</b> {customer?.name ?? "selecione o cliente"}
+              <b className="text-stone-800">Comprador:</b>{" "}
+              {customer?.name ?? "selecione o cliente"}
             </span>
           </div>
-          <button type="button" aria-label="Fechar novo pedido" onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100"><X size={19} /></button>
+          <button
+            type="button"
+            data-mobile-exit-labeled
+            aria-label="Fechar novo pedido"
+            onClick={requestClose}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-stone-600 hover:bg-stone-100"
+          >
+            <X size={19} />
+            <span className="text-xs font-bold sm:hidden">Cancelar</span>
+          </button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
+          {isSample && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+              <p className="text-xs font-bold uppercase tracking-wider">
+                Amostra sem cobrança comercial
+              </p>
+              <p className="mt-1 text-[11px] leading-5">
+                {isExport ? (
+                  <>
+                    A amostra internacional não gera cobrança, comissão nem
+                    receita. O valor aduaneiro informado abaixo será usado
+                    somente na NF-e e nos documentos de exportação, convertido
+                    para BRL pela cotação registrada.
+                  </>
+                ) : (
+                  <>
+                    Cada pacote será registrado por{" "}
+                    <b>{money.format(SAMPLE_FISCAL_PACKAGE_VALUE)}</b>, apenas
+                    como valor fiscal simbólico. Esta regra vale para todos os
+                    usuários. O pedido movimenta estoque, pode gerar NF-e e
+                    expedição, mas não gera cobrança, comissão nem receita
+                    comercial.
+                  </>
+                )}
+              </p>
+              <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                Antes da emissão, confirme no Bling a natureza da operação, CFOP
+                e tributação definidos pela contabilidade.
+              </p>
+            </div>
+          )}
+
           <section className="rounded-2xl border border-forest-100 bg-forest-50/60 p-3">
-            <p className="text-xs font-bold text-forest-950">1 · Finalidade do pedido</p>
-            <p className="mt-1 text-[10px] text-stone-500">A finalidade define quais clientes e qual tabela comercial poderão ser utilizados.</p>
+            <p className="text-xs font-bold text-forest-950">
+              1 · Finalidade do pedido
+            </p>
+            <p className="mt-1 text-[10px] text-stone-500">
+              A finalidade define quais clientes e qual tabela comercial poderão
+              ser utilizados.
+            </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {orderPurposes.map((purpose) => {
-                const total = filterCustomersByOrderPurpose(customers, purpose).length;
+                const total = filterCustomersByOrderPurpose(
+                  customers,
+                  purpose,
+                ).length;
                 const selected = orderPurpose === purpose;
                 return (
                   <button
@@ -827,7 +2343,11 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                     className={`rounded-xl border px-3 py-3 text-left transition ${selected ? "border-forest-700 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-forest-300"}`}
                   >
                     <strong className="block text-xs">{purpose}</strong>
-                    <span className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}>{total} cliente{total === 1 ? "" : "s"}</span>
+                    <span
+                      className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}
+                    >
+                      {total} cliente{total === 1 ? "" : "s"}
+                    </span>
                   </button>
                 );
               })}
@@ -835,10 +2355,36 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
           </section>
 
           <div>
-            <label htmlFor="new-order-customer" className="block text-xs font-semibold">2 · Cliente</label>
-            <select id="new-order-customer" disabled={!orderPurpose} value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400">
-              <option value="">{orderPurpose ? `Selecione um cliente de ${orderPurpose}` : "Selecione primeiro a finalidade"}</option>
-              {filteredCustomers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            <label
+              htmlFor="new-order-customer"
+              className="block text-xs font-semibold"
+            >
+              2 · Cliente
+            </label>
+            <select
+              id="new-order-customer"
+              disabled={!orderPurpose}
+              value={customerId}
+              onChange={(event) => setCustomerId(event.target.value)}
+              className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+            >
+              <option value="">
+                {orderPurpose
+                  ? `Selecione um cliente de ${orderPurpose}`
+                  : "Selecione primeiro a finalidade"}
+              </option>
+              {filteredCustomers.map((item) => (
+                <option
+                  key={item.id}
+                  value={item.id}
+                  disabled={item.fiscalReadiness?.ready === false}
+                >
+                  {item.name}
+                  {item.fiscalReadiness?.ready === false
+                    ? " · cadastro fiscal pendente"
+                    : ""}
+                </option>
+              ))}
             </select>
             {orderPurpose && (
               <span className="mt-1 block text-[10px] text-stone-400">
@@ -847,19 +2393,48 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
             )}
           </div>
 
-          <div>
-            <p className="text-xs font-semibold">Forma de pagamento</p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setPaymentType("CASH")} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}>À vista</button>
-              <button type="button" onClick={() => setPaymentType("TERM")} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}>A prazo</button>
+          {customer?.fiscalReadiness?.ready === false && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              <b>Cliente ainda não está pronto para NF-e.</b>
+              <p className="mt-1">
+                Complete em Clientes:{" "}
+                {customer.fiscalReadiness.issues.join(", ")}.
+              </p>
             </div>
-          </div>
+          )}
+
+          {!isSample && (
+            <div>
+              <p className="text-xs font-semibold">Forma de pagamento</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentType("CASH")}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                >
+                  À vista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentType("TERM")}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}
+                >
+                  A prazo
+                </button>
+              </div>
+            </div>
+          )}
 
           {isTerm && (
             <>
               <Field label="Condição de pagamento">
-                <select value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)}>
-                  {paymentOptions.map((option) => <option key={option}>{option}</option>)}
+                <select
+                  value={paymentTerms}
+                  onChange={(event) => setPaymentTerms(event.target.value)}
+                >
+                  {paymentOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
                 </select>
               </Field>
               {customerId && (
@@ -874,6 +2449,9 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                   exceeds={exceeds}
                   status={health?.creditStatus ?? customer?.creditStatus}
                   reviewPending={health?.creditReviewPending}
+                  overdueCount={overdueCount}
+                  overdueAmount={overdueAmount}
+                  maxDaysOverdue={maxDaysOverdue}
                 />
               )}
             </>
@@ -883,80 +2461,324 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-bold">Produtos do pedido</p>
-                <p className="mt-0.5 text-[10px] text-stone-400">{orderPurpose ? `Produtos para o pedido de ${orderPurpose}.` : "Selecione a finalidade e o cliente antes dos produtos."}</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">
+                  {!customerId
+                    ? "Selecione a finalidade e o cliente antes dos produtos."
+                    : isSample
+                      ? "Selecione os produtos e quantidades enviados como amostra."
+                      : `Produtos para o pedido de ${orderPurpose}. Informe o desconto em reais; o BBOS calcula o percentual e o preço final.`}
+                </p>
               </div>
               <div className="flex gap-2">
-                <button type="button" disabled={!customerId} onClick={() => setLines(variants.map((variant) => ({ ...newDraftLine(), variantId: variant.productVariantId })))} className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600 disabled:cursor-not-allowed disabled:opacity-40">Adicionar todos</button>
-                <button type="button" disabled={!customerId} onClick={() => setLines((current) => [...current, newDraftLine()])} className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"><Plus size={12} className="mr-1 inline" /> Produto</button>
+                <button
+                  type="button"
+                  disabled={!customerId}
+                  onClick={() =>
+                    setLines(
+                      variants.map((variant) => ({
+                        ...newDraftLine(),
+                        variantId: variant.productVariantId,
+                      })),
+                    )
+                  }
+                  className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Adicionar todos
+                </button>
+                <button
+                  type="button"
+                  disabled={!customerId}
+                  onClick={() =>
+                    setLines((current) => [...current, newDraftLine()])
+                  }
+                  className="rounded-lg bg-forest-900 px-3 py-2 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus size={12} className="mr-1 inline" /> Produto
+                </button>
               </div>
             </div>
 
             <div className="space-y-1.5">
               {lines.map((line, index) => {
-                const selectedVariant = variants.find((variant) => variant.productVariantId === line.variantId);
+                const selectedVariant = variants.find(
+                  (variant) => variant.productVariantId === line.variantId,
+                );
                 const lineQuote = quotes[line.id];
+                const linePricing = lineQuote
+                  ? calculateSalesLineDiscount({
+                      officialUnitPrice: isSample
+                        ? SAMPLE_FISCAL_PACKAGE_VALUE
+                        : lineQuote.officialUnitPrice,
+                      discountAmount: isSample ? 0 : line.discountAmount,
+                      maxDiscountPercent: canApproveNegotiatedPrice
+                        ? null
+                        : lineQuote.discountPolicy.maxRequestPercent,
+                      minimumPrice: lineQuote.discountPolicy.minimumPrice,
+                    })
+                  : null;
                 return (
-                  <div key={line.id} className="rounded-lg border bg-white px-2.5 py-2">
-                    <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_82px_112px_112px_30px]">
+                  <div
+                    key={line.id}
+                    className="rounded-lg border bg-white px-2.5 py-2"
+                  >
+                    <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_72px_100px_104px_122px_108px_30px]">
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Produto / apresentação</p>
-                        <select disabled={!customerId} value={line.variantId} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, variantId: event.target.value } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400">
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Produto / apresentação
+                        </p>
+                        <select
+                          disabled={!customerId}
+                          value={line.variantId}
+                          onChange={(event) =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.id === line.id
+                                  ? {
+                                      ...item,
+                                      variantId: event.target.value,
+                                      discountAmount: "",
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+                        >
                           <option value="">Selecione</option>
                           {variants.map((variant) => (
-                            <option key={variant.productVariantId} value={variant.productVariantId} disabled={lines.some((item) => item.id !== line.id && item.variantId === variant.productVariantId)}>
-                              {variant.product} · {variant.presentationGrams >= 1000 ? `${variant.presentationGrams / 1000} kg` : `${variant.presentationGrams} g`} · {variant.sku}
+                            <option
+                              key={variant.productVariantId}
+                              value={variant.productVariantId}
+                              disabled={lines.some(
+                                (item) =>
+                                  item.id !== line.id &&
+                                  item.variantId === variant.productVariantId,
+                              )}
+                            >
+                              {variant.product} ·{" "}
+                              {variant.presentationGrams >= 1000
+                                ? `${variant.presentationGrams / 1000} kg`
+                                : `${variant.presentationGrams} g`}{" "}
+                              · {variant.sku}
                             </option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Qtd.</p>
-                        <input type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item.id === line.id ? { ...item, quantity: Math.max(1, Number(event.target.value)) } : item))} className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs" />
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Qtd.
+                        </p>
+                        <input
+                          type="number"
+                          min="1"
+                          value={line.quantity}
+                          onChange={(event) =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.id === line.id
+                                  ? {
+                                      ...item,
+                                      quantity: Math.max(
+                                        1,
+                                        Number(event.target.value),
+                                      ),
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs"
+                        />
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Preço unit.</p>
-                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">{quoteBusy && line.variantId ? "…" : lineQuote ? money.format(lineQuote.officialUnitPrice) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          {isSample ? "Preço / pacote" : "Preço tabela"}
+                        </p>
+                        <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">
+                          {quoteBusy && line.variantId
+                            ? "…"
+                            : lineQuote
+                              ? money.format(
+                                  isSample
+                                    ? SAMPLE_FISCAL_PACKAGE_VALUE
+                                    : lineQuote.officialUnitPrice,
+                                )
+                              : "—"}
+                        </div>
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">Subtotal</p>
-                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">{lineQuote ? money.format(lineQuote.totalAmount) : "—"}</div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Desconto (R$)
+                        </p>
+                        {isSample ? (
+                          <div className="rounded-lg border bg-stone-50 px-2.5 py-1.5 text-xs font-semibold">
+                            {money.format(0)}
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            aria-label={`Desconto em reais do item ${index + 1}`}
+                            value={line.discountAmount ?? ""}
+                            placeholder="0,00"
+                            onChange={(event) =>
+                              setLines((current) =>
+                                current.map((item) =>
+                                  item.id === line.id
+                                    ? {
+                                        ...item,
+                                        discountAmount: event.target.value,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            className={`w-full rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold ${linePricing && !linePricing.valid ? "border-red-400 text-red-800" : ""}`}
+                          />
+                        )}
                       </div>
-                      <button type="button" aria-label={`Remover item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"><X size={15} /></button>
+                      <div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Preço final
+                        </p>
+                        <div className="rounded-lg bg-violet-50 px-2 py-1.5 text-right text-[10px] font-bold text-violet-800">
+                          {linePricing ? (
+                            <>
+                              {money.format(linePricing.finalUnitPrice)}
+                              <span className="ml-1 font-medium">
+                                ·{" "}
+                                {linePricing.discountPercent.toLocaleString(
+                                  "pt-BR",
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
+                                %
+                              </span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
+                          Subtotal
+                        </p>
+                        <div className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-right text-xs font-bold">
+                          {lineQuote
+                            ? money.format(
+                                line.quantity *
+                                  Number(linePricing?.finalUnitPrice ?? 0),
+                              )
+                            : "—"}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remover item ${index + 1}`}
+                        disabled={lines.length === 1}
+                        onClick={() =>
+                          setLines((current) =>
+                            current.filter((item) => item.id !== line.id),
+                          )
+                        }
+                        className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-20"
+                      >
+                        <X size={15} />
+                      </button>
                     </div>
-                    {selectedVariant && <p className="mt-1 text-[9px] leading-tight text-stone-400">{selectedVariant.line} · estoque disponível {selectedVariant.availableStock} pacote(s){lineQuote ? ` · tabela ${lineQuote.salesChannelName}` : ""}</p>}
-                    {lineQuoteErrors[line.id] && <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-800">{lineQuoteErrors[line.id]}</p>}
+                    {selectedVariant && (
+                      <p className="mt-1 text-[9px] leading-tight text-stone-400">
+                        {selectedVariant.line} · estoque disponível{" "}
+                        {selectedVariant.availableStock} pacote(s)
+                        {lineQuote
+                          ? lineQuote.pricingSource === "CUSTOMER"
+                            ? ` · preço negociado para este cliente`
+                            : ` · tabela ${lineQuote.salesChannelName}`
+                          : ""}
+                        {linePricing && linePricing.discountAmount > 0
+                          ? ` · desconto ${money.format(linePricing.discountAmount)} por unidade (${linePricing.discountPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)`
+                          : ""}
+                      </p>
+                    )}
+                    {linePricing && !linePricing.valid && (
+                      <p className="mt-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[10px] text-red-800">
+                        {linePricing.message}
+                      </p>
+                    )}
+                    {lineQuoteErrors[line.id] && (
+                      <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-800">
+                        {lineQuoteErrors[line.id]}
+                      </p>
+                    )}
                   </div>
                 );
               })}
             </div>
 
             <div className="mt-2 flex items-center justify-between rounded-xl bg-forest-900 px-4 py-2 text-white">
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Subtotal dos produtos</span>
-              <b className="text-sm">{quoteBusy ? "Consultando…" : money.format(productsTotal)}</b>
+              <span className="text-[10px] font-semibold uppercase tracking-wider">
+                Subtotal dos produtos
+              </span>
+              <b className="text-sm">
+                {quoteBusy ? "Consultando…" : money.format(productsTotal)}
+              </b>
             </div>
-            {quoteError && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{quoteError}</p>}
+            {quoteError && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                {quoteError}
+              </p>
+            )}
           </section>
 
           <section className="rounded-2xl border border-stone-200 bg-white">
-            <button type="button" onClick={() => setShowTerms((value) => !value)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+            <button
+              type="button"
+              onClick={() => setShowTerms((value) => !value)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+            >
               <div>
                 <p className="text-xs font-bold">Condições do pedido</p>
-                <p className="mt-0.5 text-[10px] text-stone-400">Frete, entrega, referência e observações.</p>
+                <p className="mt-0.5 text-[10px] text-stone-400">
+                  Frete, entrega, referência e observações.
+                </p>
               </div>
-              <span className="text-xs font-semibold text-violet-700">{showTerms ? "Recolher" : "Editar"}</span>
+              <span className="text-xs font-semibold text-violet-700">
+                {showTerms ? "Recolher" : "Editar"}
+              </span>
             </button>
 
             {showTerms && (
               <div className="grid gap-3 border-t p-4 sm:grid-cols-2">
-                {isDistributor ? (
+                {isDistributor && !isSample ? (
                   <div className="sm:col-span-2">
-                    <p className="mb-2 text-[10px] font-semibold text-stone-600">Como o distribuidor quer receber?</p>
+                    <p className="mb-2 text-[10px] font-semibold text-stone-600">
+                      Como o distribuidor quer receber?
+                    </p>
                     <div className="grid gap-2 sm:grid-cols-3">
-                      {([
-                        ["CUSTOMER", "Cotar pela Bispo", "Comparamos as opções. O frete escolhido entra no pedido e no Pix."],
-                        ["PICKUP", "Retirar na Bispo", "O distribuidor agenda a retirada em nossa empresa, sem frete no pedido."],
-                        ["CUSTOMER_CARRIER", "Transportadora própria", "O distribuidor indica e contrata a transportadora por sua conta e risco."],
-                      ] as const).map(([value, title, detail]) => (
+                      {(
+                        [
+                          [
+                            "CUSTOMER",
+                            "Cotar pela Bispo",
+                            "Comparamos as opções. O frete escolhido entra no pedido e no Pix.",
+                          ],
+                          [
+                            "PICKUP",
+                            "Retirar na Bispo",
+                            "O distribuidor agenda a retirada em nossa empresa, sem frete no pedido.",
+                          ],
+                          [
+                            "CUSTOMER_CARRIER",
+                            "Transportadora própria",
+                            "O distribuidor indica e contrata a transportadora por sua conta e risco.",
+                          ],
+                        ] as const
+                      ).map(([value, title, detail]) => (
                         <button
                           key={value}
                           type="button"
@@ -964,80 +2786,189 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                           onClick={() => setFreightResponsibility(value)}
                           className={`rounded-xl border p-3 text-left transition ${freightResponsibility === value ? "border-emerald-800 bg-emerald-50 ring-1 ring-emerald-800" : "border-stone-200 bg-white hover:border-stone-400"}`}
                         >
-                          <span className="block text-xs font-bold text-stone-900">{title}</span>
-                          <span className="mt-1 block text-[10px] leading-4 text-stone-500">{detail}</span>
+                          <span className="block text-xs font-bold text-stone-900">
+                            {title}
+                          </span>
+                          <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                            {detail}
+                          </span>
                         </button>
                       ))}
                     </div>
                   </div>
                 ) : (
                   <Field label="Frete">
-                    <select value={freightResponsibility} onChange={(event) => setFreightResponsibility(event.target.value as "" | "BISPO" | "CUSTOMER" | "CUSTOMER_CARRIER" | "PICKUP")}>
+                    <select
+                      value={freightResponsibility}
+                      onChange={(event) =>
+                        setFreightResponsibility(
+                          event.target.value as
+                            | ""
+                            | "BISPO"
+                            | "CUSTOMER"
+                            | "CUSTOMER_CARRIER"
+                            | "PICKUP",
+                        )
+                      }
+                    >
                       <option value="">Selecione</option>
-                      <option value="CUSTOMER">Por conta do cliente</option>
+                      {(!isSample || isExport) && (
+                        <option value="CUSTOMER">Por conta do cliente</option>
+                      )}
                       <option value="BISPO">Por conta da Bispo</option>
                       <option value="PICKUP">Retirada na Bispo Coffees</option>
                     </select>
                   </Field>
                 )}
                 <Field label="Entrega prevista">
-                  <input type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} />
+                  <input
+                    type="date"
+                    value={expectedDeliveryDate}
+                    onChange={(event) =>
+                      setExpectedDeliveryDate(event.target.value)
+                    }
+                  />
                 </Field>
                 {freightResponsibility === "CUSTOMER_CARRIER" && (
                   <Field label="Transportadora indicada pelo distribuidor">
-                    <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Nome da transportadora · obrigatório" />
+                    <input
+                      value={carrierName}
+                      onChange={(event) => setCarrierName(event.target.value)}
+                      placeholder="Nome da transportadora · obrigatório"
+                    />
                   </Field>
                 )}
-                {!isDistributor && freightResponsibility && freightResponsibility !== "PICKUP" && (
-                  <Field label="Transportadora">
-                    <input value={carrierName} onChange={(event) => setCarrierName(event.target.value)} placeholder="Opcional / a definir" />
-                  </Field>
-                )}
-                {isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-4 text-amber-900 sm:col-span-2">
-                    A contratação, o pagamento, o seguro, a coleta e o risco do transporte ficam sob responsabilidade do distribuidor. A Bispo entregará a mercadoria à transportadora indicada mediante identificação e agendamento.
-                  </div>
-                )}
+                {!isDistributor &&
+                  !usesPlatformShipping &&
+                  freightResponsibility &&
+                  freightResponsibility !== "PICKUP" && (
+                    <Field label="Transportadora">
+                      <input
+                        value={carrierName}
+                        onChange={(event) => setCarrierName(event.target.value)}
+                        placeholder="Opcional / a definir"
+                      />
+                    </Field>
+                  )}
+                {isDistributor &&
+                  freightResponsibility === "CUSTOMER_CARRIER" && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] leading-4 text-amber-900 sm:col-span-2">
+                      A contratação, o pagamento, o seguro, a coleta e o risco
+                      do transporte ficam sob responsabilidade do distribuidor.
+                      A Bispo entregará a mercadoria à transportadora indicada
+                      mediante identificação e agendamento.
+                    </div>
+                  )}
                 {isDistributor && freightResponsibility === "PICKUP" && (
                   <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-[10px] leading-4 text-stone-600 sm:col-span-2">
-                    A retirada será agendada após a liberação financeira e fiscal. O pedido não terá valor de frete.
+                    A retirada será agendada após a liberação financeira e
+                    fiscal. O pedido não terá valor de frete.
                   </div>
                 )}
-                <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">Corretor e comissão · opcional</p>
-                  <p className="mt-1 text-[10px] text-stone-500">Escolha percentual sobre os produtos ou valor fixo por pacote. O frete nunca entra na comissão.</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
-                    <Field label="Corretor">
-                      <select value={brokerId} onChange={(event) => { setBrokerId(event.target.value); if (!event.target.value) { setBrokerCommissionPercent(""); setBrokerCommissionPerPackage(""); } }}>
-                        <option value="">Sem corretor</option>
-                        {brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.tradeName || broker.name}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Forma da comissão">
-                      <select disabled={!brokerId} value={brokerCommissionMode} onChange={(event) => setBrokerCommissionMode(event.target.value as "PERCENTAGE" | "PER_PACKAGE")}>
-                        <option value="PERCENTAGE">Percentual</option>
-                        <option value="PER_PACKAGE">Valor por pacote</option>
-                      </select>
-                    </Field>
-                    {brokerCommissionMode === "PERCENTAGE" ? (
-                      <Field label="Comissão (%)">
-                        <input type="number" min="0" max="100" step="0.01" disabled={!brokerId} value={brokerCommissionPercent} onChange={(event) => setBrokerCommissionPercent(event.target.value)} placeholder="0,00" />
+                {!isSample && (
+                  <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 sm:col-span-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">
+                      Parceiro/corretor e comissão · opcional
+                    </p>
+                    <p className="mt-1 text-[10px] text-stone-500">
+                      Selecione um parceiro habilitado como corretor comercial.
+                      O frete nunca entra na comissão.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_170px_150px_170px]">
+                      <Field label="Parceiro/corretor">
+                        <select
+                          value={brokerId}
+                          onChange={(event) => {
+                            setBrokerId(event.target.value);
+                            if (!event.target.value) {
+                              setBrokerCommissionPercent("");
+                              setBrokerCommissionPerPackage("");
+                            }
+                          }}
+                        >
+                          <option value="">Sem parceiro/corretor</option>
+                          {brokers.map((broker) => (
+                            <option key={broker.id} value={broker.id}>
+                              {broker.tradeName || broker.name}
+                            </option>
+                          ))}
+                        </select>
                       </Field>
-                    ) : (
-                      <Field label="Valor por pacote">
-                        <input type="number" min="0" step="0.01" disabled={!brokerId} value={brokerCommissionPerPackage} onChange={(event) => setBrokerCommissionPerPackage(event.target.value)} placeholder="R$ 0,00" />
+                      <Field label="Forma da comissão">
+                        <select
+                          disabled={!brokerId}
+                          value={brokerCommissionMode}
+                          onChange={(event) =>
+                            setBrokerCommissionMode(
+                              event.target.value as
+                                "PERCENTAGE" | "PER_PACKAGE",
+                            )
+                          }
+                        >
+                          <option value="PERCENTAGE">Percentual</option>
+                          <option value="PER_PACKAGE">Valor por pacote</option>
+                        </select>
                       </Field>
+                      {brokerCommissionMode === "PERCENTAGE" ? (
+                        <Field label="Comissão (%)">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            disabled={!brokerId}
+                            value={brokerCommissionPercent}
+                            onChange={(event) =>
+                              setBrokerCommissionPercent(event.target.value)
+                            }
+                            placeholder="0,00"
+                          />
+                        </Field>
+                      ) : (
+                        <Field label="Valor por pacote">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            disabled={!brokerId}
+                            value={brokerCommissionPerPackage}
+                            onChange={(event) =>
+                              setBrokerCommissionPerPackage(event.target.value)
+                            }
+                            placeholder="R$ 0,00"
+                          />
+                        </Field>
+                      )}
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-semibold text-stone-600">
+                          Valor a pagar
+                        </p>
+                        <div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">
+                          {money.format(brokerCommission)}
+                        </div>
+                      </div>
+                    </div>
+                    {brokerId && brokerCommissionMode === "PER_PACKAGE" && (
+                      <p className="mt-2 text-[10px] text-stone-500">
+                        {totalPackages} pacote(s) ×{" "}
+                        {money.format(Number(brokerCommissionPerPackage || 0))}{" "}
+                        por pacote.
+                      </p>
                     )}
-                    <div><p className="mb-1.5 text-[10px] font-semibold text-stone-600">Valor a pagar</p><div className="rounded-xl border bg-white px-3 py-3 text-sm font-bold">{money.format(brokerCommission)}</div></div>
                   </div>
-                  {brokerId && brokerCommissionMode === "PER_PACKAGE" && <p className="mt-2 text-[10px] text-stone-500">{totalPackages} pacote(s) × {money.format(Number(brokerCommissionPerPackage || 0))} por pacote.</p>}
-                </div>
+                )}
                 {usesPlatformShipping && (
                   <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold text-emerald-950">Cotação do frete · Melhor Envio</p>
-                        <p className="mt-1 text-[10px] text-emerald-800">Informe as medidas reais da caixa. O BBOS consulta todas as modalidades disponíveis para o CEP cadastrado.</p>
+                        <p className="text-xs font-bold text-emerald-950">
+                          Cotação do frete · Melhor Envio
+                        </p>
+                        <p className="mt-1 text-[10px] text-emerald-800">
+                          {isSample
+                            ? "O BBOS usa automaticamente a Caixa P padrão e pesquisa as modalidades disponíveis para o CEP do destinatário. O custo fica com a Bispo."
+                            : "Informe as medidas reais da caixa. O BBOS consulta todas as modalidades disponíveis para o CEP cadastrado."}
+                        </p>
                       </div>
                       <button
                         type="button"
@@ -1047,56 +2978,82 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                           !completeLines.length ||
                           completeLines.some((line) => !quotes[line.id]) ||
                           !packageBoxes.length ||
-                          packageBoxes.some((box) =>
-                            !Number.isFinite(Number(box.widthCm)) || Number(box.widthCm) <= 0 ||
-                            !Number.isFinite(Number(box.heightCm)) || Number(box.heightCm) <= 0 ||
-                            !Number.isFinite(Number(box.lengthCm)) || Number(box.lengthCm) <= 0
+                          packageBoxes.some(
+                            (box) =>
+                              !Number.isFinite(Number(box.widthCm)) ||
+                              Number(box.widthCm) <= 0 ||
+                              !Number.isFinite(Number(box.heightCm)) ||
+                              Number(box.heightCm) <= 0 ||
+                              !Number.isFinite(Number(box.lengthCm)) ||
+                              Number(box.lengthCm) <= 0,
                           )
                         }
                         onClick={() => void calculateShipping()}
                         className="rounded-lg bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
                       >
-                        {shippingBusy ? "Consultando todas…" : shippingQuotes.length ? "Cotar novamente" : "Ver todas as cotações"}
+                        {shippingBusy
+                          ? "Pesquisando envios…"
+                          : shippingQuotes.length
+                            ? "Pesquisar novamente"
+                            : isSample
+                              ? "Pesquisar envio"
+                              : "Ver todas as cotações"}
                       </button>
                     </div>
                     <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Volumes da cotação</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                            Volumes da cotação
+                          </p>
                           <p className="mt-1 text-[10px] text-stone-500">
-                            Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg. Cada caixa pode ter medidas e peso diferentes.
+                            {isSample
+                              ? "Caixa P Bispo padrão: 35 × 22 × 11 cm · até 2,5 kg. O BBOS calcula automaticamente a quantidade de caixas."
+                              : "Caixa P Bispo: 35 × 22 × 11 cm · até 2,5 kg. Cada caixa pode ter medidas e peso diferentes."}
                           </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomPackage(false);
-                              const suggested = Math.max(1, Math.ceil(totalWeightGrams / 2500));
-                              setPackageBoxes(Array.from({ length: suggested }, () => newPackageBox()));
-                            }}
-                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
-                          >
-                            Usar Caixa P
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCustomPackage(true)}
-                            className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
-                          >
-                            Personalizar caixas
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomPackage(true);
-                              setPackageBoxes((current) => [...current, newPackageBox(current[current.length - 1])]);
-                            }}
-                            className="rounded-lg bg-emerald-950 px-3 py-2 text-[10px] font-bold text-white"
-                          >
-                            + Adicionar caixa
-                          </button>
-                        </div>
+                        {!isSample && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomPackage(false);
+                                const suggested = Math.max(
+                                  1,
+                                  Math.ceil(totalWeightGrams / 2500),
+                                );
+                                setPackageBoxes(
+                                  Array.from({ length: suggested }, () =>
+                                    newPackageBox(),
+                                  ),
+                                );
+                              }}
+                              className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${!customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                            >
+                              Usar Caixa P
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomPackage(true)}
+                              className={`rounded-lg border px-3 py-2 text-[10px] font-bold ${customPackage ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                            >
+                              Personalizar caixas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomPackage(true);
+                                setPackageBoxes((current) => [
+                                  ...current,
+                                  newPackageBox(current[current.length - 1]),
+                                ]);
+                              }}
+                              className="rounded-lg bg-emerald-950 px-3 py-2 text-[10px] font-bold text-white"
+                            >
+                              + Adicionar caixa
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-3 space-y-2">
@@ -1105,20 +3062,31 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                             ? totalWeightGrams / packageBoxes.length / 1000
                             : 0;
                           return (
-                            <div key={box.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                            <div
+                              key={box.id}
+                              className="rounded-xl border border-stone-200 bg-stone-50 p-3"
+                            >
                               <div className="mb-2 flex items-center justify-between">
-                                <b className="text-[11px] text-stone-800">Caixa {index + 1}</b>
-                                <button
-                                  type="button"
-                                  disabled={packageBoxes.length === 1}
-                                  onClick={() => {
-                                    setCustomPackage(true);
-                                    setPackageBoxes((current) => current.filter((item) => item.id !== box.id));
-                                  }}
-                                  className="rounded-lg px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-25"
-                                >
-                                  Remover
-                                </button>
+                                <b className="text-[11px] text-stone-800">
+                                  Caixa {index + 1}
+                                </b>
+                                {!isSample && (
+                                  <button
+                                    type="button"
+                                    disabled={packageBoxes.length === 1}
+                                    onClick={() => {
+                                      setCustomPackage(true);
+                                      setPackageBoxes((current) =>
+                                        current.filter(
+                                          (item) => item.id !== box.id,
+                                        ),
+                                      );
+                                    }}
+                                    className="rounded-lg px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-25"
+                                  >
+                                    Remover
+                                  </button>
+                                )}
                               </div>
                               <div className="grid gap-2 sm:grid-cols-4">
                                 <Field label="Largura (cm)">
@@ -1127,8 +3095,19 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                                     min="1"
                                     step="1"
                                     value={box.widthCm}
-                                    disabled={!customPackage}
-                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, widthCm: event.target.value } : item))}
+                                    disabled={isSample || !customPackage}
+                                    onChange={(event) =>
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                widthCm: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      )
+                                    }
                                   />
                                 </Field>
                                 <Field label="Altura (cm)">
@@ -1137,8 +3116,19 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                                     min="1"
                                     step="1"
                                     value={box.heightCm}
-                                    disabled={!customPackage}
-                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, heightCm: event.target.value } : item))}
+                                    disabled={isSample || !customPackage}
+                                    onChange={(event) =>
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                heightCm: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      )
+                                    }
                                   />
                                 </Field>
                                 <Field label="Comprimento (cm)">
@@ -1147,8 +3137,19 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                                     min="1"
                                     step="1"
                                     value={box.lengthCm}
-                                    disabled={!customPackage}
-                                    onChange={(event) => setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, lengthCm: event.target.value } : item))}
+                                    disabled={isSample || !customPackage}
+                                    onChange={(event) =>
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                lengthCm: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      )
+                                    }
                                   />
                                 </Field>
                                 <Field label="Peso da caixa (kg)">
@@ -1157,11 +3158,25 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                                     min="0.1"
                                     step="0.1"
                                     value={box.weightKg}
+                                    disabled={isSample}
                                     onChange={(event) => {
                                       setCustomPackage(true);
-                                      setPackageBoxes((current) => current.map((item) => item.id === box.id ? { ...item, weightKg: event.target.value } : item));
+                                      setPackageBoxes((current) =>
+                                        current.map((item) =>
+                                          item.id === box.id
+                                            ? {
+                                                ...item,
+                                                weightKg: event.target.value,
+                                              }
+                                            : item,
+                                        ),
+                                      );
                                     }}
-                                    placeholder={automaticKg > 0 ? `Auto: ${automaticKg.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}` : "Automático"}
+                                    placeholder={
+                                      automaticKg > 0
+                                        ? `Auto: ${automaticKg.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`
+                                        : "Automático"
+                                    }
                                   />
                                 </Field>
                               </div>
@@ -1170,101 +3185,330 @@ function NewOrder({ customers, variants, brokers, onClose, onCreated }: { custom
                         })}
                       </div>
                       <p className="mt-2 text-[10px] text-stone-500">
-                        Se o peso de uma caixa ficar em branco, o BBOS distribui automaticamente o peso restante do pedido entre as caixas sem peso informado.
+                        {isSample
+                          ? "A embalagem padrão e a distribuição do peso serão preservadas na cotação, na etiqueta e na expedição."
+                          : "Se o peso de uma caixa ficar em branco, o BBOS distribui automaticamente o peso restante do pedido entre as caixas sem peso informado."}
                       </p>
                     </div>
-                    {shippingError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">{shippingError}</p>}
+                    {shippingError && (
+                      <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[11px] text-red-700">
+                        {shippingError}
+                      </p>
+                    )}
                     {shippingSummary && (
                       <div className="mt-3 grid gap-2 rounded-xl bg-emerald-950 p-3 text-white sm:grid-cols-[1.4fr_.8fr_.8fr]">
                         <div className="flex items-center gap-3">
                           <div>
-                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Origem</small>
-                            <b className="text-xs">{formatPostalCode(shippingSummary.originPostalCode)}</b>
+                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                              Origem
+                            </small>
+                            <b className="text-xs">
+                              {formatPostalCode(
+                                shippingSummary.originPostalCode,
+                              )}
+                            </b>
                           </div>
                           <span className="text-emerald-300">→</span>
                           <div>
-                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Destino</small>
-                            <b className="text-xs">{formatPostalCode(shippingSummary.destinationPostalCode)}</b>
+                            <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                              Destino
+                            </small>
+                            <b className="text-xs">
+                              {formatPostalCode(
+                                shippingSummary.destinationPostalCode,
+                              )}
+                            </b>
                           </div>
                         </div>
                         <div>
-                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Peso</small>
-                          <b className="text-xs">{(shippingSummary.weightGrams / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</b>
+                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                            Peso
+                          </small>
+                          <b className="text-xs">
+                            {(
+                              shippingSummary.weightGrams / 1000
+                            ).toLocaleString("pt-BR", {
+                              maximumFractionDigits: 3,
+                            })}{" "}
+                            kg
+                          </b>
                         </div>
                         <div>
-                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">Embalagem cotada</small>
-                          <b className="text-xs">{shippingSummary.widthCm} × {shippingSummary.heightCm} × {shippingSummary.lengthCm} cm</b>
+                          <small className="block text-[9px] uppercase tracking-wider text-emerald-200">
+                            Embalagem cotada
+                          </small>
+                          <b className="text-xs">
+                            {shippingSummary.widthCm} ×{" "}
+                            {shippingSummary.heightCm} ×{" "}
+                            {shippingSummary.lengthCm} cm
+                          </b>
                         </div>
                       </div>
                     )}
                     {shippingQuotes.length > 0 && (
                       <div className="mt-3">
                         <div className="mb-2 flex items-center gap-2">
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-stone-500">Ordenar por</span>
-                          <button type="button" onClick={() => setShippingSort("PRICE")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "PRICE" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Mais barato</button>
-                          <button type="button" onClick={() => setShippingSort("TIME")} className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "TIME" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}>Menor prazo</button>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-stone-500">
+                            Ordenar por
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShippingSort("PRICE")}
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "PRICE" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}
+                          >
+                            Mais barato
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShippingSort("TIME")}
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold ${shippingSort === "TIME" ? "bg-emerald-950 text-white" : "bg-white text-stone-600"}`}
+                          >
+                            Menor prazo
+                          </button>
                         </div>
                         <div className="grid gap-2 lg:grid-cols-2">
-                        {sortedShippingQuotes.map((option) => (
-                          <label key={option.id} className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}>
-                            <input type="radio" name="shipping-quote" value={option.id} checked={shippingQuoteId === option.id} onChange={() => setShippingQuoteId(option.id)} className="sr-only" />
-                            <span className="grid items-center gap-3 sm:grid-cols-[1.4fr_1fr_.7fr_.7fr]">
-                              <span className="flex min-w-0 items-center gap-2">
-                                {option.carrierLogoUrl ? <img src={option.carrierLogoUrl} alt="" className="h-6 w-10 object-contain" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-100 text-[9px] font-bold">{option.carrierName.slice(0, 2).toUpperCase()}</span>}
-                                <span className="min-w-0">
-                                  <b className="block truncate text-xs text-stone-900">{option.carrierName}</b>
-                                  <small className="block truncate text-[10px] text-stone-500">{option.serviceName}</small>
+                          {sortedShippingQuotes.map((option) => (
+                            <label
+                              key={option.id}
+                              className={`cursor-pointer rounded-xl border p-3 ${shippingQuoteId === option.id ? "border-emerald-700 bg-white ring-1 ring-emerald-700" : "border-emerald-100 bg-white/70"}`}
+                            >
+                              <input
+                                type="radio"
+                                name="shipping-quote"
+                                value={option.id}
+                                checked={shippingQuoteId === option.id}
+                                onChange={() => setShippingQuoteId(option.id)}
+                                className="sr-only"
+                              />
+                              <span className="grid items-center gap-3 sm:grid-cols-[1.4fr_1fr_.7fr_.7fr]">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  {option.carrierLogoUrl ? (
+                                    <img
+                                      src={option.carrierLogoUrl}
+                                      alt=""
+                                      className="h-6 w-10 object-contain"
+                                    />
+                                  ) : (
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-100 text-[9px] font-bold">
+                                      {option.carrierName
+                                        .slice(0, 2)
+                                        .toUpperCase()}
+                                    </span>
+                                  )}
+                                  <span className="min-w-0">
+                                    <b className="block truncate text-xs text-stone-900">
+                                      {option.carrierName}
+                                    </b>
+                                    <small className="block truncate text-[10px] text-stone-500">
+                                      {option.serviceName}
+                                    </small>
+                                  </span>
                                 </span>
+                                <small className="text-[10px] text-stone-500">
+                                  {option.postingType}
+                                </small>
+                                <small className="text-[10px] font-semibold text-stone-700">
+                                  Até {option.deliveryDays} dias úteis
+                                </small>
+                                <b className="whitespace-nowrap text-right text-xs text-stone-900">
+                                  {money.format(option.priceCents / 100)}
+                                </b>
                               </span>
-                              <small className="text-[10px] text-stone-500">{option.postingType}</small>
-                              <small className="text-[10px] font-semibold text-stone-700">Até {option.deliveryDays} dias úteis</small>
-                              <b className="whitespace-nowrap text-right text-xs text-stone-900">{money.format(option.priceCents / 100)}</b>
-                            </span>
-                          </label>
-                        ))}
+                            </label>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
                 <Field label="Referência / PO do cliente">
-                  <input value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} placeholder="Opcional" />
+                  <input
+                    value={customerReference}
+                    onChange={(event) =>
+                      setCustomerReference(event.target.value)
+                    }
+                    placeholder="Opcional"
+                  />
                 </Field>
                 {isExport && (
                   <>
                     <Field label="Incoterm">
-                      <input value={incoterm} onChange={(event) => setIncoterm(event.target.value.toUpperCase())} placeholder="Ex.: FOB, CIF" />
+                      <input
+                        value={incoterm}
+                        onChange={(event) =>
+                          setIncoterm(event.target.value.toUpperCase())
+                        }
+                        placeholder="Ex.: FOB, CIF"
+                      />
                     </Field>
                     <Field label="Local do Incoterm">
-                      <input value={incotermLocation} onChange={(event) => setIncotermLocation(event.target.value)} placeholder="Ex.: Santos, Barcelona" />
+                      <input
+                        value={incotermLocation}
+                        onChange={(event) =>
+                          setIncotermLocation(event.target.value)
+                        }
+                        placeholder="Ex.: Santos, Barcelona"
+                      />
                     </Field>
+                    <Field label="Moeda da tabela">
+                      <input value={orderCurrency} readOnly />
+                    </Field>
+                    {isSample && (
+                      <Field
+                        label={`Valor aduaneiro declarado (${orderCurrency})`}
+                      >
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={customsDeclaredValue}
+                          onChange={(event) =>
+                            setCustomsDeclaredValue(event.target.value)
+                          }
+                          placeholder="Ex.: 10,00"
+                        />
+                        <small className="mt-1 block text-[9px] font-normal leading-4 text-stone-500">
+                          Sem cobrança comercial. Usado somente para alfândega e
+                          NF-e.
+                        </small>
+                      </Field>
+                    )}
+                    {orderCurrency !== "BRL" && (
+                      <>
+                        <Field label={`Cotação 1 ${orderCurrency} em BRL`}>
+                          <input
+                            type="number"
+                            min="0.000001"
+                            step="0.000001"
+                            value={exchangeRateToBrl}
+                            onChange={(event) =>
+                              setExchangeRateToBrl(event.target.value)
+                            }
+                            placeholder="Ex.: 5,750000"
+                          />
+                        </Field>
+                        <Field label="Data da cotação">
+                          <input
+                            type="date"
+                            value={exchangeRateDate}
+                            onChange={(event) =>
+                              setExchangeRateDate(event.target.value)
+                            }
+                          />
+                        </Field>
+                      </>
+                    )}
                   </>
                 )}
                 <label className="block text-xs font-semibold sm:col-span-2">
                   Observações comerciais
-                  <textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-sm" placeholder="Somente o que precisa aparecer no pedido..." />
+                  <textarea
+                    rows={2}
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    className="mt-2 w-full rounded-xl border px-3 py-3 text-sm"
+                    placeholder="Somente o que precisa aparecer no pedido..."
+                  />
                 </label>
               </div>
             )}
           </section>
 
           {isTerm && health && (
-            <p className={`rounded-xl px-3 py-2 text-xs ${usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}>
-              {usesPixFallback
-                ? `Sem crédito suficiente para esta compra. Ao confirmar, o cliente receberá o Pix automaticamente; o pedido só avançará depois do pagamento.`
-                : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
+            <p
+              className={`rounded-xl px-3 py-2 text-xs ${isDelinquent ? "bg-red-50 text-red-800" : usesPixFallback ? "bg-amber-50 text-amber-800" : "bg-stone-50 text-stone-500"}`}
+            >
+              {isDelinquent
+                ? `Cliente inadimplente: ${overdueCount} título(s) vencido(s), total de ${money.format(overdueAmount)}. O pedido será salvo aguardando autorização de José ou Suzi, que serão notificados.`
+                : usesPixFallback
+                  ? `Sem crédito suficiente para esta compra. Ao confirmar, o cliente receberá o Pix automaticamente; o pedido só avançará depois do pagamento.`
+                  : `Após este pedido, restariam ${money.format(after)} de crédito disponível.`}
             </p>
           )}
+        </div>
 
-          {error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
+        <footer className="shrink-0 space-y-2 border-t bg-white/95 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-5">
+          {error && (
+            <p
+              role="alert"
+              className="rounded-xl bg-red-50 p-3 text-xs text-red-700"
+            >
+              {error}
+            </p>
+          )}
           {usesPlatformShipping && selectedShippingQuote && (
             <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2 text-xs">
-              <span className="text-stone-500">Produtos + frete escolhido na plataforma</span>
-              <b>{money.format(orderTotal)}</b>
+              <span className="text-stone-500">
+                {isSample
+                  ? `Custo do envio assumido pela Bispo: ${money.format(selectedShippingQuote.priceCents / 100)}`
+                  : "Produtos + frete escolhido na plataforma"}
+              </span>
+              <b>
+                {isSample ? "Sem cobrança de frete" : money.format(orderTotal)}
+              </b>
             </div>
           )}
-          <button disabled={!completeLines.length || completeLines.length !== lines.length || quoteBusy || completeLines.some((line) => !quotes[line.id]) || !freightResponsibility || (isDistributor && freightResponsibility === "CUSTOMER" && !selectedShippingQuote) || (isDistributor && freightResponsibility === "CUSTOMER_CARRIER" && !carrierName.trim())} onClick={() => void submit()} className="w-full rounded-xl bg-forest-900 py-3 text-xs font-bold text-white disabled:opacity-40">Salvar pedido</button>
-        </div>
+          {saveBlockedReason && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+              {saveBlockedReason}
+            </p>
+          )}
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="min-h-12 rounded-xl border border-stone-300 bg-white px-4 text-xs font-bold text-stone-700"
+            >
+              Cancelar
+            </button>
+            <button
+              disabled={Boolean(saveBlockedReason)}
+              onClick={() => void submit()}
+              className="min-h-12 rounded-xl bg-forest-900 px-4 text-xs font-bold text-white disabled:opacity-40"
+            >
+              {isSample ? "Salvar pedido de amostra" : "Salvar pedido"}
+            </button>
+          </div>
+        </footer>
+
+        {discardConfirmationOpen && (
+          <div className="absolute inset-0 z-20 flex items-end bg-black/35 p-3 sm:items-center sm:justify-center">
+            <section
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="discard-order-title"
+              aria-describedby="discard-order-description"
+              className="w-full rounded-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md"
+            >
+              <h3 id="discard-order-title" className="text-lg font-bold">
+                Descartar este lançamento?
+              </h3>
+              <p
+                id="discard-order-description"
+                className="mt-2 text-sm leading-6 text-stone-600"
+              >
+                As informações preenchidas neste pedido ainda não foram salvas.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setDiscardConfirmationOpen(false)}
+                  className="min-h-12 rounded-xl border border-stone-300 bg-white px-4 text-sm font-bold text-stone-700"
+                >
+                  Continuar preenchendo
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="min-h-12 rounded-xl bg-red-700 px-4 text-sm font-bold text-white"
+                >
+                  Descartar e sair
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </aside>
     </div>,
     document.body,
@@ -1282,6 +3526,9 @@ function CreditContext({
   exceeds,
   status,
   reviewPending,
+  overdueCount,
+  overdueAmount,
+  maxDaysOverdue,
 }: {
   loading: boolean;
   limit: number;
@@ -1293,18 +3540,36 @@ function CreditContext({
   exceeds: boolean;
   status?: string;
   reviewPending?: boolean;
+  overdueCount: number;
+  overdueAmount: number;
+  maxDaysOverdue: number;
 }) {
   if (loading) {
-    return <div className="rounded-2xl border bg-stone-50 p-4 text-xs text-stone-500">Consultando crédito do cliente…</div>;
+    return (
+      <div className="rounded-2xl border bg-stone-50 p-4 text-xs text-stone-500">
+        Consultando crédito do cliente…
+      </div>
+    );
   }
 
   return (
-    <div className={`rounded-2xl border p-4 ${exceeds ? "border-red-200 bg-red-50" : "border-violet-100 bg-violet-50/60"}`}>
+    <div
+      className={`rounded-2xl border p-4 ${exceeds ? "border-red-200 bg-red-50" : "border-violet-100 bg-violet-50/60"}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[.14em] text-violet-700">Linha de crédito vigente</p>
+          <p className="text-[10px] font-black uppercase tracking-[.14em] text-violet-700">
+            Linha de crédito vigente
+          </p>
           <p className="mt-1 text-xs text-stone-500">
-            Status: {status === "APPROVED" ? "Aprovado" : status === "UNDER_REVIEW" ? "Em análise" : status === "REJECTED" ? "Reprovado" : "Não analisado"}
+            Status:{" "}
+            {status === "APPROVED"
+              ? "Aprovado"
+              : status === "UNDER_REVIEW"
+                ? "Em análise"
+                : status === "REJECTED"
+                  ? "Reprovado"
+                  : "Não analisado"}
             {reviewPending ? " · revisão de limite pendente" : ""}
           </p>
         </div>
@@ -1323,15 +3588,27 @@ function CreditContext({
           <strong>{Math.round(utilization)}%</strong>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white">
-          <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, utilization)}%` }} />
+          <div
+            className="h-full rounded-full bg-violet-500"
+            style={{ width: `${Math.min(100, utilization)}%` }}
+          />
         </div>
       </div>
 
       {orderTotal > 0 && (
-        <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-100 text-red-800" : "bg-white text-stone-600"}`}>
+        <div
+          className={`mt-3 rounded-xl px-3 py-2 text-xs ${exceeds ? "bg-red-100 text-red-800" : "bg-white text-stone-600"}`}
+        >
           {exceeds
             ? `Pedido acima do disponível em ${money.format(orderTotal - available)}.`
             : `Impacto do pedido: crédito restante ${money.format(after)}.`}
+        </div>
+      )}
+      {overdueCount > 0 && (
+        <div className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-800">
+          Inadimplência: {overdueCount} título(s), {money.format(overdueAmount)}
+          {maxDaysOverdue > 0 ? ` · até ${maxDaysOverdue} dias em atraso` : ""}.
+          Venda a prazo exige autorização de José ou Suzi.
         </div>
       )}
     </div>
@@ -1341,34 +3618,104 @@ function CreditContext({
 function MiniCredit({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-white p-2.5">
-      <p className="text-[9px] uppercase tracking-wider text-stone-400">{label}</p>
+      <p className="text-[9px] uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
       <p className="mt-1 text-xs font-bold text-stone-800">{value}</p>
     </div>
   );
 }
 
-function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () => void; onChanged: () => Promise<void> }) {
+function OrderDrawer({
+  order,
+  onClose,
+  onChanged,
+  canEdit,
+  canOperate,
+  canCompleteDelivery,
+  canPrepareReexpedition,
+  onEdit,
+}: {
+  order: Order;
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+  canEdit: boolean;
+  canOperate: boolean;
+  canCompleteDelivery: boolean;
+  canPrepareReexpedition: boolean;
+  onEdit: () => void;
+}) {
   const [mode, setMode] = useState<"INTERNAL" | "CLIENT">("INTERNAL");
   const [requests, setRequests] = useState<DiscountRequest[]>([]);
   const [discountPercent, setDiscountPercent] = useState("");
   const [rationale, setRationale] = useState("");
-  const [selectedItemId, setSelectedItemId] = useState(order.items[0]?.id ?? "");
+  const [selectedItemId, setSelectedItemId] = useState(
+    order.items[0]?.id ?? "",
+  );
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [fulfillment, setFulfillment] = useState<ShipmentInfo | null>(null);
+  const [fulfillment, setFulfillment] = useState<ShipmentInfo | null>(() =>
+    order.shipment
+      ? {
+          ...order.shipment,
+          hasUnresolvedDeliveryException: hasOpenDeliveryException(order),
+        }
+      : null,
+  );
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [posting, setPosting] = useState<PostingAgencyResponse | null>(null);
   const [postingBusy, setPostingBusy] = useState(false);
+  const [manualPix, setManualPix] = useState<ManualPixInfo | null>(null);
+  const [manualPixOpen, setManualPixOpen] = useState(false);
+  const [manualPixBusy, setManualPixBusy] = useState(false);
+  const [manualPixError, setManualPixError] = useState("");
+  const [manualPixAccountId, setManualPixAccountId] = useState("");
+  const [manualPixReference, setManualPixReference] = useState("");
+  const [manualPixPaidAt, setManualPixPaidAt] = useState(localDateTimeValue);
+  const [termApproval, setTermApproval] = useState<TermCreditApproval | null>(
+    null,
+  );
+  const [termApprovalNote, setTermApprovalNote] = useState("");
+  const shipmentStep = shipmentProgressIndex(fulfillment, order.status);
+  const shipmentProgress = Math.round(
+    (shipmentStep / (shipmentProgressSteps.length - 1)) * 100,
+  );
+  const shipmentHasException =
+    !overdueTerminalStatuses.has(order.status) &&
+    fulfillment?.reexpeditionStatus !== "LABEL_CREATED" &&
+    (fulfillment?.status === "EXCEPTION" ||
+      fulfillment?.hasUnresolvedDeliveryException === true);
+  const shipmentIsCancelled = fulfillment?.status === "CANCELLED";
+  const fiscalDocumentUrl =
+    fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl || null;
+  const printableLabelUrl =
+    fulfillment?.printableLabelUrl || fulfillment?.labelUrl || null;
+  const originalFiscalDocumentUrl =
+    fulfillment?.reexpeditionOriginalFiscalPdfUrl ||
+    fulfillment?.reexpeditionOriginalFiscalDanfeUrl ||
+    null;
+  const returnFiscalDocumentUrl =
+    fulfillment?.reexpeditionReturnFiscalPdfUrl ||
+    fulfillment?.reexpeditionReturnFiscalDanfeUrl ||
+    null;
+  const replacementFiscalDocumentUrl =
+    fulfillment?.reexpeditionReplacementFiscalPdfUrl ||
+    fulfillment?.reexpeditionReplacementFiscalDanfeUrl ||
+    null;
 
-  const selectedItem = order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
+  const selectedItem =
+    order.items.find((item) => item.id === selectedItemId) ?? order.items[0];
 
   const loadRequests = async () => {
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-requests`, {
-      credentials: "include",
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/discount-requests`,
+      {
+        credentials: "include",
+        cache: "no-store",
+      },
+    );
     if (response.ok) setRequests(await response.json());
   };
 
@@ -1376,24 +3723,57 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     void loadRequests();
   }, [order.id]);
 
+  const loadTermApproval = async () => {
+    if (order.paymentType !== "TERM" || order.orderType === "SAMPLE") {
+      setTermApproval(null);
+      return;
+    }
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/term-approval`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (response.ok) setTermApproval(await response.json());
+  };
+
+  useEffect(() => {
+    void loadTermApproval();
+  }, [order.id, order.paymentType, order.orderType]);
+
   const loadFulfillment = async () => {
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/fulfillment`, {
-      credentials: "include",
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/fulfillment`,
+      {
+        credentials: "include",
+        cache: "no-store",
+      },
+    );
     if (response.ok) setFulfillment(await response.json());
   };
 
   useEffect(() => {
     void loadFulfillment();
-    if (order.status !== "INVOICED") return;
+    const reexpeditionProcessing =
+      Boolean(fulfillment?.reexpeditionId) &&
+      !["LABEL_CREATED", "CANCELLED"].includes(
+        String(fulfillment?.reexpeditionStatus ?? ""),
+      );
+    if (
+      !["INVOICED", "READY_TO_SHIP"].includes(order.status) &&
+      !reexpeditionProcessing
+    )
+      return;
 
     const refreshTimer = window.setInterval(() => {
       void loadFulfillment();
     }, 5000);
 
     return () => window.clearInterval(refreshTimer);
-  }, [order.id, order.status]);
+  }, [
+    order.id,
+    order.status,
+    fulfillment?.reexpeditionId,
+    fulfillment?.reexpeditionStatus,
+  ]);
 
   const loadPostingAgencies = async () => {
     if (order.shippingProvider !== "MELHOR_ENVIO") {
@@ -1402,10 +3782,13 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     }
     setPostingBusy(true);
     try {
-      const response = await fetch(`${salesOrdersApi()}/${order.id}/posting-agencies`, {
-        credentials: "include",
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/posting-agencies`,
+        {
+          credentials: "include",
+          cache: "no-store",
+        },
+      );
       if (response.ok) setPosting(await response.json());
     } finally {
       setPostingBusy(false);
@@ -1413,8 +3796,39 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   };
 
   useEffect(() => {
-    void loadPostingAgencies();
-  }, [order.id, order.shippingProvider]);
+    if (canOperate) void loadPostingAgencies();
+  }, [canOperate, order.id, order.shippingProvider]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`${salesOrdersApi()}/${order.id}/manual-pix`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!active) return;
+        if (!response.ok) {
+          setManualPix(null);
+          return;
+        }
+        const payload = (await response.json()) as ManualPixInfo;
+        setManualPix(payload);
+        setManualPixAccountId((current) => {
+          if (current && payload.accounts.some((item) => item.id === current))
+            return current;
+          const preferred =
+            payload.accounts.find((item) => /ita[uú]/i.test(item.name)) ??
+            payload.accounts[0];
+          return preferred?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (active) setManualPix(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [order.id]);
 
   useEffect(() => {
     if (!selectedItem?.productVariantId) {
@@ -1430,24 +3844,33 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       credentials: "include",
       cache: "no-store",
     })
-      .then(async (response) => (response.ok ? setQuote(await response.json()) : setQuote(null)))
+      .then(async (response) =>
+        response.ok ? setQuote(await response.json()) : setQuote(null),
+      )
       .catch(() => setQuote(null));
-  }, [selectedItem?.productVariantId, selectedItem?.quantity, order.customer.id]);
+  }, [
+    selectedItem?.productVariantId,
+    selectedItem?.quantity,
+    order.customer.id,
+  ]);
 
   const requestDiscount = async () => {
     if (!selectedItem) return;
     setBusy(true);
     setError("");
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-request`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        salesOrderItemId: selectedItem.id,
-        discountPercent: Number(discountPercent),
-        rationale,
-      }),
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/discount-request`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          salesOrderItemId: selectedItem.id,
+          discountPercent: Number(discountPercent),
+          rationale,
+        }),
+      },
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(payload.message ?? "Não foi possível solicitar desconto.");
@@ -1462,12 +3885,15 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
   const decide = async (requestId: string, decision: "APPROVE" | "REJECT") => {
     setBusy(true);
     setError("");
-    const response = await fetch(`${salesOrdersApi()}/${order.id}/discount-request/${requestId}/decision`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision }),
-    });
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/discount-request/${requestId}/decision`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision }),
+      },
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(payload.message ?? "Não foi possível decidir a solicitação.");
@@ -1478,23 +3904,75 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     setBusy(false);
   };
 
-  const paymentLabel = order.paymentType === "TERM" ? (order.paymentTermsSnapshot || "A prazo") : "À vista";
+  const decideTermApproval = async (decision: "APPROVE" | "REJECT") => {
+    setBusy(true);
+    setError("");
+    const response = await fetch(
+      `${salesOrdersApi()}/${order.id}/term-approval/decision`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision, note: termApprovalNote }),
+      },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setError(
+        payload.message ?? "Não foi possível registrar a decisão financeira.",
+      );
+    } else {
+      setTermApproval(payload);
+      setTermApprovalNote("");
+      await onChanged();
+    }
+    setBusy(false);
+  };
+
+  const paymentLabel =
+    order.orderType === "SAMPLE"
+      ? "Sem cobrança · amostra"
+      : order.paymentType === "TERM"
+        ? order.paymentTermsSnapshot || "A prazo"
+        : "À vista";
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
-    : "A combinar";
-  const freightLabel = order.freightResponsibility === "PICKUP"
-    ? (freightLabels.PICKUP ?? "Retirada na Bispo Coffees")
-    : order.shippingServiceName
-    ? [order.carrierName, order.shippingServiceName, Number(order.freight ?? 0) > 0 ? money.format(Number(order.freight)) : null].filter(Boolean).join(" · ")
-    : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
+    : order.estimatedDeliveryDays
+      ? `Até ${order.estimatedDeliveryDays} dias úteis após a postagem`
+      : "A combinar";
+  const freightLabel =
+    order.freightResponsibility === "PICKUP"
+      ? (freightLabels.PICKUP ?? "Retirada na Bispo Coffees")
+      : order.shippingServiceName
+        ? [
+            order.carrierName,
+            order.shippingServiceName,
+            Number(order.freight ?? 0) > 0
+              ? money.format(Number(order.freight))
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : (freightLabels[order.freightResponsibility ?? ""] ?? "A combinar");
+  const isPickup = order.freightResponsibility === "PICKUP";
+  const canFinalizeDelivery =
+    canCompleteDelivery &&
+    (["INVOICED", "SHIPPED"].includes(order.status) ||
+      (order.status === "READY_TO_SHIP" &&
+        fulfillment?.fiscalStatus === "AUTHORIZED"));
   const requested = Number(discountPercent || 0);
-  const simulatedPrice = quote ? quote.officialUnitPrice * (1 - requested / 100) : 0;
+  const simulatedPrice = quote
+    ? quote.officialUnitPrice * (1 - requested / 100)
+    : 0;
 
   const clientSummary = [
     `PEDIDO ${order.orderNumber ?? order.code}`,
     `Cliente: ${order.customer.name}`,
     "",
-    ...order.items.map((item) => `${item.productName} · ${item.quantity} un. · ${money.format(Number(item.unitPrice ?? 0))} · ${money.format(Number(item.totalAmount))}`),
+    ...order.items.map(
+      (item) =>
+        `${item.productName} · ${itemQuantityLabel(item.quantity, order.orderType === "SAMPLE")} · ${money.format(Number(item.unitPrice ?? 0))} · ${money.format(Number(item.totalAmount))}`,
+    ),
     "",
     `Total: ${money.format(Number(order.totalAmount))}`,
     `Pagamento: ${paymentLabel}`,
@@ -1502,9 +3980,16 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     `Entrega prevista: ${deliveryLabel}`,
     order.carrierName ? `Transportadora: ${order.carrierName}` : "",
     order.customerReference ? `Referência: ${order.customerReference}` : "",
-    order.incoterm ? `Incoterm: ${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}` : "",
+    order.incoterm
+      ? `Incoterm: ${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`
+      : "",
+    order.customsDeclaredValue
+      ? `Valor aduaneiro declarado: ${order.currency || "USD"} ${Number(order.customsDeclaredValue).toFixed(2)} · sem cobrança comercial`
+      : "",
     order.notes ? `Observações: ${order.notes}` : "",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const operationalAction = async (
     endpoint: string,
@@ -1513,29 +3998,46 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`${salesOrdersApi()}/${order.id}/${endpoint}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/${endpoint}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
           typeof payload.message === "string"
             ? payload.message
-            : payload.message?.message ?? "Não foi possível avançar o pedido.",
+            : (payload.message?.message ??
+                "Não foi possível avançar o pedido."),
         );
       }
       await onChanged();
       if (endpoint === "invoice") await loadFulfillment();
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "Não foi possível avançar o pedido.",
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível avançar o pedido.",
       );
     } finally {
       setBusy(false);
     }
+  };
+
+  const completeDelivery = async (method: "PICKUP" | "MANUAL_DELIVERY") => {
+    const pickup = method === "PICKUP";
+    const confirmed = window.confirm(
+      pickup
+        ? "Confirma que este pedido foi retirado ou entregue em mãos? O BBOS registrará a data, o usuário responsável e concluirá o fluxo."
+        : "Confirma que este pedido já foi entregue ao cliente? O BBOS registrará a data, o usuário responsável e concluirá o fluxo.",
+    );
+    if (!confirmed) return;
+    await operationalAction("deliver", { method });
   };
 
   const confirmPicking = async () => {
@@ -1560,14 +4062,158 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message ?? "Não foi possível gerar a etiqueta.");
+        throw new Error(
+          payload.message ?? "Não foi possível gerar a etiqueta.",
+        );
       }
       setFulfillment(payload);
       await onChanged();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível gerar a etiqueta.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível gerar a etiqueta.",
+      );
     } finally {
       setFulfillmentBusy(false);
+    }
+  };
+
+  const prepareReexpedition = async () => {
+    const confirmed = window.confirm(
+      "Confirma que o pacote devolvido já retornou fisicamente à Bispo? O BBOS preservará a remessa original e cuidará automaticamente da devolução fiscal, da nova saída, da etiqueta e do rastreio.",
+    );
+    if (!confirmed) return;
+
+    setFulfillmentBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/reexpedition/prepare`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ returnConfirmed: true }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload.message ?? "Não foi possível preparar a reexpedição.",
+        );
+      }
+      await loadFulfillment();
+      await onChanged();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível preparar a reexpedição.",
+      );
+    } finally {
+      setFulfillmentBusy(false);
+    }
+  };
+
+  const resetCancelledInvoice = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/reset-cancelled-invoice`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Não foi possível regularizar a NF-e cancelada.",
+        );
+      }
+      await onChanged();
+      await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível regularizar a NF-e cancelada.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retryRejectedInvoice = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/retry-invoice`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.processed === false) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : typeof payload.error === "string"
+              ? payload.error
+              : "Não foi possível reprocessar a NF-e rejeitada.",
+        );
+      }
+      await onChanged();
+      await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível reprocessar a NF-e rejeitada.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetMissingInvoice = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/integrations/bling/sales-orders/${order.id}/reset-missing-invoice`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Não foi possível reconciliar a NF-e excluída.",
+        );
+      }
+      await onChanged();
+      await loadFulfillment();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível reconciliar a NF-e excluída.",
+      );
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -1581,24 +4227,129 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
     }
   };
 
+  const confirmManualPix = async () => {
+    setManualPixBusy(true);
+    setManualPixError("");
+    try {
+      const response = await fetch(
+        `${salesOrdersApi()}/${order.id}/manual-pix/confirm`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            financialAccountId: manualPixAccountId,
+            reference: manualPixReference,
+            paidAt: manualPixPaidAt
+              ? new Date(manualPixPaidAt).toISOString()
+              : undefined,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Não foi possível confirmar o Pix.",
+        );
+      }
+      setManualPix(payload as ManualPixInfo);
+      setManualPixOpen(false);
+      setManualPixReference("");
+      await onChanged();
+    } catch (cause) {
+      setManualPixError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível confirmar o Pix.",
+      );
+    } finally {
+      setManualPixBusy(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/25" />
-      <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-white p-6">
+    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
+      <button
+        aria-label="Fechar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/25"
+      />
+      <aside className="relative h-dvh max-h-dvh min-h-0 w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 [scrollbar-gutter:stable]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">{order.orderNumber ?? order.code}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold">
+                {order.orderNumber ?? order.code}
+              </h2>
+              {order.orderType === "SAMPLE" && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                  Pedido de amostra
+                </span>
+              )}
+              {order.salesChannel?.name && (
+                <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-stone-600">
+                  Origem · {order.salesChannel.name}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-stone-500">{order.customer.name}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <OrderPdfLink orderNumber={order.orderNumber ?? order.code} provisional={order.status === "DRAFT"} />
-            <button onClick={onClose}><X /></button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {fulfillment?.fiscalStatus === "AUTHORIZED" &&
+              fiscalDocumentUrl && (
+                <a
+                  href={fiscalDocumentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-950 px-4 py-2.5 text-xs font-bold text-white"
+                >
+                  <Printer size={14} />
+                  Imprimir NF-e
+                  {fulfillment.fiscalNumber
+                    ? ` ${fulfillment.fiscalNumber}`
+                    : ""}
+                </a>
+              )}
+            {order.paymentType === "TERM" &&
+              order.orderType !== "SAMPLE" &&
+              fulfillment?.fiscalStatus === "AUTHORIZED" && (
+                <OrderBillingPdfButton
+                  orderId={order.id}
+                  orderNumber={order.orderNumber ?? order.code}
+                />
+              )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-2 rounded-xl border border-forest-200 bg-forest-50 px-4 py-2.5 text-xs font-bold text-forest-800"
+              >
+                <Pencil size={14} /> Editar pedido
+              </button>
+            )}
+            <OrderPdfLink
+              orderId={order.id}
+              provisional={order.status === "DRAFT"}
+            />
+            <button onClick={onClose}>
+              <X />
+            </button>
           </div>
         </div>
 
         <div className="mt-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1">
-          <button onClick={() => setMode("INTERNAL")} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === "INTERNAL" ? "bg-white shadow-sm" : "text-stone-500"}`}>Interno</button>
-          <button onClick={() => setMode("CLIENT")} className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${mode === "CLIENT" ? "bg-white shadow-sm" : "text-stone-500"}`}>
+          <button
+            onClick={() => setMode("INTERNAL")}
+            className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === "INTERNAL" ? "bg-white shadow-sm" : "text-stone-500"}`}
+          >
+            Interno
+          </button>
+          <button
+            onClick={() => setMode("CLIENT")}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${mode === "CLIENT" ? "bg-white shadow-sm" : "text-stone-500"}`}
+          >
             <Eye size={13} /> Visualização do cliente
           </button>
         </div>
@@ -1621,45 +4372,342 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               </div>
             </div>
 
+            {order.orderType === "SAMPLE" && order.status === "DRAFT" && (
+              <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-amber-950">
+                      Amostra pronta para confirmação interna
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                      Confirme para reservar o estoque. Não haverá cobrança,
+                      aprovação do cliente ou comissão comercial.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void operationalAction("confirm")}
+                    className="rounded-xl bg-amber-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                  >
+                    {busy ? "Confirmando…" : "Confirmar amostra"}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {order.status === "DRAFT" &&
+              order.createdByStorefrontPartner?.portalAccessLevel ===
+                "DISTRIBUTOR" && (
+                <section className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-violet-950">
+                        Pedido de distribuidor sob encomenda
+                      </p>
+                      <p className="mt-1 max-w-2xl text-[11px] leading-5 text-violet-800">
+                        {order.createdByStorefrontPartner.tradeName ||
+                          order.createdByStorefrontPartner.name}{" "}
+                        pediu entrega em <strong>{deliveryLabel}</strong>. José
+                        ou Suzi devem revisar a data e aprovar o pedido para
+                        liberar a produção. O estoque atual não bloqueia esta
+                        aprovação.
+                      </p>
+                    </div>
+                    {canEdit && canOperate && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={onEdit}
+                          className="rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-[11px] font-bold text-violet-900"
+                        >
+                          Revisar data
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void operationalAction("confirm")}
+                          className="rounded-xl bg-violet-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                        >
+                          {busy ? "Aprovando…" : "Aprovar e liberar produção"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
             {displayStatus(order) === "AWAITING_PAYMENT" && (
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-bold text-amber-950">Pix enviado com a confirmação</p>
-                <p className="mt-1 text-[11px] leading-5 text-amber-800">O pedido permanece protegido em rascunho e só avança para estoque e faturamento depois que o Mercado Pago confirmar o crédito.</p>
-                {order.payment?.expiresAt && <p className="mt-2 text-[10px] text-amber-700">Expira em {new Date(order.payment.expiresAt).toLocaleString("pt-BR")}</p>}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-amber-950">
+                      Pagamento pendente
+                    </p>
+                    <p className="mt-1 max-w-2xl text-[11px] leading-5 text-amber-800">
+                      A produção, a reserva e a emissão da NF-e podem avançar
+                      sem registrar o pagamento. A expedição permanece bloqueada
+                      até a baixa financeira.
+                    </p>
+                  </div>
+                  {order.status === "DRAFT" && canEdit && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void operationalAction("confirm")}
+                      className="rounded-xl bg-amber-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Liberando…" : "Liberar produção e NF-e"}
+                    </button>
+                  )}
+                </div>
+                {order.payment?.expiresAt && (
+                  <p className="mt-2 text-[10px] text-amber-700">
+                    Expira em{" "}
+                    {new Date(order.payment.expiresAt).toLocaleString("pt-BR")}
+                  </p>
+                )}
+              </section>
+            )}
+
+            {manualPix && manualPix.paid && (
+              <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-full bg-emerald-100 p-2 text-emerald-800">
+                    <ShieldCheck size={17} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-emerald-950">
+                      Pagamento confirmado
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-emerald-800">
+                      {money.format(
+                        manualPix.approval?.amount ?? manualPix.amount,
+                      )}
+                      {manualPix.approval?.method
+                        ? ` via ${manualPix.approval.method}`
+                        : ""}
+                      {manualPix.approval?.financialAccountName
+                        ? ` · ${manualPix.approval.financialAccountName}`
+                        : ""}
+                    </p>
+                    {manualPix.approval?.manual && (
+                      <p className="text-[10px] leading-4 text-emerald-700">
+                        Aprovado manualmente por{" "}
+                        {manualPix.approval.recordedByName}
+                        {manualPix.approval.paidAt
+                          ? ` em ${new Date(manualPix.approval.paidAt).toLocaleString("pt-BR")}`
+                          : ""}
+                        {manualPix.approval.reference
+                          ? ` · Ref. ${manualPix.approval.reference}`
+                          : ""}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {manualPix && manualPix.eligible && !manualPix.paid && (
+              <section className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-2 text-xs font-bold text-violet-950">
+                      <BadgeDollarSign size={16} /> Pagamento direto via Pix
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-violet-800">
+                      Confirmação manual restrita a José e Suzi no nível
+                      administrativo. Valor em aberto:{" "}
+                      {money.format(manualPix.amount)}.
+                    </p>
+                  </div>
+                  {!manualPixOpen && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualPixError("");
+                        setManualPixOpen(true);
+                      }}
+                      className="rounded-xl bg-violet-950 px-4 py-2.5 text-[11px] font-bold text-white"
+                    >
+                      Confirmar PIX recebido
+                    </button>
+                  )}
+                </div>
+
+                {manualPixOpen && (
+                  <div className="mt-4 rounded-2xl border border-violet-200 bg-white p-4">
+                    <p className="text-xs font-bold text-stone-900">
+                      Aprovar recebimento de {money.format(manualPix.amount)}
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-stone-500">
+                      Esta ação dá baixa no financeiro, registra o aprovador e,
+                      quando necessário, libera o pedido para reserva de
+                      estoque.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                        Conta que recebeu
+                        <select
+                          value={manualPixAccountId}
+                          onChange={(event) =>
+                            setManualPixAccountId(event.target.value)
+                          }
+                          className="mt-1.5 w-full rounded-xl border bg-white px-3 py-2.5 text-xs font-semibold normal-case text-stone-800"
+                        >
+                          <option value="">Selecione</option>
+                          {manualPix.accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                              {account.financialInstitution?.name
+                                ? ` · ${account.financialInstitution.name}`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                        Data do recebimento
+                        <input
+                          type="datetime-local"
+                          value={manualPixPaidAt}
+                          max={localDateTimeValue()}
+                          onChange={(event) =>
+                            setManualPixPaidAt(event.target.value)
+                          }
+                          className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-xs font-semibold normal-case text-stone-800"
+                        />
+                      </label>
+                    </div>
+                    <label className="mt-3 block text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                      Identificador ou referência do comprovante
+                      <input
+                        value={manualPixReference}
+                        maxLength={180}
+                        onChange={(event) =>
+                          setManualPixReference(event.target.value)
+                        }
+                        placeholder="Ex.: E2E do Pix ou comprovante bancário"
+                        className="mt-1.5 w-full rounded-xl border px-3 py-2.5 text-xs font-medium normal-case text-stone-800"
+                      />
+                    </label>
+                    {manualPixError && (
+                      <p
+                        role="alert"
+                        className="mt-3 rounded-xl bg-red-50 p-3 text-[11px] text-red-700"
+                      >
+                        {manualPixError}
+                      </p>
+                    )}
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        disabled={manualPixBusy}
+                        onClick={() => {
+                          setManualPixOpen(false);
+                          setManualPixError("");
+                        }}
+                        className="rounded-xl border px-4 py-2.5 text-[11px] font-bold text-stone-600"
+                      >
+                        Voltar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          manualPixBusy ||
+                          !manualPixAccountId ||
+                          !manualPixReference.trim()
+                        }
+                        onClick={() => void confirmManualPix()}
+                        className="rounded-xl bg-violet-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-40"
+                      >
+                        {manualPixBusy
+                          ? "Confirmando…"
+                          : `Aprovar ${money.format(manualPix.amount)}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 
             <div className="mt-6 space-y-2">
               {order.items.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs">
-                  <strong>{item.productName}<span className="ml-1 font-normal text-stone-400">{item.sku}</span></strong>
-                  <span>{item.quantity} un.</span>
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[1fr_70px_110px_110px] gap-2 rounded-xl bg-stone-50 px-3 py-3 text-xs"
+                >
+                  <strong>
+                    {item.productName}
+                    <span className="ml-1 font-normal text-stone-400">
+                      {item.sku}
+                    </span>
+                  </strong>
+                  <span>
+                    {itemQuantityLabel(
+                      item.quantity,
+                      order.orderType === "SAMPLE",
+                    )}
+                  </span>
                   <span>{money.format(Number(item.unitPrice ?? 0))}</span>
-                  <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
+                  <strong className="text-right">
+                    {money.format(Number(item.totalAmount))}
+                  </strong>
                 </div>
               ))}
             </div>
 
-            {["CONFIRMED", "RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(order.status) && (
+            {[
+              "CONFIRMED",
+              "RESERVED",
+              "IN_PRODUCTION",
+              "PICKING",
+              "READY_TO_SHIP",
+              "INVOICED",
+              "SHIPPED",
+            ].includes(order.status) && (
               <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold text-stone-900">Próxima ação operacional</p>
+                    <p className="text-xs font-bold text-stone-900">
+                      Próxima ação operacional
+                    </p>
                     <p className="mt-1 text-[10px] text-stone-600">
-                      {order.status === "CONFIRMED"
-                        ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
-                        : order.status === "RESERVED"
-                          ? "O estoque está reservado. Inicie a separação física do pedido."
-                        : order.status === "PICKING"
-                          ? "Confirme que a quantidade separada corresponde à quantidade reservada."
-                          : order.status === "READY_TO_SHIP"
-                            ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
-                            : fulfillment?.labelUrl
-                              ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
-                              : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
+                      {fulfillment?.invoiceQueueStatus === "FAILED" &&
+                      fulfillment?.invoiceQueueError
+                        ? `Falha no faturamento: ${fulfillment.invoiceQueueError}`
+                        : fulfillment?.fiscalStatus === "REJECTED"
+                          ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}. Corrija e reprocesse antes de expedir.`
+                          : order.status === "SHIPPED"
+                            ? "Pedido enviado. Confirme a entrega quando o cliente receber para concluir o fluxo."
+                            : order.status === "INVOICED"
+                              ? isPickup
+                                ? "NF-e autorizada. Confirme a retirada ou entrega em mãos para concluir o fluxo."
+                                : fulfillment?.labelUrl
+                                  ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                  : "NF-e autorizada. Pedido faturado e pronto para envio ou confirmação de entrega."
+                              : order.status === "CONFIRMED"
+                                ? "Pedido confirmado. Reserve o estoque disponível para iniciar a preparação."
+                                : order.status === "RESERVED"
+                                  ? "O estoque está reservado. Inicie a separação física do pedido."
+                                  : order.status === "IN_PRODUCTION"
+                                    ? "O café torrado a granel está reservado por linha e perfil. O pedido aguarda a embalagem definida na venda."
+                                    : order.status === "PICKING"
+                                      ? "Confirme que a quantidade separada corresponde à quantidade reservada."
+                                      : order.status === "READY_TO_SHIP" &&
+                                          fulfillment?.fiscalStatus ===
+                                            "AUTHORIZED"
+                                        ? fulfillment?.labelUrl
+                                          ? "NF-e autorizada e etiqueta disponível. O pedido pode ser expedido."
+                                          : "NF-e autorizada. Gere a etiqueta para preparar a expedição."
+                                        : order.status === "READY_TO_SHIP"
+                                          ? "Pedido pronto. Solicite o faturamento para o BBOS enviar ao Bling."
+                                          : fulfillment?.labelUrl
+                                            ? "NF-e processada e etiqueta disponível. O pedido pode ser expedido."
+                                            : "Faturamento solicitado. Aguardando autorização da NF-e e geração da etiqueta."}
                     </p>
                   </div>
-                  {order.status === "CONFIRMED" && (
+                  {canOperate && order.status === "CONFIRMED" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -1669,7 +4717,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {busy ? "Reservando…" : "Reservar estoque"}
                     </button>
                   )}
-                  {order.status === "RESERVED" && (
+                  {canOperate && order.status === "RESERVED" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -1679,7 +4727,7 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {busy ? "Processando…" : "Iniciar separação"}
                     </button>
                   )}
-                  {order.status === "PICKING" && (
+                  {canOperate && order.status === "PICKING" && (
                     <button
                       type="button"
                       disabled={busy}
@@ -1689,27 +4737,81 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                       {busy ? "Processando…" : "Confirmar separação"}
                     </button>
                   )}
-                  {order.status === "READY_TO_SHIP" && (
+                  {canOperate &&
+                    order.status === "READY_TO_SHIP" &&
+                    fulfillment?.fiscalStatus !== "AUTHORIZED" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void (fulfillment?.fiscalStatus === "REJECTED"
+                            ? retryRejectedInvoice()
+                            : operationalAction("invoice"))
+                        }
+                        className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy
+                          ? fulfillment?.fiscalStatus === "REJECTED"
+                            ? "Reprocessando…"
+                            : "Enviando ao Bling…"
+                          : fulfillment?.invoiceQueueStatus === "FAILED"
+                            ? "Tentar faturar novamente"
+                            : fulfillment?.fiscalStatus === "REJECTED"
+                              ? "Reprocessar NF-e"
+                              : "Faturar no Bling"}
+                      </button>
+                    )}
+                  {canOperate &&
+                    fulfillment?.fiscalStatus === "AUTHORIZED" &&
+                    (order.status === "INVOICED" ||
+                      order.status === "READY_TO_SHIP") &&
+                    !isPickup &&
+                    (fulfillment?.labelUrl ||
+                      order.shippingProvider !== "MELHOR_ENVIO") && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void operationalAction("ship")}
+                        className="rounded-xl bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy ? "Processando…" : "Confirmar expedição"}
+                      </button>
+                    )}
+                  {canFinalizeDelivery && (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void operationalAction("invoice")}
-                      className="rounded-xl bg-stone-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      onClick={() =>
+                        void completeDelivery(
+                          isPickup ? "PICKUP" : "MANUAL_DELIVERY",
+                        )
+                      }
+                      className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(4,120,87,.16)] disabled:opacity-50"
                     >
-                      {busy ? "Enviando ao Bling…" : "Faturar no Bling"}
-                    </button>
-                  )}
-                  {order.status === "INVOICED" && fulfillment?.labelUrl && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void operationalAction("ship")}
-                      className="rounded-xl bg-emerald-950 px-4 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"
-                    >
-                      {busy ? "Processando…" : "Confirmar expedição"}
+                      {busy
+                        ? "Concluindo…"
+                        : isPickup
+                          ? "Confirmar retirada e concluir"
+                          : "Confirmar entrega e concluir"}
                     </button>
                   )}
                 </div>
+                {canFinalizeDelivery && (
+                  <p className="mt-3 text-[10px] text-stone-500">
+                    A confirmação de retirada ou entrega grava data e usuário
+                    responsável na auditoria do pedido.
+                  </p>
+                )}
+                {error && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+                  >
+                    <p className="font-bold">Não foi possível avançar.</p>
+                    <p className="mt-1">{error}</p>
+                  </div>
+                )}
               </section>
             )}
 
@@ -1719,85 +4821,575 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                 <MiniValue label="Pagamento" value={paymentLabel} />
                 <MiniValue label="Frete" value={freightLabel} />
                 <MiniValue label="Entrega" value={deliveryLabel} />
-                {order.carrierName && <MiniValue label="Transportadora" value={order.carrierName} />}
-                {order.customerReference && <MiniValue label="Referência" value={order.customerReference} />}
-                {order.incoterm && <MiniValue label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
-                {order.broker && <MiniValue label="Corretor" value={`${order.broker.tradeName || order.broker.name} · ${order.brokerCommissionMode === "PER_PACKAGE" ? `${money.format(Number(order.brokerCommissionPerPackage ?? 0))}/pacote` : `${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`} · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`} />}
+                {order.carrierName && (
+                  <MiniValue label="Transportadora" value={order.carrierName} />
+                )}
+                {order.customerReference && (
+                  <MiniValue
+                    label="Referência"
+                    value={order.customerReference}
+                  />
+                )}
+                {order.incoterm && (
+                  <MiniValue
+                    label="Incoterm"
+                    value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`}
+                  />
+                )}
+                {order.broker && (
+                  <MiniValue
+                    label="Corretor"
+                    value={`${order.broker.tradeName || order.broker.name} · ${order.brokerCommissionMode === "PER_PACKAGE" ? `${money.format(Number(order.brokerCommissionPerPackage ?? 0))}/pacote` : `${Number(order.brokerCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`} · ${money.format(Number(order.brokerCommissionAmount ?? 0))}`}
+                  />
+                )}
               </div>
             </section>
 
-            {(order.status === "DRAFT" || order.status === "CONFIRMED") && (
-              <OrderCustomerApprovalActions orderId={order.id} onAccepted={onChanged} />
+            {termApproval?.requiresApproval && (
+              <section className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-red-950">
+                      Venda a prazo · cliente inadimplente
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-red-800">
+                      {termApproval.overdueCount} título(s) vencido(s), total de{" "}
+                      {money.format(termApproval.overdueAmount)}
+                      {termApproval.maxDaysOverdue > 0
+                        ? ` · atraso de até ${termApproval.maxDaysOverdue} dias`
+                        : ""}
+                      . O pedido só pode seguir com autorização de{" "}
+                      {termApproval.approverLabel}.
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      termApproval.status === "APPROVED"
+                        ? "success"
+                        : termApproval.status === "REJECTED"
+                          ? "danger"
+                          : "warning"
+                    }
+                  >
+                    {termApproval.status === "APPROVED"
+                      ? "Autorizado"
+                      : termApproval.status === "REJECTED"
+                        ? "Recusado"
+                        : "Aguardando autorização"}
+                  </Badge>
+                </div>
+                {termApproval.status === "PENDING" &&
+                  termApproval.canDecide && (
+                    <div className="mt-4">
+                      <label className="block text-xs font-semibold text-red-950">
+                        Observação da decisão
+                        <textarea
+                          rows={2}
+                          value={termApprovalNote}
+                          onChange={(event) =>
+                            setTermApprovalNote(event.target.value)
+                          }
+                          className="mt-2 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm"
+                          placeholder="Condição excepcional autorizada..."
+                        />
+                      </label>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          disabled={busy}
+                          onClick={() => void decideTermApproval("APPROVE")}
+                          className="rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                        >
+                          Autorizar venda a prazo
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => void decideTermApproval("REJECT")}
+                          className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-bold text-red-800 disabled:opacity-50"
+                        >
+                          Recusar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                {termApproval.status === "PENDING" &&
+                  !termApproval.canDecide && (
+                    <p className="mt-3 text-[11px] text-red-800">
+                      José e Suzi foram notificados no BBOS e no aplicativo.
+                    </p>
+                  )}
+                {termApproval.decidedByName && (
+                  <p className="mt-3 border-t border-red-200 pt-3 text-[10px] text-red-800">
+                    Decisão registrada por{" "}
+                    <strong>{termApproval.decidedByName}</strong>
+                    {termApproval.decidedAt
+                      ? ` em ${new Date(termApproval.decidedAt).toLocaleString("pt-BR")}`
+                      : ""}
+                    {termApproval.decisionNote
+                      ? ` · ${termApproval.decisionNote}`
+                      : ""}
+                    .
+                  </p>
+                )}
+              </section>
             )}
+
+            {order.orderType !== "SAMPLE" &&
+              (order.status === "DRAFT" || order.status === "CONFIRMED") &&
+              (order.paymentType !== "TERM" ||
+                termApproval?.requiresApproval === false ||
+                termApproval?.status === "APPROVED") && (
+                <OrderCustomerApprovalActions
+                  orderId={order.id}
+                  onAccepted={onChanged}
+                />
+              )}
 
             {order.shippingProvider === "MELHOR_ENVIO" && (
               <section className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold text-emerald-950">Expedição · Melhor Envio</p>
+                    <p className="text-xs font-bold text-emerald-950">
+                      Expedição · Melhor Envio
+                    </p>
                     <p className="mt-1 text-[10px] text-emerald-800">
-                      {fulfillment?.labelUrl
-                        ? "Etiqueta pronta para impressão."
+                      {fulfillment?.reexpeditionId
+                        ? "Reexpedição em preparação. A etiqueta e a NF-e anteriores estão preservadas apenas para auditoria."
                         : fulfillment?.fiscalStatus === "REJECTED"
                           ? `NF-e rejeitada pela SEFAZ${fulfillment.sefazStatusCode ? ` (${fulfillment.sefazStatusCode})` : ""}: ${fulfillment.sefazMessage ?? "revise a configuração fiscal do produto."}`
-                        : fulfillment?.fiscalStatus === "AUTHORIZED"
-                          ? "NF-e autorizada. A etiqueta já pode ser gerada."
-                        : order.status === "INVOICED"
-                          ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
-                          : "A etiqueta será liberada após a autorização da NF-e."}
+                          : fulfillment?.labelUrl
+                            ? "Etiqueta pronta para impressão."
+                            : fulfillment?.fiscalStatus === "AUTHORIZED"
+                              ? "NF-e autorizada. A etiqueta já pode ser gerada."
+                              : ["INVOICED", "READY_TO_SHIP"].includes(
+                                    order.status,
+                                  ) && fulfillment?.fiscalStatus === "SENT"
+                                ? "Faturamento solicitado. Aguardando a autorização da NF-e para liberar a geração da etiqueta."
+                                : "A etiqueta será liberada após a autorização da NF-e."}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {(fulfillment?.fiscalPdfUrl || fulfillment?.fiscalDanfeUrl) && (
+                    {(fulfillment?.reexpeditionId
+                      ? originalFiscalDocumentUrl
+                      : fiscalDocumentUrl) && (
                       <a
-                        href={fulfillment.fiscalPdfUrl || fulfillment.fiscalDanfeUrl || "#"}
+                        href={
+                          fulfillment?.reexpeditionId
+                            ? (originalFiscalDocumentUrl ?? undefined)
+                            : (fiscalDocumentUrl ?? undefined)
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-xl border border-emerald-900 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
                       >
-                        Ver NF-e{fulfillment.fiscalNumber ? ` nº ${fulfillment.fiscalNumber}` : ""}
+                        {fulfillment?.reexpeditionId
+                          ? "Ver NF-e original"
+                          : "Ver NF-e"}
+                        {(
+                          fulfillment?.reexpeditionId
+                            ? fulfillment.reexpeditionOriginalFiscalNumber
+                            : fulfillment?.fiscalNumber
+                        )
+                          ? ` nº ${
+                              fulfillment?.reexpeditionId
+                                ? fulfillment.reexpeditionOriginalFiscalNumber
+                                : fulfillment?.fiscalNumber
+                            }`
+                          : ""}
                       </a>
                     )}
-                    {fulfillment?.labelUrl ? (
+                    {fulfillment?.reexpeditionId && returnFiscalDocumentUrl && (
                       <a
-                        href={fulfillment.labelUrl}
+                        href={returnFiscalDocumentUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                        className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-[11px] font-bold text-amber-900"
                       >
-                        Abrir etiqueta
+                        Ver devolução
+                        {fulfillment.reexpeditionReturnFiscalNumber
+                          ? ` nº ${fulfillment.reexpeditionReturnFiscalNumber}`
+                          : ""}
                       </a>
-                    ) : fulfillment?.fiscalStatus === "REJECTED" ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void operationalAction("invoice")}
-                        className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-                      >
-                        {busy ? "Reprocessando…" : "Reprocessar NF-e"}
-                      </button>
-                    ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
-                      <button
-                        type="button"
-                        disabled={fulfillmentBusy}
-                        onClick={() => void generateLabel()}
-                        className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-                      >
-                        {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
-                      </button>
-                    ) : null}
+                    )}
+                    {fulfillment?.reexpeditionId &&
+                      replacementFiscalDocumentUrl && (
+                        <a
+                          href={replacementFiscalDocumentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-[11px] font-bold text-emerald-950"
+                        >
+                          Ver nova saída
+                          {fulfillment.reexpeditionReplacementFiscalNumber
+                            ? ` nº ${fulfillment.reexpeditionReplacementFiscalNumber}`
+                            : ""}
+                        </a>
+                      )}
+                    {canOperate &&
+                      (fulfillment?.reexpeditionId ? (
+                        printableLabelUrl ? (
+                          <a
+                            href={printableLabelUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                          >
+                            Imprimir nova etiqueta
+                          </a>
+                        ) : null
+                      ) : fulfillment?.fiscalStatus === "REJECTED" ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void retryRejectedInvoice()}
+                          className="rounded-xl bg-red-800 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                        >
+                          {busy ? "Reprocessando…" : "Reprocessar NF-e"}
+                        </button>
+                      ) : printableLabelUrl ? (
+                        <a
+                          href={printableLabelUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white"
+                        >
+                          Abrir etiqueta
+                        </a>
+                      ) : fulfillment?.fiscalStatus === "SENT" &&
+                        fulfillment?.fiscalExternalId ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void resetMissingInvoice()}
+                          className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
+                        >
+                          {busy ? "Verificando…" : "NF-e excluída no Bling"}
+                        </button>
+                      ) : fulfillment?.fiscalStatus === "AUTHORIZED" ? (
+                        <>
+                          {order.orderType === "SAMPLE" && (
+                            <button
+                              type="button"
+                              disabled={busy || fulfillmentBusy}
+                              onClick={() => void resetCancelledInvoice()}
+                              className="rounded-xl border border-red-300 bg-white px-4 py-2 text-[11px] font-bold text-red-800 disabled:opacity-50"
+                            >
+                              {busy
+                                ? "Regularizando…"
+                                : "NF-e cancelada no Bling"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={fulfillmentBusy || busy}
+                            onClick={() => void generateLabel()}
+                            className="rounded-xl bg-emerald-950 px-4 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                          >
+                            {fulfillmentBusy ? "Gerando…" : "Gerar etiqueta"}
+                          </button>
+                        </>
+                      ) : null)}
                   </div>
                 </div>
-                {fulfillment?.trackingCode && (
-                  <p className="mt-3 text-[11px] text-emerald-900">
-                    Rastreio: <b>{fulfillment.trackingCode}</b>
-                  </p>
+                {(fulfillment?.authorizationCode ||
+                  fulfillment?.trackingCode) && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-emerald-900">
+                    <span>
+                      Rastreio:{" "}
+                      <b>
+                        {fulfillment.authorizationCode ??
+                          fulfillment.trackingCode}
+                        {fulfillment.authorizationCode &&
+                        fulfillment.trackingCode &&
+                        fulfillment.authorizationCode !==
+                          fulfillment.trackingCode
+                          ? ` · ${fulfillment.trackingCode}`
+                          : ""}
+                      </b>
+                    </span>
+                    {shipmentTrackingUrl(fulfillment) && (
+                      <a
+                        href={shipmentTrackingUrl(fulfillment) ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 font-bold text-emerald-950"
+                      >
+                        Ver detalhes no Melhor Rastreio
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {shipmentHasException && !fulfillment?.reexpeditionId && (
+                  <div className="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 shadow-[0_12px_30px_-24px_rgba(185,28,28,0.8)]">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="max-w-2xl">
+                        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-red-800">
+                          Entrega com devolução
+                        </p>
+                        <p className="mt-1 text-xs font-bold text-red-950">
+                          Confirme o retorno físico antes de preparar uma nova
+                          expedição.
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-red-800">
+                          O BBOS preservará a remessa antiga, validará o
+                          endereço e não fará nova venda, cobrança ou baixa de
+                          estoque. Documentos fiscais, etiqueta e rastreio serão
+                          processados automaticamente.
+                        </p>
+                      </div>
+                      {canPrepareReexpedition ? (
+                        <button
+                          type="button"
+                          disabled={fulfillmentBusy || busy}
+                          onClick={() => void prepareReexpedition()}
+                          className="rounded-xl bg-red-800 px-4 py-3 text-[11px] font-black text-white disabled:opacity-50"
+                        >
+                          {fulfillmentBusy
+                            ? "Iniciando…"
+                            : "Confirmar devolução e reexpedir"}
+                        </button>
+                      ) : (
+                        <span className="rounded-xl border border-red-200 bg-white px-4 py-3 text-[10px] font-bold text-red-800">
+                          Aguardando confirmação da administração ou direção.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {fulfillment?.reexpeditionId && (
+                  <div className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">
+                          Reexpedição automática · tentativa{" "}
+                          {fulfillment.reexpeditionAttemptNumber ?? 1}
+                        </p>
+                        <p className="mt-1 text-sm font-black text-amber-950">
+                          {{
+                            QUEUED: "Na fila de processamento",
+                            CONFIGURATION_REQUIRED:
+                              "Configuração fiscal necessária",
+                            RETURN_FISCAL_PENDING: "Emitindo devolução fiscal",
+                            RETURN_FISCAL_AUTHORIZED: "Devolução autorizada",
+                            OUTBOUND_FISCAL_PENDING: "Emitindo a nova saída",
+                            OUTBOUND_FISCAL_AUTHORIZED: "Nova saída autorizada",
+                            LABEL_PENDING: "Gerando a nova etiqueta",
+                            LABEL_CREATED: "Reenvio pronto para postagem",
+                            FAILED: "Processamento interrompido",
+                            CANCELLED: "Reexpedição cancelada",
+                          }[
+                            String(fulfillment.reexpeditionStatus ?? "QUEUED")
+                          ] ?? "Processando a reexpedição"}
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-amber-900">
+                          A etiqueta e a remessa anteriores estão preservadas e
+                          não podem ser reutilizadas. O BBOS avança sozinho e só
+                          interrompe o fluxo diante de uma rejeição real.
+                        </p>
+                        {fulfillment.reexpeditionLastError && (
+                          <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-800">
+                            {fulfillment.reexpeditionLastError}
+                          </p>
+                        )}
+                      </div>
+                      {fulfillment.reexpeditionPreparedAt && (
+                        <span className="rounded-full bg-white px-3 py-1.5 text-[9px] font-bold text-amber-900">
+                          {fulfillment.reexpeditionPreparedByName
+                            ? `${fulfillment.reexpeditionPreparedByName} · `
+                            : ""}
+                          {new Date(
+                            fulfillment.reexpeditionPreparedAt,
+                          ).toLocaleString("pt-BR")}
+                        </span>
+                      )}
+                    </div>
+                    {fulfillment.reexpeditionAddressSnapshot && (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-white p-3 text-[10px] text-stone-700">
+                        <p className="font-black uppercase tracking-wider text-stone-500">
+                          Endereço conferido para o reenvio
+                        </p>
+                        <p className="mt-1 font-bold text-stone-950">
+                          {fulfillment.reexpeditionAddressSnapshot.address},{" "}
+                          {fulfillment.reexpeditionAddressSnapshot.number}
+                          {fulfillment.reexpeditionAddressSnapshot.complement
+                            ? ` · ${fulfillment.reexpeditionAddressSnapshot.complement}`
+                            : ""}
+                        </p>
+                        <p className="mt-0.5">
+                          {fulfillment.reexpeditionAddressSnapshot.district} ·{" "}
+                          {fulfillment.reexpeditionAddressSnapshot.city}/
+                          {fulfillment.reexpeditionAddressSnapshot.state_abbr} ·
+                          CEP{" "}
+                          {fulfillment.reexpeditionAddressSnapshot.postal_code}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {fulfillment && (
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_14px_35px_-28px_rgba(6,78,59,0.7)]">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-950">
+                          Evolução do envio
+                        </p>
+                        <p className="mt-1 text-[10px] text-stone-500">
+                          Acompanhe cada etapa até a entrega no destino.
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider ${
+                          shipmentIsCancelled
+                            ? "bg-red-100 text-red-700"
+                            : shipmentHasException
+                              ? "bg-amber-100 text-amber-800"
+                              : shipmentStep ===
+                                  shipmentProgressSteps.length - 1
+                                ? "bg-emerald-700 text-white"
+                                : "bg-emerald-50 text-emerald-800"
+                        }`}
+                      >
+                        {shipmentIsCancelled
+                          ? "Envio cancelado"
+                          : shipmentHasException
+                            ? "Atenção necessária"
+                            : (shipmentProgressSteps[shipmentStep]?.detail ??
+                              "Em preparação")}
+                      </span>
+                    </div>
+
+                    <div
+                      className="relative mt-5"
+                      aria-label={`Progresso do envio: ${shipmentProgress}%`}
+                    >
+                      <div className="absolute left-[10%] right-[10%] top-[17px] h-1 overflow-hidden rounded-full bg-stone-100">
+                        <div
+                          className={`h-full rounded-full transition-[width] duration-700 ${
+                            shipmentIsCancelled
+                              ? "bg-red-500"
+                              : shipmentHasException
+                                ? "bg-amber-500"
+                                : "bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500"
+                          }`}
+                          style={{ width: `${shipmentProgress}%` }}
+                        />
+                      </div>
+
+                      <div className="relative grid grid-cols-5 gap-1">
+                        {shipmentProgressSteps.map((step, index) => {
+                          const Icon = step.icon;
+                          const reached = index <= shipmentStep;
+                          const active = index === shipmentStep;
+                          return (
+                            <div
+                              key={step.label}
+                              className="flex min-w-0 flex-col items-center text-center"
+                            >
+                              <span
+                                className={`relative z-10 flex size-9 items-center justify-center rounded-full border-2 transition-colors ${
+                                  reached
+                                    ? shipmentIsCancelled
+                                      ? "border-red-500 bg-red-500 text-white"
+                                      : shipmentHasException
+                                        ? "border-amber-500 bg-amber-500 text-white"
+                                        : "border-emerald-600 bg-emerald-600 text-white"
+                                    : "border-stone-200 bg-white text-stone-300"
+                                } ${
+                                  active
+                                    ? shipmentIsCancelled
+                                      ? "ring-4 ring-red-100"
+                                      : shipmentHasException
+                                        ? "ring-4 ring-amber-100"
+                                        : "ring-4 ring-emerald-100"
+                                    : ""
+                                }`}
+                              >
+                                <Icon size={15} strokeWidth={2.5} />
+                              </span>
+                              <span
+                                className={`mt-2 hidden truncate text-[9px] font-bold uppercase tracking-wide sm:block ${
+                                  reached
+                                    ? "text-emerald-950"
+                                    : "text-stone-400"
+                                }`}
+                              >
+                                {step.label}
+                              </span>
+                              <span className="mt-0.5 hidden text-[8px] text-stone-400 sm:block">
+                                {step.detail}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!!fulfillment?.trackingEvents?.length && (
+                  <div className="mt-4 border-t border-emerald-100 pt-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">
+                          Histórico do transporte
+                        </p>
+                        <p className="mt-1 text-[10px] text-emerald-700">
+                          Marcos oficiais recebidos pelo BBOS do Melhor Envio e
+                          da transportadora.
+                        </p>
+                      </div>
+                      {shipmentTrackingUrl(fulfillment) && (
+                        <a
+                          href={shipmentTrackingUrl(fulfillment) ?? undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-bold text-emerald-900 underline"
+                        >
+                          Abrir histórico completo
+                        </a>
+                      )}
+                    </div>
+                    <ol className="mt-3 space-y-3">
+                      {fulfillment.trackingEvents.map((event, index) => (
+                        <li
+                          key={`${event.eventType}-${event.occurredAt}-${index}`}
+                          className="grid grid-cols-[18px_1fr] gap-2"
+                        >
+                          <div className="flex flex-col items-center">
+                            <span className="mt-1 size-2.5 rounded-full bg-emerald-700 ring-4 ring-emerald-100" />
+                            {index < fulfillment.trackingEvents!.length - 1 && (
+                              <span className="mt-1 min-h-8 w-px flex-1 bg-emerald-200" />
+                            )}
+                          </div>
+                          <div className="pb-1">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                              <p className="text-[11px] font-bold text-stone-900">
+                                {event.title}
+                              </p>
+                              <time className="text-[9px] text-stone-500">
+                                {new Date(event.occurredAt).toLocaleString(
+                                  "pt-BR",
+                                )}
+                              </time>
+                            </div>
+                            <p className="mt-0.5 text-[10px] leading-4 text-stone-600">
+                              {event.detail}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 )}
 
                 <div className="mt-4 border-t border-emerald-100 pt-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">Onde postar</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900">
+                        Onde postar
+                      </p>
                       <p className="mt-1 text-[10px] text-emerald-700">
                         {postingBusy
                           ? "Consultando unidades disponíveis no Melhor Envio…"
@@ -1818,7 +5410,10 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                   {posting?.agencies?.length ? (
                     <div className="mt-3 grid gap-2">
                       {posting.agencies.slice(0, 4).map((agency, index) => (
-                        <div key={agency.id} className="rounded-xl border border-emerald-100 bg-white p-3">
+                        <div
+                          key={agency.id}
+                          className="rounded-xl border border-emerald-100 bg-white p-3"
+                        >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2">
@@ -1827,14 +5422,22 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
                                     Opção de postagem
                                   </span>
                                 )}
-                                <p className="text-[11px] font-bold text-stone-900">{agency.name}</p>
+                                <p className="text-[11px] font-bold text-stone-900">
+                                  {agency.name}
+                                </p>
                               </div>
                               {agency.address && (
-                                <p className="mt-1 text-[10px] text-stone-700">{agency.address}</p>
+                                <p className="mt-1 text-[10px] text-stone-700">
+                                  {agency.address}
+                                </p>
                               )}
                               <p className="mt-1 text-[10px] text-stone-500">
-                                {[agency.district, agency.city, agency.state].filter(Boolean).join(" · ")}
-                                {agency.postalCode ? ` · CEP ${agency.postalCode}` : ""}
+                                {[agency.district, agency.city, agency.state]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                                {agency.postalCode
+                                  ? ` · CEP ${agency.postalCode}`
+                                  : ""}
                               </p>
                             </div>
                             {agency.mapsUrl && (
@@ -1856,56 +5459,142 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
               </section>
             )}
 
-            {order.status === "DRAFT" && order.items.length > 0 && (
-              <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
-                <div className="flex items-center gap-2">
-                  <BadgeDollarSign size={17} className="text-violet-700" />
-                  <div>
-                    <p className="text-xs font-bold text-violet-900">Solicitar desconto</p>
-                    <p className="text-[10px] text-violet-700">Controle interno. Nada desta aprovação aparece para o cliente.</p>
+            {order.orderType !== "SAMPLE" &&
+              order.status === "DRAFT" &&
+              order.items.length > 0 && (
+                <section className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                  <div className="flex items-center gap-2">
+                    <BadgeDollarSign size={17} className="text-violet-700" />
+                    <div>
+                      <p className="text-xs font-bold text-violet-900">
+                        Solicitar desconto
+                      </p>
+                      <p className="text-[10px] text-violet-700">
+                        Controle interno. Nada desta aprovação aparece para o
+                        cliente.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <Field label="Item">
-                    <select value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)}>
-                      {order.items.map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.sku}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Desconto solicitado (%)">
-                    <input type="number" min="0" step="0.01" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} />
-                  </Field>
-                </div>
-                {quote && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                    <MiniValue label="Preço oficial" value={money.format(quote.officialUnitPrice)} />
-                    <MiniValue label="Preço proposto" value={money.format(simulatedPrice)} />
-                    <MiniValue label="Máx. solicitável" value={`${quote.discountPolicy.maxRequestPercent.toFixed(2)}%`} />
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Item">
+                      <select
+                        value={selectedItemId}
+                        onChange={(event) =>
+                          setSelectedItemId(event.target.value)
+                        }
+                      >
+                        {order.items.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.productName} · {item.sku}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Desconto solicitado (%)">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={discountPercent}
+                        onChange={(event) =>
+                          setDiscountPercent(event.target.value)
+                        }
+                      />
+                    </Field>
                   </div>
-                )}
-                <label className="mt-3 block text-xs font-semibold">
-                  Justificativa
-                  <textarea rows={3} value={rationale} onChange={(event) => setRationale(event.target.value)} className="mt-2 w-full rounded-xl border bg-white px-3 py-3 text-sm" placeholder="Motivo comercial da exceção..." />
-                </label>
-                <button disabled={busy || !quote || requested <= 0 || !rationale.trim()} onClick={() => void requestDiscount()} className="mt-3 w-full rounded-xl bg-stone-950 py-3 text-xs font-bold text-white disabled:opacity-40">Enviar para aprovação</button>
-              </section>
-            )}
+                  {quote && (
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                      <MiniValue
+                        label="Preço oficial"
+                        value={money.format(quote.officialUnitPrice)}
+                      />
+                      <MiniValue
+                        label="Preço proposto"
+                        value={money.format(simulatedPrice)}
+                      />
+                      <MiniValue
+                        label="Máx. solicitável"
+                        value={`${quote.discountPolicy.maxRequestPercent.toFixed(2)}%`}
+                      />
+                    </div>
+                  )}
+                  <label className="mt-3 block text-xs font-semibold">
+                    Justificativa
+                    <textarea
+                      rows={3}
+                      value={rationale}
+                      onChange={(event) => setRationale(event.target.value)}
+                      className="mt-2 w-full rounded-xl border bg-white px-3 py-3 text-sm"
+                      placeholder="Motivo comercial da exceção..."
+                    />
+                  </label>
+                  <button
+                    disabled={
+                      busy || !quote || requested <= 0 || !rationale.trim()
+                    }
+                    onClick={() => void requestDiscount()}
+                    className="mt-3 w-full rounded-xl bg-stone-950 py-3 text-xs font-bold text-white disabled:opacity-40"
+                  >
+                    Enviar para aprovação
+                  </button>
+                </section>
+              )}
 
             {requests.length > 0 && (
               <section className="mt-6">
-                <div className="flex items-center gap-2"><ShieldCheck size={16} /><h3 className="text-sm font-semibold">Histórico interno de descontos</h3></div>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} />
+                  <h3 className="text-sm font-semibold">
+                    Histórico interno de descontos
+                  </h3>
+                </div>
                 <div className="mt-3 space-y-2">
                   {requests.map((request) => (
                     <div key={request.id} className="rounded-xl border p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-semibold">{Number(request.discountPercent).toFixed(2)}% · {money.format(Number(request.officialUnitPrice))} → {money.format(Number(request.requestedUnitPrice))}</p>
-                        <Badge tone={request.status === "APPROVED" ? "success" : request.status === "REJECTED" ? "danger" : "warning"}>{request.status === "APPROVED" ? "Aprovado" : request.status === "REJECTED" ? "Recusado" : "Pendente"}</Badge>
+                        <p className="text-xs font-semibold">
+                          {Number(request.discountPercent).toFixed(2)}% ·{" "}
+                          {money.format(Number(request.officialUnitPrice))} →{" "}
+                          {money.format(Number(request.requestedUnitPrice))}
+                        </p>
+                        <Badge
+                          tone={
+                            request.status === "APPROVED"
+                              ? "success"
+                              : request.status === "REJECTED"
+                                ? "danger"
+                                : "warning"
+                          }
+                        >
+                          {request.status === "APPROVED"
+                            ? "Aprovado"
+                            : request.status === "REJECTED"
+                              ? "Recusado"
+                              : "Pendente"}
+                        </Badge>
                       </div>
-                      <p className="mt-1 text-[11px] text-stone-500">{request.rationale}</p>
-                      <p className="mt-1 text-[10px] text-stone-400">Solicitado por {request.requestedByName}</p>
+                      <p className="mt-1 text-[11px] text-stone-500">
+                        {request.rationale}
+                      </p>
+                      <p className="mt-1 text-[10px] text-stone-400">
+                        Solicitado por {request.requestedByName}
+                      </p>
                       {request.status === "PENDING" && (
                         <div className="mt-3 flex gap-2">
-                          <button disabled={busy} onClick={() => void decide(request.id, "APPROVE")} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-[11px] font-semibold text-white"><Check size={13} /> Aprovar</button>
-                          <button disabled={busy} onClick={() => void decide(request.id, "REJECT")} className="rounded-lg border px-3 py-2 text-[11px] font-semibold">Recusar</button>
+                          <button
+                            disabled={busy}
+                            onClick={() => void decide(request.id, "APPROVE")}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-[11px] font-semibold text-white"
+                          >
+                            <Check size={13} /> Aprovar
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => void decide(request.id, "REJECT")}
+                            className="rounded-lg border px-3 py-2 text-[11px] font-semibold"
+                          >
+                            Recusar
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1915,8 +5604,6 @@ function OrderDrawer({ order, onClose, onChanged }: { order: Order; onClose: () 
             )}
           </>
         )}
-
-        {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</div>}
       </aside>
     </div>
   );
@@ -1941,23 +5628,41 @@ function ClientOrderView({
     <section className="mt-6 rounded-3xl border bg-stone-50 p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">Bispo Coffees · Pedido</p>
-          <h3 className="mt-1 text-2xl font-bold">{order.orderNumber ?? order.code}</h3>
-          <p className="mt-1 text-sm text-stone-500">Preparado para {order.customer.name}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">
+            Bispo Coffees · Pedido
+          </p>
+          <h3 className="mt-1 text-2xl font-bold">
+            {order.orderNumber ?? order.code}
+          </h3>
+          <p className="mt-1 text-sm text-stone-500">
+            Preparado para {order.customer.name}
+          </p>
         </div>
         <Status status={order.status} />
       </div>
 
       <div className="mt-6 overflow-hidden rounded-2xl border bg-white">
         <div className="grid grid-cols-[1fr_58px_100px_108px] gap-2 border-b bg-stone-50 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-stone-400">
-          <span>Produto</span><span>Qtd.</span><span>Preço</span><span className="text-right">Total</span>
+          <span>Produto</span>
+          <span>{order.orderType === "SAMPLE" ? "Pacotes" : "Qtd."}</span>
+          <span>{order.orderType === "SAMPLE" ? "Preço/pacote" : "Preço"}</span>
+          <span className="text-right">Total</span>
         </div>
         {order.items.map((item) => (
-          <div key={item.id} className="grid grid-cols-[1fr_58px_100px_108px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0">
+          <div
+            key={item.id}
+            className="grid grid-cols-[1fr_58px_100px_108px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0"
+          >
             <strong>{item.productName}</strong>
-            <span>{item.quantity}</span>
+            <span>
+              {order.orderType === "SAMPLE"
+                ? itemQuantityLabel(item.quantity, true)
+                : item.quantity}
+            </span>
             <span>{money.format(Number(item.unitPrice ?? 0))}</span>
-            <strong className="text-right">{money.format(Number(item.totalAmount))}</strong>
+            <strong className="text-right">
+              {money.format(Number(item.totalAmount))}
+            </strong>
           </div>
         ))}
       </div>
@@ -1966,49 +5671,100 @@ function ClientOrderView({
         <ClientTerm label="Pagamento" value={paymentLabel} />
         <ClientTerm label="Frete" value={freightLabel} />
         <ClientTerm label="Entrega prevista" value={deliveryLabel} />
-        {order.carrierName && <ClientTerm label="Transportadora" value={order.carrierName} />}
-        {order.customerReference && <ClientTerm label="Referência" value={order.customerReference} />}
-        {order.incoterm && <ClientTerm label="Incoterm" value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`} />}
+        {order.carrierName && (
+          <ClientTerm label="Transportadora" value={order.carrierName} />
+        )}
+        {order.customerReference && (
+          <ClientTerm label="Referência" value={order.customerReference} />
+        )}
+        {order.incoterm && (
+          <ClientTerm
+            label="Incoterm"
+            value={`${order.incoterm}${order.incotermLocation ? ` · ${order.incotermLocation}` : ""}`}
+          />
+        )}
       </div>
 
       {order.notes && (
         <div className="mt-4 rounded-2xl bg-white p-4">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">Observações</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
+            Observações
+          </p>
           <p className="mt-1 text-xs leading-5 text-stone-700">{order.notes}</p>
         </div>
       )}
 
       <div className="mt-5 flex items-end justify-between rounded-2xl bg-stone-950 px-5 py-4 text-white">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-stone-400">Total do pedido</p>
-          <p className="mt-1 text-xs text-stone-300">Condições resumidas para aprovação</p>
+          <p className="text-[10px] uppercase tracking-wider text-stone-400">
+            Total do pedido
+          </p>
+          <p className="mt-1 text-xs text-stone-300">
+            Condições resumidas para aprovação
+          </p>
         </div>
-        <strong className="text-2xl">{money.format(Number(order.totalAmount))}</strong>
+        <strong className="text-2xl">
+          {money.format(Number(order.totalAmount))}
+        </strong>
       </div>
 
-      <button onClick={onCopy} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border bg-white px-4 py-3 text-xs font-bold">
-        <Copy size={14} /> {copied ? "Resumo copiado" : "Copiar resumo para enviar"}
+      <button
+        onClick={onCopy}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border bg-white px-4 py-3 text-xs font-bold"
+      >
+        <Copy size={14} />{" "}
+        {copied ? "Resumo copiado" : "Copiar resumo para enviar"}
       </button>
     </section>
   );
 }
 
 function ClientTerm({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl bg-white p-4"><p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 text-sm font-semibold text-stone-900">{value}</p></div>;
+  return (
+    <div className="rounded-2xl bg-white p-4">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-stone-900">{value}</p>
+    </div>
+  );
 }
 
 function MiniValue({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-white p-3"><p className="text-[9px] uppercase tracking-wider text-stone-400">{label}</p><p className="mt-1 font-bold text-stone-800">{value}</p></div>;
+  return (
+    <div className="rounded-xl bg-white p-3">
+      <p className="text-[9px] uppercase tracking-wider text-stone-400">
+        {label}
+      </p>
+      <p className="mt-1 font-bold text-stone-800">{value}</p>
+    </div>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="block text-xs font-semibold">{label}<div className="mt-2 [&>*]:w-full [&>*]:rounded-xl [&>*]:border [&>*]:px-3 [&>*]:py-3">{children}</div></label>;
+  return (
+    <label className="block text-xs font-semibold">
+      {label}
+      <div className="mt-2 [&>*]:w-full [&>*]:rounded-xl [&>*]:border [&>*]:px-3 [&>*]:py-3">
+        {children}
+      </div>
+    </label>
+  );
 }
 
 function Kpi({ label, value }: { label: string; value: string }) {
-  return <Card className="p-4"><p className="text-[11px] text-stone-500">{label}</p><p className="mt-2 text-xl font-bold">{value}</p></Card>;
+  return (
+    <Card className="p-4">
+      <p className="text-[11px] text-stone-500">{label}</p>
+      <p className="mt-2 text-xl font-bold">{value}</p>
+    </Card>
+  );
 }
 
 function Status({ status }: { status: string }) {
-  return <Badge tone={statusTone[status] ?? "neutral"}>{statusLabel[status] ?? status}</Badge>;
+  return (
+    <Badge tone={statusTone[status] ?? "neutral"}>
+      {statusLabel[status] ?? status}
+    </Badge>
+  );
 }

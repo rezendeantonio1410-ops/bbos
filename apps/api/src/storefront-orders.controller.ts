@@ -25,6 +25,13 @@ import { StorefrontCouponsService } from "./storefront-coupons.service";
 import { StorefrontCustomerService } from "./storefront-customer.service";
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
 import { SalesOrdersService } from "./sales-orders.service";
+import {
+  ensureBispoStoreSalesChannel,
+  storefrontCustomerProfile,
+  storefrontShippingSalesOrderData,
+} from "./storefront-order-sync";
+import { reserveMelhorEnvioFreight } from "./storefront-shipping-finance";
+import { recordPaidStorefrontOrder } from "./storefront-payment-finance";
 
 const groundProductIds = new Set(["essencial", "intenso"]);
 const preparationFor = (id: string) =>
@@ -444,37 +451,19 @@ export class StorefrontOrdersController
       unitPriceCents: number;
       totalCents: number;
     }>;
+    const shippingData = storefrontShippingSalesOrderData(storefront);
 
     return this.database.$transaction(async (transaction) => {
-      const channel =
-        (await transaction.salesChannel.findFirst({
-          where: {
-            companyId: storefront.companyId,
-            type: "ECOMMERCE",
-            active: true,
-          },
-          orderBy: { createdAt: "asc" },
-        })) ??
-        (await transaction.salesChannel.upsert({
-          where: {
-            companyId_code: {
-              companyId: storefront.companyId,
-              code: "ECOMMERCE",
-            },
-          },
-          update: { active: true, name: "Loja online", currency: "BRL" },
-          create: {
-            companyId: storefront.companyId,
-            code: "ECOMMERCE",
-            name: "Loja online",
-            type: "ECOMMERCE",
-            active: true,
-            country: "BR",
-            currency: "BRL",
-          },
-        }));
+      const channel = await ensureBispoStoreSalesChannel(
+        transaction,
+        storefront.companyId,
+      );
 
       const cpf = digits(customerData?.cpf);
+      const customerProfile = storefrontCustomerProfile(
+        customerData ?? {},
+        delivery ?? {},
+      );
       let customer = cpf
         ? await transaction.customer.findFirst({
             where: { companyId: storefront.companyId, taxId: cpf },
@@ -483,15 +472,13 @@ export class StorefrontOrdersController
       if (customer) {
         customer = await transaction.customer.update({
           where: { id: customer.id },
-          data: { name: customerData?.name?.trim() || customer.name },
+          data: customerProfile,
         });
       } else {
         customer = await transaction.customer.create({
           data: {
             companyId: storefront.companyId,
-            name: customerData?.name?.trim() || "Cliente da loja",
-            taxId: cpf || null,
-            segment: "E-commerce",
+            ...customerProfile,
           },
         });
       }
@@ -535,15 +522,54 @@ export class StorefrontOrdersController
         },
       });
       if (existing) {
+        const data: {
+          status?: SalesOrderStatus;
+          salesChannelId?: string;
+          paymentType?: string;
+          paymentTermsSnapshot?: string;
+          freight?: number;
+          freightResponsibility?: string | null;
+          shippingQuoteId?: string | null;
+          shippingProvider?: string | null;
+          shippingServiceId?: string | null;
+          shippingServiceName?: string | null;
+          carrierName?: string | null;
+          estimatedDeliveryDays?: number | null;
+          externalOrderId?: string;
+        } = {};
         if (
           status !== existing.status &&
           (existing.status === SalesOrderStatus.DRAFT ||
             (existing.status === SalesOrderStatus.CANCELLED &&
               status === SalesOrderStatus.CONFIRMED))
         ) {
+          data.status = status;
+        }
+        if (existing.salesChannelId !== channel.id) {
+          data.salesChannelId = channel.id;
+        }
+        if (existing.paymentType === "LEGACY") {
+          data.paymentType = "CASH";
+          data.paymentTermsSnapshot = `${storefront.requestedPaymentMethod === "CARD" ? "Cartão" : "Pix"} · Loja Bispo`;
+        }
+        const shippingChanged =
+          Number(existing.freight) !== shippingData.freight ||
+          existing.freightResponsibility !==
+            shippingData.freightResponsibility ||
+          existing.shippingQuoteId !== shippingData.shippingQuoteId ||
+          existing.shippingProvider !== shippingData.shippingProvider ||
+          existing.shippingServiceId !== shippingData.shippingServiceId ||
+          existing.shippingServiceName !== shippingData.shippingServiceName ||
+          existing.carrierName !== shippingData.carrierName ||
+          existing.estimatedDeliveryDays !== shippingData.estimatedDeliveryDays;
+        if (shippingChanged) Object.assign(data, shippingData);
+        if (existing.externalOrderId !== storefront.id) {
+          data.externalOrderId = storefront.id;
+        }
+        if (Object.keys(data).length) {
           return transaction.salesOrder.update({
             where: { id: existing.id },
-            data: { status },
+            data,
           });
         }
         return existing;
@@ -579,9 +605,12 @@ export class StorefrontOrdersController
             ? storefront.subtotalCents / 100 / totalQuantity
             : 0,
           subtotal: storefront.subtotalCents / 100,
-          freight: storefront.shippingCents / 100,
+          ...shippingData,
           discount: (storefront.discountCents || 0) / 100,
           totalAmount: storefront.totalCents / 100,
+          paymentType: "CASH",
+          paymentTermsSnapshot: `${storefront.requestedPaymentMethod === "CARD" ? "Cartão" : "Pix"} · Loja Bispo`,
+          externalOrderId: storefront.id,
           orderDate: storefront.createdAt,
           notes: [
             `Loja online · ${customerData?.email || ""} · ${customerData?.phone || ""}`,
@@ -823,6 +852,25 @@ export class StorefrontOrdersController
           `coupon:${redemption[0].id}`,
         );
       }
+      const freightQuote = order.shippingQuoteId
+        ? await transaction.$queryRawUnsafe<
+            Array<{ providerPriceCents: number }>
+          >(
+            `SELECT "providerPriceCents" FROM "ShippingQuote" WHERE id=$1 LIMIT 1`,
+            order.shippingQuoteId,
+          )
+        : [];
+      await reserveMelhorEnvioFreight(transaction, {
+        id: order.id,
+        companyId: order.companyId,
+        code: order.code,
+        shippingProvider: order.shippingProvider,
+        shippingCents: Number(order.shippingCents ?? 0),
+        providerPriceCents: Number(
+          freightQuote[0]?.providerPriceCents ?? order.shippingCents ?? 0,
+        ),
+        paidAt: new Date(),
+      });
       return { id: order.id, code: order.code, status: "PAID" };
     });
     if ((result as any).duplicatePayment) {
@@ -852,8 +900,58 @@ export class StorefrontOrdersController
       `storefront:payment-confirmed:${orderId}`,
       { externalId, provider },
     );
-    await this.syncSalesOrder(orderId);
+    const salesOrder = await this.syncSalesOrder(orderId);
+    await this.recordStorefrontPaymentInFinance(orderId, salesOrder.id);
     return result;
+  }
+
+  private async recordStorefrontPaymentInFinance(
+    storefrontOrderId: string,
+    salesOrderId: string,
+  ) {
+    return this.database.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRawUnsafe<any[]>(
+        `SELECT so.id AS "salesOrderId",so."companyId",so."customerId",so."totalAmount",
+                sfo.code,sfo."paymentProvider",sfo."paidAt",
+                attempt.id AS "paymentAttemptId",attempt.method,attempt."amountCents",attempt."externalId"
+           FROM "SalesOrder" so
+           JOIN "StorefrontOrder" sfo ON sfo.id=$1 AND sfo."companyId"=so."companyId"
+           JOIN LATERAL (
+             SELECT p.id,p.method,p."amountCents",p."externalId"
+               FROM "StorefrontPaymentAttempt" p
+              WHERE p."storefrontOrderId"=sfo.id AND p.status='PAID'
+              ORDER BY p."paidAt" DESC NULLS LAST,p."createdAt" DESC
+              LIMIT 1
+           ) attempt ON TRUE
+          WHERE so.id=$2 AND sfo."paidAt" IS NOT NULL
+          LIMIT 1`,
+        storefrontOrderId,
+        salesOrderId,
+      );
+      const payment = rows[0];
+      if (!payment) return null;
+      await transaction.$executeRawUnsafe(
+        `UPDATE "StorefrontOrder"
+            SET "salesOrderId"=COALESCE("salesOrderId",$2),"updatedAt"=NOW()
+          WHERE id=$1`,
+        storefrontOrderId,
+        salesOrderId,
+      );
+      return recordPaidStorefrontOrder(transaction, {
+        salesOrderId,
+        storefrontOrderId,
+        paymentAttemptId: payment.paymentAttemptId,
+        companyId: payment.companyId,
+        customerId: payment.customerId,
+        orderCode: payment.code,
+        provider: payment.paymentProvider,
+        method: payment.method,
+        externalId: payment.externalId,
+        amountCents: Number(payment.amountCents),
+        orderTotal: Number(payment.totalAmount),
+        paidAt: payment.paidAt,
+      });
+    });
   }
 
   private async reconcileMercadoPago(order: {
@@ -1743,7 +1841,7 @@ export class StorefrontOrdersController
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT status,"serviceName","carrierName","trackingCode","trackingUrl","postedAt","deliveredAt"
-           FROM "Shipment" WHERE "storefrontOrderId"=$1 LIMIT 1`,
+           FROM "Shipment" WHERE "storefrontOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`,
         orderId,
       ),
     ]);

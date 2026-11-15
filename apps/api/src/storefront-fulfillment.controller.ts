@@ -29,11 +29,18 @@ export class StorefrontFulfillmentController {
     const rawBody = request.rawBody;
     if (!secret || !suppliedSignature || !rawBody)
       throw new UnauthorizedException("Webhook logístico não autorizado.");
-    const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+    const digest = createHmac("sha256", secret).update(rawBody).digest();
     const provided = suppliedSignature.trim().replace(/^sha256=/i, "");
-    const expectedBuffer = Buffer.from(expected, "utf8");
-    const providedBuffer = Buffer.from(provided, "utf8");
-    if (expectedBuffer.length !== providedBuffer.length || !timingSafeEqual(expectedBuffer, providedBuffer))
+    const signatures = [digest.toString("base64"), digest.toString("hex")];
+    const validSignature = signatures.some((expected) => {
+      const expectedBuffer = Buffer.from(expected, "utf8");
+      const providedBuffer = Buffer.from(provided, "utf8");
+      return (
+        expectedBuffer.length === providedBuffer.length &&
+        timingSafeEqual(expectedBuffer, providedBuffer)
+      );
+    });
+    if (!validSignature)
       throw new UnauthorizedException("Assinatura do webhook logístico inválida.");
     const externalId = String(body?.id || body?.order_id || body?.data?.id || body?.data?.order_id || "");
     const status = String(body?.status || body?.data?.status || body?.event || "");

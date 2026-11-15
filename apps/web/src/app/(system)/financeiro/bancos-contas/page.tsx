@@ -80,7 +80,7 @@ export default function BankAccountsPage() {
           <button onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border bg-white px-3 text-xs font-bold">
             <RefreshCw size={14} /> Atualizar
           </button>
-          <button onClick={() => setOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest-900 px-4 text-xs font-bold text-white">
+          <button data-bbos-write-action onClick={() => setOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest-900 px-4 text-xs font-bold text-white">
             <Plus size={15} /> Nova conta
           </button>
         </div>
@@ -110,7 +110,7 @@ export default function BankAccountsPage() {
             <Landmark className="mx-auto text-stone-300" size={28} />
             <p className="mt-3 text-sm font-bold">Nenhuma conta bancária cadastrada.</p>
             <p className="mt-1 text-xs text-stone-500">Comece pela conta principal do Itaú.</p>
-            <button onClick={() => setOpen(true)} className="mt-5 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
+            <button data-bbos-write-action onClick={() => setOpen(true)} className="mt-5 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white">
               Cadastrar conta principal
             </button>
           </Card>
