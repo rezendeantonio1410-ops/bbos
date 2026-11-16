@@ -832,7 +832,7 @@ export default function CustomersPage() {
 
       {showNew && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
-          <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
+          <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white px-4 pb-32 pt-5 shadow-2xl sm:p-6 sm:pb-28">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[.18em] text-blue-700">
@@ -845,6 +845,7 @@ export default function CustomersPage() {
               </div>
               <button
                 onClick={() => setShowNew(false)}
+                aria-label="Fechar cadastro de cliente"
                 className="rounded-xl border p-2"
               >
                 <X size={18} />
@@ -1196,20 +1197,33 @@ export default function CustomersPage() {
                 {error}
               </div>
             )}
-            <button
-              disabled={saving}
-              onClick={() => void createCustomer()}
-              className="mt-6 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {saving ? "Salvando…" : "Cadastrar cliente"}
-            </button>
+            <div className="fixed inset-x-0 bottom-0 z-[80] border-t border-stone-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_32px_rgba(28,25,23,0.14)] backdrop-blur sm:left-auto sm:right-0 sm:w-full sm:max-w-2xl sm:px-6">
+              <div className="mx-auto flex max-w-2xl gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setShowNew(false)}
+                  className="min-h-12 flex-1 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-700 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void createCustomer()}
+                  className="min-h-12 flex-[1.6] rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white shadow-lg disabled:opacity-50"
+                >
+                  {saving ? "Salvando…" : "Salvar cliente"}
+                </button>
+              </div>
+            </div>
           </aside>
         </div>
       )}
 
       {editCustomer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
-          <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
+          <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white px-4 pb-32 pt-5 shadow-2xl sm:p-6 sm:pb-28">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[.18em] text-blue-700">
@@ -1225,6 +1239,7 @@ export default function CustomersPage() {
                   setEditCustomer(null);
                   setForm(emptyCustomer);
                 }}
+                aria-label="Fechar edição do cliente"
                 className="rounded-xl border p-2"
               >
                 <X size={18} />
@@ -1553,13 +1568,29 @@ export default function CustomersPage() {
                 {error}
               </div>
             )}
-            <button
-              disabled={saving}
-              onClick={() => void saveCustomer()}
-              className="mt-6 w-full rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {saving ? "Salvando…" : "Salvar alterações"}
-            </button>
+            <div className="fixed inset-x-0 bottom-0 z-[80] border-t border-stone-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_32px_rgba(28,25,23,0.14)] backdrop-blur sm:left-auto sm:right-0 sm:w-full sm:max-w-2xl sm:px-6">
+              <div className="mx-auto flex max-w-2xl gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setEditCustomer(null);
+                    setForm(emptyCustomer);
+                  }}
+                  className="min-h-12 flex-1 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-700 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void saveCustomer()}
+                  className="min-h-12 flex-[1.6] rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white shadow-lg disabled:opacity-50"
+                >
+                  {saving ? "Salvando…" : "Salvar alterações"}
+                </button>
+              </div>
+            </div>
           </aside>
         </div>
       )}
