@@ -33,6 +33,8 @@ type Customer = {
 type Variant = {
   productVariantId: string;
   warehouseId: string;
+  line: string;
+  lineCode: string;
   product: string;
   sku: string;
   presentationGrams: number;
@@ -460,6 +462,24 @@ export function PartnerOrderWorkspace({
   const relationshipCustomer = customers.find(
     (customer) => customer.id === relationshipCustomerId,
   );
+  const availableProductsByLine = useMemo(() => {
+    const groups = new Map<string, Variant[]>();
+    for (const variant of variants) {
+      const line = variant.line || "Outros";
+      groups.set(line, [...(groups.get(line) ?? []), variant]);
+    }
+    return [...groups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
+      .map(([line, items]) => ({
+        line,
+        items: items.sort((left, right) =>
+          `${left.product}-${left.presentationGrams}`.localeCompare(
+            `${right.product}-${right.presentationGrams}`,
+            "pt-BR",
+          ),
+        ),
+      }));
+  }, [variants]);
 
   return (
     <section className="rounded-3xl border border-emerald-900/10 bg-[#eaf2ec] p-5 sm:p-7">
@@ -524,6 +544,53 @@ export function PartnerOrderWorkspace({
         <p className="mt-5 rounded-xl bg-white p-3 text-xs font-semibold text-emerald-900">
           {message}
         </p>
+      )}
+
+      {isDistributor && availableProductsByLine.length > 0 && (
+        <section className="mt-5 rounded-2xl border border-emerald-900/10 bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-emerald-800">
+                Produtos disponíveis
+              </p>
+              <p className="mt-1 text-xs leading-5 text-stone-500">
+                Somente itens ativos e com preço vigente na lista comercial da
+                Signa. O saldo físico não bloqueia: o pedido pode seguir para
+                aprovação e produção sob encomenda.
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+              {variants.length} produto(s)
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {availableProductsByLine.map((group) => (
+              <div
+                key={group.line}
+                className="rounded-xl border border-stone-200 bg-[#fafaf7] p-3"
+              >
+                <p className="text-xs font-bold text-stone-800">
+                  {group.line}
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {group.items.map((variant) => (
+                    <p
+                      key={variant.productVariantId}
+                      className="flex items-center justify-between gap-3 text-xs text-stone-600"
+                    >
+                      <span>{variant.product}</span>
+                      <span className="whitespace-nowrap text-stone-400">
+                        {variant.presentationGrams >= 1000
+                          ? `${variant.presentationGrams / 1000} kg`
+                          : `${variant.presentationGrams} g`}
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {showCustomer && !isDistributor && (
@@ -1002,8 +1069,8 @@ export function PartnerOrderWorkspace({
               <p className="mt-1 text-xs text-emerald-800">
                 Pedido exclusivo para o próprio distribuidor ·{" "}
                 {catalog?.exclusive
-                  ? `${catalog.productCount} produto(s) na sua lista exclusiva`
-                  : `${catalog?.productCount ?? 0} produto(s) na tabela Distribuidor`}
+                  ? `${catalog.productCount} produto(s) disponíveis na sua lista exclusiva`
+                  : `${catalog?.productCount ?? 0} produto(s) disponíveis na tabela Distribuidor`}
               </p>
             </div>
           ) : (
@@ -1083,20 +1150,24 @@ export function PartnerOrderWorkspace({
                   required
                 >
                   <option value="">Selecione o produto</option>
-                  {variants.map((variant) => (
-                    <option
-                      key={`${variant.productVariantId}-${variant.warehouseId}`}
-                      value={variant.productVariantId}
-                    >
-                      {variant.product} ·{" "}
-                      {variant.presentationGrams >= 1000
-                        ? `${variant.presentationGrams / 1000} kg`
-                        : `${variant.presentationGrams} g`}{" "}
-                      ·{" "}
-                      {isDistributor
-                        ? "produção sob encomenda"
-                        : `estoque ${variant.availableStock}`}
-                    </option>
+                  {availableProductsByLine.map((group) => (
+                    <optgroup key={group.line} label={group.line}>
+                      {group.items.map((variant) => (
+                        <option
+                          key={`${variant.productVariantId}-${variant.warehouseId}`}
+                          value={variant.productVariantId}
+                        >
+                          {variant.product} ·{" "}
+                          {variant.presentationGrams >= 1000
+                            ? `${variant.presentationGrams / 1000} kg`
+                            : `${variant.presentationGrams} g`}{" "}
+                          ·{" "}
+                          {isDistributor
+                            ? "disponível sob encomenda"
+                            : `estoque ${variant.availableStock}`}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 <input
