@@ -148,6 +148,49 @@ const receivableStatusLabels: Record<string, string> = {
   PAID: "Pago",
   CANCELLED: "Cancelado",
 };
+const distributorCatalogTones = [
+  "border-[#e0cca9] bg-[#faf7f2]",
+  "border-[#e8dec9] bg-[#f4efe5]",
+  "border-[#d6cec8] bg-[#fbf9f4]",
+  "border-[#dbcfb9] bg-[#efe7da]",
+];
+const orderStatusTone = (order: Order) => {
+  if (order.receivableStatus === "OVERDUE") {
+    return {
+      row: "bg-[#fff4f1] hover:bg-[#ffebe7]",
+      badge: "bg-[#f9ddd7] text-[#9d3f35]",
+      card: "border-[#e6aaa0] bg-[#fff8f6]",
+    };
+  }
+  if (order.status === "DELIVERED") {
+    return {
+      row: "bg-[#f1f8f4] hover:bg-[#e8f4ed]",
+      badge: "bg-[#dceee4] text-[#155449]",
+      card: "border-[#bddcca] bg-[#f6fbf8]",
+    };
+  }
+  if (
+    ["INVOICED", "SHIPPED", "READY_TO_SHIP", "PICKING"].includes(order.status)
+  ) {
+    return {
+      row: "bg-[#f1f7fa] hover:bg-[#e8f2f6]",
+      badge: "bg-[#dceaf0] text-[#285d6b]",
+      card: "border-[#bed4de] bg-[#f6fafc]",
+    };
+  }
+  if (["CONFIRMED", "RESERVED", "IN_PRODUCTION"].includes(order.status)) {
+    return {
+      row: "bg-[#faf7f2] hover:bg-[#f4efe5]",
+      badge: "bg-[#efe7da] text-[#8a6020]",
+      card: "border-[#e0cca9] bg-[#fdfbf7]",
+    };
+  }
+  return {
+    row: "bg-[#fffaf0] hover:bg-[#fbf2df]",
+    badge: "bg-[#f6e8c9] text-[#8a6020]",
+    card: "border-[#ead2a2] bg-[#fffcf5]",
+  };
+};
 const purposeLabel = (value: string) => purposeLabels[value] || value;
 const outcomeLabel = (value: string) => outcomeLabels[value] || value;
 const creditStatusLabel = (value?: string) =>
@@ -503,10 +546,18 @@ export function PartnerOrderWorkspace({
   }, [variants]);
 
   return (
-    <section className="rounded-3xl border border-emerald-900/10 bg-[#eaf2ec] p-5 sm:p-7">
+    <section
+      className={`border ${
+        isDistributor
+          ? "rounded-2xl border-[#e0cca9] bg-[#f4efe5] p-3 pb-24 sm:p-4 sm:pb-4"
+          : "rounded-3xl border-emerald-900/10 bg-[#eaf2ec] p-5 sm:p-7"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+          <p
+            className={`text-xs font-bold uppercase tracking-[.16em] ${isDistributor ? "text-[#8a6020]" : "text-[#087568]"}`}
+          >
             Operação liberada ·{" "}
             {accessLevel === "DISTRIBUTOR"
               ? "Distribuidor"
@@ -514,12 +565,16 @@ export function PartnerOrderWorkspace({
                 ? "Gerente comercial · carteira completa"
                 : "Vendedor · somente sua carteira"}
           </p>
-          <h2 className="mt-1 text-2xl font-semibold">
+          <h2
+            className={`mt-1 font-semibold ${isDistributor ? "text-xl" : "text-2xl"}`}
+          >
             {isDistributor
               ? "Minhas compras na Bispo"
               : "Pedidos para clientes"}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+          <p
+            className={`max-w-2xl text-stone-600 ${isDistributor ? "mt-1 text-xs leading-5" : "mt-2 text-sm leading-6"}`}
+          >
             {isDistributor
               ? "Faça pedidos somente para sua empresa. Os preços vêm da sua tabela e o pedido segue para conferência da Bispo."
               : "Use clientes vinculados ao seu acesso ou cadastre um novo. O preço vem da tabela oficial e o pedido segue para conferência da Bispo."}
@@ -541,7 +596,7 @@ export function PartnerOrderWorkspace({
             disabled={
               (isDistributor && customers.length !== 1) || !variants.length
             }
-            className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${isDistributor ? "bg-[#3b2a1f] hover:bg-[#5b4232]" : "bg-[#14201d] hover:bg-[#214f46]"}`}
           >
             <ShoppingCart size={15} /> Novo pedido
           </button>
@@ -568,43 +623,46 @@ export function PartnerOrderWorkspace({
       )}
 
       {isDistributor && availableProductsByLine.length > 0 && (
-        <section className="mt-5 rounded-2xl border border-emerald-900/10 bg-white p-4 sm:p-5">
+        <section
+          id="catalogo-signa"
+          className="mt-3 scroll-mt-4 rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] p-3 sm:p-4"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-emerald-800">
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#8a6020]">
                 Produtos disponíveis
               </p>
               <p className="mt-1 text-xs leading-5 text-stone-500">
-                Somente as combinações liberadas na lista exclusiva da Signa. O
-                saldo físico não bloqueia: o pedido pode seguir para aprovação e
-                produção sob encomenda.
+                Sua lista exclusiva. Escolha a apresentação; a Bispo confirma a
+                data e produz sob encomenda.
               </p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+            <span className="rounded-full bg-[#efe7da] px-3 py-1 text-xs font-bold text-[#8a6020]">
               {variants.length} apresentações
             </span>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {availableProductsByLine.map((group) => (
+          <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {availableProductsByLine.map((group, groupIndex) => (
               <div
                 key={group.line}
-                className="rounded-xl border border-stone-200 bg-[#fafaf7] p-3"
+                className={`rounded-xl border p-3 ${distributorCatalogTones[groupIndex % distributorCatalogTones.length]}`}
               >
-                <p className="text-xs font-bold text-stone-800">{group.line}</p>
+                <p className="text-sm font-bold text-[#3b2a1f]">{group.line}</p>
                 <div className="mt-2 space-y-1.5">
                   {group.items.map((variant) => (
                     <p
                       key={variant.productVariantId}
                       className="flex items-center justify-between gap-3 text-xs text-stone-600"
                     >
-                      <span>{variant.product}</span>
-                      <span className="whitespace-nowrap text-stone-400">
+                      <span className="font-medium">
                         {variant.presentationGrams >= 1000
                           ? `${variant.presentationGrams / 1000} kg`
                           : `${variant.presentationGrams} g`}
+                      </span>
+                      <span className="whitespace-nowrap font-bold text-stone-700">
                         {variant.catalogPrice != null
-                          ? ` · ${money.format(variant.catalogPrice)}`
-                          : ""}
+                          ? money.format(variant.catalogPrice)
+                          : "Consultar"}
                       </span>
                     </p>
                   ))}
@@ -770,20 +828,26 @@ export function PartnerOrderWorkspace({
         </form>
       )}
 
-      <section className="mt-6 rounded-2xl border border-emerald-900/10 bg-white p-4 sm:p-5">
+      <section
+        className={`rounded-2xl border border-emerald-900/10 bg-white ${
+          isDistributor ? "mt-3 p-3 sm:p-4" : "mt-6 p-4 sm:p-5"
+        }`}
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#087568]">
               {isDistributor ? "Conta comercial" : "Relacionamento comercial"}
             </p>
-            <h3 className="mt-1 text-lg font-semibold">
+            <h3
+              className={`mt-1 font-semibold ${isDistributor ? "text-base" : "text-lg"}`}
+            >
               {isDistributor
-                ? "Meu cadastro e condição de compra"
+                ? "Minha condição comercial"
                 : "Visitas, crédito e histórico"}
             </h3>
             <p className="mt-1 text-xs leading-5 text-stone-500">
               {isDistributor
-                ? "Este é o único cadastro autorizado para seus pedidos. Solicitações de crédito continuam sujeitas à aprovação da Bispo."
+                ? "Pedidos somente para a Signa. Crédito e prazo dependem da aprovação da Bispo."
                 : "Registre o que aconteceu no cliente e deixe a próxima ação clara para toda a equipe."}
             </p>
           </div>
@@ -825,7 +889,7 @@ export function PartnerOrderWorkspace({
         {relationshipCustomer && (
           <>
             <div
-              className={`mt-4 grid gap-2 ${isDistributor ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+              className={`grid gap-2 ${isDistributor ? "mt-3 grid-cols-2" : "mt-4 sm:grid-cols-3"}`}
             >
               {!isDistributor && (
                 <button
@@ -1076,430 +1140,612 @@ export function PartnerOrderWorkspace({
       </section>
 
       {showOrder && (
-        <form
-          onSubmit={createOrder}
-          className="mt-6 space-y-4 rounded-2xl bg-white p-4 sm:p-5"
-        >
-          {isDistributor && customers.length === 1 && customers[0] ? (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                Comprador
-              </p>
-              <p className="mt-1 text-sm font-bold text-emerald-950">
-                {customers[0].tradeName || customers[0].name}
-              </p>
-              <p className="mt-1 text-xs text-emerald-800">
-                Pedido exclusivo para o próprio distribuidor ·{" "}
-                {catalog?.exclusive
-                  ? `${catalog.productCount} apresentação(ões) disponíveis na sua lista exclusiva`
-                  : `${catalog?.productCount ?? 0} apresentação(ões) disponíveis na tabela Distribuidor`}
-              </p>
-            </div>
-          ) : (
-            <PortalField label="Cliente liberado">
-              <select
-                value={customerId}
-                onChange={(event) => {
-                  setCustomerId(event.target.value);
-                  invalidateQuote();
-                }}
-                required
-              >
-                <option value="">Selecione</option>
-                {customers.map((customer) => (
-                  <option
-                    key={customer.id}
-                    value={customer.id}
-                    disabled={customer.fiscalReadiness?.ready === false}
-                  >
-                    {customer.tradeName || customer.name}
-                    {customer.city
-                      ? ` · ${customer.city}/${customer.state || ""}`
-                      : ""}
-                    {customer.fiscalReadiness?.ready === false
-                      ? " · cadastro fiscal pendente"
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </PortalField>
+        <>
+          {isDistributor && (
+            <button
+              type="button"
+              aria-label="Fechar novo pedido"
+              onClick={() => setShowOrder(false)}
+              className="fixed inset-0 z-40 cursor-default bg-stone-950/45 backdrop-blur-[2px]"
+            />
           )}
-          {!customers.length && !loading && (
-            <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-              {isDistributor
-                ? "Peça à equipe Bispo para vincular o cadastro da sua empresa."
-                : "Cadastre um cliente ou peça à equipe Bispo para liberar um cliente existente."}
-            </p>
-          )}
-          {!variants.length && !loading && (
-            <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-              A equipe Bispo ainda precisa liberar produtos e preços para esta
-              lista comercial.
-            </p>
-          )}
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-stone-700">Produtos</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setLines((current) => [...current, newLine()]);
-                  invalidateQuote();
-                }}
-                className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800"
-              >
-                <Plus size={13} /> Produto
-              </button>
-            </div>
-            {lines.map((line, index) => (
-              <div
-                key={line.id}
-                className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_100px_40px]"
-              >
+          <form
+            onSubmit={createOrder}
+            className={
+              isDistributor
+                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-3xl space-y-4 overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl sm:inset-x-5 sm:p-5"
+                : "mt-6 space-y-4 rounded-2xl bg-white p-4 sm:p-5"
+            }
+          >
+            {isDistributor && (
+              <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-center justify-between gap-4 border-b border-stone-100 bg-white/95 px-4 py-3 backdrop-blur sm:-top-5 sm:-mx-5 sm:-mt-5 sm:px-5">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#8a6020]">
+                    Novo pedido Signa
+                  </p>
+                  <h3 className="text-lg font-semibold">Monte seu pedido</h3>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Cancelar e fechar"
+                  onClick={() => setShowOrder(false)}
+                  className="grid size-10 place-items-center rounded-full bg-stone-100 text-stone-600"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+            {isDistributor && customers.length === 1 && customers[0] ? (
+              <div className="rounded-xl border border-[#e0cca9] bg-[#faf7f2] p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#8a6020]">
+                  Comprador
+                </p>
+                <p className="mt-1 text-sm font-bold text-[#3b2a1f]">
+                  {customers[0].tradeName || customers[0].name}
+                </p>
+                <p className="mt-1 text-xs text-[#6b5747]">
+                  Pedido exclusivo para o próprio distribuidor ·{" "}
+                  {catalog?.exclusive
+                    ? `${catalog.productCount} apresentação(ões) disponíveis na sua lista exclusiva`
+                    : `${catalog?.productCount ?? 0} apresentação(ões) disponíveis na tabela Distribuidor`}
+                </p>
+              </div>
+            ) : (
+              <PortalField label="Cliente liberado">
                 <select
-                  value={line.productVariantId}
+                  value={customerId}
                   onChange={(event) => {
-                    setLines((current) =>
-                      current.map((item) =>
-                        item.id === line.id
-                          ? { ...item, productVariantId: event.target.value }
-                          : item,
-                      ),
-                    );
+                    setCustomerId(event.target.value);
                     invalidateQuote();
                   }}
                   required
                 >
-                  <option value="">Selecione o produto</option>
-                  {availableProductsByLine.map((group) => (
-                    <optgroup key={group.line} label={group.line}>
-                      {group.items.map((variant) => (
-                        <option
-                          key={`${variant.productVariantId}-${variant.warehouseId}`}
-                          value={variant.productVariantId}
-                        >
-                          {variant.product} ·{" "}
-                          {variant.presentationGrams >= 1000
-                            ? `${variant.presentationGrams / 1000} kg`
-                            : `${variant.presentationGrams} g`}{" "}
-                          {variant.catalogPrice != null
-                            ? `· ${money.format(variant.catalogPrice)} `
-                            : ""}
-                          ·{" "}
-                          {isDistributor
-                            ? "disponível sob encomenda"
-                            : `estoque ${variant.availableStock}`}
-                        </option>
-                      ))}
-                    </optgroup>
+                  <option value="">Selecione</option>
+                  {customers.map((customer) => (
+                    <option
+                      key={customer.id}
+                      value={customer.id}
+                      disabled={customer.fiscalReadiness?.ready === false}
+                    >
+                      {customer.tradeName || customer.name}
+                      {customer.city
+                        ? ` · ${customer.city}/${customer.state || ""}`
+                        : ""}
+                      {customer.fiscalReadiness?.ready === false
+                        ? " · cadastro fiscal pendente"
+                        : ""}
+                    </option>
                   ))}
-                </select>
-                <input
-                  type="number"
-                  min={1}
-                  value={line.quantity}
-                  onChange={(event) => {
-                    setLines((current) =>
-                      current.map((item) =>
-                        item.id === line.id
-                          ? {
-                              ...item,
-                              quantity: Math.max(1, Number(event.target.value)),
-                            }
-                          : item,
-                      ),
-                    );
-                    invalidateQuote();
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label={`Remover produto ${index + 1}`}
-                  disabled={lines.length === 1}
-                  onClick={() => {
-                    setLines((current) =>
-                      current.filter((item) => item.id !== line.id),
-                    );
-                    invalidateQuote();
-                  }}
-                  className="grid place-items-center text-stone-400 disabled:opacity-20"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {isDistributor && (
-              <PortalField label="Condição de pagamento">
-                <select
-                  value={paymentType}
-                  onChange={(event) =>
-                    setPaymentType(event.target.value as "CASH" | "TERM")
-                  }
-                >
-                  <option value="CASH">À vista na emissão da NF-e</option>
-                  <option value="TERM">A prazo após emissão da NF-e</option>
                 </select>
               </PortalField>
             )}
-            {isDistributor && paymentType === "TERM" && (
-              <PortalField label="Prazo após a NF-e">
-                <div className="relative">
+            {!customers.length && !loading && (
+              <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+                {isDistributor
+                  ? "Peça à equipe Bispo para vincular o cadastro da sua empresa."
+                  : "Cadastre um cliente ou peça à equipe Bispo para liberar um cliente existente."}
+              </p>
+            )}
+            {!variants.length && !loading && (
+              <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+                A equipe Bispo ainda precisa liberar produtos e preços para esta
+                lista comercial.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-stone-700">Produtos</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLines((current) => [...current, newLine()]);
+                    invalidateQuote();
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800"
+                >
+                  <Plus size={13} /> Produto
+                </button>
+              </div>
+              {lines.map((line, index) => (
+                <div
+                  key={line.id}
+                  className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_100px_40px]"
+                >
+                  <select
+                    value={line.productVariantId}
+                    onChange={(event) => {
+                      setLines((current) =>
+                        current.map((item) =>
+                          item.id === line.id
+                            ? { ...item, productVariantId: event.target.value }
+                            : item,
+                        ),
+                      );
+                      invalidateQuote();
+                    }}
+                    required
+                  >
+                    <option value="">Selecione o produto</option>
+                    {availableProductsByLine.map((group) => (
+                      <optgroup key={group.line} label={group.line}>
+                        {group.items.map((variant) => (
+                          <option
+                            key={`${variant.productVariantId}-${variant.warehouseId}`}
+                            value={variant.productVariantId}
+                          >
+                            {variant.product} ·{" "}
+                            {variant.presentationGrams >= 1000
+                              ? `${variant.presentationGrams / 1000} kg`
+                              : `${variant.presentationGrams} g`}{" "}
+                            {variant.catalogPrice != null
+                              ? `· ${money.format(variant.catalogPrice)} `
+                              : ""}
+                            ·{" "}
+                            {isDistributor
+                              ? "disponível sob encomenda"
+                              : `estoque ${variant.availableStock}`}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     min={1}
-                    max={365}
-                    step={1}
-                    value={paymentTermDays}
-                    onChange={(event) =>
-                      setPaymentTermDays(
-                        Math.min(365, Math.max(1, Number(event.target.value))),
-                      )
-                    }
-                    required
-                    className="pr-14"
+                    value={line.quantity}
+                    onChange={(event) => {
+                      setLines((current) =>
+                        current.map((item) =>
+                          item.id === line.id
+                            ? {
+                                ...item,
+                                quantity: Math.max(
+                                  1,
+                                  Number(event.target.value),
+                                ),
+                              }
+                            : item,
+                        ),
+                      );
+                      invalidateQuote();
+                    }}
                   />
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
-                    dias
-                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remover produto ${index + 1}`}
+                    disabled={lines.length === 1}
+                    onClick={() => {
+                      setLines((current) =>
+                        current.filter((item) => item.id !== line.id),
+                      );
+                      invalidateQuote();
+                    }}
+                    className="grid place-items-center text-stone-400 disabled:opacity-20"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
-                <span className="mt-1 block text-[10px] leading-4 text-stone-500">
-                  O vencimento será calculado a partir da emissão da NF-e.
-                </span>
+              ))}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {isDistributor && (
+                <PortalField label="Condição de pagamento">
+                  <select
+                    value={paymentType}
+                    onChange={(event) =>
+                      setPaymentType(event.target.value as "CASH" | "TERM")
+                    }
+                  >
+                    <option value="CASH">À vista na emissão da NF-e</option>
+                    <option value="TERM">A prazo após emissão da NF-e</option>
+                  </select>
+                </PortalField>
+              )}
+              {isDistributor && paymentType === "TERM" && (
+                <PortalField label="Prazo após a NF-e">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      step={1}
+                      value={paymentTermDays}
+                      onChange={(event) =>
+                        setPaymentTermDays(
+                          Math.min(
+                            365,
+                            Math.max(1, Number(event.target.value)),
+                          ),
+                        )
+                      }
+                      required
+                      className="pr-14"
+                    />
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
+                      dias
+                    </span>
+                  </div>
+                  <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                    O vencimento será calculado a partir da emissão da NF-e.
+                  </span>
+                </PortalField>
+              )}
+              <PortalField label="Entrega">
+                <select
+                  value={deliveryMode}
+                  onChange={(event) =>
+                    setDeliveryMode(
+                      event.target.value as "PICKUP" | "CUSTOMER_CARRIER",
+                    )
+                  }
+                >
+                  <option value="PICKUP">Retirada na Bispo</option>
+                  <option value="CUSTOMER_CARRIER">
+                    Transportadora do cliente
+                  </option>
+                </select>
               </PortalField>
-            )}
-            <PortalField label="Entrega">
-              <select
-                value={deliveryMode}
-                onChange={(event) =>
-                  setDeliveryMode(
-                    event.target.value as "PICKUP" | "CUSTOMER_CARRIER",
-                  )
+              {deliveryMode === "CUSTOMER_CARRIER" && (
+                <PortalField label="Transportadora">
+                  <input
+                    value={carrierName}
+                    onChange={(event) => setCarrierName(event.target.value)}
+                    required
+                  />
+                </PortalField>
+              )}
+              <PortalField
+                label={
+                  isDistributor
+                    ? "Data de entrega solicitada"
+                    : "Entrega desejada"
                 }
               >
-                <option value="PICKUP">Retirada na Bispo</option>
-                <option value="CUSTOMER_CARRIER">
-                  Transportadora do cliente
-                </option>
-              </select>
-            </PortalField>
-            {deliveryMode === "CUSTOMER_CARRIER" && (
-              <PortalField label="Transportadora">
                 <input
-                  value={carrierName}
-                  onChange={(event) => setCarrierName(event.target.value)}
-                  required
+                  type="date"
+                  value={expectedDeliveryDate}
+                  onChange={(event) =>
+                    setExpectedDeliveryDate(event.target.value)
+                  }
+                />
+                {isDistributor && (
+                  <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                    A data será confirmada ou ajustada por José ou Suzi na
+                    aprovação do pedido.
+                  </span>
+                )}
+              </PortalField>
+              <PortalField label="Referência do cliente">
+                <input
+                  value={customerReference}
+                  onChange={(event) => setCustomerReference(event.target.value)}
                 />
               </PortalField>
-            )}
-            <PortalField
-              label={
-                isDistributor
-                  ? "Data de entrega solicitada"
-                  : "Entrega desejada"
-              }
-            >
-              <input
-                type="date"
-                value={expectedDeliveryDate}
-                onChange={(event) =>
-                  setExpectedDeliveryDate(event.target.value)
-                }
-              />
-              {isDistributor && (
-                <span className="mt-1 block text-[10px] leading-4 text-stone-500">
-                  A data será confirmada ou ajustada por José ou Suzi na
-                  aprovação do pedido.
-                </span>
-              )}
-            </PortalField>
-            <PortalField label="Referência do cliente">
-              <input
-                value={customerReference}
-                onChange={(event) => setCustomerReference(event.target.value)}
-              />
-            </PortalField>
-          </div>
-          <PortalField label="Observações">
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-            />
-          </PortalField>
-
-          {quote && (
-            <div className="rounded-2xl bg-stone-950 p-4 text-white">
-              {quote.items.map((item) => {
-                const variant = variants.find(
-                  (candidate) =>
-                    candidate.productVariantId === item.productVariantId,
-                );
-                return (
-                  <div
-                    key={item.productVariantId}
-                    className="flex justify-between gap-3 py-1 text-xs text-stone-300"
-                  >
-                    <span>
-                      {variant?.product || item.productVariantId} ·{" "}
-                      {item.quantity} × {money.format(item.unitPrice)}
-                    </span>
-                    <strong>{money.format(item.totalAmount)}</strong>
-                  </div>
-                );
-              })}
-              <div className="mt-3 flex justify-between border-t border-white/20 pt-3">
-                <span className="text-xs font-bold uppercase tracking-wider">
-                  Total
-                </span>
-                <strong className="text-xl">
-                  {money.format(quote.totalAmount)}
-                </strong>
-              </div>
             </div>
-          )}
+            <PortalField label="Observações">
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </PortalField>
 
-          <div className="flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setShowOrder(false)}
-              className="rounded-xl border px-4 py-2.5 text-xs font-bold"
+            {quote && (
+              <div className="rounded-2xl bg-stone-950 p-4 text-white">
+                {quote.items.map((item) => {
+                  const variant = variants.find(
+                    (candidate) =>
+                      candidate.productVariantId === item.productVariantId,
+                  );
+                  return (
+                    <div
+                      key={item.productVariantId}
+                      className="flex justify-between gap-3 py-1 text-xs text-stone-300"
+                    >
+                      <span>
+                        {variant?.product || item.productVariantId} ·{" "}
+                        {item.quantity} × {money.format(item.unitPrice)}
+                      </span>
+                      <strong>{money.format(item.totalAmount)}</strong>
+                    </div>
+                  );
+                })}
+                <div className="mt-3 flex justify-between border-t border-white/20 pt-3">
+                  <span className="text-xs font-bold uppercase tracking-wider">
+                    Total
+                  </span>
+                  <strong className="text-xl">
+                    {money.format(quote.totalAmount)}
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            <div
+              className={`flex flex-wrap justify-end gap-2 ${
+                isDistributor
+                  ? "sticky -bottom-4 z-10 -mx-4 -mb-4 border-t border-stone-100 bg-white/95 p-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:px-5"
+                  : ""
+              }`}
             >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void calculateQuote()}
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-800 px-4 py-2.5 text-xs font-bold text-emerald-900 disabled:opacity-50"
-            >
-              <RefreshCw size={13} /> Calcular
-            </button>
-            <button
-              disabled={busy || !quote}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
-            >
-              <Send size={13} /> Enviar pedido
-            </button>
-          </div>
-        </form>
+              <button
+                type="button"
+                onClick={() => setShowOrder(false)}
+                className="rounded-xl border px-4 py-2.5 text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void calculateQuote()}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold disabled:opacity-50 ${isDistributor ? "border-[#8a6020] text-[#8a6020]" : "border-emerald-800 text-emerald-900"}`}
+              >
+                <RefreshCw size={13} /> Calcular
+              </button>
+              <button
+                disabled={busy || !quote}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 ${isDistributor ? "bg-[#3b2a1f]" : "bg-[#14201d]"}`}
+              >
+                <Send size={13} /> Enviar pedido
+              </button>
+            </div>
+          </form>
+        </>
       )}
 
-      <div className="mt-7">
-        <h3 className="text-sm font-bold">Pedidos e pagamentos</h3>
-        <p className="mt-1 text-xs text-stone-500">
-          Acompanhe a situação do pedido, o vencimento e o saldo. A confirmação
-          do pagamento é feita pela equipe Bispo.
-        </p>
-        {orders.length ? (
-          <div className="mt-3 overflow-x-auto rounded-2xl bg-white">
-            <table className="w-full min-w-[620px] text-left text-xs">
-              <thead className="border-b bg-stone-50 text-[10px] uppercase tracking-wider text-stone-500">
-                <tr>
-                  <th className="px-4 py-3">Pedido</th>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">Data</th>
-                  <th className="px-4 py-3">Total</th>
-                  <th className="px-4 py-3">Situação</th>
-                  <th className="px-4 py-3">Pagamento</th>
-                  <th className="px-4 py-3">Documento</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {orders.map((order) => (
-                  <tr key={order.id}>
-                    <td className="px-4 py-3 font-bold">{order.code}</td>
-                    <td className="px-4 py-3">{order.customerName}</td>
-                    <td className="px-4 py-3 text-stone-500">
-                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
-                    </td>
-                    <td className="px-4 py-3 font-bold">
-                      {money.format(Number(order.totalAmount))}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-800">
-                        {statusLabel[order.status] || order.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p
-                        className={`font-bold ${order.receivableStatus === "OVERDUE" ? "text-red-700" : "text-stone-700"}`}
-                      >
-                        {receivableStatusLabels[order.receivableStatus || ""] ||
-                          (order.paymentType === "TERM"
-                            ? "Aguardando faturamento"
-                            : "À vista")}
-                      </p>
-                      {order.paymentDate ? (
-                        <p className="mt-1 text-[10px] text-emerald-700">
-                          Pago em{" "}
-                          {new Date(order.paymentDate).toLocaleDateString(
-                            "pt-BR",
-                          )}
-                        </p>
-                      ) : order.dueDate ? (
-                        <p className="mt-1 text-[10px] text-stone-500">
-                          Vence em{" "}
-                          {new Date(order.dueDate).toLocaleDateString("pt-BR")}{" "}
-                          · saldo {money.format(Number(order.openAmount || 0))}
-                        </p>
-                      ) : order.paymentTermsSnapshot ? (
-                        <p className="mt-1 text-[10px] text-stone-500">
-                          {order.paymentTermsSnapshot}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        {order.invoiceStatus === "AUTHORIZED" &&
-                        order.invoicePdfAvailable ? (
-                          <a
-                            href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
-                          >
-                            Baixar NF {order.invoiceNumber || ""}
-                          </a>
-                        ) : order.invoiceNumber ? (
-                          <span className="inline-flex rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-800">
-                            NF {order.invoiceNumber} ·{" "}
-                            {order.invoiceStatus === "AUTHORIZED"
-                              ? "Autorizada"
-                              : "Em processamento"}
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
-                            NF aguardando emissão pela Bispo
-                          </span>
-                        )}
-                        {order.billingAvailable ? (
-                          <a
-                            href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
-                          >
-                            Baixar cobrança
-                          </a>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div
+        id={isDistributor ? "pedidos-signa" : undefined}
+        className={`${isDistributor ? "mt-4 scroll-mt-4" : "mt-7"}`}
+      >
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold">Meus pedidos</h3>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Acompanhe aprovação, produção, pagamento e NF-e em um só lugar.
+            </p>
           </div>
+          <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold text-stone-500">
+            {orders.length} {orders.length === 1 ? "pedido" : "pedidos"}
+          </span>
+        </div>
+        {orders.length ? (
+          <>
+            {isDistributor && (
+              <div className="mt-3 space-y-2 md:hidden">
+                {orders.map((order) => (
+                  <DistributorOrderCard key={order.id} order={order} />
+                ))}
+              </div>
+            )}
+            <div
+              className={`mt-3 overflow-x-auto rounded-2xl bg-white ${
+                isDistributor ? "hidden md:block" : ""
+              }`}
+            >
+              <table className="w-full min-w-[620px] text-left text-xs">
+                <thead className="border-b bg-stone-50 text-[10px] uppercase tracking-wider text-stone-500">
+                  <tr>
+                    <th className="px-4 py-3">Pedido</th>
+                    <th className="px-4 py-3">Cliente</th>
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3">Total</th>
+                    <th className="px-4 py-3">Situação</th>
+                    <th className="px-4 py-3">Pagamento</th>
+                    <th className="px-4 py-3">Documento</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {orders.map((order) => (
+                    <tr key={order.id} className={orderStatusTone(order).row}>
+                      <td className="px-4 py-3 font-bold">{order.code}</td>
+                      <td className="px-4 py-3">{order.customerName}</td>
+                      <td className="px-4 py-3 text-stone-500">
+                        {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                      </td>
+                      <td className="px-4 py-3 font-bold">
+                        {money.format(Number(order.totalAmount))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${orderStatusTone(order).badge}`}
+                        >
+                          {statusLabel[order.status] || order.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p
+                          className={`font-bold ${order.receivableStatus === "OVERDUE" ? "text-red-700" : "text-stone-700"}`}
+                        >
+                          {receivableStatusLabels[
+                            order.receivableStatus || ""
+                          ] ||
+                            (order.paymentType === "TERM"
+                              ? "Aguardando faturamento"
+                              : "À vista")}
+                        </p>
+                        {order.paymentDate ? (
+                          <p className="mt-1 text-[10px] text-emerald-700">
+                            Pago em{" "}
+                            {new Date(order.paymentDate).toLocaleDateString(
+                              "pt-BR",
+                            )}
+                          </p>
+                        ) : order.dueDate ? (
+                          <p className="mt-1 text-[10px] text-stone-500">
+                            Vence em{" "}
+                            {new Date(order.dueDate).toLocaleDateString(
+                              "pt-BR",
+                            )}{" "}
+                            · saldo{" "}
+                            {money.format(Number(order.openAmount || 0))}
+                          </p>
+                        ) : order.paymentTermsSnapshot ? (
+                          <p className="mt-1 text-[10px] text-stone-500">
+                            {order.paymentTermsSnapshot}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {order.invoiceStatus === "AUTHORIZED" &&
+                          order.invoicePdfAvailable ? (
+                            <a
+                              href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
+                            >
+                              Baixar NF {order.invoiceNumber || ""}
+                            </a>
+                          ) : order.invoiceNumber ? (
+                            <span className="inline-flex rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-800">
+                              NF {order.invoiceNumber} ·{" "}
+                              {order.invoiceStatus === "AUTHORIZED"
+                                ? "Autorizada"
+                                : "Em processamento"}
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
+                              NF aguardando emissão pela Bispo
+                            </span>
+                          )}
+                          {order.billingAvailable ? (
+                            <a
+                              href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
+                            >
+                              Baixar cobrança
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <p className="mt-3 rounded-2xl border border-dashed border-emerald-900/20 bg-white/50 p-5 text-center text-xs text-stone-500">
             Nenhum pedido criado por este acesso.
           </p>
         )}
       </div>
+      {isDistributor && !showOrder && (
+        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-[#e0cca9] bg-[#fbf9f4]/95 p-1.5 shadow-xl backdrop-blur md:hidden">
+          <a
+            href="#catalogo-signa"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#6b5747]"
+          >
+            <ClipboardCheck size={17} />
+            Produtos
+          </a>
+          <button
+            type="button"
+            onClick={() => setShowOrder(true)}
+            disabled={customers.length !== 1 || !variants.length}
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl bg-[#3b2a1f] text-[10px] font-bold text-white disabled:opacity-45"
+          >
+            <Plus size={17} />
+            Novo pedido
+          </button>
+          <a
+            href="#pedidos-signa"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#6b5747]"
+          >
+            <History size={17} />
+            Pedidos
+          </a>
+        </nav>
+      )}
     </section>
+  );
+}
+
+function DistributorOrderCard({ order }: { order: Order }) {
+  const tone = orderStatusTone(order);
+  const paymentLabel =
+    receivableStatusLabels[order.receivableStatus || ""] ||
+    (order.paymentType === "TERM" ? "Aguardando faturamento" : "À vista");
+  return (
+    <article className={`rounded-2xl border p-3.5 shadow-sm ${tone.card}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold">{order.code}</p>
+          <p className="mt-0.5 text-[10px] text-stone-500">
+            {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+          </p>
+        </div>
+        <p className="whitespace-nowrap text-sm font-bold">
+          {money.format(Number(order.totalAmount))}
+        </p>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className={`rounded-xl p-2.5 ${tone.badge}`}>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
+            Pedido
+          </p>
+          <p className="mt-1 text-xs font-bold">
+            {statusLabel[order.status] || order.status}
+          </p>
+        </div>
+        <div className="rounded-xl bg-[#f7f7f3] p-2.5">
+          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
+            Pagamento
+          </p>
+          <p
+            className={`mt-1 text-xs font-bold ${
+              order.receivableStatus === "OVERDUE"
+                ? "text-red-700"
+                : "text-stone-700"
+            }`}
+          >
+            {paymentLabel}
+          </p>
+        </div>
+      </div>
+      <p className="mt-2 text-[10px] leading-4 text-stone-500">
+        {order.paymentDate
+          ? `Pago em ${new Date(order.paymentDate).toLocaleDateString("pt-BR")}`
+          : order.dueDate
+            ? `Vence em ${new Date(order.dueDate).toLocaleDateString("pt-BR")} · saldo ${money.format(Number(order.openAmount || 0))}`
+            : order.paymentTermsSnapshot ||
+              "O vencimento será definido após a emissão da NF-e."}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+        {order.invoiceStatus === "AUTHORIZED" && order.invoicePdfAvailable ? (
+          <a
+            href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
+          >
+            Baixar NF {order.invoiceNumber || ""}
+          </a>
+        ) : (
+          <span className="rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
+            {order.invoiceNumber
+              ? `NF ${order.invoiceNumber} em processamento`
+              : "NF aguardando Bispo"}
+          </span>
+        )}
+        {order.billingAvailable && (
+          <a
+            href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
+          >
+            Cobrança
+          </a>
+        )}
+      </div>
+    </article>
   );
 }
 
