@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   BadgeDollarSign,
+  Bell,
   CheckCircle2,
   Factory,
   FileCheck2,
@@ -83,6 +84,16 @@ type PortalData = {
     invoiceStatus?: string | null;
     invoicePdfAvailable?: boolean;
     billingAvailable?: boolean;
+  }>;
+  notifications: Array<{
+    id: string;
+    orderId: string;
+    orderCode: string;
+    eventType: string;
+    title: string;
+    detail: string;
+    source: string;
+    occurredAt: string;
   }>;
   updatedAt: string;
 };
@@ -299,35 +310,53 @@ export default function PartnerPortalPage() {
             <section
               className={`flex flex-wrap items-end justify-between gap-4 ${
                 data.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "rounded-3xl bg-gradient-to-br from-[#103c35] via-[#155449] to-[#21685b] px-5 py-5 text-white shadow-sm sm:px-7"
+                  ? "overflow-hidden rounded-3xl border border-[#e0cca9] bg-gradient-to-br from-[#fbf9f4] via-[#faf7f2] to-[#efe7da] px-5 py-5 text-[#3b2a1f] shadow-sm sm:px-7"
                   : ""
               }`}
             >
-              <div className="min-w-0">
+              <div className="min-w-0 max-w-3xl">
+                {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+                  <div className="mb-4 flex flex-wrap items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
+                      alt="Signa Coffee"
+                      className="h-8 w-auto sm:h-10"
+                    />
+                    <span className="h-8 w-px bg-[#e0cca9]" />
+                    <span className="text-[10px] font-bold uppercase tracking-[.16em] text-[#8a6020]">
+                      Ambiente exclusivo · Operado pelo BBOS
+                    </span>
+                  </div>
+                )}
                 <p
                   className={`text-xs font-bold uppercase tracking-[.16em] ${
                     data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "text-[#b8e4d8]"
+                      ? "text-[#8a6020]"
                       : "text-[#087568]"
                   }`}
                 >
                   {data.partner.portalAccessLevel === "DISTRIBUTOR"
-                    ? "Sua operação com a Bispo"
+                    ? "Curadoria · Personalização · Presença"
                     : "Visão exclusiva"}
                 </p>
                 <h1
                   className={`mt-1 font-semibold ${
                     data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "text-2xl sm:text-3xl"
+                      ? "font-serif text-2xl sm:text-3xl"
                       : "text-3xl sm:mt-2 sm:text-4xl"
                   }`}
                 >
-                  Olá, {data.partner.contactName || data.partner.name}.
+                  Olá,{" "}
+                  {data.partner.portalAccessLevel === "DISTRIBUTOR"
+                    ? data.partner.name
+                    : data.partner.contactName || data.partner.name}
+                  .
                 </h1>
                 <p
                   className={`mt-1.5 max-w-3xl text-sm ${
                     data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "text-emerald-50/80"
+                      ? "text-[#6b5747]"
                       : "text-stone-500"
                   }`}
                 >
@@ -343,7 +372,7 @@ export default function PartnerPortalPage() {
               <p
                 className={`text-xs ${
                   data.partner.portalAccessLevel === "DISTRIBUTOR"
-                    ? "text-emerald-50/60"
+                    ? "text-[#76695d]"
                     : "text-stone-400"
                 }`}
               >
@@ -355,6 +384,7 @@ export default function PartnerPortalPage() {
               <>
                 <DistributorMetrics orders={data.partnerOrders} />
                 <DistributorJourney />
+                <DistributorNotifications items={data.notifications ?? []} />
               </>
             ) : (
               <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -596,10 +626,10 @@ function DistributorMetric({
   tone: "green" | "sand" | "blue" | "lilac" | "red";
 }) {
   const tones = {
-    green: "border-[#cfe4da] bg-[#edf6f1] text-[#155449]",
-    sand: "border-[#eadfcf] bg-[#faf4e9] text-[#79552a]",
-    blue: "border-[#d7e3e8] bg-[#eff6f8] text-[#285d6b]",
-    lilac: "border-[#e2dcf0] bg-[#f5f1fb] text-[#655184]",
+    green: "border-[#d8dacb] bg-[#f4f3ed] text-[#53593b]",
+    sand: "border-[#e0cca9] bg-[#faf7f2] text-[#8a6020]",
+    blue: "border-[#c7d4d8] bg-[#f1f5f6] text-[#063b4c]",
+    lilac: "border-[#ded2e1] bg-[#f7f2f8] text-[#8d6598]",
     red: "border-[#f1d3cf] bg-[#fff1ef] text-[#9d3f35]",
   } as const;
   return (
@@ -624,14 +654,14 @@ function DistributorJourney() {
     { icon: PackageCheck, label: "5. Entrega", text: "Pedido concluído" },
   ];
   return (
-    <section className="rounded-2xl border border-stone-200 bg-white px-3 py-3 shadow-sm">
+    <section className="rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] px-3 py-3 shadow-sm">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {steps.map(({ icon: Icon, label, text }, index) => (
           <div
             key={label}
-            className="relative flex items-center gap-2 rounded-xl bg-[#f7f7f3] px-3 py-2.5"
+            className="relative flex items-center gap-2 rounded-xl bg-[#f4efe5] px-3 py-2.5"
           >
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[#087568] shadow-sm">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[#8a6020] shadow-sm">
               <Icon size={15} />
             </span>
             <span className="min-w-0">
@@ -641,13 +671,72 @@ function DistributorJourney() {
               </span>
             </span>
             {index < steps.length - 1 && (
-              <span className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 text-stone-300 sm:block">
+              <span className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 text-[#c09853] sm:block">
                 →
               </span>
             )}
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function DistributorNotifications({
+  items,
+}: {
+  items: PortalData["notifications"];
+}) {
+  return (
+    <section className="rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] p-3.5 shadow-sm sm:p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#8a6020]">
+            Atualizações da sua operação
+          </p>
+          <p className="mt-1 text-xs text-[#76695d]">
+            Cada ação do pedido fica registrada aqui.
+          </p>
+        </div>
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#efe7da] text-[#8a6020]">
+          <Bell size={16} />
+        </span>
+      </div>
+      {items.length ? (
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {items.slice(0, 6).map((item, index) => (
+            <article
+              key={item.id}
+              className={`rounded-xl border px-3 py-2.5 ${
+                index === 0
+                  ? "border-[#c09853] bg-white"
+                  : "border-[#e8dec9] bg-[#faf7f2]"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[10px] font-bold uppercase tracking-[.12em] text-[#8a6020]">
+                    {item.orderCode}
+                  </p>
+                  <p className="mt-0.5 text-xs font-bold text-[#3b2a1f]">
+                    {item.title}
+                  </p>
+                </div>
+                <time className="whitespace-nowrap text-[9px] text-[#76695d]">
+                  {new Date(item.occurredAt).toLocaleDateString("pt-BR")}
+                </time>
+              </div>
+              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-[#6b5747]">
+                {item.detail}
+              </p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-xl border border-dashed border-[#e0cca9] bg-white/70 p-4 text-center text-xs text-[#76695d]">
+          As ações dos seus pedidos aparecerão aqui.
+        </p>
+      )}
     </section>
   );
 }
