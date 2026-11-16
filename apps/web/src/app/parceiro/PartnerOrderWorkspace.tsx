@@ -66,6 +66,7 @@ type Order = {
   paymentDate?: string | null;
   invoiceNumber?: string | null;
   invoiceStatus?: string | null;
+  invoicePdfAvailable?: boolean;
   billingAvailable?: boolean;
 };
 type Line = { id: string; productVariantId: string; quantity: number };
@@ -113,6 +114,7 @@ const statusLabel: Record<string, string> = {
   RESERVED: "Estoque reservado",
   PICKING: "Em separação",
   READY_TO_SHIP: "Pronto para envio",
+  IN_PRODUCTION: "Em produção",
   INVOICED: "Faturado",
   SHIPPED: "Expedido",
   DELIVERED: "Entregue",
@@ -1401,22 +1403,40 @@ export function PartnerOrderWorkspace({
                       ) : null}
                     </td>
                     <td className="px-4 py-3">
-                      {order.billingAvailable ? (
-                        <a
-                          href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
-                        >
-                          Baixar cobrança
-                        </a>
-                      ) : (
-                        <span className="text-[10px] text-stone-400">
-                          {order.invoiceNumber
-                            ? `NF ${order.invoiceNumber}`
-                            : "Ainda não disponível"}
-                        </span>
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {order.invoiceStatus === "AUTHORIZED" &&
+                        order.invoicePdfAvailable ? (
+                          <a
+                            href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
+                          >
+                            Baixar NF {order.invoiceNumber || ""}
+                          </a>
+                        ) : order.invoiceNumber ? (
+                          <span className="inline-flex rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-800">
+                            NF {order.invoiceNumber} ·{" "}
+                            {order.invoiceStatus === "AUTHORIZED"
+                              ? "Autorizada"
+                              : "Em processamento"}
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
+                            NF aguardando emissão pela Bispo
+                          </span>
+                        )}
+                        {order.billingAvailable ? (
+                          <a
+                            href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
+                          >
+                            Baixar cobrança
+                          </a>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -4,6 +4,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   Post,
   Req,
@@ -499,6 +500,7 @@ export class PartnerPortalController {
                 ar."dueDate",ar.amount AS "receivableAmount",ar."openAmount",
                 ar."paymentDate",fiscal.number AS "invoiceNumber",
                 fiscal.status::text AS "invoiceStatus",
+                fiscal."pdfAvailable" AS "invoicePdfAvailable",
                 (so."paymentType"='TERM' AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
                   AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
            FROM "SalesOrder" so
@@ -511,7 +513,11 @@ export class PartnerPortalController {
               LIMIT 1
            ) ar ON TRUE
            LEFT JOIN LATERAL (
-             SELECT fd.number,fd.status
+             SELECT fd.number,fd.status,
+                    (COALESCE(
+                      NULLIF(fd."payloadSnapshot"#>>'{blingNfe,linkPDF}',''),
+                      NULLIF(fd."payloadSnapshot"#>>'{blingNfe,linkDanfe}','')
+                    ) IS NOT NULL) AS "pdfAvailable"
                FROM "FiscalDocument" fd
               WHERE fd."companyId"=so."companyId" AND fd."salesOrderId"=so.id
                 AND fd.direction='OUTBOUND'
@@ -659,6 +665,39 @@ export class PartnerPortalController {
       "Cache-Control": "private, no-store",
     });
     response.send(pdf);
+  }
+
+  @Get("orders/:orderId/invoice/pdf")
+  async invoicePdf(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Res() response: any,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT fd.number,fd.status::text AS status,
+              COALESCE(
+                NULLIF(fd."payloadSnapshot"#>>'{blingNfe,linkPDF}',''),
+                NULLIF(fd."payloadSnapshot"#>>'{blingNfe,linkDanfe}','')
+              ) AS "pdfUrl"
+         FROM "FiscalDocument" fd
+        WHERE fd."companyId"=$1 AND fd."salesOrderId"=$2
+          AND fd.direction='OUTBOUND'
+        ORDER BY fd."createdAt" DESC
+        LIMIT 1`,
+      actor.companyId,
+      orderId,
+    );
+    const invoice = rows[0];
+    const pdfUrl = String(invoice?.pdfUrl ?? "").trim();
+    if (invoice?.status !== "AUTHORIZED" || !/^https:\/\//i.test(pdfUrl)) {
+      throw new NotFoundException(
+        "O DANFE ficará disponível após a autorização da NF-e.",
+      );
+    }
+    response.set({ "Cache-Control": "private, no-store" });
+    response.redirect(302, pdfUrl);
   }
 
   @Post("customers")
