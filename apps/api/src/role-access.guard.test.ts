@@ -485,6 +485,8 @@ test("partner portal data queries are always scoped to the signed partner and co
   assert.match(source, /so\."createdByStorefrontPartnerId"=\$2/);
   assert.match(source, /assertPartnerOrder/);
   assert.match(source, /orders\/:orderId\/billing\/pdf/);
+  assert.match(source, /orders\/:orderId\/invoice\/pdf/);
+  assert.match(source, /O DANFE ficará disponível após a autorização da NF-e/);
   assert.match(source, /"Cache-Control": "private, no-store"/);
   assert.match(source, /"SELLER", "SALES_MANAGER", "DISTRIBUTOR"/);
   assert.match(source, /partner\.portalAccessLevel === "SALES_MANAGER"/);
