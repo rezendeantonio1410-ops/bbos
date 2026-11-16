@@ -36,6 +36,10 @@ type Variant = {
   line: string;
   lineCode: string;
   product: string;
+  internalLine?: string;
+  internalProduct?: string;
+  catalogSortOrder?: number;
+  catalogPrice?: number | null;
   sku: string;
   presentationGrams: number;
   availableStock: number;
@@ -469,14 +473,22 @@ export function PartnerOrderWorkspace({
       groups.set(line, [...(groups.get(line) ?? []), variant]);
     }
     return [...groups.entries()]
-      .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
+      .sort(([, leftItems], [, rightItems]) => {
+        const leftOrder = Math.min(
+          ...leftItems.map((item) => item.catalogSortOrder ?? 9999),
+        );
+        const rightOrder = Math.min(
+          ...rightItems.map((item) => item.catalogSortOrder ?? 9999),
+        );
+        return leftOrder - rightOrder;
+      })
       .map(([line, items]) => ({
         line,
-        items: items.sort((left, right) =>
-          `${left.product}-${left.presentationGrams}`.localeCompare(
-            `${right.product}-${right.presentationGrams}`,
-            "pt-BR",
-          ),
+        items: items.sort(
+          (left, right) =>
+            (left.catalogSortOrder ?? 9999) -
+              (right.catalogSortOrder ?? 9999) ||
+            left.presentationGrams - right.presentationGrams,
         ),
       }));
   }, [variants]);
@@ -554,13 +566,13 @@ export function PartnerOrderWorkspace({
                 Produtos disponíveis
               </p>
               <p className="mt-1 text-xs leading-5 text-stone-500">
-                Somente itens ativos e com preço vigente na lista comercial da
-                Signa. O saldo físico não bloqueia: o pedido pode seguir para
-                aprovação e produção sob encomenda.
+                Somente as combinações liberadas na lista exclusiva da Signa. O
+                saldo físico não bloqueia: o pedido pode seguir para aprovação e
+                produção sob encomenda.
               </p>
             </div>
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
-              {variants.length} produto(s)
+              {variants.length} apresentações
             </span>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -569,9 +581,7 @@ export function PartnerOrderWorkspace({
                 key={group.line}
                 className="rounded-xl border border-stone-200 bg-[#fafaf7] p-3"
               >
-                <p className="text-xs font-bold text-stone-800">
-                  {group.line}
-                </p>
+                <p className="text-xs font-bold text-stone-800">{group.line}</p>
                 <div className="mt-2 space-y-1.5">
                   {group.items.map((variant) => (
                     <p
@@ -583,6 +593,9 @@ export function PartnerOrderWorkspace({
                         {variant.presentationGrams >= 1000
                           ? `${variant.presentationGrams / 1000} kg`
                           : `${variant.presentationGrams} g`}
+                        {variant.catalogPrice != null
+                          ? ` · ${money.format(variant.catalogPrice)}`
+                          : ""}
                       </span>
                     </p>
                   ))}
@@ -1069,8 +1082,8 @@ export function PartnerOrderWorkspace({
               <p className="mt-1 text-xs text-emerald-800">
                 Pedido exclusivo para o próprio distribuidor ·{" "}
                 {catalog?.exclusive
-                  ? `${catalog.productCount} produto(s) disponíveis na sua lista exclusiva`
-                  : `${catalog?.productCount ?? 0} produto(s) disponíveis na tabela Distribuidor`}
+                  ? `${catalog.productCount} apresentação(ões) disponíveis na sua lista exclusiva`
+                  : `${catalog?.productCount ?? 0} apresentação(ões) disponíveis na tabela Distribuidor`}
               </p>
             </div>
           ) : (
@@ -1161,6 +1174,9 @@ export function PartnerOrderWorkspace({
                           {variant.presentationGrams >= 1000
                             ? `${variant.presentationGrams / 1000} kg`
                             : `${variant.presentationGrams} g`}{" "}
+                          {variant.catalogPrice != null
+                            ? `· ${money.format(variant.catalogPrice)} `
+                            : ""}
                           ·{" "}
                           {isDistributor
                             ? "disponível sob encomenda"
