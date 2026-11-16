@@ -520,6 +520,9 @@ test("distributor catalog is filtered and priced on the server", () => {
   assert.match(source, /catalogSortOrder/);
   assert.match(source, /distributorCatalog\.variantIds\.has/);
   assert.match(source, /customerProductPriceId/);
+  assert.match(source, /paymentTermDays/);
+  assert.match(source, /dias após a emissão da NF-e/);
+  assert.match(source, /termApprovals\.ensureForOrder/);
   assert.match(source, /baseProductPriceId/);
   assert.match(source, /Produto não liberado na lista comercial/);
   assert.match(source, /aguardando aprovação de José ou Suzi/);

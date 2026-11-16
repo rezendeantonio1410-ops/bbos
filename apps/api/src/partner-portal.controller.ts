@@ -13,6 +13,7 @@ import {
 import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { SalesOrdersService } from "./sales-orders.service";
+import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
@@ -30,7 +31,10 @@ type PartnerActor = {
 export class PartnerPortalController {
   private readonly database = prisma;
 
-  constructor(private readonly salesOrders: SalesOrdersService) {}
+  constructor(
+    private readonly salesOrders: SalesOrdersService,
+    private readonly termApprovals: SalesOrderTermApprovalService,
+  ) {}
 
   private async context(request: { user?: PartnerActor }) {
     const actor = request.user;
@@ -1039,6 +1043,8 @@ export class PartnerPortalController {
       }>;
       deliveryMode?: "PICKUP" | "CUSTOMER_CARRIER";
       carrierName?: string;
+      paymentType?: "CASH" | "TERM";
+      paymentTermDays?: number;
       expectedDeliveryDate?: string;
       customerReference?: string;
       notes?: string;
@@ -1121,6 +1127,22 @@ export class PartnerPortalController {
         "Informe a transportadora escolhida pelo cliente.",
       );
     }
+    const paymentType = body.paymentType === "TERM" ? "TERM" : "CASH";
+    const paymentTermDays = Number(body.paymentTermDays ?? 0);
+    if (
+      paymentType === "TERM" &&
+      (!Number.isSafeInteger(paymentTermDays) ||
+        paymentTermDays < 1 ||
+        paymentTermDays > 365)
+    ) {
+      throw new BadRequestException(
+        "Informe um prazo de pagamento entre 1 e 365 dias.",
+      );
+    }
+    const paymentTermsSnapshot =
+      paymentType === "TERM"
+        ? `${paymentTermDays} dias após a emissão da NF-e`
+        : "À vista na emissão da NF-e";
     const orderNumber = await this.nextOrderNumber(actor.companyId);
     const order = await this.salesOrders.create(actor.companyId, {
       code: orderNumber,
@@ -1142,22 +1164,35 @@ export class PartnerPortalController {
     });
     await this.database.$executeRawUnsafe(
       `UPDATE "SalesOrder"
-          SET "createdByStorefrontPartnerId"=$2,"paymentType"='CASH',
-              "paymentTermsSnapshot"='À vista',"freightResponsibility"=$3,
-              "carrierName"=$4,"customerReference"=$5,"updatedAt"=NOW()
-        WHERE id=$1 AND "companyId"=$6`,
+          SET "createdByStorefrontPartnerId"=$2,"paymentType"=$3,
+              "paymentTermsSnapshot"=$4,"freightResponsibility"=$5,
+              "carrierName"=$6,"customerReference"=$7,"updatedAt"=NOW()
+        WHERE id=$1 AND "companyId"=$8`,
       order.id,
       partner.id,
+      paymentType,
+      paymentTermsSnapshot,
       deliveryMode,
       carrierName || null,
       String(body.customerReference ?? "").trim() || null,
       actor.companyId,
     );
+    if (paymentType === "TERM") {
+      await this.termApprovals.ensureForOrder(actor.companyId, order.id, {
+        id: actor.id ?? partner.id,
+        companyId: actor.companyId,
+        name: String(actor.name ?? partner.contactName ?? partner.name),
+        email: partner.email,
+        role: actor.role,
+      });
+    }
     return {
       id: order.id,
       code: orderNumber,
       status: "DRAFT",
       totalAmount: Number(order.totalAmount),
+      paymentType,
+      paymentTermsSnapshot,
       message:
         partner.portalAccessLevel === "DISTRIBUTOR"
           ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."

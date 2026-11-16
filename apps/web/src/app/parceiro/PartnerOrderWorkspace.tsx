@@ -200,6 +200,8 @@ export function PartnerOrderWorkspace({
     "PICKUP" | "CUSTOMER_CARRIER"
   >("PICKUP");
   const [carrierName, setCarrierName] = useState("");
+  const [paymentType, setPaymentType] = useState<"CASH" | "TERM">("CASH");
+  const [paymentTermDays, setPaymentTermDays] = useState(28);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [customerReference, setCustomerReference] = useState("");
   const [notes, setNotes] = useState("");
@@ -436,6 +438,9 @@ export function PartnerOrderWorkspace({
             items: cleanItems,
             deliveryMode,
             carrierName,
+            paymentType,
+            paymentTermDays:
+              paymentType === "TERM" ? paymentTermDays : undefined,
             expectedDeliveryDate,
             customerReference,
             notes,
@@ -450,6 +455,8 @@ export function PartnerOrderWorkspace({
       setCustomerId(distributorCustomer?.id ?? "");
       setQuote(null);
       setCarrierName("");
+      setPaymentType("CASH");
+      setPaymentTermDays(28);
       setExpectedDeliveryDate("");
       setCustomerReference("");
       setNotes("");
@@ -1225,6 +1232,45 @@ export function PartnerOrderWorkspace({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
+            {isDistributor && (
+              <PortalField label="Condição de pagamento">
+                <select
+                  value={paymentType}
+                  onChange={(event) =>
+                    setPaymentType(event.target.value as "CASH" | "TERM")
+                  }
+                >
+                  <option value="CASH">À vista na emissão da NF-e</option>
+                  <option value="TERM">A prazo após emissão da NF-e</option>
+                </select>
+              </PortalField>
+            )}
+            {isDistributor && paymentType === "TERM" && (
+              <PortalField label="Prazo após a NF-e">
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    step={1}
+                    value={paymentTermDays}
+                    onChange={(event) =>
+                      setPaymentTermDays(
+                        Math.min(365, Math.max(1, Number(event.target.value))),
+                      )
+                    }
+                    required
+                    className="pr-14"
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
+                    dias
+                  </span>
+                </div>
+                <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                  O vencimento será calculado a partir da emissão da NF-e.
+                </span>
+              </PortalField>
+            )}
             <PortalField label="Entrega">
               <select
                 value={deliveryMode}
@@ -1399,6 +1445,10 @@ export function PartnerOrderWorkspace({
                           Vence em{" "}
                           {new Date(order.dueDate).toLocaleDateString("pt-BR")}{" "}
                           · saldo {money.format(Number(order.openAmount || 0))}
+                        </p>
+                      ) : order.paymentTermsSnapshot ? (
+                        <p className="mt-1 text-[10px] text-stone-500">
+                          {order.paymentTermsSnapshot}
                         </p>
                       ) : null}
                     </td>
