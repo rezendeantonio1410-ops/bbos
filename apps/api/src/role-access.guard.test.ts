@@ -517,12 +517,32 @@ test("distributor catalog is filtered and priced on the server", () => {
   assert.match(source, /Produção sob encomenda/);
   assert.match(source, /sc\.type='DISTRIBUIDOR'/);
   assert.match(source, /CustomerProductPrice/);
+  assert.match(source, /CustomerCatalogProduct/);
+  assert.match(source, /displayLineName/);
+  assert.match(source, /catalogSortOrder/);
   assert.match(source, /distributorCatalog\.variantIds\.has/);
   assert.match(source, /customerProductPriceId/);
   assert.match(source, /baseProductPriceId/);
   assert.match(source, /Produto não liberado na lista comercial/);
   assert.match(source, /aguardando aprovação de José ou Suzi/);
   assert.match(source, /data desejada será confirmada/);
+});
+
+test("Signa catalog exposes only approved combinations and maps Reserva to Raro", () => {
+  const migration = readFileSync(
+    join(
+      __dirname,
+      "../../../packages/database/prisma/migrations/20261116170000_signa_exclusive_catalog_v1/migration.sql",
+    ),
+    "utf8",
+  );
+  assert.match(migration, /'Clássicos','Clássicos','GOU-WLE-250'/);
+  assert.match(migration, /'Caramelo','Caramelo','CLA-CAR-1000'/);
+  assert.match(migration, /'Frutado','Frutado','EPI-WLF-1000'/);
+  assert.match(migration, /'Reserva','Reserva','RAR-WLR-250'/);
+  assert.match(migration, /'WHITE_LABEL_RARO','RAROS'/);
+  assert.match(migration, /esperadas 10 apresentações ativas/);
+  assert.doesNotMatch(migration, /RAR-WLR-500|RAR-WLR-1000/);
 });
 
 test("distributor order requires José or Suzi approval and enters production", () => {

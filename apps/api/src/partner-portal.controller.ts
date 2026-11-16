@@ -133,6 +133,68 @@ export class PartnerPortalController {
     productVariantId: string,
     distributor = false,
   ) {
+    if (distributor) {
+      const distributorRows = await this.database.$queryRawUnsafe<any[]>(
+        `WITH distributor_channel AS (
+           SELECT sc.id,sc.name,sc.type::text AS type
+             FROM "SalesChannel" sc
+            WHERE sc."companyId"=$3 AND sc.active=true AND sc.type='DISTRIBUIDOR'
+            ORDER BY sc."createdAt" ASC
+            LIMIT 1
+         ), customer_price AS (
+           SELECT cpp.id,cpp.price,cpp.currency
+             FROM "CustomerProductPrice" cpp
+            WHERE cpp."companyId"=$3
+              AND cpp."customerId"=$1
+              AND cpp."productVariantId"=$2
+              AND cpp.active=true
+              AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+              AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())
+            ORDER BY cpp."validFrom" DESC NULLS LAST,cpp."updatedAt" DESC
+            LIMIT 1
+         )
+         SELECT cpp.id AS "customerProductPriceId",
+                cpp.price AS "customerPrice",cpp.currency,
+                sc.id AS "salesChannelId",sc.name AS "salesChannelName",
+                sc.type AS "salesChannelType",
+                pp.id AS "productPriceId",pp.price AS "channelPrice"
+           FROM customer_price cpp
+           CROSS JOIN distributor_channel sc
+           LEFT JOIN LATERAL (
+             SELECT candidate.id,candidate.price
+               FROM "ProductPrice" candidate
+              WHERE candidate."companyId"=$3
+                AND candidate."productVariantId"=$2
+                AND candidate."salesChannelId"=sc.id
+                AND candidate.currency=cpp.currency
+                AND candidate.active=true
+                AND (candidate."validFrom" IS NULL OR candidate."validFrom" <= NOW())
+                AND (candidate."validUntil" IS NULL OR candidate."validUntil" >= NOW())
+              ORDER BY candidate."validFrom" DESC NULLS LAST,candidate."createdAt" DESC
+              LIMIT 1
+           ) pp ON TRUE`,
+        customerId,
+        productVariantId,
+        companyId,
+      );
+      if (!distributorRows[0]) {
+        throw new BadRequestException(
+          "Produto sem preço vigente na lista exclusiva deste distribuidor.",
+        );
+      }
+      return {
+        unitPrice: Number(distributorRows[0].customerPrice),
+        currency: distributorRows[0].currency,
+        productPriceId:
+          (distributorRows[0].productPriceId as string | null) ?? undefined,
+        customerProductPriceId: distributorRows[0]
+          .customerProductPriceId as string,
+        pricingSource: "CUSTOMER" as const,
+        salesChannelId: distributorRows[0].salesChannelId as string,
+        salesChannelName: distributorRows[0].salesChannelName as string,
+        salesChannelType: distributorRows[0].salesChannelType as string,
+      };
+    }
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `WITH base_price AS (
          SELECT pp.id AS "productPriceId",pp.price AS "channelPrice",pp.currency,
@@ -145,14 +207,12 @@ export class PartnerPortalController {
           WHERE c.id=$1 AND c."companyId"=$3 AND pp.active=true
             AND (pp."validFrom" IS NULL OR pp."validFrom" <= NOW())
             AND (pp."validUntil" IS NULL OR pp."validUntil" >= NOW())
-            AND (NOT $4::boolean OR sc.type='DISTRIBUIDOR')
             AND (
               c.segment IS NULL
               OR c.segment NOT ILIKE '%varejo%'
               OR sc.code='VAREJO'
             )
           ORDER BY CASE
-            WHEN $4::boolean AND sc.type='DISTRIBUIDOR' THEN 0
             WHEN c.segment ILIKE '%distrib%' AND sc.type='DISTRIBUIDOR' THEN 0
             WHEN c.segment ILIKE '%cafeter%' AND sc.type='CAFETERIA' THEN 0
             WHEN c.segment ILIKE '%escrit%' AND sc.type='ESCRITORIO' THEN 0
@@ -183,7 +243,6 @@ export class PartnerPortalController {
       customerId,
       productVariantId,
       companyId,
-      distributor,
     );
     if (!rows[0]) {
       throw new BadRequestException(
@@ -209,6 +268,30 @@ export class PartnerPortalController {
     companyId: string,
     customerId: string,
   ): Promise<{ variantIds: Set<string>; exclusive: boolean }> {
+    const catalogRows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT catalog."productVariantId"
+         FROM "CustomerCatalogProduct" catalog
+         JOIN "CustomerProductPrice" cpp
+           ON cpp."companyId"=catalog."companyId"
+          AND cpp."customerId"=catalog."customerId"
+          AND cpp."productVariantId"=catalog."productVariantId"
+          AND cpp.active=true
+          AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+          AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())
+        WHERE catalog."companyId"=$1 AND catalog."customerId"=$2
+          AND catalog.active=true
+        ORDER BY catalog."sortOrder" ASC,catalog."displayProductName" ASC`,
+      companyId,
+      customerId,
+    );
+    if (catalogRows.length > 0) {
+      return {
+        variantIds: new Set(
+          catalogRows.map((row) => String(row.productVariantId)),
+        ),
+        exclusive: true,
+      };
+    }
     const explicitRows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT cpp."productVariantId"
          FROM "CustomerProductPrice" cpp
@@ -253,9 +336,31 @@ export class PartnerPortalController {
 
   private async distributorVariantOptions(
     companyId: string,
+    customerId: string,
     variantIds: Set<string>,
   ) {
     if (!variantIds.size) return [];
+    const catalogRows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT catalog."productVariantId",catalog."displayLineName",
+              catalog."displayProductName",catalog."sortOrder",cpp.price AS "catalogPrice"
+         FROM "CustomerCatalogProduct" catalog
+         JOIN "CustomerProductPrice" cpp
+           ON cpp."companyId"=catalog."companyId"
+          AND cpp."customerId"=catalog."customerId"
+          AND cpp."productVariantId"=catalog."productVariantId"
+          AND cpp.active=true
+          AND (cpp."validFrom" IS NULL OR cpp."validFrom" <= NOW())
+          AND (cpp."validUntil" IS NULL OR cpp."validUntil" >= NOW())
+        WHERE catalog."companyId"=$1 AND catalog."customerId"=$2
+          AND catalog.active=true
+          AND catalog."productVariantId"=ANY($3::text[])`,
+      companyId,
+      customerId,
+      [...variantIds],
+    );
+    const catalogByVariant = new Map(
+      catalogRows.map((row) => [String(row.productVariantId), row]),
+    );
     const variants = await this.database.productVariant.findMany({
       where: {
         id: { in: [...variantIds] },
@@ -275,35 +380,47 @@ export class PartnerPortalController {
       },
       orderBy: [{ product: { name: "asc" } }, { netWeightGrams: "asc" }],
     });
-    return variants.map((variant) => {
-      const primaryStock = variant.finishedProducts[0] ?? null;
-      const physicalStock = variant.finishedProducts.reduce(
-        (sum, item) => sum + Number(item.quantityOnHand),
-        0,
+    return variants
+      .map((variant) => {
+        const primaryStock = variant.finishedProducts[0] ?? null;
+        const physicalStock = variant.finishedProducts.reduce(
+          (sum, item) => sum + Number(item.quantityOnHand),
+          0,
+        );
+        const reservedStock = variant.finishedProducts.reduce(
+          (sum, item) => sum + Number(item.reservedQuantity),
+          0,
+        );
+        const catalog = catalogByVariant.get(variant.id);
+        return {
+          productVariantId: variant.id,
+          warehouseId: primaryStock?.warehouseId ?? "",
+          warehouse: primaryStock?.warehouse.name ?? "Produção sob encomenda",
+          line: catalog?.displayLineName ?? variant.product.productLine.name,
+          lineCode: variant.product.productLine.code,
+          product: catalog?.displayProductName ?? variant.product.name,
+          internalLine: variant.product.productLine.name,
+          internalProduct: variant.product.name,
+          catalogSortOrder: Number(catalog?.sortOrder ?? 9999),
+          catalogPrice:
+            catalog?.catalogPrice == null ? null : Number(catalog.catalogPrice),
+          sku: variant.sku,
+          presentationGrams: variant.netWeightGrams,
+          salesUnit: variant.salesUnit,
+          physicalStock,
+          reservedStock,
+          availableStock: Math.max(0, physicalStock - reservedStock),
+          onHand: physicalStock,
+          reserved: reservedStock,
+          available: Math.max(0, physicalStock - reservedStock),
+          productionToOrder: true,
+        };
+      })
+      .sort(
+        (left, right) =>
+          left.catalogSortOrder - right.catalogSortOrder ||
+          left.presentationGrams - right.presentationGrams,
       );
-      const reservedStock = variant.finishedProducts.reduce(
-        (sum, item) => sum + Number(item.reservedQuantity),
-        0,
-      );
-      return {
-        productVariantId: variant.id,
-        warehouseId: primaryStock?.warehouseId ?? "",
-        warehouse: primaryStock?.warehouse.name ?? "Produção sob encomenda",
-        line: variant.product.productLine.name,
-        lineCode: variant.product.productLine.code,
-        product: variant.product.name,
-        sku: variant.sku,
-        presentationGrams: variant.netWeightGrams,
-        salesUnit: variant.salesUnit,
-        physicalStock,
-        reservedStock,
-        availableStock: Math.max(0, physicalStock - reservedStock),
-        onHand: physicalStock,
-        reserved: reservedStock,
-        available: Math.max(0, physicalStock - reservedStock),
-        productionToOrder: true,
-      };
-    });
   }
 
   private async nextOrderNumber(companyId: string) {
@@ -492,6 +609,7 @@ export class PartnerPortalController {
     const variants = catalog
       ? await this.distributorVariantOptions(
           actor.companyId,
+          distributorCustomer.id,
           catalog.variantIds,
         )
       : internalOptions.variants;
@@ -902,6 +1020,7 @@ export class PartnerPortalController {
       ? {
           variants: await this.distributorVariantOptions(
             actor.companyId,
+            customerId,
             distributorCatalog.variantIds,
           ),
         }
