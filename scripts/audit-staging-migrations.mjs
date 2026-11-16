@@ -17,6 +17,9 @@ function run(command, args) {
 function resolveApplied(name) {
   run("pnpm", ["--filter", "@bbos/database", "exec", "prisma", "migrate", "resolve", "--applied", name, "--schema=prisma/schema.prisma"]);
 }
+function resolveRolledBack(name) {
+  run("pnpm", ["--filter", "@bbos/database", "exec", "prisma", "migrate", "resolve", "--rolled-back", name, "--schema=prisma/schema.prisma"]);
+}
 async function scalar(sql, ...values) {
   const rows = await prisma.$queryRawUnsafe(sql, ...values);
   return rows[0]?.value ?? null;
@@ -57,6 +60,13 @@ try {
   };
   const recoveries = [];
   const add = async (name, checks) => recoveries.push([name, await audit(name, checks)]);
+  const signaMigration = "20261116170000_signa_exclusive_catalog_v1";
+  const signaStatus = status(signaMigration);
+  const signaRollbackSafe = signaStatus === "FAILED"
+    ? await audit(`${signaMigration} rollback`, [
+        ["exclusive catalog table absent", table("CustomerCatalogProduct").then((value) => !value)],
+      ])
+    : true;
 
   await add("20260814120000_green_coffee_purchase_v2", [
     ["enum approval", en("PurchaseApprovalStatus")], ["enum operational", en("PurchaseOperationalStatus")],
@@ -209,7 +219,10 @@ try {
   ]);
 
   if (recoveries.some(([, safe]) => !safe)) throw new Error("Recovery audit failed; migration history was not changed.");
+  if (!signaRollbackSafe) throw new Error("Signa migration recovery audit failed; migration history was not changed.");
   await prisma.$disconnect();
+
+  if (signaStatus === "FAILED") resolveRolledBack(signaMigration);
 
   for (const [name] of recoveries) {
     const s = status(name);

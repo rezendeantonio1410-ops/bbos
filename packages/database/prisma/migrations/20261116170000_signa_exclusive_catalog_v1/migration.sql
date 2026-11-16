@@ -187,7 +187,7 @@ WITH catalog_specs("displayLineName","displayProductName",sku,"sortOrder") AS (
     JOIN "StorefrontPartnerCustomer" link ON link."partnerId"=partner.id
    WHERE lower(partner.email)='comercial@nivov.com.br'
      AND partner.active=TRUE
-     AND partner."portalAccessLevel"='DISTRIBUIDOR'
+     AND partner."portalAccessLevel"='DISTRIBUTOR'
 ), resolved AS (
   SELECT customer."companyId",customer."customerId",variant.id AS "productVariantId",
          specs."displayLineName",specs."displayProductName",specs."sortOrder"
