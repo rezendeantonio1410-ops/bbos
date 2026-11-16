@@ -833,7 +833,7 @@ export default function CustomersPage() {
       {showNew && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
           <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white px-4 pb-32 pt-5 shadow-2xl sm:p-6 sm:pb-28">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[.18em] text-blue-700">
                   Cadastro guiado
@@ -843,13 +843,24 @@ export default function CustomersPage() {
                   Cadastre uma vez, já pronto para pedido, NF-e e expedição.
                 </p>
               </div>
-              <button
-                onClick={() => setShowNew(false)}
-                aria-label="Fechar cadastro de cliente"
-                className="rounded-xl border p-2"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void createCustomer()}
+                  className="min-h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                >
+                  {saving ? "Salvando…" : "Salvar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNew(false)}
+                  aria-label="Fechar cadastro de cliente"
+                  className="min-h-11 min-w-11 rounded-xl border p-2"
+                >
+                  <X className="mx-auto" size={18} />
+                </button>
+              </div>
             </div>
             <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
               <div className="flex gap-3">
@@ -1197,7 +1208,7 @@ export default function CustomersPage() {
                 {error}
               </div>
             )}
-            <div className="fixed inset-x-0 bottom-0 z-[80] border-t border-stone-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_32px_rgba(28,25,23,0.14)] backdrop-blur sm:left-auto sm:right-0 sm:w-full sm:max-w-2xl sm:px-6">
+            <div className="fixed inset-x-2 bottom-[calc(4.75rem_+_env(safe-area-inset-bottom))] z-[90] rounded-2xl border border-stone-200 bg-white/95 p-2.5 shadow-[0_-12px_32px_rgba(28,25,23,0.18)] backdrop-blur sm:left-auto sm:right-2 sm:w-[calc(100%_-_1rem)] sm:max-w-2xl sm:px-4 lg:inset-x-0 lg:bottom-0 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-6 lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <div className="mx-auto flex max-w-2xl gap-2">
                 <button
                   type="button"
@@ -1224,7 +1235,7 @@ export default function CustomersPage() {
       {editCustomer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
           <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white px-4 pb-32 pt-5 shadow-2xl sm:p-6 sm:pb-28">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[.18em] text-blue-700">
                   Cadastro do cliente
@@ -1234,16 +1245,27 @@ export default function CustomersPage() {
                   Atualize os dados comerciais e de entrega.
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setEditCustomer(null);
-                  setForm(emptyCustomer);
-                }}
-                aria-label="Fechar edição do cliente"
-                className="rounded-xl border p-2"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void saveCustomer()}
+                  className="min-h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                >
+                  {saving ? "Salvando…" : "Salvar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditCustomer(null);
+                    setForm(emptyCustomer);
+                  }}
+                  aria-label="Fechar edição do cliente"
+                  className="min-h-11 min-w-11 rounded-xl border p-2"
+                >
+                  <X className="mx-auto" size={18} />
+                </button>
+              </div>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <Field label="País fiscal *" wide>
@@ -1568,7 +1590,7 @@ export default function CustomersPage() {
                 {error}
               </div>
             )}
-            <div className="fixed inset-x-0 bottom-0 z-[80] border-t border-stone-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_32px_rgba(28,25,23,0.14)] backdrop-blur sm:left-auto sm:right-0 sm:w-full sm:max-w-2xl sm:px-6">
+            <div className="fixed inset-x-2 bottom-[calc(4.75rem_+_env(safe-area-inset-bottom))] z-[90] rounded-2xl border border-stone-200 bg-white/95 p-2.5 shadow-[0_-12px_32px_rgba(28,25,23,0.18)] backdrop-blur sm:left-auto sm:right-2 sm:w-[calc(100%_-_1rem)] sm:max-w-2xl sm:px-4 lg:inset-x-0 lg:bottom-0 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-6 lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <div className="mx-auto flex max-w-2xl gap-2">
                 <button
                   type="button"
