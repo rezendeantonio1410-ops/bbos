@@ -273,44 +273,99 @@ const normalizedFirstName = (value: string) =>
     .trim()
     .toLowerCase()
     .split(/\s+/)[0];
-const customerFormError = (form: typeof emptyCustomer) => {
+type CustomerFormField =
+  | "countryCode"
+  | "countryName"
+  | "name"
+  | "legalName"
+  | "taxId"
+  | "foreignTaxId"
+  | "email"
+  | "phone"
+  | "postalCode"
+  | "address"
+  | "addressNumber"
+  | "district"
+  | "city"
+  | "state"
+  | "stateRegistrationType"
+  | "stateRegistration";
+
+type CustomerFormErrors = Partial<Record<CustomerFormField, string>>;
+
+const customerFormErrors = (form: typeof emptyCustomer): CustomerFormErrors => {
+  const errors: CustomerFormErrors = {};
   try {
     normalizeCustomerPhone(form.phone);
   } catch {
-    return MOBILE_ERROR;
+    errors.phone = MOBILE_ERROR;
   }
   const document = form.taxId.replace(/\D/g, "");
   const isForeign = form.countryCode !== "BR";
-  const missing: string[] = [];
-  if (!form.name.trim()) missing.push("nome");
+  if (!form.name.trim()) errors.name = "Informe o nome usado pela equipe.";
   if (isForeign && !/^[A-Z]{2}$/.test(form.countryCode))
-    missing.push("código do país");
-  if (isForeign && !form.countryName.trim()) missing.push("país");
+    errors.countryCode = "Selecione o país fiscal do cliente.";
+  if (isForeign && !form.countryName.trim())
+    errors.countryName = "Informe o país fiscal do cliente.";
   if (isForeign && !form.foreignTaxId.trim())
-    missing.push("identificação fiscal estrangeira");
+    errors.foreignTaxId = "Informe a identificação fiscal estrangeira.";
   if (!isForeign && ![11, 14].includes(document.length))
-    missing.push("CPF/CNPJ válido");
+    errors.taxId = "Informe um CPF com 11 dígitos ou CNPJ com 14 dígitos.";
   if (!isForeign && document.length === 14 && !form.legalName.trim())
-    missing.push("razão social");
+    errors.legalName = "A razão social é obrigatória para CNPJ.";
+  if (
+    form.email.trim() &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+  )
+    errors.email = "Informe um e-mail válido, como nome@empresa.com.br.";
   if (!isForeign && form.postalCode.replace(/\D/g, "").length !== 8)
-    missing.push("CEP");
-  if (!form.address.trim()) missing.push("logradouro");
-  if (!isForeign && !form.addressNumber.trim()) missing.push("número");
-  if (!form.district.trim()) missing.push("bairro");
-  if (!form.city.trim()) missing.push("cidade");
-  if (!isForeign && !form.state.trim()) missing.push("UF");
+    errors.postalCode = "Informe um CEP com 8 dígitos.";
+  if (!form.address.trim()) errors.address = "Informe o logradouro.";
+  if (!isForeign && !form.addressNumber.trim())
+    errors.addressNumber = "Informe o número ou use S/N.";
+  if (!form.district.trim()) errors.district = "Informe o bairro.";
+  if (!form.city.trim()) errors.city = "Informe a cidade.";
+  if (!isForeign && !form.state.trim()) errors.state = "Selecione a UF.";
   if (!isForeign && document.length === 14 && !form.stateRegistrationType)
-    missing.push("situação da inscrição estadual");
+    errors.stateRegistrationType =
+      "Selecione a situação da inscrição estadual.";
   if (
     !isForeign &&
     document.length === 14 &&
     form.stateRegistrationType === "NUMBER" &&
     !form.stateRegistration.trim()
   )
-    missing.push("inscrição estadual");
-  return missing.length
-    ? `Complete os dados fiscais obrigatórios: ${missing.join(", ")}.`
-    : "";
+    errors.stateRegistration = "Informe o número da inscrição estadual.";
+  return errors;
+};
+
+const readableCustomerSaveError = (message: unknown, fallback: string) => {
+  const text = Array.isArray(message)
+    ? message.filter(Boolean).join(" ")
+    : String(message ?? "").trim();
+  if (!text) return fallback;
+  if (/internal server error/i.test(text))
+    return "O BBOS encontrou um erro ao salvar. Tente novamente; se continuar, avise o administrador.";
+  return text;
+};
+
+const customerFieldFromServerError = (
+  message: string,
+): CustomerFormField | undefined => {
+  const normalized = message.toLowerCase();
+  if (/cpf|cnpj|documento fiscal|tax.?id/.test(normalized)) return "taxId";
+  if (/razão social|razao social|legal.?name/.test(normalized))
+    return "legalName";
+  if (/e-?mail/.test(normalized)) return "email";
+  if (/telefone|celular|whatsapp|phone/.test(normalized)) return "phone";
+  if (/cep|código postal|codigo postal|postal/.test(normalized))
+    return "postalCode";
+  if (/logradouro|endereço|endereco|address/.test(normalized)) return "address";
+  if (/bairro|district/.test(normalized)) return "district";
+  if (/cidade|city/.test(normalized)) return "city";
+  if (/inscrição estadual|inscricao estadual/.test(normalized))
+    return "stateRegistration";
+  return undefined;
 };
 
 export default function CustomersPage() {
@@ -321,6 +376,7 @@ export default function CustomersPage() {
   const [showNew, setShowNew] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState(emptyCustomer);
+  const [formErrors, setFormErrors] = useState<CustomerFormErrors>({});
   const [saving, setSaving] = useState(false);
   const cepLookup = useBrazilianCepAutofill({
     postalCode: form.postalCode,
@@ -358,6 +414,40 @@ export default function CustomersPage() {
   const [canApproveCredit, setCanApproveCredit] = useState(false);
   const historyAutoOpened = useRef(false);
 
+  const validateCustomerForm = () => {
+    const validationErrors = customerFormErrors(form);
+    setFormErrors(validationErrors);
+    const invalidFields = Object.keys(validationErrors);
+    if (invalidFields.length === 0) return true;
+
+    setError(
+      `Revise ${invalidFields.length} ${
+        invalidFields.length === 1 ? "campo marcado" : "campos marcados"
+      } em vermelho antes de salvar.`,
+    );
+    window.requestAnimationFrame(() => {
+      const firstInvalid = document.querySelector<HTMLElement>(
+        '[data-customer-field][data-invalid="true"]',
+      );
+      firstInvalid?.scrollIntoView({ behavior: "smooth", block: "center" });
+      firstInvalid
+        ?.querySelector<HTMLElement>("input, select, textarea")
+        ?.focus({ preventScroll: true });
+    });
+    return false;
+  };
+
+  useEffect(() => {
+    setFormErrors((current) =>
+      Object.keys(current).length > 0 ? customerFormErrors(form) : current,
+    );
+  }, [form]);
+
+  useEffect(() => {
+    if (error.startsWith("Revise ") && Object.keys(formErrors).length === 0)
+      setError("");
+  }, [error, formErrors]);
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -385,6 +475,8 @@ export default function CustomersPage() {
   useEffect(() => {
     void load();
     if (new URLSearchParams(window.location.search).get("novo") === "1") {
+      setError("");
+      setFormErrors({});
       setShowNew(true);
     }
   }, []);
@@ -421,8 +513,7 @@ export default function CustomersPage() {
   }, [customers, search]);
 
   const createCustomer = async () => {
-    const fiscalError = customerFormError(form);
-    if (fiscalError) return setError(fiscalError);
+    if (!validateCustomerForm()) return;
     setSaving(true);
     setError("");
     try {
@@ -438,17 +529,32 @@ export default function CustomersPage() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(
-          payload?.message ?? "Não foi possível cadastrar o cliente.",
+          readableCustomerSaveError(
+            payload?.message,
+            "Não foi possível cadastrar o cliente.",
+          ),
         );
       setForm(emptyCustomer);
+      setFormErrors({});
       setShowNew(false);
       await load();
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Não foi possível cadastrar o cliente.",
+      const message = readableCustomerSaveError(
+        cause instanceof Error ? cause.message : cause,
+        "Não foi possível cadastrar o cliente.",
       );
+      setError(message);
+      const serverField = customerFieldFromServerError(message);
+      if (serverField)
+        setFormErrors((current) => ({ ...current, [serverField]: message }));
+      window.requestAnimationFrame(() => {
+        const target = serverField
+          ? document.querySelector<HTMLElement>(
+              `[data-customer-field="${serverField}"]`,
+            )
+          : document.querySelector<HTMLElement>("[data-customer-form-alert]");
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     } finally {
       setSaving(false);
     }
@@ -456,6 +562,7 @@ export default function CustomersPage() {
 
   const openEdit = (customer: Customer) => {
     setError("");
+    setFormErrors({});
     setEditCustomer(customer);
     setForm({
       name: customer.name ?? "",
@@ -486,8 +593,7 @@ export default function CustomersPage() {
 
   const saveCustomer = async () => {
     if (!editCustomer) return;
-    const fiscalError = customerFormError(form);
-    if (fiscalError) return setError(fiscalError);
+    if (!validateCustomerForm()) return;
     setSaving(true);
     setError("");
     try {
@@ -504,17 +610,32 @@ export default function CustomersPage() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(
-          payload?.message ?? "Não foi possível atualizar o cliente.",
+          readableCustomerSaveError(
+            payload?.message,
+            "Não foi possível atualizar o cliente.",
+          ),
         );
       setEditCustomer(null);
       setForm(emptyCustomer);
+      setFormErrors({});
       await load();
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Não foi possível atualizar o cliente.",
+      const message = readableCustomerSaveError(
+        cause instanceof Error ? cause.message : cause,
+        "Não foi possível atualizar o cliente.",
       );
+      setError(message);
+      const serverField = customerFieldFromServerError(message);
+      if (serverField)
+        setFormErrors((current) => ({ ...current, [serverField]: message }));
+      window.requestAnimationFrame(() => {
+        const target = serverField
+          ? document.querySelector<HTMLElement>(
+              `[data-customer-field="${serverField}"]`,
+            )
+          : document.querySelector<HTMLElement>("[data-customer-form-alert]");
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     } finally {
       setSaving(false);
     }
@@ -743,6 +864,8 @@ export default function CustomersPage() {
           data-bbos-write-action
           onClick={() => {
             setError("");
+            setFormErrors({});
+            setForm(emptyCustomer);
             setShowNew(true);
           }}
           className="inline-flex items-center gap-2 rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white"
@@ -854,7 +977,12 @@ export default function CustomersPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowNew(false)}
+                  onClick={() => {
+                    setShowNew(false);
+                    setError("");
+                    setFormErrors({});
+                    setForm(emptyCustomer);
+                  }}
                   aria-label="Fechar cadastro de cliente"
                   className="min-h-11 min-w-11 rounded-xl border p-2"
                 >
@@ -875,8 +1003,26 @@ export default function CustomersPage() {
                 </div>
               </div>
             </div>
+            {error && (
+              <div
+                data-customer-form-alert
+                role="alert"
+                className="mt-4 flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              >
+                <AlertTriangle className="mt-0.5 shrink-0" size={18} />
+                <div>
+                  <strong>Não foi possível salvar ainda.</strong>
+                  <p className="mt-1">{error}</p>
+                </div>
+              </div>
+            )}
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="País fiscal *" wide>
+              <Field
+                label="País fiscal *"
+                fieldKey="countryCode"
+                error={formErrors.countryCode || formErrors.countryName}
+                wide
+              >
                 <select
                   value={form.countryCode}
                   onChange={(e) => {
@@ -904,6 +1050,8 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label="Como você chama este cliente?"
+                fieldKey="name"
+                error={formErrors.name}
                 help="Nome que a equipe reconhecerá rapidamente."
                 wide
               >
@@ -913,7 +1061,13 @@ export default function CustomersPage() {
                   placeholder="Ex.: Café Central"
                 />
               </Field>
-              <Field label="Razão social" help="Obrigatória para CNPJ." wide>
+              <Field
+                label="Razão social"
+                fieldKey="legalName"
+                error={formErrors.legalName}
+                help="Obrigatória para CNPJ."
+                wide
+              >
                 <input
                   value={form.legalName}
                   onChange={(e) =>
@@ -922,7 +1076,11 @@ export default function CustomersPage() {
                 />
               </Field>
               {form.countryCode === "BR" ? (
-                <Field label="CPF / CNPJ *">
+                <Field
+                  label="CPF / CNPJ *"
+                  fieldKey="taxId"
+                  error={formErrors.taxId}
+                >
                   <input
                     value={form.taxId}
                     onChange={(e) =>
@@ -934,6 +1092,8 @@ export default function CustomersPage() {
               ) : (
                 <Field
                   label="Identificação fiscal estrangeira *"
+                  fieldKey="foreignTaxId"
+                  error={formErrors.foreignTaxId}
                   help="Informe o número fiscal ou registro empresarial usado no país do cliente."
                 >
                   <input
@@ -957,7 +1117,7 @@ export default function CustomersPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="E-mail">
+              <Field label="E-mail" fieldKey="email" error={formErrors.email}>
                 <input
                   type="email"
                   value={form.email}
@@ -966,6 +1126,8 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label="Telefone / WhatsApp"
+                fieldKey="phone"
+                error={formErrors.phone}
                 help={
                   form.countryCode === "BR"
                     ? "Brasil (+55): informe DDD e celular."
@@ -1013,6 +1175,8 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label={form.countryCode === "BR" ? "CEP *" : "Código postal"}
+                fieldKey="postalCode"
+                error={formErrors.postalCode}
                 help={
                   form.countryCode === "BR"
                     ? "O BBOS completa o endereço e você confirma os dados."
@@ -1070,6 +1234,8 @@ export default function CustomersPage() {
                 label={
                   form.countryCode === "BR" ? "UF *" : "Província / região"
                 }
+                fieldKey="state"
+                error={formErrors.state}
               >
                 {form.countryCode === "BR" ? (
                   <select
@@ -1092,7 +1258,7 @@ export default function CustomersPage() {
                   />
                 )}
               </Field>
-              <Field label="Cidade *">
+              <Field label="Cidade *" fieldKey="city" error={formErrors.city}>
                 <input
                   value={form.city}
                   onChange={(e) => setForm({ ...form, city: e.target.value })}
@@ -1103,7 +1269,11 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              <Field label="Bairro *">
+              <Field
+                label="Bairro *"
+                fieldKey="district"
+                error={formErrors.district}
+              >
                 <input
                   value={form.district}
                   onChange={(e) =>
@@ -1111,7 +1281,11 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              <Field label="Logradouro *">
+              <Field
+                label="Logradouro *"
+                fieldKey="address"
+                error={formErrors.address}
+              >
                 <input
                   value={form.address}
                   onChange={(e) =>
@@ -1121,6 +1295,8 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label="Número *"
+                fieldKey="addressNumber"
+                error={formErrors.addressNumber}
                 help="Use S/N quando o endereço não possuir número."
               >
                 <input
@@ -1141,7 +1317,12 @@ export default function CustomersPage() {
               {form.countryCode === "BR" &&
                 form.taxId.replace(/\D/g, "").length === 14 && (
                   <>
-                    <Field label="Situação da inscrição estadual *" wide>
+                    <Field
+                      label="Situação da inscrição estadual *"
+                      fieldKey="stateRegistrationType"
+                      error={formErrors.stateRegistrationType}
+                      wide
+                    >
                       <select
                         value={form.stateRegistrationType}
                         onChange={(e) =>
@@ -1162,7 +1343,12 @@ export default function CustomersPage() {
                       </select>
                     </Field>
                     {form.stateRegistrationType === "NUMBER" && (
-                      <Field label="Inscrição estadual *" wide>
+                      <Field
+                        label="Inscrição estadual *"
+                        fieldKey="stateRegistration"
+                        error={formErrors.stateRegistration}
+                        wide
+                      >
                         <input
                           value={form.stateRegistration}
                           onChange={(e) =>
@@ -1203,17 +1389,17 @@ export default function CustomersPage() {
                 </p>
               </div>
             </div>
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
             <div className="fixed inset-x-2 bottom-[calc(4.75rem_+_env(safe-area-inset-bottom))] z-[90] rounded-2xl border border-stone-200 bg-white/95 p-2.5 shadow-[0_-12px_32px_rgba(28,25,23,0.18)] backdrop-blur sm:left-auto sm:right-2 sm:w-[calc(100%_-_1rem)] sm:max-w-2xl sm:px-4 lg:inset-x-0 lg:bottom-0 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-6 lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <div className="mx-auto flex max-w-2xl gap-2">
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => setShowNew(false)}
+                  onClick={() => {
+                    setShowNew(false);
+                    setError("");
+                    setFormErrors({});
+                    setForm(emptyCustomer);
+                  }}
                   className="min-h-12 flex-1 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-700 disabled:opacity-50"
                 >
                   Cancelar
@@ -1259,6 +1445,8 @@ export default function CustomersPage() {
                   onClick={() => {
                     setEditCustomer(null);
                     setForm(emptyCustomer);
+                    setError("");
+                    setFormErrors({});
                   }}
                   aria-label="Fechar edição do cliente"
                   className="min-h-11 min-w-11 rounded-xl border p-2"
@@ -1267,8 +1455,26 @@ export default function CustomersPage() {
                 </button>
               </div>
             </div>
+            {error && (
+              <div
+                data-customer-form-alert
+                role="alert"
+                className="mt-4 flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              >
+                <AlertTriangle className="mt-0.5 shrink-0" size={18} />
+                <div>
+                  <strong>Não foi possível salvar ainda.</strong>
+                  <p className="mt-1">{error}</p>
+                </div>
+              </div>
+            )}
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="País fiscal *" wide>
+              <Field
+                label="País fiscal *"
+                fieldKey="countryCode"
+                error={formErrors.countryCode || formErrors.countryName}
+                wide
+              >
                 <select
                   value={form.countryCode}
                   onChange={(e) => {
@@ -1294,13 +1500,22 @@ export default function CustomersPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Nome do cliente" wide>
+              <Field
+                label="Nome do cliente *"
+                fieldKey="name"
+                error={formErrors.name}
+                wide
+              >
                 <input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </Field>
-              <Field label="Razão social">
+              <Field
+                label="Razão social"
+                fieldKey="legalName"
+                error={formErrors.legalName}
+              >
                 <input
                   value={form.legalName}
                   onChange={(e) =>
@@ -1317,7 +1532,11 @@ export default function CustomersPage() {
                 />
               </Field>
               {form.countryCode === "BR" ? (
-                <Field label="CPF / CNPJ *">
+                <Field
+                  label="CPF / CNPJ *"
+                  fieldKey="taxId"
+                  error={formErrors.taxId}
+                >
                   <input
                     value={form.taxId}
                     onChange={(e) =>
@@ -1328,6 +1547,8 @@ export default function CustomersPage() {
               ) : (
                 <Field
                   label="Identificação fiscal estrangeira *"
+                  fieldKey="foreignTaxId"
+                  error={formErrors.foreignTaxId}
                   help="Número fiscal ou registro empresarial do país do cliente."
                 >
                   <input
@@ -1351,7 +1572,7 @@ export default function CustomersPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="E-mail">
+              <Field label="E-mail" fieldKey="email" error={formErrors.email}>
                 <input
                   type="email"
                   value={form.email}
@@ -1360,6 +1581,8 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label="Telefone / WhatsApp"
+                fieldKey="phone"
+                error={formErrors.phone}
                 help={
                   form.countryCode === "BR"
                     ? "Brasil (+55): informe DDD e celular."
@@ -1407,6 +1630,8 @@ export default function CustomersPage() {
               </Field>
               <Field
                 label={form.countryCode === "BR" ? "CEP *" : "Código postal"}
+                fieldKey="postalCode"
+                error={formErrors.postalCode}
               >
                 <div className="flex gap-2">
                   <input
@@ -1459,6 +1684,8 @@ export default function CustomersPage() {
                 label={
                   form.countryCode === "BR" ? "UF *" : "Província / região"
                 }
+                fieldKey="state"
+                error={formErrors.state}
               >
                 {form.countryCode === "BR" ? (
                   <select
@@ -1481,13 +1708,17 @@ export default function CustomersPage() {
                   />
                 )}
               </Field>
-              <Field label="Cidade *">
+              <Field label="Cidade *" fieldKey="city" error={formErrors.city}>
                 <input
                   value={form.city}
                   onChange={(e) => setForm({ ...form, city: e.target.value })}
                 />
               </Field>
-              <Field label="Bairro *">
+              <Field
+                label="Bairro *"
+                fieldKey="district"
+                error={formErrors.district}
+              >
                 <input
                   value={form.district}
                   onChange={(e) =>
@@ -1495,7 +1726,11 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              <Field label="Logradouro *">
+              <Field
+                label="Logradouro *"
+                fieldKey="address"
+                error={formErrors.address}
+              >
                 <input
                   value={form.address}
                   onChange={(e) =>
@@ -1503,7 +1738,12 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              <Field label="Número *" help="Use S/N quando necessário.">
+              <Field
+                label="Número *"
+                fieldKey="addressNumber"
+                error={formErrors.addressNumber}
+                help="Use S/N quando necessário."
+              >
                 <input
                   value={form.addressNumber}
                   onChange={(e) =>
@@ -1522,7 +1762,12 @@ export default function CustomersPage() {
               {form.countryCode === "BR" &&
                 form.taxId.replace(/\D/g, "").length === 14 && (
                   <>
-                    <Field label="Situação da inscrição estadual *" wide>
+                    <Field
+                      label="Situação da inscrição estadual *"
+                      fieldKey="stateRegistrationType"
+                      error={formErrors.stateRegistrationType}
+                      wide
+                    >
                       <select
                         value={form.stateRegistrationType}
                         onChange={(e) =>
@@ -1543,7 +1788,12 @@ export default function CustomersPage() {
                       </select>
                     </Field>
                     {form.stateRegistrationType === "NUMBER" && (
-                      <Field label="Inscrição estadual *" wide>
+                      <Field
+                        label="Inscrição estadual *"
+                        fieldKey="stateRegistration"
+                        error={formErrors.stateRegistration}
+                        wide
+                      >
                         <input
                           value={form.stateRegistration}
                           onChange={(e) =>
@@ -1585,11 +1835,6 @@ export default function CustomersPage() {
                 </select>
               </Field>
             </div>
-            {error && (
-              <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
             <div className="fixed inset-x-2 bottom-[calc(4.75rem_+_env(safe-area-inset-bottom))] z-[90] rounded-2xl border border-stone-200 bg-white/95 p-2.5 shadow-[0_-12px_32px_rgba(28,25,23,0.18)] backdrop-blur sm:left-auto sm:right-2 sm:w-[calc(100%_-_1rem)] sm:max-w-2xl sm:px-4 lg:inset-x-0 lg:bottom-0 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-6 lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <div className="mx-auto flex max-w-2xl gap-2">
                 <button
@@ -1598,6 +1843,8 @@ export default function CustomersPage() {
                   onClick={() => {
                     setEditCustomer(null);
                     setForm(emptyCustomer);
+                    setError("");
+                    setFormErrors({});
                   }}
                   className="min-h-12 flex-1 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-700 disabled:opacity-50"
                 >
@@ -2375,20 +2622,47 @@ function Field({
   children,
   wide = false,
   help,
+  fieldKey,
+  error,
 }: {
   label: string;
   children: React.ReactNode;
   wide?: boolean;
   help?: string;
+  fieldKey?: CustomerFormField;
+  error?: string;
 }) {
   return (
-    <label className={wide ? "sm:col-span-2" : ""}>
-      <span className="mb-1.5 block text-sm font-semibold">{label}</span>
-      <div className="[&>input]:w-full [&>input]:rounded-xl [&>input]:border [&>input]:px-3 [&>input]:py-3 [&>input]:text-sm [&>select]:w-full [&>select]:rounded-xl [&>select]:border [&>select]:px-3 [&>select]:py-3 [&>select]:text-sm [&>textarea]:w-full [&>textarea]:rounded-xl [&>textarea]:border [&>textarea]:px-3 [&>textarea]:py-3 [&>textarea]:text-sm">
+    <label
+      data-customer-field={fieldKey}
+      data-invalid={Boolean(error)}
+      className={wide ? "sm:col-span-2" : ""}
+    >
+      <span
+        className={`mb-1.5 block text-sm font-semibold ${error ? "text-red-700" : ""}`}
+      >
+        {label}
+      </span>
+      <div
+        className={`[&>input]:w-full [&>input]:rounded-xl [&>input]:border [&>input]:px-3 [&>input]:py-3 [&>input]:text-sm [&>select]:w-full [&>select]:rounded-xl [&>select]:border [&>select]:px-3 [&>select]:py-3 [&>select]:text-sm [&>textarea]:w-full [&>textarea]:rounded-xl [&>textarea]:border [&>textarea]:px-3 [&>textarea]:py-3 [&>textarea]:text-sm ${
+          error
+            ? "rounded-xl [&_input]:border-red-400 [&_input]:bg-red-50/50 [&_input]:outline-red-400 [&_select]:border-red-400 [&_select]:bg-red-50/50 [&_select]:outline-red-400 [&_textarea]:border-red-400 [&_textarea]:bg-red-50/50"
+            : ""
+        }`}
+      >
         {children}
       </div>
+      {error && (
+        <span className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-red-700">
+          <AlertTriangle className="mt-0.5 shrink-0" size={13} /> {error}
+        </span>
+      )}
       {help && (
-        <span className="mt-1 block text-[11px] text-stone-400">{help}</span>
+        <span
+          className={`mt-1 block text-[11px] ${error ? "text-stone-500" : "text-stone-400"}`}
+        >
+          {help}
+        </span>
       )}
     </label>
   );
