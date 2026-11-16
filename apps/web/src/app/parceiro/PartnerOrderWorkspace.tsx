@@ -149,11 +149,48 @@ const receivableStatusLabels: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 const distributorCatalogTones = [
-  "border-[#d9e8e1] bg-[#f1f8f4]",
-  "border-[#eadfce] bg-[#fbf5ea]",
-  "border-[#d9e5ec] bg-[#f1f7fa]",
-  "border-[#e5dcef] bg-[#f7f2fb]",
+  "border-[#e0cca9] bg-[#faf7f2]",
+  "border-[#e8dec9] bg-[#f4efe5]",
+  "border-[#d6cec8] bg-[#fbf9f4]",
+  "border-[#dbcfb9] bg-[#efe7da]",
 ];
+const orderStatusTone = (order: Order) => {
+  if (order.receivableStatus === "OVERDUE") {
+    return {
+      row: "bg-[#fff4f1] hover:bg-[#ffebe7]",
+      badge: "bg-[#f9ddd7] text-[#9d3f35]",
+      card: "border-[#e6aaa0] bg-[#fff8f6]",
+    };
+  }
+  if (order.status === "DELIVERED") {
+    return {
+      row: "bg-[#f1f8f4] hover:bg-[#e8f4ed]",
+      badge: "bg-[#dceee4] text-[#155449]",
+      card: "border-[#bddcca] bg-[#f6fbf8]",
+    };
+  }
+  if (
+    ["INVOICED", "SHIPPED", "READY_TO_SHIP", "PICKING"].includes(order.status)
+  ) {
+    return {
+      row: "bg-[#f1f7fa] hover:bg-[#e8f2f6]",
+      badge: "bg-[#dceaf0] text-[#285d6b]",
+      card: "border-[#bed4de] bg-[#f6fafc]",
+    };
+  }
+  if (["CONFIRMED", "RESERVED", "IN_PRODUCTION"].includes(order.status)) {
+    return {
+      row: "bg-[#faf7f2] hover:bg-[#f4efe5]",
+      badge: "bg-[#efe7da] text-[#8a6020]",
+      card: "border-[#e0cca9] bg-[#fdfbf7]",
+    };
+  }
+  return {
+    row: "bg-[#fffaf0] hover:bg-[#fbf2df]",
+    badge: "bg-[#f6e8c9] text-[#8a6020]",
+    card: "border-[#ead2a2] bg-[#fffcf5]",
+  };
+};
 const purposeLabel = (value: string) => purposeLabels[value] || value;
 const outcomeLabel = (value: string) => outcomeLabels[value] || value;
 const creditStatusLabel = (value?: string) =>
@@ -510,15 +547,17 @@ export function PartnerOrderWorkspace({
 
   return (
     <section
-      className={`border border-emerald-900/10 ${
+      className={`border ${
         isDistributor
-          ? "rounded-2xl bg-[#edf3ef] p-3 sm:p-4"
-          : "rounded-3xl bg-[#eaf2ec] p-5 sm:p-7"
+          ? "rounded-2xl border-[#e0cca9] bg-[#f4efe5] p-3 pb-24 sm:p-4 sm:pb-4"
+          : "rounded-3xl border-emerald-900/10 bg-[#eaf2ec] p-5 sm:p-7"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+          <p
+            className={`text-xs font-bold uppercase tracking-[.16em] ${isDistributor ? "text-[#8a6020]" : "text-[#087568]"}`}
+          >
             Operação liberada ·{" "}
             {accessLevel === "DISTRIBUTOR"
               ? "Distribuidor"
@@ -557,7 +596,7 @@ export function PartnerOrderWorkspace({
             disabled={
               (isDistributor && customers.length !== 1) || !variants.length
             }
-            className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#214f46] disabled:cursor-not-allowed disabled:opacity-45"
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${isDistributor ? "bg-[#3b2a1f] hover:bg-[#5b4232]" : "bg-[#14201d] hover:bg-[#214f46]"}`}
           >
             <ShoppingCart size={15} /> Novo pedido
           </button>
@@ -584,10 +623,13 @@ export function PartnerOrderWorkspace({
       )}
 
       {isDistributor && availableProductsByLine.length > 0 && (
-        <section className="mt-3 rounded-2xl border border-emerald-900/10 bg-white p-3 sm:p-4">
+        <section
+          id="catalogo-signa"
+          className="mt-3 scroll-mt-4 rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] p-3 sm:p-4"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-emerald-800">
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#8a6020]">
                 Produtos disponíveis
               </p>
               <p className="mt-1 text-xs leading-5 text-stone-500">
@@ -595,7 +637,7 @@ export function PartnerOrderWorkspace({
                 data e produz sob encomenda.
               </p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+            <span className="rounded-full bg-[#efe7da] px-3 py-1 text-xs font-bold text-[#8a6020]">
               {variants.length} apresentações
             </span>
           </div>
@@ -605,7 +647,7 @@ export function PartnerOrderWorkspace({
                 key={group.line}
                 className={`rounded-xl border p-3 ${distributorCatalogTones[groupIndex % distributorCatalogTones.length]}`}
               >
-                <p className="text-sm font-bold text-stone-800">{group.line}</p>
+                <p className="text-sm font-bold text-[#3b2a1f]">{group.line}</p>
                 <div className="mt-2 space-y-1.5">
                   {group.items.map((variant) => (
                     <p
@@ -1118,7 +1160,7 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-center justify-between gap-4 border-b border-stone-100 bg-white/95 px-4 py-3 backdrop-blur sm:-top-5 sm:-mx-5 sm:-mt-5 sm:px-5">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#087568]">
+                  <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#8a6020]">
                     Novo pedido Signa
                   </p>
                   <h3 className="text-lg font-semibold">Monte seu pedido</h3>
@@ -1134,14 +1176,14 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && customers.length === 1 && customers[0] ? (
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              <div className="rounded-xl border border-[#e0cca9] bg-[#faf7f2] p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#8a6020]">
                   Comprador
                 </p>
-                <p className="mt-1 text-sm font-bold text-emerald-950">
+                <p className="mt-1 text-sm font-bold text-[#3b2a1f]">
                   {customers[0].tradeName || customers[0].name}
                 </p>
-                <p className="mt-1 text-xs text-emerald-800">
+                <p className="mt-1 text-xs text-[#6b5747]">
                   Pedido exclusivo para o próprio distribuidor ·{" "}
                   {catalog?.exclusive
                     ? `${catalog.productCount} apresentação(ões) disponíveis na sua lista exclusiva`
@@ -1439,13 +1481,13 @@ export function PartnerOrderWorkspace({
                 type="button"
                 disabled={busy}
                 onClick={() => void calculateQuote()}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-800 px-4 py-2.5 text-xs font-bold text-emerald-900 disabled:opacity-50"
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold disabled:opacity-50 ${isDistributor ? "border-[#8a6020] text-[#8a6020]" : "border-emerald-800 text-emerald-900"}`}
               >
                 <RefreshCw size={13} /> Calcular
               </button>
               <button
                 disabled={busy || !quote}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 ${isDistributor ? "bg-[#3b2a1f]" : "bg-[#14201d]"}`}
               >
                 <Send size={13} /> Enviar pedido
               </button>
@@ -1454,7 +1496,10 @@ export function PartnerOrderWorkspace({
         </>
       )}
 
-      <div className={isDistributor ? "mt-4" : "mt-7"}>
+      <div
+        id={isDistributor ? "pedidos-signa" : undefined}
+        className={`${isDistributor ? "mt-4 scroll-mt-4" : "mt-7"}`}
+      >
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h3 className="text-base font-bold">Meus pedidos</h3>
@@ -1494,7 +1539,7 @@ export function PartnerOrderWorkspace({
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {orders.map((order) => (
-                    <tr key={order.id}>
+                    <tr key={order.id} className={orderStatusTone(order).row}>
                       <td className="px-4 py-3 font-bold">{order.code}</td>
                       <td className="px-4 py-3">{order.customerName}</td>
                       <td className="px-4 py-3 text-stone-500">
@@ -1504,7 +1549,9 @@ export function PartnerOrderWorkspace({
                         {money.format(Number(order.totalAmount))}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-800">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${orderStatusTone(order).badge}`}
+                        >
                           {statusLabel[order.status] || order.status}
                         </span>
                       </td>
@@ -1589,16 +1636,44 @@ export function PartnerOrderWorkspace({
           </p>
         )}
       </div>
+      {isDistributor && !showOrder && (
+        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-[#e0cca9] bg-[#fbf9f4]/95 p-1.5 shadow-xl backdrop-blur md:hidden">
+          <a
+            href="#catalogo-signa"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#6b5747]"
+          >
+            <ClipboardCheck size={17} />
+            Produtos
+          </a>
+          <button
+            type="button"
+            onClick={() => setShowOrder(true)}
+            disabled={customers.length !== 1 || !variants.length}
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl bg-[#3b2a1f] text-[10px] font-bold text-white disabled:opacity-45"
+          >
+            <Plus size={17} />
+            Novo pedido
+          </button>
+          <a
+            href="#pedidos-signa"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#6b5747]"
+          >
+            <History size={17} />
+            Pedidos
+          </a>
+        </nav>
+      )}
     </section>
   );
 }
 
 function DistributorOrderCard({ order }: { order: Order }) {
+  const tone = orderStatusTone(order);
   const paymentLabel =
     receivableStatusLabels[order.receivableStatus || ""] ||
     (order.paymentType === "TERM" ? "Aguardando faturamento" : "À vista");
   return (
-    <article className="rounded-2xl border border-stone-200 bg-white p-3.5 shadow-sm">
+    <article className={`rounded-2xl border p-3.5 shadow-sm ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-bold">{order.code}</p>
@@ -1611,11 +1686,11 @@ function DistributorOrderCard({ order }: { order: Order }) {
         </p>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-xl bg-[#f7f7f3] p-2.5">
+        <div className={`rounded-xl p-2.5 ${tone.badge}`}>
           <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
             Pedido
           </p>
-          <p className="mt-1 text-xs font-bold text-amber-800">
+          <p className="mt-1 text-xs font-bold">
             {statusLabel[order.status] || order.status}
           </p>
         </div>

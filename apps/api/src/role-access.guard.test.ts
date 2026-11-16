@@ -531,6 +531,11 @@ test("distributor catalog is filtered and priced on the server", () => {
   assert.match(source, /Produto não liberado na lista comercial/);
   assert.match(source, /aguardando aprovação de José ou Suzi/);
   assert.match(source, /data desejada será confirmada/);
+  assert.match(source, /SalesOrderCustomerLifecycleService/);
+  assert.match(source, /ORDER_SUBMITTED/);
+  assert.match(source, /SALES_DISTRIBUTOR_ORDER/);
+  assert.match(source, /SalesOrderCustomerEvent/);
+  assert.match(source, /notifications: partnerNotifications/);
 });
 
 test("Signa catalog exposes only approved combinations and maps Reserva to Raro", () => {
