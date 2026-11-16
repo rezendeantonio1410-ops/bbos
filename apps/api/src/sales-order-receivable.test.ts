@@ -17,6 +17,13 @@ test("uses the first term to calculate the receivable due date", () => {
     resolveSalesOrderDueDate(issueDate, null).toISOString(),
     "2026-12-04T12:00:00.000Z",
   );
+  assert.equal(
+    resolveSalesOrderDueDate(
+      issueDate,
+      "28 dias após a emissão da NF-e",
+    ).toISOString(),
+    "2026-12-02T12:00:00.000Z",
+  );
 });
 
 test("creates an idempotent title for an authorized term order", async () => {
@@ -53,10 +60,10 @@ test("creates an idempotent title for an authorized term order", async () => {
   assert.deepEqual(upsert.update, { invoiceId: "12345" });
 });
 
-test("Bling authorization and reconciliation both ensure the title", () => {
+test("all Bling authorization and reconciliation paths ensure the title", () => {
   const source = readFileSync(
     join(__dirname, "integrations/bling/bling-outbox.service.ts"),
     "utf8",
   );
-  assert.equal(source.match(/ensureSalesOrderReceivable\(/g)?.length, 2);
+  assert.equal(source.match(/ensureSalesOrderReceivable\(/g)?.length, 3);
 });

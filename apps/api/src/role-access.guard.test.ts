@@ -481,6 +481,8 @@ test("partner portal data queries are always scoped to the signed partner and co
   assert.match(source, /so\."createdByStorefrontPartnerId"=\$2/);
   assert.match(source, /assertPartnerOrder/);
   assert.match(source, /orders\/:orderId\/billing\/pdf/);
+  assert.match(source, /orders\/:orderId\/invoice\/pdf/);
+  assert.match(source, /O DANFE ficará disponível após a autorização da NF-e/);
   assert.match(source, /"Cache-Control": "private, no-store"/);
   assert.match(source, /"SELLER", "SALES_MANAGER", "DISTRIBUTOR"/);
   assert.match(source, /partner\.portalAccessLevel === "SALES_MANAGER"/);
@@ -518,6 +520,9 @@ test("distributor catalog is filtered and priced on the server", () => {
   assert.match(source, /catalogSortOrder/);
   assert.match(source, /distributorCatalog\.variantIds\.has/);
   assert.match(source, /customerProductPriceId/);
+  assert.match(source, /paymentTermDays/);
+  assert.match(source, /dias após a emissão da NF-e/);
+  assert.match(source, /termApprovals\.ensureForOrder/);
   assert.match(source, /baseProductPriceId/);
   assert.match(source, /Produto não liberado na lista comercial/);
   assert.match(source, /aguardando aprovação de José ou Suzi/);

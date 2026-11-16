@@ -78,6 +78,7 @@ type PortalData = {
     paymentDate?: string | null;
     invoiceNumber?: string | null;
     invoiceStatus?: string | null;
+    invoicePdfAvailable?: boolean;
     billingAvailable?: boolean;
   }>;
   updatedAt: string;
