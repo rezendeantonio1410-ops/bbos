@@ -14,6 +14,7 @@ import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { SalesOrdersService } from "./sales-orders.service";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
+import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
@@ -34,6 +35,7 @@ export class PartnerPortalController {
   constructor(
     private readonly salesOrders: SalesOrdersService,
     private readonly termApprovals: SalesOrderTermApprovalService,
+    private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
   ) {}
 
   private async context(request: { user?: PartnerActor }) {
@@ -447,10 +449,15 @@ export class PartnerPortalController {
     const isSalesManager = partner.portalAccessLevel === "SALES_MANAGER";
     const isDistributor = partner.portalAccessLevel === "DISTRIBUTOR";
 
-    const [metricsRows, coupons, businesses, partnerOrders] = await Promise.all(
-      [
-        this.database.$queryRawUnsafe<any[]>(
-          `SELECT
+    const [
+      metricsRows,
+      coupons,
+      businesses,
+      partnerOrders,
+      partnerNotifications,
+    ] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT
             COUNT(r.id) FILTER (WHERE r.status <> 'CANCELLED')::int AS "businessCount",
             COALESCE(SUM(r."netSubtotalCents") FILTER (WHERE r.status <> 'CANCELLED'),0)::int AS "salesCents",
             COALESCE(SUM(r."commissionCents") FILTER (WHERE r.status <> 'CANCELLED'),0)::int AS "commissionEarnedCents",
@@ -464,11 +471,11 @@ export class PartnerPortalController {
             AND ap.category='COMISSAO_CUPOM'
             AND ap."brokerCommissionPayableKey"=('coupon:' || r.id)
           WHERE partner.id=$1 AND partner."companyId"=$2`,
-          partner.id,
-          actor.companyId,
-        ),
-        this.database.$queryRawUnsafe<any[]>(
-          `SELECT c.id,c.code,c.description,c."discountType",c."discountValue",
+        partner.id,
+        actor.companyId,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT c.id,c.code,c.description,c."discountType",c."discountValue",
                 c."commissionType",c."commissionValue",c."commissionBasis",
                 c."usageLimit",c."usageCount",c."validFrom",c."validUntil",c.active,
                 COUNT(r.id) FILTER (WHERE r.status <> 'CANCELLED')::int AS "confirmedUses",
@@ -478,11 +485,11 @@ export class PartnerPortalController {
           WHERE c."companyId"=$1 AND c."partnerId"=$2
           GROUP BY c.id
           ORDER BY c."createdAt" DESC`,
-          actor.companyId,
-          partner.id,
-        ),
-        this.database.$queryRawUnsafe<any[]>(
-          `SELECT r.id,r."couponCode",r."grossSubtotalCents",r."discountCents",
+        actor.companyId,
+        partner.id,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT r.id,r."couponCode",r."grossSubtotalCents",r."discountCents",
                 r."netSubtotalCents",r."commissionCents",r.status,r."createdAt",
                 so.code AS "orderCode",ap.status AS "payableStatus",
                 COALESCE(ROUND(ap."openAmount" * 100),0)::int AS "commissionOpenCents",
@@ -494,11 +501,11 @@ export class PartnerPortalController {
           WHERE r."companyId"=$1 AND r."partnerId"=$2 AND r.status <> 'CANCELLED'
           ORDER BY r."createdAt" DESC
           LIMIT 100`,
-          actor.companyId,
-          partner.id,
-        ),
-        this.database.$queryRawUnsafe<any[]>(
-          `SELECT so.id,so.code,so.status::text AS status,so."totalAmount",so."orderedAt",
+        actor.companyId,
+        partner.id,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT so.id,so.code,so.status::text AS status,so."totalAmount",so."orderedAt",
                 so."paymentType"::text AS "paymentType",so."paymentTermsSnapshot",
                 c.name AS "customerName",ar.status::text AS "receivableStatus",
                 ar."dueDate",ar.amount AS "receivableAmount",ar."openAmount",
@@ -540,13 +547,34 @@ export class PartnerPortalController {
             AND so.status <> 'CANCELLED'
           ORDER BY so."orderedAt" DESC
           LIMIT 100`,
-          actor.companyId,
-          partner.id,
-          isSalesManager,
-          isDistributor,
-        ),
-      ],
-    );
+        actor.companyId,
+        partner.id,
+        isSalesManager,
+        isDistributor,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT event.id,event."salesOrderId" AS "orderId",
+                  COALESCE(so."orderNumber",so.code) AS "orderCode",
+                  event."eventType",event.title,event.detail,event.source,event."occurredAt"
+             FROM "SalesOrderCustomerEvent" event
+             JOIN "SalesOrder" so ON so.id=event."salesOrderId"
+            WHERE event."companyId"=$1 AND event.public=TRUE
+              AND (
+                $3::boolean
+                OR ($4::boolean AND EXISTS (
+                  SELECT 1 FROM "StorefrontPartnerCustomer" link
+                   WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+                ))
+                OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
+              )
+            ORDER BY event."occurredAt" DESC
+            LIMIT 30`,
+        actor.companyId,
+        partner.id,
+        isSalesManager,
+        isDistributor,
+      ),
+    ]);
 
     return {
       partner,
@@ -574,6 +602,7 @@ export class PartnerPortalController {
       coupons,
       businesses,
       partnerOrders,
+      notifications: partnerNotifications,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -1185,6 +1214,40 @@ export class PartnerPortalController {
         email: partner.email,
         role: actor.role,
       });
+    }
+    await this.customerLifecycle.record(
+      order.id,
+      "ORDER_SUBMITTED",
+      "Pedido enviado para aprovação",
+      `${partner.name} enviou o pedido ${orderNumber} para aprovação da Bispo Coffees.`,
+      "BBOS",
+      `partner-order:submitted:${order.id}`,
+      {
+        partnerId: partner.id,
+        requestedDeliveryDate: body.expectedDeliveryDate || null,
+      },
+      false,
+    );
+    if (partner.portalAccessLevel === "DISTRIBUTOR") {
+      const notificationMessage = `${partner.name} enviou o pedido ${orderNumber}. Confirme a data de entrega e aprove a liberação para produção.`;
+      for (const targetRole of ["ADMIN", "EXECUTIVE"]) {
+        const notificationType = `SALES_DISTRIBUTOR_ORDER:${order.id}:${targetRole}`;
+        await this.database.$executeRawUnsafe(
+          `INSERT INTO "OperationalNotification"
+            (id,"companyId",type,title,message,"targetRole","createdAt")
+           SELECT $1,$2,$3,$4,$5,$6,NOW()
+            WHERE NOT EXISTS (
+              SELECT 1 FROM "OperationalNotification"
+               WHERE "companyId"=$2 AND type=$3 AND "targetRole"=$6
+            )`,
+          randomUUID(),
+          actor.companyId,
+          notificationType,
+          "Pedido de distribuidor aguardando aprovação",
+          notificationMessage,
+          targetRole,
+        );
+      }
     }
     return {
       id: order.id,
