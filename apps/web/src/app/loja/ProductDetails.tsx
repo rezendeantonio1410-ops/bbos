@@ -25,6 +25,7 @@ export type ProductStory = StoreProductStory & {
     history: string[];
     varieties: string;
     gallery: { src: string; alt: string; caption: string }[];
+    packageGallery?: { src: string; alt: string; caption: string }[];
   };
 };
 

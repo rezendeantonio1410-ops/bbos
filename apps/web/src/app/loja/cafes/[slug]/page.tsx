@@ -46,6 +46,8 @@ export default async function MicrolotPage({ params }: PageProps) {
   const producerPhoto = details.gallery[0];
   const farmPhoto = details.gallery[1];
   if (!producerPhoto || !farmPhoto) notFound();
+  const packagePhotos = details.packageGallery ?? [];
+  const packagePhoto = packagePhotos[0];
   const cartProduct = {
     id: product.id,
     name: product.name,
@@ -98,16 +100,18 @@ export default async function MicrolotPage({ params }: PageProps) {
             </Link>
             <div className={styles.packageStage}>
               <span className={styles.edition}>EDIÇÃO LIMITADA</span>
-              <div
-                className={styles.packagePlaceholder}
-                aria-label="Espaço reservado para a fotografia da embalagem do Raro"
-              >
-                <small>EDIÇÃO LIMITADA</small>
-                <span>BISPO</span>
-                <b>Raro</b>
-                <em>250 g</em>
-              </div>
-              <p>Espaço reservado para a fotografia oficial da embalagem.</p>
+              {packagePhoto ? (
+                <div className={styles.packagePhoto}>
+                  <Image
+                    src={packagePhoto.src}
+                    alt={packagePhoto.alt}
+                    fill
+                    priority
+                    sizes="(max-width: 600px) 224px, 315px"
+                  />
+                </div>
+              ) : null}
+              <p>Fotografia oficial da embalagem desta edição.</p>
             </div>
             <div className={styles.heroPhotos}>
               <figure>
@@ -162,6 +166,25 @@ export default async function MicrolotPage({ params }: PageProps) {
             </div>
           </div>
         </section>
+
+        {packagePhotos.length > 1 ? (
+          <section
+            className={styles.packageGallery}
+            aria-label="Fotografias da embalagem do café Raro"
+          >
+            {packagePhotos.slice(1).map((photo) => (
+              <figure key={photo.src}>
+                <Image
+                  src={photo.src}
+                  alt={photo.alt}
+                  fill
+                  sizes="(max-width: 720px) 82vw, 33vw"
+                />
+                <figcaption>{photo.caption}</figcaption>
+              </figure>
+            ))}
+          </section>
+        ) : null}
 
         <nav className={styles.storyNav} aria-label="Conteúdo do lote">
           <a href="#perfil">A xícara</a>
