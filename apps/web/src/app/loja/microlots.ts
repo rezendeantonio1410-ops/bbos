@@ -32,7 +32,7 @@ export const alexandreMicrolot: Microlot = {
     notes: "86,5 pontos · Origem única · Safra limitada",
     ...storefrontCommerce("raros"),
     tone: "#8E2721",
-    image: "/brand/products/raros/alexandre-colheita.webp",
+    image: "/brand/products/raros/carlos-alexandre-embalagem-frente.jpg",
     tag: "poucas unidades",
     story: {
       promise:
@@ -86,6 +86,28 @@ export const alexandreMicrolot: Microlot = {
             src: "/brand/products/raros/alexandre-secagem.webp",
             alt: "Cerejas de café durante a secagem",
             caption: "Cuidado depois da colheita",
+          },
+        ],
+        packageGallery: [
+          {
+            src: "/brand/products/raros/carlos-alexandre-embalagem-frente.jpg",
+            alt: "Embalagem oficial do café Bispo Raro de Carlos Alexandre Siqueira",
+            caption: "Embalagem oficial · frente",
+          },
+          {
+            src: "/brand/products/raros/carlos-alexandre-embalagem-lateral.jpg",
+            alt: "Embalagem do café Bispo Raro vista de lado",
+            caption: "Edição limitada · 250 g",
+          },
+          {
+            src: "/brand/products/raros/carlos-alexandre-embalagem-verso.jpg",
+            alt: "Verso da embalagem do café Bispo Raro com a história do produtor",
+            caption: "Origem, história e preparo",
+          },
+          {
+            src: "/brand/products/raros/carlos-alexandre-cafe-servido.jpg",
+            alt: "Café Bispo Raro ao lado de uma xícara e de uma jarra de café servido",
+            caption: "Da origem à xícara",
           },
         ],
       },
