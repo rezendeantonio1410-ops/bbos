@@ -19,6 +19,7 @@ type UserRow = {
   role: string;
   active: boolean;
   avatarUrl?: string | null;
+  storefrontPartnerId?: string | null;
 };
 
 const roleLabel: Record<string, string> = {
@@ -61,7 +62,9 @@ export default function UsersPage() {
       });
       const body = await response.json().catch(() => []);
       if (!response.ok)
-        throw new Error(body?.message ?? "Não foi possível carregar os usuários.");
+        throw new Error(
+          body?.message ?? "Não foi possível carregar os usuários.",
+        );
       setUsers(body);
     } catch (caught) {
       setError(
@@ -120,12 +123,15 @@ export default function UsersPage() {
     setResetError("");
     setResetDone("");
     try {
-      const response = await fetch(`/api/admin/users/${resetTarget.id}/password`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ password: resetPassword }),
-      });
+      const response = await fetch(
+        `/api/admin/users/${resetTarget.id}/password`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ password: resetPassword }),
+        },
+      );
       const body = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(body?.message ?? "Não foi possível redefinir a senha.");
@@ -158,7 +164,9 @@ export default function UsersPage() {
     reader.onload = () => {
       const value = typeof reader.result === "string" ? reader.result : null;
       if (!value || value.length > 3_000_000) {
-        setAvatarError("A imagem é muito grande. Use JPG, PNG ou WebP de até 2 MB.");
+        setAvatarError(
+          "A imagem é muito grande. Use JPG, PNG ou WebP de até 2 MB.",
+        );
         return;
       }
       setAvatarPreview(value);
@@ -171,19 +179,24 @@ export default function UsersPage() {
     setAvatarSaving(true);
     setAvatarError("");
     try {
-      const response = await fetch(`/api/admin/users/${avatarTarget.id}/avatar`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ avatarUrl: avatarPreview }),
-      });
+      const response = await fetch(
+        `/api/admin/users/${avatarTarget.id}/avatar`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ avatarUrl: avatarPreview }),
+        },
+      );
       const body = (await response.json().catch(() => ({}))) as UserRow & {
         message?: string;
       };
       if (!response.ok)
         throw new Error(body.message ?? "Não foi possível atualizar a foto.");
       setUsers((current) =>
-        current.map((user) => (user.id === body.id ? { ...user, ...body } : user)),
+        current.map((user) =>
+          user.id === body.id ? { ...user, ...body } : user,
+        ),
       );
       setDone(`Foto oficial de ${body.name} atualizada no BBOS.`);
       setAvatarTarget(null);
@@ -209,8 +222,8 @@ export default function UsersPage() {
           Usuários e Acessos
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-stone-500">
-          Cada pessoa entra com sua própria conta. O BBOS mantém ações, sessões e
-          identidade separadas.
+          Cada pessoa entra com sua própria conta. O BBOS mantém ações, sessões
+          e identidade separadas.
         </p>
       </header>
       <div className="grid gap-5 lg:grid-cols-[1fr_.9fr]">
@@ -252,8 +265,12 @@ export default function UsersPage() {
                       )}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{user.name}</p>
-                      <p className="truncate text-xs text-stone-500">{user.email}</p>
+                      <p className="truncate text-sm font-semibold">
+                        {user.name}
+                      </p>
+                      <p className="truncate text-xs text-stone-500">
+                        {user.email}
+                      </p>
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
@@ -267,6 +284,19 @@ export default function UsersPage() {
                     >
                       {user.active ? "Ativo" : "Inativo"}
                     </p>
+                    {user.role === "SALES" && (
+                      <p
+                        className={`mt-1 text-[11px] font-semibold ${
+                          user.storefrontPartnerId
+                            ? "text-emerald-700"
+                            : "text-amber-700"
+                        }`}
+                      >
+                        {user.storefrontPartnerId
+                          ? "Carteira vinculada"
+                          : "Carteira pendente"}
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={() => openPasswordReset(user)}
@@ -294,7 +324,9 @@ export default function UsersPage() {
             </span>
             <div>
               <h2 className="font-semibold">Novo acesso</h2>
-              <p className="text-xs text-stone-500">Crie o login sem sair do BBOS.</p>
+              <p className="text-xs text-stone-500">
+                Crie o login sem sair do BBOS.
+              </p>
             </div>
           </div>
           <div className="mt-5 space-y-4">
@@ -321,7 +353,9 @@ export default function UsersPage() {
                 <option value="ADMIN">Sócio administrador (ADMIN)</option>
                 <option value="EXECUTIVE">Executivo</option>
                 <option value="FINANCE">Financeiro</option>
-                <option value="ACCOUNTANT">Contabilidade (somente leitura)</option>
+                <option value="ACCOUNTANT">
+                  Contabilidade (somente leitura)
+                </option>
                 <option value="SALES">Vendedor / Comercial</option>
                 <option value="INDUSTRIAL">Produção</option>
                 <option value="MARKETPLACE_OPERATOR">
@@ -336,8 +370,9 @@ export default function UsersPage() {
               )}
               {role === "ACCOUNTANT" && (
                 <p className="mt-2 text-[11px] leading-5 text-violet-700">
-                  Consulta financeira, fiscal, custos, clientes, pedidos e vendas.
-                  Não altera pagamentos, notas, estoque, crédito ou cadastros.
+                  Consulta financeira, fiscal, custos, clientes, pedidos e
+                  vendas. Não altera pagamentos, notas, estoque, crédito ou
+                  cadastros.
                 </p>
               )}
             </Label>
@@ -357,8 +392,8 @@ export default function UsersPage() {
                 />
               </div>
               <p className="mt-1 text-[11px] text-amber-700">
-                Use no mínimo 12 caracteres, com maiúsculas, minúsculas e números.
-                Nunca reutilize uma senha pessoal.
+                Use no mínimo 12 caracteres, com maiúsculas, minúsculas e
+                números. Nunca reutilize uma senha pessoal.
               </p>
             </Label>
           </div>
@@ -384,8 +419,9 @@ export default function UsersPage() {
           <div className="mt-4 flex gap-2 rounded-2xl bg-violet-50 p-3 text-xs leading-5 text-violet-900">
             <ShieldCheck size={17} className="mt-0.5 shrink-0" />
             <p>
-              Administradores têm o mesmo nível de gestão e veem os mesmos dados da
-              empresa, mas cada ação permanece ligada ao usuário que a executou.
+              Administradores têm o mesmo nível de gestão e veem os mesmos dados
+              da empresa, mas cada ação permanece ligada ao usuário que a
+              executou.
             </p>
           </div>
         </section>
@@ -431,8 +467,9 @@ export default function UsersPage() {
                 </div>
               </Label>
               <p className="mt-2 text-xs leading-5 text-amber-700">
-                Mínimo de 12 caracteres, com maiúsculas, minúsculas e números. Ao
-                salvar, todas as sessões anteriores desse usuário serão encerradas.
+                Mínimo de 12 caracteres, com maiúsculas, minúsculas e números.
+                Ao salvar, todas as sessões anteriores desse usuário serão
+                encerradas.
               </p>
             </div>
             {resetError && (
@@ -510,7 +547,13 @@ export default function UsersPage() {
   );
 }
 
-function Label({ title, children }: { title: string; children: React.ReactNode }) {
+function Label({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block text-sm font-semibold text-stone-700">
       <span>{title}</span>

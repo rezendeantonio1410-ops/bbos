@@ -473,6 +473,17 @@ test("o vendedor não acessa e-commerce nem marketplaces", () => {
   }
 });
 
+test("novos vendedores recebem carteira comercial isolada no cadastro", () => {
+  const source = readFileSync(
+    join(__dirname, "admin-users.controller.ts"),
+    "utf8",
+  );
+  assert.match(source, /role === UserRole\.SALES/);
+  assert.match(source, /transaction\.storefrontPartner\.create/);
+  assert.match(source, /transaction\.broker\.create/);
+  assert.match(source, /storefrontPartnerId,/);
+});
+
 test("partner portal data queries are always scoped to the signed partner and company", () => {
   const source = readFileSync(
     join(__dirname, "partner-portal.controller.ts"),

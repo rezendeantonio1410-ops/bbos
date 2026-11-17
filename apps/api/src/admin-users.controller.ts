@@ -12,6 +12,7 @@ import {
 import { prisma, UserRole } from "@bbos/database";
 import { AuthService, hashPassword } from "./auth.service";
 import { passwordPolicyError } from "./auth-security";
+import { randomUUID } from "node:crypto";
 
 @Controller("admin/users")
 export class AdminUsersController {
@@ -39,6 +40,7 @@ export class AdminUsersController {
         role: true,
         active: true,
         avatarUrl: true,
+        storefrontPartnerId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -68,24 +70,57 @@ export class AdminUsersController {
     const existing = await this.db.user.findUnique({ where: { email } });
     if (existing)
       throw new BadRequestException("Já existe um usuário com este e-mail.");
-    return this.db.user.create({
-      data: {
-        companyId: actor.companyId,
-        name,
-        email,
-        passwordHash: hashPassword(password),
-        role: role as UserRole,
-        active: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        avatarUrl: true,
-        createdAt: true,
-      },
+    return this.db.$transaction(async (transaction) => {
+      let storefrontPartnerId: string | null = null;
+      if (role === UserRole.SALES) {
+        storefrontPartnerId = randomUUID();
+        await transaction.storefrontPartner.create({
+          data: {
+            id: storefrontPartnerId,
+            companyId: actor.companyId,
+            name,
+            contactName: name,
+            email,
+            active: true,
+            isSalesPartner: true,
+            isSalesBroker: true,
+            isGreenCoffeeBroker: false,
+            portalAccessLevel: "SELLER",
+          },
+        });
+        await transaction.broker.create({
+          data: {
+            id: randomUUID(),
+            companyId: actor.companyId,
+            businessPartnerId: storefrontPartnerId,
+            name,
+            contactName: name,
+            email,
+            active: true,
+          },
+        });
+      }
+      return transaction.user.create({
+        data: {
+          companyId: actor.companyId,
+          name,
+          email,
+          passwordHash: hashPassword(password),
+          role: role as UserRole,
+          active: true,
+          storefrontPartnerId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          active: true,
+          avatarUrl: true,
+          storefrontPartnerId: true,
+          createdAt: true,
+        },
+      });
     });
   }
 
