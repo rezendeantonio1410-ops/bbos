@@ -14,6 +14,7 @@ import { prisma, UserRole } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService, hashPassword } from "./auth.service";
 import { passwordPolicyError } from "./auth-security";
+import { salesPortfolioPartnerId } from "./sales-portfolio";
 
 const internationalPhone = (value: unknown) => {
   const raw = String(value ?? "").trim();
@@ -29,6 +30,42 @@ const internationalPhone = (value: unknown) => {
 const documentDigits = (value: unknown) =>
   String(value ?? "").replace(/\D/g, "");
 
+const salesCommissionPolicy = (value: Record<string, any>) => {
+  const mode = String(value.salesCommissionMode ?? "")
+    .trim()
+    .toUpperCase();
+  if (mode && !["PERCENTAGE", "PER_PACKAGE"].includes(mode)) {
+    throw new BadRequestException("Modalidade de comissão inválida.");
+  }
+  const percent =
+    value.salesCommissionPercent === "" || value.salesCommissionPercent == null
+      ? null
+      : Number(value.salesCommissionPercent);
+  const perPackage =
+    value.salesCommissionPerPackage === "" ||
+    value.salesCommissionPerPackage == null
+      ? null
+      : Number(value.salesCommissionPerPackage);
+  if (
+    percent !== null &&
+    (!Number.isFinite(percent) || percent < 0 || percent > 100)
+  ) {
+    throw new BadRequestException(
+      "A comissão percentual deve estar entre 0% e 100%.",
+    );
+  }
+  if (perPackage !== null && (!Number.isFinite(perPackage) || perPackage < 0)) {
+    throw new BadRequestException(
+      "A comissão por pacote não pode ser negativa.",
+    );
+  }
+  return {
+    salesCommissionMode: mode || null,
+    salesCommissionPercent: mode === "PERCENTAGE" ? percent : null,
+    salesCommissionPerPackage: mode === "PER_PACKAGE" ? perPackage : null,
+  };
+};
+
 @Controller("storefront/partners")
 export class StorefrontPartnersController {
   private readonly database = prisma;
@@ -38,6 +75,14 @@ export class StorefrontPartnersController {
     const actor = await this.auth.resolve(this.auth.readToken(request));
     if (!actor) throw new UnauthorizedException("Sessão inválida.");
     return actor;
+  }
+
+  private ensureAdministrator(actor: { role: UserRole | string }) {
+    if (actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        "Somente José ou Suzi podem configurar representantes e comissões.",
+      );
+    }
   }
 
   private ensureOperationalRole(roles: {
@@ -107,6 +152,7 @@ export class StorefrontPartnersController {
   @Get()
   async list(@Req() request: any) {
     const actor = await this.actor(request);
+    const partnerScope = salesPortfolioPartnerId(actor);
     const partners = await this.database.$queryRawUnsafe<any[]>(
       `SELECT partner.*, portal.id AS "portalUserId", portal.email AS "portalEmail",
               portal.active AS "portalActive",
@@ -117,8 +163,10 @@ export class StorefrontPartnersController {
          LEFT JOIN "User" portal ON portal."storefrontPartnerId"=partner.id
          LEFT JOIN "Broker" broker ON broker."businessPartnerId"=partner.id
         WHERE partner."companyId"=$1
+          AND ($2::text IS NULL OR partner.id=$2)
         ORDER BY partner.name ASC`,
       actor.companyId,
+      partnerScope,
     );
     if (actor.role !== UserRole.SALES) return partners;
     return partners.map((partner) => ({
@@ -345,6 +393,7 @@ export class StorefrontPartnersController {
   @Post()
   async create(@Req() request: any, @Body() body: Record<string, any>) {
     const actor = await this.actor(request);
+    this.ensureAdministrator(actor);
     const name = String(body.name ?? "").trim();
     if (!name) throw new BadRequestException("Nome do parceiro é obrigatório.");
     const taxId = String(body.taxId ?? "").replace(/\D/g, "") || null;
@@ -353,6 +402,7 @@ export class StorefrontPartnersController {
       isSalesBroker: body.isSalesBroker === true,
       isGreenCoffeeBroker: body.isGreenCoffeeBroker === true,
     };
+    const commissionPolicy = salesCommissionPolicy(body);
     this.ensureOperationalRole(roles);
     if (taxId) {
       const duplicate = await this.database.storefrontPartner.findFirst({
@@ -379,6 +429,7 @@ export class StorefrontPartnersController {
           pixKey: String(body.pixKey ?? "").trim() || null,
           active: body.active !== false,
           ...roles,
+          ...commissionPolicy,
         },
       });
       await this.syncBrokerProfile(transaction, partner);
@@ -393,6 +444,7 @@ export class StorefrontPartnersController {
     @Body() body: Record<string, any>,
   ) {
     const actor = await this.actor(request);
+    this.ensureAdministrator(actor);
     const current = await this.database.storefrontPartner.findFirst({
       where: { id, companyId: actor.companyId },
     });
@@ -406,6 +458,7 @@ export class StorefrontPartnersController {
       isSalesBroker: value.isSalesBroker === true,
       isGreenCoffeeBroker: value.isGreenCoffeeBroker === true,
     };
+    const commissionPolicy = salesCommissionPolicy(value);
     this.ensureOperationalRole(roles);
     if (taxId) {
       const duplicate = await this.database.storefrontPartner.findFirst({
@@ -435,6 +488,7 @@ export class StorefrontPartnersController {
           pixKey: String(value.pixKey ?? "").trim() || null,
           active: value.active !== false,
           ...roles,
+          ...commissionPolicy,
         },
       });
       await this.syncBrokerProfile(transaction, partner);

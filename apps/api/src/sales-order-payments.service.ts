@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { MercadoPagoService } from "./mercado-pago.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { SalesOrdersService } from "./sales-orders.service";
+import { releaseSalesCommission } from "./sales-commission";
 
 type PaymentReason =
   "CASH_ORDER" | "CREDIT_NOT_APPROVED" | "INSUFFICIENT_CREDIT";
@@ -293,6 +294,10 @@ export class SalesOrderPaymentsService {
             status: ReceivableStatus.PAID,
             paymentDate: paidAt,
           },
+        });
+        await releaseSalesCommission(transaction, {
+          salesOrderId: order.id,
+          paidAt,
         });
         if (order.status === SalesOrderStatus.DRAFT) {
           await transaction.salesOrder.update({
@@ -668,6 +673,11 @@ export class SalesOrderPaymentsService {
             WHERE id=$1 AND status<>'CANCELLED'`,
           attempt.salesOrderId,
         );
+        await releaseSalesCommission(transaction, {
+          salesOrderId: attempt.salesOrderId,
+          paidAt: new Date(),
+          paymentConfirmed: true,
+        });
         return {
           attemptUpdated: Boolean(attemptUpdated),
           orderConfirmed: Boolean(orderConfirmed),

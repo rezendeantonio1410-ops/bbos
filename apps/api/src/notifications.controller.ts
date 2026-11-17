@@ -13,9 +13,14 @@ import {
   keepOpenDeliveryExceptions,
   notificationHref,
 } from "./notification-links";
+import { salesPortfolioPartnerId } from "./sales-portfolio";
 
 type AuthenticatedRequest = {
-  user: { companyId: string; role: string };
+  user: {
+    companyId: string;
+    role: string;
+    storefrontPartnerId?: string | null;
+  };
 };
 
 @Controller("notifications")
@@ -67,14 +72,27 @@ export class NotificationsController {
     );
   }
 
-  private async visibleToSales(notifications: any[], companyId: string) {
+  private async visibleToSales(
+    notifications: any[],
+    companyId: string,
+    partnerId: string,
+  ) {
     const shipmentIds = notifications
       .filter((item) => item.type.startsWith("ORDER_DELIVERY_EXCEPTION:"))
       .map((item) => item.type.split(":")[1])
       .filter(Boolean);
-    if (!shipmentIds.length) return notifications;
-    const visible = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT sh.id
+    const customerIds = notifications
+      .filter(
+        (item) =>
+          item.type.startsWith("CREDIT_") ||
+          item.type.startsWith("SALES_RECEIVABLE_OVERDUE:"),
+      )
+      .map((item) => item.type.split(":")[1])
+      .filter(Boolean);
+    const [visibleShipments, visibleCustomers] = await Promise.all([
+      shipmentIds.length
+        ? prisma.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT sh.id
          FROM "Shipment" sh
          LEFT JOIN "SalesOrder" so ON so.id=sh."salesOrderId"
          LEFT JOIN "SalesChannel" channel ON channel.id=so."salesChannelId"
@@ -83,16 +101,46 @@ export class NotificationsController {
           AND so.id IS NOT NULL
           AND so."externalOrderId" IS NULL
           AND so."importedAt" IS NULL
-          AND (channel.id IS NULL OR (channel.type::text<>'ECOMMERCE' AND channel."platformCode" IS NULL))`,
-      companyId,
-      shipmentIds,
-    );
-    const visibleIds = new Set(visible.map((item) => item.id));
-    return notifications.filter(
-      (item) =>
-        !item.type.startsWith("ORDER_DELIVERY_EXCEPTION:") ||
-        visibleIds.has(item.type.split(":")[1]),
-    );
+          AND (channel.id IS NULL OR (channel.type::text<>'ECOMMERCE' AND channel."platformCode" IS NULL))
+          AND (
+            so."createdByStorefrontPartnerId"=$3
+            OR EXISTS (
+              SELECT 1
+                FROM "StorefrontPartnerCustomer" portfolio
+               WHERE portfolio."partnerId"=$3
+                 AND portfolio."customerId"=so."customerId"
+            )
+          )`,
+            companyId,
+            shipmentIds,
+            partnerId,
+          )
+        : Promise.resolve([]),
+      customerIds.length
+        ? prisma.customer.findMany({
+            where: {
+              companyId,
+              id: { in: customerIds },
+              storefrontPartners: { some: { partnerId } },
+            },
+            select: { id: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const visibleShipmentIds = new Set(visibleShipments.map((item) => item.id));
+    const visibleCustomerIds = new Set(visibleCustomers.map((item) => item.id));
+    return notifications.filter((item) => {
+      if (item.type.startsWith("ORDER_DELIVERY_EXCEPTION:")) {
+        return visibleShipmentIds.has(item.type.split(":")[1]);
+      }
+      if (
+        item.type.startsWith("CREDIT_") ||
+        item.type.startsWith("SALES_RECEIVABLE_OVERDUE:")
+      ) {
+        return visibleCustomerIds.has(item.type.split(":")[1]);
+      }
+      return true;
+    });
   }
 
   @Get()
@@ -106,7 +154,11 @@ export class NotificationsController {
     });
     const roleVisibleNotifications =
       role === "SALES"
-        ? await this.visibleToSales(notifications, companyId)
+        ? await this.visibleToSales(
+            notifications,
+            companyId,
+            salesPortfolioPartnerId(request.user)!,
+          )
         : notifications;
     const operationallyCurrentNotifications =
       await this.keepOnlyOpenDeliveryExceptions(
@@ -135,6 +187,20 @@ export class NotificationsController {
   async read(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     const { companyId, role } = request.user;
     const targetRoles = role === "ACCOUNTANT" ? ["ACCOUNTANT"] : [role, "ALL"];
+    if (role === "SALES") {
+      const notification = await prisma.operationalNotification.findFirst({
+        where: { id, companyId, targetRole: { in: targetRoles } },
+      });
+      const visible = notification
+        ? await this.visibleToSales(
+            [notification],
+            companyId,
+            salesPortfolioPartnerId(request.user)!,
+          )
+        : [];
+      if (!visible.length)
+        throw new NotFoundException("Notificação não encontrada.");
+    }
     const result = await prisma.operationalNotification.updateMany({
       where: { id, companyId, targetRole: { in: targetRoles } },
       data: { readAt: new Date() },
@@ -148,6 +214,21 @@ export class NotificationsController {
   async readAll(@Req() request: AuthenticatedRequest) {
     const { companyId, role } = request.user;
     const targetRoles = role === "ACCOUNTANT" ? ["ACCOUNTANT"] : [role, "ALL"];
+    if (role === "SALES") {
+      const unread = await prisma.operationalNotification.findMany({
+        where: { companyId, targetRole: { in: targetRoles }, readAt: null },
+      });
+      const visible = await this.visibleToSales(
+        unread,
+        companyId,
+        salesPortfolioPartnerId(request.user)!,
+      );
+      const result = await prisma.operationalNotification.updateMany({
+        where: { id: { in: visible.map((item) => item.id) }, readAt: null },
+        data: { readAt: new Date() },
+      });
+      return { ok: true, updated: result.count };
+    }
     const result = await prisma.operationalNotification.updateMany({
       where: { companyId, targetRole: { in: targetRoles }, readAt: null },
       data: { readAt: new Date() },

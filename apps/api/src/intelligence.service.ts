@@ -33,7 +33,12 @@ export class IntelligenceService {
     private readonly costing: CostingService,
   ) {}
 
-  async ask(companyId: string, role: string, input: IntelligenceInput) {
+  async ask(
+    companyId: string,
+    role: string,
+    input: IntelligenceInput,
+    storefrontPartnerId?: string | null,
+  ) {
     const isSales = role === "SALES";
     const path = String(input.path ?? "/home");
     const question = String(input.question ?? "")
@@ -55,7 +60,11 @@ export class IntelligenceService {
       }
       return this.costsAnswer(companyId);
     }
-    const snapshot = await this.dashboard.home(companyId, isSales);
+    const snapshot = await this.dashboard.home(
+      companyId,
+      isSales,
+      isSales ? (storefrontPartnerId ?? null) : null,
+    );
     const facts: IntelligenceFact[] = [
       {
         label: "Vendas no mês",

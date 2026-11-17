@@ -20,6 +20,10 @@ import {
 } from "./customer-fiscal-readiness";
 import { parseCustomerVisitInput } from "./customer-visit-input";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
+import {
+  assertCustomerInSalesPortfolio,
+  salesPortfolioPartnerId,
+} from "./sales-portfolio";
 
 const CREDIT_STATUSES = [
   "NOT_ANALYZED",
@@ -57,7 +61,29 @@ export class CustomersController {
     return actor;
   }
 
-  private async health(companyId: string, customerId?: string) {
+  private async assertCustomerVisible(actor: any, customerId: string) {
+    await assertCustomerInSalesPortfolio(this.db, actor, customerId);
+  }
+
+  private async health(
+    companyId: string,
+    customerId?: string,
+    storefrontPartnerId?: string | null,
+  ) {
+    const args: unknown[] = [companyId];
+    const conditions: string[] = [`c."companyId" = $1`];
+    if (customerId) {
+      args.push(customerId);
+      conditions.push(`c.id = $${args.length}`);
+    }
+    if (storefrontPartnerId) {
+      args.push(storefrontPartnerId);
+      conditions.push(`EXISTS (
+        SELECT 1 FROM "StorefrontPartnerCustomer" portfolio
+         WHERE portfolio."customerId"=c.id
+           AND portfolio."partnerId"=$${args.length}
+      )`);
+    }
     return this.db.$queryRawUnsafe<any[]>(
       `SELECT c.id,
               (
@@ -73,9 +99,9 @@ export class CustomersController {
               COALESCE(MAX(CASE WHEN ar.status NOT IN ('PAID','CANCELLED') AND ar."dueDate" < NOW() AND ar."openAmount" > 0 THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - ar."dueDate"))/86400) END),0)::int AS "maxDaysOverdue"
          FROM "Customer" c
          LEFT JOIN "AccountsReceivable" ar ON ar."customerId" = c.id
-        WHERE c."companyId" = $1 ${customerId ? "AND c.id = $2" : ""}
+        WHERE ${conditions.join(" AND ")}
         GROUP BY c.id`,
-      ...(customerId ? [companyId, customerId] : [companyId]),
+      ...args,
     );
   }
 
@@ -142,6 +168,7 @@ export class CustomersController {
   @Get()
   async list(@Req() request: any) {
     const actor = await this.actor(request);
+    const partnerId = salesPortfolioPartnerId(actor);
     const [customers, health] = await Promise.all([
       this.db.$queryRawUnsafe<any[]>(
         `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId",
@@ -167,10 +194,16 @@ export class CustomersController {
                 ) AS "creditReviewPending"
            FROM "Customer" c
           WHERE c."companyId" = $1
+            AND ($2::text IS NULL OR EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" portfolio
+               WHERE portfolio."customerId"=c.id
+                 AND portfolio."partnerId"=$2
+            ))
           ORDER BY c.name ASC`,
         actor.companyId,
+        partnerId,
       ),
-      this.health(actor.companyId),
+      this.health(actor.companyId, undefined, partnerId),
     ]);
     const byId = new Map(health.map((item) => [item.id, item]));
     return customers.map((customer) => {
@@ -186,6 +219,7 @@ export class CustomersController {
   @Get(":id/health")
   async getHealth(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
     const customer = (
       await this.db.$queryRawUnsafe<any[]>(
         `SELECT c.id, c.name, c."legalName", c."tradeName", c."taxId",
@@ -215,6 +249,7 @@ export class CustomersController {
   @Get(":id/credit-history")
   async creditHistory(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
     const customer = await this.db.customer.findFirst({
       where: { id, companyId: actor.companyId },
     });
@@ -243,6 +278,7 @@ export class CustomersController {
   @Get(":id/sales-history")
   async salesHistory(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
     const customer = await this.db.customer.findFirst({
       where: { id, companyId: actor.companyId },
       select: { id: true },
@@ -289,6 +325,7 @@ export class CustomersController {
   @Get(":id/visits")
   async visitHistory(@Param("id") id: string, @Req() request: any) {
     const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
     const customer = await this.db.customer.findFirst({
       where: { id, companyId: actor.companyId },
       select: { id: true },
@@ -312,6 +349,7 @@ export class CustomersController {
   @Get("visits/recent")
   async recentVisits(@Req() request: any) {
     const actor = await this.actor(request);
+    const partnerId = salesPortfolioPartnerId(actor);
     return this.db.$queryRawUnsafe<any[]>(
       `SELECT v.id,v."customerId",v."recordedByName",v."visitAt",v."contactName",
               v.purpose,v.outcome,v.facts,v."nextAction",v."nextActionAt",v."createdAt",
@@ -319,9 +357,15 @@ export class CustomersController {
          FROM "CustomerVisit" v
          JOIN "Customer" c ON c.id=v."customerId" AND c."companyId"=v."companyId"
         WHERE v."companyId"=$1
+          AND ($2::text IS NULL OR EXISTS (
+            SELECT 1 FROM "StorefrontPartnerCustomer" portfolio
+             WHERE portfolio."customerId"=v."customerId"
+               AND portfolio."partnerId"=$2
+          ))
         ORDER BY v."visitAt" DESC,v."createdAt" DESC
         LIMIT 300`,
       actor.companyId,
+      partnerId,
     );
   }
 
@@ -332,6 +376,7 @@ export class CustomersController {
     @Body() body: Record<string, unknown>,
   ) {
     const actor = await this.actor(request);
+    const partnerId = await assertCustomerInSalesPortfolio(this.db, actor, id);
     const customer = await this.db.customer.findFirst({
       where: { id, companyId: actor.companyId, active: true },
       select: { id: true },
@@ -344,12 +389,13 @@ export class CustomersController {
     const visitId = randomUUID();
     await this.db.$executeRawUnsafe(
       `INSERT INTO "CustomerVisit"
-        (id,"companyId","customerId","recordedByUserId","recordedByName",
+        (id,"companyId","customerId","storefrontPartnerId","recordedByUserId","recordedByName",
          "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt","createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,
       visitId,
       actor.companyId,
       id,
+      partnerId,
       actor.id ?? null,
       actor.name,
       input.visitAt,
@@ -366,6 +412,7 @@ export class CustomersController {
   @Post()
   async create(@Req() request: any, @Body() body: Record<string, any>) {
     const actor = await this.actor(request);
+    const partnerId = salesPortfolioPartnerId(actor);
     const fiscalReadiness = assessCustomerFiscalReadiness({
       ...body,
       name: body.name ?? body.tradeName ?? body.legalName,
@@ -413,39 +460,47 @@ export class CustomersController {
       ? "NOT_ANALYZED"
       : "UNDER_REVIEW";
     const id = randomUUID();
-    const rows = await this.db.$queryRawUnsafe<any[]>(
-      `INSERT INTO "Customer"
+    const rows = await this.db.$transaction(async (transaction) => {
+      const created = await transaction.$queryRawUnsafe<any[]>(
+        `INSERT INTO "Customer"
         (id, "companyId", name, "legalName", "tradeName", "taxId", "countryCode", "countryName", "foreignTaxId", segment,
          email, phone, "postalCode", address, "addressNumber", "addressComplement", district, city, state,
          "stateRegistration", "stateRegistrationType",
          "paymentTerms", active, "creditStatus", "creditLimit", "createdAt", "updatedAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,0,NOW(),NOW())
        RETURNING *`,
-      id,
-      actor.companyId,
-      name,
-      fiscal.legalName || null,
-      body.tradeName?.trim() || null,
-      taxId || null,
-      fiscal.countryCode,
-      fiscal.countryName,
-      fiscal.foreignTaxId || null,
-      optionalText(body.segment),
-      optionalText(body.email),
-      internationalPhone(body.phone),
-      fiscal.postalCode,
-      fiscal.address,
-      fiscal.addressNumber,
-      fiscal.addressComplement || null,
-      fiscal.district,
-      fiscal.city,
-      fiscal.state,
-      fiscal.stateRegistration || null,
-      fiscal.stateRegistrationType,
-      paymentTerms,
-      body.active !== false,
-      initialCreditStatus,
-    );
+        id,
+        actor.companyId,
+        name,
+        fiscal.legalName || null,
+        body.tradeName?.trim() || null,
+        taxId || null,
+        fiscal.countryCode,
+        fiscal.countryName,
+        fiscal.foreignTaxId || null,
+        optionalText(body.segment),
+        optionalText(body.email),
+        internationalPhone(body.phone),
+        fiscal.postalCode,
+        fiscal.address,
+        fiscal.addressNumber,
+        fiscal.addressComplement || null,
+        fiscal.district,
+        fiscal.city,
+        fiscal.state,
+        fiscal.stateRegistration || null,
+        fiscal.stateRegistrationType,
+        paymentTerms,
+        body.active !== false,
+        initialCreditStatus,
+      );
+      if (partnerId) {
+        await transaction.storefrontPartnerCustomer.create({
+          data: { partnerId, customerId: id },
+        });
+      }
+      return created;
+    });
     return this.decorate(rows[0], null);
   }
 
@@ -456,6 +511,7 @@ export class CustomersController {
     @Body() body: Record<string, any>,
   ) {
     const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
     const customer = (
       await this.db.$queryRawUnsafe<any[]>(
         `SELECT id,name,"companyId","creditStatus","creditLimit","paymentTerms"
@@ -572,6 +628,7 @@ export class CustomersController {
     @Body() body: Record<string, any>,
   ) {
     const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
     const existing = await this.db.customer.findFirst({
       where: { id, companyId: actor.companyId },
     });

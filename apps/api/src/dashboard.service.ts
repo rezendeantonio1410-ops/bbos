@@ -6,6 +6,10 @@ import type {
   Period,
 } from "@bbos/shared";
 import { buildSalesMap, previousPeriodWindow } from "./sales-map";
+import {
+  customerPortfolioWhere,
+  salesOrderPortfolioWhere,
+} from "./sales-portfolio";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 const money = (value: number) =>
@@ -79,23 +83,34 @@ export class DashboardService implements OnModuleDestroy {
     await this.db.$disconnect();
   }
 
-  async home(companyId: string, excludePlatformOrders = false) {
+  async home(
+    companyId: string,
+    excludePlatformOrders = false,
+    portfolioPartnerId: string | null = null,
+  ) {
     const now = new Date();
     const day = periodStart("day");
     const month = periodStart("month");
-    const orderVisibility: Prisma.SalesOrderWhereInput = excludePlatformOrders
-      ? {
-          externalOrderId: null,
-          importedAt: null,
-          OR: [
-            { salesChannelId: null },
-            {
-              salesChannel: {
-                is: { type: { not: "ECOMMERCE" }, platformCode: null },
-              },
+    const visibilityRules: Prisma.SalesOrderWhereInput[] = [];
+    if (excludePlatformOrders) {
+      visibilityRules.push({
+        externalOrderId: null,
+        importedAt: null,
+        OR: [
+          { salesChannelId: null },
+          {
+            salesChannel: {
+              is: { type: { not: "ECOMMERCE" }, platformCode: null },
             },
-          ],
-        }
+          },
+        ],
+      });
+    }
+    if (portfolioPartnerId) {
+      visibilityRules.push(salesOrderPortfolioWhere(portfolioPartnerId));
+    }
+    const orderVisibility: Prisma.SalesOrderWhereInput = visibilityRules.length
+      ? { AND: visibilityRules }
       : {};
     const [
       orders,
@@ -189,6 +204,9 @@ export class DashboardService implements OnModuleDestroy {
       this.db.accountsReceivable.aggregate({
         where: {
           companyId,
+          ...(portfolioPartnerId
+            ? { customer: customerPortfolioWhere(portfolioPartnerId) }
+            : {}),
           status: { notIn: ["PAID", "CANCELLED"] },
           dueDate: { lt: now },
           openAmount: { gt: 0 },
@@ -258,10 +276,21 @@ export class DashboardService implements OnModuleDestroy {
                 )
               )
             )
+            AND (
+              $3::text IS NULL
+              OR so."createdByStorefrontPartnerId"=$3
+              OR EXISTS (
+                SELECT 1
+                  FROM "StorefrontPartnerCustomer" portfolio
+                 WHERE portfolio."partnerId"=$3
+                   AND portfolio."customerId"=so."customerId"
+              )
+            )
           ORDER BY shipment."updatedAt" DESC
           LIMIT 20`,
         companyId,
         excludePlatformOrders,
+        portfolioPartnerId,
       ),
     ]);
     const open = orders.filter(
@@ -386,8 +415,12 @@ export class DashboardService implements OnModuleDestroy {
         : toNumber(production._sum.plannedWeightKg),
       pendingLab: excludePlatformOrders ? 0 : pendingLab,
       openPurchases: excludePlatformOrders ? 0 : openPurchases,
-      finishedGoodsUnits: toNumber(products._sum.quantityOnHand),
-      finishedGoodsReserved: toNumber(products._sum.reservedQuantity),
+      finishedGoodsUnits: portfolioPartnerId
+        ? 0
+        : toNumber(products._sum.quantityOnHand),
+      finishedGoodsReserved: portfolioPartnerId
+        ? 0
+        : toNumber(products._sum.reservedQuantity),
       roastedStock: excludePlatformOrders
         ? { physicalKg: 0, reservedKg: 0, availableKg: 0 }
         : {

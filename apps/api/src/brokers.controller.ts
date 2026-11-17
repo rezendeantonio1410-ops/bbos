@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
+import { salesPortfolioPartnerId } from "./sales-portfolio";
 
 @Controller("brokers")
 export class BrokersController {
@@ -29,10 +30,12 @@ export class BrokersController {
   @Get()
   async list(@Req() request: any, @Query("role") role?: string) {
     const actor = await this.actor(request);
+    const partnerScope = salesPortfolioPartnerId(actor);
     const normalizedRole = String(role ?? "").toUpperCase();
     const brokers = await this.db.broker.findMany({
       where: {
         companyId: actor.companyId,
+        ...(partnerScope ? { businessPartnerId: partnerScope } : {}),
         ...(normalizedRole === "SALES"
           ? { businessPartner: { isSalesBroker: true } }
           : normalizedRole === "GREEN_COFFEE"

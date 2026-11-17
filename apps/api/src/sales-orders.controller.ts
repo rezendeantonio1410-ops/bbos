@@ -41,6 +41,11 @@ import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
+import {
+  assertCustomerInSalesPortfolio,
+  salesOrderPortfolioWhere,
+  salesPortfolioPartnerId,
+} from "./sales-portfolio";
 
 const isCashTerm = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -99,33 +104,39 @@ export class SalesOrdersController {
 
   private async actorForOrder(request: any, id: string) {
     const actor = await this.actor(request);
-    await this.salesOrders.get(actor.companyId, id);
     await this.assertOrderVisibleToActor(actor, id);
+    await this.salesOrders.get(actor.companyId, id);
     return actor;
   }
 
   private async assertOrderVisibleToActor(actor: any, id: string) {
     if (actor.role !== UserRole.SALES) return;
+    const partnerId = salesPortfolioPartnerId(actor)!;
     const visible = await this.salesOrders.database.salesOrder.findFirst({
       where: {
         id,
         companyId: actor.companyId,
         externalOrderId: null,
         importedAt: null,
-        OR: [
-          { salesChannelId: null },
+        AND: [
           {
-            salesChannel: {
-              is: { type: { not: "ECOMMERCE" }, platformCode: null },
-            },
+            OR: [
+              { salesChannelId: null },
+              {
+                salesChannel: {
+                  is: { type: { not: "ECOMMERCE" }, platformCode: null },
+                },
+              },
+            ],
           },
+          salesOrderPortfolioWhere(partnerId),
         ],
       },
       select: { id: true },
     });
     if (!visible) {
       throw new ForbiddenException(
-        "Pedidos do site e de plataformas são restritos à administração e aos operadores autorizados.",
+        "Este pedido não pertence à carteira deste representante ou tem origem em uma plataforma restrita.",
       );
     }
   }
@@ -243,16 +254,21 @@ export class SalesOrdersController {
   @Get()
   async list(@Req() request: any) {
     const actor = await this.actor(request);
+    const partnerId = salesPortfolioPartnerId(actor);
     return this.salesOrders.list(
       actor.companyId,
       actor.role === UserRole.SALES,
+      partnerId,
     );
   }
 
   @Get("options")
   async options(@Req() request: any) {
     const actor = await this.actor(request);
-    return this.salesOrders.options(actor.companyId);
+    return this.salesOrders.options(
+      actor.companyId,
+      salesPortfolioPartnerId(actor),
+    );
   }
 
   @Get("next-number")
@@ -277,6 +293,11 @@ export class SalesOrdersController {
     if (!Number.isSafeInteger(quantity) || quantity <= 0)
       throw new BadRequestException("Quantidade inválida.");
     const actor = await this.actor(request);
+    await assertCustomerInSalesPortfolio(
+      this.salesOrders.database,
+      actor,
+      customerId,
+    );
     const price = await this.resolveInternalPrice(
       actor.companyId,
       customerId,
@@ -325,6 +346,13 @@ export class SalesOrdersController {
     const actor = await this.actor(request);
     const isSample = resolveSalesOrderType(body.orderType) === "SAMPLE";
     const customerId = String(body.customerId ?? "").trim();
+    if (customerId) {
+      await assertCustomerInSalesPortfolio(
+        this.salesOrders.database,
+        actor,
+        customerId,
+      );
+    }
     const requestedItems = body.items?.length
       ? body.items.map((item) => ({
           productVariantId: String(item.productVariantId ?? "").trim(),
@@ -754,6 +782,11 @@ export class SalesOrdersController {
       );
     if (!body.customerId || !body.items?.length)
       throw new BadRequestException("Cliente e itens são obrigatórios.");
+    const salesPartnerId = await assertCustomerInSalesPortfolio(
+      this.salesOrders.database,
+      actor,
+      body.customerId,
+    );
 
     const freightResponsibility = String(body.freightResponsibility ?? "")
       .trim()
@@ -986,26 +1019,64 @@ export class SalesOrdersController {
         "Pedido de amostra não pode gerar comissão comercial.",
       );
     }
-    const brokerId = isSample
+    let brokerId = isSample
       ? undefined
       : String(body.brokerId ?? "").trim() || undefined;
-    const brokerCommissionMode = brokerId
+    let brokerCommissionMode = brokerId
       ? String(body.brokerCommissionMode ?? "PERCENTAGE").toUpperCase()
       : undefined;
+    let brokerCommissionPercent =
+      brokerId && brokerCommissionMode === "PERCENTAGE"
+        ? Number(body.brokerCommissionPercent ?? 0)
+        : 0;
+    let brokerCommissionPerPackage =
+      brokerId && brokerCommissionMode === "PER_PACKAGE"
+        ? Number(body.brokerCommissionPerPackage ?? 0)
+        : 0;
+
+    if (actor.role === UserRole.SALES && !isSample) {
+      const representative =
+        await this.salesOrders.database.storefrontPartner.findFirst({
+          where: {
+            id: salesPartnerId!,
+            companyId: actor.companyId,
+            active: true,
+            isSalesPartner: true,
+            isSalesBroker: true,
+          },
+          select: {
+            salesCommissionMode: true,
+            salesCommissionPercent: true,
+            salesCommissionPerPackage: true,
+            brokerProfile: { select: { id: true, active: true } },
+          },
+        });
+      const mode = String(
+        representative?.salesCommissionMode ?? "",
+      ).toUpperCase();
+      const percent = Number(representative?.salesCommissionPercent ?? 0);
+      const perPackage = Number(representative?.salesCommissionPerPackage ?? 0);
+      const policyIsValid =
+        representative?.brokerProfile?.active === true &&
+        ((mode === "PERCENTAGE" && percent > 0 && percent <= 100) ||
+          (mode === "PER_PACKAGE" && perPackage > 0));
+      if (!policyIsValid) {
+        throw new BadRequestException(
+          "A comissão deste representante ainda não foi configurada. Solicite a José ou Suzi a definição da regra antes de registrar o pedido.",
+        );
+      }
+      brokerId = representative.brokerProfile!.id;
+      brokerCommissionMode = mode;
+      brokerCommissionPercent = mode === "PERCENTAGE" ? percent : 0;
+      brokerCommissionPerPackage = mode === "PER_PACKAGE" ? perPackage : 0;
+    }
+
     if (
       brokerCommissionMode &&
       !["PERCENTAGE", "PER_PACKAGE"].includes(brokerCommissionMode)
     ) {
       throw new BadRequestException("Modalidade de comissão inválida.");
     }
-    const brokerCommissionPercent =
-      brokerId && brokerCommissionMode === "PERCENTAGE"
-        ? Number(body.brokerCommissionPercent ?? 0)
-        : 0;
-    const brokerCommissionPerPackage =
-      brokerId && brokerCommissionMode === "PER_PACKAGE"
-        ? Number(body.brokerCommissionPerPackage ?? 0)
-        : 0;
     if (
       !Number.isFinite(brokerCommissionPercent) ||
       brokerCommissionPercent < 0 ||
@@ -1124,6 +1195,7 @@ export class SalesOrdersController {
       code: orderNumber,
       orderNumber,
       orderType,
+      createdByStorefrontPartnerId: salesPartnerId ?? undefined,
       salesChannelId: resolvedChannelId,
       currency: resolvedCurrency ?? "BRL",
       exchangeRateToBrl,
@@ -1361,6 +1433,11 @@ export class SalesOrdersController {
     const submittedItems = Array.isArray(body.items) ? body.items : [];
     if (!customerId || !submittedItems.length)
       throw new BadRequestException("Cliente e itens são obrigatórios.");
+    await assertCustomerInSalesPortfolio(
+      this.salesOrders.database,
+      actor,
+      customerId,
+    );
     const customer = await this.salesOrders.database.customer.findFirst({
       where: { id: customerId, companyId: actor.companyId, active: true },
       select: { id: true },

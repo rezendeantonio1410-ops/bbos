@@ -603,31 +603,34 @@ model Broker {
 }
 
 model StorefrontPartner {
-  id                  String                       @id @default(cuid())
-  companyId           String
-  company             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                String
-  legalName           String?
-  tradeName           String?
-  taxId               String?
-  contactName         String?
-  phone               String?
-  email               String?
-  pixKey              String?
-  bankDetails         Json?
-  active              Boolean                      @default(true)
-  isSalesPartner      Boolean                      @default(true)
-  isSalesBroker       Boolean                      @default(false)
-  isGreenCoffeeBroker Boolean                      @default(false)
-  portalAccessLevel   StorefrontPartnerAccessLevel @default(VIEWER)
-  brokerProfile       Broker?                      @relation("BusinessPartnerBrokerProfile")
-  accountsPayable     AccountsPayable[]
-  portalUser          User?
-  customers           StorefrontPartnerCustomer[]
-  salesOrders         SalesOrder[]
-  customerVisits      CustomerVisit[]
-  createdAt           DateTime                     @default(now())
-  updatedAt           DateTime                     @updatedAt
+  id                        String                       @id @default(cuid())
+  companyId                 String
+  company                   Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                      String
+  legalName                 String?
+  tradeName                 String?
+  taxId                     String?
+  contactName               String?
+  phone                     String?
+  email                     String?
+  pixKey                    String?
+  bankDetails               Json?
+  active                    Boolean                      @default(true)
+  isSalesPartner            Boolean                      @default(true)
+  isSalesBroker             Boolean                      @default(false)
+  isGreenCoffeeBroker       Boolean                      @default(false)
+  salesCommissionMode       String?                      @db.VarChar(20)
+  salesCommissionPercent    Decimal?                     @db.Decimal(7, 4)
+  salesCommissionPerPackage Decimal?                     @db.Decimal(14, 2)
+  portalAccessLevel         StorefrontPartnerAccessLevel @default(VIEWER)
+  brokerProfile             Broker?                      @relation("BusinessPartnerBrokerProfile")
+  accountsPayable           AccountsPayable[]
+  portalUser                User?
+  customers                 StorefrontPartnerCustomer[]
+  salesOrders               SalesOrder[]
+  customerVisits            CustomerVisit[]
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])

@@ -23,6 +23,7 @@ import {
   monthlyOccurrence,
   recurrenceCount,
 } from "./expense-policy";
+import { releaseSalesCommission } from "./sales-commission";
 
 const RECEIPT_METHODS = new Set([
   "PIX",
@@ -726,6 +727,12 @@ export class FinanceService implements OnModuleDestroy {
             paymentDate: open === 0 ? paidAt : undefined,
           },
         });
+        if (open === 0 && item.salesOrderId) {
+          await releaseSalesCommission(tx, {
+            salesOrderId: item.salesOrderId,
+            paidAt,
+          });
+        }
         return { payment, receivable, idempotent: false };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

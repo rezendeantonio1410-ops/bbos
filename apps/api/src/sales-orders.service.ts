@@ -13,6 +13,7 @@ import {
   prisma,
   SalesOrderStatus,
 } from "@bbos/database";
+import { cancelOpenSalesCommission } from "./sales-commission";
 import {
   releaseSalesStock,
   reserveSalesStock,
@@ -30,6 +31,7 @@ import {
   assessCustomerFiscalReadiness,
   customerFiscalReadinessMessage,
 } from "./customer-fiscal-readiness";
+import { salesOrderPortfolioWhere } from "./sales-portfolio";
 
 export type CreateSalesOrderInput = {
   code: string;
@@ -51,6 +53,7 @@ export type CreateSalesOrderInput = {
   brokerCommissionPercent?: number;
   brokerCommissionPerPackage?: number;
   brokerCommissionAmount?: number;
+  createdByStorefrontPartnerId?: string;
   notes?: string;
   items: Array<{
     productVariantId: string;
@@ -792,7 +795,11 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     return this.database.$disconnect();
   }
 
-  async list(companyId: string, excludePlatformOrders = false) {
+  async list(
+    companyId: string,
+    excludePlatformOrders = false,
+    storefrontPartnerId?: string | null,
+  ) {
     const platformScope: Prisma.SalesOrderWhereInput = excludePlatformOrders
       ? {
           externalOrderId: null,
@@ -812,6 +819,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         companyId,
         status: { not: SalesOrderStatus.CANCELLED },
         ...platformScope,
+        ...(storefrontPartnerId
+          ? salesOrderPortfolioWhere(storefrontPartnerId)
+          : {}),
       },
       include: this.orderInclude,
       orderBy: { orderedAt: "desc" },
@@ -1054,11 +1064,20 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async options(companyId: string) {
+  async options(companyId: string, storefrontPartnerId?: string | null) {
     const [customers, balances, brokers, greenVariants, greenStock] =
       await Promise.all([
         this.database.customer.findMany({
-          where: { companyId },
+          where: {
+            companyId,
+            ...(storefrontPartnerId
+              ? {
+                  storefrontPartners: {
+                    some: { partnerId: storefrontPartnerId },
+                  },
+                }
+              : {}),
+          },
           orderBy: { name: "asc" },
         }),
         this.database.finishedProduct.findMany({
@@ -1089,6 +1108,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
            AND broker.active = TRUE
            AND partner.active = TRUE
            AND partner."isSalesBroker" = TRUE
+           AND (${storefrontPartnerId ?? null}::text IS NULL OR partner.id = ${storefrontPartnerId ?? null})
          ORDER BY partner.name ASC
       `),
         this.database.productVariant.findMany({
@@ -1295,6 +1315,8 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           data: {
             companyId: customer.companyId,
             customerId: customer.id,
+            createdByStorefrontPartnerId:
+              input.createdByStorefrontPartnerId ?? undefined,
             brokerId: input.brokerId,
             brokerCommissionMode:
               orderType === "SAMPLE" ? undefined : input.brokerCommissionMode,
@@ -1884,6 +1906,11 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           where: { id },
           data: { status: SalesOrderStatus.CANCELLED },
         });
+        await cancelOpenSalesCommission(
+          transaction,
+          id,
+          "Pedido cancelado antes da quitação do cliente.",
+        );
         return { orderId: id, idempotent: false };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -2369,38 +2396,6 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
               status: "OPEN",
             },
           });
-        }
-        if (order.brokerId && Number(order.brokerCommissionAmount ?? 0) > 0) {
-          const payableKey = `sales-order:${order.id}:broker-commission`;
-          const existingPayable = await transaction.accountsPayable.findUnique({
-            where: { brokerCommissionPayableKey: payableKey },
-          });
-          if (!existingPayable) {
-            const issueDate = new Date();
-            await transaction.accountsPayable.create({
-              data: {
-                companyId: order.companyId,
-                brokerId: order.brokerId,
-                supplierId: null,
-                brokerCommissionPayableKey: payableKey,
-                description: `${order.orderNumber ?? order.code} · comissão de corretagem da venda`,
-                issueDate,
-                dueDate: issueDate,
-                amount: order.brokerCommissionAmount!,
-                openAmount: order.brokerCommissionAmount!,
-                status: "OPEN",
-                category: "COMISSAO_VENDA",
-                notes:
-                  order.brokerCommissionMode === "PER_PACKAGE"
-                    ? `Comissão de R$ ${Number(
-                        order.brokerCommissionPerPackage ?? 0,
-                      )
-                        .toFixed(2)
-                        .replace(".", ",")} por pacote vendido.`
-                    : `Comissão de ${order.brokerCommissionPercent ?? 0}% sobre os produtos do pedido.`,
-              },
-            });
-          }
         }
       }
       return { orderId: id, idempotent: false, status };

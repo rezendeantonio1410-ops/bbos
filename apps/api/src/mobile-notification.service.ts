@@ -220,6 +220,56 @@ export class MobileNotificationService {
     return this.deliver(notification.id);
   }
 
+  private async salesNotificationUserIds(companyId: string, type: string) {
+    const customerScoped =
+      type.startsWith("CREDIT_") ||
+      type.startsWith("SALES_RECEIVABLE_OVERDUE:");
+    if (customerScoped) {
+      const customerId = type.split(":")[1];
+      if (!customerId) return [];
+      const users = await this.db.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT DISTINCT portal.id
+           FROM "User" portal
+           JOIN "StorefrontPartnerCustomer" portfolio
+             ON portfolio."partnerId"=portal."storefrontPartnerId"
+          WHERE portal."companyId"=$1
+            AND portal.role='SALES'
+            AND portal.active=TRUE
+            AND portfolio."customerId"=$2`,
+        companyId,
+        customerId,
+      );
+      return users.map((user) => user.id);
+    }
+
+    if (type.startsWith("ORDER_DELIVERY_EXCEPTION:")) {
+      const shipmentId = type.split(":")[1];
+      if (!shipmentId) return [];
+      const users = await this.db.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT DISTINCT portal.id
+           FROM "User" portal
+           JOIN "Shipment" shipment
+             ON shipment.id=$2 AND shipment."companyId"=portal."companyId"
+           JOIN "SalesOrder" sales_order ON sales_order.id=shipment."salesOrderId"
+           LEFT JOIN "StorefrontPartnerCustomer" portfolio
+             ON portfolio."partnerId"=portal."storefrontPartnerId"
+            AND portfolio."customerId"=sales_order."customerId"
+          WHERE portal."companyId"=$1
+            AND portal.role='SALES'
+            AND portal.active=TRUE
+            AND (
+              sales_order."createdByStorefrontPartnerId"=portal."storefrontPartnerId"
+              OR portfolio."partnerId" IS NOT NULL
+            )`,
+        companyId,
+        shipmentId,
+      );
+      return users.map((user) => user.id);
+    }
+
+    return null;
+  }
+
   private async bridgeOperationalNotifications() {
     const enabledAt = process.env.WEB_PUSH_ENABLED_AT
       ? new Date(process.env.WEB_PUSH_ENABLED_AT)
@@ -246,9 +296,8 @@ export class MobileNotificationService {
         });
         continue;
       }
-      await this.queueForRoles({
+      const queueInput = {
         companyId: item.companyId,
-        roles,
         idempotencyKey: `operational:${item.id}`,
         type: item.type,
         title: item.title,
@@ -257,7 +306,16 @@ export class MobileNotificationService {
         sourceOperationalNotificationId: item.id,
         entityType: item.purchaseId ? "GREEN_COFFEE_PURCHASE" : undefined,
         entityId: item.purchaseId ?? undefined,
-      });
+      };
+      const salesUserIds =
+        item.targetRole === UserRole.SALES
+          ? await this.salesNotificationUserIds(item.companyId, item.type)
+          : null;
+      if (salesUserIds) {
+        await this.queue({ ...queueInput, userIds: salesUserIds });
+      } else {
+        await this.queueForRoles({ ...queueInput, roles });
+      }
       await this.db.operationalNotification.update({
         where: { id: item.id },
         data: { mobilePushBridgedAt: new Date() },

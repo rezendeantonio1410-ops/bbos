@@ -15,6 +15,7 @@ import {
 } from "@bbos/database";
 import type { Request } from "express";
 import { AuthService } from "./auth.service";
+import { releaseSalesCommission } from "./sales-commission";
 
 const normalize = (value: unknown) =>
   String(value ?? "")
@@ -41,13 +42,20 @@ export class FinanceAssistedReconciliationController {
       where: { id, companyId },
       include: { bankTransaction: true },
     });
-    if (!item) throw new BadRequestException("Item de conciliação não encontrado.");
+    if (!item)
+      throw new BadRequestException("Item de conciliação não encontrado.");
     if (!item.bankTransactionId || !item.bankTransaction)
-      throw new BadRequestException("Este item não nasceu de uma movimentação bancária.");
+      throw new BadRequestException(
+        "Este item não nasceu de uma movimentação bancária.",
+      );
     if (item.direction !== "IN" || item.bankTransaction.direction !== "CREDIT")
-      throw new BadRequestException("A baixa assistida de clientes exige um crédito bancário de entrada.");
+      throw new BadRequestException(
+        "A baixa assistida de clientes exige um crédito bancário de entrada.",
+      );
     if (item.financialTransactionId)
-      throw new BadRequestException("Este item já está vinculado a um lançamento financeiro.");
+      throw new BadRequestException(
+        "Este item já está vinculado a um lançamento financeiro.",
+      );
     return item;
   }
 
@@ -55,7 +63,9 @@ export class FinanceAssistedReconciliationController {
     const item = await this.context(id, companyId);
     const bankTransaction = item.bankTransaction;
     if (!bankTransaction)
-      throw new BadRequestException("Movimentação bancária inválida para baixa assistida.");
+      throw new BadRequestException(
+        "Movimentação bancária inválida para baixa assistida.",
+      );
 
     const rows = await this.db.accountsReceivable.findMany({
       where: {
@@ -88,18 +98,21 @@ export class FinanceAssistedReconciliationController {
         const customer = normalize(receivable.customer.name);
         const referenceMatch = Boolean(
           (orderCode && haystack.includes(orderCode)) ||
-            (orderNumber && haystack.includes(orderNumber)),
+          (orderNumber && haystack.includes(orderNumber)),
         );
         const customerMatch = Boolean(
           customer &&
-            (haystack.includes(customer) ||
-              customer
-                .split(" ")
-                .filter((part) => part.length >= 4)
-                .some((part) => haystack.includes(part))),
+          (haystack.includes(customer) ||
+            customer
+              .split(" ")
+              .filter((part) => part.length >= 4)
+              .some((part) => haystack.includes(part))),
         );
         const daysFromDue = Math.abs(
-          Math.round((item.occurredAt.getTime() - receivable.dueDate.getTime()) / 86400000),
+          Math.round(
+            (item.occurredAt.getTime() - receivable.dueDate.getTime()) /
+              86400000,
+          ),
         );
         const dateMatch = daysFromDue <= 30;
         const score =
@@ -113,7 +126,10 @@ export class FinanceAssistedReconciliationController {
           customerId: receivable.customerId,
           customer: receivable.customer.name,
           salesOrderId: receivable.salesOrderId,
-          orderNumber: receivable.salesOrder?.orderNumber ?? receivable.salesOrder?.code ?? null,
+          orderNumber:
+            receivable.salesOrder?.orderNumber ??
+            receivable.salesOrder?.code ??
+            null,
           dueDate: receivable.dueDate,
           amount: Number(receivable.amount),
           openAmount: Number(receivable.openAmount),
@@ -179,9 +195,15 @@ export class FinanceAssistedReconciliationController {
           include: { bankTransaction: true },
         });
         if (!item || !item.bankTransactionId || !item.bankTransaction)
-          throw new BadRequestException("Movimentação bancária inválida para baixa assistida.");
+          throw new BadRequestException(
+            "Movimentação bancária inválida para baixa assistida.",
+          );
         if (item.financialTransactionId)
-          return { idempotent: true, reconciliationItemId: id, financialTransactionId: item.financialTransactionId };
+          return {
+            idempotent: true,
+            reconciliationItemId: id,
+            financialTransactionId: item.financialTransactionId,
+          };
 
         const bankTransaction = item.bankTransaction;
 
@@ -192,15 +214,21 @@ export class FinanceAssistedReconciliationController {
         if (!receivable)
           throw new BadRequestException("Conta a receber não encontrada.");
         if (Number(receivable.openAmount) !== Number(item.amount))
-          throw new BadRequestException("O saldo do título mudou; refaça a análise antes da baixa.");
+          throw new BadRequestException(
+            "O saldo do título mudou; refaça a análise antes da baixa.",
+          );
         if (
           receivable.status === ReceivableStatus.PAID ||
           receivable.status === ReceivableStatus.CANCELLED
         )
-          throw new BadRequestException("O título não está mais disponível para baixa.");
+          throw new BadRequestException(
+            "O título não está mais disponível para baixa.",
+          );
 
         const idempotencyKey = `BANK_RECEIPT:${item.bankTransactionId}`;
-        const existingPayment = await tx.payment.findUnique({ where: { idempotencyKey } });
+        const existingPayment = await tx.payment.findUnique({
+          where: { idempotencyKey },
+        });
         if (existingPayment) {
           const existingTransaction = await tx.financialTransaction.findUnique({
             where: { paymentId: existingPayment.id },
@@ -245,6 +273,12 @@ export class FinanceAssistedReconciliationController {
             paymentDate: item.occurredAt,
           },
         });
+        if (receivable.salesOrderId) {
+          await releaseSalesCommission(tx, {
+            salesOrderId: receivable.salesOrderId,
+            paidAt: item.occurredAt,
+          });
+        }
         await tx.reconciliationItem.update({
           where: { id: item.id },
           data: {

@@ -29,6 +29,9 @@ type Partner = {
   isSalesPartner: boolean;
   isSalesBroker: boolean;
   isGreenCoffeeBroker: boolean;
+  salesCommissionMode?: "PERCENTAGE" | "PER_PACKAGE" | null;
+  salesCommissionPercent?: string | number | null;
+  salesCommissionPerPackage?: string | number | null;
   portalUserId?: string | null;
   portalEmail?: string | null;
   portalActive?: boolean | null;
@@ -110,6 +113,9 @@ export default function StorefrontPartnersPage() {
             isSalesPartner: data.get("isSalesPartner") === "true",
             isSalesBroker: data.get("isSalesBroker") === "true",
             isGreenCoffeeBroker: data.get("isGreenCoffeeBroker") === "true",
+            salesCommissionMode: data.get("salesCommissionMode"),
+            salesCommissionPercent: data.get("salesCommissionPercent"),
+            salesCommissionPerPackage: data.get("salesCommissionPerPackage"),
           }),
         },
       );
@@ -294,6 +300,15 @@ export default function StorefrontPartnersPage() {
                 </span>
               )}
             </div>
+            {partner.salesCommissionMode && (
+              <p className="mt-3 rounded-lg bg-violet-50 px-3 py-2 text-[11px] font-semibold text-violet-800">
+                Comissão de venda:{" "}
+                {partner.salesCommissionMode === "PER_PACKAGE"
+                  ? `${Number(partner.salesCommissionPerPackage ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por pacote`
+                  : `${Number(partner.salesCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`}
+                . Liberação após a quitação; pagamento no dia 02.
+              </p>
+            )}
             {partner.portalUserId && (
               <p
                 className={`mt-3 text-[10px] font-bold uppercase tracking-wider ${partner.portalActive ? "text-emerald-700" : "text-stone-400"}`}
@@ -317,15 +332,17 @@ export default function StorefrontPartnersPage() {
                   : ` · ${partner.customerCount ?? 0} cliente(s) liberado(s)`}
             </p>
             <div className="mt-4 flex flex-wrap gap-4">
-              <button
-                onClick={() => {
-                  setSelected(partner);
-                  setOpen(true);
-                }}
-                className="inline-flex items-center gap-2 text-xs font-bold text-[#087568]"
-              >
-                <Pencil size={13} /> Editar
-              </button>
+              {actorRole === "ADMIN" && (
+                <button
+                  onClick={() => {
+                    setSelected(partner);
+                    setOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-[#087568]"
+                >
+                  <Pencil size={13} /> Editar
+                </button>
+              )}
               {actorRole === "ADMIN" && partner.isSalesPartner && (
                 <button
                   onClick={() => void openPermissions(partner)}
@@ -455,6 +472,55 @@ export default function StorefrontPartnersPage() {
                     description="Comissão em compras"
                     defaultChecked={selected?.isGreenCoffeeBroker ?? false}
                   />
+                </div>
+              </fieldset>
+              <fieldset className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 md:col-span-2">
+                <legend className="px-1 text-xs font-bold text-violet-900">
+                  Comissão do representante
+                </legend>
+                <p className="mb-3 text-[11px] leading-5 text-violet-800">
+                  A comissão é reservada ao registrar o pedido, liberada somente
+                  após a quitação integral do cliente e vence no dia 02 do mês
+                  seguinte.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Regra">
+                    <select
+                      name="salesCommissionMode"
+                      defaultValue={selected?.salesCommissionMode ?? ""}
+                    >
+                      <option value="">Sem comissão configurada</option>
+                      <option value="PERCENTAGE">Percentual da venda</option>
+                      <option value="PER_PACKAGE">Valor por pacote</option>
+                    </select>
+                  </Field>
+                  <Field label="Percentual (%)">
+                    <input
+                      name="salesCommissionPercent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      defaultValue={
+                        selected?.salesCommissionPercent == null
+                          ? ""
+                          : String(selected.salesCommissionPercent)
+                      }
+                    />
+                  </Field>
+                  <Field label="Valor por pacote (R$)">
+                    <input
+                      name="salesCommissionPerPackage"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={
+                        selected?.salesCommissionPerPackage == null
+                          ? ""
+                          : String(selected.salesCommissionPerPackage)
+                      }
+                    />
+                  </Field>
                 </div>
               </fieldset>
               <div className="flex items-end justify-end gap-2 md:col-span-2">

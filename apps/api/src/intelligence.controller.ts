@@ -7,13 +7,21 @@ export class IntelligenceController {
 
   @Post("ask")
   ask(
-    @Req() request: { user?: { companyId: string; role: string } },
+    @Req()
+    request: {
+      user?: {
+        companyId: string;
+        role: string;
+        storefrontPartnerId?: string | null;
+      };
+    },
     @Body() body: { question?: string; path?: string },
   ) {
     return this.intelligence.ask(
       request.user!.companyId,
       request.user!.role,
       body,
+      request.user!.storefrontPartnerId,
     );
   }
 }
