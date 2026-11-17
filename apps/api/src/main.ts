@@ -3,10 +3,13 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { bootstrapAdminFromEnvironment } from './bootstrap-admin';
+import { bootstrapPartnerAccessFromEnvironment } from './bootstrap-partner-access';
 
 async function bootstrap() {
   const bootstrapResult = await bootstrapAdminFromEnvironment();
   if (bootstrapResult) console.log(`BBOS admin bootstrap ${bootstrapResult.created ? "created" : "verified"} for configured account.`);
+  const partnerRecovery = await bootstrapPartnerAccessFromEnvironment();
+  if (partnerRecovery) console.log(`BBOS partner access recovered for ${partnerRecovery.email}.`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.set('trust proxy', 1);
   app.useBodyParser('json', { limit: '2mb' });
