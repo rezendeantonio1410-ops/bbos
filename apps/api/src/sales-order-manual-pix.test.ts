@@ -67,6 +67,18 @@ function serviceFixture(orderStatus = "INVOICED") {
     $executeRawUnsafe: async () => 1,
     salesOrder: {
       findFirst: async () => order,
+      findUnique: async () => ({
+        ...order,
+        brokerId: null,
+        brokerCommissionMode: null,
+        brokerCommissionPercent: null,
+        brokerCommissionPerPackage: null,
+        brokerCommissionAmount: null,
+        broker: null,
+        accountsReceivable: [
+          { status: receivable.status, openAmount: receivable.openAmount },
+        ],
+      }),
       update: async ({ data }: { data: Record<string, unknown> }) => {
         calls.orders.push(data);
         Object.assign(order, data);

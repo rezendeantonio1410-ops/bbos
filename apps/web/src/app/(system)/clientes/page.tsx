@@ -29,6 +29,7 @@ import {
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { CustomerTaxIdSuggestionWorkflow } from "@/components/customer-tax-id-suggestion-workflow";
 
 type Health = {
   health: "HEALTHY" | "INFO" | "ATTENTION" | "BLOCKED";
@@ -46,6 +47,9 @@ type Customer = {
   legalName?: string | null;
   tradeName?: string | null;
   taxId?: string | null;
+  taxIdVerificationStatus?: string | null;
+  taxIdVerifiedAt?: string | null;
+  taxIdVerificationSource?: string | null;
   countryCode?: string | null;
   countryName?: string | null;
   foreignTaxId?: string | null;
@@ -375,6 +379,7 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [taxIdCustomer, setTaxIdCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState(emptyCustomer);
   const [formErrors, setFormErrors] = useState<CustomerFormErrors>({});
   const [saving, setSaving] = useState(false);
@@ -946,6 +951,7 @@ export default function CustomersPage() {
                 onRequest={() => openRequest(customer)}
                 onCredit={() => openCredit(customer)}
                 onVisits={() => void openVisits(customer)}
+                onTaxIdReview={() => setTaxIdCustomer(customer)}
                 canApproveCredit={canApproveCredit}
               />
             ))}
@@ -2073,6 +2079,65 @@ export default function CustomersPage() {
         </div>
       )}
 
+      {taxIdCustomer && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-tax-id-dialog-title"
+            className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[88vh] sm:rounded-3xl"
+          >
+            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4 sm:px-7 sm:py-5">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[.18em] text-emerald-700">
+                  Conferência cadastral
+                </p>
+                <h2
+                  id="customer-tax-id-dialog-title"
+                  className="mt-1 text-xl font-semibold sm:text-2xl"
+                >
+                  Confirmar CNPJ
+                </h2>
+                <p className="mt-1 text-sm text-stone-500">
+                  {taxIdCustomer.tradeName || taxIdCustomer.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTaxIdCustomer(null)}
+                className="rounded-xl border border-stone-200 p-2 text-stone-600 transition hover:bg-stone-50"
+                aria-label="Fechar conferência de CNPJ"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
+              <CustomerTaxIdSuggestionWorkflow
+                customer={taxIdCustomer}
+                onConfirmed={async (taxId) => {
+                  setTaxIdCustomer((current) =>
+                    current
+                      ? {
+                          ...current,
+                          taxId,
+                          taxIdVerificationStatus: "CONFIRMED_INTERNAL",
+                        }
+                      : current,
+                  );
+                  await load();
+                }}
+                onManualEntry={() => {
+                  const customer = taxIdCustomer;
+                  setTaxIdCustomer(null);
+                  openEdit(customer);
+                }}
+              />
+            </div>
+          </section>
+        </div>
+      )}
+
       {visitCustomer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
           <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
@@ -2294,6 +2359,7 @@ function CustomerRow({
   onRequest,
   onCredit,
   onVisits,
+  onTaxIdReview,
   canApproveCredit,
 }: {
   customer: Customer;
@@ -2301,6 +2367,7 @@ function CustomerRow({
   onRequest: () => void;
   onCredit: () => void;
   onVisits: () => void;
+  onTaxIdReview: () => void;
   canApproveCredit: boolean;
 }) {
   const h = customer.financialHealth;
@@ -2320,6 +2387,13 @@ function CustomerRow({
         : h.health === "ATTENTION"
           ? AlertTriangle
           : Info;
+  const taxIdDigits = (customer.taxId ?? "").replace(/\D/g, "");
+  const isBrazilian = (customer.countryCode ?? "BR") === "BR";
+  const cnpjRelevant =
+    isBrazilian && (taxIdDigits.length === 0 || taxIdDigits.length === 14);
+  const cnpjConfirmed =
+    customer.taxIdVerificationStatus === "VERIFIED_ACTIVE" ||
+    customer.taxIdVerificationStatus === "CONFIRMED_INTERNAL";
   return (
     <div className="p-5 transition hover:bg-stone-50/60">
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1.5fr_auto] lg:items-center">
@@ -2340,6 +2414,17 @@ function CustomerRow({
                 ? "Fiscal completo"
                 : "Fiscal pendente"}
             </span>
+            {cnpjRelevant && (
+              <span
+                className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                  cnpjConfirmed
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-amber-50 text-amber-800"
+                }`}
+              >
+                {cnpjConfirmed ? "CNPJ confirmado" : "CNPJ a conferir"}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs text-stone-500">
             {customer.taxId || "CPF/CNPJ ainda não informado"}
@@ -2396,6 +2481,15 @@ function CustomerRow({
               </p>
             )}
           </div>
+          {cnpjRelevant && !cnpjConfirmed && (
+            <button
+              data-bbos-write-action
+              onClick={onTaxIdReview}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              <Search size={14} /> Conferir CNPJ
+            </button>
+          )}
           <button
             data-bbos-write-action
             onClick={onEdit}

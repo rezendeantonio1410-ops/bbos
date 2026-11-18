@@ -12,11 +12,26 @@ import {
   Send,
   UserRound,
 } from "lucide-react";
+import { CustomerTaxIdSuggestionWorkflow } from "@/components/customer-tax-id-suggestion-workflow";
 
 type Customer = {
   id: string;
   name: string;
+  legalName?: string | null;
   tradeName?: string | null;
+  taxId?: string | null;
+  taxIdVerificationStatus?:
+    | "NOT_VERIFIED"
+    | "PENDING_REVIEW"
+    | "VERIFIED_ACTIVE"
+    | "CONFIRMED_INTERNAL"
+    | "VERIFIED_INACTIVE"
+    | "REJECTED";
+  postalCode?: string | null;
+  address?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
+  district?: string | null;
   city?: string | null;
   state?: string | null;
   segment?: string | null;
@@ -212,6 +227,31 @@ export default function AtendimentoPage() {
     );
   }, [search, visits]);
 
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === customerId) ?? null,
+    [customerId, customers],
+  );
+
+  const handleTaxIdConfirmed = useCallback(
+    (taxId: string) => {
+      setCustomers((current) =>
+        current.map((customer) =>
+          customer.id === customerId
+            ? {
+                ...customer,
+                taxId,
+                taxIdVerificationStatus: "CONFIRMED_INTERNAL",
+              }
+            : customer,
+        ),
+      );
+      setNotice(
+        "CNPJ confirmado com auditoria. O relato da visita continua disponível para registro.",
+      );
+    },
+    [customerId],
+  );
+
   const today = new Date();
   const lastThirtyDays = visits.filter(
     (visit) =>
@@ -341,6 +381,24 @@ export default function AtendimentoPage() {
               >
                 Ver histórico de vendas e pagamentos deste cliente
               </Link>
+            )}
+            {selectedCustomer && (
+              <div className="sm:col-span-2">
+                <CustomerTaxIdSuggestionWorkflow
+                  customer={selectedCustomer}
+                  onConfirmed={handleTaxIdConfirmed}
+                  onManualEntry={() => {
+                    window.location.assign(
+                      `/clientes?cliente=${encodeURIComponent(selectedCustomer.id)}&editar=1`,
+                    );
+                  }}
+                />
+                <p className="mt-2 text-xs leading-5 text-stone-500">
+                  Esta conferência é independente do relato e não impede salvar
+                  a visita. O CNPJ só entra no cadastro fiscal depois da
+                  confirmação explícita.
+                </p>
+              </div>
             )}
             <Field label="Data e hora *">
               <input

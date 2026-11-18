@@ -3,6 +3,7 @@ import { normalizeCustomerPhone } from "@bbos/shared";
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Get,
   NotFoundException,
@@ -19,11 +20,21 @@ import {
   customerFiscalReadinessMessage,
 } from "./customer-fiscal-readiness";
 import { parseCustomerVisitInput } from "./customer-visit-input";
+import {
+  canUpdateInternalTaxIdRejectionMetadata,
+  isTrustedInternalTaxIdVerificationStatus,
+  normalizeCnpj,
+  selectTaxIdSuggestionSnapshotRows,
+  suggestInternalCnpjs,
+  type CnpjSuggestionField,
+  type InternalCnpjCandidateInput,
+} from "./internal-cnpj-suggestion";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 import {
   assertCustomerInSalesPortfolio,
   salesPortfolioPartnerId,
 } from "./sales-portfolio";
+import { isValidCnpj } from "./supplier-verification";
 
 const CREDIT_STATUSES = [
   "NOT_ANALYZED",
@@ -41,6 +52,55 @@ const optionalText = (value: unknown) => {
   const normalized = String(value ?? "").trim();
   return normalized || null;
 };
+const compactAddress = (...parts: unknown[]) =>
+  parts
+    .map(optionalText)
+    .filter((part): part is string => Boolean(part))
+    .join(", ") || null;
+
+const suggestionMatchReasons = (
+  scores: Partial<Record<CnpjSuggestionField, number>>,
+) => {
+  const labels: Record<CnpjSuggestionField, string> = {
+    NAME: "nome",
+    LEGAL_NAME: "razão social",
+    ADDRESS: "endereço",
+    POSTAL_CODE: "CEP",
+    CITY: "cidade",
+    STATE: "UF",
+  };
+  return (Object.entries(scores) as Array<[CnpjSuggestionField, number]>)
+    .filter(([, score]) => Number(score) >= 0.5)
+    .sort((left, right) => right[1] - left[1])
+    .map(([field, score]) => ({
+      field,
+      label: labels[field],
+      score: Number(score),
+    }));
+};
+
+const jsonObject = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
+const actorDisplayName = (actor: any) =>
+  String(actor?.name ?? actor?.email ?? "Usuário BBOS").trim() ||
+  "Usuário BBOS";
+
+type RawQueryClient = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: any[]): Promise<T>;
+};
+
 const internationalPhone = (value: unknown) => {
   try {
     return normalizeCustomerPhone(value);
@@ -63,6 +123,297 @@ export class CustomersController {
 
   private async assertCustomerVisible(actor: any, customerId: string) {
     await assertCustomerInSalesPortfolio(this.db, actor, customerId);
+  }
+
+  private taxIdSuggestionCustomerSourceIds(scoreReasons: unknown) {
+    const internalSources = jsonObject(scoreReasons).internalSources;
+    if (!Array.isArray(internalSources) || internalSources.length === 0) {
+      throw new NotFoundException("Sugestão de CNPJ não encontrada.");
+    }
+    const sources = internalSources
+      .filter(
+        (source): source is Record<string, unknown> =>
+          Boolean(source) &&
+          typeof source === "object" &&
+          !Array.isArray(source),
+      )
+      .map((source) => ({
+        source: String(source.source ?? ""),
+        sourceId: String(source.sourceId ?? ""),
+      }));
+    if (
+      sources.length !== internalSources.length ||
+      sources.some(
+        (source) => source.source !== "CUSTOMER" || !source.sourceId,
+      )
+    ) {
+      throw new NotFoundException("Sugestão de CNPJ não encontrada.");
+    }
+    return [...new Set(sources.map((source) => source.sourceId))].sort();
+  }
+
+  private async assertTaxIdSuggestionAllowed(
+    actor: any,
+    scoreReasons: unknown,
+    db: RawQueryClient = this.db,
+  ) {
+    if (actor.role !== "SALES") return;
+    const partnerId = salesPortfolioPartnerId(actor);
+    const uniqueSourceIds =
+      this.taxIdSuggestionCustomerSourceIds(scoreReasons);
+    const allowed = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT c.id
+         FROM "Customer" c
+         JOIN "StorefrontPartnerCustomer" portfolio
+           ON portfolio."customerId"=c.id AND portfolio."partnerId"=$2
+        WHERE c."companyId"=$1 AND c.id = ANY($3::text[])`,
+      actor.companyId,
+      partnerId,
+      uniqueSourceIds,
+    );
+    if (new Set(allowed.map((row) => row.id)).size !== uniqueSourceIds.length) {
+      throw new NotFoundException("Sugestão de CNPJ não encontrada.");
+    }
+  }
+
+  private async lockAndAssertSalesPortfolioCustomers(
+    actor: any,
+    customerIds: string[],
+    db: RawQueryClient,
+  ) {
+    if (actor.role !== "SALES") return;
+    const partnerId = salesPortfolioPartnerId(actor);
+    const scopedCustomerIds = [
+      ...new Set(customerIds.filter((customerId) => Boolean(customerId))),
+    ].sort();
+    if (scopedCustomerIds.length === 0) {
+      throw new NotFoundException("Sugestão de CNPJ não encontrada.");
+    }
+    const locked = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT portfolio."customerId" AS id
+         FROM "StorefrontPartnerCustomer" portfolio
+         JOIN "Customer" c ON c.id=portfolio."customerId"
+        WHERE c."companyId"=$1 AND portfolio."partnerId"=$2
+          AND portfolio."customerId" = ANY($3::text[])
+        ORDER BY portfolio."customerId"
+        FOR SHARE OF portfolio`,
+      actor.companyId,
+      partnerId,
+      scopedCustomerIds,
+    );
+    if (new Set(locked.map((row) => row.id)).size !== scopedCustomerIds.length) {
+      throw new NotFoundException("Sugestão de CNPJ não encontrada.");
+    }
+  }
+
+  private async lockAndAssertTaxIdSuggestionPortfolioScope(
+    actor: any,
+    targetCustomerId: string,
+    scoreReasons: unknown,
+    db: RawQueryClient,
+  ) {
+    if (actor.role !== "SALES") return;
+    await this.lockAndAssertSalesPortfolioCustomers(
+      actor,
+      [
+        targetCustomerId,
+        ...this.taxIdSuggestionCustomerSourceIds(scoreReasons),
+      ],
+      db,
+    );
+  }
+
+  private async lockTaxIdSuggestionCompanyScope(
+    actor: any,
+    db: RawQueryClient,
+  ) {
+    await db.$queryRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      `${actor.companyId}:customer-tax-id-suggestions`,
+    );
+  }
+
+  private async assertTaxIdSuggestionEvidenceCurrent(
+    actor: any,
+    suggestionTaxId: unknown,
+    scoreReasons: unknown,
+    db: RawQueryClient,
+  ) {
+    const staleEvidence = () =>
+      new ConflictException(
+        "A fonte desta sugestão foi alterada. Pesquise o CNPJ novamente.",
+      );
+    const canonicalCnpj =
+      typeof suggestionTaxId === "string" ? normalizeCnpj(suggestionTaxId) : "";
+    if (!canonicalCnpj || !isValidCnpj(canonicalCnpj)) {
+      throw new BadRequestException("A sugestão contém um CNPJ inválido.");
+    }
+
+    await this.assertTaxIdSuggestionAllowed(actor, scoreReasons, db);
+    const rawSources = jsonObject(scoreReasons).internalSources;
+    if (!Array.isArray(rawSources) || rawSources.length === 0) {
+      throw staleEvidence();
+    }
+    const sources = rawSources.map((source) => {
+      if (!source || typeof source !== "object" || Array.isArray(source)) {
+        throw staleEvidence();
+      }
+      const record = source as Record<string, unknown>;
+      const type = String(record.source ?? "");
+      const sourceId = String(record.sourceId ?? "");
+      if (!sourceId || !["CUSTOMER", "SUPPLIER"].includes(type)) {
+        throw staleEvidence();
+      }
+      return { type, sourceId };
+    });
+
+    const customerIds = [
+      ...new Set(
+        sources
+          .filter((source) => source.type === "CUSTOMER")
+          .map((source) => source.sourceId),
+      ),
+    ].sort();
+    const supplierIds = [
+      ...new Set(
+        sources
+          .filter((source) => source.type === "SUPPLIER")
+          .map((source) => source.sourceId),
+      ),
+    ].sort();
+    const customerRows = customerIds.length
+      ? await db.$queryRawUnsafe<
+          Array<{
+            id: string;
+            taxId: string | null;
+            active: boolean;
+            taxIdVerificationStatus: string;
+          }>
+        >(
+          `SELECT id,"taxId",active,
+                  "taxIdVerificationStatus"::text AS "taxIdVerificationStatus"
+             FROM "Customer"
+            WHERE "companyId"=$1 AND id = ANY($2::text[])
+            ORDER BY id
+            FOR UPDATE`,
+          actor.companyId,
+          customerIds,
+        )
+      : [];
+    const supplierRows = supplierIds.length
+      ? await db.$queryRawUnsafe<
+          Array<{
+            id: string;
+            taxId: string | null;
+            active: boolean;
+            taxIdVerificationStatus: string;
+          }>
+        >(
+          `SELECT id,"taxId",active,
+                  "taxIdVerificationStatus"::text AS "taxIdVerificationStatus"
+             FROM "Supplier"
+            WHERE "companyId"=$1 AND id = ANY($2::text[])
+            ORDER BY id
+            FOR UPDATE`,
+          actor.companyId,
+          supplierIds,
+        )
+      : [];
+    const currentSources = new Map<string, (typeof customerRows)[number]>();
+    for (const row of customerRows)
+      currentSources.set(`CUSTOMER:${row.id}`, row);
+    for (const row of supplierRows)
+      currentSources.set(`SUPPLIER:${row.id}`, row);
+
+    for (const source of sources) {
+      const row = currentSources.get(`${source.type}:${source.sourceId}`);
+      if (
+        !row ||
+        row.active !== true ||
+        !isTrustedInternalTaxIdVerificationStatus(
+          row.taxIdVerificationStatus,
+        ) ||
+        normalizeCnpj(row.taxId) !== canonicalCnpj
+      ) {
+        throw staleEvidence();
+      }
+    }
+    return canonicalCnpj;
+  }
+
+  private async taxIdSuggestionSnapshot(actor: any, customerId: string) {
+    const companyId = actor.companyId;
+    const customer = (
+      await this.db.$queryRawUnsafe<any[]>(
+        `SELECT id,"taxId","taxIdVerificationStatus"::text AS "taxIdVerificationStatus",
+                "taxIdVerifiedAt","taxIdVerificationSource"
+           FROM "Customer"
+          WHERE id=$1 AND "companyId"=$2`,
+        customerId,
+        companyId,
+      )
+    )[0];
+    if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+    const rows = await this.db.$queryRawUnsafe<any[]>(
+      `SELECT id,"taxId","legalName","tradeName","postalCode",address,"addressNumber",
+              district,city,state,source,confidence::float8 AS confidence,"scoreReasons",
+              status,"createdAt","selectedAt","confirmedAt"
+         FROM "CustomerTaxIdSuggestion"
+        WHERE "companyId"=$1 AND "customerId"=$2
+          AND status IN ('DRAFT','SELECTED','CONFIRMED')
+        ORDER BY CASE status WHEN 'SELECTED' THEN 0 WHEN 'DRAFT' THEN 1 ELSE 2 END,
+                 "createdAt" DESC
+        LIMIT 50`,
+      companyId,
+      customerId,
+    );
+
+    const visibleRows: any[] = [];
+    for (const row of rows) {
+      try {
+        await this.assertTaxIdSuggestionAllowed(actor, row.scoreReasons);
+        visibleRows.push(row);
+      } catch (error) {
+        if (actor.role !== "SALES") throw error;
+      }
+    }
+    const snapshotRows = selectTaxIdSuggestionSnapshotRows(visibleRows, 3);
+
+    return {
+      customer,
+      suggestions: snapshotRows.map((row) => {
+        const scoreReasons = jsonObject(row.scoreReasons);
+        const storedReasons = scoreReasons.matchReasons;
+        const matchReasons = Array.isArray(storedReasons)
+          ? storedReasons
+          : suggestionMatchReasons(
+              jsonObject(scoreReasons.fieldScores) as Partial<
+                Record<CnpjSuggestionField, number>
+              >,
+            );
+        return {
+          id: row.id,
+          taxId: row.taxId,
+          legalName: row.legalName,
+          tradeName: row.tradeName,
+          postalCode: row.postalCode,
+          address: row.address,
+          addressNumber: row.addressNumber,
+          district: row.district,
+          city: row.city,
+          state: row.state,
+          source: row.source,
+          sourceLabel: "Cadastro interno BBOS",
+          confidence: Number(row.confidence),
+          matchReasons,
+          status: row.status,
+          createdAt: row.createdAt,
+          selectedAt: row.selectedAt,
+          confirmedAt: row.confirmedAt,
+        };
+      }),
+    };
   }
 
   private async health(
@@ -172,6 +523,8 @@ export class CustomersController {
     const [customers, health] = await Promise.all([
       this.db.$queryRawUnsafe<any[]>(
         `SELECT c.id, c."companyId", c.name, c."legalName", c."tradeName", c."taxId",
+                c."taxIdVerificationStatus"::text AS "taxIdVerificationStatus",
+                c."taxIdVerifiedAt", c."taxIdVerificationSource",
                 c."countryCode", c."countryName", c."foreignTaxId", c.segment,
                 c.email, c.phone, c."postalCode", c.address, c."addressNumber", c."addressComplement",
                 c.district, c.city, c.state, c."stateRegistration", c."stateRegistrationType",
@@ -320,6 +673,517 @@ export class CustomersController {
       id,
       actor.role === "SALES",
     );
+  }
+
+  @Get(":id/tax-id-suggestions")
+  async taxIdSuggestions(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
+    return this.taxIdSuggestionSnapshot(actor, id);
+  }
+
+  @Post(":id/tax-id-suggestions/search")
+  async searchTaxIdSuggestions(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
+    const portfolioPartnerId = salesPortfolioPartnerId(actor);
+    await this.db.$transaction(async (tx) => {
+      await this.lockTaxIdSuggestionCompanyScope(actor, tx);
+      await this.lockAndAssertSalesPortfolioCustomers(actor, [id], tx);
+      const targets = await tx.$queryRawUnsafe<any[]>(
+        `SELECT c.id,c.name,c."legalName",c."tradeName",c."postalCode",c.address,
+                c."addressNumber",c.district,c.city,c.state,c."countryCode"
+           FROM "Customer" c
+          WHERE c.id=$1 AND c."companyId"=$2 AND c.active=true
+            AND ($3::text IS NULL OR EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" portfolio
+               WHERE portfolio."customerId"=c.id AND portfolio."partnerId"=$3
+            ))
+          FOR UPDATE OF c`,
+        id,
+        actor.companyId,
+        portfolioPartnerId,
+      );
+      const target = targets[0];
+      if (!target) {
+        throw new NotFoundException("Cliente ativo não encontrado.");
+      }
+      if (String(target.countryCode ?? "BR").toUpperCase() !== "BR") {
+        throw new BadRequestException(
+          "A sugestão interna de CNPJ está disponível apenas para clientes do Brasil.",
+        );
+      }
+
+      const customerRows = await tx.$queryRawUnsafe<any[]>(
+        `SELECT c.id,c.name,c."legalName",c."tradeName",c."taxId",c."postalCode",c.address,
+                c."addressNumber",c.district,c.city,c.state,
+                c."taxIdVerificationStatus"::text AS "taxIdVerificationStatus"
+           FROM "Customer" c
+          WHERE c."companyId"=$1 AND c.id<>$2 AND c.active=true
+            AND c."taxIdVerificationStatus"::text IN ('VERIFIED_ACTIVE','CONFIRMED_INTERNAL')
+            AND NULLIF(regexp_replace(COALESCE(c."taxId",''),'[^0-9]','','g'),'') IS NOT NULL
+            AND ($3::text IS NULL OR EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" portfolio
+               WHERE portfolio."customerId"=c.id AND portfolio."partnerId"=$3
+            ))
+          ORDER BY c.id
+          FOR UPDATE OF c`,
+        actor.companyId,
+        id,
+        portfolioPartnerId,
+      );
+      await this.lockAndAssertSalesPortfolioCustomers(
+        actor,
+        [id, ...customerRows.map((row) => String(row.id))],
+        tx,
+      );
+      const supplierRows =
+        actor.role === "SALES"
+          ? []
+          : await tx.$queryRawUnsafe<any[]>(
+              `SELECT s.id,s.name,s."legalName",s."tradeName",s."taxId",s."postalCode",s.address,
+                      s.district,s.city,s.state,
+                      s."taxIdVerificationStatus"::text AS "taxIdVerificationStatus"
+                 FROM "Supplier" s
+                WHERE s."companyId"=$1 AND s.active=true
+                  AND s."taxIdVerificationStatus"::text IN ('VERIFIED_ACTIVE','CONFIRMED_INTERNAL')
+                  AND NULLIF(regexp_replace(COALESCE(s."taxId",''),'[^0-9]','','g'),'') IS NOT NULL
+                ORDER BY s.id
+                FOR UPDATE OF s`,
+              actor.companyId,
+            );
+
+      const sourceRecords = new Map<string, any>();
+      const candidates: InternalCnpjCandidateInput[] = [];
+      for (const row of customerRows) {
+        if (
+          !isTrustedInternalTaxIdVerificationStatus(row.taxIdVerificationStatus)
+        ) {
+          continue;
+        }
+        sourceRecords.set(`CUSTOMER:${row.id}`, row);
+        candidates.push({
+          source: "CUSTOMER",
+          sourceId: row.id,
+          cnpj: row.taxId,
+          name: row.tradeName ?? row.name,
+          legalName: row.legalName,
+          address: compactAddress(row.address, row.addressNumber, row.district),
+          postalCode: row.postalCode,
+          city: row.city,
+          state: row.state,
+        });
+      }
+      for (const row of supplierRows) {
+        if (
+          !isTrustedInternalTaxIdVerificationStatus(row.taxIdVerificationStatus)
+        ) {
+          continue;
+        }
+        sourceRecords.set(`SUPPLIER:${row.id}`, row);
+        candidates.push({
+          source: "SUPPLIER",
+          sourceId: row.id,
+          cnpj: row.taxId,
+          name: row.tradeName ?? row.name,
+          legalName: row.legalName,
+          address: compactAddress(row.address, row.district),
+          postalCode: row.postalCode,
+          city: row.city,
+          state: row.state,
+        });
+      }
+
+      const result = suggestInternalCnpjs(
+        {
+          name: target.tradeName ?? target.name,
+          legalName: target.legalName,
+          address: compactAddress(
+            target.address,
+            target.addressNumber,
+            target.district,
+          ),
+          postalCode: target.postalCode,
+          city: target.city,
+          state: target.state,
+        },
+        candidates,
+      );
+      if (!result.validQuery) {
+        throw new BadRequestException({
+          message: "Complete nome e localização antes de pesquisar o CNPJ.",
+          issues: result.issues,
+        });
+      }
+      const proposedSuggestions = result.suggestions.slice(0, 3);
+
+      const activeRows = await tx.$queryRawUnsafe<
+        Array<{ id: string; taxId: string; scoreReasons: unknown }>
+      >(
+        `SELECT id,"taxId","scoreReasons"
+           FROM "CustomerTaxIdSuggestion"
+          WHERE "companyId"=$1 AND "customerId"=$2
+            AND status IN ('DRAFT','SELECTED')
+          ORDER BY "createdAt" DESC
+          FOR UPDATE`,
+        actor.companyId,
+        id,
+      );
+      const visibleRows: typeof activeRows = [];
+      for (const row of activeRows) {
+        try {
+          if (actor.role === "SALES") {
+            await this.lockAndAssertTaxIdSuggestionPortfolioScope(
+              actor,
+              id,
+              row.scoreReasons,
+              tx,
+            );
+          } else {
+            await this.assertTaxIdSuggestionAllowed(
+              actor,
+              row.scoreReasons,
+              tx,
+            );
+          }
+          visibleRows.push(row);
+        } catch (error) {
+          if (actor.role !== "SALES") throw error;
+        }
+      }
+      const visibleIds = visibleRows.map((row) => row.id);
+      if (visibleIds.length > 0) {
+        await tx.$executeRawUnsafe(
+          `UPDATE "CustomerTaxIdSuggestion"
+              SET status='REJECTED',"rejectedAt"=NOW(),"rejectedByUserId"=$3,
+                  "rejectedByName"=$4,"updatedAt"=NOW()
+            WHERE "companyId"=$1 AND "customerId"=$2
+              AND id = ANY($5::text[]) AND status IN ('DRAFT','SELECTED')`,
+          actor.companyId,
+          id,
+          actor.id ?? null,
+          actorDisplayName(actor),
+          visibleIds,
+        );
+      }
+
+      for (const suggestion of proposedSuggestions) {
+        const preferredSource = suggestion.sources[0];
+        if (!preferredSource) continue;
+        const sourceRow = sourceRecords.get(
+          `${preferredSource.source}:${preferredSource.sourceId}`,
+        );
+        const internalSources = suggestion.sources.map((source) => {
+          const row = sourceRecords.get(`${source.source}:${source.sourceId}`);
+          return {
+            ...source,
+            taxIdVerificationStatus:
+              row?.taxIdVerificationStatus ?? "NOT_VERIFIED",
+          };
+        });
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "CustomerTaxIdSuggestion"
+            (id,"companyId","customerId","taxId","legalName","tradeName","postalCode",address,
+             "addressNumber",district,city,state,source,confidence,"scoreReasons","searchCriteria",
+             status,"searchedByUserId","searchedByName","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,
+                   'DRAFT',$17,$18,NOW(),NOW())`,
+          randomUUID(),
+          actor.companyId,
+          id,
+          suggestion.cnpj,
+          suggestion.legalName ?? sourceRow?.legalName ?? null,
+          suggestion.name ?? sourceRow?.tradeName ?? sourceRow?.name ?? null,
+          suggestion.postalCode ?? sourceRow?.postalCode ?? null,
+          sourceRow?.address ?? suggestion.address ?? null,
+          sourceRow?.addressNumber ?? null,
+          sourceRow?.district ?? null,
+          suggestion.city ?? sourceRow?.city ?? null,
+          suggestion.state ?? sourceRow?.state ?? null,
+          `BBOS_INTERNAL:${suggestion.sources.map((item) => item.source).join("+")}`,
+          suggestion.confidence,
+          JSON.stringify({
+            fieldScores: suggestion.fieldScores,
+            matchReasons: suggestionMatchReasons(suggestion.fieldScores),
+            internalSources,
+          }),
+          JSON.stringify(result.normalizedQuery),
+          actor.id ?? null,
+          actorDisplayName(actor),
+        );
+      }
+    });
+
+    return this.taxIdSuggestionSnapshot(actor, id);
+  }
+
+  @Post(":id/tax-id-suggestions/reject")
+  async rejectTaxIdSuggestions(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
+    if (body.acknowledged !== true) {
+      throw new BadRequestException(
+        "Confirme a decisão sobre as sugestões de CNPJ.",
+      );
+    }
+    const reason = String(body.reason ?? "").trim();
+    if (!["NONE_MATCH", "MANUAL_ENTRY"].includes(reason)) {
+      throw new BadRequestException(
+        'Informe reason como "NONE_MATCH" ou "MANUAL_ENTRY".',
+      );
+    }
+    const verificationSource =
+      reason === "NONE_MATCH"
+        ? "BBOS_INTERNAL_NO_MATCH"
+        : "BBOS_INTERNAL_MANUAL_ENTRY";
+
+    await this.db.$transaction(async (tx) => {
+      await this.lockTaxIdSuggestionCompanyScope(actor, tx);
+      await this.lockAndAssertSalesPortfolioCustomers(actor, [id], tx);
+      const customers = await tx.$queryRawUnsafe<
+        Array<{
+          id: string;
+          taxId: string | null;
+          taxIdVerificationStatus: string;
+          taxIdVerificationSource: string | null;
+        }>
+      >(
+        `SELECT id,"taxId","taxIdVerificationStatus"::text AS "taxIdVerificationStatus",
+                "taxIdVerificationSource"
+           FROM "Customer"
+          WHERE id=$1 AND "companyId"=$2
+          FOR UPDATE`,
+        id,
+        actor.companyId,
+      );
+      const customer = customers[0];
+      if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+      const activeRows = await tx.$queryRawUnsafe<
+        Array<{ id: string; scoreReasons: unknown }>
+      >(
+        `SELECT id,"scoreReasons"
+           FROM "CustomerTaxIdSuggestion"
+          WHERE "companyId"=$1 AND "customerId"=$2
+            AND status IN ('DRAFT','SELECTED')
+          FOR UPDATE`,
+        actor.companyId,
+        id,
+      );
+      const visibleIds: string[] = [];
+      for (const row of activeRows) {
+        try {
+          if (actor.role === "SALES") {
+            await this.lockAndAssertTaxIdSuggestionPortfolioScope(
+              actor,
+              id,
+              row.scoreReasons,
+              tx,
+            );
+          } else {
+            await this.assertTaxIdSuggestionAllowed(
+              actor,
+              row.scoreReasons,
+              tx,
+            );
+          }
+          visibleIds.push(row.id);
+        } catch (error) {
+          if (actor.role !== "SALES") throw error;
+        }
+      }
+      if (visibleIds.length === 0) {
+        throw new BadRequestException(
+          "Não há sugestões ativas de CNPJ para rejeitar.",
+        );
+      }
+      await tx.$executeRawUnsafe(
+        `UPDATE "CustomerTaxIdSuggestion"
+            SET status='REJECTED',"rejectedAt"=NOW(),"rejectedByUserId"=$3,
+                "rejectedByName"=$4,"updatedAt"=NOW()
+          WHERE "companyId"=$1 AND "customerId"=$2
+            AND id = ANY($5::text[]) AND status IN ('DRAFT','SELECTED')`,
+        actor.companyId,
+        id,
+        actor.id ?? null,
+        actorDisplayName(actor),
+        visibleIds,
+      );
+      if (
+        canUpdateInternalTaxIdRejectionMetadata(
+          customer.taxIdVerificationStatus,
+          customer.taxIdVerificationSource,
+        )
+      ) {
+        await tx.$executeRawUnsafe(
+          `UPDATE "Customer"
+            SET "taxIdVerificationSource"=$3,
+                "updatedAt"=NOW()
+          WHERE id=$1 AND "companyId"=$2
+            AND "taxIdVerificationStatus"='NOT_VERIFIED'::"TaxVerificationStatus"
+            AND ("taxIdVerificationSource" IS NULL OR "taxIdVerificationSource" IN
+                 ('','BBOS_INTERNAL_NO_MATCH','BBOS_INTERNAL_MANUAL_ENTRY'))`,
+          id,
+          actor.companyId,
+          verificationSource,
+        );
+      }
+    });
+
+    return this.taxIdSuggestionSnapshot(actor, id);
+  }
+
+  @Post(":id/tax-id-suggestions/:suggestionId/confirm")
+  async confirmTaxIdSuggestion(
+    @Param("id") id: string,
+    @Param("suggestionId") suggestionId: string,
+    @Req() request: any,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const actor = await this.actor(request);
+    await this.assertCustomerVisible(actor, id);
+    if (body.acknowledged !== true) {
+      throw new BadRequestException(
+        "Confirme que o CNPJ selecionado pertence a este cliente.",
+      );
+    }
+
+    await this.db.$transaction(async (tx) => {
+      await this.lockTaxIdSuggestionCompanyScope(actor, tx);
+      const customers = await tx.$queryRawUnsafe<
+        Array<{ id: string; taxId: string | null }>
+      >(
+        `SELECT id,"taxId" FROM "Customer"
+          WHERE id=$1 AND "companyId"=$2
+          FOR UPDATE`,
+        id,
+        actor.companyId,
+      );
+      const customer = customers[0];
+      if (!customer) throw new NotFoundException("Cliente não encontrado.");
+
+      const lockedSuggestions = await tx.$queryRawUnsafe<
+        Array<{
+          id: string;
+          taxId: string;
+          scoreReasons: unknown;
+          status: string;
+        }>
+      >(
+        `SELECT id,"taxId","scoreReasons",status
+           FROM "CustomerTaxIdSuggestion"
+          WHERE id=$1 AND "companyId"=$2 AND "customerId"=$3
+          FOR UPDATE`,
+        suggestionId,
+        actor.companyId,
+        id,
+      );
+      const lockedSuggestion = lockedSuggestions[0];
+      if (!lockedSuggestion) {
+        throw new NotFoundException("Sugestão de CNPJ não encontrada.");
+      }
+      await this.lockAndAssertTaxIdSuggestionPortfolioScope(
+        actor,
+        id,
+        lockedSuggestion.scoreReasons,
+        tx,
+      );
+      await this.assertTaxIdSuggestionAllowed(
+        actor,
+        lockedSuggestion.scoreReasons,
+        tx,
+      );
+      const normalizedSuggestionCnpj = normalizeCnpj(lockedSuggestion.taxId);
+      if (!normalizedSuggestionCnpj || !isValidCnpj(normalizedSuggestionCnpj)) {
+        throw new BadRequestException("A sugestão contém um CNPJ inválido.");
+      }
+      if (
+        lockedSuggestion.status === "CONFIRMED" &&
+        normalizeCnpj(customer.taxId) === normalizedSuggestionCnpj
+      ) {
+        return;
+      }
+      if (!["DRAFT", "SELECTED"].includes(lockedSuggestion.status)) {
+        throw new BadRequestException(
+          "Esta sugestão não está mais disponível para confirmação.",
+        );
+      }
+
+      const canonicalCnpj = await this.assertTaxIdSuggestionEvidenceCurrent(
+        actor,
+        lockedSuggestion.taxId,
+        lockedSuggestion.scoreReasons,
+        tx,
+      );
+
+      await tx.$queryRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtext($1))`,
+        `${actor.companyId}:${canonicalCnpj}`,
+      );
+      const duplicate = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "Customer"
+          WHERE "companyId"=$1 AND id<>$2
+            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$3
+          LIMIT 1`,
+        actor.companyId,
+        id,
+        canonicalCnpj,
+      );
+      if (duplicate[0]) {
+        throw new ConflictException(
+          "Este CNPJ já está cadastrado em outro cliente desta empresa.",
+        );
+      }
+
+      await tx.$executeRawUnsafe(
+        `UPDATE "Customer"
+            SET "taxId"=$3,
+                "taxIdVerificationStatus"='CONFIRMED_INTERNAL'::"TaxVerificationStatus",
+                "taxIdVerifiedAt"=NOW(),
+                "taxIdVerificationSource"=$4,
+                "updatedAt"=NOW()
+          WHERE id=$1 AND "companyId"=$2`,
+        id,
+        actor.companyId,
+        canonicalCnpj,
+        `BBOS_INTERNAL_CONFIRMED:${suggestionId}`,
+      );
+      await tx.$executeRawUnsafe(
+        `UPDATE "CustomerTaxIdSuggestion"
+            SET status='CONFIRMED',
+                "selectedAt"=COALESCE("selectedAt",NOW()),
+                "selectedByUserId"=COALESCE("selectedByUserId",$4),
+                "selectedByName"=COALESCE("selectedByName",$5),
+                "confirmedAt"=COALESCE("confirmedAt",NOW()),
+                "confirmedByUserId"=COALESCE("confirmedByUserId",$4),
+                "confirmedByName"=COALESCE("confirmedByName",$5),
+                "updatedAt"=NOW()
+          WHERE id=$1 AND "companyId"=$2 AND "customerId"=$3`,
+        suggestionId,
+        actor.companyId,
+        id,
+        actor.id ?? null,
+        actorDisplayName(actor),
+      );
+      await tx.$executeRawUnsafe(
+        `UPDATE "CustomerTaxIdSuggestion"
+            SET status='REJECTED',"rejectedAt"=NOW(),"rejectedByUserId"=$4,
+                "rejectedByName"=$5,"updatedAt"=NOW()
+          WHERE "companyId"=$1 AND "customerId"=$2 AND id<>$3
+            AND status IN ('DRAFT','SELECTED')`,
+        actor.companyId,
+        id,
+        suggestionId,
+        actor.id ?? null,
+        actorDisplayName(actor),
+      );
+    });
+
+    return this.taxIdSuggestionSnapshot(actor, id);
   }
 
   @Get(":id/visits")
@@ -684,7 +1548,8 @@ export class CustomersController {
     const fiscal = fiscalReadiness.normalized;
     const name = fiscal.name;
     const taxId = fiscal.taxId;
-    if (taxId && taxId !== current.taxId) {
+    const taxIdChanged = normalizeCnpj(taxId) !== normalizeCnpj(current.taxId);
+    if (taxId && taxIdChanged) {
       const duplicate = await this.db.$queryRawUnsafe<any[]>(
         `SELECT id FROM "Customer"
           WHERE "companyId"=$1 AND id<>$2
@@ -695,7 +1560,7 @@ export class CustomersController {
         taxId,
       );
       if (duplicate[0])
-        throw new BadRequestException(
+        throw new ConflictException(
           "CPF/CNPJ já cadastrado para esta empresa.",
         );
     }
@@ -725,43 +1590,124 @@ export class CustomersController {
       needsCreditApproval && current.creditStatus !== "APPROVED"
         ? "UNDER_REVIEW"
         : current.creditStatus;
-    const rows = await this.db.$queryRawUnsafe<any[]>(
-      `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6,
+    const rows = await this.db.$transaction(async (tx) => {
+      // Keep the same lock order used by CNPJ confirmation: customer row first,
+      // then the CNPJ advisory lock. Besides preventing lost updates, this avoids
+      // a row-lock/advisory-lock deadlock when PATCH and /confirm run together.
+      const lockedCurrent = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "Customer"
+          WHERE id=$1 AND "companyId"=$2 AND "updatedAt"=$3::timestamptz
+          FOR UPDATE`,
+        id,
+        actor.companyId,
+        current.updatedAt,
+      );
+      if (!lockedCurrent[0]) {
+        throw new ConflictException(
+          "Este cliente foi alterado por outra ação. Recarregue os dados e tente novamente.",
+        );
+      }
+
+      if (taxId && taxIdChanged) {
+        await tx.$queryRawUnsafe(
+          `SELECT pg_advisory_xact_lock(hashtext($1))`,
+          `${actor.companyId}:${taxId}`,
+        );
+        const duplicate = await tx.$queryRawUnsafe<any[]>(
+          `SELECT id FROM "Customer"
+            WHERE "companyId"=$1 AND id<>$2
+              AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$3
+            LIMIT 1`,
+          actor.companyId,
+          id,
+          taxId,
+        );
+        if (duplicate[0]) {
+          throw new ConflictException(
+            "CPF/CNPJ já cadastrado para esta empresa.",
+          );
+        }
+      }
+      const updatedRows = await tx.$queryRawUnsafe<any[]>(
+        `UPDATE "Customer" SET name=$3, "legalName"=$4, "tradeName"=$5, "taxId"=$6,
          "countryCode"=$7, "countryName"=$8, "foreignTaxId"=$9, segment=$10,
          email=$11, phone=$12, "postalCode"=$13, address=$14, "addressNumber"=$15,
          "addressComplement"=$16, district=$17, city=$18, state=$19,
          "stateRegistration"=$20, "stateRegistrationType"=$21,
-         "paymentTerms"=$22, active=$23, "creditStatus"=$24, "updatedAt"=NOW()
-       WHERE id=$1 AND "companyId"=$2 RETURNING *`,
-      id,
-      actor.companyId,
-      name,
-      fiscal.legalName || null,
-      body.tradeName === undefined
-        ? current.tradeName
-        : body.tradeName?.trim() || null,
-      taxId || null,
-      fiscal.countryCode,
-      fiscal.countryName,
-      fiscal.foreignTaxId || null,
-      body.segment === undefined
-        ? current.segment
-        : body.segment?.trim() || null,
-      body.email === undefined ? current.email : body.email?.trim() || null,
-      body.phone === undefined ? current.phone : internationalPhone(body.phone),
-      fiscal.postalCode,
-      fiscal.address,
-      fiscal.addressNumber,
-      fiscal.addressComplement || null,
-      fiscal.district,
-      fiscal.city,
-      fiscal.state,
-      fiscal.stateRegistration || null,
-      fiscal.stateRegistrationType,
-      paymentTerms,
-      body.active === undefined ? current.active : Boolean(body.active),
-      nextCreditStatus,
-    );
+         "paymentTerms"=$22, active=$23, "creditStatus"=$24,
+         "taxIdVerificationStatus"=CASE
+           WHEN $25::boolean THEN 'NOT_VERIFIED'::"TaxVerificationStatus"
+           ELSE "taxIdVerificationStatus"
+         END,
+         "taxIdVerifiedAt"=CASE
+           WHEN $25::boolean THEN NULL
+           ELSE "taxIdVerifiedAt"
+         END,
+         "taxIdVerificationSource"=CASE
+           WHEN $25::boolean THEN 'MANUAL_ENTRY'
+           ELSE "taxIdVerificationSource"
+         END,
+         "updatedAt"=NOW()
+       WHERE id=$1 AND "companyId"=$2 AND "updatedAt"=$26::timestamptz RETURNING *`,
+        id,
+        actor.companyId,
+        name,
+        fiscal.legalName || null,
+        body.tradeName === undefined
+          ? current.tradeName
+          : body.tradeName?.trim() || null,
+        taxId || null,
+        fiscal.countryCode,
+        fiscal.countryName,
+        fiscal.foreignTaxId || null,
+        body.segment === undefined
+          ? current.segment
+          : body.segment?.trim() || null,
+        body.email === undefined ? current.email : body.email?.trim() || null,
+        body.phone === undefined
+          ? current.phone
+          : internationalPhone(body.phone),
+        fiscal.postalCode,
+        fiscal.address,
+        fiscal.addressNumber,
+        fiscal.addressComplement || null,
+        fiscal.district,
+        fiscal.city,
+        fiscal.state,
+        fiscal.stateRegistration || null,
+        fiscal.stateRegistrationType,
+        paymentTerms,
+        body.active === undefined ? current.active : Boolean(body.active),
+        nextCreditStatus,
+        taxIdChanged,
+        current.updatedAt,
+      );
+
+      if (!updatedRows[0]) {
+        throw new ConflictException(
+          "Este cliente foi alterado por outra ação. Recarregue os dados e tente novamente.",
+        );
+      }
+
+      if (taxIdChanged) {
+        await tx.$executeRawUnsafe(
+          `UPDATE "CustomerTaxIdSuggestion"
+              SET status='REJECTED',
+                  "rejectedAt"=COALESCE("rejectedAt",NOW()),
+                  "rejectedByUserId"=COALESCE("rejectedByUserId",$3),
+                  "rejectedByName"=COALESCE("rejectedByName",$4),
+                  "updatedAt"=NOW()
+            WHERE "companyId"=$1 AND "customerId"=$2
+              AND status IN ('DRAFT','SELECTED')`,
+          actor.companyId,
+          id,
+          actor.id ?? null,
+          actorDisplayName(actor),
+        );
+      }
+
+      return updatedRows;
+    });
     const financial = (await this.health(actor.companyId, id))[0];
     return this.decorate(rows[0], financial);
   }

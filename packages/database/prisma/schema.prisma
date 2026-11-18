@@ -92,6 +92,7 @@ enum GreenCoffeeSupplierType {
 enum TaxVerificationStatus {
   VERIFIED_ACTIVE
   VERIFIED_INACTIVE
+  CONFIRMED_INTERNAL
   INVALID
   NOT_VERIFIED
   SERVICE_UNAVAILABLE
@@ -476,6 +477,7 @@ model Company {
   cuppingPublicSessions        CuppingPublicSession[]
   storefrontMediaAssets        StorefrontMediaAsset[]
   customerVisits               CustomerVisit[]
+  customerTaxIdSuggestions     CustomerTaxIdSuggestion[]
 }
 
 /// Recoverable archive for narrowly scoped production data cleanups.
@@ -719,45 +721,91 @@ model SupplierOriginProduction {
 }
 
 model Customer {
-  id                    String                      @id @default(cuid())
-  companyId             String
-  company               Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                  String
-  legalName             String?
-  tradeName             String?
-  taxId                 String?
-  countryCode           String                      @default("BR") @db.VarChar(2)
-  countryName           String                      @default("Brasil")
-  foreignTaxId          String?
-  segment               String?
-  email                 String?
-  phone                 String?
-  postalCode            String?
-  address               String?
-  addressNumber         String?
-  addressComplement     String?
-  district              String?
-  city                  String?
-  state                 String?
-  stateRegistration     String?
-  stateRegistrationType String                      @default("NOT_DECLARED")
-  paymentTerms          String?
-  active                Boolean                     @default(true)
-  creditStatus          String                      @default("NOT_ANALYZED")
-  creditLimit           Decimal                     @default(0) @db.Decimal(14, 2)
-  creditNotes           String?
-  creditReviewedAt      DateTime?
-  creditReviewedBy      String?
-  salesOrders           SalesOrder[]
-  accountsReceivable    AccountsReceivable[]
-  reconciliationItems   ReconciliationItem[]
-  storefrontPartners    StorefrontPartnerCustomer[]
-  visits                CustomerVisit[]
-  productPrices         CustomerProductPrice[]
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
+  id                      String                      @id @default(cuid())
+  companyId               String
+  company                 Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                    String
+  legalName               String?
+  tradeName               String?
+  taxId                   String?
+  taxIdVerificationStatus TaxVerificationStatus       @default(NOT_VERIFIED)
+  taxIdVerifiedAt         DateTime?
+  taxIdVerificationSource String?
+  countryCode             String                      @default("BR") @db.VarChar(2)
+  countryName             String                      @default("Brasil")
+  foreignTaxId            String?
+  segment                 String?
+  email                   String?
+  phone                   String?
+  postalCode              String?
+  address                 String?
+  addressNumber           String?
+  addressComplement       String?
+  district                String?
+  city                    String?
+  state                   String?
+  stateRegistration       String?
+  stateRegistrationType   String                      @default("NOT_DECLARED")
+  paymentTerms            String?
+  active                  Boolean                     @default(true)
+  creditStatus            String                      @default("NOT_ANALYZED")
+  creditLimit             Decimal                     @default(0) @db.Decimal(14, 2)
+  creditNotes             String?
+  creditReviewedAt        DateTime?
+  creditReviewedBy        String?
+  salesOrders             SalesOrder[]
+  accountsReceivable      AccountsReceivable[]
+  reconciliationItems     ReconciliationItem[]
+  storefrontPartners      StorefrontPartnerCustomer[]
+  visits                  CustomerVisit[]
+  taxIdSuggestions        CustomerTaxIdSuggestion[]
+  productPrices           CustomerProductPrice[]
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
 
   @@index([companyId])
+  @@index([companyId, taxId])
+  @@unique([id, companyId])
+}
+
+/// Auditable CNPJ candidates found from name/address matching.
+/// A suggestion is deliberately separate from Customer.taxId until a user
+/// explicitly confirms it; only the confirmation flow may promote it.
+model CustomerTaxIdSuggestion {
+  id                String    @id @default(cuid())
+  companyId         String
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId        String
+  customer          Customer  @relation(fields: [customerId, companyId], references: [id, companyId], onDelete: Cascade)
+  taxId             String
+  legalName         String?
+  tradeName         String?
+  postalCode        String?
+  address           String?
+  addressNumber     String?
+  district          String?
+  city              String?
+  state             String?
+  source            String
+  confidence        Decimal   @db.Decimal(5, 4)
+  scoreReasons      Json?
+  searchCriteria    Json?
+  status            String    @default("DRAFT")
+  searchedByUserId  String?
+  searchedByName    String?
+  selectedAt        DateTime?
+  selectedByUserId  String?
+  selectedByName    String?
+  confirmedAt       DateTime?
+  confirmedByUserId String?
+  confirmedByName   String?
+  rejectedAt        DateTime?
+  rejectedByUserId  String?
+  rejectedByName    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([companyId, customerId, status, createdAt])
   @@index([companyId, taxId])
 }
 

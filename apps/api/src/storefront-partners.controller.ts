@@ -245,6 +245,10 @@ export class StorefrontPartnersController {
       }
     }
     await this.database.$transaction(async (transaction) => {
+      await transaction.$queryRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtext($1))`,
+        `${actor.companyId}:customer-tax-id-suggestions`,
+      );
       await transaction.$executeRawUnsafe(
         `UPDATE "StorefrontPartner" SET "portalAccessLevel"=$3::"StorefrontPartnerAccessLevel","updatedAt"=NOW()
           WHERE id=$1 AND "companyId"=$2`,
