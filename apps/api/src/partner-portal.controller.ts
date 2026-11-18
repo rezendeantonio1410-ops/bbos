@@ -73,7 +73,7 @@ export class PartnerPortalController {
   private assertCanManageCustomerPortfolio(partner: any) {
     if (!["SELLER", "SALES_MANAGER"].includes(partner.portalAccessLevel)) {
       throw new ForbiddenException(
-        "Distribuidores compram apenas para o próprio cadastro e não administram clientes.",
+        "Esta ação não está disponível para este perfil.",
       );
     }
   }
@@ -588,7 +588,7 @@ export class PartnerPortalController {
         canManageCustomerPortfolio: ["SELLER", "SALES_MANAGER"].includes(
           partner.portalAccessLevel,
         ),
-        canRequestCredit: ["SELLER", "SALES_MANAGER", "DISTRIBUTOR"].includes(
+        canRequestCredit: ["SELLER", "SALES_MANAGER"].includes(
           partner.portalAccessLevel,
         ),
       },
@@ -903,7 +903,7 @@ export class PartnerPortalController {
     @Body() body: Record<string, any>,
   ) {
     const { actor, partner } = await this.context(request);
-    this.assertCanCreateOrders(partner);
+    this.assertCanManageCustomerPortfolio(partner);
     const customer = await this.assertCustomer(
       partner,
       actor.companyId,

@@ -518,6 +518,28 @@ test("distributor portal is tied to one matching customer account", () => {
   assert.match(source, /mesmo CPF\/CNPJ/);
 });
 
+test("distributor can order but cannot manage clients or request credit", () => {
+  const source = readFileSync(
+    join(__dirname, "partner-portal.controller.ts"),
+    "utf8",
+  );
+  const orderOptionsRoute = source.slice(
+    source.indexOf('@Get("order-options")'),
+    source.indexOf('@Post("customers")'),
+  );
+  const creditRequestRoute = source.slice(
+    source.indexOf('@Post("customers/:customerId/credit-request")'),
+    source.indexOf('@Post("quote")'),
+  );
+
+  assert.match(source, /canRequestCredit: \["SELLER", "SALES_MANAGER"\]/);
+  assert.match(orderOptionsRoute, /assertCanCreateOrders\(partner\)/);
+  assert.match(
+    creditRequestRoute,
+    /assertCanManageCustomerPortfolio\(partner\)/,
+  );
+});
+
 test("distributor catalog is filtered and priced on the server", () => {
   const source = readFileSync(
     join(__dirname, "partner-portal.controller.ts"),

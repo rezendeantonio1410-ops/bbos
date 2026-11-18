@@ -149,10 +149,10 @@ const receivableStatusLabels: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 const distributorCatalogTones = [
-  "border-[#e0cca9] bg-[#faf7f2]",
-  "border-[#e8dec9] bg-[#f4efe5]",
-  "border-[#d6cec8] bg-[#fbf9f4]",
-  "border-[#dbcfb9] bg-[#efe7da]",
+  "border-emerald-900/10 bg-white",
+  "border-emerald-900/10 bg-[#f7faf8]",
+  "border-emerald-900/10 bg-white",
+  "border-emerald-900/10 bg-[#f7faf8]",
 ];
 const orderStatusTone = (order: Order) => {
   if (order.receivableStatus === "OVERDUE") {
@@ -180,15 +180,15 @@ const orderStatusTone = (order: Order) => {
   }
   if (["CONFIRMED", "RESERVED", "IN_PRODUCTION"].includes(order.status)) {
     return {
-      row: "bg-[#faf7f2] hover:bg-[#f4efe5]",
-      badge: "bg-[#efe7da] text-[#8a6020]",
-      card: "border-[#e0cca9] bg-[#fdfbf7]",
+      row: "bg-[#f7faf8] hover:bg-[#eef5f1]",
+      badge: "bg-[#dceee4] text-[#155449]",
+      card: "border-[#bddcca] bg-[#f6fbf8]",
     };
   }
   return {
-    row: "bg-[#fffaf0] hover:bg-[#fbf2df]",
-    badge: "bg-[#f6e8c9] text-[#8a6020]",
-    card: "border-[#ead2a2] bg-[#fffcf5]",
+    row: "bg-white hover:bg-stone-50",
+    badge: "bg-stone-100 text-stone-600",
+    card: "border-stone-200 bg-white",
   };
 };
 const purposeLabel = (value: string) => purposeLabels[value] || value;
@@ -299,7 +299,6 @@ export function PartnerOrderWorkspace({
       isDistributor && customers.length === 1 ? customers[0] : null;
     if (!distributorCustomer) return;
     setCustomerId(distributorCustomer.id);
-    setRelationshipCustomerId(distributorCustomer.id);
   }, [customers, isDistributor]);
 
   const loadVisits = useCallback(async (selectedCustomerId: string) => {
@@ -324,8 +323,12 @@ export function PartnerOrderWorkspace({
   }, []);
 
   useEffect(() => {
+    if (isDistributor) {
+      setVisits([]);
+      return;
+    }
     void loadVisits(relationshipCustomerId);
-  }, [loadVisits, relationshipCustomerId]);
+  }, [isDistributor, loadVisits, relationshipCustomerId]);
 
   const cleanItems = useMemo(
     () =>
@@ -549,36 +552,31 @@ export function PartnerOrderWorkspace({
     <section
       className={`border ${
         isDistributor
-          ? "rounded-2xl border-[#e0cca9] bg-[#f4efe5] p-3 pb-24 sm:p-4 sm:pb-4"
+          ? "rounded-2xl border-emerald-900/10 bg-[#eaf2ec] p-3 pb-24 sm:p-4 sm:pb-4"
           : "rounded-3xl border-emerald-900/10 bg-[#eaf2ec] p-5 sm:p-7"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p
-            className={`text-xs font-bold uppercase tracking-[.16em] ${isDistributor ? "text-[#8a6020]" : "text-[#087568]"}`}
-          >
-            Operação liberada ·{" "}
-            {accessLevel === "DISTRIBUTOR"
-              ? "Distribuidor"
-              : accessLevel === "SALES_MANAGER"
+          {!isDistributor && (
+            <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+              Operação liberada ·{" "}
+              {accessLevel === "SALES_MANAGER"
                 ? "Gerente comercial · carteira completa"
                 : "Vendedor · somente sua carteira"}
-          </p>
+            </p>
+          )}
           <h2
             className={`mt-1 font-semibold ${isDistributor ? "text-xl" : "text-2xl"}`}
           >
-            {isDistributor
-              ? "Minhas compras na Bispo"
-              : "Pedidos para clientes"}
+            {isDistributor ? "Produtos disponíveis" : "Pedidos para clientes"}
           </h2>
-          <p
-            className={`max-w-2xl text-stone-600 ${isDistributor ? "mt-1 text-xs leading-5" : "mt-2 text-sm leading-6"}`}
-          >
-            {isDistributor
-              ? "Faça pedidos somente para sua empresa. Os preços vêm da sua tabela e o pedido segue para conferência da Bispo."
-              : "Use clientes vinculados ao seu acesso ou cadastre um novo. O preço vem da tabela oficial e o pedido segue para conferência da Bispo."}
-          </p>
+          {!isDistributor && (
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+              Use clientes vinculados ao seu acesso ou cadastre um novo. O preço
+              vem da tabela oficial e o pedido segue para conferência da Bispo.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {!isDistributor && (
@@ -596,7 +594,7 @@ export function PartnerOrderWorkspace({
             disabled={
               (isDistributor && customers.length !== 1) || !variants.length
             }
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${isDistributor ? "bg-[#3b2a1f] hover:bg-[#5b4232]" : "bg-[#14201d] hover:bg-[#214f46]"}`}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#214f46] disabled:cursor-not-allowed disabled:opacity-45"
           >
             <ShoppingCart size={15} /> Novo pedido
           </button>
@@ -625,19 +623,15 @@ export function PartnerOrderWorkspace({
       {isDistributor && availableProductsByLine.length > 0 && (
         <section
           id="catalogo-signa"
-          className="mt-3 scroll-mt-4 rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] p-3 sm:p-4"
+          className="mt-3 scroll-mt-4 rounded-2xl border border-emerald-900/10 bg-white p-3 sm:p-4"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#8a6020]">
-                Produtos disponíveis
-              </p>
-              <p className="mt-1 text-xs leading-5 text-stone-500">
-                Sua lista exclusiva. Escolha a apresentação; a Bispo confirma a
-                data e produz sob encomenda.
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
+                Lista exclusiva
               </p>
             </div>
-            <span className="rounded-full bg-[#efe7da] px-3 py-1 text-xs font-bold text-[#8a6020]">
+            <span className="rounded-full bg-[#eaf2ec] px-3 py-1 text-xs font-bold text-[#087568]">
               {variants.length} apresentações
             </span>
           </div>
@@ -647,7 +641,7 @@ export function PartnerOrderWorkspace({
                 key={group.line}
                 className={`rounded-xl border p-3 ${distributorCatalogTones[groupIndex % distributorCatalogTones.length]}`}
               >
-                <p className="text-sm font-bold text-[#3b2a1f]">{group.line}</p>
+                <p className="text-sm font-bold text-[#14201d]">{group.line}</p>
                 <div className="mt-2 space-y-1.5">
                   {group.items.map((variant) => (
                     <p
@@ -828,33 +822,24 @@ export function PartnerOrderWorkspace({
         </form>
       )}
 
-      <section
-        className={`rounded-2xl border border-emerald-900/10 bg-white ${
-          isDistributor ? "mt-3 p-3 sm:p-4" : "mt-6 p-4 sm:p-5"
-        }`}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#087568]">
-              {isDistributor ? "Conta comercial" : "Relacionamento comercial"}
-            </p>
-            <h3
-              className={`mt-1 font-semibold ${isDistributor ? "text-base" : "text-lg"}`}
-            >
-              {isDistributor
-                ? "Minha condição comercial"
-                : "Visitas, crédito e histórico"}
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-stone-500">
-              {isDistributor
-                ? "Pedidos somente para a Signa. Crédito e prazo dependem da aprovação da Bispo."
-                : "Registre o que aconteceu no cliente e deixe a próxima ação clara para toda a equipe."}
-            </p>
+      {!isDistributor && (
+        <section className="mt-6 rounded-2xl border border-emerald-900/10 bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#087568]">
+                Relacionamento comercial
+              </p>
+              <h3 className="mt-1 text-lg font-semibold">
+                Visitas, crédito e histórico
+              </h3>
+              <p className="mt-1 text-xs leading-5 text-stone-500">
+                Registre o que aconteceu no cliente e deixe a próxima ação clara
+                para toda a equipe.
+              </p>
+            </div>
+            <History size={20} className="text-emerald-800" />
           </div>
-          <History size={20} className="text-emerald-800" />
-        </div>
 
-        {!isDistributor && (
           <div className="mt-4">
             <PortalField label="Cliente">
               <select
@@ -877,21 +862,12 @@ export function PartnerOrderWorkspace({
               </select>
             </PortalField>
           </div>
-        )}
 
-        {isDistributor && customers.length !== 1 && !loading && (
-          <p className="mt-4 rounded-xl bg-amber-50 p-4 text-xs font-semibold text-amber-900">
-            O acesso do distribuidor precisa ser vinculado a um único cadastro
-            próprio pela equipe Bispo.
-          </p>
-        )}
-
-        {relationshipCustomer && (
-          <>
-            <div
-              className={`grid gap-2 ${isDistributor ? "mt-3 grid-cols-2" : "mt-4 sm:grid-cols-3"}`}
-            >
-              {!isDistributor && (
+          {relationshipCustomer && (
+            <>
+              <div
+                className={`grid gap-2 ${isDistributor ? "mt-3 grid-cols-2" : "mt-4 sm:grid-cols-3"}`}
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -902,242 +878,245 @@ export function PartnerOrderWorkspace({
                 >
                   <CalendarDays size={15} /> Registrar visita
                 </button>
-              )}
-              <button
-                type="button"
-                disabled={relationshipCustomer.creditReviewPending}
-                onClick={() => {
-                  setShowCredit((value) => !value);
-                  setShowVisit(false);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs font-bold text-violet-800 disabled:opacity-45"
-              >
-                <CreditCard size={15} />
-                {relationshipCustomer.creditReviewPending
-                  ? "Crédito em análise"
-                  : "Solicitar crédito"}
-              </button>
-              <button
-                type="button"
-                disabled={!variants.length}
-                onClick={() => {
-                  setCustomerId(relationshipCustomer.id);
-                  setShowOrder(true);
-                  setShowVisit(false);
-                  setShowCredit(false);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-800 px-4 py-3 text-xs font-bold text-emerald-900 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <ShoppingCart size={15} /> Fazer pedido
-              </button>
-            </div>
+                <button
+                  type="button"
+                  disabled={relationshipCustomer.creditReviewPending}
+                  onClick={() => {
+                    setShowCredit((value) => !value);
+                    setShowVisit(false);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs font-bold text-violet-800 disabled:opacity-45"
+                >
+                  <CreditCard size={15} />
+                  {relationshipCustomer.creditReviewPending
+                    ? "Crédito em análise"
+                    : "Solicitar crédito"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!variants.length}
+                  onClick={() => {
+                    setCustomerId(relationshipCustomer.id);
+                    setShowOrder(true);
+                    setShowVisit(false);
+                    setShowCredit(false);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-800 px-4 py-3 text-xs font-bold text-emerald-900 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <ShoppingCart size={15} /> Fazer pedido
+                </button>
+              </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider">
-              <span className="rounded-full bg-stone-100 px-2.5 py-1 text-stone-600">
-                {relationshipCustomer.segment || "Sem segmento"}
-              </span>
-              <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">
-                Crédito: {creditStatusLabel(relationshipCustomer.creditStatus)}
-              </span>
-              {relationshipCustomer.creditStatus === "APPROVED" && (
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
-                  Limite{" "}
-                  {money.format(Number(relationshipCustomer.creditLimit || 0))}
+              <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider">
+                <span className="rounded-full bg-stone-100 px-2.5 py-1 text-stone-600">
+                  {relationshipCustomer.segment || "Sem segmento"}
                 </span>
-              )}
-            </div>
-          </>
-        )}
+                <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">
+                  Crédito:{" "}
+                  {creditStatusLabel(relationshipCustomer.creditStatus)}
+                </span>
+                {relationshipCustomer.creditStatus === "APPROVED" && (
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                    Limite{" "}
+                    {money.format(
+                      Number(relationshipCustomer.creditLimit || 0),
+                    )}
+                  </span>
+                )}
+              </div>
+            </>
+          )}
 
-        {showVisit && relationshipCustomer && !isDistributor && (
-          <form
-            onSubmit={createVisit}
-            className="mt-5 grid gap-3 rounded-2xl bg-[#f5f3ed] p-4 sm:grid-cols-2"
-          >
-            <PortalField label="Data e hora da visita">
-              <input
-                name="visitAt"
-                type="datetime-local"
-                defaultValue={localDateTime()}
-                required
-              />
-            </PortalField>
-            <PortalField label="Pessoa que recebeu o vendedor">
-              <input name="contactName" placeholder="Nome do contato" />
-            </PortalField>
-            <PortalField label="Objetivo da visita">
-              <select name="purpose" defaultValue="PROSPECCAO" required>
-                <option value="PROSPECCAO">Prospecção</option>
-                <option value="APRESENTACAO">Apresentação de produtos</option>
-                <option value="NEGOCIACAO">Negociação</option>
-                <option value="POS_VENDA">Pós-venda</option>
-                <option value="COBRANCA">Cobrança</option>
-                <option value="OUTRO">Outro</option>
-              </select>
-            </PortalField>
-            <PortalField label="Resultado">
-              <select name="outcome" defaultValue="ACOMPANHAR" required>
-                <option value="ACOMPANHAR">Acompanhar</option>
-                <option value="INTERESSADO">Cliente interessado</option>
-                <option value="COTACAO">Solicitou cotação</option>
-                <option value="PEDIDO">Pedido encaminhado</option>
-                <option value="SEM_INTERESSE">Sem interesse agora</option>
-                <option value="NAO_LOCALIZADO">Contato não localizado</option>
-              </select>
-            </PortalField>
-            <div className="sm:col-span-2">
-              <PortalField label="Fatos registrados na visita">
-                <textarea
-                  name="facts"
-                  rows={4}
-                  placeholder="O que foi conversado, necessidades, objeções, produtos de interesse e decisões tomadas."
+          {showVisit && relationshipCustomer && !isDistributor && (
+            <form
+              onSubmit={createVisit}
+              className="mt-5 grid gap-3 rounded-2xl bg-[#f5f3ed] p-4 sm:grid-cols-2"
+            >
+              <PortalField label="Data e hora da visita">
+                <input
+                  name="visitAt"
+                  type="datetime-local"
+                  defaultValue={localDateTime()}
                   required
                 />
               </PortalField>
-            </div>
-            <PortalField label="Próxima ação">
-              <textarea
-                name="nextAction"
-                rows={2}
-                placeholder="Ex.: enviar amostras e retornar com proposta."
-              />
-            </PortalField>
-            <PortalField label="Data da próxima ação">
-              <input name="nextActionAt" type="datetime-local" />
-            </PortalField>
-            <div className="flex justify-end gap-2 sm:col-span-2">
-              <button
-                type="button"
-                onClick={() => setShowVisit(false)}
-                className="rounded-xl border px-4 py-2.5 text-xs font-bold"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={busy}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
-              >
-                <ClipboardCheck size={14} /> Salvar visita
-              </button>
-            </div>
-          </form>
-        )}
+              <PortalField label="Pessoa que recebeu o vendedor">
+                <input name="contactName" placeholder="Nome do contato" />
+              </PortalField>
+              <PortalField label="Objetivo da visita">
+                <select name="purpose" defaultValue="PROSPECCAO" required>
+                  <option value="PROSPECCAO">Prospecção</option>
+                  <option value="APRESENTACAO">Apresentação de produtos</option>
+                  <option value="NEGOCIACAO">Negociação</option>
+                  <option value="POS_VENDA">Pós-venda</option>
+                  <option value="COBRANCA">Cobrança</option>
+                  <option value="OUTRO">Outro</option>
+                </select>
+              </PortalField>
+              <PortalField label="Resultado">
+                <select name="outcome" defaultValue="ACOMPANHAR" required>
+                  <option value="ACOMPANHAR">Acompanhar</option>
+                  <option value="INTERESSADO">Cliente interessado</option>
+                  <option value="COTACAO">Solicitou cotação</option>
+                  <option value="PEDIDO">Pedido encaminhado</option>
+                  <option value="SEM_INTERESSE">Sem interesse agora</option>
+                  <option value="NAO_LOCALIZADO">Contato não localizado</option>
+                </select>
+              </PortalField>
+              <div className="sm:col-span-2">
+                <PortalField label="Fatos registrados na visita">
+                  <textarea
+                    name="facts"
+                    rows={4}
+                    placeholder="O que foi conversado, necessidades, objeções, produtos de interesse e decisões tomadas."
+                    required
+                  />
+                </PortalField>
+              </div>
+              <PortalField label="Próxima ação">
+                <textarea
+                  name="nextAction"
+                  rows={2}
+                  placeholder="Ex.: enviar amostras e retornar com proposta."
+                />
+              </PortalField>
+              <PortalField label="Data da próxima ação">
+                <input name="nextActionAt" type="datetime-local" />
+              </PortalField>
+              <div className="flex justify-end gap-2 sm:col-span-2">
+                <button
+                  type="button"
+                  onClick={() => setShowVisit(false)}
+                  className="rounded-xl border px-4 py-2.5 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  <ClipboardCheck size={14} /> Salvar visita
+                </button>
+              </div>
+            </form>
+          )}
 
-        {showCredit && relationshipCustomer && (
-          <form
-            onSubmit={requestCredit}
-            className="mt-5 grid gap-3 rounded-2xl bg-violet-50 p-4 sm:grid-cols-2"
-          >
-            <PortalField label="Limite solicitado (R$)">
-              <input
-                name="requestedLimit"
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-              />
-            </PortalField>
-            <PortalField label="Condição solicitada">
-              <select name="requestedTerms" defaultValue="28 dias" required>
-                <option value="7 dias">7 dias</option>
-                <option value="14 dias">14 dias</option>
-                <option value="21 dias">21 dias</option>
-                <option value="28 dias">28 dias</option>
-                <option value="30 dias">30 dias</option>
-                <option value="45 dias">45 dias</option>
-                <option value="60 dias">60 dias</option>
-              </select>
-            </PortalField>
-            <PortalField label="Volume mensal estimado (R$)">
-              <input name="monthlyVolume" type="number" min="0" step="0.01" />
-            </PortalField>
-            <PortalField label="Justificativa comercial">
-              <textarea
-                name="rationale"
-                rows={3}
-                placeholder="Relacionamento, potencial, frequência de compra e demais informações relevantes."
-                required
-              />
-            </PortalField>
-            <div className="flex justify-end gap-2 sm:col-span-2">
-              <button
-                type="button"
-                onClick={() => setShowCredit(false)}
-                className="rounded-xl border px-4 py-2.5 text-xs font-bold"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={busy}
-                className="rounded-xl bg-violet-800 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Enviar para análise
-              </button>
-            </div>
-          </form>
-        )}
+          {showCredit && relationshipCustomer && (
+            <form
+              onSubmit={requestCredit}
+              className="mt-5 grid gap-3 rounded-2xl bg-violet-50 p-4 sm:grid-cols-2"
+            >
+              <PortalField label="Limite solicitado (R$)">
+                <input
+                  name="requestedLimit"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                />
+              </PortalField>
+              <PortalField label="Condição solicitada">
+                <select name="requestedTerms" defaultValue="28 dias" required>
+                  <option value="7 dias">7 dias</option>
+                  <option value="14 dias">14 dias</option>
+                  <option value="21 dias">21 dias</option>
+                  <option value="28 dias">28 dias</option>
+                  <option value="30 dias">30 dias</option>
+                  <option value="45 dias">45 dias</option>
+                  <option value="60 dias">60 dias</option>
+                </select>
+              </PortalField>
+              <PortalField label="Volume mensal estimado (R$)">
+                <input name="monthlyVolume" type="number" min="0" step="0.01" />
+              </PortalField>
+              <PortalField label="Justificativa comercial">
+                <textarea
+                  name="rationale"
+                  rows={3}
+                  placeholder="Relacionamento, potencial, frequência de compra e demais informações relevantes."
+                  required
+                />
+              </PortalField>
+              <div className="flex justify-end gap-2 sm:col-span-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCredit(false)}
+                  className="rounded-xl border px-4 py-2.5 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={busy}
+                  className="rounded-xl bg-violet-800 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  Enviar para análise
+                </button>
+              </div>
+            </form>
+          )}
 
-        {relationshipCustomer && !isDistributor && (
-          <div className="mt-6 border-t border-stone-100 pt-5">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-sm font-bold">Histórico de visitas</h4>
-              <button
-                type="button"
-                disabled={visitsLoading}
-                onClick={() => void loadVisits(relationshipCustomer.id)}
-                className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 disabled:opacity-50"
-              >
-                <RefreshCw size={13} /> Atualizar
-              </button>
-            </div>
-            {visitsLoading ? (
-              <p className="mt-3 text-xs text-stone-500">
-                Carregando histórico…
-              </p>
-            ) : visits.length ? (
-              <div className="mt-3 space-y-3">
-                {visits.map((visit) => (
-                  <article
-                    key={visit.id}
-                    className="rounded-2xl border border-stone-200 p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-bold text-[#14201d]">
-                          {purposeLabel(visit.purpose)} ·{" "}
-                          {outcomeLabel(visit.outcome)}
-                        </p>
-                        <p className="mt-1 text-[11px] text-stone-500">
-                          {new Date(visit.visitAt).toLocaleString("pt-BR")} ·{" "}
-                          {visit.recordedByName}
-                          {visit.contactName
-                            ? ` · contato: ${visit.contactName}`
+          {relationshipCustomer && !isDistributor && (
+            <div className="mt-6 border-t border-stone-100 pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-bold">Histórico de visitas</h4>
+                <button
+                  type="button"
+                  disabled={visitsLoading}
+                  onClick={() => void loadVisits(relationshipCustomer.id)}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 disabled:opacity-50"
+                >
+                  <RefreshCw size={13} /> Atualizar
+                </button>
+              </div>
+              {visitsLoading ? (
+                <p className="mt-3 text-xs text-stone-500">
+                  Carregando histórico…
+                </p>
+              ) : visits.length ? (
+                <div className="mt-3 space-y-3">
+                  {visits.map((visit) => (
+                    <article
+                      key={visit.id}
+                      className="rounded-2xl border border-stone-200 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-bold text-[#14201d]">
+                            {purposeLabel(visit.purpose)} ·{" "}
+                            {outcomeLabel(visit.outcome)}
+                          </p>
+                          <p className="mt-1 text-[11px] text-stone-500">
+                            {new Date(visit.visitAt).toLocaleString("pt-BR")} ·{" "}
+                            {visit.recordedByName}
+                            {visit.contactName
+                              ? ` · contato: ${visit.contactName}`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+                        {visit.facts}
+                      </p>
+                      {visit.nextAction && (
+                        <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
+                          <strong>Próxima ação:</strong> {visit.nextAction}
+                          {visit.nextActionAt
+                            ? ` · ${new Date(visit.nextActionAt).toLocaleString("pt-BR")}`
                             : ""}
                         </p>
-                      </div>
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
-                      {visit.facts}
-                    </p>
-                    {visit.nextAction && (
-                      <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
-                        <strong>Próxima ação:</strong> {visit.nextAction}
-                        {visit.nextActionAt
-                          ? ` · ${new Date(visit.nextActionAt).toLocaleString("pt-BR")}`
-                          : ""}
-                      </p>
-                    )}
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 rounded-xl border border-dashed p-4 text-center text-xs text-stone-500">
-                Nenhuma visita registrada para este cliente.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-xl border border-dashed p-4 text-center text-xs text-stone-500">
+                  Nenhuma visita registrada para este cliente.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {showOrder && (
         <>
@@ -1160,7 +1139,7 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-center justify-between gap-4 border-b border-stone-100 bg-white/95 px-4 py-3 backdrop-blur sm:-top-5 sm:-mx-5 sm:-mt-5 sm:px-5">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#8a6020]">
+                  <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#087568]">
                     Novo pedido Signa
                   </p>
                   <h3 className="text-lg font-semibold">Monte seu pedido</h3>
@@ -1176,14 +1155,14 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && customers.length === 1 && customers[0] ? (
-              <div className="rounded-xl border border-[#e0cca9] bg-[#faf7f2] p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#8a6020]">
+              <div className="rounded-xl border border-emerald-900/10 bg-[#f7faf8] p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
                   Comprador
                 </p>
-                <p className="mt-1 text-sm font-bold text-[#3b2a1f]">
+                <p className="mt-1 text-sm font-bold text-[#14201d]">
                   {customers[0].tradeName || customers[0].name}
                 </p>
-                <p className="mt-1 text-xs text-[#6b5747]">
+                <p className="mt-1 text-xs text-stone-500">
                   Pedido exclusivo para o próprio distribuidor ·{" "}
                   {catalog?.exclusive
                     ? `${catalog.productCount} apresentação(ões) disponíveis na sua lista exclusiva`
@@ -1481,13 +1460,13 @@ export function PartnerOrderWorkspace({
                 type="button"
                 disabled={busy}
                 onClick={() => void calculateQuote()}
-                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold disabled:opacity-50 ${isDistributor ? "border-[#8a6020] text-[#8a6020]" : "border-emerald-800 text-emerald-900"}`}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-800 px-4 py-2.5 text-xs font-bold text-emerald-900 disabled:opacity-50"
               >
                 <RefreshCw size={13} /> Calcular
               </button>
               <button
                 disabled={busy || !quote}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 ${isDistributor ? "bg-[#3b2a1f]" : "bg-[#14201d]"}`}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
               >
                 <Send size={13} /> Enviar pedido
               </button>
@@ -1637,10 +1616,10 @@ export function PartnerOrderWorkspace({
         )}
       </div>
       {isDistributor && !showOrder && (
-        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-[#e0cca9] bg-[#fbf9f4]/95 p-1.5 shadow-xl backdrop-blur md:hidden">
+        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-emerald-900/10 bg-white/95 p-1.5 shadow-xl backdrop-blur md:hidden">
           <a
             href="#catalogo-signa"
-            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#6b5747]"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#087568]"
           >
             <ClipboardCheck size={17} />
             Produtos
@@ -1649,14 +1628,14 @@ export function PartnerOrderWorkspace({
             type="button"
             onClick={() => setShowOrder(true)}
             disabled={customers.length !== 1 || !variants.length}
-            className="flex min-h-12 flex-col items-center justify-center rounded-xl bg-[#3b2a1f] text-[10px] font-bold text-white disabled:opacity-45"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl bg-[#14201d] text-[10px] font-bold text-white disabled:opacity-45"
           >
             <Plus size={17} />
             Novo pedido
           </button>
           <a
             href="#pedidos-signa"
-            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#6b5747]"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#087568]"
           >
             <History size={17} />
             Pedidos

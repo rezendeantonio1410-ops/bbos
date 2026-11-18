@@ -7,10 +7,7 @@ import {
   BadgeDollarSign,
   Bell,
   CheckCircle2,
-  Factory,
-  FileCheck2,
   LogOut,
-  PackageCheck,
   ReceiptText,
   RefreshCw,
   ShoppingBag,
@@ -310,40 +307,30 @@ export default function PartnerPortalPage() {
             <section
               className={`flex flex-wrap items-end justify-between gap-4 ${
                 data.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "overflow-hidden rounded-3xl border border-[#e0cca9] bg-gradient-to-br from-[#fbf9f4] via-[#faf7f2] to-[#efe7da] px-5 py-5 text-[#3b2a1f] shadow-sm sm:px-7"
+                  ? "overflow-hidden rounded-2xl border border-emerald-900/10 bg-white px-5 py-4 text-[#14201d] shadow-sm sm:px-6"
                   : ""
               }`}
             >
               <div className="min-w-0 max-w-3xl">
                 {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
-                  <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <div className="mb-3 flex items-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
                       alt="Signa Coffee"
                       className="h-8 w-auto sm:h-10"
                     />
-                    <span className="h-8 w-px bg-[#e0cca9]" />
-                    <span className="text-[10px] font-bold uppercase tracking-[.16em] text-[#8a6020]">
-                      Ambiente exclusivo · Operado pelo BBOS
-                    </span>
                   </div>
                 )}
-                <p
-                  className={`text-xs font-bold uppercase tracking-[.16em] ${
-                    data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "text-[#8a6020]"
-                      : "text-[#087568]"
-                  }`}
-                >
-                  {data.partner.portalAccessLevel === "DISTRIBUTOR"
-                    ? "Curadoria · Personalização · Presença"
-                    : "Visão exclusiva"}
-                </p>
+                {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
+                  <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+                    Visão exclusiva
+                  </p>
+                )}
                 <h1
                   className={`mt-1 font-semibold ${
                     data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "font-serif text-2xl sm:text-3xl"
+                      ? "text-2xl sm:text-3xl"
                       : "text-3xl sm:mt-2 sm:text-4xl"
                   }`}
                 >
@@ -353,39 +340,26 @@ export default function PartnerPortalPage() {
                     : data.partner.contactName || data.partner.name}
                   .
                 </h1>
-                <p
-                  className={`mt-1.5 max-w-3xl text-sm ${
-                    data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "text-[#6b5747]"
-                      : "text-stone-500"
-                  }`}
-                >
+                <p className="mt-1.5 max-w-3xl text-sm text-stone-500">
                   {data.partner.portalAccessLevel === "VIEWER"
                     ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
                     : data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "Compre da Bispo para sua empresa e acompanhe somente os próprios pedidos, vencimentos e documentos."
+                      ? "Seu pedido aqui."
                       : data.partner.portalAccessLevel === "SALES_MANAGER"
                         ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
                         : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
                 </p>
               </div>
-              <p
-                className={`text-xs ${
-                  data.partner.portalAccessLevel === "DISTRIBUTOR"
-                    ? "text-[#76695d]"
-                    : "text-stone-400"
-                }`}
-              >
-                Atualizado em {new Date(data.updatedAt).toLocaleString("pt-BR")}
-              </p>
+              {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
+                <p className="text-xs text-stone-400">
+                  Atualizado em{" "}
+                  {new Date(data.updatedAt).toLocaleString("pt-BR")}
+                </p>
+              )}
             </section>
 
             {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
-              <>
-                <DistributorMetrics orders={data.partnerOrders} />
-                <DistributorJourney />
-                <DistributorNotifications items={data.notifications ?? []} />
-              </>
+              <DistributorMetrics orders={data.partnerOrders} />
             ) : (
               <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <Metric
@@ -422,6 +396,10 @@ export default function PartnerPortalPage() {
                 orders={data.partnerOrders}
                 onOrderCreated={load}
               />
+            )}
+
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+              <DistributorNotifications items={data.notifications ?? []} />
             )}
 
             {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
@@ -626,10 +604,10 @@ function DistributorMetric({
   tone: "green" | "sand" | "blue" | "lilac" | "red";
 }) {
   const tones = {
-    green: "border-[#d8dacb] bg-[#f4f3ed] text-[#53593b]",
-    sand: "border-[#e0cca9] bg-[#faf7f2] text-[#8a6020]",
-    blue: "border-[#c7d4d8] bg-[#f1f5f6] text-[#063b4c]",
-    lilac: "border-[#ded2e1] bg-[#f7f2f8] text-[#8d6598]",
+    green: "border-emerald-900/10 bg-white text-[#087568]",
+    sand: "border-emerald-900/10 bg-white text-[#087568]",
+    blue: "border-emerald-900/10 bg-white text-[#087568]",
+    lilac: "border-emerald-900/10 bg-white text-[#087568]",
     red: "border-[#f1d3cf] bg-[#fff1ef] text-[#9d3f35]",
   } as const;
   return (
@@ -645,60 +623,20 @@ function DistributorMetric({
   );
 }
 
-function DistributorJourney() {
-  const steps = [
-    { icon: ShoppingBag, label: "1. Pedido", text: "Você envia" },
-    { icon: CheckCircle2, label: "2. Aprovação", text: "Bispo confirma" },
-    { icon: Factory, label: "3. Produção", text: "Sob encomenda" },
-    { icon: FileCheck2, label: "4. NF-e", text: "Documento liberado" },
-    { icon: PackageCheck, label: "5. Entrega", text: "Pedido concluído" },
-  ];
-  return (
-    <section className="rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] px-3 py-3 shadow-sm">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {steps.map(({ icon: Icon, label, text }, index) => (
-          <div
-            key={label}
-            className="relative flex items-center gap-2 rounded-xl bg-[#f4efe5] px-3 py-2.5"
-          >
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[#8a6020] shadow-sm">
-              <Icon size={15} />
-            </span>
-            <span className="min-w-0">
-              <strong className="block truncate text-xs">{label}</strong>
-              <span className="block truncate text-[10px] text-stone-500">
-                {text}
-              </span>
-            </span>
-            {index < steps.length - 1 && (
-              <span className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 text-[#c09853] sm:block">
-                →
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function DistributorNotifications({
   items,
 }: {
   items: PortalData["notifications"];
 }) {
   return (
-    <section className="rounded-2xl border border-[#e8dec9] bg-[#fbf9f4] p-3.5 shadow-sm sm:p-4">
+    <section className="rounded-2xl border border-emerald-900/10 bg-white p-3.5 shadow-sm sm:p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#8a6020]">
-            Atualizações da sua operação
-          </p>
-          <p className="mt-1 text-xs text-[#76695d]">
-            Cada ação do pedido fica registrada aqui.
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
+            Atualizações dos pedidos
           </p>
         </div>
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#efe7da] text-[#8a6020]">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2ec] text-[#087568]">
           <Bell size={16} />
         </span>
       </div>
@@ -709,31 +647,31 @@ function DistributorNotifications({
               key={item.id}
               className={`rounded-xl border px-3 py-2.5 ${
                 index === 0
-                  ? "border-[#c09853] bg-white"
-                  : "border-[#e8dec9] bg-[#faf7f2]"
+                  ? "border-emerald-700/30 bg-[#f7faf8]"
+                  : "border-stone-200 bg-white"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-[10px] font-bold uppercase tracking-[.12em] text-[#8a6020]">
+                  <p className="truncate text-[10px] font-bold uppercase tracking-[.12em] text-[#087568]">
                     {item.orderCode}
                   </p>
-                  <p className="mt-0.5 text-xs font-bold text-[#3b2a1f]">
+                  <p className="mt-0.5 text-xs font-bold text-[#14201d]">
                     {item.title}
                   </p>
                 </div>
-                <time className="whitespace-nowrap text-[9px] text-[#76695d]">
+                <time className="whitespace-nowrap text-[9px] text-stone-400">
                   {new Date(item.occurredAt).toLocaleDateString("pt-BR")}
                 </time>
               </div>
-              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-[#6b5747]">
+              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-stone-500">
                 {item.detail}
               </p>
             </article>
           ))}
         </div>
       ) : (
-        <p className="mt-3 rounded-xl border border-dashed border-[#e0cca9] bg-white/70 p-4 text-center text-xs text-[#76695d]">
+        <p className="mt-3 rounded-xl border border-dashed border-emerald-900/20 bg-[#f7faf8] p-4 text-center text-xs text-stone-500">
           As ações dos seus pedidos aparecerão aqui.
         </p>
       )}
