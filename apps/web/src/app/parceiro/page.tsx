@@ -192,7 +192,7 @@ export default function PartnerPortalPage() {
             <div className="hidden border-l border-stone-200 pl-5 sm:block">
               <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "Área do distribuidor"
+                  ? "Área Signa"
                   : "Portal do representante"}
               </p>
               <p className="mt-1 text-xs text-stone-500">

@@ -628,7 +628,7 @@ export function PartnerOrderWorkspace({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
-                Lista exclusiva
+                Catálogo Signa
               </p>
             </div>
             <span className="rounded-full bg-[#eaf2ec] px-3 py-1 text-xs font-bold text-[#087568]">
@@ -1154,7 +1154,7 @@ export function PartnerOrderWorkspace({
                 </button>
               </div>
             )}
-            {isDistributor && customers.length === 1 && customers[0] ? (
+            {isDistributor && customers.length === 1 && customers[0] && (
               <div className="rounded-xl border border-emerald-900/10 bg-[#f7faf8] p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
                   Comprador
@@ -1163,13 +1163,13 @@ export function PartnerOrderWorkspace({
                   {customers[0].tradeName || customers[0].name}
                 </p>
                 <p className="mt-1 text-xs text-stone-500">
-                  Pedido exclusivo para o próprio distribuidor ·{" "}
-                  {catalog?.exclusive
-                    ? `${catalog.productCount} apresentação(ões) disponíveis na sua lista exclusiva`
-                    : `${catalog?.productCount ?? 0} apresentação(ões) disponíveis na tabela Distribuidor`}
+                  Escolha os produtos e as quantidades para o seu próximo
+                  pedido. {catalog?.productCount ?? 0} apresentação(ões)
+                  disponíveis.
                 </p>
               </div>
-            ) : (
+            )}
+            {!isDistributor && (
               <PortalField label="Cliente liberado">
                 <select
                   value={customerId}
@@ -1201,14 +1201,15 @@ export function PartnerOrderWorkspace({
             {!customers.length && !loading && (
               <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
                 {isDistributor
-                  ? "Peça à equipe Bispo para vincular o cadastro da sua empresa."
+                  ? "Estamos preparando os dados da Signa para receber o próximo pedido. Tente novamente em instantes."
                   : "Cadastre um cliente ou peça à equipe Bispo para liberar um cliente existente."}
               </p>
             )}
             {!variants.length && !loading && (
               <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-                A equipe Bispo ainda precisa liberar produtos e preços para esta
-                lista comercial.
+                {isDistributor
+                  ? "O catálogo Signa está sendo atualizado. Tente novamente em instantes."
+                  : "A equipe Bispo ainda precisa liberar produtos e preços para esta lista comercial."}
               </p>
             )}
 
@@ -1600,7 +1601,8 @@ export function PartnerOrderWorkspace({
             </>
           ) : (
             <p className="mt-3 rounded-2xl border border-dashed border-emerald-900/20 bg-white/50 p-5 text-center text-xs text-stone-500">
-              Nenhum pedido criado por este acesso.
+              Você ainda não tem pedidos. Quando fizer o primeiro, ele aparecerá
+              aqui.
             </p>
           )}
         </div>
