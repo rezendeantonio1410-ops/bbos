@@ -7,10 +7,12 @@ import {
   BadgeDollarSign,
   Bell,
   CheckCircle2,
+  ChevronRight,
   LogOut,
   ReceiptText,
   RefreshCw,
   ShoppingBag,
+  ShoppingCart,
   TicketPercent,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
@@ -184,13 +186,39 @@ export default function PartnerPortalPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f3ed] text-[#14201d]">
-      <header className="border-b border-black/10 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
+    <main className="min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)]">
+      <header className="sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)]/95 backdrop-blur sm:static">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-5">
           <div className="flex items-center gap-5">
-            <Logo />
+            <div
+              className={
+                data?.partner.portalAccessLevel === "DISTRIBUTOR"
+                  ? "hidden sm:block"
+                  : "block"
+              }
+            >
+              <Logo />
+            </div>
+            {data?.partner.portalAccessLevel === "DISTRIBUTOR" && (
+              <div className="flex items-center gap-3 sm:hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
+                  alt="Signa Coffee"
+                  className="h-7 w-auto"
+                />
+                <div className="border-l border-[var(--bbos-surface-border)] pl-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">
+                    Portal de pedidos
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-[var(--bbos-text-muted)]">
+                    Operado pelo BBOS
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="hidden border-l border-stone-200 pl-5 sm:block">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
                   ? "Área Signa"
                   : "Portal do representante"}
@@ -202,20 +230,33 @@ export default function PartnerPortalPage() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="inline-flex items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-xs font-bold text-stone-600"
-          >
-            <LogOut size={15} /> Sair
-          </button>
+          <div className="flex items-center gap-1.5">
+            {data?.partner.portalAccessLevel === "DISTRIBUTOR" && (
+              <a
+                href="#historico-pedidos"
+                aria-label="Documentos e histórico"
+                className="grid size-10 place-items-center rounded-xl text-[var(--bbos-coffee-green)] hover:bg-[var(--bbos-nav-active)] sm:hidden"
+              >
+                <ReceiptText size={18} />
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => void logout()}
+              aria-label="Sair do portal"
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 py-2 text-xs font-bold text-[var(--bbos-text-secondary)] transition hover:bg-[var(--bbos-surface-subtle)]"
+            >
+              <LogOut size={16} />{" "}
+              <span className="hidden sm:inline">Sair</span>
+            </button>
+          </div>
         </div>
       </header>
 
       <div
         className={`mx-auto max-w-7xl px-4 py-5 sm:px-8 sm:py-7 ${
           data?.partner.portalAccessLevel === "DISTRIBUTOR"
-            ? "space-y-4"
+            ? "space-y-4 pb-24 sm:pb-7"
             : "space-y-7"
         }`}
       >
@@ -305,9 +346,10 @@ export default function PartnerPortalPage() {
         {data && (
           <>
             <section
+              id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
                 data.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "overflow-hidden rounded-2xl border border-emerald-900/10 bg-white px-5 py-4 text-[#14201d] shadow-sm sm:px-6"
+                  ? "scroll-mt-20 overflow-hidden rounded-2xl border border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] px-4 py-4 text-[var(--bbos-text-primary)] shadow-sm sm:scroll-mt-4 sm:px-6"
                   : ""
               }`}
             >
@@ -323,7 +365,7 @@ export default function PartnerPortalPage() {
                   </div>
                 )}
                 {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
-                  <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+                  <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                     Visão exclusiva
                   </p>
                 )}
@@ -349,6 +391,17 @@ export default function PartnerPortalPage() {
                         ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
                         : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
                 </p>
+                {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(new Event("bbos:partner-order:new"))
+                    }
+                    className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--bbos-action-primary)] px-4 text-sm font-bold text-white shadow-sm sm:hidden"
+                  >
+                    <ShoppingCart size={18} /> Novo pedido
+                  </button>
+                )}
               </div>
               {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
                 <p className="text-xs text-stone-400">
@@ -569,32 +622,48 @@ function DistributorMetrics({
     0,
   );
   return (
-    <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <DistributorMetric
-        icon={ShoppingBag}
-        label="Pedidos"
-        value={String(orders.length)}
-        tone="green"
-      />
-      <DistributorMetric
-        icon={ReceiptText}
-        label="Total comprado"
-        value={money.format(total)}
-        tone="sand"
-      />
-      <DistributorMetric
-        icon={BadgeDollarSign}
-        label="A pagar"
-        value={money.format(open)}
-        tone="blue"
-      />
-      <DistributorMetric
-        icon={CheckCircle2}
-        label="Vencidos"
-        value={String(overdue.length)}
-        tone={overdue.length ? "red" : "lilac"}
-      />
-    </section>
+    <>
+      <section className="grid grid-cols-2 gap-2 sm:hidden">
+        <DistributorMetric
+          icon={ShoppingBag}
+          label="Pedidos"
+          value={String(orders.length)}
+          tone="green"
+        />
+        <DistributorMetric
+          icon={overdue.length ? BadgeDollarSign : CheckCircle2}
+          label={overdue.length ? "Vencidos" : "Situação"}
+          value={overdue.length ? String(overdue.length) : "Tudo em dia"}
+          tone={overdue.length ? "red" : "lilac"}
+        />
+      </section>
+      <section className="hidden gap-2 sm:grid sm:grid-cols-4">
+        <DistributorMetric
+          icon={ShoppingBag}
+          label="Pedidos"
+          value={String(orders.length)}
+          tone="green"
+        />
+        <DistributorMetric
+          icon={ReceiptText}
+          label="Total comprado"
+          value={money.format(total)}
+          tone="sand"
+        />
+        <DistributorMetric
+          icon={BadgeDollarSign}
+          label="A pagar"
+          value={money.format(open)}
+          tone="blue"
+        />
+        <DistributorMetric
+          icon={CheckCircle2}
+          label="Vencidos"
+          value={String(overdue.length)}
+          tone={overdue.length ? "red" : "lilac"}
+        />
+      </section>
+    </>
   );
 }
 
@@ -610,11 +679,13 @@ function DistributorMetric({
   tone: "green" | "sand" | "blue" | "lilac" | "red";
 }) {
   const tones = {
-    green: "border-emerald-900/10 bg-white text-[#087568]",
-    sand: "border-emerald-900/10 bg-white text-[#087568]",
-    blue: "border-emerald-900/10 bg-white text-[#087568]",
-    lilac: "border-emerald-900/10 bg-white text-[#087568]",
-    red: "border-[#f1d3cf] bg-[#fff1ef] text-[#9d3f35]",
+    green:
+      "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] text-[var(--bbos-coffee-green)]",
+    sand: "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] text-[var(--bbos-coffee-green)]",
+    blue: "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] text-[var(--bbos-coffee-green)]",
+    lilac:
+      "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] text-[var(--bbos-coffee-green)]",
+    red: "border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] text-[var(--bbos-danger)]",
   } as const;
   return (
     <article className={`rounded-2xl border p-3.5 ${tones[tone]}`}>
@@ -651,13 +722,49 @@ function distributorPaymentLabel(order: PortalData["partnerOrders"][number]) {
 }
 
 function distributorStatusTone(status: string, overdue = false) {
-  if (overdue) return "bg-[#fff1ef] text-[#9d3f35]";
-  if (status === "DELIVERED") return "bg-emerald-50 text-emerald-800";
-  if (status === "SHIPPED") return "bg-sky-50 text-sky-800";
-  if (status === "IN_PRODUCTION") return "bg-amber-50 text-amber-800";
-  if (status === "CANCELLED") return "bg-stone-100 text-stone-500";
-  return "bg-[#eaf2ec] text-[#087568]";
+  if (overdue) {
+    return "bg-[var(--bbos-danger-soft)] text-[var(--bbos-danger)]";
+  }
+  if (status === "DELIVERED") {
+    return "bg-[var(--bbos-success-soft)] text-[var(--bbos-success)]";
+  }
+  if (["SHIPPED", "INVOICED", "READY_TO_SHIP"].includes(status)) {
+    return "bg-[var(--bbos-info-soft)] text-[var(--bbos-info)]";
+  }
+  if (["IN_PRODUCTION", "PICKING"].includes(status)) {
+    return "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]";
+  }
+  if (status === "CANCELLED") {
+    return "bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-muted)]";
+  }
+  return "bg-[var(--bbos-nav-active)] text-[var(--bbos-coffee-green)]";
 }
+
+const distributorOrderProgress: Record<string, number> = {
+  DRAFT: 10,
+  CONFIRMED: 20,
+  RESERVED: 35,
+  PICKING: 50,
+  IN_PRODUCTION: 55,
+  READY_TO_SHIP: 70,
+  INVOICED: 80,
+  SHIPPED: 90,
+  DELIVERED: 100,
+  CANCELLED: 100,
+};
+
+const distributorNextStep: Record<string, string> = {
+  DRAFT: "Aguardando conferência da Bispo",
+  CONFIRMED: "Pedido aprovado para preparação",
+  RESERVED: "Café reservado para o pedido",
+  PICKING: "Em preparação",
+  IN_PRODUCTION: "Produção sob encomenda",
+  READY_TO_SHIP: "Pronto para emissão da NF-e",
+  INVOICED: "NF-e emitida; preparando a entrega",
+  SHIPPED: "Acompanhe a entrega",
+  DELIVERED: "Pedido concluído",
+  CANCELLED: "Pedido cancelado",
+};
 
 function DistributorOrderQueue({
   orders,
@@ -691,7 +798,84 @@ function DistributorOrderQueue({
       </div>
 
       {activeOrders.length ? (
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-[var(--bbos-surface-border)] sm:hidden">
+          {activeOrders.map((order) => {
+            const overdue = order.receivableStatus === "OVERDUE";
+            const progress = distributorOrderProgress[order.status] ?? 15;
+            return (
+              <article key={order.id} className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[var(--bbos-text-primary)]">
+                      {order.code}
+                    </p>
+                    <p className="mt-1 text-[10px] text-[var(--bbos-text-muted)]">
+                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-bold text-[var(--bbos-text-primary)]">
+                    {money.format(Number(order.totalAmount || 0))}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${distributorStatusTone(order.status, overdue)}`}
+                  >
+                    {distributorStatusLabels[order.status] || order.status}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold ${overdue ? "text-[var(--bbos-danger)]" : "text-[var(--bbos-text-secondary)]"}`}
+                  >
+                    {distributorPaymentLabel(order)}
+                  </span>
+                </div>
+                <div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bbos-surface-subtle)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--bbos-coffee-green)] transition-all"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p className="text-[10px] text-[var(--bbos-text-muted)]">
+                      {distributorNextStep[order.status] ||
+                        "Pedido em andamento"}
+                    </p>
+                    <span className="text-[10px] font-bold text-[var(--bbos-coffee-green)]">
+                      {progress}%
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href="#historico-pedidos"
+                    className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 text-xs font-bold text-[var(--bbos-text-primary)]"
+                  >
+                    Ver pedido <ChevronRight size={14} />
+                  </a>
+                  {order.invoicePdfAvailable ? (
+                    <a
+                      href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-[var(--bbos-action-primary)] px-3 text-xs font-bold text-white"
+                    >
+                      <ReceiptText size={14} /> NF-e
+                    </a>
+                  ) : (
+                    <span className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--bbos-surface-subtle)] px-3 text-center text-[10px] font-bold text-[var(--bbos-text-muted)]">
+                      NF-e após faturamento
+                    </span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {activeOrders.length ? (
+        <div className="hidden overflow-x-auto sm:block">
           <div className="min-w-[720px] divide-y divide-stone-100">
             {activeOrders.map((order) => {
               const overdue = order.receivableStatus === "OVERDUE";
@@ -735,11 +919,13 @@ function DistributorOrderQueue({
             })}
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {!activeOrders.length ? (
         <p className="px-4 py-5 text-center text-xs text-stone-500">
           Nenhum pedido em andamento.
         </p>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -768,89 +954,128 @@ function DistributorOrderHistory({
   );
 
   return (
-    <section className="rounded-2xl border border-emerald-900/10 bg-white p-3.5 shadow-sm sm:p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
-            Histórico dos pedidos
-          </p>
-          <p className="mt-0.5 text-xs text-stone-500">
-            Consulte as etapas concluídas de cada pedido.
-          </p>
+    <>
+      <details
+        id="historico-pedidos"
+        className="group scroll-mt-20 rounded-2xl border border-[var(--bbos-surface-border)] bg-white shadow-sm sm:hidden"
+      >
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 marker:hidden">
+          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
+            <Bell size={16} /> Histórico e documentos
+          </span>
+          <span className="rounded-full bg-[var(--bbos-nav-active)] px-2.5 py-1 text-[10px] font-bold text-[var(--bbos-coffee-green)]">
+            {history.length}
+          </span>
+        </summary>
+        <div className="border-t border-[var(--bbos-surface-border)] p-2.5">
+          <DistributorOrderHistoryList
+            history={history}
+            eventsByOrder={eventsByOrder}
+          />
         </div>
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2ec] text-[#087568]">
-          <Bell size={16} />
-        </span>
-      </div>
-      {history.length ? (
-        <div className="mt-3 divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
-          {history.map((order) => {
-            const events = eventsByOrder.get(order.id) ?? [];
-            const latest = events[0];
-            return (
-              <details key={order.id} className="group bg-white">
-                <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 marker:hidden sm:grid-cols-[minmax(140px,.75fr)_minmax(0,1.4fr)_auto_auto]">
-                  <div>
-                    <p className="truncate text-xs font-bold text-[#14201d]">
-                      {order.code}
-                    </p>
-                    <p className="mt-0.5 text-[9px] text-stone-400">
-                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
-                    </p>
-                  </div>
-                  <p className="hidden truncate text-[10px] text-stone-500 sm:block">
-                    {latest?.title || "Pedido registrado"}
-                  </p>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[9px] font-bold ${distributorStatusTone(order.status, order.receivableStatus === "OVERDUE")}`}
-                  >
-                    {distributorStatusLabels[order.status] || order.status}
-                  </span>
-                  <span className="hidden text-[9px] font-bold text-[#087568] sm:inline">
-                    {events.length} {events.length === 1 ? "etapa" : "etapas"} ·
-                    ver
-                  </span>
-                </summary>
-                <div className="border-t border-stone-100 bg-[#f7faf8] px-3 py-2.5">
-                  {events.length ? (
-                    <div className="space-y-2">
-                      {events.map((item) => (
-                        <div
-                          key={item.id}
-                          className="grid gap-1 rounded-lg bg-white px-3 py-2 sm:grid-cols-[110px_minmax(0,1fr)]"
-                        >
-                          <time className="text-[9px] text-stone-400">
-                            {new Date(item.occurredAt).toLocaleDateString(
-                              "pt-BR",
-                            )}
-                          </time>
-                          <div>
-                            <p className="text-[10px] font-bold text-[#14201d]">
-                              {item.title}
-                            </p>
-                            <p className="mt-0.5 text-[10px] leading-4 text-stone-500">
-                              {item.detail}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+      </details>
+
+      <section
+        id="historico-pedidos-desktop"
+        className="hidden rounded-2xl border border-[var(--bbos-surface-border)] bg-white p-4 shadow-sm sm:block"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">
+              Histórico dos pedidos
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--bbos-text-muted)]">
+              Consulte as etapas concluídas de cada pedido.
+            </p>
+          </div>
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bbos-nav-active)] text-[var(--bbos-coffee-green)]">
+            <Bell size={16} />
+          </span>
+        </div>
+        <DistributorOrderHistoryList
+          history={history}
+          eventsByOrder={eventsByOrder}
+        />
+      </section>
+    </>
+  );
+}
+
+function DistributorOrderHistoryList({
+  history,
+  eventsByOrder,
+}: {
+  history: PortalData["partnerOrders"];
+  eventsByOrder: Map<string, PortalData["notifications"]>;
+}) {
+  if (!history.length) {
+    return (
+      <p className="rounded-xl border border-dashed border-[var(--bbos-surface-border)] bg-[var(--bbos-surface-subtle)] p-4 text-center text-xs text-[var(--bbos-text-muted)] sm:mt-3">
+        O histórico aparecerá aqui depois do primeiro pedido.
+      </p>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-[var(--bbos-surface-border)] overflow-hidden rounded-xl border border-[var(--bbos-surface-border)] sm:mt-3">
+      {history.map((order) => {
+        const events = eventsByOrder.get(order.id) ?? [];
+        const latest = events[0];
+        return (
+          <details key={order.id} className="group bg-white">
+            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 marker:hidden sm:grid-cols-[minmax(140px,.75fr)_minmax(0,1.4fr)_auto_auto]">
+              <div>
+                <p className="truncate text-xs font-bold text-[var(--bbos-text-primary)]">
+                  {order.code}
+                </p>
+                <p className="mt-0.5 text-[9px] text-[var(--bbos-text-muted)]">
+                  {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                </p>
+              </div>
+              <p className="hidden truncate text-[10px] text-[var(--bbos-text-muted)] sm:block">
+                {latest?.title || "Pedido registrado"}
+              </p>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[9px] font-bold ${distributorStatusTone(order.status, order.receivableStatus === "OVERDUE")}`}
+              >
+                {distributorStatusLabels[order.status] || order.status}
+              </span>
+              <span className="hidden text-[9px] font-bold text-[var(--bbos-coffee-green)] sm:inline">
+                {events.length} {events.length === 1 ? "etapa" : "etapas"} · ver
+              </span>
+            </summary>
+            <div className="border-t border-[var(--bbos-surface-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2.5">
+              {events.length ? (
+                <div className="space-y-2">
+                  {events.map((item) => (
+                    <div
+                      key={item.id}
+                      className="grid gap-1 rounded-lg bg-white px-3 py-2 sm:grid-cols-[110px_minmax(0,1fr)]"
+                    >
+                      <time className="text-[9px] text-[var(--bbos-text-muted)]">
+                        {new Date(item.occurredAt).toLocaleDateString("pt-BR")}
+                      </time>
+                      <div>
+                        <p className="text-[10px] font-bold text-[var(--bbos-text-primary)]">
+                          {item.title}
+                        </p>
+                        <p className="mt-0.5 text-[10px] leading-4 text-[var(--bbos-text-muted)]">
+                          {item.detail}
+                        </p>
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-[10px] text-stone-500">
-                      Ainda não há atualizações detalhadas para este pedido.
-                    </p>
-                  )}
+                  ))}
                 </div>
-              </details>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="mt-3 rounded-xl border border-dashed border-emerald-900/20 bg-[#f7faf8] p-4 text-center text-xs text-stone-500">
-          O histórico aparecerá aqui depois do primeiro pedido.
-        </p>
-      )}
-    </section>
+              ) : (
+                <p className="text-[10px] text-[var(--bbos-text-muted)]">
+                  Ainda não há atualizações detalhadas para este pedido.
+                </p>
+              )}
+            </div>
+          </details>
+        );
+      })}
+    </div>
   );
 }
 

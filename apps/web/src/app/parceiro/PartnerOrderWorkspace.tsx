@@ -149,46 +149,46 @@ const receivableStatusLabels: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 const distributorCatalogTones = [
-  "border-emerald-900/10 bg-white",
-  "border-emerald-900/10 bg-[#f7faf8]",
-  "border-emerald-900/10 bg-white",
-  "border-emerald-900/10 bg-[#f7faf8]",
+  "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)]",
+  "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface-subtle)]",
+  "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)]",
+  "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface-subtle)]",
 ];
 const orderStatusTone = (order: Order) => {
   if (order.receivableStatus === "OVERDUE") {
     return {
-      row: "bg-[#fff4f1] hover:bg-[#ffebe7]",
-      badge: "bg-[#f9ddd7] text-[#9d3f35]",
-      card: "border-[#e6aaa0] bg-[#fff8f6]",
+      row: "bg-[var(--bbos-danger-soft)] hover:bg-red-100/60",
+      badge: "bg-red-100 text-[var(--bbos-danger)]",
+      card: "border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)]",
     };
   }
   if (order.status === "DELIVERED") {
     return {
-      row: "bg-[#f1f8f4] hover:bg-[#e8f4ed]",
-      badge: "bg-[#dceee4] text-[#155449]",
-      card: "border-[#bddcca] bg-[#f6fbf8]",
+      row: "bg-[var(--bbos-success-soft)] hover:bg-emerald-100/60",
+      badge: "bg-emerald-100 text-[var(--bbos-success)]",
+      card: "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)]",
     };
   }
   if (
     ["INVOICED", "SHIPPED", "READY_TO_SHIP", "PICKING"].includes(order.status)
   ) {
     return {
-      row: "bg-[#f1f7fa] hover:bg-[#e8f2f6]",
-      badge: "bg-[#dceaf0] text-[#285d6b]",
-      card: "border-[#bed4de] bg-[#f6fafc]",
+      row: "bg-[var(--bbos-info-soft)] hover:bg-blue-100/60",
+      badge: "bg-blue-100 text-[var(--bbos-info)]",
+      card: "border-blue-200 bg-[var(--bbos-info-soft)]",
     };
   }
   if (["CONFIRMED", "RESERVED", "IN_PRODUCTION"].includes(order.status)) {
     return {
-      row: "bg-[#f7faf8] hover:bg-[#eef5f1]",
-      badge: "bg-[#dceee4] text-[#155449]",
-      card: "border-[#bddcca] bg-[#f6fbf8]",
+      row: "bg-[var(--bbos-warning-soft)] hover:bg-amber-100/60",
+      badge: "bg-amber-100 text-[var(--bbos-warning)]",
+      card: "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)]",
     };
   }
   return {
-    row: "bg-white hover:bg-stone-50",
-    badge: "bg-stone-100 text-stone-600",
-    card: "border-stone-200 bg-white",
+    row: "bg-[var(--bbos-surface)] hover:bg-[var(--bbos-surface-subtle)]",
+    badge: "bg-[var(--bbos-nav-active)] text-[var(--bbos-nav-active-text)]",
+    card: "border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)]",
   };
 };
 const purposeLabel = (value: string) => purposeLabels[value] || value;
@@ -300,6 +300,18 @@ export function PartnerOrderWorkspace({
     if (!distributorCustomer) return;
     setCustomerId(distributorCustomer.id);
   }, [customers, isDistributor]);
+
+  useEffect(() => {
+    if (!isDistributor) return;
+    const openNewOrder = () => {
+      setError("");
+      setMessage("");
+      setShowOrder(true);
+    };
+    window.addEventListener("bbos:partner-order:new", openNewOrder);
+    return () =>
+      window.removeEventListener("bbos:partner-order:new", openNewOrder);
+  }, [isDistributor]);
 
   const loadVisits = useCallback(async (selectedCustomerId: string) => {
     if (!selectedCustomerId) {
@@ -459,7 +471,7 @@ export function PartnerOrderWorkspace({
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível calcular o pedido.",
+          : "Não foi possível conferir o pedido.",
       );
     } finally {
       setBusy(false);
@@ -469,7 +481,7 @@ export function PartnerOrderWorkspace({
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!quote) {
-      setError("Calcule o pedido antes de enviá-lo.");
+      setError("Confira o pedido antes de enviá-lo.");
       return;
     }
     setBusy(true);
@@ -484,9 +496,11 @@ export function PartnerOrderWorkspace({
             items: cleanItems,
             deliveryMode,
             carrierName,
-            paymentType,
+            paymentType: isDistributor ? "CASH" : paymentType,
             paymentTermDays:
-              paymentType === "TERM" ? paymentTermDays : undefined,
+              !isDistributor && paymentType === "TERM"
+                ? paymentTermDays
+                : undefined,
             expectedDeliveryDate,
             customerReference,
             notes,
@@ -552,14 +566,14 @@ export function PartnerOrderWorkspace({
     <section
       className={`border ${
         isDistributor
-          ? "rounded-2xl border-emerald-900/10 bg-[#eaf2ec] p-3 pb-24 sm:p-4 sm:pb-4"
-          : "rounded-3xl border-emerald-900/10 bg-[#eaf2ec] p-5 sm:p-7"
+          ? "rounded-2xl border-[var(--bbos-surface-border)] bg-[var(--bbos-surface-subtle)] p-3 pb-24 sm:p-4 sm:pb-4"
+          : "rounded-3xl border-[var(--bbos-surface-border)] bg-[var(--bbos-surface-subtle)] p-5 sm:p-7"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           {!isDistributor && (
-            <p className="text-xs font-bold uppercase tracking-[.16em] text-[#087568]">
+            <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
               Operação liberada ·{" "}
               {accessLevel === "SALES_MANAGER"
                 ? "Gerente comercial · carteira completa"
@@ -594,7 +608,7 @@ export function PartnerOrderWorkspace({
             disabled={
               (isDistributor && customers.length !== 1) || !variants.length
             }
-            className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#214f46] disabled:cursor-not-allowed disabled:opacity-45"
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--bbos-action-primary)] px-4 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[var(--bbos-action-primary-hover)] disabled:cursor-not-allowed disabled:opacity-45"
           >
             <ShoppingCart size={15} /> Novo pedido
           </button>
@@ -627,11 +641,11 @@ export function PartnerOrderWorkspace({
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">
                 Catálogo Signa
               </p>
             </div>
-            <span className="rounded-full bg-[#eaf2ec] px-3 py-1 text-xs font-bold text-[#087568]">
+            <span className="rounded-full bg-[var(--bbos-nav-active)] px-3 py-1 text-xs font-bold text-[var(--bbos-coffee-green)]">
               {variants.length} apresentações
             </span>
           </div>
@@ -641,7 +655,9 @@ export function PartnerOrderWorkspace({
                 key={group.line}
                 className={`rounded-xl border p-3 ${distributorCatalogTones[groupIndex % distributorCatalogTones.length]}`}
               >
-                <p className="text-sm font-bold text-[#14201d]">{group.line}</p>
+                <p className="text-sm font-bold text-[var(--bbos-text-primary)]">
+                  {group.line}
+                </p>
                 <div className="mt-2 space-y-1.5">
                   {group.items.map((variant) => (
                     <p
@@ -1312,44 +1328,9 @@ export function PartnerOrderWorkspace({
             <div className="grid gap-3 sm:grid-cols-2">
               {isDistributor && (
                 <PortalField label="Condição de pagamento">
-                  <select
-                    value={paymentType}
-                    onChange={(event) =>
-                      setPaymentType(event.target.value as "CASH" | "TERM")
-                    }
-                  >
-                    <option value="CASH">À vista na emissão da NF-e</option>
-                    <option value="TERM">A prazo após emissão da NF-e</option>
-                  </select>
-                </PortalField>
-              )}
-              {isDistributor && paymentType === "TERM" && (
-                <PortalField label="Prazo após a NF-e">
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min={1}
-                      max={365}
-                      step={1}
-                      value={paymentTermDays}
-                      onChange={(event) =>
-                        setPaymentTermDays(
-                          Math.min(
-                            365,
-                            Math.max(1, Number(event.target.value)),
-                          ),
-                        )
-                      }
-                      required
-                      className="pr-14"
-                    />
-                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
-                      dias
-                    </span>
+                  <div className="flex min-h-10 items-center rounded-xl border border-emerald-900/15 bg-[#f7faf8] px-3 py-2.5 text-sm font-semibold text-[#14201d]">
+                    À vista na emissão da NF-e
                   </div>
-                  <span className="mt-1 block text-[10px] leading-4 text-stone-500">
-                    O vencimento será calculado a partir da emissão da NF-e.
-                  </span>
                 </PortalField>
               )}
               <PortalField label="Entrega">
@@ -1444,12 +1425,23 @@ export function PartnerOrderWorkspace({
             )}
 
             <div
-              className={`flex flex-wrap justify-end gap-2 ${
+              className={`flex flex-wrap items-center justify-end gap-2 ${
                 isDistributor
                   ? "sticky -bottom-4 z-10 -mx-4 -mb-4 border-t border-stone-100 bg-white/95 p-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:px-5"
                   : ""
               }`}
             >
+              {isDistributor && (
+                <p
+                  className={`w-full text-xs font-semibold sm:mr-auto sm:w-auto ${
+                    quote ? "text-emerald-800" : "text-stone-600"
+                  }`}
+                >
+                  {quote
+                    ? "Pedido conferido. Agora você pode enviar."
+                    : "Confira produtos, quantidades e valores para liberar o envio."}
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => setShowOrder(false)}
@@ -1461,15 +1453,25 @@ export function PartnerOrderWorkspace({
                 type="button"
                 disabled={busy}
                 onClick={() => void calculateQuote()}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-800 px-4 py-2.5 text-xs font-bold text-emerald-900 disabled:opacity-50"
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition disabled:opacity-50 ${
+                  quote
+                    ? "border border-emerald-800 bg-white text-emerald-900"
+                    : "bg-[#087568] text-white shadow-[0_8px_22px_rgba(8,117,104,0.24)] ring-2 ring-[#087568]/15"
+                }`}
               >
-                <RefreshCw size={13} /> Calcular
+                {quote ? <RefreshCw size={14} /> : <ClipboardCheck size={14} />}
+                {quote ? "Conferir novamente" : "1. Conferir pedido"}
               </button>
               <button
                 disabled={busy || !quote}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+                title={
+                  quote
+                    ? "Enviar pedido para aprovação da Bispo"
+                    : "Confira o pedido para liberar o envio"
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
               >
-                <Send size={13} /> Enviar pedido
+                <Send size={13} /> 2. Enviar pedido
               </button>
             </div>
           </form>
