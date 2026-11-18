@@ -359,7 +359,10 @@ export default function PartnerPortalPage() {
             </section>
 
             {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
-              <DistributorMetrics orders={data.partnerOrders} />
+              <>
+                <DistributorMetrics orders={data.partnerOrders} />
+                <DistributorOrderQueue orders={data.partnerOrders} />
+              </>
             ) : (
               <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <Metric
@@ -399,7 +402,10 @@ export default function PartnerPortalPage() {
             )}
 
             {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
-              <DistributorNotifications items={data.notifications ?? []} />
+              <DistributorOrderHistory
+                orders={data.partnerOrders}
+                items={data.notifications ?? []}
+              />
             )}
 
             {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
@@ -623,56 +629,225 @@ function DistributorMetric({
   );
 }
 
-function DistributorNotifications({
+const distributorStatusLabels: Record<string, string> = {
+  DRAFT: "Em conferência",
+  CONFIRMED: "Aprovado",
+  RESERVED: "Reservado",
+  PICKING: "Em preparação",
+  READY_TO_SHIP: "Pronto para NF-e",
+  IN_PRODUCTION: "Em produção",
+  INVOICED: "Faturado",
+  SHIPPED: "Em transporte",
+  DELIVERED: "Entregue",
+  CANCELLED: "Cancelado",
+};
+
+function distributorPaymentLabel(order: PortalData["partnerOrders"][number]) {
+  if (order.receivableStatus === "PAID" || order.paymentDate) return "Pago";
+  if (order.receivableStatus === "OVERDUE") return "Vencido";
+  if (order.openAmount && Number(order.openAmount) > 0) return "A pagar";
+  if (order.paymentType === "TERM") return "Após a NF-e";
+  return "À vista";
+}
+
+function distributorStatusTone(status: string, overdue = false) {
+  if (overdue) return "bg-[#fff1ef] text-[#9d3f35]";
+  if (status === "DELIVERED") return "bg-emerald-50 text-emerald-800";
+  if (status === "SHIPPED") return "bg-sky-50 text-sky-800";
+  if (status === "IN_PRODUCTION") return "bg-amber-50 text-amber-800";
+  if (status === "CANCELLED") return "bg-stone-100 text-stone-500";
+  return "bg-[#eaf2ec] text-[#087568]";
+}
+
+function DistributorOrderQueue({
+  orders,
+}: {
+  orders: PortalData["partnerOrders"];
+}) {
+  const activeOrders = [...orders]
+    .filter((order) => !["DELIVERED", "CANCELLED"].includes(order.status))
+    .sort(
+      (a, b) =>
+        new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime(),
+    );
+
+  return (
+    <section
+      id="pedidos-em-andamento"
+      className="scroll-mt-4 overflow-hidden rounded-2xl border border-emerald-900/10 bg-white shadow-sm"
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-stone-100 px-4 py-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
+            Pedidos em andamento
+          </p>
+          <p className="mt-0.5 text-xs text-stone-500">
+            Acompanhe o status atual de cada pedido.
+          </p>
+        </div>
+        <span className="rounded-full bg-[#eaf2ec] px-3 py-1 text-[10px] font-bold text-[#087568]">
+          {activeOrders.length}
+        </span>
+      </div>
+
+      {activeOrders.length ? (
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px] divide-y divide-stone-100">
+            {activeOrders.map((order) => {
+              const overdue = order.receivableStatus === "OVERDUE";
+              return (
+                <article
+                  key={order.id}
+                  className="grid grid-cols-[minmax(180px,1.2fr)_minmax(150px,.9fr)_minmax(130px,.75fr)_minmax(120px,.65fr)] items-center gap-4 px-4 py-3 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-[#14201d]">
+                      {order.code}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-stone-400">
+                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                  <div>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${distributorStatusTone(order.status)}`}
+                    >
+                      {distributorStatusLabels[order.status] || order.status}
+                    </span>
+                  </div>
+                  <div>
+                    <p
+                      className={`font-bold ${overdue ? "text-[#9d3f35]" : "text-stone-700"}`}
+                    >
+                      {distributorPaymentLabel(order)}
+                    </p>
+                    {order.dueDate && !order.paymentDate ? (
+                      <p className="mt-0.5 text-[10px] text-stone-400">
+                        {new Date(order.dueDate).toLocaleDateString("pt-BR")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <p className="text-right font-bold text-[#14201d]">
+                    {money.format(Number(order.totalAmount || 0))}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="px-4 py-5 text-center text-xs text-stone-500">
+          Nenhum pedido em andamento.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function DistributorOrderHistory({
+  orders,
   items,
 }: {
+  orders: PortalData["partnerOrders"];
   items: PortalData["notifications"];
 }) {
+  const eventsByOrder = new Map<string, PortalData["notifications"]>();
+  [...items]
+    .sort(
+      (a, b) =>
+        new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+    )
+    .forEach((item) => {
+      const current = eventsByOrder.get(item.orderId) ?? [];
+      current.push(item);
+      eventsByOrder.set(item.orderId, current);
+    });
+
+  const history = [...orders].sort(
+    (a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime(),
+  );
+
   return (
     <section className="rounded-2xl border border-emerald-900/10 bg-white p-3.5 shadow-sm sm:p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[.14em] text-[#087568]">
-            Atualizações dos pedidos
+            Histórico dos pedidos
+          </p>
+          <p className="mt-0.5 text-xs text-stone-500">
+            Consulte as etapas concluídas de cada pedido.
           </p>
         </div>
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2ec] text-[#087568]">
           <Bell size={16} />
         </span>
       </div>
-      {items.length ? (
-        <div className="mt-3 grid gap-2 lg:grid-cols-2">
-          {items.slice(0, 6).map((item, index) => (
-            <article
-              key={item.id}
-              className={`rounded-xl border px-3 py-2.5 ${
-                index === 0
-                  ? "border-emerald-700/30 bg-[#f7faf8]"
-                  : "border-stone-200 bg-white"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[10px] font-bold uppercase tracking-[.12em] text-[#087568]">
-                    {item.orderCode}
+      {history.length ? (
+        <div className="mt-3 divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
+          {history.map((order) => {
+            const events = eventsByOrder.get(order.id) ?? [];
+            const latest = events[0];
+            return (
+              <details key={order.id} className="group bg-white">
+                <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 marker:hidden sm:grid-cols-[minmax(140px,.75fr)_minmax(0,1.4fr)_auto_auto]">
+                  <div>
+                    <p className="truncate text-xs font-bold text-[#14201d]">
+                      {order.code}
+                    </p>
+                    <p className="mt-0.5 text-[9px] text-stone-400">
+                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                  <p className="hidden truncate text-[10px] text-stone-500 sm:block">
+                    {latest?.title || "Pedido registrado"}
                   </p>
-                  <p className="mt-0.5 text-xs font-bold text-[#14201d]">
-                    {item.title}
-                  </p>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[9px] font-bold ${distributorStatusTone(order.status, order.receivableStatus === "OVERDUE")}`}
+                  >
+                    {distributorStatusLabels[order.status] || order.status}
+                  </span>
+                  <span className="hidden text-[9px] font-bold text-[#087568] sm:inline">
+                    {events.length} {events.length === 1 ? "etapa" : "etapas"} ·
+                    ver
+                  </span>
+                </summary>
+                <div className="border-t border-stone-100 bg-[#f7faf8] px-3 py-2.5">
+                  {events.length ? (
+                    <div className="space-y-2">
+                      {events.map((item) => (
+                        <div
+                          key={item.id}
+                          className="grid gap-1 rounded-lg bg-white px-3 py-2 sm:grid-cols-[110px_minmax(0,1fr)]"
+                        >
+                          <time className="text-[9px] text-stone-400">
+                            {new Date(item.occurredAt).toLocaleDateString(
+                              "pt-BR",
+                            )}
+                          </time>
+                          <div>
+                            <p className="text-[10px] font-bold text-[#14201d]">
+                              {item.title}
+                            </p>
+                            <p className="mt-0.5 text-[10px] leading-4 text-stone-500">
+                              {item.detail}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-stone-500">
+                      Ainda não há atualizações detalhadas para este pedido.
+                    </p>
+                  )}
                 </div>
-                <time className="whitespace-nowrap text-[9px] text-stone-400">
-                  {new Date(item.occurredAt).toLocaleDateString("pt-BR")}
-                </time>
-              </div>
-              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-stone-500">
-                {item.detail}
-              </p>
-            </article>
-          ))}
+              </details>
+            );
+          })}
         </div>
       ) : (
         <p className="mt-3 rounded-xl border border-dashed border-emerald-900/20 bg-[#f7faf8] p-4 text-center text-xs text-stone-500">
-          As ações dos seus pedidos aparecerão aqui.
+          O histórico aparecerá aqui depois do primeiro pedido.
         </p>
       )}
     </section>

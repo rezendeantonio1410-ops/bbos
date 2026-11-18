@@ -1475,146 +1475,136 @@ export function PartnerOrderWorkspace({
         </>
       )}
 
-      <div
-        id={isDistributor ? "pedidos-signa" : undefined}
-        className={`${isDistributor ? "mt-4 scroll-mt-4" : "mt-7"}`}
-      >
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h3 className="text-base font-bold">Meus pedidos</h3>
-            <p className="mt-0.5 text-xs text-stone-500">
-              Acompanhe aprovação, produção, pagamento e NF-e em um só lugar.
-            </p>
-          </div>
-          <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold text-stone-500">
-            {orders.length} {orders.length === 1 ? "pedido" : "pedidos"}
-          </span>
-        </div>
-        {orders.length ? (
-          <>
-            {isDistributor && (
-              <div className="mt-3 space-y-2 md:hidden">
-                {orders.map((order) => (
-                  <DistributorOrderCard key={order.id} order={order} />
-                ))}
-              </div>
-            )}
-            <div
-              className={`mt-3 overflow-x-auto rounded-2xl bg-white ${
-                isDistributor ? "hidden md:block" : ""
-              }`}
-            >
-              <table className="w-full min-w-[620px] text-left text-xs">
-                <thead className="border-b bg-stone-50 text-[10px] uppercase tracking-wider text-stone-500">
-                  <tr>
-                    <th className="px-4 py-3">Pedido</th>
-                    <th className="px-4 py-3">Cliente</th>
-                    <th className="px-4 py-3">Data</th>
-                    <th className="px-4 py-3">Total</th>
-                    <th className="px-4 py-3">Situação</th>
-                    <th className="px-4 py-3">Pagamento</th>
-                    <th className="px-4 py-3">Documento</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {orders.map((order) => (
-                    <tr key={order.id} className={orderStatusTone(order).row}>
-                      <td className="px-4 py-3 font-bold">{order.code}</td>
-                      <td className="px-4 py-3">{order.customerName}</td>
-                      <td className="px-4 py-3 text-stone-500">
-                        {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
-                      </td>
-                      <td className="px-4 py-3 font-bold">
-                        {money.format(Number(order.totalAmount))}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${orderStatusTone(order).badge}`}
-                        >
-                          {statusLabel[order.status] || order.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p
-                          className={`font-bold ${order.receivableStatus === "OVERDUE" ? "text-red-700" : "text-stone-700"}`}
-                        >
-                          {receivableStatusLabels[
-                            order.receivableStatus || ""
-                          ] ||
-                            (order.paymentType === "TERM"
-                              ? "Aguardando faturamento"
-                              : "À vista")}
-                        </p>
-                        {order.paymentDate ? (
-                          <p className="mt-1 text-[10px] text-emerald-700">
-                            Pago em{" "}
-                            {new Date(order.paymentDate).toLocaleDateString(
-                              "pt-BR",
-                            )}
-                          </p>
-                        ) : order.dueDate ? (
-                          <p className="mt-1 text-[10px] text-stone-500">
-                            Vence em{" "}
-                            {new Date(order.dueDate).toLocaleDateString(
-                              "pt-BR",
-                            )}{" "}
-                            · saldo{" "}
-                            {money.format(Number(order.openAmount || 0))}
-                          </p>
-                        ) : order.paymentTermsSnapshot ? (
-                          <p className="mt-1 text-[10px] text-stone-500">
-                            {order.paymentTermsSnapshot}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          {order.invoiceStatus === "AUTHORIZED" &&
-                          order.invoicePdfAvailable ? (
-                            <a
-                              href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
-                            >
-                              Baixar NF {order.invoiceNumber || ""}
-                            </a>
-                          ) : order.invoiceNumber ? (
-                            <span className="inline-flex rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-800">
-                              NF {order.invoiceNumber} ·{" "}
-                              {order.invoiceStatus === "AUTHORIZED"
-                                ? "Autorizada"
-                                : "Em processamento"}
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
-                              NF aguardando emissão pela Bispo
-                            </span>
-                          )}
-                          {order.billingAvailable ? (
-                            <a
-                              href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
-                            >
-                              Baixar cobrança
-                            </a>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {!isDistributor && (
+        <div className="mt-7">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold">Meus pedidos</h3>
+              <p className="mt-0.5 text-xs text-stone-500">
+                Acompanhe aprovação, produção, pagamento e NF-e em um só lugar.
+              </p>
             </div>
-          </>
-        ) : (
-          <p className="mt-3 rounded-2xl border border-dashed border-emerald-900/20 bg-white/50 p-5 text-center text-xs text-stone-500">
-            Nenhum pedido criado por este acesso.
-          </p>
-        )}
-      </div>
+            <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold text-stone-500">
+              {orders.length} {orders.length === 1 ? "pedido" : "pedidos"}
+            </span>
+          </div>
+          {orders.length ? (
+            <>
+              <div className="mt-3 overflow-x-auto rounded-2xl bg-white">
+                <table className="w-full min-w-[620px] text-left text-xs">
+                  <thead className="border-b bg-stone-50 text-[10px] uppercase tracking-wider text-stone-500">
+                    <tr>
+                      <th className="px-4 py-3">Pedido</th>
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Data</th>
+                      <th className="px-4 py-3">Total</th>
+                      <th className="px-4 py-3">Situação</th>
+                      <th className="px-4 py-3">Pagamento</th>
+                      <th className="px-4 py-3">Documento</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {orders.map((order) => (
+                      <tr key={order.id} className={orderStatusTone(order).row}>
+                        <td className="px-4 py-3 font-bold">{order.code}</td>
+                        <td className="px-4 py-3">{order.customerName}</td>
+                        <td className="px-4 py-3 text-stone-500">
+                          {new Date(order.orderedAt).toLocaleDateString(
+                            "pt-BR",
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-bold">
+                          {money.format(Number(order.totalAmount))}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${orderStatusTone(order).badge}`}
+                          >
+                            {statusLabel[order.status] || order.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p
+                            className={`font-bold ${order.receivableStatus === "OVERDUE" ? "text-red-700" : "text-stone-700"}`}
+                          >
+                            {receivableStatusLabels[
+                              order.receivableStatus || ""
+                            ] ||
+                              (order.paymentType === "TERM"
+                                ? "Aguardando faturamento"
+                                : "À vista")}
+                          </p>
+                          {order.paymentDate ? (
+                            <p className="mt-1 text-[10px] text-emerald-700">
+                              Pago em{" "}
+                              {new Date(order.paymentDate).toLocaleDateString(
+                                "pt-BR",
+                              )}
+                            </p>
+                          ) : order.dueDate ? (
+                            <p className="mt-1 text-[10px] text-stone-500">
+                              Vence em{" "}
+                              {new Date(order.dueDate).toLocaleDateString(
+                                "pt-BR",
+                              )}{" "}
+                              · saldo{" "}
+                              {money.format(Number(order.openAmount || 0))}
+                            </p>
+                          ) : order.paymentTermsSnapshot ? (
+                            <p className="mt-1 text-[10px] text-stone-500">
+                              {order.paymentTermsSnapshot}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-2">
+                            {order.invoiceStatus === "AUTHORIZED" &&
+                            order.invoicePdfAvailable ? (
+                              <a
+                                href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
+                              >
+                                Baixar NF {order.invoiceNumber || ""}
+                              </a>
+                            ) : order.invoiceNumber ? (
+                              <span className="inline-flex rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-800">
+                                NF {order.invoiceNumber} ·{" "}
+                                {order.invoiceStatus === "AUTHORIZED"
+                                  ? "Autorizada"
+                                  : "Em processamento"}
+                              </span>
+                            ) : (
+                              <span className="inline-flex rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
+                                NF aguardando emissão pela Bispo
+                              </span>
+                            )}
+                            {order.billingAvailable ? (
+                              <a
+                                href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
+                              >
+                                Baixar cobrança
+                              </a>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 rounded-2xl border border-dashed border-emerald-900/20 bg-white/50 p-5 text-center text-xs text-stone-500">
+              Nenhum pedido criado por este acesso.
+            </p>
+          )}
+        </div>
+      )}
       {isDistributor && !showOrder && (
         <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-emerald-900/10 bg-white/95 p-1.5 shadow-xl backdrop-blur md:hidden">
           <a
@@ -1634,7 +1624,7 @@ export function PartnerOrderWorkspace({
             Novo pedido
           </button>
           <a
-            href="#pedidos-signa"
+            href="#pedidos-em-andamento"
             className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#087568]"
           >
             <History size={17} />
@@ -1643,88 +1633,6 @@ export function PartnerOrderWorkspace({
         </nav>
       )}
     </section>
-  );
-}
-
-function DistributorOrderCard({ order }: { order: Order }) {
-  const tone = orderStatusTone(order);
-  const paymentLabel =
-    receivableStatusLabels[order.receivableStatus || ""] ||
-    (order.paymentType === "TERM" ? "Aguardando faturamento" : "À vista");
-  return (
-    <article className={`rounded-2xl border p-3.5 shadow-sm ${tone.card}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold">{order.code}</p>
-          <p className="mt-0.5 text-[10px] text-stone-500">
-            {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
-          </p>
-        </div>
-        <p className="whitespace-nowrap text-sm font-bold">
-          {money.format(Number(order.totalAmount))}
-        </p>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <div className={`rounded-xl p-2.5 ${tone.badge}`}>
-          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
-            Pedido
-          </p>
-          <p className="mt-1 text-xs font-bold">
-            {statusLabel[order.status] || order.status}
-          </p>
-        </div>
-        <div className="rounded-xl bg-[#f7f7f3] p-2.5">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
-            Pagamento
-          </p>
-          <p
-            className={`mt-1 text-xs font-bold ${
-              order.receivableStatus === "OVERDUE"
-                ? "text-red-700"
-                : "text-stone-700"
-            }`}
-          >
-            {paymentLabel}
-          </p>
-        </div>
-      </div>
-      <p className="mt-2 text-[10px] leading-4 text-stone-500">
-        {order.paymentDate
-          ? `Pago em ${new Date(order.paymentDate).toLocaleDateString("pt-BR")}`
-          : order.dueDate
-            ? `Vence em ${new Date(order.dueDate).toLocaleDateString("pt-BR")} · saldo ${money.format(Number(order.openAmount || 0))}`
-            : order.paymentTermsSnapshot ||
-              "O vencimento será definido após a emissão da NF-e."}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
-        {order.invoiceStatus === "AUTHORIZED" && order.invoicePdfAvailable ? (
-          <a
-            href={`/api/partner-portal/orders/${order.id}/invoice/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg bg-emerald-900 px-3 py-2 text-[10px] font-bold text-white"
-          >
-            Baixar NF {order.invoiceNumber || ""}
-          </a>
-        ) : (
-          <span className="rounded-lg bg-stone-100 px-3 py-2 text-[10px] font-bold text-stone-500">
-            {order.invoiceNumber
-              ? `NF ${order.invoiceNumber} em processamento`
-              : "NF aguardando Bispo"}
-          </span>
-        )}
-        {order.billingAvailable && (
-          <a
-            href={`/api/partner-portal/orders/${order.id}/billing/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg border border-emerald-800 px-3 py-2 text-[10px] font-bold text-emerald-900"
-          >
-            Cobrança
-          </a>
-        )}
-      </div>
-    </article>
   );
 }
 
