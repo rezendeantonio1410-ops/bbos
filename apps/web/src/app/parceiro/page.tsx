@@ -415,7 +415,7 @@ export default function PartnerPortalPage() {
 
             {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
               <>
-                <div className="sr-only"><DistributorMetrics orders={data.partnerOrders} /></div>
+                <></>
               </>
             ) : (
               <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
