@@ -347,16 +347,16 @@ export default function PartnerPortalPage() {
         {data && (
           <>
             {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} />}
-            {data.partner.portalAccessLevel !== "DISTRIBUTOR" && <section
+            {true && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
-                data.partner.portalAccessLevel === "DISTRIBUTOR"
+                false
                   ? "scroll-mt-20 overflow-hidden rounded-2xl border border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] px-4 py-4 text-[var(--bbos-text-primary)] shadow-sm sm:scroll-mt-4 sm:px-6"
                   : ""
               }`}
             >
               <div className="min-w-0 max-w-3xl">
-                {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+                {false && (
                   <div className="mb-3 flex items-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -366,19 +366,19 @@ export default function PartnerPortalPage() {
                     />
                   </div>
                 )}
-                {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
+                {true && (
                   <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                     Visão exclusiva
                   </p>
                 )}
                 <h1
                   className={`mt-1 font-semibold ${
-                    data.partner.portalAccessLevel === "DISTRIBUTOR"
+                    false
                       ? "text-2xl sm:text-3xl"
                       : "text-3xl sm:mt-2 sm:text-4xl"
                   }`}
                 >
-                  {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
+                  {false ? (
                     <>Gestão de pedidos</>
                   ) : (
                     <>Olá, {data.partner.contactName || data.partner.name}.</>
@@ -387,13 +387,13 @@ export default function PartnerPortalPage() {
                 <p className="mt-1.5 max-w-3xl text-sm text-stone-500">
                   {data.partner.portalAccessLevel === "VIEWER"
                     ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
-                    : data.partner.portalAccessLevel === "DISTRIBUTOR"
+                    : false
                       ? "Consulte pedidos, acompanhe o faturamento e confira os pagamentos em um só lugar."
                       : data.partner.portalAccessLevel === "SALES_MANAGER"
                         ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
                         : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
                 </p>
-                {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+                {false && (
                   <button
                     type="button"
                     onClick={() =>
@@ -405,7 +405,7 @@ export default function PartnerPortalPage() {
                   </button>
                 )}
               </div>
-              {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
+              {true && (
                 <p className="text-xs text-stone-400">
                   Atualizado em{" "}
                   {new Date(data.updatedAt).toLocaleString("pt-BR")}
