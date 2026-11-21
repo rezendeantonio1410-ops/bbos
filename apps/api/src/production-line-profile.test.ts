@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Prisma } from "@bbos/database";
 import { ProductionService } from "./production.service";
 
-const profile = (name: string, line = "GOURMET") => ({
+const profile = (name: string, line = "GOURMET", netWeightGrams = 1000) => ({
   id: "product-1",
   productLineId: "line-1",
   code: "ESSENCIAL",
@@ -31,7 +31,7 @@ const profile = (name: string, line = "GOURMET") => ({
       id: "variant-1",
       productId: "product-1",
       sku: "GOU-ESS-1000",
-      netWeightGrams: 1000,
+      netWeightGrams,
       active: true,
     },
   ],
@@ -49,6 +49,16 @@ test("OP por linha aceita um perfil oficial de café torrado", async () => {
   );
   assert.equal(result.product.name, "Essencial");
   assert.equal(result.variant.id, "variant-1");
+});
+
+test("OP de torra aceita Épicos a granel sem validar peso de embalagem", async () => {
+  const result = await new ProductionService().requireProductionProduct(
+    transactionFor(profile("Épicos", "EPICOS", 1000)),
+    "product-1",
+  );
+
+  assert.equal(result.product.productLine.code, "EPICOS");
+  assert.equal(result.variant.netWeightGrams, 1000);
 });
 
 test("OP por linha rejeita White Label como perfil de torra", async () => {

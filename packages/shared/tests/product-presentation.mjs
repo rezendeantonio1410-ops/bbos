@@ -102,6 +102,35 @@ test("OP aceita ProductVariant ativo com produto e linha ativos", () => {
   );
 });
 
+test("OP de torra ignora a apresentação e mantém Épicos a granel em kg", () => {
+  const bulkRoastReference = {
+    ...eligibleVariant,
+    netWeightGrams: 1000,
+    product: {
+      ...eligibleVariant.product,
+      productLine: {
+        ...eligibleVariant.product.productLine,
+        code: "EPICOS",
+      },
+    },
+  };
+
+  assert.equal(
+    validateProductionVariantEligibility(bulkRoastReference).id,
+    "variant-1",
+  );
+  assert.throws(
+    () =>
+      validateCreateProductSku({
+        line: "EPICOS",
+        productName: "Produto teste",
+        sku: "EPI-TESTE-1K",
+        packageWeightG: 1000,
+      }),
+    /permite somente apresentação 250 g/,
+  );
+});
+
 test("OP rejeita ProductVariant inexistente", () => {
   assert.throws(
     () => validateProductionVariantEligibility(null),

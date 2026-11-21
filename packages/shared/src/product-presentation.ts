@@ -145,10 +145,8 @@ export function validateProductionVariantEligibility<
   if (!variant.product.active) throw new Error("O produto está inativo.");
   if (!variant.product.productLine.active)
     throw new Error("A linha de produto está inativa.");
-  assertProductPresentationAllowed(
-    variant.product.productLine.code,
-    variant.netWeightGrams,
-  );
+  // A variante identifica a linha e o perfil enquanto a torra permanece a
+  // granel, em kg. O formato do pacote só é validado no catálogo/embalagem.
   return variant;
 }
 
