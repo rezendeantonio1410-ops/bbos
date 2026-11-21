@@ -253,6 +253,24 @@ export default function PartnerPortalPage() {
         </div>
       </header>
 
+      {data?.partner.portalAccessLevel === "DISTRIBUTOR" && (
+        <nav aria-label="Navegação do portal Signa" className="mx-auto mt-4 flex max-w-7xl gap-2 overflow-x-auto px-4 pb-1 sm:px-8" >
+          {[
+            { label: "Visão geral", href: "#inicio" },
+            { label: "Pedidos", href: "#pedidos-em-andamento" },
+            { label: "Produtos", href: "#catalogo-signa" },
+            { label: "Documentos", href: "#historico-pedidos" },
+          ].map((item) => (
+            <a key={item.href} href={item.href} className="shrink-0 rounded-lg border border-[var(--bbos-surface-border)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--bbos-text-primary)] transition hover:border-emerald-800 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">
+              {item.label}
+            </a>
+          ))}
+          <button type="button" onClick={() => window.dispatchEvent(new Event("bbos:partner-order:new"))}
+            className="ml-auto shrink-0 rounded-lg bg-[var(--bbos-action-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90">
+            + Novo pedido
+          </button>
+        </nav>
+      )}
       <div
         className={`mx-auto max-w-7xl px-4 py-5 sm:px-8 sm:py-7 ${
           data?.partner.portalAccessLevel === "DISTRIBUTOR"
