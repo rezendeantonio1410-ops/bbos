@@ -18,6 +18,7 @@ import {
 import { Logo } from "@/components/logo";
 import type { SessionIdentity } from "@/lib/auth-session";
 import { PartnerOrderWorkspace } from "./PartnerOrderWorkspace";
+import { SignaEnterpriseDashboard } from "./SignaEnterpriseDashboard";
 
 type PortalData = {
   partner: {
@@ -186,8 +187,8 @@ export default function PartnerPortalPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)]/95 backdrop-blur sm:static">
+    <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "lg:pl-52" : ""}`}>
+      <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-[#102338] text-white" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-5">
           <div className="flex items-center gap-5">
             <div
@@ -253,24 +254,6 @@ export default function PartnerPortalPage() {
         </div>
       </header>
 
-      {data?.partner.portalAccessLevel === "DISTRIBUTOR" && (
-        <nav aria-label="Navegação do portal Signa" className="mx-auto mt-4 flex max-w-7xl gap-2 overflow-x-auto px-4 pb-1 sm:px-8" >
-          {[
-            { label: "Visão geral", href: "#inicio" },
-            { label: "Pedidos", href: "#pedidos-em-andamento" },
-            { label: "Produtos", href: "#catalogo-signa" },
-            { label: "Documentos", href: "#historico-pedidos" },
-          ].map((item) => (
-            <a key={item.href} href={item.href} className="shrink-0 rounded-lg border border-[var(--bbos-surface-border)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--bbos-text-primary)] transition hover:border-emerald-800 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">
-              {item.label}
-            </a>
-          ))}
-          <button type="button" onClick={() => window.dispatchEvent(new Event("bbos:partner-order:new"))}
-            className="ml-auto shrink-0 rounded-lg bg-[var(--bbos-action-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90">
-            + Novo pedido
-          </button>
-        </nav>
-      )}
       <div
         className={`mx-auto max-w-7xl px-4 py-5 sm:px-8 sm:py-7 ${
           data?.partner.portalAccessLevel === "DISTRIBUTOR"
@@ -363,7 +346,8 @@ export default function PartnerPortalPage() {
 
         {data && (
           <>
-            <section
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} />}
+            {data.partner.portalAccessLevel !== "DISTRIBUTOR" && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
                 data.partner.portalAccessLevel === "DISTRIBUTOR"
@@ -427,12 +411,11 @@ export default function PartnerPortalPage() {
                   {new Date(data.updatedAt).toLocaleString("pt-BR")}
                 </p>
               )}
-            </section>
+            </section>}
 
             {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
               <>
-                <DistributorMetrics orders={data.partnerOrders} />
-                <DistributorOrderQueue orders={data.partnerOrders} />
+                <div className="sr-only"><DistributorMetrics orders={data.partnerOrders} /></div>
               </>
             ) : (
               <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
