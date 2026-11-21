@@ -220,12 +220,12 @@ export default function PartnerPortalPage() {
             <div className="hidden border-l border-stone-200 pl-5 sm:block">
               <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "Área Signa"
+                  ? "Portal comercial | Signa"
                   : "Portal do representante"}
               </p>
               <p className="mt-1 text-xs text-stone-500">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "Compras, pagamentos e documentos"
+                  ? "Pedidos · Faturamento · Pagamentos"
                   : "Clientes, visitas e pedidos"}
               </p>
             </div>
@@ -376,17 +376,17 @@ export default function PartnerPortalPage() {
                       : "text-3xl sm:mt-2 sm:text-4xl"
                   }`}
                 >
-                  Olá,{" "}
-                  {data.partner.portalAccessLevel === "DISTRIBUTOR"
-                    ? data.partner.name
-                    : data.partner.contactName || data.partner.name}
-                  .
+                  {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
+                    <>Gestão de pedidos</>
+                  ) : (
+                    <>Olá, {data.partner.contactName || data.partner.name}.</>
+                  )}
                 </h1>
                 <p className="mt-1.5 max-w-3xl text-sm text-stone-500">
                   {data.partner.portalAccessLevel === "VIEWER"
                     ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
                     : data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "Seu pedido aqui."
+                      ? "Consulte pedidos, acompanhe o faturamento e confira os pagamentos em um só lugar."
                       : data.partner.portalAccessLevel === "SALES_MANAGER"
                         ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
                         : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
