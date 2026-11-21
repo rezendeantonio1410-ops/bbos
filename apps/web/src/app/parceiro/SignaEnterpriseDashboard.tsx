@@ -29,7 +29,7 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
     return matches && (filter==="Todos" || (filter==="Em produção" ? o.status==="IN_PRODUCTION" : filter==="Faturado" ? o.status==="INVOICED" : filter==="Concluído" ? o.status==="DELIVERED" : !["INVOICED","DELIVERED","CANCELLED"].includes(o.status)));
   }),[orders,search,filter]);
   const sum=orders.reduce((s,o)=>s+Number(o.totalAmount||0),0);
-  const due=orders.reduce((s,o)=>s+(o.receivableStatus==="PAID" || o.receivableStatus==="CANCELLED" ? 0 : Number(o.totalAmount||0)),0);
+  const invoiced = orders.filter(o=>o.invoiceStatus==="AUTHORIZED").reduce((s,o)=>s+Number(o.totalAmount||0),0);
   return (
     <section id="inicio" className="relative space-y-5" aria-label="Painel comercial Signa">
       <button type="button" onClick={()=>setMenuOpen(v=>!v)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold lg:hidden" aria-expanded={menuOpen}>Menu do portal</button>
@@ -55,7 +55,7 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
         {[
           ["Pedidos",String(orders.length),"Histórico disponível"],
           ["Total em pedidos",currency.format(sum),"Valor dos pedidos"],
-          ["Saldo a conferir",currency.format(due),"Estimativa; consultar financeiro"],
+          ["Pedidos com NF autorizada",currency.format(invoiced),"Valor dos pedidos com NF autorizada"],
           ["Concluídos",String(orders.filter(o=>o.status==="DELIVERED").length),"Pedidos entregues"]
         ].map(([label,value,detail])=><article key={label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-3 text-2xl font-semibold tracking-tight text-[#102338]">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></article>)}
       </div>
@@ -75,6 +75,9 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
         </div>
         <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Pedido","Data","Cliente","Valor","Situação","Documentos"].map(x=><th key={x} scope="col" className="px-5 py-3 font-semibold">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map(o=><tr key={o.id} className="hover:bg-slate-50"><td className="px-5 py-4 font-semibold">{o.code}</td><td className="px-5 py-4">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td><td className="px-5 py-4">{o.customerName}</td><td className="px-5 py-4">{currency.format(Number(o.totalAmount))}</td><td className="px-5 py-4"><span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{stages[o.status]||o.status}</span></td><td className="px-5 py-4">{o.invoiceStatus==="AUTHORIZED"&&o.invoicePdfAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/invoice/pdf`} target="_blank" rel="noreferrer">Ver NF</a>:o.billingAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer">Ver cobrança</a>:<span className="text-xs text-slate-500">Aguardando</span>}</td></tr>)}</tbody></table>{!filtered.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}</div>
       </section>
+      <div className="sticky bottom-3 z-20 mx-auto w-fit rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur md:hidden">
+        <button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:partner-order:new"))} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-[#a87520] px-6 text-sm font-semibold text-white"><Plus size={18}/> Novo pedido</button>
+      </div>
       <section id="relatorios-signa" className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="text-lg font-semibold text-[#102338]">Inteligência comercial</h3><p className="mt-2 text-sm text-slate-600">Os relatórios de kg, clientes e mapa serão habilitados após a integração dos dados de itens e localização. Nenhum volume geográfico é estimado.</p></section>
     </section>
   );
