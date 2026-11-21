@@ -31,7 +31,7 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
   const sum=orders.reduce((s,o)=>s+Number(o.totalAmount||0),0);
   const due=orders.reduce((s,o)=>s+(o.receivableStatus==="PAID" || o.receivableStatus==="CANCELLED" ? 0 : Number(o.totalAmount||0)),0);
   return (
-    <section className="relative space-y-5" aria-label="Painel comercial Signa">
+    <section id="inicio" className="relative space-y-5" aria-label="Painel comercial Signa">
       <button type="button" onClick={()=>setMenuOpen(v=>!v)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold lg:hidden" aria-expanded={menuOpen}>Menu do portal</button>
       <aside className={`${menuOpen?"block":"hidden"} rounded-xl bg-[#102338] p-4 text-white lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:block lg:w-52 lg:rounded-none lg:pt-24`}>
         <p className="mb-5 border-b border-white/20 pb-4 text-xs font-semibold uppercase tracking-[.14em] text-slate-300">Portal do parceiro</p>
@@ -59,7 +59,7 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
           ["Concluídos",String(orders.filter(o=>o.status==="DELIVERED").length),"Pedidos entregues"]
         ].map(([label,value,detail])=><article key={label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-3 text-2xl font-semibold tracking-tight text-[#102338]">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></article>)}
       </div>
-      <section className="rounded-xl border border-slate-200 bg-white shadow-sm" aria-label="Tabela de pedidos">
+      <section id="pedidos-em-andamento" className="rounded-xl border border-slate-200 bg-white shadow-sm" aria-label="Tabela de pedidos">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
           <div><h3 className="text-lg font-semibold text-[#102338]">Meus pedidos</h3><p className="text-xs text-slate-500">Acompanhamento operacional e financeiro</p></div>
           <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2"><Search size={16}/><span className="sr-only">Buscar pedido</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar pedido ou cliente" className="w-48 bg-transparent text-sm outline-none"/></label>
