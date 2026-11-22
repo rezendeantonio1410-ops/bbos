@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -1282,7 +1283,7 @@ export function PartnerOrderWorkspace({
                 <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
                 <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
                   <option value="">Não indicar cliente final</option>
-                  {endCustomers.filter(customer => !endCustomerSearch.trim() || [customer.name, customer.city, customer.state].some(value => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR").includes(endCustomerSearch.trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR")))).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
+                  {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
                 </select>
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">Cadastrar novo cliente final</summary>
