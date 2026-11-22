@@ -3,6 +3,14 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Revisão incremental — 22/11/2026, 17h47 (Brasília)
+
+- [x] PR #70 continua **merged** na branch `release/bbos-rc1-consolidation`; app/API Render `live` no SHA `902187f`, que inclui a entrega urgente.
+- [x] Leitura SQL da instância **identificada no Render como `bbos-postgres-staging`**: catálogo e preços exclusivos Signa ativos: `RAR-WLR-250` (250 g / R$ 38,00), `RAR-WLR-500` (500 g / R$ 76,80), `RAR-WLR-1000` (1 kg / R$ 148,00). Nenhum preço privado nem registro de catálogo ativo para outros clientes nas variantes novas. Essa leitura **não comprova, isoladamente, qual URL de banco os serviços RC1 usam**.
+- [ ] Teste autenticado de criação de pedido ainda pendente. Na base consultada existem **0 pedidos Signa** para cada SKU Reserva; não gerar pedidos artificiais em produção nem declarar aprovação do fluxo.
+- [x] Implementado nesta PR WIP um bloqueio de preços inválidos na cotação e criação de pedidos: sem preço, zero, negativo, não finito ou menor que 1 centavo = erro controlado, nunca pedido gratuito. Testes de regressão cobrindo 250 g, 500 g, 1 kg e entradas inválidas incorporados ao teste `test:signa-billing` que já integra `pnpm test`.
+- [ ] Confirmar execução integral de CI no SHA final da PR #67, revisar migrações em banco isolado, reconciliação fiscal/Pix e segurança por parceiro. **Não fazer merge/deploy da PR #67 até todos os testes e validações visual/fiscal estarem aprovados.**
+
 ## Verificação atual — 22/11/2026, 16h (Brasília) — NÃO PUBLICAR PR #67
 
 - [x] **PR #70 já integrada à release**, sem novo merge: migração `20261122153000_signa_reserva_500_1000` verificada em consulta somente leitura (`finished=true`, `rolled_back=false`). Banco confirma variantes ativas `RAR-WLR-250` (250 g, R$ 38,00), `RAR-WLR-500` (500 g, R$ 76,80) e `RAR-WLR-1000` (1 kg, R$ 148,00), com preços privados ativos exclusivamente na conta Signa Coffee.
