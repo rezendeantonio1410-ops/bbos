@@ -1172,6 +1172,15 @@ export class PartnerPortalController {
       paymentType === "TERM"
         ? `${paymentTermDays} dias após a emissão da NF-e`
         : "À vista na emissão da NF-e";
+    // The partner's requested ready date is not a Bispo commitment.
+    const requestedReadyDate = String(body.expectedDeliveryDate ?? "").trim();
+    if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(requestedReadyDate) ||
+          !Number.isFinite(Date.parse(requestedReadyDate + "T12:00:00Z")) ||
+          new Date(requestedReadyDate + "T12:00:00Z").toISOString().slice(0, 10) !== requestedReadyDate) {
+        throw new BadRequestException("Informe uma data válida para o produto pronto.");
+      }
+    }
     const orderNumber = await this.nextOrderNumber(actor.companyId);
     const order = await this.salesOrders.create(actor.companyId, {
       code: orderNumber,
@@ -1206,6 +1215,15 @@ export class PartnerPortalController {
       String(body.customerReference ?? "").trim() || null,
       actor.companyId,
     );
+    if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
+          WHERE id=$1 AND "companyId"=$2`,
+        order.id,
+        actor.companyId,
+        requestedReadyDate,
+      );
+    }
     if (paymentType === "TERM") {
       await this.termApprovals.ensureForOrder(actor.companyId, order.id, {
         id: actor.id ?? partner.id,
