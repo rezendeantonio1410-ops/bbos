@@ -59,13 +59,33 @@ function SignaReports() {
     </div>}
   </section>;
 }
+function SignaCustomerHistory() {
+  const [rows,setRows] = useState<Array<{id:string;name:string;city:string|null;state:string|null;orderCount:number;totalOrders:number;lastOrderAt:string|null}>>([]);
+  const [error,setError] = useState("");
+  const [search,setSearch] = useState("");
+  useEffect(()=>{
+    const controller = new AbortController();
+    void fetch("/api/partner-portal/end-customer-history",{credentials:"include",cache:"no-store",signal:controller.signal})
+      .then(async response=>{if(!response.ok)throw new Error("Histórico indisponível.");return response.json();})
+      .then(result=>{if(!controller.signal.aborted)setRows(result.customers);})
+      .catch(()=>{if(!controller.signal.aborted)setError("Não foi possível carregar o histórico.");});
+    return ()=>controller.abort();
+  },[]);
+  const visible=rows.filter(row=>(row.name+" "+(row.city??"")).toLowerCase().includes(search.toLowerCase()));
+  return <section id="clientes-signa" className="rounded-lg border border-slate-200 bg-white p-5">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-[#0E191D]">Clientes atendidos</h3><p className="text-xs text-slate-500">Histórico comercial, separado do faturamento fiscal</p></div><input type="search" aria-label="Pesquisar clientes" placeholder="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/></div>
+    {error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="bg-[#EBEBEB]"><tr><th className="p-3">Cliente</th><th>Localidade</th><th>Pedidos</th><th>Valor dos pedidos</th><th>Último pedido</th></tr></thead><tbody className="divide-y">{visible.map(row=><tr key={row.id}><td className="p-3 font-semibold">{row.name}</td><td>{[row.city,row.state].filter(Boolean).join(" / ")||"—"}</td><td>{row.orderCount}</td><td>{currency.format(Number(row.totalOrders))}</td><td>{row.lastOrderAt?new Date(row.lastOrderAt).toLocaleDateString("pt-BR"):"—"}</td></tr>)}</tbody></table>{!visible.length&&!error&&<p className="p-3 text-sm text-slate-500">Nenhum cliente registrado neste filtro.</p>}</div>
+    <p className="mt-3 text-xs text-slate-500">Valores dos pedidos, não equivalentes a pagamentos recebidos.</p>
+  </section>;
+}
 const currency = new Intl.NumberFormat("pt-BR", {style:"currency",currency:"BRL"});
 const stages: Record<string,string> = {DRAFT:"Em análise",CONFIRMED:"Aprovado",RESERVED:"Estoque reservado",IN_PRODUCTION:"Em produção",PICKING:"Em preparação",READY_TO_SHIP:"Pronto",INVOICED:"Faturado",SHIPPED:"Expedido",DELIVERED:"Concluído",CANCELLED:"Cancelado"};
 const menu = [
   {label:"Início",href:"#inicio",icon:LayoutDashboard},
   {label:"Pedidos",href:"#pedidos-em-andamento",icon:ShoppingCart},
   {label:"Produtos",href:"#catalogo-signa",icon:Package},
-  {label:"Clientes",href:null,icon:Users},
+  {label:"Clientes",href:"#clientes-signa",icon:Users},
   {label:"Faturamento",href:"#historico-pedidos",icon:FileText},
   {label:"Pagamentos",href:null,icon:CreditCard},
   {label:"Relatórios",href:"#relatorios-signa",icon:BarChart3},
@@ -153,6 +173,7 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
       <div className="sticky bottom-3 z-20 mx-auto w-fit rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur md:hidden">
         <button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:partner-order:new"))} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-[#0E191D] px-6 text-sm font-semibold text-white"><Plus size={18}/> Novo pedido</button>
       </div>
+      <SignaCustomerHistory/>
       <SignaReports/>
     </section>
   );
