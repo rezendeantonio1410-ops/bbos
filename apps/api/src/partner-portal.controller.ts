@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   Res,
 } from "@nestjs/common";
@@ -19,6 +20,10 @@ import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { pdfContentDisposition } from "./sales-order-pdf-download";
+import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
+import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
+import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
+import { parseBillableUnitPrice } from "./partner-price-validation";
 
 type PartnerActor = {
   id?: string | null;
@@ -114,10 +119,10 @@ export class PartnerPortalController {
         WHERE so.id=$2 AND so."companyId"=$3
           AND (
             $4::boolean
-            OR ($5::boolean AND EXISTS (
+            OR ($5::boolean AND (so."createdByStorefrontPartnerId"=$1 OR EXISTS (
               SELECT 1 FROM "StorefrontPartnerCustomer" link
                WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
-            ))
+            )))
             OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
           )
         LIMIT 1`,
@@ -189,8 +194,14 @@ export class PartnerPortalController {
           "Produto sem preço vigente na lista exclusiva deste distribuidor.",
         );
       }
+      const unitPrice = parseBillableUnitPrice(distributorRows[0].customerPrice);
+      if (unitPrice === null) {
+        throw new BadRequestException(
+          "Produto com preço exclusivo inválido. Contacte a Bispo antes de enviar o pedido.",
+        );
+      }
       return {
-        unitPrice: Number(distributorRows[0].customerPrice),
+        unitPrice,
         currency: distributorRows[0].currency,
         productPriceId:
           (distributorRows[0].productPriceId as string | null) ?? undefined,
@@ -256,8 +267,16 @@ export class PartnerPortalController {
         "Produto sem preço vigente para o canal comercial deste cliente.",
       );
     }
+    const unitPrice = parseBillableUnitPrice(
+      rows[0].customerPrice ?? rows[0].channelPrice,
+    );
+    if (unitPrice === null) {
+      throw new BadRequestException(
+        "Produto com preço inválido. Contacte a Bispo antes de enviar o pedido.",
+      );
+    }
     return {
-      unitPrice: Number(rows[0].customerPrice ?? rows[0].channelPrice),
+      unitPrice,
       currency: rows[0].currency,
       productPriceId: rows[0].productPriceId as string,
       customerProductPriceId:
@@ -538,10 +557,10 @@ export class PartnerPortalController {
           WHERE so."companyId"=$1
             AND (
               $3::boolean
-              OR ($4::boolean AND EXISTS (
+              OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                 SELECT 1 FROM "StorefrontPartnerCustomer" link
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
-              ))
+              )))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
             AND so.status <> 'CANCELLED'
@@ -561,10 +580,10 @@ export class PartnerPortalController {
             WHERE event."companyId"=$1 AND event.public=TRUE
               AND (
                 $3::boolean
-                OR ($4::boolean AND EXISTS (
+                OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                   SELECT 1 FROM "StorefrontPartnerCustomer" link
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
-                ))
+                )))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )
             ORDER BY event."occurredAt" DESC
@@ -991,29 +1010,63 @@ export class PartnerPortalController {
     };
   }
 
+  /**
+   * Only the authenticated Signa distributor, whose linked pricing Customer
+   * has the same CNPJ as its partner account, may see these fiscal choices.
+   * The end-customer commercial registry must never be used as an NF-e recipient.
+   */
+  private async findSignaBillingRecipients(companyId: string, partner: any) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT DISTINCT recipient.*,
+              CASE WHEN length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14 THEN 'CNPJ'
+                   WHEN length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11 THEN 'CPF'
+                   ELSE 'INVALID' END AS "documentType",
+              pricing.id AS "pricingCustomerId"
+         FROM "StorefrontPartner" p
+         JOIN "StorefrontPartnerCustomer" link ON link."partnerId"=p.id
+         JOIN "Customer" pricing ON pricing.id=link."customerId"
+           AND pricing."companyId"=p."companyId" AND pricing.active=true
+         JOIN "Customer" recipient ON recipient."companyId"=p."companyId"
+           AND recipient.active=true
+        WHERE p.id=$1 AND p."companyId"=$2 AND p.active=true
+          AND p."portalAccessLevel"='DISTRIBUTOR'
+          AND LOWER(TRIM(p.name))='signa coffee'
+          AND LOWER(TRIM(pricing.name))='signa coffee'
+          AND regexp_replace(COALESCE(p."taxId",''),'[^0-9]','','g') =
+              regexp_replace(COALESCE(pricing."taxId",''),'[^0-9]','','g')
+          AND (
+            (recipient.id=pricing.id AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+            OR
+            (LOWER(TRIM(recipient.name))='rodrigo lampert ribas'
+             AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11)
+          )
+        ORDER BY recipient.name`,
+      partner.id,
+      companyId,
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      documentType: row.documentType as "CPF" | "CNPJ",
+      pricingCustomerId: String(row.pricingCustomerId),
+      taxIdVerificationStatus: String(row.taxIdVerificationStatus ?? "NOT_VERIFIED"),
+      fiscalReady: assessCustomerFiscalReadiness(row).ready,
+    }));
+  }
+
   @Get("billing-recipients")
   async billingRecipients(@Req() request: { user?: PartnerActor }) {
     const { actor, partner } = await this.context(request);
-    if (partner.portalAccessLevel !== "DISTRIBUTOR" ||
-        !/^signa coffee$/i.test(String(partner.name ?? "").trim())) {
-      throw new ForbiddenException("Destinatários fiscais indisponíveis para este parceiro.");
-    }
-    const rows = await this.database.$queryRawUnsafe<Array<{
-      id: string; name: string; documentType: string; taxIdVerificationStatus: string | null;
-    }>>(
-      `SELECT id,name,
-        CASE WHEN length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=14 THEN 'CNPJ'
-             WHEN length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=11 THEN 'CPF'
-             ELSE 'INVALID' END AS "documentType",
-        "taxIdVerificationStatus"
-        FROM "Customer"
-        WHERE "companyId"=$1 AND active=true AND
-        ((name='Signa Coffee' AND length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=14)
-        OR (name='Rodrigo Lampert Ribas' AND length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=11))
-        ORDER BY CASE WHEN name='Signa Coffee' THEN 0 ELSE 1 END`,
-      actor.companyId,
-    );
-    return { recipients: rows };
+    const enabled = partner.portalAccessLevel === "DISTRIBUTOR" &&
+      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+    if (!enabled) return { enabled: false, recipients: [] };
+    const recipients = await this.findSignaBillingRecipients(actor.companyId, partner);
+    return {
+      enabled: true,
+      recipients: recipients.map(({ id, name, documentType, taxIdVerificationStatus, fiscalReady }) => ({
+        id, name, documentType, taxIdVerificationStatus, fiscalReady,
+      })),
+    };
   }
 
   @Post("quote")
@@ -1084,6 +1137,142 @@ export class PartnerPortalController {
     };
   }
 
+  @Get("commercial-reports")
+  async commercialReports(
+    @Req() request: { user?: PartnerActor },
+    @Query("year") yearQuery?: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Relatórios disponíveis apenas para distribuidores.");
+    }
+    // All report sections share identical, bound date boundaries.
+    // Do not silently apply a year filter only to the monthly summary.
+    let year: number | null;
+    try {
+      year = parseSignaReportYear(yearQuery);
+    } catch {
+      throw new BadRequestException("Informe um ano válido entre 2000 e 2099.");
+    }
+    const { start, end } = signaReportYearBounds(year);
+    // Values are order totals, not tax invoices or settled receipts.
+    // Every aggregate is restricted by company AND the authenticated partner.
+    const [monthly, products, regions, years] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT to_char(date_trunc('month', so."createdAt"),'YYYY-MM') AS month,
+                count(DISTINCT so.id)::int AS orders,
+                COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
+                COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
+           FROM "SalesOrder" so
+           JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
+           JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+            AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
+            AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
+          GROUP BY date_trunc('month', so."createdAt")
+          ORDER BY month DESC LIMIT 36`,
+        actor.companyId, partner.id, start, end,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT item.sku,item."productName" AS product,
+                count(DISTINCT so.id)::int AS orders,
+                COALESCE(sum(item.quantity),0)::int AS units,
+                COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
+                COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
+           FROM "SalesOrder" so
+           JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
+           JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+            AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
+            AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
+          GROUP BY item.sku,item."productName"
+          ORDER BY "orderValue" DESC LIMIT 100`,
+        actor.companyId, partner.id, start, end,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT ec.state,ec.city,count(DISTINCT so.id)::int AS orders,
+                COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
+                COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
+           FROM "SalesOrder" so
+           JOIN "PartnerEndCustomer" ec ON ec.id=so."partnerEndCustomerId"
+             AND ec."partnerId"=$2 AND ec."companyId"=$1
+           JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
+           JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+            AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
+            AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
+          GROUP BY ec.state,ec.city ORDER BY "orderValue" DESC LIMIT 100`,
+        actor.companyId, partner.id, start, end,
+      ),
+      this.database.$queryRawUnsafe<Array<{ year: number }>>(
+        `SELECT DISTINCT EXTRACT(YEAR FROM so."createdAt")::int AS year
+           FROM "SalesOrder" so
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+          ORDER BY year DESC LIMIT 30`,
+        actor.companyId, partner.id,
+      ),
+    ]);
+    return {
+      monthly, products, regions,
+      availableYears: years.map((row) => String(row.year)),
+      selectedYear: year,
+      basis: "ORDER_VALUE", currency: "BRL",
+      notice: "Valores de pedidos; não equivalem a notas fiscais autorizadas ou pagamentos recebidos.",
+    };
+  }
+
+  // Commercial end customers are scoped to this partner and never become fiscal recipients.
+  @Get("end-customers")
+  async listEndCustomers(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
+    }
+    const customers = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,name,"taxId",email,phone,city,state,notes,"createdAt"
+         FROM "PartnerEndCustomer"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true
+        ORDER BY name ASC LIMIT 500`,
+      actor.companyId,
+      partner.id,
+    );
+    return { customers };
+  }
+
+  @Post("end-customers")
+  async createEndCustomer(
+    @Req() request: { user?: PartnerActor },
+    @Body() body: { name?: string; taxId?: string; email?: string; phone?: string; city?: string; state?: string; notes?: string },
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
+    }
+    const name = String(body.name ?? "").trim();
+    const state = String(body.state ?? "").trim().toUpperCase();
+    if (name.length < 2 || name.length > 180) {
+      throw new BadRequestException("Informe o nome do cliente (2 a 180 caracteres).");
+    }
+    if (state && !/^[A-Z]{2}$/.test(state)) {
+      throw new BadRequestException("Informe a UF com duas letras.");
+    }
+    const clean = (value: unknown, max: number) => String(value ?? "").trim().slice(0, max) || null;
+    const id = randomUUID();
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "PartnerEndCustomer"
+        (id,"companyId","partnerId",name,"taxId",email,phone,city,state,notes,"createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())`,
+      id, actor.companyId, partner.id, name, clean(body.taxId, 32),
+      clean(body.email, 254), clean(body.phone, 40), clean(body.city, 120),
+      state || null, clean(body.notes, 1000),
+    );
+    return { id, name, message: "Cliente comercial cadastrado." };
+  }
+
   @Post("orders")
   async createOrder(
     @Req() request: { user?: PartnerActor },
@@ -1100,6 +1289,7 @@ export class PartnerPortalController {
       paymentType?: "CASH" | "TERM";
       paymentTermDays?: number;
       expectedDeliveryDate?: string;
+      partnerEndCustomerId?: string | null;
       billingRecipientId?: string;
       customerReference?: string;
       notes?: string;
@@ -1110,17 +1300,37 @@ export class PartnerPortalController {
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
     let fiscalCustomerId = customerId;
-    if (partner.portalAccessLevel === "DISTRIBUTOR" &&
-        /^signa coffee$/i.test(String(partner.name ?? "").trim())) {
-      const recipientId = String(body.billingRecipientId ?? "").trim();
-      if (!recipientId) {
-        throw new BadRequestException("Selecione Signa (CNPJ) ou Rodrigo (CPF) para faturamento.");
+    const signaDistributor = partner.portalAccessLevel === "DISTRIBUTOR" &&
+      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+    if (signaDistributor) {
+      const available = await this.findSignaBillingRecipients(actor.companyId, partner);
+      const selected = selectSignaFiscalRecipient(
+        customerId,
+        String(body.billingRecipientId ?? "").trim(),
+        available.filter((entry) => entry.pricingCustomerId === customerId),
+      );
+      if (!selected) {
+        throw new BadRequestException(
+          "Selecione um destinatário fiscal válido: Signa (CNPJ) ou Rodrigo (CPF).",
+        );
       }
-      const permitted = await this.billingRecipients(request);
-      if (!permitted.recipients.some((recipient) => recipient.id === recipientId)) {
-        throw new BadRequestException("Destinatário fiscal não autorizado para a Signa.");
+      fiscalCustomerId = selected;
+    } else if (body.billingRecipientId) {
+      throw new BadRequestException("Destinatário fiscal não autorizado para este parceiro.");
+    }
+    const partnerEndCustomerId = String(body.partnerEndCustomerId ?? "").trim();
+    if (partnerEndCustomerId) {
+      if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+        throw new BadRequestException("Cliente final disponível apenas para distribuidores.");
       }
-      fiscalCustomerId = recipientId;
+      const endCustomers = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "PartnerEndCustomer"
+          WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true LIMIT 1`,
+        partnerEndCustomerId, actor.companyId, partner.id,
+      );
+      if (!endCustomers.length) {
+        throw new BadRequestException("Cliente final não pertence à carteira deste parceiro.");
+      }
     }
     const items = body.items ?? [];
     if (!items.length)
@@ -1184,6 +1394,7 @@ export class PartnerPortalController {
           salesChannelId: price.salesChannelId,
           salesChannelName: price.salesChannelName,
           officialUnitPrice: price.unitPrice,
+          pricingCustomerId: customerId,
         },
       });
     }
@@ -1211,16 +1422,26 @@ export class PartnerPortalController {
       paymentType === "TERM"
         ? `${paymentTermDays} dias após a emissão da NF-e`
         : "À vista na emissão da NF-e";
+    // The partner's requested ready date is not a Bispo commitment.
+    const requestedReadyDate = String(body.expectedDeliveryDate ?? "").trim();
+    if (
+      partner.portalAccessLevel === "DISTRIBUTOR" &&
+      requestedReadyDate &&
+      !isValidPartnerRequestedReadyDate(requestedReadyDate)
+    ) {
+      throw new BadRequestException("Informe uma data válida para o produto pronto.");
+    }
     const orderNumber = await this.nextOrderNumber(actor.companyId);
     const order = await this.salesOrders.create(actor.companyId, {
       code: orderNumber,
       orderNumber,
       customerId: fiscalCustomerId,
+      createdByStorefrontPartnerId: partner.id,
       salesChannelId,
       freight: 0,
       notes: [
         `Criado no portal por ${partner.name}.`,
-        fiscalCustomerId !== customerId ? "Destinatário fiscal selecionado: Rodrigo (CPF). Preços preservados da tabela exclusiva Signa." : "",
+        signaDistributor ? `Conta de preços: Signa Coffee. Destinatário fiscal: ${fiscalCustomerId === customerId ? "Signa (CNPJ)" : "Rodrigo (CPF)"}.` : "",
         partner.portalAccessLevel === "DISTRIBUTOR"
           ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
           : "",
@@ -1246,6 +1467,22 @@ export class PartnerPortalController {
       String(body.customerReference ?? "").trim() || null,
       actor.companyId,
     );
+    if (partnerEndCustomerId) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrder" SET "partnerEndCustomerId"=$3
+          WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$4`,
+        order.id, actor.companyId, partnerEndCustomerId, partner.id,
+      );
+    }
+    if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
+          WHERE id=$1 AND "companyId"=$2`,
+        order.id,
+        actor.companyId,
+        requestedReadyDate,
+      );
+    }
     if (paymentType === "TERM") {
       await this.termApprovals.ensureForOrder(actor.companyId, order.id, {
         id: actor.id ?? partner.id,
