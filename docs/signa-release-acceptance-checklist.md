@@ -3,6 +3,18 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Revisão incremental — 22/11/2026, 18h51 (Brasília)
+
+- [x] PR #70 **merged**, commit `880283eb`, CI de sua branch aprovado. App e API RC1 estão `live` no Render no commit `902187f`, posterior ao hotfix. Não houve novo merge/deploy neste ciclo.
+- [x] Leitura **somente leitura** do banco identificado explicitamente no Render como `bbos-postgres-staging`: migração `20261122153000_signa_reserva_500_1000` concluída sem rollback, variantes `RAR-WLR-250`, `RAR-WLR-500`, `RAR-WLR-1000` ativas, preços Signa R$ 38,00 / R$ 76,80 / R$ 148,00 e catálogo privado ativo. O banco de fato conectado aos serviços RC1 **não foi comprovado** por esta consulta.
+- [x] **Nova evidência desde 17h47:** existe na base consultada um pedido atribuído ao parceiro Signa para **10 unidades do SKU `RAR-WLR-1000`**, preço unitário R$ 148,00, total do item R$ 1.480,00, status `READY_TO_SHIP`, criado em 22/11/2026 às 21:47 UTC. Este registro **não demonstra** sozinho que o pedido foi criado com sessão autenticada no serviço RC1. A variante de **500 g continua sem pedidos nessa base**.
+- [ ] **Integração Bling NÃO comprovada**: a instância consultada não possui `IntegrationResourceMap` com SKU/variant ID de `RAR-WLR-500` ou `RAR-WLR-1000`. Antes de considerar concluído, sincronizar produto fiscal validado e verificar IDs no Bling, produtos não duplicados, variantes/SKUs corretos e NF-e em ambiente seguro. Não confundir nome visual "Reserva" com produto-base "White Label Raro".
+- [x] **Correção de segurança em código WIP PR #67:** consultas de autorização de PDF, lista de pedidos e eventos agora permitem pedido de distribuidor quando o parceiro o criou; consulta por cliente vinculado só é permitida para **pedido legado sem parceiro de origem** (`createdByStorefrontPartnerId IS NULL`). Pedidos atribuídos a outro parceiro ficam invisíveis. Nenhum registro histórico foi alterado.
+- [x] Teste de regressão estático das três consultas e da guarda dos PDFs fiscais adicionado em `partner-portal-order-access.test.ts`, registrado em `pnpm test`. A execução completa de CI para o HEAD atualizado **ainda precisa ser comprovada**.
+- [ ] Manter bloqueada a publicação da PR #67 até resolução de conflitos, testes autenticados de isolamento horizontal, pedido 500 g, aprovação de data Bispo, NF-e/Pix, relatórios e inspeção visual desktop/mobile. Não alterar automaticamente produção nem gerar pedido fictício.
+
+**Esta revisão substitui como evidência atual as contagens de pedidos anotadas em revisões anteriores do checklist.** Os demais itens e bloqueadores continuam válidos.
+
 ## Revisão incremental — 22/11/2026, 17h47 (Brasília)
 
 - [x] PR #70 continua **merged** na branch `release/bbos-rc1-consolidation`; app/API Render `live` no SHA `902187f`, que inclui a entrega urgente.
