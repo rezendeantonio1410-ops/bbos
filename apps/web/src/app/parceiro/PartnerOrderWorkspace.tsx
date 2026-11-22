@@ -1225,19 +1225,28 @@ export function PartnerOrderWorkspace({
             )}
             {isDistributor && (
               <div className="rounded-xl border border-[#d5dedc] bg-white p-4">
-                <label htmlFor="signa-billing-recipient" className="block text-sm font-semibold text-[#0E191D]">
-                  Faturar para (destinatário da NF-e)
-                </label>
-                <select id="signa-billing-recipient" required value={billingRecipientId}
-                  onChange={(event) => { setBillingRecipientId(event.target.value); invalidateQuote(); }}
-                  className="mt-2 w-full rounded-lg border border-[#d5dedc] bg-white px-3 py-3 text-sm">
-                  <option value="">Escolha quem receberá a nota fiscal</option>
-                  {billingRecipients.map((recipient) => (
-                    <option key={recipient.id} value={recipient.id}>
-                      {recipient.name} — {recipient.documentType}
-                    </option>
-                  ))}
-                </select>
+                <fieldset>
+                  <legend className="text-sm font-semibold text-[#0E191D]">
+                    Faturar para <span className="text-red-700">*</span>
+                  </legend>
+                  <p className="mt-1 text-xs text-slate-600">Escolha quem receberá a nota fiscal deste pedido.</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {billingRecipients.map((recipient) => (
+                      <label key={recipient.id}
+                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#EBEBEB]"}`}>
+                        <input type="radio" name="signa-billing-recipient"
+                          value={recipient.id} checked={billingRecipientId === recipient.id}
+                          onChange={() => { setBillingRecipientId(recipient.id); invalidateQuote(); }}
+                          required className="size-4 accent-[#0E191D]" />
+                        <span className="text-sm font-semibold text-[#0E191D]">{recipient.name}
+                          <span className="block text-xs font-normal text-slate-600">{recipient.documentType}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {!billingRecipientId && <p className="mt-2 text-xs font-medium text-amber-800">Seleção obrigatória antes de enviar o pedido.</p>}
+                  {!billingRecipients.length && <p className="mt-2 text-xs text-red-700">Destinatários fiscais indisponíveis. Atualize a página ou contacte a Bispo.</p>}
+                </fieldset>
                 <p className="mt-2 text-xs text-slate-600">
                   Os preços permanecem os da tabela exclusiva da Signa. A emissão da NF-e depende da validação fiscal do cadastro.
                 </p>
