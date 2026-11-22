@@ -18,6 +18,7 @@ import {
 import { Logo } from "@/components/logo";
 import type { SessionIdentity } from "@/lib/auth-session";
 import { PartnerOrderWorkspace } from "./PartnerOrderWorkspace";
+import { SignaEnterpriseDashboard } from "./SignaEnterpriseDashboard";
 
 type PortalData = {
   partner: {
@@ -186,8 +187,8 @@ export default function PartnerPortalPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)]/95 backdrop-blur sm:static">
+    <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "lg:pl-52" : ""}`}>
+      <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-[#102338] text-white" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-5">
           <div className="flex items-center gap-5">
             <div
@@ -220,12 +221,12 @@ export default function PartnerPortalPage() {
             <div className="hidden border-l border-stone-200 pl-5 sm:block">
               <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "Área Signa"
+                  ? "Portal comercial | Signa"
                   : "Portal do representante"}
               </p>
               <p className="mt-1 text-xs text-stone-500">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
-                  ? "Compras, pagamentos e documentos"
+                  ? "Pedidos · Faturamento · Pagamentos"
                   : "Clientes, visitas e pedidos"}
               </p>
             </div>
@@ -345,16 +346,17 @@ export default function PartnerPortalPage() {
 
         {data && (
           <>
-            <section
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} />}
+            {true && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
-                data.partner.portalAccessLevel === "DISTRIBUTOR"
+                false
                   ? "scroll-mt-20 overflow-hidden rounded-2xl border border-[var(--bbos-surface-border)] bg-[var(--bbos-surface)] px-4 py-4 text-[var(--bbos-text-primary)] shadow-sm sm:scroll-mt-4 sm:px-6"
                   : ""
               }`}
             >
               <div className="min-w-0 max-w-3xl">
-                {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+                {false && (
                   <div className="mb-3 flex items-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -364,34 +366,34 @@ export default function PartnerPortalPage() {
                     />
                   </div>
                 )}
-                {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
+                {true && (
                   <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                     Visão exclusiva
                   </p>
                 )}
                 <h1
                   className={`mt-1 font-semibold ${
-                    data.partner.portalAccessLevel === "DISTRIBUTOR"
+                    false
                       ? "text-2xl sm:text-3xl"
                       : "text-3xl sm:mt-2 sm:text-4xl"
                   }`}
                 >
-                  Olá,{" "}
-                  {data.partner.portalAccessLevel === "DISTRIBUTOR"
-                    ? data.partner.name
-                    : data.partner.contactName || data.partner.name}
-                  .
+                  {false ? (
+                    <>Gestão de pedidos</>
+                  ) : (
+                    <>Olá, {data.partner.contactName || data.partner.name}.</>
+                  )}
                 </h1>
                 <p className="mt-1.5 max-w-3xl text-sm text-stone-500">
                   {data.partner.portalAccessLevel === "VIEWER"
                     ? "Aqui aparecem somente negócios atribuídos aos seus cupons."
-                    : data.partner.portalAccessLevel === "DISTRIBUTOR"
-                      ? "Seu pedido aqui."
+                    : false
+                      ? "Consulte pedidos, acompanhe o faturamento e confira os pagamentos em um só lugar."
                       : data.partner.portalAccessLevel === "SALES_MANAGER"
                         ? "Acompanhe toda a carteira, as visitas da equipe e os pedidos comerciais."
                         : "Acompanhe seus negócios e monte pedidos somente para os clientes da sua carteira."}
                 </p>
-                {data.partner.portalAccessLevel === "DISTRIBUTOR" && (
+                {false && (
                   <button
                     type="button"
                     onClick={() =>
@@ -403,18 +405,17 @@ export default function PartnerPortalPage() {
                   </button>
                 )}
               </div>
-              {data.partner.portalAccessLevel !== "DISTRIBUTOR" && (
+              {true && (
                 <p className="text-xs text-stone-400">
                   Atualizado em{" "}
                   {new Date(data.updatedAt).toLocaleString("pt-BR")}
                 </p>
               )}
-            </section>
+            </section>}
 
             {data.partner.portalAccessLevel === "DISTRIBUTOR" ? (
               <>
-                <DistributorMetrics orders={data.partnerOrders} />
-                <DistributorOrderQueue orders={data.partnerOrders} />
+                <></>
               </>
             ) : (
               <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
