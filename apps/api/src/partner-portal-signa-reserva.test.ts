@@ -103,8 +103,11 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   const options = await controller.orderOptions(request);
   assert.equal(options.catalog.exclusive, true);
   assert.equal(options.catalog.productCount, 2);
+  const catalogVariants = options.variants as Array<{
+    sku: string; presentationGrams: number; catalogPrice: number;
+  }>;
   assert.deepEqual(
-    options.variants.map((v) => [v.sku, v.presentationGrams, v.catalogPrice]),
+    catalogVariants.map((v) => [v.sku, v.presentationGrams, v.catalogPrice]),
     [["RAR-WLR-500", 500, 76.8], ["RAR-WLR-1000", 1000, 148]],
   );
   const items = [
@@ -120,7 +123,7 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   assert.equal(submitted.status, "DRAFT");
   assert.equal(submitted.totalAmount, 224.8);
   assert.equal(createdOrders.length, 1);
-  const orderItems = createdOrders[0].items as Array<{
+  const orderItems = createdOrders[0]!.items as Array<{
     unitPrice: number; pricingSource: string; customerProductPriceId: string;
   }>;
   assert.deepEqual(orderItems.map((i) => i.unitPrice), [76.8, 148]);
