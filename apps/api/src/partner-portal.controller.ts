@@ -991,6 +991,31 @@ export class PartnerPortalController {
     };
   }
 
+  @Get("billing-recipients")
+  async billingRecipients(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR" ||
+        !/^signa coffee$/i.test(String(partner.name ?? "").trim())) {
+      throw new ForbiddenException("Destinatários fiscais indisponíveis para este parceiro.");
+    }
+    const rows = await this.database.$queryRawUnsafe<Array<{
+      id: string; name: string; documentType: string; taxIdVerificationStatus: string | null;
+    }>>(
+      `SELECT id,name,
+        CASE WHEN length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=14 THEN 'CNPJ'
+             WHEN length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=11 THEN 'CPF'
+             ELSE 'INVALID' END AS "documentType",
+        "taxIdVerificationStatus"
+        FROM "Customer"
+        WHERE "companyId"=$1 AND active=true AND
+        ((name='Signa Coffee' AND length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=14)
+        OR (name='Rodrigo Lampert Ribas' AND length(regexp_replace(coalesce("taxId",''),'[^0-9]','','g'))=11))
+        ORDER BY CASE WHEN name='Signa Coffee' THEN 0 ELSE 1 END`,
+      actor.companyId,
+    );
+    return { recipients: rows };
+  }
+
   @Post("quote")
   async quote(
     @Req() request: { user?: PartnerActor },
@@ -1075,6 +1100,7 @@ export class PartnerPortalController {
       paymentType?: "CASH" | "TERM";
       paymentTermDays?: number;
       expectedDeliveryDate?: string;
+      billingRecipientId?: string;
       customerReference?: string;
       notes?: string;
     },
@@ -1083,6 +1109,19 @@ export class PartnerPortalController {
     this.assertCanCreateOrders(partner);
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
+    let fiscalCustomerId = customerId;
+    if (partner.portalAccessLevel === "DISTRIBUTOR" &&
+        /^signa coffee$/i.test(String(partner.name ?? "").trim())) {
+      const recipientId = String(body.billingRecipientId ?? "").trim();
+      if (!recipientId) {
+        throw new BadRequestException("Selecione Signa (CNPJ) ou Rodrigo (CPF) para faturamento.");
+      }
+      const permitted = await this.billingRecipients(request);
+      if (!permitted.recipients.some((recipient) => recipient.id === recipientId)) {
+        throw new BadRequestException("Destinatário fiscal não autorizado para a Signa.");
+      }
+      fiscalCustomerId = recipientId;
+    }
     const items = body.items ?? [];
     if (!items.length)
       throw new BadRequestException("Adicione ao menos um produto.");
@@ -1176,11 +1215,12 @@ export class PartnerPortalController {
     const order = await this.salesOrders.create(actor.companyId, {
       code: orderNumber,
       orderNumber,
-      customerId,
+      customerId: fiscalCustomerId,
       salesChannelId,
       freight: 0,
       notes: [
         `Criado no portal por ${partner.name}.`,
+        fiscalCustomerId !== customerId ? "Destinatário fiscal selecionado: Rodrigo (CPF). Preços preservados da tabela exclusiva Signa." : "",
         partner.portalAccessLevel === "DISTRIBUTOR"
           ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
           : "",
