@@ -12,6 +12,8 @@ type CommercialReport = {
   products: Array<{sku:string;product:string;units:number;kilograms:number;orderValue:number}>;
   regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number}>;
   notice:string;
+  availableYears:string[];
+  selectedYear:number|null;
 };
 function SignaReports() {
   const [data,setData] = useState<CommercialReport|null>(null);
@@ -19,13 +21,19 @@ function SignaReports() {
   const [period,setPeriod] = useState("all");
   useEffect(()=>{
     const controller = new AbortController();
-    void fetch("/api/partner-portal/commercial-reports",{credentials:"include",signal:controller.signal})
+    setError("");
+    setData(null);
+    const path = period==="all"
+      ? "/api/partner-portal/commercial-reports"
+      : `/api/partner-portal/commercial-reports?year=${encodeURIComponent(period)}`;
+    void fetch(path,{credentials:"include",cache:"no-store",signal:controller.signal})
       .then(async response=>{if(!response.ok)throw new Error("Não foi possível carregar os relatórios.");return response.json() as Promise<CommercialReport>;})
-      .then(setData).catch(cause=>{if(!controller.signal.aborted)setError(cause instanceof Error?cause.message:"Erro ao carregar relatórios.");});
+      .then(result=>{if(!controller.signal.aborted)setData(result);})
+      .catch(cause=>{if(!controller.signal.aborted)setError(cause instanceof Error?cause.message:"Erro ao carregar relatórios.");});
     return ()=>controller.abort();
-  },[]);
-  const months = data?.monthly.filter(m=>period==="all"||m.month.startsWith(period))??[];
-  const years = [...new Set(data?.monthly.map(m=>m.month.slice(0,4))??[])];
+  },[period]);
+  const months = data?.monthly??[];
+  const years = data?.availableYears??[];
   const kg=months.reduce((sum,m)=>sum+Number(m.kilograms),0);
   const amount=months.reduce((sum,m)=>sum+Number(m.orderValue),0);
   const downloadCsv=()=>{
@@ -33,15 +41,16 @@ function SignaReports() {
     const lines=[["Período","Pedidos","Quilos","Valor de pedidos (BRL)"],...months.map(m=>[m.month,m.orders,m.kilograms,m.orderValue])];
     const csv="\uFEFF"+lines.map(line=>line.map(value=>`"${String(value).replace(/"/g,'""')}"`).join(";")).join("\r\n");
     const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
-    const link=document.createElement("a");link.href=url;link.download="signa-relatorio-mensal.csv";link.click();URL.revokeObjectURL(url);
+    const link=document.createElement("a");link.href=url;link.download=`signa-relatorio-mensal-${period}.csv`;link.click();URL.revokeObjectURL(url);
   };
   return <section id="relatorios-signa" className="rounded-xl border border-slate-200 bg-white p-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-[#102338]">Inteligência comercial</h3><p className="text-xs text-slate-500">Pedidos, produtos e regiões · valores de pedidos, não pagamentos</p></div>
-      <div className="flex items-center gap-2"><label htmlFor="signa-report-period" className="text-xs font-medium">Ano</label><select id="signa-report-period" value={period} onChange={e=>setPeriod(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="all">Todos</option>{years.map(year=><option key={year} value={year}>{year}</option>)}</select><button type="button" disabled={!data} onClick={downloadCsv} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-40">Exportar CSV</button></div>
+      <div className="flex items-center gap-2"><label htmlFor="signa-report-period" className="text-xs font-medium">Ano</label><select id="signa-report-period" value={period} onChange={e=>setPeriod(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="all">Todos</option>{years.map(year=><option key={year} value={year}>{year}</option>)}</select><button type="button" disabled={!data} onClick={downloadCsv} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-40">Exportar CSV mensal</button></div>
     </div>
     {error&&<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
     {!data&&!error&&<p className="mt-4 text-sm text-slate-500">Carregando dados comerciais...</p>}
     {data&&<div className="mt-4 space-y-5">
+      {!months.length&&<p role="status" className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Nenhum pedido encontrado neste período.</p>}
       <div className="grid gap-3 sm:grid-cols-3">{[["Volume",`${kg.toLocaleString("pt-BR",{maximumFractionDigits:2})} kg`],["Valor de pedidos",currency.format(amount)],["Pedidos",String(months.reduce((s,m)=>s+Number(m.orders),0))]].map(([label,value])=><div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-lg font-semibold">{value}</p></div>)}</div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
