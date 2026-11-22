@@ -236,6 +236,17 @@ export function PartnerOrderWorkspace({
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
+  const [billingEnabled, setBillingEnabled] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingRecipients, setBillingRecipients] = useState<Array<{
+    id: string;
+    name: string;
+    documentType: "CNPJ" | "CPF";
+    taxIdVerificationStatus: string;
+    fiscalReady: boolean;
+  }>>([]);
+  const [billingRecipientId, setBillingRecipientId] = useState("");
+
   const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;city?:string|null;state?:string|null}>>([]);
   const [partnerEndCustomerId, setPartnerEndCustomerId] = useState("");
   const [newEndCustomerName, setNewEndCustomerName] = useState("");
@@ -300,6 +311,35 @@ export function PartnerOrderWorkspace({
   useEffect(() => {
     void loadOptions();
   }, [loadOptions]);
+
+  useEffect(() => {
+    if (!isDistributor) return;
+    let active = true;
+    setBillingLoading(true);
+    void portalApi<{
+      enabled: boolean;
+      recipients: Array<{
+        id: string;
+        name: string;
+        documentType: "CNPJ" | "CPF";
+        taxIdVerificationStatus: string;
+        fiscalReady: boolean;
+      }>;
+    }>("/billing-recipients")
+      .then((result) => {
+        if (!active) return;
+        setBillingEnabled(result.enabled);
+        setBillingRecipients(result.recipients);
+        setBillingRecipientId(
+          result.recipients.find((recipient) => recipient.documentType === "CNPJ")?.id ?? "",
+        );
+      })
+      .catch(() => {
+        if (active) setError("Não foi possível consultar os destinatários fiscais. Atualize a página antes de enviar o pedido.");
+      })
+      .finally(() => { if (active) setBillingLoading(false); });
+    return () => { active = false; };
+  }, [isDistributor]);
 
   useEffect(() => {
     if (!isDistributor) return;
@@ -515,6 +555,10 @@ export function PartnerOrderWorkspace({
 
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (billingEnabled && !billingRecipientId) {
+      setError("Selecione Signa (CNPJ) ou Rodrigo (CPF) como destinatário fiscal.");
+      return;
+    }
     if (!quote) {
       setError("Confira o pedido antes de enviá-lo.");
       return;
@@ -529,6 +573,7 @@ export function PartnerOrderWorkspace({
           body: JSON.stringify({
             partnerEndCustomerId: isDistributor ? partnerEndCustomerId || null : undefined,
             customerId,
+            billingRecipientId: billingEnabled ? billingRecipientId : undefined,
             items: cleanItems,
             deliveryMode,
             carrierName,
@@ -1237,6 +1282,39 @@ export function PartnerOrderWorkspace({
                   </div>
                   <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
                 </details>
+              </div>
+            )}
+            {isDistributor && (billingEnabled || billingLoading) && (
+              <div className="rounded-xl border border-[#d5dedc] bg-white p-4">
+                <label htmlFor="signa-billing-recipient" className="block text-sm font-semibold text-[#0E191D]">
+                  Faturar para
+                </label>
+                <select
+                  id="signa-billing-recipient"
+                  required
+                  disabled={billingLoading || billingRecipients.length === 0}
+                  value={billingRecipientId}
+                  onChange={(event) => setBillingRecipientId(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[#d5dedc] bg-white px-3 py-3 text-sm"
+                >
+                  <option value="">Selecione o destinatário fiscal</option>
+                  {billingRecipients.map((recipient) => (
+                    <option key={recipient.id} value={recipient.id}>
+                      {recipient.name} — {recipient.documentType}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-600">
+                  O preço permanece o da tabela exclusiva Signa, inclusive quando o faturamento é para Rodrigo.
+                  O cliente final acima é apenas um registro comercial.
+                </p>
+                {billingRecipients.some((recipient) => recipient.id === billingRecipientId && (
+                  recipient.taxIdVerificationStatus !== "VERIFIED" || !recipient.fiscalReady
+                )) && (
+                  <p className="mt-1 text-xs font-medium text-amber-800">
+                    Os dados fiscais deste destinatário precisam ser validados pela Bispo antes da emissão da NF-e.
+                  </p>
+                )}
               </div>
             )}
             {!isDistributor && (
