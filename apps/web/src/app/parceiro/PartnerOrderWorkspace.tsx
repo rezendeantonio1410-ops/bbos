@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -206,7 +207,6 @@ const emptyCustomerAddress = {
 async function portalApi<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/partner-portal${path}`, {
     ...init,
-    cache: "no-store",
     credentials: "include",
     headers: { "content-type": "application/json", ...(init?.headers || {}) },
   });
@@ -237,8 +237,32 @@ export function PartnerOrderWorkspace({
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
-  const [billingRecipients, setBillingRecipients] = useState<Array<{id:string;name:string;documentType:string;taxIdVerificationStatus:string|null}>>([]);
+  const [billingEnabled, setBillingEnabled] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingRecipients, setBillingRecipients] = useState<Array<{
+    id: string;
+    name: string;
+    documentType: "CNPJ" | "CPF";
+    taxIdVerificationStatus: string;
+    fiscalReady: boolean;
+  }>>([]);
   const [billingRecipientId, setBillingRecipientId] = useState("");
+
+  const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;city?:string|null;state?:string|null}>>([]);
+  const [partnerEndCustomerId, setPartnerEndCustomerId] = useState("");
+  const [endCustomerSearch, setEndCustomerSearch] = useState("");
+  const [newEndCustomerName, setNewEndCustomerName] = useState("");
+  const [newEndCustomerCity, setNewEndCustomerCity] = useState("");
+  const [newEndCustomerState, setNewEndCustomerState] = useState("");
+  const [savingEndCustomer, setSavingEndCustomer] = useState(false);
+
+  function closeOrder() {
+    setBillingRecipientId("");
+    setPartnerEndCustomerId("");
+    setEndCustomerSearch("");
+    setShowOrder(false);
+  }
+
 
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -296,29 +320,42 @@ export function PartnerOrderWorkspace({
 
   useEffect(() => {
     void loadOptions();
-    // A distributor may leave this tab open while Bispo publishes new variants.
-    // Refresh on return, rather than showing an obsolete catalog indefinitely.
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") void loadOptions();
-    };
-    window.addEventListener("focus", refreshWhenVisible);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    return () => {
-      window.removeEventListener("focus", refreshWhenVisible);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
   }, [loadOptions]);
 
   useEffect(() => {
     if (!isDistributor) return;
     let active = true;
-    void portalApi<{recipients:Array<{id:string;name:string;documentType:string;taxIdVerificationStatus:string|null}>}>("/billing-recipients")
+    setBillingLoading(true);
+    void portalApi<{
+      enabled: boolean;
+      recipients: Array<{
+        id: string;
+        name: string;
+        documentType: "CNPJ" | "CPF";
+        taxIdVerificationStatus: string;
+        fiscalReady: boolean;
+      }>;
+    }>("/billing-recipients")
       .then((result) => {
         if (!active) return;
+        setBillingEnabled(result.enabled);
         setBillingRecipients(result.recipients);
+        // A new order must never preselect its fiscal recipient.
         setBillingRecipientId("");
       })
-      .catch(() => { if (active) setError("Não foi possível carregar os destinatários fiscais da Signa."); });
+      .catch(() => {
+        if (active) setError("Não foi possível consultar os destinatários fiscais. Atualize a página antes de enviar o pedido.");
+      })
+      .finally(() => { if (active) setBillingLoading(false); });
+    return () => { active = false; };
+  }, [isDistributor]);
+
+  useEffect(() => {
+    if (!isDistributor) return;
+    let active = true;
+    void portalApi<{customers: Array<{id:string;name:string;city?:string|null;state?:string|null}>}>("/end-customers")
+      .then(result => { if(active) setEndCustomers(result.customers); })
+      .catch(() => { /* Optional commercial customer list may not yet be configured. */ });
     return () => { active = false; };
   }, [isDistributor]);
 
@@ -334,6 +371,9 @@ export function PartnerOrderWorkspace({
     const openNewOrder = () => {
       setError("");
       setMessage("");
+      setBillingRecipientId("");
+      setPartnerEndCustomerId("");
+      setEndCustomerSearch("");
       setShowOrder(true);
     };
     window.addEventListener("bbos:partner-order:new", openNewOrder);
@@ -398,7 +438,7 @@ export function PartnerOrderWorkspace({
       setCustomerId(customer.id);
       setRelationshipCustomerId(customer.id);
       setShowCustomer(false);
-      setShowOrder(false);
+      closeOrder();
       setShowVisit(true);
       setShowCredit(false);
       setMessage(
@@ -506,8 +546,36 @@ export function PartnerOrderWorkspace({
     }
   }
 
+  async function saveEndCustomer() {
+    if (!newEndCustomerName.trim()) { setError("Informe o nome do cliente final."); return; }
+    setSavingEndCustomer(true);
+    setError("");
+    try {
+      const result = await portalApi<{id:string;name:string}>("/end-customers", {
+        method: "POST",
+        body: JSON.stringify({name:newEndCustomerName,city:newEndCustomerCity,state:newEndCustomerState}),
+      });
+      setEndCustomers(previous => [...previous, {id:result.id,name:result.name,city:newEndCustomerCity,state:newEndCustomerState}].sort((a,b)=>a.name.localeCompare(b.name)));
+      setEndCustomerSearch("");
+      setPartnerEndCustomerId(result.id);
+      setNewEndCustomerName("");
+      setNewEndCustomerCity("");
+      setNewEndCustomerState("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o cliente.");
+    } finally { setSavingEndCustomer(false); }
+  }
+
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (billingLoading) {
+      setError("Aguarde a consulta dos destinatários fiscais antes de enviar o pedido.");
+      return;
+    }
+    if (billingEnabled && !billingRecipientId) {
+      setError("Selecione Signa (CNPJ) ou Rodrigo (CPF) como destinatário fiscal.");
+      return;
+    }
     if (!quote) {
       setError("Confira o pedido antes de enviá-lo.");
       return;
@@ -520,8 +588,9 @@ export function PartnerOrderWorkspace({
         {
           method: "POST",
           body: JSON.stringify({
+            partnerEndCustomerId: isDistributor ? partnerEndCustomerId || null : undefined,
             customerId,
-            billingRecipientId: isDistributor ? billingRecipientId : undefined,
+            billingRecipientId: billingEnabled ? billingRecipientId : undefined,
             items: cleanItems,
             deliveryMode,
             carrierName,
@@ -537,14 +606,16 @@ export function PartnerOrderWorkspace({
         },
       );
       setMessage(`${order.code} criado. ${order.message}`);
-      setShowOrder(false);
+      closeOrder();
       setLines([newLine()]);
       const distributorCustomer =
         isDistributor && customers.length === 1 ? customers[0] : null;
       setCustomerId(distributorCustomer?.id ?? "");
+      setBillingRecipientId("");
+      setPartnerEndCustomerId("");
+      setEndCustomerSearch("");
       setQuote(null);
       setCarrierName("");
-      setBillingRecipientId("");
       setPaymentType("CASH");
       setPaymentTermDays(28);
       setExpectedDeliveryDate("");
@@ -675,17 +746,9 @@ export function PartnerOrderWorkspace({
                 Catálogo Signa
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span aria-live="polite" className="rounded-full bg-[var(--bbos-nav-active)] px-3 py-1 text-xs font-bold text-[var(--bbos-coffee-green)]">
-                {variants.length} apresentações
-              </span>
-              <button type="button" onClick={() => void loadOptions()} disabled={loading}
-                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                aria-label="Atualizar produtos e preços do catálogo">
-                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-                Atualizar
-              </button>
-            </div>
+            <span className="rounded-full bg-[var(--bbos-nav-active)] px-3 py-1 text-xs font-bold text-[var(--bbos-coffee-green)]">
+              {variants.length} apresentações
+            </span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
             {availableProductsByLine.map((group, groupIndex) => (
@@ -1178,7 +1241,7 @@ export function PartnerOrderWorkspace({
             <button
               type="button"
               aria-label="Fechar novo pedido"
-              onClick={() => setShowOrder(false)}
+              onClick={() => closeOrder()}
               className="fixed inset-0 z-40 cursor-default bg-stone-950/45 backdrop-blur-[2px]"
             />
           )}
@@ -1201,7 +1264,7 @@ export function PartnerOrderWorkspace({
                 <button
                   type="button"
                   aria-label="Cancelar e fechar"
-                  onClick={() => setShowOrder(false)}
+                  onClick={() => closeOrder()}
                   className="grid size-10 place-items-center rounded-full bg-stone-100 text-stone-600"
                 >
                   <X size={18} />
@@ -1224,32 +1287,57 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
+                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                  <option value="">Não indicar cliente final</option>
+                  {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
+                </select>
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">Cadastrar novo cliente final</summary>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <input aria-label="Nome do cliente final" placeholder="Nome ou razão social" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                    <input aria-label="Cidade do cliente final" placeholder="Cidade" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                    <input aria-label="UF do cliente final" placeholder="UF" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                  </div>
+                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
+                </details>
+              </div>
+            )}
+            {isDistributor && (billingEnabled || billingLoading) && (
               <div className="rounded-xl border border-[#d5dedc] bg-white p-4">
                 <fieldset>
-                  <legend className="text-sm font-semibold text-[#0E191D]">
-                    Faturar para <span className="text-red-700">*</span>
-                  </legend>
-                  <p className="mt-1 text-xs text-slate-600">Escolha quem receberá a nota fiscal deste pedido.</p>
+                  <legend className="text-sm font-semibold text-[#0E191D]">Faturar para <span className="text-red-700">*</span></legend>
+                  <p className="mt-1 text-xs text-slate-600">Escolha quem receberá a nota fiscal. Nenhuma opção vem selecionada.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {billingRecipients.map((recipient) => (
                       <label key={recipient.id}
-                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#EBEBEB]"}`}>
-                        <input type="radio" name="signa-billing-recipient"
-                          value={recipient.id} checked={billingRecipientId === recipient.id}
-                          onChange={() => { setBillingRecipientId(recipient.id); invalidateQuote(); }}
-                          required className="size-4 accent-[#0E191D]" />
+                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
+                        <input type="radio" name="signa-billing-recipient" required
+                          disabled={billingLoading} value={recipient.id} checked={billingRecipientId === recipient.id}
+                          onChange={() => setBillingRecipientId(recipient.id)}
+                          className="size-4 accent-[#0E191D]" />
                         <span className="text-sm font-semibold text-[#0E191D]">{recipient.name}
                           <span className="block text-xs font-normal text-slate-600">{recipient.documentType}</span>
                         </span>
                       </label>
                     ))}
                   </div>
-                  {!billingRecipientId && <p className="mt-2 text-xs font-medium text-amber-800">Seleção obrigatória antes de enviar o pedido.</p>}
-                  {!billingRecipients.length && <p className="mt-2 text-xs text-red-700">Destinatários fiscais indisponíveis. Atualize a página ou contacte a Bispo.</p>}
+                  {!billingRecipientId && <p className="mt-2 text-xs font-medium text-amber-800">Seleção obrigatória para finalizar o pedido.</p>}
+                  {!billingLoading && billingRecipients.length === 0 && <p className="mt-2 text-xs font-medium text-red-700">Nenhum destinatário fiscal disponível. Contacte a Bispo.</p>}
                 </fieldset>
                 <p className="mt-2 text-xs text-slate-600">
-                  Os preços permanecem os da tabela exclusiva da Signa. A emissão da NF-e depende da validação fiscal do cadastro.
+                  O preço permanece o da tabela exclusiva Signa, inclusive quando o faturamento é para Rodrigo.
+                  O cliente final acima é apenas um registro comercial.
                 </p>
+                {billingRecipients.some((recipient) => recipient.id === billingRecipientId && (
+                  recipient.taxIdVerificationStatus !== "VERIFIED" || !recipient.fiscalReady
+                )) && (
+                  <p className="mt-1 text-xs font-medium text-amber-800">
+                    Os dados fiscais deste destinatário precisam ser validados pela Bispo antes da emissão da NF-e.
+                  </p>
+                )}
               </div>
             )}
             {!isDistributor && (
@@ -1427,7 +1515,7 @@ export function PartnerOrderWorkspace({
               <PortalField
                 label={
                   isDistributor
-                    ? "Data de entrega solicitada"
+                    ? "Data desejada para o produto pronto"
                     : "Entrega desejada"
                 }
               >
@@ -1440,8 +1528,7 @@ export function PartnerOrderWorkspace({
                 />
                 {isDistributor && (
                   <span className="mt-1 block text-[10px] leading-4 text-stone-500">
-                    A data será confirmada ou ajustada por José ou Suzi na
-                    aprovação do pedido.
+                    Esta é a data solicitada pela Signa, não um prazo confirmado. A Bispo poderá aceitá-la ou definir outra data na aprovação.
                   </span>
                 )}
               </PortalField>
@@ -1511,7 +1598,7 @@ export function PartnerOrderWorkspace({
               )}
               <button
                 type="button"
-                onClick={() => setShowOrder(false)}
+                onClick={() => closeOrder()}
                 className="rounded-xl border px-4 py-2.5 text-xs font-bold"
               >
                 Cancelar
