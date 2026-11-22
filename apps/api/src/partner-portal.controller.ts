@@ -6,6 +6,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -24,6 +25,7 @@ import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
+import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
 
 type PartnerActor = {
   id?: string | null;
@@ -1274,6 +1276,53 @@ export class PartnerPortalController {
       state || null, clean(body.notes, 1000),
     );
     return { id, name, message: "Cliente comercial cadastrado." };
+  }
+
+  // Commercial identity only. Never change partnerId, companyId or fiscal Customer.
+  @Patch("end-customers/:customerId")
+  async updateEndCustomer(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+    @Body() body: unknown,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
+    }
+    let changes: ReturnType<typeof parsePartnerEndCustomerPatch>;
+    try {
+      changes = parsePartnerEndCustomerPatch(body);
+    } catch (cause) {
+      throw new BadRequestException(
+        cause instanceof Error ? cause.message : "Dados inválidos do cliente comercial.",
+      );
+    }
+    const has = (field: "name" | "city" | "state") =>
+      Object.prototype.hasOwnProperty.call(changes, field);
+    const updated = await this.database.$queryRawUnsafe<
+      Array<{ id: string; name: string; city: string | null; state: string | null }>
+    >(
+      `UPDATE "PartnerEndCustomer"
+          SET name=CASE WHEN $4::boolean THEN $5::text ELSE name END,
+              city=CASE WHEN $6::boolean THEN $7::text ELSE city END,
+              state=CASE WHEN $8::boolean THEN $9::text ELSE state END,
+              "updatedAt"=NOW()
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true
+        RETURNING id,name,city,state`,
+      customerId,
+      actor.companyId,
+      partner.id,
+      has("name"),
+      changes.name ?? null,
+      has("city"),
+      changes.city ?? null,
+      has("state"),
+      changes.state ?? null,
+    );
+    if (!updated[0]) {
+      throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
+    }
+    return { ...updated[0], message: "Cadastro comercial atualizado." };
   }
 
   @Post("orders")
