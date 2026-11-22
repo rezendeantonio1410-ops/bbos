@@ -3,6 +3,16 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Revisão incremental — 22/11/2026, 19h50 (Brasília)
+
+- [x] **Implementação efetiva isolada na PR #67 (não publicada):** edição de nome/cidade/UF do cliente final comercial pelo próprio distribuidor, preservando o cadastro fiscal `Customer` e os dados históricos. `PATCH /partner-portal/end-customers/:customerId` exige sessão de parceiro DISTRIBUTOR e aplica `WHERE id=$1 AND companyId=$2 AND partnerId=$3 AND active=true`. O formulário oferece edição do cliente selecionado, sem alterar destinatário fiscal.
+- [x] Validador unitário adicionado para rejeitar alteração de `partnerId`, `companyId`, `taxId`, `active`, ID fiscal, entrada inválida e UF/nome incorretos. Teste estático também comprova cláusula de isolamento no SQL. Ambos integrados ao comando `pnpm test`; **não confundir testes adicionados com CI aprovado**.
+- [x] **PR #70** segue `merged` (SHA `880283eb`); workflow da PR `45040608415` concluído como `success`. Deploys RC1 da aplicação e API em `live` no SHA `c48b9d7`, posterior ao hotfix. Nenhum merge ou deploy foi feito nesta revisão.
+- [x] Banco **`bbos-postgres-staging`** consultado somente leitura: variantes `RAR-WLR-250`, `RAR-WLR-500` e `RAR-WLR-1000`, preços privados Signa R$ 38,00 / R$ 76,80 / R$ 148,00, catálogo ativo e sem outro cliente com preço privado ativo encontrado. Migração do Reserva concluída sem rollback. **Nova confirmação:** migrações de clientes comerciais e aprovação de data também constam aplicadas *nesta base staging* às 22:07 UTC; isso NÃO prova implantação da PR #67 na aplicação/API RC1 nem que a base é produção.
+- [x] Na base consultada há registros de pedidos para 250 g (37 unidades) e 1 kg (10 unidades); **não há registro de pedido para 500 g** nessa consulta. Esses registros não substituem teste autenticado e controlado do catálogo/fluxo de criação de pedido RC1.
+- [ ] **CI do HEAD novo da PR #67 não comprovado**; validação temporária PR #83 criada como rascunho sem autorização de merge, mas não havia execução de Actions para esse SHA no momento da consulta. Validar typecheck/lint/test/build e testes de migração/segurança antes de liberar.
+- [ ] **Portas de publicação fechadas:** comprovante de qual banco está ligado a app/API RC1, criação autenticada de pedido 500g e 1kg, Bling/NF-e, Pix/conciliação, verificação fiscal Signa/Rodrigo, aprovação de prazo exclusiva Bispo, isolamento autenticado horizontal, relatórios/exportações, logo e aceite visual desktop/mobile. A PR #67 tem conflitos com release e permanece draft.
+
 ## Revisão incremental — 22/11/2026, 18h51 (Brasília)
 
 - [x] PR #70 **merged**, commit `880283eb`, CI de sua branch aprovado. App e API RC1 estão `live` no Render no commit `902187f`, posterior ao hotfix. Não houve novo merge/deploy neste ciclo.
