@@ -349,7 +349,7 @@ export default function PartnerPortalPage() {
 
         {data && (
           <>
-            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} />}
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} events={data.notifications} />}
             {true && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
@@ -814,7 +814,7 @@ function DistributorOrderQueue({
                       {order.code}
                     </p>
                     <p className="mt-1 text-[10px] text-[var(--bbos-text-muted)]">
-                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                      {new Date(order.orderedAt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false})}
                     </p>
                   </div>
                   <p className="shrink-0 text-sm font-bold text-[var(--bbos-text-primary)]">
@@ -893,7 +893,7 @@ function DistributorOrderQueue({
                       {order.code}
                     </p>
                     <p className="mt-0.5 text-[10px] text-stone-400">
-                      {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                      {new Date(order.orderedAt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false})}
                     </p>
                   </div>
                   <div>
@@ -1033,7 +1033,7 @@ function DistributorOrderHistoryList({
                   {order.code}
                 </p>
                 <p className="mt-0.5 text-[9px] text-[var(--bbos-text-muted)]">
-                  {new Date(order.orderedAt).toLocaleDateString("pt-BR")}
+                  {new Date(order.orderedAt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false})}
                 </p>
               </div>
               <p className="hidden truncate text-[10px] text-[var(--bbos-text-muted)] sm:block">
@@ -1057,7 +1057,7 @@ function DistributorOrderHistoryList({
                       className="grid gap-1 rounded-lg bg-white px-3 py-2 sm:grid-cols-[110px_minmax(0,1fr)]"
                     >
                       <time className="text-[9px] text-[var(--bbos-text-muted)]">
-                        {new Date(item.occurredAt).toLocaleDateString("pt-BR")}
+                        {new Date(item.occurredAt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false})}
                       </time>
                       <div>
                         <p className="text-[10px] font-bold text-[var(--bbos-text-primary)]">
