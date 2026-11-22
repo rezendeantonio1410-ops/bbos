@@ -166,6 +166,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
   const [filter,setFilter] = useState("Todos");
   const [menuOpen,setMenuOpen] = useState(false);
   const [expandedOrder,setExpandedOrder] = useState<string | null>(null);
+  useEffect(()=>{if(expandedOrder)document.getElementById("signa-order-timeline")?.scrollIntoView({behavior:"smooth",block:"start"});},[expandedOrder]);
   const filtered = useMemo(()=>orders.filter(o=>{
     const text = (o.code+" "+o.customerName).toLocaleLowerCase("pt-BR");
     const matches = !search || text.includes(search.toLocaleLowerCase("pt-BR"));
@@ -243,11 +244,11 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
             <div className="mt-3 flex gap-1" role="img" aria-label={`Etapa ${orderProgress[o.status]??1} de 6: ${stages[o.status]||o.status}`}>
               {[1,2,3,4,5,6].map(n=><span key={n} className={`h-1.5 flex-1 rounded-full ${n<=(orderProgress[o.status]??1)?"bg-[#0E191D]":"bg-slate-200"}`}/>)}
             </div>
-            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><a href="#historico-pedidos" className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</a></div>
+            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><button type="button" aria-expanded={expandedOrder===o.id} aria-controls="signa-order-timeline" onClick={()=>setExpandedOrder(value=>value===o.id?null:o.id)} className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</button></div>
           </article>)}
         </div>}
       </section>
-      {expandedOrder&&<section className="rounded-xl border border-[#b4c6c1] bg-white p-5" aria-label="Linha do tempo do pedido">
+      {expandedOrder&&<section id="signa-order-timeline" className="scroll-mt-28 rounded-xl border border-[#b4c6c1] bg-white p-5" aria-label="Linha do tempo do pedido">
         <div className="flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Linha do tempo · {orders.find(o=>o.id===expandedOrder)?.code}</h3><button type="button" onClick={()=>setExpandedOrder(null)} className="text-sm font-semibold underline">Fechar</button></div>
         <p className="mt-1 text-xs text-slate-500">Datas e horários registrados pelo BBOS; etapas sem registro não são estimadas.</p>
         <ol className="mt-4 space-y-3 border-l-2 border-[#25734c] pl-5">
