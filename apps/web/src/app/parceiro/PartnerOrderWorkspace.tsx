@@ -236,6 +236,13 @@ export function PartnerOrderWorkspace({
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
+  const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;city?:string|null;state?:string|null}>>([]);
+  const [partnerEndCustomerId, setPartnerEndCustomerId] = useState("");
+  const [newEndCustomerName, setNewEndCustomerName] = useState("");
+  const [newEndCustomerCity, setNewEndCustomerCity] = useState("");
+  const [newEndCustomerState, setNewEndCustomerState] = useState("");
+  const [savingEndCustomer, setSavingEndCustomer] = useState(false);
+
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [busy, setBusy] = useState(false);
@@ -293,6 +300,15 @@ export function PartnerOrderWorkspace({
   useEffect(() => {
     void loadOptions();
   }, [loadOptions]);
+
+  useEffect(() => {
+    if (!isDistributor) return;
+    let active = true;
+    void portalApi<{customers: Array<{id:string;name:string;city?:string|null;state?:string|null}>}>("/end-customers")
+      .then(result => { if(active) setEndCustomers(result.customers); })
+      .catch(() => { /* Optional commercial customer list may not yet be configured. */ });
+    return () => { active = false; };
+  }, [isDistributor]);
 
   useEffect(() => {
     const distributorCustomer =
@@ -478,6 +494,25 @@ export function PartnerOrderWorkspace({
     }
   }
 
+  async function saveEndCustomer() {
+    if (!newEndCustomerName.trim()) { setError("Informe o nome do cliente final."); return; }
+    setSavingEndCustomer(true);
+    setError("");
+    try {
+      const result = await portalApi<{id:string;name:string}>("/end-customers", {
+        method: "POST",
+        body: JSON.stringify({name:newEndCustomerName,city:newEndCustomerCity,state:newEndCustomerState}),
+      });
+      setEndCustomers(previous => [...previous, {id:result.id,name:result.name,city:newEndCustomerCity,state:newEndCustomerState}].sort((a,b)=>a.name.localeCompare(b.name)));
+      setPartnerEndCustomerId(result.id);
+      setNewEndCustomerName("");
+      setNewEndCustomerCity("");
+      setNewEndCustomerState("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o cliente.");
+    } finally { setSavingEndCustomer(false); }
+  }
+
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!quote) {
@@ -492,6 +527,7 @@ export function PartnerOrderWorkspace({
         {
           method: "POST",
           body: JSON.stringify({
+            partnerEndCustomerId: isDistributor ? partnerEndCustomerId || null : undefined,
             customerId,
             items: cleanItems,
             deliveryMode,
@@ -1183,6 +1219,24 @@ export function PartnerOrderWorkspace({
                   pedido. {catalog?.productCount ?? 0} apresentação(ões)
                   disponíveis.
                 </p>
+              </div>
+            )}
+            {isDistributor && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
+                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                  <option value="">Não indicar cliente final</option>
+                  {endCustomers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
+                </select>
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">Cadastrar novo cliente final</summary>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <input aria-label="Nome do cliente final" placeholder="Nome ou razão social" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                    <input aria-label="Cidade do cliente final" placeholder="Cidade" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                    <input aria-label="UF do cliente final" placeholder="UF" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
+                  </div>
+                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
+                </details>
               </div>
             )}
             {!isDistributor && (
