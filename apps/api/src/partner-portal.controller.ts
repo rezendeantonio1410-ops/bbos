@@ -22,6 +22,7 @@ import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { pdfContentDisposition } from "./sales-order-pdf-download";
 import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
+import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 
 type PartnerActor = {
   id?: string | null;
@@ -994,6 +995,63 @@ export class PartnerPortalController {
     };
   }
 
+  /**
+   * Only the authenticated Signa distributor, whose linked pricing Customer
+   * has the same CNPJ as its partner account, may see these fiscal choices.
+   * The end-customer commercial registry must never be used as an NF-e recipient.
+   */
+  private async findSignaBillingRecipients(companyId: string, partner: any) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT DISTINCT recipient.*,
+              CASE WHEN length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14 THEN 'CNPJ'
+                   WHEN length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11 THEN 'CPF'
+                   ELSE 'INVALID' END AS "documentType",
+              pricing.id AS "pricingCustomerId"
+         FROM "StorefrontPartner" p
+         JOIN "StorefrontPartnerCustomer" link ON link."partnerId"=p.id
+         JOIN "Customer" pricing ON pricing.id=link."customerId"
+           AND pricing."companyId"=p."companyId" AND pricing.active=true
+         JOIN "Customer" recipient ON recipient."companyId"=p."companyId"
+           AND recipient.active=true
+        WHERE p.id=$1 AND p."companyId"=$2 AND p.active=true
+          AND p."portalAccessLevel"='DISTRIBUTOR'
+          AND LOWER(TRIM(p.name))='signa coffee'
+          AND LOWER(TRIM(pricing.name))='signa coffee'
+          AND regexp_replace(COALESCE(p."taxId",''),'[^0-9]','','g') =
+              regexp_replace(COALESCE(pricing."taxId",''),'[^0-9]','','g')
+          AND (
+            (recipient.id=pricing.id AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+            OR
+            (LOWER(TRIM(recipient.name))='rodrigo lampert ribas'
+             AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11)
+          )
+        ORDER BY recipient.name`,
+      partner.id,
+      companyId,
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      documentType: row.documentType as "CPF" | "CNPJ",
+      pricingCustomerId: String(row.pricingCustomerId),
+      taxIdVerificationStatus: String(row.taxIdVerificationStatus ?? "NOT_VERIFIED"),
+      fiscalReady: assessCustomerFiscalReadiness(row).ready,
+    }));
+  }
+
+  @Get("billing-recipients")
+  async billingRecipients(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    const enabled = partner.portalAccessLevel === "DISTRIBUTOR" &&
+      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+    if (!enabled) return { enabled: false, recipients: [] };
+    const recipients = await this.findSignaBillingRecipients(actor.companyId, partner);
+    return {
+      enabled: true,
+      recipients: recipients.map(({ pricingCustomerId: _pricingCustomerId, ...publicRecipient }) => publicRecipient),
+    };
+  }
+
   @Post("quote")
   async quote(
     @Req() request: { user?: PartnerActor },
@@ -1215,6 +1273,7 @@ export class PartnerPortalController {
       paymentTermDays?: number;
       expectedDeliveryDate?: string;
       partnerEndCustomerId?: string | null;
+      billingRecipientId?: string;
       customerReference?: string;
       notes?: string;
     },
@@ -1223,6 +1282,25 @@ export class PartnerPortalController {
     this.assertCanCreateOrders(partner);
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
+    let fiscalCustomerId = customerId;
+    const signaDistributor = partner.portalAccessLevel === "DISTRIBUTOR" &&
+      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+    if (signaDistributor) {
+      const available = await this.findSignaBillingRecipients(actor.companyId, partner);
+      const selected = selectSignaFiscalRecipient(
+        customerId,
+        String(body.billingRecipientId ?? "").trim(),
+        available.filter((entry) => entry.pricingCustomerId === customerId),
+      );
+      if (!selected) {
+        throw new BadRequestException(
+          "Selecione um destinatário fiscal válido: Signa (CNPJ) ou Rodrigo (CPF).",
+        );
+      }
+      fiscalCustomerId = selected;
+    } else if (body.billingRecipientId) {
+      throw new BadRequestException("Destinatário fiscal não autorizado para este parceiro.");
+    }
     const partnerEndCustomerId = String(body.partnerEndCustomerId ?? "").trim();
     if (partnerEndCustomerId) {
       if (partner.portalAccessLevel !== "DISTRIBUTOR") {
@@ -1299,6 +1377,7 @@ export class PartnerPortalController {
           salesChannelId: price.salesChannelId,
           salesChannelName: price.salesChannelName,
           officialUnitPrice: price.unitPrice,
+          pricingCustomerId: customerId,
         },
       });
     }
@@ -1339,11 +1418,13 @@ export class PartnerPortalController {
     const order = await this.salesOrders.create(actor.companyId, {
       code: orderNumber,
       orderNumber,
-      customerId,
+      customerId: fiscalCustomerId,
+      createdByStorefrontPartnerId: partner.id,
       salesChannelId,
       freight: 0,
       notes: [
         `Criado no portal por ${partner.name}.`,
+        signaDistributor ? `Conta de preços: Signa Coffee. Destinatário fiscal: ${fiscalCustomerId === customerId ? "Signa (CNPJ)" : "Rodrigo (CPF)"}.` : "",
         partner.portalAccessLevel === "DISTRIBUTOR"
           ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
           : "",
