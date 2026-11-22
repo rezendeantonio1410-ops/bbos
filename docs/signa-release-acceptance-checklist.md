@@ -3,6 +3,27 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Avanço incremental: faturamento Signa/Rodrigo — 22/11/2026 (somente código WIP)
+
+- [x] **Base de produção verificada (somente leitura):** cadastro ativo de Signa Coffee (CNPJ) e Rodrigo Lampert Ribas (CPF), ambos da mesma empresa BBOS. O CNPJ do parceiro Signa corresponde ao CNPJ de seu cliente comercial. **Ambos estão com `taxIdVerificationStatus=NOT_VERIFIED`**. Isso não é autorização para emitir NF-e.
+- [x] **Restrição fiscal implementada em código na PR #67:** novo `GET /partner-portal/billing-recipients` só fornece destinatários autorizados à Signa autenticada (vínculo e CNPJ parceiro/cliente iguais). Pedido exige ID fiscal da lista; outras pessoas não podem informar ID arbitrário. Rodrigo não vira cliente comercial da Signa.
+- [x] **Tabela de preço preservada em código:** cotação e `resolvePrice` usam o `customerId` comercial da Signa; `SalesOrdersService.create` recebe separadamente o destinatário fiscal como `customerId` do pedido. Snapshot de preço conserva `pricingCustomerId`; `createdByStorefrontPartnerId` é incluído já na criação.
+- [x] **Visibilidade corrigida em código:** pedidos faturados para Rodrigo, eventos e arquivos de cobrança/NF-e podem ser consultados pelo parceiro que criou o pedido, sem liberar acesso a outros parceiros.
+- [x] **Interface**: escolha Signa/CNPJ ou Rodrigo/CPF no novo pedido, rótulo de validação fiscal pendente; cliente final permanece separado. Teste unitário de allowlist criado e incorporado a `pnpm test` na branch.
+- [ ] **Porta de saída NÃO aprovada**: PR #67 diverge da release; CI ainda sem execução no HEAD atualizado; é obrigatória validação completa de segurança, dados fiscais, precificação e NF-e real em ambiente isolado. PR #74 permanece separada como **draft** para evitar publicação avulsa.
+- [ ] **Migrações do restante da PR #67 NÃO aplicadas em produção**: `20261122010000_partner_end_customers` e `20261122020000_signa_ready_date_approval`. Esta pendência é esperada e impede testar esses fluxos no ambiente produtivo.
+- [ ] **Pedido autenticado em produção não simulado**: preservar o histórico; nenhum pedido fictício ou teste com emissão fiscal/financeira foi criado.
+- [ ] **Confirmação de NF-e:** verificar bloqueio fiscal com documentos `NOT_VERIFIED`, destinatário fiscal correto no XML/PDF autorizado, Pix e conciliação antes de aceitar.
+- [ ] **CI e testes:** executar `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`; cenários Signa e Rodrigo, isolamento horizontal, preço exclusivo, histórico, migrabilidade e validação visual.
+
+### PR #70 — produção verificada sem alterações adicionais nesta execução
+
+- [x] PR #70 integrada via merge `880283eb`; workflow `45040608415` (`Test, typecheck, lint and build`) concluído com sucesso.
+- [x] Migração `20261122153000_signa_reserva_500_1000` concluída às 15:56:12 UTC sem rollback; 12 apresentações ativas no catálogo privado Signa, inclusive Reserva 250 g R$ 38,00, 500 g R$ 76,80 e 1 kg R$ 148,00.
+- [x] Preços exclusivos das três variantes confirmados em leitura da base; nenhum outro cliente tem preço privado ativo nas duas variantes novas.
+- [x] Render aplicação/API `live` no commit `402c1499` (posterior ao merge #70), conforme deploys observados.
+- [ ] Teste autenticado de criação de **pedido real** para cada SKU novo e validação do resultado/visibilidade na produção. Sem credencial autorizada para simulação e sem alterar pedidos reais, este gate **permanece aberto**.
+
 ## Registro incremental — 22/11/2026
 
 ### Avanço incremental: relatórios, navegação e identidade — 22/11/2026
