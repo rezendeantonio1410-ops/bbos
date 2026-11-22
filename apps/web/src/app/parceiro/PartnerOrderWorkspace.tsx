@@ -657,9 +657,17 @@ export function PartnerOrderWorkspace({
                 Catálogo Signa
               </p>
             </div>
-            <span className="rounded-full bg-[var(--bbos-nav-active)] px-3 py-1 text-xs font-bold text-[var(--bbos-coffee-green)]">
-              {variants.length} apresentações
-            </span>
+            <div className="flex items-center gap-2">
+              <span aria-live="polite" className="rounded-full bg-[var(--bbos-nav-active)] px-3 py-1 text-xs font-bold text-[var(--bbos-coffee-green)]">
+                {variants.length} apresentações
+              </span>
+              <button type="button" onClick={() => void loadOptions()} disabled={loading}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                aria-label="Atualizar produtos e preços do catálogo">
+                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                Atualizar
+              </button>
+            </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
             {availableProductsByLine.map((group, groupIndex) => (
