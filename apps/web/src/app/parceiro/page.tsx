@@ -349,7 +349,7 @@ export default function PartnerPortalPage() {
 
         {data && (
           <>
-            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} />}
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} events={data.notifications} />}
             {true && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
