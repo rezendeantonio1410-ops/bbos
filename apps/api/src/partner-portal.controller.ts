@@ -19,6 +19,7 @@ import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { pdfContentDisposition } from "./sales-order-pdf-download";
+import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 
 type PartnerActor = {
   id?: string | null;
@@ -1294,12 +1295,12 @@ export class PartnerPortalController {
         : "À vista na emissão da NF-e";
     // The partner's requested ready date is not a Bispo commitment.
     const requestedReadyDate = String(body.expectedDeliveryDate ?? "").trim();
-    if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(requestedReadyDate) ||
-          !Number.isFinite(Date.parse(requestedReadyDate + "T12:00:00Z")) ||
-          new Date(requestedReadyDate + "T12:00:00Z").toISOString().slice(0, 10) !== requestedReadyDate) {
-        throw new BadRequestException("Informe uma data válida para o produto pronto.");
-      }
+    if (
+      partner.portalAccessLevel === "DISTRIBUTOR" &&
+      requestedReadyDate &&
+      !isValidPartnerRequestedReadyDate(requestedReadyDate)
+    ) {
+      throw new BadRequestException("Informe uma data válida para o produto pronto.");
     }
     const orderNumber = await this.nextOrderNumber(actor.companyId);
     const order = await this.salesOrders.create(actor.companyId, {
