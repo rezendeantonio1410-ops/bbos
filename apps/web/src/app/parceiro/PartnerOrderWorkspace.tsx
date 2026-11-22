@@ -1360,7 +1360,7 @@ export function PartnerOrderWorkspace({
               <PortalField
                 label={
                   isDistributor
-                    ? "Data de entrega solicitada"
+                    ? "Data desejada para o produto pronto"
                     : "Entrega desejada"
                 }
               >
@@ -1373,8 +1373,7 @@ export function PartnerOrderWorkspace({
                 />
                 {isDistributor && (
                   <span className="mt-1 block text-[10px] leading-4 text-stone-500">
-                    A data será confirmada ou ajustada por José ou Suzi na
-                    aprovação do pedido.
+                    Esta é a data solicitada pela Signa, não um prazo confirmado. A Bispo poderá aceitá-la ou definir outra data na aprovação.
                   </span>
                 )}
               </PortalField>
