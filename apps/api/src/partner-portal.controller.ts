@@ -1048,7 +1048,9 @@ export class PartnerPortalController {
     const recipients = await this.findSignaBillingRecipients(actor.companyId, partner);
     return {
       enabled: true,
-      recipients: recipients.map(({ pricingCustomerId: _pricingCustomerId, ...publicRecipient }) => publicRecipient),
+      recipients: recipients.map(({ id, name, documentType, taxIdVerificationStatus, fiscalReady }) => ({
+        id, name, documentType, taxIdVerificationStatus, fiscalReady,
+      })),
     };
   }
 
