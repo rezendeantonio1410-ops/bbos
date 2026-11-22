@@ -11,6 +11,7 @@
     "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts",
     "test:customer-fiscal-readiness": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/customer-fiscal-readiness.test.ts",
     "test:signa-ready-date": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-ready-date.test.ts",
+    "test:signa-report-period": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-report-period.test.ts",
     "test:customer-visit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-visit-input.test.ts",
     "test:customer-sales-history": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-sales-history.test.ts",
     "test:sales-receivable-alert": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-receivable-alert.service.test.ts",
