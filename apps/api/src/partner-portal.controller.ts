@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   Res,
 } from "@nestjs/common";
@@ -20,6 +21,7 @@ import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { pdfContentDisposition } from "./sales-order-pdf-download";
 import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
+import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
 
 type PartnerActor = {
   id?: string | null;
@@ -1061,14 +1063,26 @@ export class PartnerPortalController {
   }
 
   @Get("commercial-reports")
-  async commercialReports(@Req() request: { user?: PartnerActor }) {
+  async commercialReports(
+    @Req() request: { user?: PartnerActor },
+    @Query("year") yearQuery?: string,
+  ) {
     const { actor, partner } = await this.context(request);
     if (partner.portalAccessLevel !== "DISTRIBUTOR") {
       throw new ForbiddenException("Relatórios disponíveis apenas para distribuidores.");
     }
+    // All report sections share identical, bound date boundaries.
+    // Do not silently apply a year filter only to the monthly summary.
+    let year: number | null;
+    try {
+      year = parseSignaReportYear(yearQuery);
+    } catch {
+      throw new BadRequestException("Informe um ano válido entre 2000 e 2099.");
+    }
+    const { start, end } = signaReportYearBounds(year);
     // Values are order totals, not tax invoices or settled receipts.
     // Every aggregate is restricted by company AND the authenticated partner.
-    const [monthly, products, regions] = await Promise.all([
+    const [monthly, products, regions, years] = await Promise.all([
       this.database.$queryRawUnsafe<any[]>(
         `SELECT to_char(date_trunc('month', so."createdAt"),'YYYY-MM') AS month,
                 count(DISTINCT so.id)::int AS orders,
@@ -1079,9 +1093,11 @@ export class PartnerPortalController {
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
           WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
             AND so.status::text NOT IN ('CANCELLED')
+            AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
+            AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
           GROUP BY date_trunc('month', so."createdAt")
           ORDER BY month DESC LIMIT 36`,
-        actor.companyId, partner.id,
+        actor.companyId, partner.id, start, end,
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT item.sku,item."productName" AS product,
@@ -1094,9 +1110,11 @@ export class PartnerPortalController {
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
           WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
             AND so.status::text NOT IN ('CANCELLED')
+            AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
+            AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
           GROUP BY item.sku,item."productName"
           ORDER BY "orderValue" DESC LIMIT 100`,
-        actor.companyId, partner.id,
+        actor.companyId, partner.id, start, end,
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT ec.state,ec.city,count(DISTINCT so.id)::int AS orders,
@@ -1109,12 +1127,27 @@ export class PartnerPortalController {
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
           WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
             AND so.status::text NOT IN ('CANCELLED')
+            AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
+            AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
           GROUP BY ec.state,ec.city ORDER BY "orderValue" DESC LIMIT 100`,
+        actor.companyId, partner.id, start, end,
+      ),
+      this.database.$queryRawUnsafe<Array<{ year: number }>>(
+        `SELECT DISTINCT EXTRACT(YEAR FROM so."createdAt")::int AS year
+           FROM "SalesOrder" so
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+          ORDER BY year DESC LIMIT 30`,
         actor.companyId, partner.id,
       ),
     ]);
-    return { monthly, products, regions, basis: "ORDER_VALUE", currency: "BRL",
-      notice: "Valores de pedidos; não equivalem a notas fiscais autorizadas ou pagamentos recebidos." };
+    return {
+      monthly, products, regions,
+      availableYears: years.map((row) => String(row.year)),
+      selectedYear: year,
+      basis: "ORDER_VALUE", currency: "BRL",
+      notice: "Valores de pedidos; não equivalem a notas fiscais autorizadas ou pagamentos recebidos.",
+    };
   }
 
   // Commercial end customers are scoped to this partner and never become fiscal recipients.
