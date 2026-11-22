@@ -118,10 +118,10 @@ export class PartnerPortalController {
         WHERE so.id=$2 AND so."companyId"=$3
           AND (
             $4::boolean
-            OR ($5::boolean AND EXISTS (
+            OR ($5::boolean AND (so."createdByStorefrontPartnerId"=$1 OR EXISTS (
               SELECT 1 FROM "StorefrontPartnerCustomer" link
                WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
-            ))
+            )))
             OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
           )
         LIMIT 1`,
@@ -542,10 +542,10 @@ export class PartnerPortalController {
           WHERE so."companyId"=$1
             AND (
               $3::boolean
-              OR ($4::boolean AND EXISTS (
+              OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                 SELECT 1 FROM "StorefrontPartnerCustomer" link
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
-              ))
+              )))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
             AND so.status <> 'CANCELLED'
@@ -565,10 +565,10 @@ export class PartnerPortalController {
             WHERE event."companyId"=$1 AND event.public=TRUE
               AND (
                 $3::boolean
-                OR ($4::boolean AND EXISTS (
+                OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                   SELECT 1 FROM "StorefrontPartnerCustomer" link
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
-                ))
+                )))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )
             ORDER BY event."occurredAt" DESC
