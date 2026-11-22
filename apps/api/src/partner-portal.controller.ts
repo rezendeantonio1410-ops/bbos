@@ -122,6 +122,7 @@ export class PartnerPortalController {
             OR ($5::boolean AND (so."createdByStorefrontPartnerId"=$1 OR EXISTS (
               SELECT 1 FROM "StorefrontPartnerCustomer" link
                WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
+                 AND so."createdByStorefrontPartnerId" IS NULL
             )))
             OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
           )
@@ -560,6 +561,7 @@ export class PartnerPortalController {
               OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                 SELECT 1 FROM "StorefrontPartnerCustomer" link
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+                 AND so."createdByStorefrontPartnerId" IS NULL
               )))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
@@ -583,6 +585,7 @@ export class PartnerPortalController {
                 OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                   SELECT 1 FROM "StorefrontPartnerCustomer" link
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+                 AND so."createdByStorefrontPartnerId" IS NULL
                 )))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )
