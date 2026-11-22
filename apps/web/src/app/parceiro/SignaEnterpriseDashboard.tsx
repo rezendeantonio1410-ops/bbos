@@ -52,8 +52,31 @@ function SignaReports() {
     {data&&<div className="mt-4 space-y-5">
       {!months.length&&<p role="status" className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Nenhum pedido encontrado neste período.</p>}
       <div className="grid gap-3 sm:grid-cols-3">{[["Volume",`${kg.toLocaleString("pt-BR",{maximumFractionDigits:2})} kg`],["Valor de pedidos",currency.format(amount)],["Pedidos",String(months.reduce((s,m)=>s+Number(m.orders),0))]].map(([label,value])=><div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-lg font-semibold">{value}</p></div>)}</div>
-      <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h4 className="text-sm font-semibold text-[#0E191D]">Evolução de compras</h4>
+        <p className="mb-4 text-xs text-slate-500">Volume mensal (kg) · pedidos reais</p>
+        {months.length ? <div className="flex h-44 items-end gap-2 overflow-x-auto border-b border-slate-200 pb-2" role="img" aria-label="Gráfico de volume mensal de compras em quilogramas">
+          {months.map(m=>{const maximum=Math.max(1,...months.map(entry=>Number(entry.kilograms)));return <div key={m.month} className="flex h-full min-w-12 flex-1 flex-col items-center justify-end gap-1">
+            <span className="text-[10px] tabular-nums text-slate-600">{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:0})}</span>
+            <div title={`${m.month}: ${m.kilograms} kg`} className="w-full max-w-14 rounded-t-md bg-[#25734c]" style={{height:`${Math.max(2,Number(m.kilograms)/maximum*112)}px`}}/>
+            <span className="text-[10px] text-slate-600">{m.month.slice(5)}</span>
+          </div>})}
+        </div>:<p className="text-sm text-slate-500">Sem compras registradas no período.</p>}
+      </div>
+      <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal · dados detalhados</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h4 className="text-sm font-semibold text-[#0E191D]">Compras por região</h4>
+        <p className="mb-4 text-xs text-slate-500">Volume (kg) por UF · apenas clientes com região informada</p>
+        {data.regions.length ? <div className="space-y-3">{data.regions.slice(0,10).map((region,index)=>{
+          const maximum=Math.max(1,...data.regions.map(item=>Number(item.kilograms)));
+          return <div key={index} className="grid grid-cols-[42px_1fr_78px] items-center gap-3 text-xs">
+            <span className="font-semibold">{region.state||"—"}</span>
+            <div className="h-3 overflow-hidden rounded-full bg-[#EBEBEB]"><div className="h-full rounded-full bg-[#25734c]" style={{width:`${Math.min(100,Number(region.kilograms)/maximum*100)}%`}}/></div>
+            <span className="text-right tabular-nums">{Number(region.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:1})} kg</span>
+          </div>;
+        })}</div>:<p className="text-sm text-slate-500">Ainda não há clientes com compras e localização registrada.</p>}
+      </div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Regiões · clientes finais informados</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">UF</th><th>Cidade</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.regions.map((p,i)=><tr key={i} className="border-b"><td className="py-2">{p.state||"—"}</td><td>{p.city||"Não informada"}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
       <p className="text-xs text-slate-500">{data.notice}</p>
     </div>}
