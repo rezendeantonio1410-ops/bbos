@@ -33,3 +33,15 @@ test("PDF fiscal passa pela mesma autorização de pedido", () => {
     assert.match(segment, /await this\.assertPartnerOrder\(partner, actor\.companyId, orderId\)/);
   }
 });
+
+test("edição de cliente comercial tem escopo de empresa/parceiro e não altera cadastro fiscal", () => {
+  const start = source.indexOf('@Patch("end-customers/:customerId")');
+  const end = source.indexOf('  @Post("orders")', start);
+  assert.ok(start >= 0 && end > start);
+  const segment = source.slice(start, end);
+  assert.match(segment, /portalAccessLevel !== "DISTRIBUTOR"/);
+  assert.match(segment, /parsePartnerEndCustomerPatch\(body\)/);
+  assert.match(segment, /WHERE id=\$1 AND "companyId"=\$2 AND "partnerId"=\$3 AND active=true/);
+  assert.match(segment, /RETURNING id,name,city,state/);
+  assert.doesNotMatch(segment, /UPDATE "Customer"/);
+});
