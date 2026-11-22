@@ -1243,6 +1243,33 @@ export class PartnerPortalController {
     return { customers };
   }
 
+  @Get("end-customer-history")
+  async endCustomerHistory(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Histórico disponível apenas para distribuidores.");
+    }
+    const customers = await this.database.$queryRawUnsafe<Array<{
+      id: string; name: string; city: string | null; state: string | null;
+      orderCount: number; totalOrders: number; lastOrderAt: Date | null;
+    }>>(
+      `SELECT ec.id,ec.name,ec.city,ec.state,
+        count(so.id)::int AS "orderCount",
+        COALESCE(sum(so."totalAmount"),0)::float AS "totalOrders",
+        max(so."createdAt") AS "lastOrderAt"
+       FROM "PartnerEndCustomer" ec
+       LEFT JOIN "SalesOrder" so ON so."partnerEndCustomerId"=ec.id
+         AND so."companyId"=ec."companyId"
+         AND so."createdByStorefrontPartnerId"=ec."partnerId"
+         AND so.status::text <> 'CANCELLED'
+       WHERE ec."companyId"=$1 AND ec."partnerId"=$2 AND ec.active=true
+       GROUP BY ec.id,ec.name,ec.city,ec.state
+       ORDER BY ec.name ASC LIMIT 500`,
+      actor.companyId, partner.id,
+    );
+    return { customers, notice: "Valores de pedidos; não representam faturamento ou recebimentos." };
+  }
+
   @Post("end-customers")
   async createEndCustomer(
     @Req() request: { user?: PartnerActor },
