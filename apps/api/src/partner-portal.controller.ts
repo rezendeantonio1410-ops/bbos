@@ -1211,7 +1211,15 @@ export class PartnerPortalController {
         actor.companyId, partner.id, start, end,
       ),
       this.database.$queryRawUnsafe<any[]>(
-        `SELECT item.sku,item."productName" AS product,
+        `SELECT item.sku,
+                COALESCE(NULLIF(TRIM(catalog."displayProductName"),''),
+                  CASE
+                    WHEN product.code IN ('WHITE_LABEL_ESSENCIAL','WHITE_LABEL_CLASSICO_500GR') THEN 'Clássicos'
+                    WHEN product.code='WHITE_LABEL_CLASSICO' THEN 'Caramelo'
+                    WHEN product.code='WHITE_LABEL_FRUTADO' THEN 'Frutado'
+                    WHEN product.code='WHITE_LABEL_RARO' THEN 'Reserva'
+                    ELSE item."productName"
+                  END) AS product,
                 count(DISTINCT so.id)::int AS orders,
                 COALESCE(sum(item.quantity),0)::int AS units,
                 COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
@@ -1219,11 +1227,22 @@ export class PartnerPortalController {
            FROM "SalesOrder" so
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+           JOIN "Product" product ON product.id=variant."productId"
+           LEFT JOIN LATERAL (
+             SELECT cp."displayProductName"
+               FROM "CustomerCatalogProduct" cp
+               JOIN "Customer" customer ON customer.id=cp."customerId"
+              WHERE cp."companyId"=so."companyId"
+                AND cp."productVariantId"=variant.id
+                AND cp.active=true
+                AND LOWER(TRIM(customer.name))='signa coffee'
+              ORDER BY cp."updatedAt" DESC LIMIT 1
+           ) catalog ON TRUE
           WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
-          GROUP BY item.sku,item."productName"
+          GROUP BY item.sku,item."productName",catalog."displayProductName",product.code
           ORDER BY "orderValue" DESC LIMIT 100`,
         actor.companyId, partner.id, start, end,
       ),
