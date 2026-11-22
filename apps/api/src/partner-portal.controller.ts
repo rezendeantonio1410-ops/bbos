@@ -122,6 +122,15 @@ export class PartnerPortalController {
             OR ($5::boolean AND (so."createdByStorefrontPartnerId"=$1 OR EXISTS (
               SELECT 1 FROM "StorefrontPartnerCustomer" link
                WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
+            ) OR EXISTS (
+              SELECT 1 FROM "StorefrontPartner" signa
+              JOIN "Customer" recipient ON recipient.id=so."customerId"
+              WHERE signa.id=$1 AND signa."companyId"=so."companyId"
+                AND signa.active=true AND signa."portalAccessLevel"='DISTRIBUTOR'
+                AND LOWER(TRIM(signa.name))='signa coffee'
+                AND recipient."companyId"=signa."companyId" AND recipient.active=true
+                AND ((LOWER(TRIM(recipient.name))='signa coffee' AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+                  OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas' AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11))
             )))
             OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
           )
@@ -137,6 +146,25 @@ export class PartnerPortalController {
         "Este pedido não pertence à carteira deste distribuidor.",
       );
     }
+  }
+
+  // Legacy BBOS orders invoiced to Signa or Rodrigo are visible to Signa only.
+  // This is read-only portfolio visibility: never reassign fiscal customer or order owner.
+  private signaHistoricalOrderScope() {
+    return `EXISTS (
+      SELECT 1 FROM "StorefrontPartner" signa
+      JOIN "Customer" recipient ON recipient.id=so."customerId"
+      WHERE signa.id=$2 AND signa."companyId"=so."companyId"
+        AND signa.active=true AND signa."portalAccessLevel"='DISTRIBUTOR'
+        AND LOWER(TRIM(signa.name))='signa coffee'
+        AND recipient."companyId"=signa."companyId" AND recipient.active=true
+        AND (
+          (LOWER(TRIM(recipient.name))='signa coffee'
+            AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+          OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas'
+            AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11)
+        )
+    )`;
   }
 
   private async resolvePrice(
@@ -560,7 +588,7 @@ export class PartnerPortalController {
               OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                 SELECT 1 FROM "StorefrontPartnerCustomer" link
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
-              )))
+              ) OR ${this.signaHistoricalOrderScope()}))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
             AND so.status <> 'CANCELLED'
@@ -583,7 +611,7 @@ export class PartnerPortalController {
                 OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                   SELECT 1 FROM "StorefrontPartnerCustomer" link
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
-                )))
+                ) OR ${this.signaHistoricalOrderScope()}))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )
             ORDER BY event."occurredAt" DESC
