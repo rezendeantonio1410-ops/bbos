@@ -65,11 +65,11 @@ const menu = [
   {label:"Início",href:"#inicio",icon:LayoutDashboard},
   {label:"Pedidos",href:"#pedidos-em-andamento",icon:ShoppingCart},
   {label:"Produtos",href:"#catalogo-signa",icon:Package},
-  {label:"Clientes",href:"#historico-pedidos",icon:Users},
+  {label:"Clientes",href:null,icon:Users},
   {label:"Faturamento",href:"#historico-pedidos",icon:FileText},
-  {label:"Pagamentos",href:"#historico-pedidos",icon:CreditCard},
+  {label:"Pagamentos",href:null,icon:CreditCard},
   {label:"Relatórios",href:"#relatorios-signa",icon:BarChart3},
-  {label:"Mapas",href:"#relatorios-signa",icon:MapPinned},
+  {label:"Mapas",href:null,icon:MapPinned},
 ];
 export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrderSummary[];partnerName:string}) {
   const [search,setSearch] = useState("");
@@ -90,7 +90,14 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
       <aside className={`${menuOpen?"block":"hidden"} rounded-xl bg-[#102338] p-4 text-white lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:block lg:w-52 lg:rounded-none lg:pt-28`}>
         <p className="mb-5 border-b border-white/20 pb-4 text-xs font-semibold uppercase tracking-[.14em] text-slate-300">Portal do parceiro</p>
         <nav aria-label="Módulos Signa" className="space-y-1">
-          {menu.map(({label,href,icon:Icon})=><a key={label} href={href} onClick={()=>setMenuOpen(false)} className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-100 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"><Icon size={17}/>{label}</a>)}
+          {menu.map(({label,href,icon:Icon})=>href ? (
+            <a key={label} href={href} onClick={()=>setMenuOpen(false)} className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-100 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"><Icon size={17}/>{label}</a>
+          ) : (
+            <span key={label} aria-disabled="true" title="Módulo em implementação" className="flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-slate-400">
+              <span className="flex items-center gap-3"><Icon size={17}/>{label}</span>
+              <span className="text-[9px] font-normal uppercase tracking-wide text-slate-400">Em breve</span>
+            </span>
+          ))}
         </nav>
         <p className="mt-8 border-t border-white/20 pt-4 text-xs text-slate-300">{partnerName} · Bispo Coffees</p>
       </aside>
