@@ -73,6 +73,9 @@ type PortalData = {
     totalAmount: number | string;
     orderedAt: string;
     customerName: string;
+    billingRecipientName?: string | null;
+    endCustomerName?: string | null;
+    volumeKg?: number | string | null;
     paymentType?: "CASH" | "TERM" | null;
     paymentTermsSnapshot?: string | null;
     receivableStatus?: string | null;
