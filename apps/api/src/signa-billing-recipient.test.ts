@@ -59,3 +59,21 @@ test("não permite pedidos ou cotações com preços nulos, gratuitos ou inváli
   }
   assert.equal(parseBillableUnitPrice("0.01"), 0.01);
 });
+
+test("preços privados exigem valores em centavos, sem arredondamento implícito", () => {
+  for (const invalid of [
+    0.011, 76.801, "76.805", "76.8001", "7.68e1", "0x4c",
+    "76,80", "76.80abc", "0.009", "999999999999999.99",
+  ]) {
+    assert.equal(parseBillableUnitPrice(invalid), null, String(invalid));
+  }
+  for (const [value, expected] of [
+    ["76.8000", 76.8],
+    [" 76.80 ", 76.8],
+    [76.8, 76.8],
+    [148, 148],
+    [0.29, 0.29],
+  ] as const) {
+    assert.equal(parseBillableUnitPrice(value), expected, String(value));
+  }
+});
