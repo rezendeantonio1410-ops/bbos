@@ -71,6 +71,8 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
     const matches = !search || text.includes(search.toLocaleLowerCase("pt-BR"));
     return matches && (filter==="Todos" || (filter==="Em produção" ? o.status==="IN_PRODUCTION" : filter==="Faturado" ? o.status==="INVOICED" : filter==="Concluído" ? o.status==="DELIVERED" : !["INVOICED","DELIVERED","CANCELLED"].includes(o.status)));
   }),[orders,search,filter]);
+  const activeOrders = useMemo(()=>orders.filter(o=>!["DELIVERED","CANCELLED"].includes(o.status)),[orders]);
+  const orderProgress: Record<string,number> = {DRAFT:1,CONFIRMED:2,RESERVED:2,IN_PRODUCTION:3,PICKING:4,READY_TO_SHIP:4,INVOICED:5,SHIPPED:5,DELIVERED:6};
   const sum=orders.reduce((s,o)=>s+Number(o.totalAmount||0),0);
   const invoiced = orders.filter(o=>o.invoiceStatus==="AUTHORIZED").reduce((s,o)=>s+Number(o.totalAmount||0),0);
   return (
@@ -102,6 +104,20 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
           ["Concluídos",String(orders.filter(o=>o.status==="DELIVERED").length),"Pedidos entregues"]
         ].map(([label,value,detail])=><article key={label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-3 text-2xl font-semibold tracking-tight text-[#102338]">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></article>)}
       </div>
+      <section aria-label="Pedidos em andamento" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Pedidos em andamento</h3><span className="text-xs text-slate-500">{activeOrders.length} pedido(s)</span></div>
+        {activeOrders.length===0?<p className="text-sm text-slate-500">Nenhum pedido em andamento.</p>:
+        <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+          {activeOrders.map(o=><article key={o.id} className="w-64 shrink-0 snap-start rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
+            <div className="flex items-center justify-between gap-2"><strong className="text-sm text-[#0E191D]">{o.code}</strong><span className="rounded bg-white px-2 py-1 text-[11px] font-medium text-slate-700">{stages[o.status]||o.status}</span></div>
+            <p className="mt-2 truncate text-xs text-slate-500">{o.customerName}</p>
+            <div className="mt-3 flex gap-1" role="img" aria-label={`Etapa ${orderProgress[o.status]??1} de 6: ${stages[o.status]||o.status}`}>
+              {[1,2,3,4,5,6].map(n=><span key={n} className={`h-1.5 flex-1 rounded-full ${n<=(orderProgress[o.status]??1)?"bg-[#0E191D]":"bg-slate-200"}`}/>)}
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><a href="#historico-pedidos" className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</a></div>
+          </article>)}
+        </div>}
+      </section>
       <section id="pedidos-em-andamento" className="rounded-xl border border-slate-200 bg-white shadow-sm" aria-label="Tabela de pedidos">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
           <div><h3 className="text-lg font-semibold text-[#102338]">Meus pedidos</h3><p className="text-xs text-slate-500">Acompanhamento operacional e financeiro</p></div>
