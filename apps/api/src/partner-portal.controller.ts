@@ -23,6 +23,7 @@ import { pdfContentDisposition } from "./sales-order-pdf-download";
 import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
+import { parseBillableUnitPrice } from "./partner-price-validation";
 
 type PartnerActor = {
   id?: string | null;
@@ -193,8 +194,14 @@ export class PartnerPortalController {
           "Produto sem preço vigente na lista exclusiva deste distribuidor.",
         );
       }
+      const unitPrice = parseBillableUnitPrice(distributorRows[0].customerPrice);
+      if (unitPrice === null) {
+        throw new BadRequestException(
+          "Produto com preço exclusivo inválido. Contacte a Bispo antes de enviar o pedido.",
+        );
+      }
       return {
-        unitPrice: Number(distributorRows[0].customerPrice),
+        unitPrice,
         currency: distributorRows[0].currency,
         productPriceId:
           (distributorRows[0].productPriceId as string | null) ?? undefined,
@@ -260,8 +267,16 @@ export class PartnerPortalController {
         "Produto sem preço vigente para o canal comercial deste cliente.",
       );
     }
+    const unitPrice = parseBillableUnitPrice(
+      rows[0].customerPrice ?? rows[0].channelPrice,
+    );
+    if (unitPrice === null) {
+      throw new BadRequestException(
+        "Produto com preço inválido. Contacte a Bispo antes de enviar o pedido.",
+      );
+    }
     return {
-      unitPrice: Number(rows[0].customerPrice ?? rows[0].channelPrice),
+      unitPrice,
       currency: rows[0].currency,
       productPriceId: rows[0].productPriceId as string,
       customerProductPriceId:
