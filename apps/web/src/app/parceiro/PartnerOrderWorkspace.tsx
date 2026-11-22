@@ -256,6 +256,14 @@ export function PartnerOrderWorkspace({
   const [newEndCustomerState, setNewEndCustomerState] = useState("");
   const [savingEndCustomer, setSavingEndCustomer] = useState(false);
 
+  function closeOrder() {
+    setBillingRecipientId("");
+    setPartnerEndCustomerId("");
+    setEndCustomerSearch("");
+    setShowOrder(false);
+  }
+
+
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [busy, setBusy] = useState(false);
@@ -430,7 +438,7 @@ export function PartnerOrderWorkspace({
       setCustomerId(customer.id);
       setRelationshipCustomerId(customer.id);
       setShowCustomer(false);
-      setShowOrder(false);
+      closeOrder();
       setShowVisit(true);
       setShowCredit(false);
       setMessage(
@@ -548,6 +556,7 @@ export function PartnerOrderWorkspace({
         body: JSON.stringify({name:newEndCustomerName,city:newEndCustomerCity,state:newEndCustomerState}),
       });
       setEndCustomers(previous => [...previous, {id:result.id,name:result.name,city:newEndCustomerCity,state:newEndCustomerState}].sort((a,b)=>a.name.localeCompare(b.name)));
+      setEndCustomerSearch("");
       setPartnerEndCustomerId(result.id);
       setNewEndCustomerName("");
       setNewEndCustomerCity("");
@@ -597,7 +606,7 @@ export function PartnerOrderWorkspace({
         },
       );
       setMessage(`${order.code} criado. ${order.message}`);
-      setShowOrder(false);
+      closeOrder();
       setLines([newLine()]);
       const distributorCustomer =
         isDistributor && customers.length === 1 ? customers[0] : null;
@@ -1232,7 +1241,7 @@ export function PartnerOrderWorkspace({
             <button
               type="button"
               aria-label="Fechar novo pedido"
-              onClick={() => setShowOrder(false)}
+              onClick={() => closeOrder()}
               className="fixed inset-0 z-40 cursor-default bg-stone-950/45 backdrop-blur-[2px]"
             />
           )}
@@ -1255,7 +1264,7 @@ export function PartnerOrderWorkspace({
                 <button
                   type="button"
                   aria-label="Cancelar e fechar"
-                  onClick={() => setShowOrder(false)}
+                  onClick={() => closeOrder()}
                   className="grid size-10 place-items-center rounded-full bg-stone-100 text-stone-600"
                 >
                   <X size={18} />
@@ -1589,7 +1598,7 @@ export function PartnerOrderWorkspace({
               )}
               <button
                 type="button"
-                onClick={() => setShowOrder(false)}
+                onClick={() => closeOrder()}
                 className="rounded-xl border px-4 py-2.5 text-xs font-bold"
               >
                 Cancelar
