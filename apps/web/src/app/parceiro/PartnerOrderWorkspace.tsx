@@ -237,6 +237,9 @@ export function PartnerOrderWorkspace({
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
+  const [billingRecipients, setBillingRecipients] = useState<Array<{id:string;name:string;documentType:string;taxIdVerificationStatus:string|null}>>([]);
+  const [billingRecipientId, setBillingRecipientId] = useState("");
+
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [busy, setBusy] = useState(false);
@@ -305,6 +308,19 @@ export function PartnerOrderWorkspace({
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [loadOptions]);
+
+  useEffect(() => {
+    if (!isDistributor) return;
+    let active = true;
+    void portalApi<{recipients:Array<{id:string;name:string;documentType:string;taxIdVerificationStatus:string|null}>}>("/billing-recipients")
+      .then((result) => {
+        if (!active) return;
+        setBillingRecipients(result.recipients);
+        setBillingRecipientId(result.recipients.find((item) => item.documentType === "CNPJ")?.id ?? "");
+      })
+      .catch(() => { if (active) setError("Não foi possível carregar os destinatários fiscais da Signa."); });
+    return () => { active = false; };
+  }, [isDistributor]);
 
   useEffect(() => {
     const distributorCustomer =
@@ -505,6 +521,7 @@ export function PartnerOrderWorkspace({
           method: "POST",
           body: JSON.stringify({
             customerId,
+            billingRecipientId: isDistributor ? billingRecipientId : undefined,
             items: cleanItems,
             deliveryMode,
             carrierName,
@@ -1202,6 +1219,26 @@ export function PartnerOrderWorkspace({
                   Escolha os produtos e as quantidades para o seu próximo
                   pedido. {catalog?.productCount ?? 0} apresentação(ões)
                   disponíveis.
+                </p>
+              </div>
+            )}
+            {isDistributor && (
+              <div className="rounded-xl border border-[#d5dedc] bg-white p-4">
+                <label htmlFor="signa-billing-recipient" className="block text-sm font-semibold text-[#0E191D]">
+                  Faturar para (destinatário da NF-e)
+                </label>
+                <select id="signa-billing-recipient" required value={billingRecipientId}
+                  onChange={(event) => { setBillingRecipientId(event.target.value); invalidateQuote(); }}
+                  className="mt-2 w-full rounded-lg border border-[#d5dedc] bg-white px-3 py-3 text-sm">
+                  <option value="">Selecione o destinatário fiscal</option>
+                  {billingRecipients.map((recipient) => (
+                    <option key={recipient.id} value={recipient.id}>
+                      {recipient.name} — {recipient.documentType}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-600">
+                  Os preços permanecem os da tabela exclusiva da Signa. A emissão da NF-e depende da validação fiscal do cadastro.
                 </p>
               </div>
             )}
