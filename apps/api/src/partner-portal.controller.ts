@@ -1202,7 +1202,7 @@ export class PartnerPortalController {
            FROM "SalesOrder" so
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
@@ -1219,7 +1219,7 @@ export class PartnerPortalController {
            FROM "SalesOrder" so
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
@@ -1236,7 +1236,7 @@ export class PartnerPortalController {
              AND ec."partnerId"=$2 AND ec."companyId"=$1
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
@@ -1246,7 +1246,7 @@ export class PartnerPortalController {
       this.database.$queryRawUnsafe<Array<{ year: number }>>(
         `SELECT DISTINCT EXTRACT(YEAR FROM so."createdAt")::int AS year
            FROM "SalesOrder" so
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
           ORDER BY year DESC LIMIT 30`,
         actor.companyId, partner.id,
