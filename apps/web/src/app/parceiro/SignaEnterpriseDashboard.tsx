@@ -204,28 +204,19 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
         <button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:partner-order:new"))} className="inline-flex items-center gap-2 rounded-lg bg-[#0E191D] px-5 py-3 text-sm font-semibold text-white"><Plus size={16}/> Novo pedido</button>
         {[["Meus pedidos","#pedidos-em-andamento"],["Notas fiscais","#historico-pedidos"],["Produtos","#catalogo-signa"],["Relatórios","#relatorios-signa"]].map(([label,href])=><a key={label} href={href} className="rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-800 hover:bg-slate-50">{label}</a>)}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5" aria-label="Indicadores de pedidos">
         {[
-          ["Pedidos",String(orders.length),"Histórico disponível"],
-          ["Total em pedidos",currency.format(sum),"Valor dos pedidos"],
-          ["Pedidos com NF autorizada",currency.format(invoiced),"Valor dos pedidos com NF autorizada"],
+          ["Pedidos",String(orders.length),"Histórico completo"],
+          ["Volume comprado",`${orders.reduce((s,o)=>s+Number(o.volumeKg||0),0).toLocaleString("pt-BR",{maximumFractionDigits:1})} kg`,"Peso dos pedidos"],
+          ["Valor dos pedidos",currency.format(sum),"Pedidos registrados"],
+          ["NF autorizada",currency.format(invoiced),"Pedidos com NF autorizada"],
           ["Concluídos",String(orders.filter(o=>o.status==="DELIVERED").length),"Pedidos entregues"]
-        ].map(([label,value,detail])=><article key={label} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-3 text-2xl font-semibold tracking-tight text-[#0E191D]">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></article>)}
+        ].map(([label,value,detail])=><article key={label} className="min-w-0 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <p className="text-[11px] font-semibold text-slate-600">{label}</p>
+          <p className="mt-1 truncate text-xl font-semibold tracking-tight text-[#0E191D]" title={value}>{value}</p>
+          <p className="mt-1 text-[10px] text-slate-500">{detail}</p>
+        </article>)}
       </div>
-      <section aria-label="Pedidos em andamento" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Pedidos em andamento</h3><span className="text-xs text-slate-500">{activeOrders.length} pedido(s)</span></div>
-        {activeOrders.length===0?<p className="text-sm text-slate-500">Nenhum pedido em andamento.</p>:
-        <div className="flex snap-x gap-3 overflow-x-auto pb-2">
-          {activeOrders.map(o=><article key={o.id} className="w-64 shrink-0 snap-start rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
-            <div className="flex items-center justify-between gap-2"><strong className="text-sm text-[#0E191D]">{o.code}</strong><span className="rounded bg-white px-2 py-1 text-[11px] font-medium text-slate-700">{stages[o.status]||o.status}</span></div>
-            <p className="mt-2 truncate text-xs text-slate-500">{o.customerName}</p>
-            <div className="mt-3 flex gap-1" role="img" aria-label={`Etapa ${orderProgress[o.status]??1} de 6: ${stages[o.status]||o.status}`}>
-              {[1,2,3,4,5,6].map(n=><span key={n} className={`h-1.5 flex-1 rounded-full ${n<=(orderProgress[o.status]??1)?"bg-[#0E191D]":"bg-slate-200"}`}/>)}
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><a href="#historico-pedidos" className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</a></div>
-          </article>)}
-        </div>}
-      </section>
       <section id="pedidos-em-andamento" className="rounded-lg border border-slate-200 bg-white shadow-sm" aria-label="Tabela de pedidos">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
           <div><h3 className="text-lg font-semibold text-[#0E191D]">Meus pedidos</h3><p className="text-xs text-slate-500">Acompanhamento operacional e financeiro</p></div>
@@ -240,7 +231,21 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
           </article>)}
           {!filtered.length&&<p className="p-5 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}
         </div>
-        <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Pedido","Data","Faturar para","Cliente (registro)","Volume (kg)","Valor","Situação","Documentos"].map(x=><th key={x} scope="col" className="px-5 py-3 font-semibold">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map(o=><tr key={o.id} className="hover:bg-slate-50"><td className="px-5 py-4 font-semibold"><button type="button" aria-expanded={expandedOrder===o.id} onClick={()=>setExpandedOrder(value=>value===o.id?null:o.id)} className="text-left font-semibold text-[#0E191D] underline decoration-slate-300 underline-offset-4 hover:decoration-[#0E191D]">{o.code}</button></td><td className="px-5 py-4">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td><td className="px-5 py-4">{o.billingRecipientName||o.customerName}</td><td className="px-5 py-4">{o.endCustomerName||"Não informado"}</td><td className="px-5 py-4">{Number(o.volumeKg||0).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td className="px-5 py-4">{currency.format(Number(o.totalAmount))}</td><td className="px-5 py-4"><span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{stages[o.status]||o.status}</span></td><td className="px-5 py-4">{o.invoiceStatus==="AUTHORIZED"&&o.invoicePdfAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/invoice/pdf`} target="_blank" rel="noreferrer">Ver NF</a>:o.billingAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer">Ver cobrança</a>:<span className="text-xs text-slate-500">Aguardando</span>}</td></tr>)}</tbody></table>{!filtered.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}</div>
+        <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-xs"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Pedido","Data","Faturar para","Cliente (registro)","Volume (kg)","Valor","Situação","Documentos"].map(x=><th key={x} scope="col" className="px-5 py-3 font-semibold">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map(o=><tr key={o.id} className="hover:bg-slate-50"><td className="px-3 py-3 font-semibold"><button type="button" aria-expanded={expandedOrder===o.id} onClick={()=>setExpandedOrder(value=>value===o.id?null:o.id)} className="text-left font-semibold text-[#0E191D] underline decoration-slate-300 underline-offset-4 hover:decoration-[#0E191D]">{o.code}</button></td><td className="px-3 py-3">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td><td className="px-5 py-4">{o.billingRecipientName||o.customerName}</td><td className="px-5 py-4">{o.endCustomerName||"Não informado"}</td><td className="px-5 py-4">{Number(o.volumeKg||0).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td className="px-5 py-4">{currency.format(Number(o.totalAmount))}</td><td className="px-5 py-4"><span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{stages[o.status]||o.status}</span></td><td className="px-5 py-4">{o.invoiceStatus==="AUTHORIZED"&&o.invoicePdfAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/invoice/pdf`} target="_blank" rel="noreferrer">Ver NF</a>:o.billingAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer">Ver cobrança</a>:<span className="text-xs text-slate-500">Aguardando</span>}</td></tr>)}</tbody></table>{!filtered.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}</div>
+      </section>
+      <section aria-label="Pedidos em andamento" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Pedidos em andamento</h3><span className="text-xs text-slate-500">{activeOrders.length} pedido(s)</span></div>
+        {activeOrders.length===0?<p className="text-sm text-slate-500">Nenhum pedido em andamento.</p>:
+        <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+          {activeOrders.map(o=><article key={o.id} className="w-64 shrink-0 snap-start rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
+            <div className="flex items-center justify-between gap-2"><strong className="text-sm text-[#0E191D]">{o.code}</strong><span className="rounded bg-white px-2 py-1 text-[11px] font-medium text-slate-700">{stages[o.status]||o.status}</span></div>
+            <p className="mt-2 truncate text-xs text-slate-500">{o.customerName}</p>
+            <div className="mt-3 flex gap-1" role="img" aria-label={`Etapa ${orderProgress[o.status]??1} de 6: ${stages[o.status]||o.status}`}>
+              {[1,2,3,4,5,6].map(n=><span key={n} className={`h-1.5 flex-1 rounded-full ${n<=(orderProgress[o.status]??1)?"bg-[#0E191D]":"bg-slate-200"}`}/>)}
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><a href="#historico-pedidos" className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</a></div>
+          </article>)}
+        </div>}
       </section>
       {expandedOrder&&<section className="rounded-xl border border-[#b4c6c1] bg-white p-5" aria-label="Linha do tempo do pedido">
         <div className="flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Linha do tempo · {orders.find(o=>o.id===expandedOrder)?.code}</h3><button type="button" onClick={()=>setExpandedOrder(null)} className="text-sm font-semibold underline">Fechar</button></div>
