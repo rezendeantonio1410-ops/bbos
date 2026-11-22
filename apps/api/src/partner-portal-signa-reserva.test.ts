@@ -140,7 +140,7 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   assert.deepEqual(rodrigoItems.map((i) => i.unitPrice), [76.8, 148]);
   await assert.rejects(
     controller.createOrder(request, {customerId, billingRecipientId:"unapproved", items}),
-    /Destinatário fiscal não autorizado/,
+    /Selecione um destinatário fiscal válido/,
   );
 
   const orderItems = createdOrders[0]!.items as Array<{
