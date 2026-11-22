@@ -1059,6 +1059,54 @@ export class PartnerPortalController {
     };
   }
 
+  // Commercial end customers are scoped to this partner and never become fiscal recipients.
+  @Get("end-customers")
+  async listEndCustomers(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
+    }
+    const customers = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,name,"taxId",email,phone,city,state,notes,"createdAt"
+         FROM "PartnerEndCustomer"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true
+        ORDER BY name ASC LIMIT 500`,
+      actor.companyId,
+      partner.id,
+    );
+    return { customers };
+  }
+
+  @Post("end-customers")
+  async createEndCustomer(
+    @Req() request: { user?: PartnerActor },
+    @Body() body: { name?: string; taxId?: string; email?: string; phone?: string; city?: string; state?: string; notes?: string },
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
+    }
+    const name = String(body.name ?? "").trim();
+    const state = String(body.state ?? "").trim().toUpperCase();
+    if (name.length < 2 || name.length > 180) {
+      throw new BadRequestException("Informe o nome do cliente (2 a 180 caracteres).");
+    }
+    if (state && !/^[A-Z]{2}$/.test(state)) {
+      throw new BadRequestException("Informe a UF com duas letras.");
+    }
+    const clean = (value: unknown, max: number) => String(value ?? "").trim().slice(0, max) || null;
+    const id = randomUUID();
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "PartnerEndCustomer"
+        (id,"companyId","partnerId",name,"taxId",email,phone,city,state,notes,"createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())`,
+      id, actor.companyId, partner.id, name, clean(body.taxId, 32),
+      clean(body.email, 254), clean(body.phone, 40), clean(body.city, 120),
+      state || null, clean(body.notes, 1000),
+    );
+    return { id, name, message: "Cliente comercial cadastrado." };
+  }
+
   @Post("orders")
   async createOrder(
     @Req() request: { user?: PartnerActor },
