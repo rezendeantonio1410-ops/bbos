@@ -25,10 +25,10 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
           portalAccessLevel: "DISTRIBUTOR",
         }];
       }
-      if (sql.includes('FROM "Customer"') && sql.includes('"documentType"')) {
+      if (sql.includes('SELECT DISTINCT recipient.*') && sql.includes('"documentType"')) {
         return [
-          { id: customerId, name: "Signa Coffee", documentType: "CNPJ", taxIdVerificationStatus: "NOT_VERIFIED" },
-          { id: rodrigoId, name: "Rodrigo Lampert Ribas", documentType: "CPF", taxIdVerificationStatus: "NOT_VERIFIED" },
+          { id: customerId, name: "Signa Coffee", documentType: "CNPJ", pricingCustomerId: customerId, taxIdVerificationStatus: "NOT_VERIFIED" },
+          { id: rodrigoId, name: "Rodrigo Lampert Ribas", documentType: "CPF", pricingCustomerId: customerId, taxIdVerificationStatus: "NOT_VERIFIED" },
         ];
       }
       if (sql.includes('FROM "Customer" c')) {
