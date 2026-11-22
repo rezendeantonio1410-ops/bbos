@@ -5,6 +5,14 @@
 
 ## Registro incremental — 22/11/2026
 
+### Avanço incremental: relatórios, navegação e identidade — 22/11/2026
+
+- [x] **Catálogo Reserva em produção (leitura de banco)**: migração `20261122153000_signa_reserva_500_1000` concluída em 22/11 às 15:56 UTC, sem rollback registrado; SKUs `RAR-WLR-250`, `RAR-WLR-500`, `RAR-WLR-1000` ativos no catálogo e preço exclusivo Signa, respectivamente R$ 38,00, R$ 76,80 e R$ 148,00. Ainda não significa pedido real autenticado testado.
+- [x] **Filtro anual de relatórios corrigido em código**: consulta parametrizada aplica o mesmo intervalo anual a totais mensais, produtos e regiões. O frontend solicita dados novos a cada troca de ano; exportação é explicitamente CSV **mensal**. Foram criados testes de validação de ano e limites de período e incluídos em `pnpm test`.
+- [x] **Identidade Bispo / Signa ajustada em código**: cabeçalho Bispo legível sobre fundo claro, painel empresarial neutro e remoção do segundo bloco de boas-vindas da Signa. Atalhos de módulos ainda inexistentes deixam de direcionar a seções incorretas e aparecem desativados.
+- [ ] **Gate obrigatório**: validar GitHub Actions no SHA final desta branch, resolver divergência/conflitos com release e executar testes completos autenticados, migração em ambiente isolado e aprovação visual. Nenhum novo deploy destes módulos está autorizado.
+
+
 - **Reserva**: hotfix PR #70 mesclada na release (merge `880283eb`), com workflow de CI aprovado para o head `ff4ef9f`. A entrega antecipada **não autoriza** publicar o restante desta PR.
 - **Datas dos pedidos Signa**: foi identificado um regex incorreto com `\\d` literal no validador. A validação foi extraída para `isValidPartnerRequestedReadyDate` e protegida por teste de regressão incluído em `pnpm test`.
 - **Ainda sem aceite**: testes de pedido autenticado, verificação de schema/migrações no banco vivo, confirmação de datas por aprovador Bispo, validação fiscal/financeira ponta a ponta, CI do commit final e smoke tests visuais desktop/mobile. Não presumir conclusão com base apenas em build.
