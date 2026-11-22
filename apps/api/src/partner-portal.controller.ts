@@ -1123,6 +1123,7 @@ export class PartnerPortalController {
       paymentType?: "CASH" | "TERM";
       paymentTermDays?: number;
       expectedDeliveryDate?: string;
+      partnerEndCustomerId?: string | null;
       customerReference?: string;
       notes?: string;
     },
@@ -1131,6 +1132,20 @@ export class PartnerPortalController {
     this.assertCanCreateOrders(partner);
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
+    const partnerEndCustomerId = String(body.partnerEndCustomerId ?? "").trim();
+    if (partnerEndCustomerId) {
+      if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+        throw new BadRequestException("Cliente final disponível apenas para distribuidores.");
+      }
+      const endCustomers = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "PartnerEndCustomer"
+          WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true LIMIT 1`,
+        partnerEndCustomerId, actor.companyId, partner.id,
+      );
+      if (!endCustomers.length) {
+        throw new BadRequestException("Cliente final não pertence à carteira deste parceiro.");
+      }
+    }
     const items = body.items ?? [];
     if (!items.length)
       throw new BadRequestException("Adicione ao menos um produto.");
@@ -1263,6 +1278,13 @@ export class PartnerPortalController {
       String(body.customerReference ?? "").trim() || null,
       actor.companyId,
     );
+    if (partnerEndCustomerId) {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "SalesOrder" SET "partnerEndCustomerId"=$3
+          WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$4`,
+        order.id, actor.companyId, partnerEndCustomerId, partner.id,
+      );
+    }
     if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
       await this.database.$executeRawUnsafe(
         `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
