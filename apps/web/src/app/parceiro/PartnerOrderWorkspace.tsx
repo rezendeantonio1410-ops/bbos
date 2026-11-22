@@ -206,6 +206,7 @@ const emptyCustomerAddress = {
 async function portalApi<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/partner-portal${path}`, {
     ...init,
+    cache: "no-store",
     credentials: "include",
     headers: { "content-type": "application/json", ...(init?.headers || {}) },
   });
@@ -292,6 +293,17 @@ export function PartnerOrderWorkspace({
 
   useEffect(() => {
     void loadOptions();
+    // A distributor may leave this tab open while Bispo publishes new variants.
+    // Refresh on return, rather than showing an obsolete catalog indefinitely.
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void loadOptions();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [loadOptions]);
 
   useEffect(() => {
