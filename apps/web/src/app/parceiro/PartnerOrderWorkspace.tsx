@@ -316,7 +316,7 @@ export function PartnerOrderWorkspace({
       .then((result) => {
         if (!active) return;
         setBillingRecipients(result.recipients);
-        setBillingRecipientId(result.recipients.find((item) => item.documentType === "CNPJ")?.id ?? "");
+        setBillingRecipientId("");
       })
       .catch(() => { if (active) setError("Não foi possível carregar os destinatários fiscais da Signa."); });
     return () => { active = false; };
@@ -544,6 +544,7 @@ export function PartnerOrderWorkspace({
       setCustomerId(distributorCustomer?.id ?? "");
       setQuote(null);
       setCarrierName("");
+      setBillingRecipientId("");
       setPaymentType("CASH");
       setPaymentTermDays(28);
       setExpectedDeliveryDate("");
@@ -1230,7 +1231,7 @@ export function PartnerOrderWorkspace({
                 <select id="signa-billing-recipient" required value={billingRecipientId}
                   onChange={(event) => { setBillingRecipientId(event.target.value); invalidateQuote(); }}
                   className="mt-2 w-full rounded-lg border border-[#d5dedc] bg-white px-3 py-3 text-sm">
-                  <option value="">Selecione o destinatário fiscal</option>
+                  <option value="">Escolha quem receberá a nota fiscal</option>
                   {billingRecipients.map((recipient) => (
                     <option key={recipient.id} value={recipient.id}>
                       {recipient.name} — {recipient.documentType}
