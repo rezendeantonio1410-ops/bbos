@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CreditCard, FileText, LayoutDashboard, MapPinned, Package, Plus, Search, ShoppingCart, Users } from "lucide-react";
 
 export type SignaOrderSummary = {
@@ -7,6 +7,49 @@ export type SignaOrderSummary = {
   customerName: string; receivableStatus?: string | null; invoiceStatus?: string | null;
   invoicePdfAvailable?: boolean; invoiceNumber?: string | null; billingAvailable?: boolean;
 };
+type CommercialReport = {
+  monthly: Array<{month:string;orders:number;kilograms:number;orderValue:number}>;
+  products: Array<{sku:string;product:string;units:number;kilograms:number;orderValue:number}>;
+  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number}>;
+  notice:string;
+};
+function SignaReports() {
+  const [data,setData] = useState<CommercialReport|null>(null);
+  const [error,setError] = useState("");
+  const [period,setPeriod] = useState("all");
+  useEffect(()=>{
+    const controller = new AbortController();
+    void fetch("/api/partner-portal/commercial-reports",{credentials:"include",signal:controller.signal})
+      .then(async response=>{if(!response.ok)throw new Error("Não foi possível carregar os relatórios.");return response.json() as Promise<CommercialReport>;})
+      .then(setData).catch(cause=>{if(!controller.signal.aborted)setError(cause instanceof Error?cause.message:"Erro ao carregar relatórios.");});
+    return ()=>controller.abort();
+  },[]);
+  const months = data?.monthly.filter(m=>period==="all"||m.month.startsWith(period))??[];
+  const years = [...new Set(data?.monthly.map(m=>m.month.slice(0,4))??[])];
+  const kg=months.reduce((sum,m)=>sum+Number(m.kilograms),0);
+  const amount=months.reduce((sum,m)=>sum+Number(m.orderValue),0);
+  const downloadCsv=()=>{
+    if(!data)return;
+    const lines=[["Período","Pedidos","Quilos","Valor de pedidos (BRL)"],...months.map(m=>[m.month,m.orders,m.kilograms,m.orderValue])];
+    const csv="\uFEFF"+lines.map(line=>line.map(value=>`"${String(value).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+    const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    const link=document.createElement("a");link.href=url;link.download="signa-relatorio-mensal.csv";link.click();URL.revokeObjectURL(url);
+  };
+  return <section id="relatorios-signa" className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-[#102338]">Inteligência comercial</h3><p className="text-xs text-slate-500">Pedidos, produtos e regiões · valores de pedidos, não pagamentos</p></div>
+      <div className="flex items-center gap-2"><label htmlFor="signa-report-period" className="text-xs font-medium">Ano</label><select id="signa-report-period" value={period} onChange={e=>setPeriod(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="all">Todos</option>{years.map(year=><option key={year} value={year}>{year}</option>)}</select><button type="button" disabled={!data} onClick={downloadCsv} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-40">Exportar CSV</button></div>
+    </div>
+    {error&&<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+    {!data&&!error&&<p className="mt-4 text-sm text-slate-500">Carregando dados comerciais...</p>}
+    {data&&<div className="mt-4 space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">{[["Volume",`${kg.toLocaleString("pt-BR",{maximumFractionDigits:2})} kg`],["Valor de pedidos",currency.format(amount)],["Pedidos",String(months.reduce((s,m)=>s+Number(m.orders),0))]].map(([label,value])=><div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-lg font-semibold">{value}</p></div>)}</div>
+      <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Regiões · clientes finais informados</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">UF</th><th>Cidade</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.regions.map((p,i)=><tr key={i} className="border-b"><td className="py-2">{p.state||"—"}</td><td>{p.city||"Não informada"}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
+      <p className="text-xs text-slate-500">{data.notice}</p>
+    </div>}
+  </section>;
+}
 const currency = new Intl.NumberFormat("pt-BR", {style:"currency",currency:"BRL"});
 const stages: Record<string,string> = {DRAFT:"Em análise",CONFIRMED:"Aprovado",RESERVED:"Estoque reservado",IN_PRODUCTION:"Em produção",PICKING:"Em preparação",READY_TO_SHIP:"Pronto",INVOICED:"Faturado",SHIPPED:"Expedido",DELIVERED:"Concluído",CANCELLED:"Cancelado"};
 const menu = [
@@ -78,7 +121,7 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
       <div className="sticky bottom-3 z-20 mx-auto w-fit rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur md:hidden">
         <button type="button" onClick={()=>window.dispatchEvent(new Event("bbos:partner-order:new"))} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-[#a87520] px-6 text-sm font-semibold text-white"><Plus size={18}/> Novo pedido</button>
       </div>
-      <section id="relatorios-signa" className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="text-lg font-semibold text-[#102338]">Inteligência comercial</h3><p className="mt-2 text-sm text-slate-600">Os relatórios de kg, clientes e mapa serão habilitados após a integração dos dados de itens e localização. Nenhum volume geográfico é estimado.</p></section>
+      <SignaReports/>
     </section>
   );
 }
