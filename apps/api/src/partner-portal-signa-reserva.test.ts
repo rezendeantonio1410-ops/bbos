@@ -5,6 +5,7 @@ import { PartnerPortalController } from "./partner-portal.controller";
 const companyId = "company-signa-test";
 const customerId = "customer-signa-test";
 const partnerId = "partner-signa-test";
+const rodrigoId = "customer-rodrigo-test";
 const variants = {
   "reserve-500": { sku: "RAR-WLR-500", grams: 500, price: 76.8 },
   "reserve-1000": { sku: "RAR-WLR-1000", grams: 1000, price: 148 },
@@ -23,6 +24,12 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
           email: "comercial@nivov.com.br", active: true,
           portalAccessLevel: "DISTRIBUTOR",
         }];
+      }
+      if (sql.includes('FROM "Customer"') && sql.includes('"documentType"')) {
+        return [
+          { id: customerId, name: "Signa Coffee", documentType: "CNPJ", taxIdVerificationStatus: "NOT_VERIFIED" },
+          { id: rodrigoId, name: "Rodrigo Lampert Ribas", documentType: "CPF", taxIdVerificationStatus: "NOT_VERIFIED" },
+        ];
       }
       if (sql.includes('FROM "Customer" c')) {
         if (sql.includes("LIMIT 1") && args[1] !== customerId) return [];
@@ -118,11 +125,24 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   assert.equal(quote.totalAmount, 224.8);
   assert.deepEqual(quote.items.map((i) => i.unitPrice), [76.8, 148]);
   const submitted = await controller.createOrder(request, {
-    customerId, items, paymentType: "CASH",
+    customerId, billingRecipientId: customerId, items, paymentType: "CASH",
   });
   assert.equal(submitted.status, "DRAFT");
   assert.equal(submitted.totalAmount, 224.8);
   assert.equal(createdOrders.length, 1);
+  assert.equal(createdOrders[0]!.customerId, customerId);
+  const submittedRodrigo = await controller.createOrder(request, {
+    customerId, billingRecipientId: rodrigoId, items, paymentType: "CASH",
+  });
+  assert.equal(submittedRodrigo.totalAmount, 224.8);
+  assert.equal(createdOrders[1]!.customerId, rodrigoId);
+  const rodrigoItems = createdOrders[1]!.items as Array<{unitPrice:number}>;
+  assert.deepEqual(rodrigoItems.map((i) => i.unitPrice), [76.8, 148]);
+  await assert.rejects(
+    controller.createOrder(request, {customerId, billingRecipientId:"unapproved", items}),
+    /Destinatário fiscal não autorizado/,
+  );
+
   const orderItems = createdOrders[0]!.items as Array<{
     unitPrice: number; pricingSource: string; customerProductPriceId: string;
   }>;
@@ -130,7 +150,7 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   assert.ok(orderItems.every((i) => i.pricingSource === "CUSTOMER"));
   assert.ok(orderItems.every((i) => i.customerProductPriceId.startsWith("price-")));
   assert.ok(writtenSql.some((sql) => sql.includes('"OperationalNotification"')));
-  assert.deepEqual(lifecycle, ["ORDER_SUBMITTED"]);
+  assert.deepEqual(lifecycle, ["ORDER_SUBMITTED", "ORDER_SUBMITTED"]);
   await assert.rejects(
     controller.quote(request, {
       customerId, items: [{ productVariantId: "sku-not-signa", quantity: 1 }],
