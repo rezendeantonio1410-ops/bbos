@@ -3,6 +3,17 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Verificação atual — 22/11/2026, 16h (Brasília) — NÃO PUBLICAR PR #67
+
+- [x] **PR #70 já integrada à release**, sem novo merge: migração `20261122153000_signa_reserva_500_1000` verificada em consulta somente leitura (`finished=true`, `rolled_back=false`). Banco confirma variantes ativas `RAR-WLR-250` (250 g, R$ 38,00), `RAR-WLR-500` (500 g, R$ 76,80) e `RAR-WLR-1000` (1 kg, R$ 148,00), com preços privados ativos exclusivamente na conta Signa Coffee.
+- [x] **Render app/API**, ambos `live` no mesmo commit de release `902187f`, posterior à PR #70. A execução não fez alterações em produção.
+- [ ] **GATE #70 ainda aberto:** não há evidência de criação de pedido autenticado para 500 g e 1 kg com validação de visibilidade/status; leitura de banco e cotação não substituem o teste.
+- [x] **Implementação incremental na PR #67:** nenhuma escolha fiscal automática; seletores explícitos por cartão; opção de cliente comercial cadastrado e busca por nome, município ou UF sem diferenciar acentos; limpeza de seleção ao cancelar e concluir pedidos; regressões de busca adicionadas ao comando raiz `pnpm test`.
+- [ ] **CI e integração pendentes:** HEAD da PR #67 `d63b52c` ainda sem GitHub Actions completo, branch divergiu da release (47 commits à frente, 5 atrás) e PR permanece `mergeable=false`. Status de workflow anterior não valida o commit atual. Executar typecheck, lint, teste e build no SHA final após resolver a divergência.
+- [ ] **Fluxos globais incompletos:** aprovação de data Bispo, NF-e fiscal autorizada, Pix/conciliação, relatórios financeiro x pedidos, exportação XLSX/PDF, isolamento autenticado, desktop/mobile, logo oficial e validação visual. Não liberar essas funcionalidades antes do aceite integral.
+
+**Nota de rastreabilidade:** PRs #74 e #75 foram integradas anteriormente na release; não são rascunhos. Sua integração não comprova prontidão fiscal do cadastro Signa/Rodrigo (ainda `NOT_VERIFIED`). A PR #67 continua independente e não pode pressupor emissão de NF-e.
+
 ## Avanço incremental: faturamento Signa/Rodrigo — 22/11/2026 (somente código WIP)
 
 - [x] **Base de produção verificada (somente leitura):** cadastro ativo de Signa Coffee (CNPJ) e Rodrigo Lampert Ribas (CPF), ambos da mesma empresa BBOS. O CNPJ do parceiro Signa corresponde ao CNPJ de seu cliente comercial. **Ambos estão com `taxIdVerificationStatus=NOT_VERIFIED`**. Isso não é autorização para emitir NF-e.
@@ -10,7 +21,7 @@
 - [x] **Tabela de preço preservada em código:** cotação e `resolvePrice` usam o `customerId` comercial da Signa; `SalesOrdersService.create` recebe separadamente o destinatário fiscal como `customerId` do pedido. Snapshot de preço conserva `pricingCustomerId`; `createdByStorefrontPartnerId` é incluído já na criação.
 - [x] **Visibilidade corrigida em código:** pedidos faturados para Rodrigo, eventos e arquivos de cobrança/NF-e podem ser consultados pelo parceiro que criou o pedido, sem liberar acesso a outros parceiros.
 - [x] **Interface**: escolha Signa/CNPJ ou Rodrigo/CPF no novo pedido, rótulo de validação fiscal pendente; cliente final permanece separado. Teste unitário de allowlist criado e incorporado a `pnpm test` na branch.
-- [ ] **Porta de saída NÃO aprovada**: PR #67 diverge da release; CI ainda sem execução no HEAD atualizado; é obrigatória validação completa de segurança, dados fiscais, precificação e NF-e real em ambiente isolado. PR #74 permanece separada como **draft** para evitar publicação avulsa.
+- [ ] **Porta de saída NÃO aprovada**: PR #67 diverge da release; CI ainda sem execução no HEAD atualizado; é obrigatória validação completa de segurança, dados fiscais, precificação e NF-e real em ambiente isolado. PRs #74 e #75 já foram integradas à release; esse fato não libera faturamento fiscal nem dispensa testes e validação de cadastro.
 - [ ] **Migrações do restante da PR #67 NÃO aplicadas em produção**: `20261122010000_partner_end_customers` e `20261122020000_signa_ready_date_approval`. Esta pendência é esperada e impede testar esses fluxos no ambiente produtivo.
 - [ ] **Pedido autenticado em produção não simulado**: preservar o histórico; nenhum pedido fictício ou teste com emissão fiscal/financeira foi criado.
 - [ ] **Confirmação de NF-e:** verificar bloqueio fiscal com documentos `NOT_VERIFIED`, destinatário fiscal correto no XML/PDF autorizado, Pix e conciliação antes de aceitar.
