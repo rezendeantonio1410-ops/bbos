@@ -3,6 +3,12 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Registro incremental — 22/11/2026
+
+- **Reserva**: hotfix PR #70 mesclada na release (merge `880283eb`), com workflow de CI aprovado para o head `ff4ef9f`. A entrega antecipada **não autoriza** publicar o restante desta PR.
+- **Datas dos pedidos Signa**: foi identificado um regex incorreto com `\\d` literal no validador. A validação foi extraída para `isValidPartnerRequestedReadyDate` e protegida por teste de regressão incluído em `pnpm test`.
+- **Ainda sem aceite**: testes de pedido autenticado, verificação de schema/migrações no banco vivo, confirmação de datas por aprovador Bispo, validação fiscal/financeira ponta a ponta, CI do commit final e smoke tests visuais desktop/mobile. Não presumir conclusão com base apenas em build.
+
 ## 1. Dados e segurança — issue #64
 
 - [ ] Entidade privada de cliente final com `partnerId` e `companyId`, índices e FK opcional para pedidos, preservando pedidos antigos.
