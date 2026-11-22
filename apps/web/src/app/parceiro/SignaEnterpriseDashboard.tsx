@@ -144,11 +144,12 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
         </nav>
         <p className="mt-8 border-t border-white/20 pt-4 text-xs text-slate-300">{partnerName} · Bispo Coffees</p>
       </aside>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white text-[#0E191D] shadow-sm">
-        <div className="border-l-4 border-l-[#0A0A0A] px-5 py-5 sm:px-7">
-          <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-teal-800">Bispo Coffees · Portal comercial</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">{partnerName}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600">Pedidos, produção, documentos fiscais e pagamentos em um único ambiente.</p>
+      <div className="overflow-hidden rounded-xl border border-[#21384b] text-white shadow-sm" style={{background:"linear-gradient(110deg,#0E191D 0%,#152e36 55%,#244934 100%)"}}>
+        <div className="flex min-h-36 items-center gap-5 px-5 py-7 sm:px-8">
+          <div aria-hidden="true" className="flex size-16 shrink-0 items-center justify-center rounded-full border border-[#cbb78d] bg-black/20 font-serif text-2xl text-[#e9dec8]">SC</div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-[#cbdcd7]">Bispo Coffees · Portal do parceiro</p>
+          <h2 className="mt-1 font-serif text-3xl font-semibold tracking-tight">{partnerName}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-[#e0eae9]">Bem-vindo ao seu portal comercial. Faça pedidos, acompanhe a produção e analise seus resultados.</p></div>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
