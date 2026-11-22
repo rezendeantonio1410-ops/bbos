@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
+import { parseBillableUnitPrice } from "./partner-price-validation";
 
 const recipients = [
   { id: "signa-cnpj", documentType: "CNPJ" as const },
@@ -44,4 +45,17 @@ test("rejeita IDs arbitrários, ausência de escolha e contas de preços externa
     selectSignaFiscalRecipient("signa-cnpj", "rodrigo-cpf", []),
     null,
   );
+});
+
+test("preços exclusivos válidos do Reserva são aceitos a partir do valor do banco", () => {
+  assert.equal(parseBillableUnitPrice("38.00"), 38);
+  assert.equal(parseBillableUnitPrice("76.80"), 76.8);
+  assert.equal(parseBillableUnitPrice("148.00"), 148);
+});
+
+test("não permite pedidos ou cotações com preços nulos, gratuitos ou inválidos", () => {
+  for (const value of [null, undefined, "", "  ", 0, "0", -1, "-1.00", "NaN", NaN, Infinity, -Infinity, "Infinity", "wrong", {}, 0.001]) {
+    assert.equal(parseBillableUnitPrice(value), null, String(value));
+  }
+  assert.equal(parseBillableUnitPrice("0.01"), 0.01);
 });
