@@ -1,7 +1,7 @@
 .fieldStory {
   grid-column: 1/-1;
   display: grid;
-  grid-template-columns: 1.08fr 0.92fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   margin-top: 8px;
 }
@@ -60,8 +60,8 @@
   color: #fff;
 }
 .personSecondary {
-  background: #e0eae9;
-  color: #0e191d;
+  background: #0e191d;
+  color: #fff;
 }
 .personPrimary small,
 .personSecondary small {
