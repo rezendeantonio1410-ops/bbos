@@ -554,7 +554,13 @@ export class PartnerPortalController {
       this.database.$queryRawUnsafe<any[]>(
         `SELECT so.id,so.code,so.status::text AS status,so."totalAmount",so."orderedAt",
                 so."paymentType"::text AS "paymentType",so."paymentTermsSnapshot",
-                c.name AS "customerName",ar.status::text AS "receivableStatus",
+                c.name AS "customerName",c.name AS "billingRecipientName",
+                endcustomer.name AS "endCustomerName",
+                COALESCE((SELECT sum(oi.quantity * pv."netWeightGrams") / 1000.0
+                  FROM "SalesOrderItem" oi
+                  JOIN "ProductVariant" pv ON pv.id=oi."productVariantId"
+                  WHERE oi."salesOrderId"=so.id),0)::float AS "volumeKg",
+                ar.status::text AS "receivableStatus",
                 ar."dueDate",ar.amount AS "receivableAmount",ar."openAmount",
                 ar."paymentDate",fiscal.number AS "invoiceNumber",
                 fiscal.status::text AS "invoiceStatus",
@@ -563,6 +569,8 @@ export class PartnerPortalController {
                   AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
            FROM "SalesOrder" so
            JOIN "Customer" c ON c.id=so."customerId"
+           LEFT JOIN "PartnerEndCustomer" endcustomer ON endcustomer.id=so."partnerEndCustomerId"
+             AND endcustomer."companyId"=so."companyId" AND endcustomer."partnerId"=$2
            LEFT JOIN LATERAL (
              SELECT title.status,title."dueDate",title.amount,title."openAmount",title."paymentDate"
                FROM "AccountsReceivable" title
