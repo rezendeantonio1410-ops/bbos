@@ -1270,6 +1270,34 @@ export class PartnerPortalController {
     return { customers, notice: "Valores de pedidos; não representam faturamento ou recebimentos." };
   }
 
+  @Get("end-customers/:endCustomerId/orders")
+  async endCustomerOrders(
+    @Req() request: { user?: PartnerActor },
+    @Param("endCustomerId") endCustomerId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Histórico disponível apenas para distribuidores.");
+    }
+    const customers = await this.database.$queryRawUnsafe<Array<{id:string}>>(
+      `SELECT id FROM "PartnerEndCustomer" WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true LIMIT 1`,
+      endCustomerId,actor.companyId,partner.id,
+    );
+    if (!customers.length) throw new NotFoundException("Cliente não encontrado.");
+    const orders = await this.database.$queryRawUnsafe<Array<{
+      id:string; code:string; status:string; totalAmount:number; orderedAt:Date;
+    }>>(
+      `SELECT so.id,so.code,so.status::text AS status,so."totalAmount"::float AS "totalAmount",
+              so."createdAt" AS "orderedAt"
+         FROM "SalesOrder" so
+        WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          AND so."partnerEndCustomerId"=$3
+        ORDER BY so."createdAt" DESC LIMIT 200`,
+      actor.companyId,partner.id,endCustomerId,
+    );
+    return { orders };
+  }
+
   @Post("end-customers")
   async createEndCustomer(
     @Req() request: { user?: PartnerActor },
