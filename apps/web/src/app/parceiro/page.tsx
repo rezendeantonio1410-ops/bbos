@@ -188,9 +188,9 @@ export default function PartnerPortalPage() {
 
   return (
     <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "lg:pl-52" : ""}`}>
-      <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-[#102338] text-white" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-5">
-          <div className="flex items-center gap-5">
+      <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-white/95 text-[#102338] shadow-sm" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-3">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-5">
             <div
               className={
                 data?.partner.portalAccessLevel === "DISTRIBUTOR"
@@ -198,7 +198,7 @@ export default function PartnerPortalPage() {
                   : "block"
               }
             >
-              <Logo />
+              <Logo compact={data?.partner.portalAccessLevel === "DISTRIBUTOR"} />
             </div>
             {data?.partner.portalAccessLevel === "DISTRIBUTOR" && (
               <div className="flex items-center gap-3 sm:hidden">
@@ -218,13 +218,13 @@ export default function PartnerPortalPage() {
                 </div>
               </div>
             )}
-            <div className="hidden border-l border-stone-200 pl-5 sm:block">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
+            <div className="hidden min-w-0 border-l border-slate-200 pl-4 sm:block">
+              <p className="text-[11px] font-bold uppercase tracking-[.12em] text-teal-800">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
                   ? "Portal comercial | Signa"
                   : "Portal do representante"}
               </p>
-              <p className="mt-1 text-xs text-stone-500">
+              <p className="mt-1 text-xs text-slate-500">
                 {data?.partner.portalAccessLevel === "DISTRIBUTOR"
                   ? "Pedidos · Faturamento · Pagamentos"
                   : "Clientes, visitas e pedidos"}
@@ -245,7 +245,7 @@ export default function PartnerPortalPage() {
               type="button"
               onClick={() => void logout()}
               aria-label="Sair do portal"
-              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 py-2 text-xs font-bold text-[var(--bbos-text-secondary)] transition hover:bg-[var(--bbos-surface-subtle)]"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
             >
               <LogOut size={16} />{" "}
               <span className="hidden sm:inline">Sair</span>
