@@ -83,9 +83,20 @@ function SignaReports() {
   </section>;
 }
 function SignaCustomerHistory() {
-  const [rows,setRows] = useState<Array<{id:string;name:string;city:string|null;state:string|null;orderCount:number;totalOrders:number;lastOrderAt:string|null}>>([]);
+  type CustomerRow = {id:string;name:string;city:string|null;state:string|null;orderCount:number;totalOrders:number;lastOrderAt:string|null};
+  const [rows,setRows] = useState<CustomerRow[]>([]);
   const [error,setError] = useState("");
+  const [notice,setNotice] = useState("");
   const [search,setSearch] = useState("");
+  const [expanded,setExpanded] = useState(false);
+  const [saving,setSaving] = useState(false);
+  const [name,setName] = useState("");
+  const [city,setCity] = useState("");
+  const [state,setState] = useState("");
+  const [phone,setPhone] = useState("");
+  const [email,setEmail] = useState("");
+  const [notes,setNotes] = useState("");
+  const [refresh,setRefresh] = useState(0);
   useEffect(()=>{
     const controller = new AbortController();
     void fetch("/api/partner-portal/end-customer-history",{credentials:"include",cache:"no-store",signal:controller.signal})
@@ -93,13 +104,48 @@ function SignaCustomerHistory() {
       .then(result=>{if(!controller.signal.aborted)setRows(result.customers);})
       .catch(()=>{if(!controller.signal.aborted)setError("Não foi possível carregar o histórico.");});
     return ()=>controller.abort();
-  },[]);
-  const visible=rows.filter(row=>(row.name+" "+(row.city??"")).toLowerCase().includes(search.toLowerCase()));
-  return <section id="clientes-signa" className="rounded-lg border border-slate-200 bg-white p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-[#0E191D]">Clientes atendidos</h3><p className="text-xs text-slate-500">Histórico comercial, separado do faturamento fiscal</p></div><input type="search" aria-label="Pesquisar clientes" placeholder="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/></div>
+  },[refresh]);
+  const visible=rows.filter(row=>(row.name+" "+(row.city??"")).toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")));
+  const saveCustomer=async (event:React.FormEvent<HTMLFormElement>)=>{
+    event.preventDefault();
+    if(saving)return;
+    setSaving(true);setError("");setNotice("");
+    try{
+      const response=await fetch("/api/partner-portal/end-customers",{
+        method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({name:name.trim(),city:city.trim(),state:state.trim().toUpperCase(),phone:phone.trim(),email:email.trim(),notes:notes.trim()}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.message||"Não foi possível cadastrar o cliente.");
+      setName("");setCity("");setState("");setPhone("");setEmail("");setNotes("");
+      setExpanded(false);setNotice("Cliente comercial cadastrado com sucesso.");setRefresh(value=>value+1);
+      window.dispatchEvent(new Event("bbos:signa-customers:updated"));
+    }catch(cause){setError(cause instanceof Error?cause.message:"Erro ao cadastrar cliente.");}
+    finally{setSaving(false);}
+  };
+  return <section id="clientes-signa" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h3 className="text-lg font-semibold text-[#0E191D]">Clientes da Signa</h3><p className="text-xs text-slate-500">Carteira comercial independente dos destinatários fiscais Signa e Rodrigo</p></div>
+      <button type="button" onClick={()=>setExpanded(value=>!value)} aria-expanded={expanded} className="rounded-lg bg-[#0E191D] px-4 py-2.5 text-sm font-semibold text-white">{expanded?"Fechar cadastro":"+ Cadastrar cliente"}</button>
+    </div>
+    {expanded&&<form onSubmit={saveCustomer} className="mt-4 space-y-3 rounded-xl border border-[#c7d8d3] bg-[#E0EAE9]/40 p-4">
+      <p className="text-sm font-semibold text-[#0E191D]">Novo cliente atendido pela Signa</p>
+      <p className="text-xs text-slate-600">Cadastro somente comercial. Não altera o cliente fiscal, a NF-e nem os preços dos pedidos.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-semibold">Nome do cliente *<input required minLength={2} maxLength={180} value={name} onChange={e=>setName(e.target.value)} placeholder="Nome ou razão social" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold">Cidade<input maxLength={120} value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold">UF<input maxLength={2} pattern="[A-Za-z]{2}" value={state} onChange={e=>setState(e.target.value.toUpperCase())} placeholder="PR" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold">Telefone<input maxLength={40} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone de contato" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-2">E-mail<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail do cliente" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-2">Observações<textarea maxLength={1000} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+      </div>
+      <button type="submit" disabled={saving||!name.trim()} className="rounded-lg bg-[#0E191D] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando...":"Salvar cliente comercial"}</button>
+    </form>}
     {error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
-    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="bg-[#EBEBEB]"><tr><th className="p-3">Cliente</th><th>Localidade</th><th>Pedidos</th><th>Valor dos pedidos</th><th>Último pedido</th></tr></thead><tbody className="divide-y">{visible.map(row=><tr key={row.id}><td className="p-3 font-semibold">{row.name}</td><td>{[row.city,row.state].filter(Boolean).join(" / ")||"—"}</td><td>{row.orderCount}</td><td>{currency.format(Number(row.totalOrders))}</td><td>{row.lastOrderAt?new Date(row.lastOrderAt).toLocaleDateString("pt-BR"):"—"}</td></tr>)}</tbody></table>{!visible.length&&!error&&<p className="p-3 text-sm text-slate-500">Nenhum cliente registrado neste filtro.</p>}</div>
-    <p className="mt-3 text-xs text-slate-500">Valores dos pedidos, não equivalentes a pagamentos recebidos.</p>
+    {notice&&<p role="status" className="mt-3 text-sm font-semibold text-emerald-800">{notice}</p>}
+    <div className="mt-5 flex items-center justify-between gap-3"><h4 className="text-sm font-semibold">Carteira e histórico de clientes</h4><input type="search" aria-label="Pesquisar clientes" placeholder="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/></div>
+    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead className="bg-[#EBEBEB]"><tr><th className="p-3">Cliente</th><th>Localidade</th><th>Pedidos</th><th>Valor dos pedidos</th><th>Último pedido</th></tr></thead><tbody className="divide-y">{visible.map(row=><tr key={row.id}><td className="p-3 font-semibold">{row.name}</td><td>{[row.city,row.state].filter(Boolean).join(" / ")||"—"}</td><td>{row.orderCount}</td><td>{currency.format(Number(row.totalOrders))}</td><td>{row.lastOrderAt?new Date(row.lastOrderAt).toLocaleDateString("pt-BR"):"—"}</td></tr>)}</tbody></table>{!visible.length&&!error&&<p className="p-3 text-sm text-slate-500">Nenhum cliente registrado neste filtro.</p>}</div>
+    <p className="mt-3 text-xs text-slate-500">Valores de pedidos, não de notas fiscais ou pagamentos recebidos.</p>
   </section>;
 }
 const currency = new Intl.NumberFormat("pt-BR", {style:"currency",currency:"BRL"});
