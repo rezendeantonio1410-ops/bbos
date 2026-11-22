@@ -1059,6 +1059,63 @@ export class PartnerPortalController {
     };
   }
 
+  @Get("commercial-reports")
+  async commercialReports(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Relatórios disponíveis apenas para distribuidores.");
+    }
+    // Values are order totals, not tax invoices or settled receipts.
+    // Every aggregate is restricted by company AND the authenticated partner.
+    const [monthly, products, regions] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT to_char(date_trunc('month', so."createdAt"),'YYYY-MM') AS month,
+                count(DISTINCT so.id)::int AS orders,
+                COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
+                COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
+           FROM "SalesOrder" so
+           JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
+           JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+          GROUP BY date_trunc('month', so."createdAt")
+          ORDER BY month DESC LIMIT 36`,
+        actor.companyId, partner.id,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT item.sku,item."productName" AS product,
+                count(DISTINCT so.id)::int AS orders,
+                COALESCE(sum(item.quantity),0)::int AS units,
+                COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
+                COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
+           FROM "SalesOrder" so
+           JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
+           JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+          GROUP BY item.sku,item."productName"
+          ORDER BY "orderValue" DESC LIMIT 100`,
+        actor.companyId, partner.id,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT ec.state,ec.city,count(DISTINCT so.id)::int AS orders,
+                COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
+                COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
+           FROM "SalesOrder" so
+           JOIN "PartnerEndCustomer" ec ON ec.id=so."partnerEndCustomerId"
+             AND ec."partnerId"=$2 AND ec."companyId"=$1
+           JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
+           JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+            AND so.status::text NOT IN ('CANCELLED')
+          GROUP BY ec.state,ec.city ORDER BY "orderValue" DESC LIMIT 100`,
+        actor.companyId, partner.id,
+      ),
+    ]);
+    return { monthly, products, regions, basis: "ORDER_VALUE", currency: "BRL",
+      notice: "Valores de pedidos; não equivalem a notas fiscais autorizadas ou pagamentos recebidos." };
+  }
+
   // Commercial end customers are scoped to this partner and never become fiscal recipients.
   @Get("end-customers")
   async listEndCustomers(@Req() request: { user?: PartnerActor }) {
