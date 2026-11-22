@@ -255,11 +255,13 @@ export function PartnerOrderWorkspace({
   const [newEndCustomerCity, setNewEndCustomerCity] = useState("");
   const [newEndCustomerState, setNewEndCustomerState] = useState("");
   const [savingEndCustomer, setSavingEndCustomer] = useState(false);
+  const [editingEndCustomerId, setEditingEndCustomerId] = useState("");
 
   function closeOrder() {
     setBillingRecipientId("");
     setPartnerEndCustomerId("");
     setEndCustomerSearch("");
+    setEditingEndCustomerId("");
     setShowOrder(false);
   }
 
@@ -550,19 +552,33 @@ export function PartnerOrderWorkspace({
     if (!newEndCustomerName.trim()) { setError("Informe o nome do cliente final."); return; }
     setSavingEndCustomer(true);
     setError("");
+    const editingId = editingEndCustomerId;
+    const city = newEndCustomerCity.trim();
+    const state = newEndCustomerState.trim().toUpperCase();
     try {
-      const result = await portalApi<{id:string;name:string}>("/end-customers", {
-        method: "POST",
-        body: JSON.stringify({name:newEndCustomerName,city:newEndCustomerCity,state:newEndCustomerState}),
-      });
-      setEndCustomers(previous => [...previous, {id:result.id,name:result.name,city:newEndCustomerCity,state:newEndCustomerState}].sort((a,b)=>a.name.localeCompare(b.name)));
+      const result = await portalApi<{id:string;name:string;city?:string|null;state?:string|null}>(
+        editingId ? `/end-customers/${encodeURIComponent(editingId)}` : "/end-customers",
+        {
+          method: editingId ? "PATCH" : "POST",
+          body: JSON.stringify({name:newEndCustomerName,city,state}),
+        },
+      );
+      const entry = {
+        id: result.id, name: result.name,
+        city: result.city ?? (city || null),
+        state: result.state ?? (state || null),
+      };
+      setEndCustomers(previous => (
+        editingId ? previous.map(customer => customer.id === editingId ? entry : customer) : [...previous, entry]
+      ).sort((left,right) => left.name.localeCompare(right.name)));
       setEndCustomerSearch("");
       setPartnerEndCustomerId(result.id);
+      setEditingEndCustomerId("");
       setNewEndCustomerName("");
       setNewEndCustomerCity("");
       setNewEndCustomerState("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o cliente.");
+      setError(cause instanceof Error ? cause.message : "Não foi possível salvar o cliente comercial.");
     } finally { setSavingEndCustomer(false); }
   }
 
@@ -1289,19 +1305,35 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
-                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>{ setPartnerEndCustomerId(event.target.value); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
                   <option value="">Não indicar cliente final</option>
                   {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
                 </select>
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">Cadastrar novo cliente final</summary>
+                {partnerEndCustomerId && (
+                  <button type="button" className="mt-2 text-sm font-semibold text-[#0E191D] underline" onClick={()=>{
+                    const chosen = endCustomers.find(customer => customer.id === partnerEndCustomerId);
+                    if (!chosen) return;
+                    setEditingEndCustomerId(chosen.id);
+                    setNewEndCustomerName(chosen.name);
+                    setNewEndCustomerCity(chosen.city ?? "");
+                    setNewEndCustomerState(chosen.state ?? "");
+                  }}>Editar cliente selecionado</button>
+                )}
+                <details key={editingEndCustomerId ? "edit" : "new"} open={Boolean(editingEndCustomerId)} className="mt-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">{editingEndCustomerId ? "Editar cliente comercial" : "Cadastrar novo cliente final"}</summary>
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     <input aria-label="Nome do cliente final" placeholder="Nome ou razão social" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                     <input aria-label="Cidade do cliente final" placeholder="Cidade" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                     <input aria-label="UF do cliente final" placeholder="UF" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                   </div>
-                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
+                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : editingEndCustomerId ? "Salvar alterações" : "Salvar cliente"}</button>
+                  {editingEndCustomerId && <button type="button" className="ml-3 text-sm underline" onClick={()=>{
+                    setEditingEndCustomerId("");
+                    setNewEndCustomerName("");
+                    setNewEndCustomerCity("");
+                    setNewEndCustomerState("");
+                  }}>Cancelar edição</button>}
                 </details>
               </div>
             )}
