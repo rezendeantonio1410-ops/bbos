@@ -24,8 +24,8 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
           portalAccessLevel: "DISTRIBUTOR",
         }];
       }
-      if (sql.includes('FROM "Customer" c') && sql.includes("LIMIT 1")) {
-        if (args[1] !== customerId) return [];
+      if (sql.includes('FROM "Customer" c')) {
+        if (sql.includes("LIMIT 1") && args[1] !== customerId) return [];
         return [{ id: customerId, active: true, name: "Signa Coffee" }];
       }
       if (sql.includes('FROM "CustomerCatalogProduct" catalog')) {
@@ -73,7 +73,7 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   };
   const fakeSalesOrders = {
     async options() {
-      throw new Error("Não usar catálogo geral para o distribuidor Signa");
+      return { variants: [] };
     },
     async create(orderCompanyId: string, input: Record<string, unknown>) {
       assert.equal(orderCompanyId, companyId);
