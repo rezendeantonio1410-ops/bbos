@@ -122,6 +122,21 @@ test("restoring a browser draft must revoke account draft editing authority", ()
 });
 
 
+test("main new-order toggle must invalidate in-flight Signa draft recovery", () => {
+  const form = readFileSync(new URL("../app/parceiro/PartnerOrderWorkspace.tsx", import.meta.url), "utf8");
+  const toggle = form.slice(form.indexOf("  function toggleOrderForm() {"), form.indexOf("  const [lines,"));
+  const close = form.slice(form.indexOf("  function closeOrder() {"), form.indexOf("  function toggleOrderForm() {"));
+  assert.match(form, /onClick=\{toggleOrderForm\}/);
+  assert.doesNotMatch(form, /onClick=\{\(\) => setShowOrder\(\(value\) => !value\)\}/);
+  assert.match(toggle, /if \(showOrder\) \{\s*closeOrder\(\)/);
+  assert.match(toggle, /serverDraftRecoveryEpoch\.current \+= 1/);
+  assert.match(toggle, /setServerDraftId\(""/);
+  assert.match(toggle, /setRecoveredServerDraftId\(""/);
+  assert.match(close, /serverDraftRecoveryEpoch\.current \+= 1/);
+  // A response begun before either close/open must not apply after the epoch changes.
+  assert.equal(signaServerDraftRecoveryIsCurrent("draft-a", "draft-a", 6, 7), false);
+});
+
 test("late server-draft recovery cannot restore a superseded selection or form", () => {
   assert.equal(signaServerDraftRecoveryIsCurrent("draft-a", "draft-a", 3, 3), true);
   assert.equal(signaServerDraftRecoveryIsCurrent("draft-a", "draft-a", 3, 4), false);
