@@ -1769,10 +1769,15 @@ export function PartnerOrderWorkspace({
                   <Plus size={13} /> Produto
                 </button>
               </div>
+              {isDistributor && (
+                <div className="hidden items-center gap-2 px-2 text-[11px] font-semibold uppercase text-stone-500 sm:grid sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" aria-hidden="true">
+                  <span>Produto</span><span>Quantidade</span><span className="text-right">Unitário</span><span className="text-right">Subtotal</span><span />
+                </div>
+              )}
               {lines.map((line, index) => (
                 <div
                   key={line.id}
-                  className="grid items-center gap-2 rounded-lg border border-stone-200 bg-white p-2 sm:grid-cols-[minmax(0,1fr)_88px_32px]"
+                  className={`grid items-center gap-2 rounded-lg border border-stone-200 bg-white p-2 ${isDistributor ? "sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" : "sm:grid-cols-[minmax(0,1fr)_88px_32px]"}`}
                 >
                   <select
                     value={line.productVariantId}
@@ -1833,6 +1838,22 @@ export function PartnerOrderWorkspace({
                       invalidateQuote();
                     }}
                   />
+                  {isDistributor && (
+                    <>
+                      <span className="text-right text-xs text-stone-600 sm:text-sm" aria-label={`Preço unitário do produto ${index + 1}`}>
+                        <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Unitário:</span>
+                        {quote?.items.find(item => item.productVariantId === line.productVariantId)?.unitPrice != null
+                          ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.unitPrice)
+                          : "—"}
+                      </span>
+                      <span className="text-right text-xs font-semibold text-[#14201d] sm:text-sm" aria-label={`Subtotal do produto ${index + 1}`}>
+                        <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Subtotal:</span>
+                        {quote?.items.find(item => item.productVariantId === line.productVariantId)?.totalAmount != null
+                          ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.totalAmount)
+                          : "—"}
+                      </span>
+                    </>
+                  )}
                   <button
                     type="button"
                     aria-label={`Remover produto ${index + 1}`}
