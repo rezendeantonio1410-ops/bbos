@@ -1249,17 +1249,17 @@ export function PartnerOrderWorkspace({
             onSubmit={createOrder}
             className={
               isDistributor
-                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-4xl space-y-4 overflow-y-auto rounded-lg border border-[#D5DEDC] bg-white p-4 shadow-xl sm:inset-x-5 sm:p-6"
+                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-5xl space-y-3 overflow-y-auto rounded-lg border border-[#D5DEDC] bg-white p-3 shadow-xl sm:inset-x-5 sm:p-4"
                 : "mt-6 space-y-4 rounded-2xl bg-white p-4 sm:p-5"
             }
           >
             {isDistributor && (
-              <div className="sticky -top-4 z-20 -mx-4 -mt-4 flex items-center justify-between gap-4 border-b border-[#D5DEDC] bg-white px-4 py-4 sm:-top-6 sm:-mx-6 sm:-mt-6 sm:px-6">
+              <div className="sticky -top-3 z-20 -mx-3 -mt-3 flex items-center justify-between gap-3 border-b border-[#D5DEDC] bg-white px-3 py-2 sm:-top-4 sm:-mx-4 sm:-mt-4 sm:px-4">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#0E3A31]">
                     Novo pedido Signa
                   </p>
-                  <h3 className="text-xl font-semibold text-[#0E191D]">Novo pedido</h3>
+                  <h3 className="text-lg font-semibold text-[#0E191D]">Novo pedido</h3>
                 </div>
                 <button
                   type="button"
@@ -1272,14 +1272,14 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && customers.length === 1 && customers[0] && (
-              <div className="rounded-md border border-[#D5DEDC] bg-[#E0EAE9]/40 p-4">
+              <div className="rounded-md border border-[#D5DEDC] bg-[#E0EAE9]/30 px-3 py-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
                   Comprador
                 </p>
                 <p className="mt-1 text-sm font-bold text-[#14201d]">
                   {customers[0].tradeName || customers[0].name}
                 </p>
-                <p className="mt-1 text-xs text-stone-500">
+                <p className="text-[11px] text-stone-500">
                   Escolha os produtos e as quantidades para o seu próximo
                   pedido. {catalog?.productCount ?? 0} apresentação(ões)
                   disponíveis.
@@ -1287,33 +1287,33 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && (
-              <div className="rounded-md border border-[#D5DEDC] bg-white p-4">
+              <div className="rounded-md border border-[#D5DEDC] bg-white p-3">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
-                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); }} className="mt-2 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2.5 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" />
-                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-2 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2.5 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]">
+                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); }} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" />
+                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]">
                   <option value="">Não indicar cliente final</option>
                   {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
                 </select>
-                <details className="mt-3">
+                <details className="mt-2">
                   <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">Cadastrar novo cliente final</summary>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
                     <input aria-label="Nome do cliente final" placeholder="Nome ou razão social" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                     <input aria-label="Cidade do cliente final" placeholder="Cidade" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                     <input aria-label="UF do cliente final" placeholder="UF" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
                   </div>
-                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
+                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-2 rounded-md bg-[#0E191D] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
                 </details>
               </div>
             )}
             {isDistributor && (billingEnabled || billingLoading) && (
-              <div className="rounded-md border border-[#D5DEDC] bg-white p-4">
+              <div className="rounded-md border border-[#D5DEDC] bg-white p-3">
                 <fieldset>
                   <legend className="text-sm font-semibold text-[#0E191D]">Faturar para <span className="text-red-700">*</span></legend>
-                  <p className="mt-1 text-xs text-slate-600">Destinatário da nota fiscal</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <p className="text-xs text-slate-600">Destinatário da nota fiscal</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {billingRecipients.map((recipient) => (
                       <label key={recipient.id}
-                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-md border px-4 py-3 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[#0E3A31] ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
+                        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[#0E3A31] ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
                         <input type="radio" name="signa-billing-recipient" required
                           disabled={billingLoading} value={recipient.id} checked={billingRecipientId === recipient.id}
                           onChange={() => setBillingRecipientId(recipient.id)}
@@ -1401,7 +1401,7 @@ export function PartnerOrderWorkspace({
               {lines.map((line, index) => (
                 <div
                   key={line.id}
-                  className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_100px_40px]"
+                  className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_100px_40px]"
                 >
                   <select
                     value={line.productVariantId}
@@ -1480,7 +1480,7 @@ export function PartnerOrderWorkspace({
               ))}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {isDistributor && (
                 <PortalField label="Condição de pagamento">
                   <div className="flex min-h-10 items-center rounded-xl border border-emerald-900/15 bg-[#f7faf8] px-3 py-2.5 text-sm font-semibold text-[#14201d]">
@@ -1581,7 +1581,7 @@ export function PartnerOrderWorkspace({
             <div
               className={`flex flex-wrap items-center justify-end gap-2 ${
                 isDistributor
-                  ? "sticky -bottom-4 z-10 -mx-4 -mb-4 border-t border-stone-100 bg-white/95 p-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:px-5"
+                  ? "sticky -bottom-3 z-10 -mx-3 -mb-3 border-t border-stone-100 bg-white/95 px-3 py-2 backdrop-blur sm:-bottom-4 sm:-mx-4 sm:-mb-4 sm:px-4"
                   : ""
               }`}
             >
