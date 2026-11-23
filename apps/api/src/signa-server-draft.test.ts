@@ -43,6 +43,27 @@ test("rejects forged prices, fiscal/finance fields, duplicate SKUs, invalid quan
   }
 });
 
+test("duplicating a server draft copies allowed payload only, not identity or concurrency metadata", () => {
+  const saved = {
+    id: "draft-original", version: 7, companyId: "company-a", userId: "user-a",
+    payload: {
+      customerId: "signa", partnerEndCustomerId: null, billingRecipientId: null,
+      items: [{ productVariantId: "reserva-500", quantity: 3 }],
+      notes: "  Entregar após conferência  ",
+    },
+  };
+  // POST must receive only `saved.payload`, never the record's scope or metadata.
+  assert.throws(() => parseSignaServerDraftPayload(saved));
+  const duplicated = parseSignaServerDraftPayload(saved.payload);
+  assert.deepEqual(duplicated.items, [{ productVariantId: "reserva-500", quantity: 3 }]);
+  assert.equal(duplicated.customerId, "signa");
+  assert.equal(duplicated.notes, "Entregar após conferência");
+  assert.equal("id" in duplicated, false);
+  assert.equal("version" in duplicated, false);
+  assert.equal("userId" in duplicated, false);
+  assert.notStrictEqual(duplicated.items, saved.payload.items);
+});
+
 test("rejects invalid concurrency versions", () => {
   for (const value of [0, -1, null, "1", 1.2, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(() => parseSignaDraftVersion(value));
