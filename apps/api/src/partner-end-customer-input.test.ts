@@ -65,12 +65,12 @@ test("normaliza CNPJ, CEP e endereço comercial sem alterar destinatário fiscal
 });
 
 test("cadastro novo exige nome, CNPJ, CEP, rua, número, bairro, cidade e UF; complemento é opcional", () => {
-  const { complement: _complement, ...withoutComplement } = complete;
-  assert.equal(parsePartnerEndCustomerPatch(withoutComplement, "create").complement, undefined);
+  const without = (field: string) =>
+    Object.fromEntries(Object.entries(complete).filter(([key]) => key !== field));
+  assert.equal(parsePartnerEndCustomerPatch(without("complement"), "create").complement, undefined);
   for (const field of ["name", "taxId", "postalCode", "street", "number", "district", "city", "state"] as const) {
-    const { [field]: _omitted, ...missing } = complete;
-    assert.throws(() => parsePartnerEndCustomerPatch(missing, "create"), /Informe/, field);
-    assert.throws(() => parsePartnerEndCustomerPatch({ ...complete, [field]: "" }, "create"), undefined, field);
+    assert.throws(() => parsePartnerEndCustomerPatch(without(field), "create"), /Informe/, field);
+    assert.throws(() => parsePartnerEndCustomerPatch({ ...complete, [field]: "" }, "create"), /Informe|inválid/, field);
   }
 });
 
