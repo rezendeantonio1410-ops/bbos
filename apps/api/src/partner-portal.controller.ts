@@ -29,7 +29,7 @@ import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
 import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
 import { selectDistributorCatalogVisibility } from "./signa-catalog-visibility";
-import { parseSignaServerDraftPayload, parseSignaDraftVersion, type SignaServerDraftPayload } from "./signa-server-draft";
+import { parseSignaServerDraftPayload, parseSignaDraftVersion, hasSignaServerDraftCapacity, MAX_SIGNA_SERVER_DRAFTS_PER_USER, type SignaServerDraftPayload } from "./signa-server-draft";
 
 type PartnerActor = {
   id?: string | null;
@@ -1445,13 +1445,33 @@ export class PartnerPortalController {
     const { actor, partner, userId } = await this.signaDraftContext(request);
     const payload = await this.validatedSignaDraft(body?.payload, actor, partner);
     const id = randomUUID();
-    const rows = await this.database.$queryRawUnsafe<any[]>(
-      `INSERT INTO "PartnerOrderDraft"
-         (id,"companyId","partnerId","userId",status,version,payload,"createdAt","updatedAt")
-         VALUES ($1,$2,$3,$4,'DRAFT',1,$5::jsonb,NOW(),NOW())
-         RETURNING id,version,payload,"createdAt","updatedAt"`,
-      id, actor.companyId, partner.id, userId, JSON.stringify(payload),
-    );
+
+    // Serialise creation within the same company/partner/user scope.
+    // Without the transaction lock, simultaneous clicks can bypass the
+    // per-user limit and push older drafts outside the 100-row listing.
+    const rows = await this.database.$transaction(async tx => {
+      await tx.$queryRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2 || ':' || $3, 0))`,
+        actor.companyId, partner.id, userId,
+      );
+      const counts = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) AS count FROM "PartnerOrderDraft"
+          WHERE "companyId"=$1 AND "partnerId"=$2 AND "userId"=$3 AND status='DRAFT'`,
+        actor.companyId, partner.id, userId,
+      );
+      if (!hasSignaServerDraftCapacity(counts[0]?.count ?? BigInt(MAX_SIGNA_SERVER_DRAFTS_PER_USER))) {
+        throw new ConflictException(
+          `Limite de ${MAX_SIGNA_SERVER_DRAFTS_PER_USER} rascunhos na conta. Exclua um rascunho antigo antes de criar outro.`,
+        );
+      }
+      return tx.$queryRawUnsafe<any[]>(
+        `INSERT INTO "PartnerOrderDraft"
+           (id,"companyId","partnerId","userId",status,version,payload,"createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,'DRAFT',1,$5::jsonb,NOW(),NOW())
+           RETURNING id,version,payload,"createdAt","updatedAt"`,
+        id, actor.companyId, partner.id, userId, JSON.stringify(payload),
+      );
+    });
     return rows[0];
   }
 
