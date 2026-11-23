@@ -3,6 +3,14 @@
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
+## Revisão incremental — 22/11/2026, 22h53 (Brasília)
+
+- [x] **Código alterado apenas na branch draft PR #67 (sem merge):** catálogo exclusivo Signa agora falha de forma fechada se não houver linhas ativas em `CustomerCatalogProduct`: não expõe produtos pelo fallback geral de preços. A mesma guarda é aplicada a `order-options`, `quote` e `orders`, sem modificar a política de fallback para outros distribuidores.
+- [x] Criados testes unitários para catálogo Signa vazio, catálogo restrito aos SKUs explícitos, desativação de uma variante e compatibilidade com outros distribuidores, além de teste de presença das três integrações no controller. Inclusão na suíte raiz via `test:signa-order-isolation`. **Testes adicionados não significam testes executados ou CI aprovado.**
+- [x] PR #70 permanece integrada à release no SHA `880283eb`. Nesta leitura somente de banco `bbos-postgres-staging`, migração do Reserva concluída sem rollback e três variantes no catálogo privado Signa ativas, com `RAR-WLR-250` R$ 38,00; `RAR-WLR-500` R$ 76,80; `RAR-WLR-1000` R$ 148,00.
+- [x] Render RC1 app/API exibem último deploy `live` de `8d40edeca2b9c9d14273e048fed2202526a2a5f8` (publicação anterior, não desta revisão). Serviços têm auto-deploy na branch release.
+- [ ] **Pendência desta revisão:** CI completo no HEAD final, teste autenticado de pedido 500 g, comprovação do banco realmente ligado à API RC1; testes de isolamento, migração em ambiente representativo, aprovação de data exclusivamente Bispo, fiscal Signa/Rodrigo, NF-e/Bling, Pix/conciliação, relatórios/exportações e aceite visual desktop/mobile. A PR #67 continua draft com conflitos. Não publicar parcial nem alterar pedidos/dados existentes.
+
 ## Revisão incremental — 22/11/2026, 20h45 (Brasília)
 
 - [x] **Código efetivamente alterado, sem publicação:** validação de preço privado `parseBillableUnitPrice` agora recusa frações de centavo e formatos não decimais (notação exponencial/hexadecimal), além de preço nulo, negativo ou não finito. Decimal SQL com zeros finais continua aceito. Isso impede arredondamento silencioso antes de gerar cotação/pedido; não altera preços ou registros em banco.
