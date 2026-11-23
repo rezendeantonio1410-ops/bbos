@@ -45,7 +45,7 @@ import {
   validateTaxId,
 } from "./supplier-verification";
 import { buildPurchaseConfirmationPdf } from "./purchase-confirmation-pdf";
-import { approvedPurchaseCorrectionEligible, parseApprovedPurchaseValueCorrection } from "./approved-purchase-value-correction";
+import { approvedPurchaseCorrectionEligible, approvedPurchaseFiscalCorrectionEligible, parseApprovedPurchaseValueCorrection } from "./approved-purchase-value-correction";
 
 type Actor = {
   userId: string;
@@ -842,12 +842,29 @@ export class GreenCoffeePurchasesController {
         tx.accountsPayable.count({ where: { purchaseId: id } }),
         tx.purchaseConfirmationDocumentVersion.count({ where: { purchaseId: id } }),
         tx.greenCoffeePurchaseAcceptance.count({ where: { purchaseId: id } }),
-        tx.$queryRawUnsafe<Array<{ count: bigint }>>(
-          `SELECT COUNT(*)::bigint AS count FROM "FiscalDocumentAllocation" WHERE "purchaseId"=$1`, id,
+        tx.$queryRawUnsafe<Array<{
+          allocationType: string; direction: string; status: string;
+          matchStatus: string; totalAmount: number;
+        }>>(
+          `SELECT a."allocationType"::text AS "allocationType",
+                  f.direction::text AS direction,
+                  f.status::text AS status,
+                  f."matchStatus"::text AS "matchStatus",
+                  f."totalAmount"::float AS "totalAmount"
+             FROM "FiscalDocumentAllocation" a
+             JOIN "FiscalDocument" f ON f.id=a."fiscalDocumentId"
+            WHERE a."purchaseId"=$1 AND f."companyId"=$2
+            ORDER BY a.id`,
+          id, actor.companyId,
         ),
       ]);
-      if (receipts || payables || documents || acceptances || Number(fiscal[0]?.count ?? 0)) {
-        throw new BadRequestException("A compra já possui documentação, aceite, contas a pagar ou recebimentos vinculados.");
+      if (receipts || payables || documents || acceptances) {
+        throw new BadRequestException("A compra já possui aceite, pagamento, recebimento ou documento contratual.");
+      }
+      if (!approvedPurchaseFiscalCorrectionEligible(fiscal, correction.totalValue)) {
+        throw new BadRequestException(
+          "Há NF-e vinculada com valor ou situação incompatível. A correção não pode alterar o documento fiscal.",
+        );
       }
       const contractedKg = Number(purchase.contractedWeightKg);
       if (!Number.isFinite(contractedKg) || contractedKg <= 0) {
@@ -877,6 +894,8 @@ export class GreenCoffeePurchasesController {
             contractedWeightKg: contractedKg,
             reason: correction.reason,
             installmentId: installment.id,
+            linkedFiscalDocument: fiscal.length === 1,
+            fiscalReconciliationMustBeReviewed: fiscal.length === 1,
           },
         },
       });
