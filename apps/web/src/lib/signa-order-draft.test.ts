@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget } from "./signa-order-draft";
+import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, signaServerDraftRecoveryIsCurrent } from "./signa-order-draft";
 
 const allowed = new Set(["reserva-500", "reserva-1000"]);
 
@@ -119,4 +119,18 @@ test("restoring a browser draft must revoke account draft editing authority", ()
   assert.ok(localValidation >= 0 && revokedSelection > localValidation);
   assert.ok(revokedEdit > revokedSelection && formChange > revokedEdit);
   assert.equal(signaServerDraftEditTarget("", "", new Set(["draft-a"])), null);
+});
+
+
+test("late server-draft recovery cannot restore a superseded selection or form", () => {
+  assert.equal(signaServerDraftRecoveryIsCurrent("draft-a", "draft-a", 3, 3), true);
+  assert.equal(signaServerDraftRecoveryIsCurrent("draft-a", "draft-a", 3, 4), false);
+  assert.equal(signaServerDraftRecoveryIsCurrent("draft-a", "draft-b", 3, 3), false);
+  assert.equal(signaServerDraftRecoveryIsCurrent("", "", 3, 3), false);
+  const form = readFileSync(new URL("../app/parceiro/PartnerOrderWorkspace.tsx", import.meta.url), "utf8");
+  const restore = form.slice(form.indexOf("  async function restoreServerDraft()"), form.indexOf("  // Copy the selected server draft"));
+  assert.match(restore, /signaServerDraftRecoveryIsCurrent\(requestedId, saved\.id, requestEpoch, serverDraftRecoveryEpoch\.current\)/);
+  assert.ok(restore.indexOf("signaServerDraftRecoveryIsCurrent(") < restore.indexOf("setCustomerId(saved.payload.customerId"));
+  assert.match(form, /serverDraftRecoveryEpoch\.current \+= 1; setServerDraftId\(event\.target\.value\)/);
+  assert.match(form, /disabled=\{busy \|\| serverDraftBusy\} onChange=\{event/);
 });
