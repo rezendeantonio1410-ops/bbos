@@ -72,6 +72,22 @@ type Order = {
   billingAvailable?: boolean;
 };
 type Line = { id: string; productVariantId: string; quantity: number };
+type ServerOrderDraft = {
+  id: string;
+  version: number;
+  updatedAt: string;
+  payload: {
+    customerId: string | null;
+    partnerEndCustomerId: string | null;
+    billingRecipientId: string | null;
+    items: Array<{ productVariantId: string; quantity: number }>;
+    deliveryMode: "PICKUP" | "CUSTOMER_CARRIER";
+    carrierName: string;
+    expectedDeliveryDate: string;
+    customerReference: string;
+    notes: string;
+  };
+};
 type Quote = {
   items: Array<{
     productVariantId: string;
@@ -237,6 +253,9 @@ export function PartnerOrderWorkspace({
   const [draftStatus, setDraftStatus] = useState("");
   const [draftDirty, setDraftDirty] = useState(false);
   const [draftScope, setDraftScope] = useState<SignaOrderDraftScope | null>(null);
+  const [serverDrafts, setServerDrafts] = useState<ServerOrderDraft[]>([]);
+  const [serverDraftId, setServerDraftId] = useState("");
+  const [serverDraftBusy, setServerDraftBusy] = useState(false);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
@@ -270,6 +289,7 @@ export function PartnerOrderWorkspace({
     setEndCustomerSearch("");
     setEditingEndCustomerId("");
     setShowOrder(false);
+    setServerDraftId("");
   }
 
 
@@ -385,6 +405,7 @@ export function PartnerOrderWorkspace({
       setMessage("");
       setBillingRecipientId("");
       setPartnerEndCustomerId("");
+      setServerDraftId("");
       setEndCustomerSearch("");
       setShowOrder(true);
     };
@@ -510,6 +531,123 @@ export function PartnerOrderWorkspace({
       setDraftStatus("Rascunho deste navegador descartado. Nenhum pedido ou dado do servidor foi alterado.");
     } catch {
       setDraftStatus("Não foi possível descartar o rascunho neste navegador.");
+    }
+  }
+
+
+  // Server drafts belong to the signed-in Signa user, never to a shared browser.
+  // The API validates the current catalog, fiscal recipient and commercial buyer.
+  const refreshServerDrafts = useCallback(async () => {
+    if (!isDistributor || !draftScope) return;
+    const response = await portalApi<{ drafts: ServerOrderDraft[] }>("/order-drafts");
+    setServerDrafts(response.drafts);
+  }, [isDistributor, draftScope]);
+
+  useEffect(() => {
+    if (!draftScope || !isDistributor) {
+      setServerDrafts([]);
+      setServerDraftId("");
+      return;
+    }
+    void refreshServerDrafts().catch(() => {
+      setDraftStatus("Não foi possível carregar rascunhos da conta. O envio de pedidos não foi afetado.");
+    });
+  }, [draftScope, isDistributor, refreshServerDrafts]);
+
+  async function saveServerDraft() {
+    if (!draftScope || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    setDraftStatus("");
+    try {
+      const payload = {
+        customerId: customerId || null,
+        partnerEndCustomerId: partnerEndCustomerId || null,
+        billingRecipientId: billingRecipientId || null,
+        items: cleanItems,
+        deliveryMode, carrierName, expectedDeliveryDate, customerReference, notes,
+      };
+      const previous = serverDrafts.find(draft => draft.id === serverDraftId);
+      const result = previous
+        ? await portalApi<ServerOrderDraft>("/order-drafts/" + previous.id, {
+            method: "PATCH", body: JSON.stringify({ version: previous.version, payload }),
+          })
+        : await portalApi<ServerOrderDraft>("/order-drafts", {
+            method: "POST", body: JSON.stringify({ payload }),
+          });
+      setServerDraftId(result.id);
+      setServerDrafts(current =>
+        [result, ...current.filter(draft => draft.id !== result.id)]
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      );
+      setDraftStatus("Rascunho salvo na conta. Pode recuperar noutro dispositivo. Recalcule a cotação antes de enviar.");
+    } catch (cause) {
+      setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível guardar o rascunho na conta.");
+      // A version conflict must not be overwritten; reload versions for an informed choice.
+      await refreshServerDrafts().catch(() => {});
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
+
+  async function restoreServerDraft() {
+    if (!serverDraftId || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    try {
+      const saved = await portalApi<ServerOrderDraft>("/order-drafts/" + serverDraftId);
+      const allowed = new Set(variants.map(variant => variant.productVariantId));
+      if (saved.payload.items.some(item => !allowed.has(item.productVariantId))) {
+        setDraftStatus("Catálogo alterado. Este rascunho não pode ser recuperado sem revisão pela Bispo.");
+        return;
+      }
+      if (saved.payload.customerId && !customers.some(customer => customer.id === saved.payload.customerId)) {
+        setDraftStatus("O comprador do rascunho já não está autorizado para este acesso.");
+        return;
+      }
+      setCustomerId(saved.payload.customerId || "");
+      setLines(saved.payload.items.length
+        ? saved.payload.items.map(item => ({ id: crypto.randomUUID(), ...item }))
+        : [newLine()]);
+      setPartnerEndCustomerId(
+        endCustomers.some(customer => customer.id === saved.payload.partnerEndCustomerId)
+          ? saved.payload.partnerEndCustomerId || "" : "",
+      );
+      setBillingRecipientId(
+        billingRecipients.some(recipient => recipient.id === saved.payload.billingRecipientId)
+          ? saved.payload.billingRecipientId || "" : "",
+      );
+      setDeliveryMode(saved.payload.deliveryMode);
+      setCarrierName(saved.payload.carrierName);
+      setExpectedDeliveryDate(saved.payload.expectedDeliveryDate);
+      setCustomerReference(saved.payload.customerReference);
+      setNotes(saved.payload.notes);
+      setQuote(null);
+      setDraftDirty(false);
+      setShowOrder(true);
+      setServerDrafts(current => [saved, ...current.filter(draft => draft.id !== saved.id)]);
+      setDraftStatus("Rascunho recuperado da conta. Confirme destinatário fiscal, disponibilidade e cotação antes de enviar.");
+    } catch (cause) {
+      setDraftStatus(cause instanceof Error ? cause.message : "Falha na recuperação do rascunho.");
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
+
+  async function discardServerDraft() {
+    const previous = serverDrafts.find(draft => draft.id === serverDraftId);
+    if (!previous || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    try {
+      await portalApi("/order-drafts/" + previous.id, {
+        method: "DELETE", body: JSON.stringify({ version: previous.version }),
+      });
+      setServerDrafts(current => current.filter(draft => draft.id !== previous.id));
+      setServerDraftId("");
+      setDraftStatus("Rascunho descartado da conta. Nenhum pedido foi alterado.");
+    } catch (cause) {
+      setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível descartar o rascunho.");
+      await refreshServerDrafts().catch(() => {});
+    } finally {
+      setServerDraftBusy(false);
     }
   }
 
@@ -1390,6 +1528,23 @@ export function PartnerOrderWorkspace({
                 </div>
                 <p className="mt-2 text-xs text-slate-600">Salvo por até 30 dias somente neste navegador e neste acesso: produtos, quantidades, modalidade e data desejada. Dados pessoais, fiscais, notas e preços não são armazenados. Para concluir, confirme tudo e recalcule a cotação.</p>
                 {draftStatus && <p role="status" className="mt-2 text-xs font-medium text-[#0E3A31]">{draftStatus}</p>}
+              </div>
+            )}
+            {isDistributor && draftScope && (
+              <div className="rounded-xl border border-[#d5dedc] bg-white p-3">
+                <p className="text-xs font-semibold text-[#0E191D]">Rascunhos da conta Signa</p>
+                <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={busy || serverDraftBusy} onClick={() => void saveServerDraft()} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar na conta</button>
+                  <select aria-label="Selecionar rascunho da conta" value={serverDraftId} onChange={event => setServerDraftId(event.target.value)} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
+                    <option value="">Selecionar rascunho</option>
+                    {serverDrafts.map(draft => (
+                      <option key={draft.id} value={draft.id}>{new Date(draft.updatedAt).toLocaleString("pt-BR")} · {draft.payload.items.length} item(ns)</option>
+                    ))}
+                  </select>
+                  <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void restoreServerDraft()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40">Recuperar da conta</button>
+                  <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void discardServerDraft()} className="px-2 py-2 text-xs font-semibold text-red-700 underline disabled:opacity-40">Excluir da conta</button>
+                </div>
               </div>
             )}
             {isDistributor && customers.length === 1 && customers[0] && (
