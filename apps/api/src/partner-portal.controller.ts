@@ -28,7 +28,7 @@ import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
-import { parsePartnerEndCustomerPatch, partnerEndCustomerFields } from "./partner-end-customer-input";
+import { parsePartnerEndCustomerPatch, partnerEndCustomerFields, isPartnerEndCustomerUniqueViolation } from "./partner-end-customer-input";
 import {
   hashSignaOrderSubmissionRequest,
   parseSignaOrderSubmissionKey,
@@ -1453,7 +1453,12 @@ export class PartnerPortalController {
       values.postalCode ?? null, values.street ?? null, values.number ?? null,
       values.district ?? null, values.complement ?? null, values.city ?? null, values.state ?? null,
       values.email ?? null, values.phone ?? null, values.notes ?? null,
-    );
+    ).catch((error: unknown) => {
+      if (isPartnerEndCustomerUniqueViolation(error)) {
+        throw new ConflictException("CNPJ já cadastrado nesta carteira. Selecione o cliente existente.");
+      }
+      throw error;
+    });
     return { id, ...values, message: "Cliente comercial cadastrado." };
   }
 
@@ -1492,7 +1497,12 @@ export class PartnerPortalController {
         WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true
         RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state,email,phone,notes`,
       customerId, actor.companyId, partner.id, ...values,
-    );
+    ).catch((error: unknown) => {
+      if (isPartnerEndCustomerUniqueViolation(error)) {
+        throw new ConflictException("CNPJ já cadastrado nesta carteira. Selecione o cliente existente.");
+      }
+      throw error;
+    });
     if (!updated[0]) throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
     return { ...updated[0], message: "Cadastro comercial atualizado." };
   }

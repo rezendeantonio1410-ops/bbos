@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
+import { parsePartnerEndCustomerPatch, isPartnerEndCustomerUniqueViolation } from "./partner-end-customer-input";
 
 const complete = {
   name: " Café Central ", taxId: "11.222.333/0001-81", postalCode: "86010-010",
@@ -83,4 +83,13 @@ test("contato opcional: e-mail validado, telefone e observações com limite", (
   assert.throws(() => parsePartnerEndCustomerPatch({ email: "sem-arroba" }), /e-mail/);
   assert.throws(() => parsePartnerEndCustomerPatch({ phone: "9".repeat(41) }));
   assert.throws(() => parsePartnerEndCustomerPatch({ notes: "x".repeat(1001) }));
+});
+
+test("violação concorrente de CNPJ no banco é mapeada para conflito, sem mascarar erros alheios", () => {
+  assert.equal(isPartnerEndCustomerUniqueViolation({ code: "P2010", meta: { code: "23505" } }), true);
+  assert.equal(isPartnerEndCustomerUniqueViolation({ code: "23505" }), true);
+  assert.equal(isPartnerEndCustomerUniqueViolation({ code: "P2002" }), true);
+  for (const error of [null, new Error("timeout"), { code: "P2010", meta: { code: "23503" } }, { code: "P2024" }]) {
+    assert.equal(isPartnerEndCustomerUniqueViolation(error), false);
+  }
 });
