@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget } from "./signa-order-draft";
 
 const allowed = new Set(["reserva-500", "reserva-1000"]);
@@ -74,4 +75,12 @@ test("selection alone cannot overwrite an unrelated or stale server draft", () =
   assert.equal(signaServerDraftEditTarget("draft-missing", "draft-missing", authorized), null);
   // Selecting a different draft and then returning to the recovered one is safe.
   assert.equal(signaServerDraftEditTarget("draft-a", "draft-a", authorized), "draft-a");
+});
+
+test("form edits a persisted draft only after an explicit recovery", () => {
+  const form = readFileSync(new URL("../app/parceiro/PartnerOrderWorkspace.tsx", import.meta.url), "utf8");
+  assert.match(form, /const editTarget = signaServerDraftEditTarget\(/);
+  assert.match(form, /const previous = serverDrafts\.find\(draft => draft\.id === editTarget\)/);
+  assert.match(form, /setRecoveredServerDraftId\(saved\.id\)/);
+  assert.match(form, /setRecoveredServerDraftId\(""\)/);
 });
