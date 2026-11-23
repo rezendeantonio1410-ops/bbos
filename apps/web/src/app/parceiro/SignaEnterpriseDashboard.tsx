@@ -212,6 +212,14 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
   const [hello,setHello] = useState("Olá");
   const isSigna = partnerName.trim().toLowerCase() === "signa coffee";
   useEffect(()=>setHello(greeting()),[]);
+  // Returning to "#inicio" (back navigation, reload) must show the page top,
+  // not a position where the header is cut behind the fixed bar.
+  useEffect(()=>{
+    const toTop=()=>{if(window.location.hash===""||window.location.hash==="#inicio")window.scrollTo({top:0});};
+    toTop();
+    window.addEventListener("pageshow",toTop);
+    return ()=>window.removeEventListener("pageshow",toTop);
+  },[]);
   // Highlights the section in view (SAP Fiori / Microsoft 365 style navigation).
   useEffect(()=>{
     const ids=menu.map(item=>item.href.slice(1));

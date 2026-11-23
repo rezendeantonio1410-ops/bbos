@@ -527,6 +527,13 @@ export function PartnerOrderWorkspace({
     [lines],
   );
 
+  // Display-only estimate from the partner catalog price; the server quote
+  // ("Conferir pedido") remains the only authoritative value for the order.
+  const estimatedTotal = useMemo(() => {
+    const priceById = new Map(variants.map((variant) => [variant.productVariantId, Number(variant.catalogPrice ?? 0)]));
+    return cleanItems.reduce((sum, item) => sum + (priceById.get(item.productVariantId) ?? 0) * item.quantity, 0);
+  }, [variants, cleanItems]);
+
   const invalidateQuote = () => {
     setQuote(null);
     if (isDistributor) setDraftDirty(true);
@@ -1084,6 +1091,144 @@ export function PartnerOrderWorkspace({
         ),
       }));
   }, [variants]);
+
+  // Products come first for distributors (step 1); other partner levels keep
+  // the customer-first order.
+  const productsBlock = (
+    <>
+    {!customers.length && !loading && (
+      <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+        {isDistributor
+          ? "Estamos preparando os dados da Signa para receber o próximo pedido. Tente novamente em instantes."
+          : "Cadastre um cliente ou peça à equipe Bispo para liberar um cliente existente."}
+      </p>
+    )}
+    {!variants.length && !loading && (
+      <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+        {isDistributor
+          ? "O catálogo Signa está sendo atualizado. Tente novamente em instantes."
+          : "A equipe Bispo ainda precisa liberar produtos e preços para esta lista comercial."}
+      </p>
+    )}
+
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="font-display text-sm font-semibold text-[#0A0A0A]">{isDistributor && <span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0A0A0A] text-[11px] text-white">1</span>}Produtos</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLines((current) => [...current, newLine()]);
+            invalidateQuote();
+          }}
+          className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#0A0A0A] hover:bg-[#f4f4f1]"
+        >
+          <Plus size={13} /> Produto
+        </button>
+      </div>
+      {isDistributor && (
+        <div className="hidden items-center gap-2 px-2 text-[11px] font-semibold uppercase text-stone-500 sm:grid sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" aria-hidden="true">
+          <span>Produto</span><span>Quantidade</span><span className="text-right">Unitário</span><span className="text-right">Subtotal</span><span />
+        </div>
+      )}
+      {lines.map((line, index) => (
+        <div
+          key={line.id}
+          className={`grid items-center gap-2 rounded-lg border border-stone-200 bg-white p-2 ${isDistributor ? "sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" : "sm:grid-cols-[minmax(0,1fr)_88px_32px]"}`}
+        >
+          <select
+            value={line.productVariantId}
+            onChange={(event) => {
+              setLines((current) =>
+                current.map((item) =>
+                  item.id === line.id
+                    ? { ...item, productVariantId: event.target.value }
+                    : item,
+                ),
+              );
+              invalidateQuote();
+            }}
+            required
+          >
+            <option value="">Selecione o produto</option>
+            {availableProductsByLine.map((group) => (
+              <optgroup key={group.line} label={group.line}>
+                {group.items.map((variant) => (
+                  <option
+                    key={`${variant.productVariantId}-${variant.warehouseId}`}
+                    value={variant.productVariantId}
+                  >
+                    {variant.product} ·{" "}
+                    {variant.presentationGrams >= 1000
+                      ? `${variant.presentationGrams / 1000} kg`
+                      : `${variant.presentationGrams} g`}{" "}
+                    {variant.catalogPrice != null
+                      ? `· ${money.format(variant.catalogPrice)} `
+                      : ""}
+                    ·{" "}
+                    {isDistributor
+                      ? "disponível sob encomenda"
+                      : `estoque ${variant.availableStock}`}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={1}
+            value={line.quantity}
+            onChange={(event) => {
+              setLines((current) =>
+                current.map((item) =>
+                  item.id === line.id
+                    ? {
+                        ...item,
+                        quantity: Math.max(
+                          1,
+                          Number(event.target.value),
+                        ),
+                      }
+                    : item,
+                ),
+              );
+              invalidateQuote();
+            }}
+          />
+          {isDistributor && (
+            <>
+              <span className="text-right text-xs text-stone-600 sm:text-sm" aria-label={`Preço unitário do produto ${index + 1}`}>
+                <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Unitário:</span>
+                {quote?.items.find(item => item.productVariantId === line.productVariantId)?.unitPrice != null
+                  ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.unitPrice)
+                  : "—"}
+              </span>
+              <span className="text-right text-xs font-semibold text-[#14201d] sm:text-sm" aria-label={`Subtotal do produto ${index + 1}`}>
+                <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Subtotal:</span>
+                {quote?.items.find(item => item.productVariantId === line.productVariantId)?.totalAmount != null
+                  ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.totalAmount)
+                  : "—"}
+              </span>
+            </>
+          )}
+          <button
+            type="button"
+            aria-label={`Remover produto ${index + 1}`}
+            disabled={lines.length === 1}
+            onClick={() => {
+              setLines((current) =>
+                current.filter((item) => item.id !== line.id),
+              );
+              invalidateQuote();
+            }}
+            className="grid place-items-center text-stone-400 disabled:opacity-20"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      ))}
+    </div>
+    </>
+  );
 
   return (
     <section
@@ -1669,6 +1814,9 @@ export function PartnerOrderWorkspace({
           )}
           <form
             onSubmit={createOrder}
+            role={isDistributor ? "dialog" : undefined}
+            aria-modal={isDistributor ? true : undefined}
+            aria-labelledby={isDistributor ? "novo-pedido-title" : undefined}
             className={
               isDistributor
                 ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-5xl space-y-3 overflow-y-auto rounded-lg border border-[#D5DEDC] bg-white p-3 shadow-xl sm:inset-x-5 sm:p-4"
@@ -1678,10 +1826,12 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="sticky -top-3 z-20 -mx-3 -mt-3 flex items-center justify-between gap-3 border-b border-[#D5DEDC] bg-white px-3 py-2 sm:-top-4 sm:-mx-4 sm:-mt-4 sm:px-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#0E3A31]">
-                    Novo pedido Signa
-                  </p>
-                  <h3 className="text-lg font-semibold text-[#0E191D]">Novo pedido</h3>
+                  <h3 id="novo-pedido-title" className="font-display text-lg font-semibold text-[#0A0A0A]">Novo pedido</h3>
+                  <ol aria-label="Etapas" className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-[#6b6b66]">
+                    <li><span className="font-semibold text-[#0A0A0A]">1</span> Produtos</li>
+                    <li><span className="font-semibold text-[#0A0A0A]">2</span> Entrega e faturamento</li>
+                    <li><span className="font-semibold text-[#0A0A0A]">3</span> Conferir e enviar</li>
+                  </ol>
                 </div>
                 <button
                   type="button"
@@ -1694,20 +1844,17 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && (
-              <div className="rounded-xl border border-[#d5dedc] bg-[#F3F6F5] p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={saveOrderDraft} disabled={!draftKey || !variants.length || busy} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar rascunho</button>
-                  <button type="button" onClick={restoreOrderDraft} disabled={!draftKey || !variants.length || busy} className="rounded-lg border border-[#bacac6] bg-white px-3 py-2 text-xs font-semibold text-[#0E191D] disabled:opacity-40">Recuperar rascunho</button>
-                  <button type="button" onClick={clearOrderDraft} disabled={!draftKey || busy} className="px-2 py-2 text-xs font-semibold text-slate-600 underline disabled:opacity-40">Descartar rascunho</button>
-                </div>
-                <p className="mt-2 text-xs text-slate-600">Salvo por até 30 dias somente neste navegador e neste acesso: produtos, quantidades, modalidade e data desejada. Dados pessoais, fiscais, notas e preços não são armazenados. Para concluir, confirme tudo e recalcule a cotação.</p>
-                {draftStatus && <p role="status" className="mt-2 text-xs font-medium text-[#0E3A31]">{draftStatus}</p>}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-[#f6f6f3] px-3 py-2 text-xs text-[#55554f]">
+                <span role="status" className="mr-auto">{draftStatus || "Rascunho salvo automaticamente neste aparelho (produtos, quantidades e data)."}</span>
+                <button type="button" onClick={restoreOrderDraft} disabled={!draftKey || !variants.length || busy} className="font-semibold text-[#0A0A0A] underline underline-offset-2 disabled:opacity-40">Continuar rascunho</button>
+                <button type="button" onClick={clearOrderDraft} disabled={!draftKey || busy} className="font-semibold text-[#6b6b66] underline underline-offset-2 disabled:opacity-40">Descartar</button>
+                <button type="button" onClick={saveOrderDraft} disabled={!draftKey || !variants.length || busy} className="sr-only focus:not-sr-only focus:font-semibold">Salvar rascunho agora</button>
               </div>
             )}
             {isDistributor && draftScope && (
-              <div className="rounded-xl border border-[#d5dedc] bg-white p-3">
-                <p className="text-xs font-semibold text-[#0E191D]">Rascunhos da conta Signa</p>
-                <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança. Para alterar um rascunho existente, selecione e use Recuperar da conta antes de salvar; apenas selecionar não o substitui.</p>
+              <details className="group rounded-lg border border-[#ececE7] bg-white px-3 py-2">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-[#0A0A0A] marker:hidden">Rascunhos da conta ({serverDrafts.length}) <span className="font-normal text-[#6b6b66]">· continue em outro dispositivo</span></summary>
+                <p className="mt-2 text-xs text-[#6b6b66]">Não criam pedido, reserva, NF-e ou cobrança. Para alterar um rascunho, recupere-o antes de salvar.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" disabled={busy || serverDraftBusy} onClick={() => void saveServerDraft()} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar na conta</button>
                   <select aria-label="Selecionar rascunho da conta" value={serverDraftId} disabled={busy || serverDraftBusy} onChange={event => { serverDraftRecoveryEpoch.current += 1; setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
@@ -1720,23 +1867,10 @@ export function PartnerOrderWorkspace({
                   <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void duplicateServerDraft()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40">Duplicar na conta</button>
                    <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void discardServerDraft()} className="px-2 py-2 text-xs font-semibold text-red-700 underline disabled:opacity-40">Excluir da conta</button>
                 </div>
-              </div>
+              </details>
             )}
-            {isDistributor && customers.length === 1 && customers[0] && (
-              <div className="rounded-md border border-[#D5DEDC] bg-[#E0EAE9]/30 px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
-                  Comprador
-                </p>
-                <p className="mt-1 text-sm font-bold text-[#14201d]">
-                  {customers[0].tradeName || customers[0].name}
-                </p>
-                <p className="text-[11px] text-stone-500">
-                  Escolha os produtos e as quantidades para o seu próximo
-                  pedido. {catalog?.productCount ?? 0} apresentação(ões)
-                  disponíveis.
-                </p>
-              </div>
-            )}
+            {isDistributor && productsBlock}
+            {isDistributor && <h4 className="pt-2 font-display text-sm font-semibold text-[#0A0A0A]"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0A0A0A] text-[11px] text-white">2</span>Entrega e faturamento</h4>}
             {isDistributor && (
               <div className="rounded-md border border-[#D5DEDC] bg-white p-3">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
@@ -1844,137 +1978,7 @@ export function PartnerOrderWorkspace({
                 </select>
               </PortalField>
             )}
-            {!customers.length && !loading && (
-              <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-                {isDistributor
-                  ? "Estamos preparando os dados da Signa para receber o próximo pedido. Tente novamente em instantes."
-                  : "Cadastre um cliente ou peça à equipe Bispo para liberar um cliente existente."}
-              </p>
-            )}
-            {!variants.length && !loading && (
-              <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-                {isDistributor
-                  ? "O catálogo Signa está sendo atualizado. Tente novamente em instantes."
-                  : "A equipe Bispo ainda precisa liberar produtos e preços para esta lista comercial."}
-              </p>
-            )}
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[#14201d]">Produtos</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLines((current) => [...current, newLine()]);
-                    invalidateQuote();
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800"
-                >
-                  <Plus size={13} /> Produto
-                </button>
-              </div>
-              {isDistributor && (
-                <div className="hidden items-center gap-2 px-2 text-[11px] font-semibold uppercase text-stone-500 sm:grid sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" aria-hidden="true">
-                  <span>Produto</span><span>Quantidade</span><span className="text-right">Unitário</span><span className="text-right">Subtotal</span><span />
-                </div>
-              )}
-              {lines.map((line, index) => (
-                <div
-                  key={line.id}
-                  className={`grid items-center gap-2 rounded-lg border border-stone-200 bg-white p-2 ${isDistributor ? "sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" : "sm:grid-cols-[minmax(0,1fr)_88px_32px]"}`}
-                >
-                  <select
-                    value={line.productVariantId}
-                    onChange={(event) => {
-                      setLines((current) =>
-                        current.map((item) =>
-                          item.id === line.id
-                            ? { ...item, productVariantId: event.target.value }
-                            : item,
-                        ),
-                      );
-                      invalidateQuote();
-                    }}
-                    required
-                  >
-                    <option value="">Selecione o produto</option>
-                    {availableProductsByLine.map((group) => (
-                      <optgroup key={group.line} label={group.line}>
-                        {group.items.map((variant) => (
-                          <option
-                            key={`${variant.productVariantId}-${variant.warehouseId}`}
-                            value={variant.productVariantId}
-                          >
-                            {variant.product} ·{" "}
-                            {variant.presentationGrams >= 1000
-                              ? `${variant.presentationGrams / 1000} kg`
-                              : `${variant.presentationGrams} g`}{" "}
-                            {variant.catalogPrice != null
-                              ? `· ${money.format(variant.catalogPrice)} `
-                              : ""}
-                            ·{" "}
-                            {isDistributor
-                              ? "disponível sob encomenda"
-                              : `estoque ${variant.availableStock}`}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    value={line.quantity}
-                    onChange={(event) => {
-                      setLines((current) =>
-                        current.map((item) =>
-                          item.id === line.id
-                            ? {
-                                ...item,
-                                quantity: Math.max(
-                                  1,
-                                  Number(event.target.value),
-                                ),
-                              }
-                            : item,
-                        ),
-                      );
-                      invalidateQuote();
-                    }}
-                  />
-                  {isDistributor && (
-                    <>
-                      <span className="text-right text-xs text-stone-600 sm:text-sm" aria-label={`Preço unitário do produto ${index + 1}`}>
-                        <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Unitário:</span>
-                        {quote?.items.find(item => item.productVariantId === line.productVariantId)?.unitPrice != null
-                          ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.unitPrice)
-                          : "—"}
-                      </span>
-                      <span className="text-right text-xs font-semibold text-[#14201d] sm:text-sm" aria-label={`Subtotal do produto ${index + 1}`}>
-                        <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Subtotal:</span>
-                        {quote?.items.find(item => item.productVariantId === line.productVariantId)?.totalAmount != null
-                          ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.totalAmount)
-                          : "—"}
-                      </span>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={`Remover produto ${index + 1}`}
-                    disabled={lines.length === 1}
-                    onClick={() => {
-                      setLines((current) =>
-                        current.filter((item) => item.id !== line.id),
-                      );
-                      invalidateQuote();
-                    }}
-                    className="grid place-items-center text-stone-400 disabled:opacity-20"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
+            {!isDistributor && productsBlock}
 
             <div className="grid gap-2 sm:grid-cols-2">
               {isDistributor && (
@@ -2043,6 +2047,7 @@ export function PartnerOrderWorkspace({
               />
             </PortalField>
 
+            {isDistributor && <h4 className="pt-2 font-display text-sm font-semibold text-[#0A0A0A]"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0A0A0A] text-[11px] text-white">3</span>Conferir e enviar</h4>}
             {quote && (
               <div className="rounded-2xl bg-stone-950 p-4 text-white">
                 {quote.items.map((item) => {
@@ -2084,12 +2089,14 @@ export function PartnerOrderWorkspace({
               {isDistributor && (
                 <p
                   className={`w-full text-xs font-semibold sm:mr-auto sm:w-auto ${
-                    quote ? "text-emerald-800" : "text-stone-600"
+                    quote ? "text-[#1d5c3a]" : "text-[#55554f]"
                   }`}
                 >
                   {quote
                     ? "Pedido conferido. Agora você pode enviar."
-                    : "Confira produtos, quantidades e valores para liberar o envio."}
+                    : estimatedTotal > 0
+                      ? <>Estimativa: <span className="tabular-nums text-[#0A0A0A]">{money.format(estimatedTotal)}</span> · {cleanItems.reduce((sum, item) => sum + item.quantity, 0)} un. — confira para ver o valor final.</>
+                      : "Escolha produtos e quantidades para começar."}
                 </p>
               )}
               <button
@@ -2105,8 +2112,8 @@ export function PartnerOrderWorkspace({
                 onClick={() => void calculateQuote()}
                 className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition disabled:opacity-50 ${
                   quote
-                    ? "border border-emerald-800 bg-white text-emerald-900"
-                    : "bg-[#087568] text-white shadow-[0_8px_22px_rgba(8,117,104,0.24)] ring-2 ring-[#087568]/15"
+                    ? "border border-[#cfcfca] bg-white text-[#0A0A0A]"
+                    : "bg-[#0A0A0A] text-white shadow-sm hover:bg-[#262626]"
                 }`}
               >
                 {quote ? <RefreshCw size={14} /> : <ClipboardCheck size={14} />}
@@ -2119,7 +2126,7 @@ export function PartnerOrderWorkspace({
                     ? "Enviar pedido para aprovação da Bispo"
                     : "Confira o pedido para liberar o envio"
                 }
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#14201d] px-4 py-2.5 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-2.5 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
               >
                 <Send size={13} /> 2. Enviar pedido
               </button>

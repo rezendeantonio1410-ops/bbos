@@ -377,3 +377,8 @@ label:has(input[name="productionHarvest"]) {
 }
 @keyframes slideIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes fadeIn { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Fixed shell bar: anchors (#inicio, #pedidos-signa, ...) and restored
+   scroll positions must land below it, never hidden behind it. */
+html:has(.signa-portal) {
+  scroll-padding-top: 5rem;
+}
