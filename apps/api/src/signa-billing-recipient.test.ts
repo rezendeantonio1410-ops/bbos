@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
+import { Prisma } from "@bbos/database";
 
 const recipients = [
   { id: "signa-cnpj", documentType: "CNPJ" as const },
@@ -75,5 +76,15 @@ test("preços privados exigem valores em centavos, sem arredondamento implícito
     [0.29, 0.29],
   ] as const) {
     assert.equal(parseBillableUnitPrice(value), expected, String(value));
+  }
+});
+
+test("preços vindos do banco como Prisma.Decimal (consulta SQL direta) são aceitos", () => {
+  assert.equal(parseBillableUnitPrice(new Prisma.Decimal("38.00")), 38);
+  assert.equal(parseBillableUnitPrice(new Prisma.Decimal("76.80")), 76.8);
+  assert.equal(parseBillableUnitPrice(new Prisma.Decimal("148")), 148);
+  assert.equal(parseBillableUnitPrice(new Prisma.Decimal("19.5")), 19.5);
+  for (const invalid of ["0", "-1", "76.805", "0.001"]) {
+    assert.equal(parseBillableUnitPrice(new Prisma.Decimal(invalid)), null, invalid);
   }
 });

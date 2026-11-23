@@ -629,7 +629,6 @@ export class PartnerPortalController {
                 SELECT 1 FROM "StorefrontPartnerCustomer" link
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
                  AND so."createdByStorefrontPartnerId" IS NULL
-              )))
               ) OR ${this.signaHistoricalOrderScope()}))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
@@ -654,7 +653,6 @@ export class PartnerPortalController {
                   SELECT 1 FROM "StorefrontPartnerCustomer" link
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
                  AND so."createdByStorefrontPartnerId" IS NULL
-                )))
                 ) OR ${this.signaHistoricalOrderScope()}))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )

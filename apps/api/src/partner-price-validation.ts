@@ -4,7 +4,19 @@
  * the client request. Accept only positive, cent-exact monetary amounts to
  * avoid silent rounding in orders and fiscal/financial integrations.
  */
-export function parseBillableUnitPrice(value: unknown): number | null {
+function isDecimalLike(value: unknown): value is { toFixed(): string; toString(): string } {
+  // Prisma returns PostgreSQL NUMERIC columns as Decimal objects in raw
+  // queries; they must be validated through their exact decimal text.
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { toFixed?: unknown }).toFixed === "function" &&
+    typeof (value as { toString?: unknown }).toString === "function"
+  );
+}
+
+export function parseBillableUnitPrice(rawValue: unknown): number | null {
+  const value = isDecimalLike(rawValue) ? rawValue.toString() : rawValue;
   if (typeof value !== "number" && typeof value !== "string") {
     return null;
   }
