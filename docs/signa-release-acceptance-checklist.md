@@ -1,5 +1,14 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — recuperação local não pode sobrescrever rascunho da conta (WIP, NÃO PUBLICAR)
+
+- [x] **Código alterado na PR #67:** ao restaurar um rascunho deste navegador, a interface agora limpa **ambos** os identificadores de seleção e autorização de edição do rascunho da conta, antes de modificar o formulário. Isso evita que o clique posterior em **Salvar na conta** substitua acidentalmente um documento persistido diferente. Rascunho local expirado/inválido não altera o formulário. Commits `3ec9f21` e `5af8d1b`.
+- [x] Teste de regressão em `apps/web/src/lib/signa-order-draft.test.ts` verifica a ordem das revogações em relação à restauração e a impossibilidade de autorizar PATCH após revogação.
+- [x] **GitHub Actions [#45153375209](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45153375209) aprovado**: TypeScript, lint, testes e build. Validação via PR temporária [#106](https://github.com/rezendeantonio1410-ops/bbos/pull/106), baseada no mesmo código funcional da feature mais marcador documental; **não integrar** a PR temporária.
+- [x] Render consultado **somente leitura**: app e API RC1 permanecem `live` no SHA anterior `07c6b9f`. Banco denominado `bbos-postgres-staging` ainda **não contém a tabela `PartnerOrderDraft` nem a migração `20261123030000_signa_order_drafts` aplicada**.
+- [ ] **Gate permanece fechado:** ensaio da migração em banco isolado e plano de rollback; testes E2E autenticados entre dispositivos, conflito concorrente e submissão idempotente; aceite visual da PR #92, conflitos da PR #67, além de fiscal, Pix, Bling, BI e smoke em ambiente seguro. Não publicar nem alterar produção.
+
+
 ## Incremento em 23/11/2026 — revogar autorização de edição ao trocar/recuperar rascunhos (WIP, NÃO PUBLICAR)
 
 - [x] Na interface Signa, trocar o rascunho selecionado **revoga imediatamente a autorização de PATCH** do registro anteriormente recuperado. O usuário deve recuperar explicitamente o novo registro antes de editá-lo. Iniciar uma nova recuperação também revoga o vínculo anterior **antes de chamar a API**; se o GET falhar ou encontrar itens sem autorização, não permanece um alvo de gravação silenciosa.
