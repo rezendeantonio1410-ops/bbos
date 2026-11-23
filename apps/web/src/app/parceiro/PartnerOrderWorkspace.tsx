@@ -511,6 +511,11 @@ export function PartnerOrderWorkspace({
         setDraftStatus("Nenhum rascunho válido: pode ter expirado ou o catálogo mudou. Nada foi enviado.");
         return;
       }
+      // A local-browser draft is an independent document. Restoring it must
+      // revoke the edit target of any account draft previously recovered here;
+      // otherwise the next "Salvar na conta" could overwrite that other draft.
+      setServerDraftId("");
+      setRecoveredServerDraftId("");
       setLines(draft.lines.map(line => ({ id: crypto.randomUUID(), ...line })));
       setDeliveryMode(draft.deliveryMode);
       setExpectedDeliveryDate(draft.expectedDeliveryDate);
