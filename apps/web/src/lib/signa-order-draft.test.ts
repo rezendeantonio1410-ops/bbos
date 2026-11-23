@@ -77,6 +77,21 @@ test("selection alone cannot overwrite an unrelated or stale server draft", () =
   assert.equal(signaServerDraftEditTarget("draft-a", "draft-a", authorized), "draft-a");
 });
 
+test("switching drafts or retrying recovery revokes the previous PATCH authority", () => {
+  const form = readFileSync(new URL("../app/parceiro/PartnerOrderWorkspace.tsx", import.meta.url), "utf8");
+  const restore = form.slice(
+    form.indexOf("  async function restoreServerDraft()"),
+    form.indexOf("  // Copy the selected server draft"),
+  );
+  assert.match(restore, /setRecoveredServerDraftId\(""{0,1}\);/);
+  // The revocation must run BEFORE the network fetch, even when that fetch fails.
+  assert.ok(restore.indexOf('setRecoveredServerDraftId("")') < restore.indexOf('await portalApi<ServerOrderDraft>("/order-drafts/"'));
+  assert.match(form, /onChange=\{event => \{ setServerDraftId\(event\.target\.value\); setRecoveredServerDraftId\(""{0,1}\); \}\}/);
+  const allowed = new Set(["draft-a", "draft-b"]);
+  assert.equal(signaServerDraftEditTarget("draft-a", "", allowed), null);
+  assert.equal(signaServerDraftEditTarget("draft-b", "draft-a", allowed), null);
+});
+
 test("form edits a persisted draft only after an explicit recovery", () => {
   const form = readFileSync(new URL("../app/parceiro/PartnerOrderWorkspace.tsx", import.meta.url), "utf8");
   assert.match(form, /const editTarget = signaServerDraftEditTarget\(/);
