@@ -120,6 +120,7 @@ function SignaCustomerHistory() {
       setForm(previous => fillEmptyFromCnpj(previous as unknown as Record<string,string>, record, {
         name: "legalName", postalCode: "postalCode", street: "street", number: "number",
         district: "district", complement: "complement", city: "city", state: "state",
+        stateRegistration: r => r.suggestedStateRegistration ?? null,
       }) as unknown as SignaEndCustomerForm);
       setPhone(current => current.trim() ? current : record.phone ?? "");
       setEmail(current => current.trim() ? current : record.email ?? "");
@@ -174,7 +175,7 @@ function SignaCustomerHistory() {
         <label className="text-xs font-semibold sm:col-span-3">Complemento<input maxLength={120} value={form.complement} onChange={e=>setField("complement",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-4">Cidade *<input required maxLength={120} value={form.city} onChange={e=>setField("city",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">UF *<input required maxLength={2} pattern="[A-Za-z]{2}" value={form.state} onChange={e=>setField("state",e.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} placeholder="PR" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold sm:col-span-3">Inscrição estadual<input maxLength={20} placeholder="Números ou ISENTO (opcional)" value={form.stateRegistration??""} onChange={e=>setField("stateRegistration",e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/><span className="mt-1 block font-normal text-slate-500">A Receita não informa a IE; preencha se houver.</span></label>
+        <label className="text-xs font-semibold sm:col-span-3">Inscrição estadual<input maxLength={20} placeholder="Números ou ISENTO (opcional)" value={form.stateRegistration??""} onChange={e=>setField("stateRegistration",e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/><span className="mt-1 block font-normal text-slate-500">Sugerida pelo cadastro público quando houver; confira.</span></label>
         <label className="text-xs font-semibold sm:col-span-3">Telefone<input maxLength={40} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone de contato" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-3">E-mail<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail do cliente" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-6">Observações<textarea maxLength={1000} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>

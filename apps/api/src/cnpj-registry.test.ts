@@ -37,16 +37,68 @@ test("situação diferente de ATIVA é sinalizada", () => {
   assert.equal(mapBrasilApiCnpj({ ...sample, descricao_situacao_cadastral: "BAIXADA" }).active, false);
 });
 
-test("CNPJ inválido não consulta a rede; 404 vira NOT_FOUND; falha vira UNAVAILABLE; cache evita repetição", async () => {
-  let calls = 0;
-  const ok = new CnpjRegistryClient(async () => { calls += 1; return { status: 200, ok: true, json: async () => sample }; });
-  await assert.rejects(ok.lookup("11.111.111/1111-11"), (e: unknown) => e instanceof CnpjLookupError && e.code === "INVALID");
-  assert.equal(calls, 0);
-  await ok.lookup("11.222.333/0001-81");
-  await ok.lookup("11222333000181");
-  assert.equal(calls, 1);
-  const missing = new CnpjRegistryClient(async () => ({ status: 404, ok: false, json: async () => ({}) }));
-  await assert.rejects(missing.lookup("11222333000181"), (e: unknown) => e instanceof CnpjLookupError && e.code === "NOT_FOUND");
-  const down = new CnpjRegistryClient(async () => { throw new Error("timeout"); });
-  await assert.rejects(down.lookup("11222333000181"), (e: unknown) => e instanceof CnpjLookupError && e.code === "UNAVAILABLE");
+const cnpjWs = {
+  razao_social: "CAFETERIA EXEMPLO LTDA",
+  estabelecimento: {
+    cnpj: "11222333000181", nome_fantasia: "CAFE EXEMPLO", situacao_cadastral: "Ativa",
+    tipo_logradouro: "RUA", logradouro: "SERGIPE", numero: "100", bairro: "CENTRO", cep: "86010010",
+    cidade: { nome: "Londrina" }, estado: { sigla: "PR" }, ddd1: "43", telefone1: "33334444",
+    inscricoes_estaduais: [
+      { inscricao_estadual: "9012345678", ativo: true, estado: { sigla: "PR" } },
+      { inscricao_estadual: "111222333", ativo: false, estado: { sigla: "SP" } },
+    ],
+  },
+};
+type Reply = { status: number; body?: unknown } | "throw";
+function fakeFetch(primary: Reply, secondary: Reply) {
+  const calls: string[] = [];
+  const impl = async (url: string) => {
+    calls.push(url.includes("cnpj.ws") ? "secondary" : "primary");
+    const reply = url.includes("cnpj.ws") ? secondary : primary;
+    if (reply === "throw") throw new Error("offline");
+    return { status: reply.status, ok: reply.status < 300, json: async () => reply.body };
+  };
+  return { calls, impl };
+}
+const client = (f: ReturnType<typeof fakeFetch>, now = () => Date.now()) =>
+  new CnpjRegistryClient(f.impl, 86_400_000, "https://brasilapi.test/cnpj", "https://publica.cnpj.ws/cnpj", 21_000, now);
+
+test("CNPJ inválido não consulta a rede", async () => {
+  const f = fakeFetch({ status: 200, body: sample }, { status: 200, body: cnpjWs });
+  await assert.rejects(client(f).lookup("11.111.111/1111-11"), (e: unknown) => e instanceof CnpjLookupError && e.code === "INVALID");
+  assert.equal(f.calls.length, 0);
+});
+
+test("BrasilAPI + IE ativa da UF sugerida pela segunda fonte; cache evita nova consulta", async () => {
+  const f = fakeFetch({ status: 200, body: sample }, { status: 200, body: cnpjWs });
+  const c = client(f);
+  const record = await c.lookup("11.222.333/0001-81");
+  assert.equal(record.source, "BRASILAPI_RECEITA_FEDERAL");
+  assert.equal(record.suggestedStateRegistration, "9012345678");
+  assert.equal(record.stateRegistrations.length, 2);
+  await c.lookup("11222333000181");
+  assert.deepEqual(f.calls, ["primary", "secondary"]);
+});
+
+test("BrasilAPI indisponível ou 404 → usa a segunda fonte; ambas falham → UNAVAILABLE / NOT_FOUND", async () => {
+  const fallback = await client(fakeFetch("throw", { status: 200, body: cnpjWs })).lookup("11222333000181");
+  assert.equal(fallback.source, "CNPJ_WS_RECEITA_FEDERAL");
+  assert.equal(fallback.legalName, "CAFETERIA EXEMPLO LTDA");
+  assert.equal(fallback.city, "Londrina");
+  assert.equal(fallback.phone, "4333334444");
+  await assert.rejects(client(fakeFetch({ status: 404 }, { status: 404 })).lookup("11222333000181"), (e: unknown) => e instanceof CnpjLookupError && e.code === "NOT_FOUND");
+  await assert.rejects(client(fakeFetch("throw", "throw")).lookup("11222333000181"), (e: unknown) => e instanceof CnpjLookupError && e.code === "UNAVAILABLE");
+});
+
+test("segunda fonte respeita o intervalo mínimo; sem ela, IE fica manual", async () => {
+  let clock = 1_000_000;
+  const f = fakeFetch({ status: 200, body: sample }, { status: 200, body: cnpjWs });
+  const c = client(f, () => clock);
+  await c.lookup("11222333000181");
+  const second = await c.lookup("11444777000161");
+  assert.equal(second.suggestedStateRegistration, null);
+  assert.deepEqual(f.calls, ["primary", "secondary", "primary"]);
+  clock += 22_000;
+  await c.lookup("19131243000197");
+  assert.equal(f.calls.at(-1), "secondary");
 });

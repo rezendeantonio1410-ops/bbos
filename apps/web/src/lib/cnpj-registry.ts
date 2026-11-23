@@ -19,6 +19,9 @@ export type CnpjRegistryRecord = {
   state: string | null;
   phone: string | null;
   email: string | null;
+  stateRegistrations?: Array<{ number: string; active: boolean; state: string | null }>;
+  /** Active IE of the company's UF found in the public registry; user reviews it. */
+  suggestedStateRegistration?: string | null;
 };
 
 export type CnpjLookupOutcome =
@@ -63,8 +66,11 @@ export async function lookupCnpjRegistry(
 /** Human status for the looked-up company; inactive companies are flagged. */
 export function cnpjRegistryStatusText(record: CnpjRegistryRecord): string {
   const name = record.tradeName ? `${record.legalName} (${record.tradeName})` : record.legalName;
+  const ie = record.suggestedStateRegistration
+    ? ` IE ${record.suggestedStateRegistration} (${record.state ?? "UF"}) encontrada no cadastro público; confira.`
+    : " IE não encontrada; informe manualmente, se houver.";
   return record.active
-    ? `CNPJ ativo na Receita Federal: ${name}. Dados preenchidos; confira e informe a IE, se houver.`
+    ? `CNPJ ativo na Receita Federal: ${name}. Dados preenchidos.${ie}`
     : `Atenção: CNPJ com situação ${record.registrationStatus} na Receita Federal (${name}). Confirme antes de cadastrar.`;
 }
 

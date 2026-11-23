@@ -405,8 +405,8 @@ export default function CustomersPage() {
     cnpj: form.taxId.replace(/\D/g, "").length === 14 ? form.taxId : "",
     enabled: form.countryCode === "BR" && (showNew || Boolean(editCustomer)),
     onResolved: (record) =>
-      setForm((current) =>
-        fillEmptyFromCnpj(current as unknown as Record<string, string>, record, {
+      setForm((current) => {
+        const filled = fillEmptyFromCnpj(current as unknown as Record<string, string>, record, {
           legalName: "legalName",
           tradeName: "tradeName",
           name: (r) => r.tradeName || r.legalName,
@@ -418,9 +418,15 @@ export default function CustomersPage() {
           city: "city",
           state: "state",
           email: "email",
-          phone: "phone",
-        }) as unknown as typeof current,
-      ),
+          // This field is a mobile number (11 digits); landlines stay manual.
+          phone: (r) => (r.phone && /^\d{2}9\d{8}$/.test(r.phone) ? r.phone : null),
+          stateRegistration: (r) => r.suggestedStateRegistration ?? null,
+        }) as unknown as typeof current;
+        // A suggested IE means the state registration type is "number".
+        return !current.stateRegistrationType && !current.stateRegistration && filled.stateRegistration
+          ? { ...filled, stateRegistrationType: "NUMBER" }
+          : filled;
+      }),
   });
 
   const [requestCustomer, setRequestCustomer] = useState<Customer | null>(null);

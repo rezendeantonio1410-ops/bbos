@@ -29,5 +29,6 @@ test("consulta usa a API do BBOS e trata 404, CNPJ inválido e indisponibilidade
 
 test("situação inativa gera alerta", () => {
   assert.match(cnpjRegistryStatusText({ ...record, active: false, registrationStatus: "BAIXADA" }), /Atenção: CNPJ com situação BAIXADA/);
-  assert.match(cnpjRegistryStatusText(record), /CNPJ ativo/);
+  assert.match(cnpjRegistryStatusText(record), /CNPJ ativo.*IE não encontrada/);
+  assert.match(cnpjRegistryStatusText({ ...record, suggestedStateRegistration: "9012345678" }), /IE 9012345678 \(PR\)/);
 });
