@@ -4702,9 +4702,10 @@ function OrderDrawer({
                       Pagamento pendente
                     </p>
                     <p className="mt-1 max-w-2xl text-[11px] leading-5 text-amber-800">
-                      A produção, a reserva e a emissão da NF-e podem avançar
-                      sem registrar o pagamento. A expedição permanece bloqueada
-                      até a baixa financeira.
+                      Produção, reserva e NF-e podem avançar sem baixa financeira.
+                      José ou Suzi podem autorizar a expedição, mesmo à vista,
+                      após a NF-e autorizada e as verificações de estoque e entrega.
+                      O recebimento continuará pendente até a conciliação.
                     </p>
                   </div>
                   {order.status === "DRAFT" && canEdit && (
