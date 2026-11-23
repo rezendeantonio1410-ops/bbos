@@ -15,7 +15,7 @@ import {
   Req,
   Res,
 } from "@nestjs/common";
-import { prisma } from "@bbos/database";
+import { Prisma, prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { SalesOrdersService } from "./sales-orders.service";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
@@ -29,6 +29,12 @@ import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-peri
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
 import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
+import {
+  hashSignaOrderSubmissionRequest,
+  parseSignaOrderSubmissionKey,
+  resolveSignaSubmissionReplay,
+  splitSignaSubmission,
+} from "./signa-order-idempotency";
 import { selectDistributorCatalogVisibility } from "./signa-catalog-visibility";
 import { parseSignaServerDraftPayload, parseSignaDraftVersion, hasSignaServerDraftCapacity, MAX_SIGNA_SERVER_DRAFTS_PER_USER, type SignaServerDraftPayload } from "./signa-server-draft";
 
@@ -464,10 +470,13 @@ export class PartnerPortalController {
       );
   }
 
-  private async nextOrderNumber(companyId: string) {
+  private async nextOrderNumber(
+    companyId: string,
+    client: Prisma.TransactionClient | typeof prisma = this.database,
+  ) {
     const year = new Date().getFullYear();
     const prefix = `P-${year}-`;
-    const rows = await this.database.$queryRawUnsafe<any[]>(
+    const rows = await client.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(MAX(RIGHT(COALESCE("orderNumber",code),6)::int),0)+1 AS next
          FROM "SalesOrder"
         WHERE "companyId"=$1 AND COALESCE("orderNumber",code) LIKE $2`,
@@ -1558,14 +1567,39 @@ export class PartnerPortalController {
       billingRecipientId?: string;
       customerReference?: string;
       notes?: string;
+      submissionKey?: string;
     },
   ) {
     const { actor, partner } = await this.context(request);
     this.assertCanCreateOrders(partner);
+    const signaDistributor = this.isSignaDistributor(partner);
+    // Signa submissions are idempotent: the same key + same payload returns the
+    // original order; a different payload or an in-flight key is refused.
+    let submission: { key: string; hash: string; userId: string } | null = null;
+    if (signaDistributor) {
+      if (!actor.id) {
+        throw new ForbiddenException("Envio disponível apenas para o usuário Signa autenticado.");
+      }
+      try {
+        const { submissionKey, payload } = splitSignaSubmission(body);
+        submission = {
+          key: parseSignaOrderSubmissionKey(submissionKey),
+          hash: hashSignaOrderSubmissionRequest(payload),
+          userId: actor.id,
+        };
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error
+            ? `${error.message} Atualize a página e envie novamente.`
+            : "Envio inválido.",
+        );
+      }
+      const previous = await this.replaySignaSubmission(actor, partner, submission);
+      if (previous) return previous;
+    }
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
     let fiscalCustomerId = customerId;
-    const signaDistributor = this.isSignaDistributor(partner);
     if (signaDistributor) {
       const available = await this.findSignaBillingRecipients(actor.companyId, partner);
       const selected = selectSignaFiscalRecipient(
@@ -1699,60 +1733,218 @@ export class PartnerPortalController {
     ) {
       throw new BadRequestException("Informe uma data válida para o produto pronto.");
     }
-    const orderNumber = await this.nextOrderNumber(actor.companyId);
-    const order = await this.salesOrders.create(actor.companyId, {
-      code: orderNumber,
+    const customerReference = String(body.customerReference ?? "").trim() || null;
+    const orderNotes = [
+      `Criado no portal por ${partner.name}.`,
+      signaDistributor ? `Conta de preços: Signa Coffee. Destinatário fiscal: ${fiscalCustomerId === customerId ? "Signa (CNPJ)" : "Rodrigo (CPF)"}.` : "",
+      partner.portalAccessLevel === "DISTRIBUTOR"
+        ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
+        : "",
+      String(body.notes ?? "").trim(),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const lostRace = Symbol("signa-submission-claimed-elsewhere");
+    // Claim, order number, SalesOrder, items, accessory fields and claim
+    // completion commit or roll back together. A concurrent request with the
+    // same scoped key blocks on the unique index and then sees the claim.
+    const created = await this.database
+      .$transaction(
+        async (transaction) => {
+          let claimId: string | null = null;
+          if (submission) {
+            const claimed = await transaction.$queryRawUnsafe<Array<{ id: string }>>(
+              `INSERT INTO "PartnerOrderSubmission"
+                 (id,"companyId","partnerId","userId","submissionKey","requestHash",status,"createdAt","updatedAt")
+               VALUES ($1,$2,$3,$4,$5,$6,'CLAIMED',NOW(),NOW())
+               ON CONFLICT ("companyId","partnerId","userId","submissionKey") DO NOTHING
+               RETURNING id`,
+              randomUUID(), actor.companyId, partner.id, submission.userId,
+              submission.key, submission.hash,
+            );
+            if (!claimed[0]) throw lostRace;
+            claimId = claimed[0].id;
+          }
+          // Serialise portal order numbering per company until commit.
+          await transaction.$queryRawUnsafe(
+            `SELECT pg_advisory_xact_lock(hashtextextended('partner-order-number:' || $1, 0)) IS NULL AS locked`,
+            actor.companyId,
+          );
+          const orderNumber = await this.nextOrderNumber(actor.companyId, transaction);
+          const order = await this.salesOrders.create(
+            actor.companyId,
+            {
+              code: orderNumber,
+              orderNumber,
+              customerId: fiscalCustomerId,
+              createdByStorefrontPartnerId: partner.id,
+              salesChannelId,
+              freight: 0,
+              notes: orderNotes,
+              expectedDeliveryDate: body.expectedDeliveryDate || undefined,
+              items: pricedItems,
+            },
+            transaction,
+          );
+          await transaction.$executeRawUnsafe(
+            `UPDATE "SalesOrder"
+                SET "createdByStorefrontPartnerId"=$2,"paymentType"=$3,
+                    "paymentTermsSnapshot"=$4,"freightResponsibility"=$5,
+                    "carrierName"=$6,"customerReference"=$7,"updatedAt"=NOW()
+              WHERE id=$1 AND "companyId"=$8`,
+            order.id,
+            partner.id,
+            paymentType,
+            paymentTermsSnapshot,
+            deliveryMode,
+            carrierName || null,
+            customerReference,
+            actor.companyId,
+          );
+          if (partnerEndCustomerId) {
+            await transaction.$executeRawUnsafe(
+              `UPDATE "SalesOrder" SET "partnerEndCustomerId"=$3
+                WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$4`,
+              order.id, actor.companyId, partnerEndCustomerId, partner.id,
+            );
+          }
+          if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
+            await transaction.$executeRawUnsafe(
+              `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
+                WHERE id=$1 AND "companyId"=$2`,
+              order.id,
+              actor.companyId,
+              requestedReadyDate,
+            );
+          }
+          if (claimId) {
+            const completed = await transaction.$executeRawUnsafe(
+              `UPDATE "PartnerOrderSubmission"
+                  SET status='COMPLETED',"salesOrderId"=$2,"completedAt"=NOW(),"updatedAt"=NOW()
+                WHERE id=$1 AND "companyId"=$3 AND "partnerId"=$4 AND status='CLAIMED'`,
+              claimId, order.id, actor.companyId, partner.id,
+            );
+            if (completed !== 1) throw new ConflictException("Envio do pedido não pôde ser confirmado.");
+          }
+          return { orderId: order.id, orderNumber, totalAmount: Number(order.totalAmount) };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          maxWait: 10_000,
+          timeout: 30_000,
+        },
+      )
+      .catch((error: unknown) => {
+        if (error === lostRace) return null;
+        throw error;
+      });
+    if (!created) {
+      // Another request committed this key first: answer with its outcome.
+      const previous = submission
+        ? await this.replaySignaSubmission(actor, partner, submission)
+        : null;
+      if (previous) return previous;
+      throw new ConflictException("Este pedido já está sendo enviado. Aguarde alguns segundos e atualize a lista.");
+    }
+    const { orderId, orderNumber } = created;
+    await this.afterPartnerOrderCommitted(actor, partner, {
+      orderId,
       orderNumber,
-      customerId: fiscalCustomerId,
-      createdByStorefrontPartnerId: partner.id,
-      salesChannelId,
-      freight: 0,
-      notes: [
-        `Criado no portal por ${partner.name}.`,
-        signaDistributor ? `Conta de preços: Signa Coffee. Destinatário fiscal: ${fiscalCustomerId === customerId ? "Signa (CNPJ)" : "Rodrigo (CPF)"}.` : "",
-        partner.portalAccessLevel === "DISTRIBUTOR"
-          ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
-          : "",
-        String(body.notes ?? "").trim(),
-      ]
-        .filter(Boolean)
-        .join(" "),
-      expectedDeliveryDate: body.expectedDeliveryDate || undefined,
-      items: pricedItems,
+      paymentType,
+      requestedDeliveryDate: body.expectedDeliveryDate || null,
     });
-    await this.database.$executeRawUnsafe(
-      `UPDATE "SalesOrder"
-          SET "createdByStorefrontPartnerId"=$2,"paymentType"=$3,
-              "paymentTermsSnapshot"=$4,"freightResponsibility"=$5,
-              "carrierName"=$6,"customerReference"=$7,"updatedAt"=NOW()
-        WHERE id=$1 AND "companyId"=$8`,
-      order.id,
-      partner.id,
+    return {
+      id: orderId,
+      code: orderNumber,
+      status: "DRAFT",
+      totalAmount: created.totalAmount,
       paymentType,
       paymentTermsSnapshot,
-      deliveryMode,
-      carrierName || null,
-      String(body.customerReference ?? "").trim() || null,
-      actor.companyId,
+      replayed: false,
+      message: this.partnerOrderMessage(partner),
+    };
+  }
+
+  private partnerOrderMessage(partner: any) {
+    return partner.portalAccessLevel === "DISTRIBUTOR"
+      ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."
+      : "Pedido enviado para conferência da equipe Bispo.";
+  }
+
+  /**
+   * Returns the original response for a repeated Signa submission, refuses a
+   * reused key with a different payload, or null when the key is unused.
+   */
+  private async replaySignaSubmission(
+    actor: PartnerActor,
+    partner: any,
+    submission: { key: string; hash: string; userId: string },
+  ) {
+    const rows = await this.database.$queryRawUnsafe<Array<{
+      status: string; requestHash: string; salesOrderId: string | null;
+    }>>(
+      `SELECT status,"requestHash","salesOrderId" FROM "PartnerOrderSubmission"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND "userId"=$3 AND "submissionKey"=$4
+        LIMIT 1`,
+      actor.companyId, partner.id, submission.userId, submission.key,
     );
-    if (partnerEndCustomerId) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "SalesOrder" SET "partnerEndCustomerId"=$3
-          WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$4`,
-        order.id, actor.companyId, partnerEndCustomerId, partner.id,
+    if (!rows[0]) return null;
+    const decision = resolveSignaSubmissionReplay(rows[0], submission.hash);
+    if (decision.kind === "payload-mismatch") {
+      throw new ConflictException(
+        "Este envio já foi usado para um pedido com outro conteúdo. Atualize a página e envie novamente.",
       );
     }
-    if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
-          WHERE id=$1 AND "companyId"=$2`,
-        order.id,
-        actor.companyId,
-        requestedReadyDate,
-      );
+    if (decision.kind === "in-progress") {
+      throw new ConflictException("Este pedido já está sendo enviado. Aguarde alguns segundos e atualize a lista.");
     }
-    if (paymentType === "TERM") {
-      await this.termApprovals.ensureForOrder(actor.companyId, order.id, {
+    const orders = await this.database.$queryRawUnsafe<Array<{
+      id: string; code: string; status: string; totalAmount: unknown;
+      paymentType: string | null; paymentTermsSnapshot: string | null;
+      partnerRequestedReadyDate: Date | null;
+    }>>(
+      `SELECT id,COALESCE("orderNumber",code) AS code,status::text AS status,"totalAmount",
+              "paymentType"::text AS "paymentType","paymentTermsSnapshot","partnerRequestedReadyDate"
+         FROM "SalesOrder"
+        WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$3 LIMIT 1`,
+      decision.salesOrderId, actor.companyId, partner.id,
+    );
+    const order = orders[0];
+    if (!order) throw new ConflictException("Pedido original deste envio não está disponível.");
+    // Completes any post-commit step interrupted by a timeout. All are idempotent.
+    await this.afterPartnerOrderCommitted(actor, partner, {
+      orderId: order.id,
+      orderNumber: order.code,
+      paymentType: order.paymentType === "TERM" ? "TERM" : "CASH",
+      requestedDeliveryDate: order.partnerRequestedReadyDate
+        ? order.partnerRequestedReadyDate.toISOString().slice(0, 10)
+        : null,
+    });
+    return {
+      id: order.id,
+      code: order.code,
+      status: order.status,
+      totalAmount: Number(order.totalAmount),
+      paymentType: order.paymentType,
+      paymentTermsSnapshot: order.paymentTermsSnapshot,
+      replayed: true,
+      message: `Pedido ${order.code} já havia sido recebido. Nenhum pedido duplicado foi criado.`,
+    };
+  }
+
+  /** Post-commit side effects. Each one is idempotent so a retry can re-run it. */
+  private async afterPartnerOrderCommitted(
+    actor: PartnerActor,
+    partner: any,
+    order: {
+      orderId: string;
+      orderNumber: string;
+      paymentType: "CASH" | "TERM";
+      requestedDeliveryDate: string | null;
+    },
+  ) {
+    if (order.paymentType === "TERM") {
+      await this.termApprovals.ensureForOrder(actor.companyId, order.orderId, {
         id: actor.id ?? partner.id,
         companyId: actor.companyId,
         name: String(actor.name ?? partner.contactName ?? partner.name),
@@ -1761,22 +1953,22 @@ export class PartnerPortalController {
       });
     }
     await this.customerLifecycle.record(
-      order.id,
+      order.orderId,
       "ORDER_SUBMITTED",
       "Pedido enviado para aprovação",
-      `${partner.name} enviou o pedido ${orderNumber} para aprovação da Bispo Coffees.`,
+      `${partner.name} enviou o pedido ${order.orderNumber} para aprovação da Bispo Coffees.`,
       "BBOS",
-      `partner-order:submitted:${order.id}`,
+      `partner-order:submitted:${order.orderId}`,
       {
         partnerId: partner.id,
-        requestedDeliveryDate: body.expectedDeliveryDate || null,
+        requestedDeliveryDate: order.requestedDeliveryDate,
       },
       false,
     );
     if (partner.portalAccessLevel === "DISTRIBUTOR") {
-      const notificationMessage = `${partner.name} enviou o pedido ${orderNumber}. Confirme a data de entrega e aprove a liberação para produção.`;
+      const notificationMessage = `${partner.name} enviou o pedido ${order.orderNumber}. Confirme a data de entrega e aprove a liberação para produção.`;
       for (const targetRole of ["ADMIN", "EXECUTIVE"]) {
-        const notificationType = `SALES_DISTRIBUTOR_ORDER:${order.id}:${targetRole}`;
+        const notificationType = `SALES_DISTRIBUTOR_ORDER:${order.orderId}:${targetRole}`;
         await this.database.$executeRawUnsafe(
           `INSERT INTO "OperationalNotification"
             (id,"companyId",type,title,message,"targetRole","createdAt")
@@ -1794,17 +1986,5 @@ export class PartnerPortalController {
         );
       }
     }
-    return {
-      id: order.id,
-      code: orderNumber,
-      status: "DRAFT",
-      totalAmount: Number(order.totalAmount),
-      paymentType,
-      paymentTermsSnapshot,
-      message:
-        partner.portalAccessLevel === "DISTRIBUTOR"
-          ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."
-          : "Pedido enviado para conferência da equipe Bispo.",
-    };
   }
 }

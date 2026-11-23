@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   hashSignaOrderSubmissionRequest,
   parseSignaOrderSubmissionKey,
+  resolveSignaSubmissionReplay,
+  splitSignaSubmission,
 } from "./signa-order-idempotency";
 
 test("chave de submissão exige formato estável e não aceita caracteres de controle", () => {
@@ -61,4 +63,60 @@ test("migração de submissão exige unicidade por empresa, parceiro, usuário e
   assert.match(migration, /status = 'COMPLETED' AND "salesOrderId" IS NOT NULL AND "completedAt" IS NOT NULL/);
   assert.match(migration, /FOREIGN KEY \("salesOrderId"\) REFERENCES "SalesOrder"\(id\) ON DELETE RESTRICT/);
   assert.doesNotMatch(migration, /(?:UPDATE|DELETE FROM|ALTER TABLE)\s+"(?:SalesOrder|Payment|AccountsReceivable)"/i);
+});
+
+test("reenvio com mesma chave e mesmo conteúdo devolve o pedido original", () => {
+  const hash = "a".repeat(64);
+  assert.deepEqual(
+    resolveSignaSubmissionReplay({ status: "COMPLETED", requestHash: hash, salesOrderId: "so-1" }, hash),
+    { kind: "replay", salesOrderId: "so-1" },
+  );
+  assert.deepEqual(
+    resolveSignaSubmissionReplay({ status: "COMPLETED", requestHash: hash, salesOrderId: "so-1" }, "b".repeat(64)),
+    { kind: "payload-mismatch" },
+  );
+  assert.deepEqual(
+    resolveSignaSubmissionReplay({ status: "CLAIMED", requestHash: hash, salesOrderId: null }, hash),
+    { kind: "in-progress" },
+  );
+});
+
+test("chave de envio não participa do fingerprint do pedido", () => {
+  const payload = { customerId: "c1", items: [{ productVariantId: "v1", quantity: 1 }] };
+  const first = splitSignaSubmission({ ...payload, submissionKey: "key-aaaaaaaaaaaaaaaa" });
+  const second = splitSignaSubmission({ submissionKey: "key-bbbbbbbbbbbbbbbb", ...payload });
+  assert.equal(first.submissionKey, "key-aaaaaaaaaaaaaaaa");
+  assert.equal(hashSignaOrderSubmissionRequest(first.payload), hashSignaOrderSubmissionRequest(second.payload));
+  for (const invalid of [null, [], "x"]) assert.throws(() => splitSignaSubmission(invalid));
+});
+
+test("POST /partner-portal/orders grava reserva, pedido e conclusão na mesma transação", () => {
+  const source = readFileSync(join(__dirname, "partner-portal.controller.ts"), "utf8");
+  const start = source.indexOf('@Post("orders")');
+  const end = source.indexOf("private partnerOrderMessage", start);
+  assert.ok(start >= 0 && end > start);
+  const route = source.slice(start, end);
+  const tx = route.slice(route.indexOf(".$transaction("));
+  // Signa requires a valid key before any validation or write.
+  assert.ok(route.indexOf("parseSignaOrderSubmissionKey") < route.indexOf(".$transaction("));
+  assert.ok(route.indexOf("replaySignaSubmission(actor, partner, submission)") < route.indexOf("assertCustomer("));
+  // Order inside the transaction: claim → numbering → SalesOrder → accessories → completion.
+  const claim = tx.indexOf('INSERT INTO "PartnerOrderSubmission"');
+  const numbering = tx.indexOf("this.nextOrderNumber(actor.companyId, transaction)");
+  const create = tx.indexOf("this.salesOrders.create(");
+  const complete = tx.indexOf(`SET status='COMPLETED',"salesOrderId"=$2`);
+  assert.ok(claim > 0 && claim < numbering && numbering < create && create < complete, "ordem transacional");
+  assert.match(tx, /ON CONFLICT \("companyId","partnerId","userId","submissionKey"\) DO NOTHING/);
+  assert.match(tx, /transaction,\n\s*\);/);
+  assert.match(tx, /isolationLevel: Prisma\.TransactionIsolationLevel\.ReadCommitted/);
+  // No accessory write escapes the transaction.
+  const inside = tx.slice(0, tx.indexOf(".catch("));
+  assert.doesNotMatch(inside, /this\.database\.\$executeRawUnsafe/);
+  assert.match(route, /if \(error === lostRace\) return null;/);
+  // Side effects only after commit, and re-run idempotently on replay.
+  assert.ok(route.indexOf("afterPartnerOrderCommitted") > route.indexOf(".catch("));
+  const replay = source.slice(source.indexOf("private async replaySignaSubmission"));
+  assert.match(replay, /WHERE "companyId"=\$1 AND "partnerId"=\$2 AND "userId"=\$3 AND "submissionKey"=\$4/);
+  assert.match(replay, /"createdByStorefrontPartnerId"=\$3/);
+  assert.match(replay, /afterPartnerOrderCommitted/);
 });

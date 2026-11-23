@@ -17,6 +17,7 @@ import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
 import { formatCnpj, validateSignaEndCustomerForm } from "@/lib/signa-end-customer-form";
+import { parseSignaOrderSubmission, reuseOrCreateSignaOrderSubmission, signaOrderSubmissionStorageKey, type SignaOrderSubmission } from "@/lib/signa-order-submission";
 import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, signaServerDraftRecoveryIsCurrent, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
@@ -261,6 +262,7 @@ export function PartnerOrderWorkspace({
   const [serverDraftBusy, setServerDraftBusy] = useState(false);
   // Invalidate an in-flight GET when the selection, form or account context changes.
   const serverDraftRecoveryEpoch = useRef(0);
+  const pendingSubmission = useRef<SignaOrderSubmission | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
@@ -924,6 +926,7 @@ export function PartnerOrderWorkspace({
 
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     if (billingLoading) {
       setError("Aguarde a consulta dos destinatários fiscais antes de enviar o pedido.");
       return;
@@ -936,14 +939,9 @@ export function PartnerOrderWorkspace({
       setError("Confira o pedido antes de enviá-lo.");
       return;
     }
-    setBusy(true);
-    setError("");
-    try {
-      const order = await portalApi<{ code: string; message: string }>(
-        "/orders",
-        {
-          method: "POST",
-          body: JSON.stringify({
+    // Must match the server fingerprint: the same content keeps the same key
+    // across double clicks, timeouts and reloads; any change gets a new key.
+    const orderBody = JSON.stringify({
             partnerEndCustomerId: isDistributor ? partnerEndCustomerId || null : undefined,
             customerId,
             billingRecipientId: billingEnabled ? billingRecipientId : undefined,
@@ -958,10 +956,42 @@ export function PartnerOrderWorkspace({
             expectedDeliveryDate,
             customerReference,
             notes,
-          }),
+    });
+    const submissionStorageKey = signaOrderSubmissionStorageKey(draftScope);
+    let submission: SignaOrderSubmission;
+    try {
+      let stored: SignaOrderSubmission | null = null;
+      try {
+        stored = submissionStorageKey
+          ? parseSignaOrderSubmission(window.sessionStorage.getItem(submissionStorageKey))
+          : null;
+      } catch { /* Storage may be disabled; the in-memory key still blocks double clicks. */ }
+      submission = reuseOrCreateSignaOrderSubmission(
+        stored ?? pendingSubmission.current, orderBody, Date.now(), () => window.crypto.randomUUID(),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível preparar o envio.");
+      return;
+    }
+    pendingSubmission.current = submission;
+    if (submissionStorageKey) {
+      try { window.sessionStorage.setItem(submissionStorageKey, JSON.stringify(submission)); } catch { /* ignore */ }
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const order = await portalApi<{ code: string; message: string; replayed?: boolean }>(
+        "/orders",
+        {
+          method: "POST",
+          body: JSON.stringify({ ...JSON.parse(orderBody), submissionKey: submission.key }),
         },
       );
-      setMessage(`${order.code} criado. ${order.message}`);
+      pendingSubmission.current = null;
+      if (submissionStorageKey) {
+        try { window.sessionStorage.removeItem(submissionStorageKey); } catch { /* ignore */ }
+      }
+      setMessage(order.replayed ? order.message : `${order.code} criado. ${order.message}`);
       // Only remove the local draft after the server confirms the order.
       if (draftKey) {
         try { window.localStorage.removeItem(draftKey); } catch { /* Storage may be disabled. */ }

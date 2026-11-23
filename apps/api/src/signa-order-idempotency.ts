@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 
 /**
- * Strict client-generated submission key for a future DB-backed, scoped
- * idempotency claim. This utility ALONE does not deduplicate orders.
+ * Strict client-generated submission key. Deduplication is enforced by the
+ * scoped unique PartnerOrderSubmission claim committed in the same database
+ * transaction as the SalesOrder (see PartnerPortalController.createOrder).
  */
 export function parseSignaOrderSubmissionKey(raw: unknown): string {
   if (
@@ -47,4 +48,41 @@ export function hashSignaOrderSubmissionRequest(body: unknown): string {
     throw new Error("Pedido excede o tamanho máximo permitido.");
   }
   return createHash("sha256").update(canonical, "utf8").digest("hex");
+}
+
+export type SignaSubmissionRecord = {
+  status: string;
+  requestHash: string;
+  salesOrderId: string | null;
+};
+
+export type SignaSubmissionDecision =
+  | { kind: "replay"; salesOrderId: string }
+  | { kind: "payload-mismatch" }
+  | { kind: "in-progress" };
+
+/**
+ * Decides what to do when a submission key was already used in this
+ * company/partner/user scope. Claims are committed together with the order,
+ * so a visible CLAIMED row only exists if the schema invariant was bypassed;
+ * it is treated as in progress and never creates a second order.
+ */
+export function resolveSignaSubmissionReplay(
+  existing: SignaSubmissionRecord,
+  requestHash: string,
+): SignaSubmissionDecision {
+  if (existing.requestHash !== requestHash) return { kind: "payload-mismatch" };
+  if (existing.status === "COMPLETED" && existing.salesOrderId) {
+    return { kind: "replay", salesOrderId: existing.salesOrderId };
+  }
+  return { kind: "in-progress" };
+}
+
+/** Splits the transport key from the business payload that is fingerprinted. */
+export function splitSignaSubmission(body: unknown): { submissionKey: unknown; payload: Record<string, unknown> } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Pedido inválido.");
+  }
+  const { submissionKey, ...payload } = body as Record<string, unknown>;
+  return { submissionKey, payload };
 }
