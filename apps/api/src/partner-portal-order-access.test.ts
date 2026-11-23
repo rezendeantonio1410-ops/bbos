@@ -28,8 +28,11 @@ test("PDF fiscal passa pela mesma autorização de pedido", () => {
   ]) {
     const start = source.indexOf(route);
     assert.ok(start >= 0, route);
-    const nextRoute = source.indexOf("  @", start + route.length);
-    const segment = source.slice(start, nextRoute === -1 ? undefined : nextRoute);
+    // Parameter decorators (@Req, @Param, @Res) are inside the method.
+    // End only at the next controller route, not at a parameter decorator.
+    const rest = source.slice(start + route.length);
+    const nextRoute = rest.search(/\n  @(?:Get|Post|Patch|Put|Delete)\(/);
+    const segment = rest.slice(0, nextRoute === -1 ? undefined : nextRoute);
     assert.match(segment, /await this\.assertPartnerOrder\(partner, actor\.companyId, orderId\)/);
   }
 });
