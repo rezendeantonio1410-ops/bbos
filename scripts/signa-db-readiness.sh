@@ -7,7 +7,7 @@ set -euo pipefail
 fail() { printf 'BLOQUEADO: %s\n' "$*" >&2; exit 2; }
 
 [[ $# -eq 1 ]] || fail "Informe o caminho para o backup pg_dump -Fc."
-[[ -n "\${DATABASE_URL:-}" ]] || fail "Defina DATABASE_URL no ambiente (nao imprima a URL)."
+[[ -n "$(printenv DATABASE_URL 2>/dev/null)" ]] || fail "Defina DATABASE_URL no ambiente (nao imprima a URL)."
 backup="$1"
 [[ -s "$backup" ]] || fail "Backup inexistente ou vazio."
 for bin in psql pg_restore find sort comm grep diff wc mktemp; do
@@ -60,14 +60,25 @@ if ! diff -u "$tmp/expected" "$tmp/pending"; then
   fail "Lista de migracoes pendentes difere das quatro revisadas; nao executar deploy."
 fi
 
-missing_tables="$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 \
-  -c 'SELECT count(*) FROM (VALUES ('\''Company'\''),('\''StorefrontPartner'\''),('\''User'\''),('\''SalesOrder'\''),('\''PartnerEndCustomer'\'')) AS r(name) WHERE to_regclass('\''public."'\'' || name || '\''"'\'') IS NULL;')" ||
-  fail "Falha ao conferir tabelas de referencia."
+missing_tables="$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 <<'SQL'
+SELECT count(*) FROM (VALUES
+ ('Company'),('StorefrontPartner'),('User'),('SalesOrder'),('PartnerEndCustomer')
+) AS r(name)
+WHERE to_regclass('public."' || name || '"') IS NULL;
+SQL
+)" || fail "Falha ao conferir tabelas de referencia."
 [[ "$missing_tables" == "0" ]] || fail "$missing_tables tabelas estruturais ausentes."
 
-duplicates="$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 \
-  -c 'SELECT count(*) FROM (SELECT "companyId","partnerId",regexp_replace("taxId",'\''[^0-9]'\'','\'''\'','\''g'\'') AS cnpj FROM "PartnerEndCustomer" WHERE active = true AND "taxId" IS NOT NULL AND length(regexp_replace("taxId",'\''[^0-9]'\'','\'''\'','\''g'\'')) = 14 GROUP BY 1,2,3 HAVING count(*) > 1) d;')" ||
-  fail "Falha ao verificar duplicidade de CNPJ."
+duplicates="$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 <<'SQL'
+SELECT count(*) FROM (
+  SELECT "companyId", "partnerId", regexp_replace("taxId", '[^0-9]', '', 'g') AS cnpj
+  FROM "PartnerEndCustomer"
+  WHERE active = true AND "taxId" IS NOT NULL
+    AND length(regexp_replace("taxId", '[^0-9]', '', 'g')) = 14
+  GROUP BY 1, 2, 3 HAVING count(*) > 1
+) d;
+SQL
+)" || fail "Falha ao verificar duplicidade de CNPJ."
 [[ "$duplicates" == "0" ]] || fail "$duplicates carteiras com CNPJ comercial duplicado."
 
 printf 'PRE-FLIGHT OK: quatro migracoes Signa pendentes, sem colisoes; banco intocado.\n'
