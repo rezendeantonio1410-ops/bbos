@@ -105,6 +105,34 @@ export async function databaseIsEmpty(prisma) {
   return Number(rows[0]?.n ?? -1) === 0;
 }
 
+/**
+ * Isolated environments only: a bootstrap interrupted by an older,
+ * non-transactional version can leave tables without the Signa migrations.
+ * When BBOS_EMPTY_DATABASE_BOOTSTRAP=true, the database name is the one
+ * explicitly declared in BBOS_RESETTABLE_DATABASE_NAME and NO migration from
+ * LEGACY_CUTOFF onwards was ever applied, the public schema is recreated so
+ * the bootstrap can start over. Production never matches these conditions.
+ */
+export async function resetIncompleteBootstrap(prisma) {
+  const resettable = process.env.BBOS_RESETTABLE_DATABASE_NAME?.trim();
+  if (process.env.BBOS_EMPTY_DATABASE_BOOTSTRAP !== "true" || !resettable) return false;
+  const [identity] = await prisma.$queryRawUnsafe(`SELECT current_database() AS name`);
+  if (identity?.name !== resettable) return false;
+  if (await databaseIsEmpty(prisma)) return false;
+  const [table] = await prisma.$queryRawUnsafe(`SELECT to_regclass('public."_prisma_migrations"') IS NOT NULL AS present`);
+  if (table?.present) {
+    const [recent] = await prisma.$queryRawUnsafe(
+      `SELECT count(*)::int AS n FROM "_prisma_migrations" WHERE migration_name >= $1 AND finished_at IS NOT NULL`,
+      LEGACY_CUTOFF,
+    );
+    if (Number(recent?.n) > 0) return false;
+  }
+  console.log(`Bootstrap: inicialização anterior incompleta em ${resettable}; recriando o esquema public.`);
+  await prisma.$executeRawUnsafe(`DROP SCHEMA public CASCADE`);
+  await prisma.$executeRawUnsafe(`CREATE SCHEMA public`);
+  return true;
+}
+
 const PRISMA_MIGRATIONS_TABLE = `CREATE TABLE "_prisma_migrations" (
   "id" VARCHAR(36) PRIMARY KEY NOT NULL,
   "checksum" VARCHAR(64) NOT NULL,

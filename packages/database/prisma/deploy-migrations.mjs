@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
-import { bootstrapEmptyDatabase, databaseIsEmpty } from "./bootstrap-empty-database.mjs";
+import { bootstrapEmptyDatabase, databaseIsEmpty, resetIncompleteBootstrap } from "./bootstrap-empty-database.mjs";
 
 const prisma = new PrismaClient();
 const recoverableMigration = "20261108170000_customer_specific_pricing_v1";
@@ -75,6 +75,7 @@ try {
   // Isolated environments only: an explicitly flagged, EMPTY database is built
   // by replaying the history the way production reached it. Databases that
   // already have tables (production included) always take the normal path.
+  if (process.env.BBOS_EMPTY_DATABASE_BOOTSTRAP === "true") await resetIncompleteBootstrap(prisma);
   if (process.env.BBOS_EMPTY_DATABASE_BOOTSTRAP === "true" && (await databaseIsEmpty(prisma))) {
     await prisma.$disconnect();
     await bootstrapEmptyDatabase();
