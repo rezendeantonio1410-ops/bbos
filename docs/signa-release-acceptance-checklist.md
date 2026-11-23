@@ -1,5 +1,14 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — contrato de idempotência para envio (WIP; NÃO PUBLICAR)
+
+- [x] Criado `apps/api/src/signa-order-idempotency.ts` para validação estrita da chave de submissão (16–128 caracteres), serialização canônica e SHA-256 do corpo completo do pedido. Alterar cliente, destinatário fiscal, itens, quantidades ou condição de pagamento produz fingerprint diferente. O hash é para comparar requisições; **não efetua deduplicação sem persistência e controle transacional**.
+- [x] Testes de regressão em `signa-order-idempotency.test.ts` cobrem estabilidade da serialização, mutações semânticas e rejeição de payloads inválidos/excessivos. Integrados aos scripts `apps/api/package.json` e `package.json`. Commits: `0ed986a`, `b874ff4`, `64aff5a`, `5d8b622`.
+- [x] [CI GitHub Actions #45190015958](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45190015958) **aprovado** no código da feature mais marcador documental da [PR temporária #111](https://github.com/rezendeantonio1410-ops/bbos/pull/111); TypeScript, lint, testes e build passaram. PR #111 encerrada **sem merge**. O marcador da PR temporária não altera runtime.
+- [x] Render somente leitura: app e API RC1 permanecem `live` no commit `46f8a7c` (#108). No PostgreSQL rotulado staging, `PartnerOrderDraft` e `PartnerOrderSubmission` ausentes; migração dos rascunhos ainda não aplicada. Nenhuma migração/deploy/dado alterado.
+- [ ] **Bloqueio crítico NÃO resolvido:** criar chave única transacional por `companyId/partnerId/userId/submissionKey`, registrar hash + estado do pedido, implementar replay seguro de submissões iguais e 409 para payload divergente/in-flight; conectar chave estável à UI durante retries e realizar testes concorrentes autenticados. A rota `POST /partner-portal/orders` permanece **não idempotente**, logo não publicar a PR #67.
+- [ ] Restantes: migração e E2E dos rascunhos, resolução de conflitos da PR #67, cadastro comercial com CNPJ/CEP/endereço persistido separado do fiscal, módulo pagamentos reutilizando financeiro existente, teste desktop/mobile e aceite. PR #92 e #108 já integradas, não refazer.
+
 ## Incremento em 23/11/2026 — privacidade dos rascunhos Signa no transporte HTTP (WIP, NÃO PUBLICAR)
 
 - [x] **Mudança isolada na PR #67:** respostas autenticadas de `GET /partner-portal/order-drafts` e `GET /partner-portal/order-drafts/:draftId` agora declaram `Cache-Control: private, no-store`, evitando armazenamento HTTP de payloads que podem conter notas, escolhas de clientes e destinatários fiscais. Nenhuma mudança nas permissões, preço, banco, envio de pedidos ou integrações. Commits `84a4426` e `029e2bd`.
