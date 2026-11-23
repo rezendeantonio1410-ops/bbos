@@ -1,5 +1,13 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — toggle Novo pedido revoga recuperação pendente (WIP, NÃO PUBLICAR)
+
+- [x] **Correção real na PR #67:** o botão principal **Novo pedido** já não faz `setShowOrder(value => !value)` diretamente. Fechar passa por `closeOrder()` e abrir invalida o epoch de recuperação, limpa seleção/autoridade PATCH de rascunhos da conta e seleção fiscal. Um GET iniciado antes do toggle não pode reintroduzir dados de outro documento no formulário. Commits `75a81e5` e `fe6565a`, teste de regressão em `signa-order-draft.test.ts`.
+- [x] **CI GitHub Actions [#45171403934](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45171403934) aprovado:** TypeScript, lint, testes e build. PR temporária [#109](https://github.com/rezendeantonio1410-ops/bbos/pull/109) usou exatamente o mesmo código da feature mais marcador documental e foi encerrada sem merge. Os testes novos são de regressão do código de UI e do guarda; **não substituem E2E autenticado**.
+- [x] **Render somente leitura:** no banco rotulado `bbos-postgres-staging`, `to_regclass('public."PartnerOrderDraft"')` retornou `null` e a migração `20261123030000_signa_order_drafts` segue sem execução (`applied=0`). App e API RC1 estavam `live` no commit `46f8a7c` (merge isolado da PR #108 para compactar o formulário); **este incremento da PR #67 não foi publicado**.
+- [ ] **Bloqueio crítico adicional confirmado na leitura do código:** `POST /partner-portal/orders` ainda chama `nextOrderNumber` e `salesOrders.create` sem chave idempotente nem transação única abrangendo criação, atualizações posteriores e notificações. Não há evidência de duplicação real, mas **retry/timeout/duplo envio pode gerar pedido duplicado**; exigir chave de submissão única por escopo, deduplicação transacional no banco, verificação de hash da solicitação e testes de retry concorrente antes do release.
+- [ ] **Gate fechado:** PR #67 draft com conflitos, migração/rollback em banco isolado, testes autenticados entre dispositivos/contas, idempotência, validação visual da UI (incluindo melhorias isoladas #92 e #108), fiscal, Pix, Bling, relatórios, logs e smoke completo. Não fazer merge/deploy ou alterar dados reais.
+
 ## Incremento em 23/11/2026 — ignorar resposta atrasada na recuperação de rascunhos (WIP; NÃO PUBLICAR)
 
 - [x] Corrigida a condição de corrida no formulário Signa: um GET de rascunho retornando depois de mudança de seleção, fechamento do pedido, abertura de novo pedido, restauração local ou perda do escopo não pode reaplicar dados antigos nem autorizar PATCH de outro rascunho. A lista de seleção fica indisponível enquanto houver operação de rascunho em andamento.
