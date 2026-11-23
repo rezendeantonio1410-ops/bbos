@@ -45,6 +45,7 @@ import {
   validateTaxId,
 } from "./supplier-verification";
 import { buildPurchaseConfirmationPdf } from "./purchase-confirmation-pdf";
+import { approvedPurchaseCorrectionEligible, parseApprovedPurchaseValueCorrection } from "./approved-purchase-value-correction";
 
 type Actor = {
   userId: string;
@@ -776,6 +777,118 @@ export class GreenCoffeePurchasesController {
       "Content-Length": pdf.length,
     });
     response.send(pdf);
+  }
+
+  /**
+   * Approved-value correction is a separate, audited administrative flow.
+   * It does not reopen approval, touch fiscal documents, or settle payments.
+   */
+  @Patch(":id/correct-approved-value")
+  async correctApprovedValue(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: unknown,
+  ) {
+    const actor = await this.sessionActor(request);
+    let correction: ReturnType<typeof parseApprovedPurchaseValueCorrection>;
+    try {
+      correction = parseApprovedPurchaseValueCorrection(body);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Valor ou justificativa inválidos.",
+      );
+    }
+    return this.db.$transaction(async (tx) => {
+      // Lock the purchase before checking whether related records have appeared.
+      const locked = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "GreenCoffeePurchase" WHERE id=$1 AND "companyId"=$2 FOR UPDATE`,
+        id, actor.companyId,
+      );
+      if (!locked[0]) throw new NotFoundException("Compra não encontrada.");
+
+      await this.requireApprover(tx, actor.companyId, actor);
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+        include: { installments: true },
+      });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      if (!approvedPurchaseCorrectionEligible({
+        approvalStatus: purchase.approvalStatus,
+        status: purchase.status,
+        externalAcceptanceStatus: purchase.externalAcceptanceStatus,
+        operationalStatus: purchase.operationalStatus,
+        paymentTermType: purchase.paymentTermType,
+        currency: purchase.currency,
+        brokerCommissionAmount: purchase.brokerCommissionAmount,
+        pricePerBag: purchase.pricePerBag,
+      })) {
+        throw new BadRequestException("A correção só é permitida antes do aceite, recebimento e pagamentos, em compra à vista sem comissão.");
+      }
+      const previous = Number(purchase.totalValue);
+      if (Math.round(previous * 100) !== Math.round(correction.expectedTotalValue * 100)) {
+        throw new BadRequestException("O valor da compra mudou. Atualize a ficha antes de corrigir.");
+      }
+      const [installment] = purchase.installments;
+      if (purchase.installments.length !== 1 ||
+          installment?.status !== PurchaseInstallmentStatus.COMMITTED ||
+          Number(installment.percentage) !== 100 ||
+          installment.accountsPayableId !== null ||
+          installment.paidAt !== null ||
+          Math.round(Number(installment.amount) * 100) !== Math.round(previous * 100)) {
+        throw new BadRequestException("As parcelas não estão elegíveis para correção automática.");
+      }
+      const [receipts, payables, documents, acceptances, fiscal] = await Promise.all([
+        tx.greenCoffeeReceipt.count({ where: { purchaseId: id } }),
+        tx.accountsPayable.count({ where: { purchaseId: id } }),
+        tx.purchaseConfirmationDocumentVersion.count({ where: { purchaseId: id } }),
+        tx.greenCoffeePurchaseAcceptance.count({ where: { purchaseId: id } }),
+        tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+          `SELECT COUNT(*)::bigint AS count FROM "FiscalDocumentAllocation" WHERE "purchaseId"=$1`, id,
+        ),
+      ]);
+      if (receipts || payables || documents || acceptances || Number(fiscal[0]?.count ?? 0)) {
+        throw new BadRequestException("A compra já possui documentação, aceite, contas a pagar ou recebimentos vinculados.");
+      }
+      const contractedKg = Number(purchase.contractedWeightKg);
+      if (!Number.isFinite(contractedKg) || contractedKg <= 0) {
+        throw new BadRequestException("Quantidade contratada inválida.");
+      }
+      const pricePerKg = Math.round(correction.totalValue / contractedKg * 10000) / 10000;
+      await tx.greenCoffeePurchase.update({
+        where: { id },
+        data: { totalValue: correction.totalValue, pricePerKg },
+      });
+      await tx.greenCoffeePurchaseInstallment.update({
+        where: { id: installment.id },
+        data: { amount: correction.totalValue },
+      });
+      await tx.greenCoffeeAuditEvent.create({
+        data: {
+          companyId: actor.companyId,
+          purchaseId: id,
+          action: "PURCHASE_APPROVED_VALUE_CORRECTED",
+          actorId: actor.userId,
+          actorName: actor.userName,
+          metadata: {
+            previousTotal: previous,
+            correctedTotal: correction.totalValue,
+            previousPricePerKg: purchase.pricePerKg == null ? null : Number(purchase.pricePerKg),
+            correctedPricePerKg: pricePerKg,
+            contractedWeightKg: contractedKg,
+            reason: correction.reason,
+            installmentId: installment.id,
+          },
+        },
+      });
+      return {
+        purchaseId: id,
+        purchaseNumber: purchase.purchaseNumber,
+        previousTotal: previous,
+        totalValue: correction.totalValue,
+        pricePerKg,
+        correctedBy: actor.userName,
+      };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   @Patch(":id")
