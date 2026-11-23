@@ -54,11 +54,11 @@ test("migração de submissão exige unicidade por empresa, parceiro, usuário e
     join(__dirname, "../../../packages/database/prisma/schema.prisma"),
     "utf8",
   );
-  assert.match(migration, /CREATE UNIQUE INDEX "PartnerOrderSubmission_scope_key_unique"[\\s\\S]*?\\("companyId", "partnerId", "userId", "submissionKey"\\)/);
-  assert.match(schema, /@@unique\\(\\[companyId, partnerId, userId, submissionKey\\], map: "PartnerOrderSubmission_scope_key_unique"\\)/);
-  assert.match(migration, /"requestHash" ~ '\^\\[0-9a-f\\]\\{64\\}\\$'/);
+  assert.match(migration, /CREATE UNIQUE INDEX "PartnerOrderSubmission_scope_key_unique"[\s\S]*?\("companyId", "partnerId", "userId", "submissionKey"\)/);
+  assert.match(schema, /@@unique\(\[companyId, partnerId, userId, submissionKey\], map: "PartnerOrderSubmission_scope_key_unique"\)/);
+  assert.match(migration, /"requestHash" ~ '\^\[0-9a-f\]\{64\}\$'/);
   assert.match(migration, /"salesOrderId" TEXT/);
   assert.match(migration, /status = 'COMPLETED' AND "salesOrderId" IS NOT NULL AND "completedAt" IS NOT NULL/);
-  assert.match(migration, /FOREIGN KEY \\("salesOrderId"\\) REFERENCES "SalesOrder"\\(id\\) ON DELETE RESTRICT/);
-  assert.doesNotMatch(migration, /(?:UPDATE|DELETE FROM|ALTER TABLE)\\s+"(?:SalesOrder|Payment|AccountsReceivable)"/i);
+  assert.match(migration, /FOREIGN KEY \("salesOrderId"\) REFERENCES "SalesOrder"\(id\) ON DELETE RESTRICT/);
+  assert.doesNotMatch(migration, /(?:UPDATE|DELETE FROM|ALTER TABLE)\s+"(?:SalesOrder|Payment|AccountsReceivable)"/i);
 });
