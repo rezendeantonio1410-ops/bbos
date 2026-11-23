@@ -9,6 +9,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test:approved-purchase-value-correction": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/approved-purchase-value-correction.test.ts",
+    "test:sales-order-term-correction": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-term-correction.test.ts",
     "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts",
     "test:customer-fiscal-readiness": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/customer-fiscal-readiness.test.ts",
     "test:customer-visit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-visit-input.test.ts",
