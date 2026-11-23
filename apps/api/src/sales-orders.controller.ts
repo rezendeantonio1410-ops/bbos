@@ -2001,12 +2001,23 @@ export class SalesOrdersController {
       id,
     );
   }
+  // A Bispo may release a cash sale before payment. Only the designated
+  // executive authorizer can make that exception; no receivable is settled.
+  private unpaidShipmentAuthorizer(actor: any) {
+    if (!isDesignatedTermCreditApprover(actor) || !actor.id) return undefined;
+    return {
+      actorId: String(actor.id),
+      name: String(actor.name ?? ""),
+      role: String(actor.role),
+    };
+  }
+
   @Post(":id/ship")
   async ship(@Param("id") id: string, @Req() request: any) {
-    return this.salesOrders.ship(
-      (await this.actorForOrder(request, id)).companyId,
-      id,
-    );
+    const actor = await this.actorForOrder(request, id);
+    return this.salesOrders.ship(actor.companyId, id, {
+      unpaidReleaseAuthorizedBy: this.unpaidShipmentAuthorizer(actor),
+    });
   }
   @Post(":id/deliver")
   async deliver(
@@ -2025,6 +2036,7 @@ export class SalesOrdersController {
       method,
       actorName: actor.name,
       actorRole: actor.role,
+      unpaidReleaseAuthorizedBy: this.unpaidShipmentAuthorizer(actor),
     });
   }
   @Post(":id/picking")
