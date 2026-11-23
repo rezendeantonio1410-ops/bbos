@@ -74,3 +74,9 @@ test("cadastro de cliente comercial exige ficha completa, impede CNPJ duplicado 
   const guard = source.slice(source.indexOf("private async assertEndCustomerTaxIdAvailable"));
   assert.match(guard, /WHERE "companyId"=\$1 AND "partnerId"=\$2 AND active=true AND "taxId"=\$3/);
 });
+
+test("portal do parceiro só lê financeiro: não confirma recebimentos, Pix, NF-e nem Bling", () => {
+  const writes = /(INSERT INTO|UPDATE|DELETE FROM)\s+"(AccountsReceivable|AccountsReceivablePayment|Payment|PixCharge|PixPayment|FiscalDocument|BankTransaction|BankReconciliation|BlingSync\w*)"/gi;
+  assert.deepEqual(source.match(writes) ?? [], []);
+  assert.doesNotMatch(source, /\.(accountsReceivable|fiscalDocument|pixCharge|payment)\.(create|update|upsert|delete)/);
+});
