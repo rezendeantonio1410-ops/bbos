@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:approved-purchase-value-correction": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/approved-purchase-value-correction.test.ts",
     "dev": "nest start --watch",
     "build": "corepack pnpm --filter @bbos/database build && corepack pnpm --filter @bbos/shared build && nest build",
     "start": "corepack pnpm --filter @bbos/database migrate:deploy && node dist/main.js",
