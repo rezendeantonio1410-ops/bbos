@@ -681,13 +681,18 @@ export class PartnerPortalController {
           this.isSignaDistributor(partner),
         )
       : null;
+    // Never return the unrestricted internal product list to a distributor.
+    // An ambiguous pricing customer must result in no visible catalog until
+    // the account configuration is fixed, not a leak across price lists.
     const variants = catalog
       ? await this.distributorVariantOptions(
           actor.companyId,
           distributorCustomer.id,
           catalog.variantIds,
         )
-      : internalOptions.variants;
+      : partner.portalAccessLevel === "DISTRIBUTOR"
+        ? []
+        : internalOptions.variants;
     return {
       customers: customers.map((customer) => ({
         ...customer,
