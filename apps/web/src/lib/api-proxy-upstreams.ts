@@ -10,7 +10,9 @@
 export const LEGACY_STAGING_API = "https://bbos-api-staging.onrender.com";
 
 function normalizeApiBase(value: string) {
-  const base = value.trim().replace(/\/$/, "");
+  let base = value.trim().replace(/\/$/, "");
+  // Render's private service reference is "host:port" without a scheme.
+  if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
   return base.endsWith("/api") ? base : `${base}/api`;
 }
 

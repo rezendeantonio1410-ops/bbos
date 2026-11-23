@@ -12,7 +12,8 @@ export function getApiBaseUrl() {
     .map((value) => value?.trim())
     .find((value): value is string => Boolean(value));
   if (configured) {
-    const base = configured.replace(/\/$/, "");
+    let base = configured.replace(/\/$/, "");
+    if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
     return base.endsWith("/api") ? base : `${base}/api`;
   }
   return "http://localhost:3001/api";

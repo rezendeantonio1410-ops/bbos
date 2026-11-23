@@ -23,3 +23,7 @@ test("somente leituras podem ser repetidas em outro destino", () => {
   for (const method of ["GET", "head", "OPTIONS"]) assert.equal(mayRetryOnAnotherUpstream(method), true);
   for (const method of ["POST", "PATCH", "PUT", "DELETE"]) assert.equal(mayRetryOnAnotherUpstream(method), false);
 });
+
+test("referência privada do Render sem esquema recebe http://", () => {
+  assert.deepEqual(proxyUpstreamBases({ BBOS_API_INTERNAL_URL: "bbos-api-homolog-ab12:10000" }), ["http://bbos-api-homolog-ab12:10000/api"]);
+});
