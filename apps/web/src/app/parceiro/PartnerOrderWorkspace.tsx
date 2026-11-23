@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ClipboardCheck,
@@ -16,7 +16,7 @@ import {
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
-import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
+import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, signaServerDraftRecoveryIsCurrent, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -258,6 +258,8 @@ export function PartnerOrderWorkspace({
   // Only the draft actually recovered into this form can be overwritten.
   const [recoveredServerDraftId, setRecoveredServerDraftId] = useState("");
   const [serverDraftBusy, setServerDraftBusy] = useState(false);
+  // Invalidate an in-flight GET when the selection, form or account context changes.
+  const serverDraftRecoveryEpoch = useRef(0);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
@@ -286,6 +288,7 @@ export function PartnerOrderWorkspace({
   const [editingEndCustomerId, setEditingEndCustomerId] = useState("");
 
   function closeOrder() {
+    serverDraftRecoveryEpoch.current += 1;
     setBillingRecipientId("");
     setPartnerEndCustomerId("");
     setEndCustomerSearch("");
@@ -404,6 +407,7 @@ export function PartnerOrderWorkspace({
   useEffect(() => {
     if (!isDistributor) return;
     const openNewOrder = () => {
+      serverDraftRecoveryEpoch.current += 1;
       setError("");
       setMessage("");
       setBillingRecipientId("");
@@ -511,6 +515,7 @@ export function PartnerOrderWorkspace({
         setDraftStatus("Nenhum rascunho válido: pode ter expirado ou o catálogo mudou. Nada foi enviado.");
         return;
       }
+      serverDraftRecoveryEpoch.current += 1;
       // A local-browser draft is an independent document. Restoring it must
       // revoke the edit target of any account draft previously recovered here;
       // otherwise the next "Salvar na conta" could overwrite that other draft.
@@ -554,6 +559,7 @@ export function PartnerOrderWorkspace({
 
   useEffect(() => {
     if (!draftScope || !isDistributor) {
+      serverDraftRecoveryEpoch.current += 1;
       setServerDrafts([]);
       setServerDraftId("");
       setRecoveredServerDraftId("");
@@ -610,11 +616,15 @@ export function PartnerOrderWorkspace({
 
   async function restoreServerDraft() {
     if (!serverDraftId || serverDraftBusy) return;
+    const requestedId = serverDraftId;
+    const requestEpoch = ++serverDraftRecoveryEpoch.current;
     // A failed or interrupted recovery must not retain permission to PATCH a prior draft.
     setRecoveredServerDraftId("");
     setServerDraftBusy(true);
     try {
-      const saved = await portalApi<ServerOrderDraft>("/order-drafts/" + serverDraftId);
+      const saved = await portalApi<ServerOrderDraft>("/order-drafts/" + encodeURIComponent(requestedId));
+      // Never apply a late response after selection, form or account context changes.
+      if (!signaServerDraftRecoveryIsCurrent(requestedId, saved.id, requestEpoch, serverDraftRecoveryEpoch.current)) return;
       const allowed = new Set(variants.map(variant => variant.productVariantId));
       if (saved.payload.items.some(item => !allowed.has(item.productVariantId))) {
         setDraftStatus("Catálogo alterado. Este rascunho não pode ser recuperado sem revisão pela Bispo.");
@@ -648,7 +658,9 @@ export function PartnerOrderWorkspace({
       setServerDrafts(current => [saved, ...current.filter(draft => draft.id !== saved.id)]);
       setDraftStatus("Rascunho recuperado da conta. Confirme destinatário fiscal, disponibilidade e cotação antes de enviar.");
     } catch (cause) {
-      setDraftStatus(cause instanceof Error ? cause.message : "Falha na recuperação do rascunho.");
+      if (requestEpoch === serverDraftRecoveryEpoch.current) {
+        setDraftStatus(cause instanceof Error ? cause.message : "Falha na recuperação do rascunho.");
+      }
     } finally {
       setServerDraftBusy(false);
     }
@@ -1587,7 +1599,7 @@ export function PartnerOrderWorkspace({
                 <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança. Para alterar um rascunho existente, selecione e use Recuperar da conta antes de salvar; apenas selecionar não o substitui.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" disabled={busy || serverDraftBusy} onClick={() => void saveServerDraft()} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar na conta</button>
-                  <select aria-label="Selecionar rascunho da conta" value={serverDraftId} onChange={event => { setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
+                  <select aria-label="Selecionar rascunho da conta" value={serverDraftId} disabled={busy || serverDraftBusy} onChange={event => { serverDraftRecoveryEpoch.current += 1; setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
                     <option value="">Selecionar rascunho</option>
                     {serverDrafts.map(draft => (
                       <option key={draft.id} value={draft.id}>{new Date(draft.updatedAt).toLocaleString("pt-BR")} · {draft.payload.items.length} item(ns)</option>
