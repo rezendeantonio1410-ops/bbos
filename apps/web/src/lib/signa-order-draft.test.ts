@@ -31,3 +31,21 @@ test("recovery requires current catalog permission, valid storage and 30-day TTL
   assert.equal(parseSignaOrderDraft(JSON.stringify({ ...draft, savedAt: 200000 }), allowed, 100000), null);
   assert.notEqual(signaOrderDraftKey("partner-a"), signaOrderDraftKey("partner-b"));
 });
+
+
+test("recovery strips injected customer, fiscal and pricing fields from forged local storage", () => {
+  const original = createSignaOrderDraft([{ productVariantId: "reserva-500", quantity: 1 }], allowed, "PICKUP", "", 100000);
+  assert.ok(original);
+  const poisoned = {
+    ...original,
+    customerId: "private-customer",
+    billingRecipientId: "private-billing",
+    totalAmount: 99999,
+    lines: [{ productVariantId: "reserva-500", quantity: 1, unitPrice: 76.8, taxId: "private-tax-id" }],
+  };
+  const restored = parseSignaOrderDraft(JSON.stringify(poisoned), allowed, 100001);
+  assert.deepEqual(restored, original);
+  for (const sensitive of ["private-customer", "private-billing", "private-tax-id", "76.8", "99999"]) {
+    assert.equal(JSON.stringify(restored).includes(sensitive), false);
+  }
+});
