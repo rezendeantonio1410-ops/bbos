@@ -10,7 +10,14 @@ import { randomUUID } from "node:crypto";
 const api = (process.env.SIGNA_E2E_API ?? "").replace(/\/$/, "");
 const password = process.env.SIGNA_E2E_PASSWORD ?? "";
 if (!api || !password) { console.error("Defina SIGNA_E2E_API e SIGNA_E2E_PASSWORD."); process.exit(2); }
-if (/bbos-(api|app)-rc1|bbos-api-staging|bispocoffees\.com/i.test(api)) { console.error("Recusado: host de produção."); process.exit(2); }
+// Deny by default: a production alias/custom domain must never be accepted.
+let endpoint;
+try { endpoint = new URL(api); } catch { console.error("Recusado: URL inválida."); process.exit(2); }
+const local = ["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname) && ["http:", "https:"].includes(endpoint.protocol);
+const renderHomolog = endpoint.origin === "https://bbos-api-homolog-8w8f.onrender.com";
+if ((!local && !renderHomolog) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || !["", "/", "/api"].includes(endpoint.pathname)) {
+  console.error("Recusado: use exclusivamente a API isolada de homologação ou loopback."); process.exit(2);
+}
 
 const results = [];
 async function check(name, fn) {
@@ -19,7 +26,7 @@ async function check(name, fn) {
 }
 
 async function login(email) {
-  const response = await fetch(`${api}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+  const response = await fetch(`${api}/auth/login`, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
   assert.equal(response.status, 201, `login ${email}: HTTP ${response.status}`);
   const cookie = (response.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
   assert.ok(cookie, "sem cookie de sessão");
@@ -28,7 +35,7 @@ async function login(email) {
 function client(cookie) {
   return async (path, { method = "GET", body } = {}) => {
     const response = await fetch(`${api}/partner-portal${path}`, {
-      method, headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
+      method, redirect: "error", headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
     });
     const text = await response.text();
     let json = null; try { json = text ? JSON.parse(text) : null; } catch { json = text; }
@@ -55,7 +62,7 @@ const other = client(await login("outro@homolog.test"));
 let options, recipients, endCustomer, draft, order;
 
 await check("sem sessão é recusado", async () => {
-  const response = await fetch(`${api}/partner-portal/summary`);
+  const response = await fetch(`${api}/partner-portal/summary`, { redirect: "error" });
   assert.ok([401, 403].includes(response.status), `HTTP ${response.status}`);
   return `HTTP ${response.status}`;
 });
@@ -191,6 +198,24 @@ await check("painel, histórico e relatórios carregam", async () => {
   for (const path of ["/summary", "/end-customer-history", "/commercial-reports"]) {
     const r = await signa(path); assert.equal(r.status, 200, `${path} HTTP ${r.status}`);
   }
+});
+
+await check("pedido novo não simula pagamento e não aparece no financeiro de outro parceiro", async () => {
+  const id = order?.id ?? order?.order?.id;
+  assert.ok(id, "pedido de homologação ausente");
+  const own = await signa("/summary");
+  assert.equal(own.status, 200);
+  assert.ok(Array.isArray(own.json.partnerOrders));
+  const row = own.json.partnerOrders.find((x) => x.id === id);
+  assert.ok(row, "pedido não visível ao parceiro de origem");
+  for (const field of ["receivableStatus", "receivableAmount", "openAmount", "paymentDate", "dueDate"]) {
+    assert.equal(row[field], null, `campo financeiro ${field} indevidamente preenchido`);
+  }
+  assert.notEqual(row.billingAvailable, true, "cobrança sem título autorizada");
+  const foreign = await other("/summary");
+  assert.equal(foreign.status, 200);
+  assert.ok(Array.isArray(foreign.json.partnerOrders));
+  assert.equal(foreign.json.partnerOrders.some((x) => x.id === id), false, "pedido de outro parceiro exposto");
 });
 
 const failed = results.filter((r) => !r.ok);
