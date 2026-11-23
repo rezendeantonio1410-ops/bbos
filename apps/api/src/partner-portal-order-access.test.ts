@@ -48,3 +48,14 @@ test("edição de cliente comercial tem escopo de empresa/parceiro e não altera
   assert.match(segment, /RETURNING id,name,city,state/);
   assert.doesNotMatch(segment, /UPDATE "Customer"/);
 });
+
+test("dados pessoais dos rascunhos da conta Signa não podem ser armazenados em cache HTTP", () => {
+  for (const route of ['order-drafts', 'order-drafts/:draftId']) {
+    const decorator = `@Get("${route}")`;
+    const start = source.indexOf(decorator);
+    assert.ok(start >= 0, `Rota ausente: ${route}`);
+    const methodStart = source.indexOf("async ", start);
+    const declaration = source.slice(start, methodStart);
+    assert.match(declaration, /@Header\("Cache-Control", "private, no-store"\)/);
+  }
+});
