@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import { selectDistributorCatalogVisibility } from "./signa-catalog-visibility";
 
@@ -31,7 +32,7 @@ test("non-Signa distributors retain legacy price-list fallback", () => {
 });
 
 test("controller consistently applies the Signa-only strict policy to options, quote and order", () => {
-  const controller = readFileSync(new URL("./partner-portal.controller.ts", import.meta.url), "utf8");
+  const controller = readFileSync(join(__dirname, "partner-portal.controller.ts"), "utf8");
   assert.equal((controller.match(/this\.distributorCatalog\(/g) ?? []).length, 3);
   assert.equal((controller.match(/this\.isSignaDistributor\(partner\)/g) ?? []).length, 4);
   assert.match(controller, /if \(!visible\.needsLegacyFallback\)/);
