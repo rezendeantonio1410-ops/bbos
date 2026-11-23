@@ -1934,6 +1934,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     options: {
       allowMissingCarrierLabel?: boolean;
       skipCustomerNotification?: boolean;
+      unpaidReleaseAuthorizedBy?: { actorId: string; name: string; role: string };
     } = {},
   ) {
     const result = await this.database.$transaction(
@@ -2049,10 +2050,35 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
               ) AS paid`,
             order.id,
           );
-          if (!paymentRows[0]?.paid)
-            throw new BadRequestException(
-              "A NF-e pode ser emitida antes do pagamento, mas a expedição de uma venda à vista exige a baixa financeira.",
+          if (!paymentRows[0]?.paid) {
+            const authorizedBy = options.unpaidReleaseAuthorizedBy;
+            if (!authorizedBy?.actorId || !authorizedBy.name || !["ADMIN", "EXECUTIVE"].includes(authorizedBy.role)) {
+              throw new BadRequestException(
+                "Venda à vista com pagamento pendente exige autorização administrativa de expedição.",
+              );
+            }
+            // Audit is committed atomically with the shipment and inventory movements.
+            // Financial status and AccountsReceivable are intentionally untouched.
+            await transaction.$executeRawUnsafe(
+              `INSERT INTO "SalesOrderCustomerEvent"
+                (id,"companyId","salesOrderId","eventType",title,detail,source,public,metadata,"idempotencyKey","occurredAt","createdAt")
+               VALUES ($1,$2,$3,'UNPAID_SHIPMENT_AUTHORIZED',
+                       'Expedição autorizada com pagamento pendente',
+                       'A Bispo autorizou a expedição sem baixa financeira. A cobrança continua em aberto.',
+                       'ADMIN',FALSE,$4::jsonb,$5,NOW(),NOW())
+               ON CONFLICT ("idempotencyKey") DO NOTHING`,
+              randomUUID(),
+              order.companyId,
+              order.id,
+              JSON.stringify({
+                authorizedByUserId: authorizedBy.actorId,
+                authorizedByName: authorizedBy.name,
+                authorizedByRole: authorizedBy.role,
+                paymentPendingAtAuthorization: true,
+              }),
+              `sales-order:unpaid-shipment-authorized:${id}`,
             );
+          }
         }
         if (
           order.shippingProvider === "MELHOR_ENVIO" &&
@@ -2223,6 +2249,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
       method: "PICKUP" | "MANUAL_DELIVERY";
       actorName?: string | null;
       actorRole?: string | null;
+      unpaidReleaseAuthorizedBy?: { actorId: string; name: string; role: string };
     },
   ) {
     const current = await this.database.salesOrder.findFirst({
@@ -2296,6 +2323,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         await this.ship(companyId, id, {
           allowMissingCarrierLabel: true,
           skipCustomerNotification: true,
+          ...(input.unpaidReleaseAuthorizedBy
+            ? { unpaidReleaseAuthorizedBy: input.unpaidReleaseAuthorizedBy }
+            : {}),
         });
       } catch (error) {
         if (isFinishedGoodsLotCoverageError(error)) {

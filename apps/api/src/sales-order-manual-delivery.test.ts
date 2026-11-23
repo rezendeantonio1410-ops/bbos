@@ -66,6 +66,55 @@ test("manual delivery dispatches inventory once and closes the order with audit"
   assert.equal((lifecycle[0]?.[6] as any)?.actorName, "José Rezende");
 });
 
+test("authorized cash shipment carries executive identity and does not mark a payment as received", async () => {
+  const shipments: unknown[][] = [];
+  const service = new SalesOrdersService({
+    record: async () => null,
+  } as never);
+  Object.defineProperty(service, "database", {
+    value: {
+      salesOrder: {
+        findFirst: async () => ({ id: "order-cash", status: SalesOrderStatus.INVOICED }),
+        update: async () => ({}),
+      },
+      $executeRawUnsafe: async () => 1,
+    },
+  });
+  service.ship = async (...args: unknown[]) => {
+    shipments.push(args);
+    return { orderId: "order-cash", idempotent: false, movementIds: [], greenReservationIds: [] };
+  };
+  await service.deliver("company-1", "order-cash", {
+    method: "PICKUP",
+    actorName: "José",
+    actorRole: "ADMIN",
+    unpaidReleaseAuthorizedBy: { actorId: "admin-1", name: "José", role: "ADMIN" },
+  });
+  assert.deepEqual(shipments[0]?.[2], {
+    allowMissingCarrierLabel: true,
+    skipCustomerNotification: true,
+    unpaidReleaseAuthorizedBy: { actorId: "admin-1", name: "José", role: "ADMIN" },
+  });
+});
+
+test("unpaid shipment requires designated executive and creates private audit within shipment transaction", () => {
+  const root = join(__dirname, "../../..");
+  const service = readFileSync(join(root, "apps/api/src/sales-orders.service.ts"), "utf8");
+  const controller = readFileSync(join(root, "apps/api/src/sales-orders.controller.ts"), "utf8");
+  const page = readFileSync(join(root, "apps/web/src/app/(system)/pedidos/page.tsx"), "utf8");
+  assert.match(controller, /isDesignatedTermCreditApprover\(actor\)/);
+  assert.match(controller, /unpaidReleaseAuthorizedBy: this\.unpaidShipmentAuthorizer\(actor\)/);
+  assert.match(service, /if \(!paymentRows\[0\]\?\.paid\) \{/);
+  assert.match(service, /unpaidReleaseAuthorizedBy/);
+  assert.match(service, /UNPAID_SHIPMENT_AUTHORIZED/);
+  assert.match(service, /'ADMIN',FALSE/);
+  assert.match(service, /paymentPendingAtAuthorization: true/);
+  assert.match(service, /A NF-e vigente precisa estar autorizada pela SEFAZ/);
+  assert.match(service, /Pedido não possui reservas ativas/);
+  assert.doesNotMatch(page, /A expedição permanece bloqueada\s+até a baixa financeira/);
+  assert.match(page, /O recebimento continuará pendente até a conciliação/);
+});
+
 test("an already delivered order still reconciles a stale carrier exception", async () => {
   const lifecycle: unknown[][] = [];
   const shipmentUpdates: unknown[][] = [];
