@@ -101,3 +101,16 @@ export function parsePartnerEndCustomerPatch(
   }
   return values as PartnerEndCustomerPatch;
 }
+
+/**
+ * A PostgreSQL unique-index race on the commercial CNPJ must be reported as
+ * HTTP 409, not a generic server failure. Prisma raw SQL uses P2010 with
+ * the database SQLSTATE inside meta.code; Prisma model calls may use P2002.
+ */
+export function isPartnerEndCustomerUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; meta?: { code?: unknown } };
+  return candidate.code === "23505"
+    || candidate.code === "P2002"
+    || (candidate.code === "P2010" && candidate.meta?.code === "23505");
+}
