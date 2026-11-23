@@ -10,7 +10,14 @@ import { randomUUID } from "node:crypto";
 const api = (process.env.SIGNA_E2E_API ?? "").replace(/\/$/, "");
 const password = process.env.SIGNA_E2E_PASSWORD ?? "";
 if (!api || !password) { console.error("Defina SIGNA_E2E_API e SIGNA_E2E_PASSWORD."); process.exit(2); }
-if (/bbos-(api|app)-rc1|bbos-api-staging|bispocoffees\.com/i.test(api)) { console.error("Recusado: host de produção."); process.exit(2); }
+// Deny by default: a production alias/custom domain must never be accepted.
+let endpoint;
+try { endpoint = new URL(api); } catch { console.error("Recusado: URL inválida."); process.exit(2); }
+const local = ["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname) && ["http:", "https:"].includes(endpoint.protocol);
+const renderHomolog = endpoint.origin === "https://bbos-api-homolog-8w8f.onrender.com";
+if ((!local && !renderHomolog) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || !["", "/", "/api"].includes(endpoint.pathname)) {
+  console.error("Recusado: use exclusivamente a API isolada de homologação ou loopback."); process.exit(2);
+}
 
 const results = [];
 async function check(name, fn) {
@@ -19,7 +26,7 @@ async function check(name, fn) {
 }
 
 async function login(email) {
-  const response = await fetch(`${api}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+  const response = await fetch(`${api}/auth/login`, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
   assert.equal(response.status, 201, `login ${email}: HTTP ${response.status}`);
   const cookie = (response.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
   assert.ok(cookie, "sem cookie de sessão");
@@ -28,7 +35,7 @@ async function login(email) {
 function client(cookie) {
   return async (path, { method = "GET", body } = {}) => {
     const response = await fetch(`${api}/partner-portal${path}`, {
-      method, headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
+      method, redirect: "error", headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
     });
     const text = await response.text();
     let json = null; try { json = text ? JSON.parse(text) : null; } catch { json = text; }
@@ -52,10 +59,22 @@ function readyDate(daysAhead = 12) {
 const run = Date.now() % 100000000;
 const signa = client(await login("signa@homolog.test"));
 const other = client(await login("outro@homolog.test"));
+// Fail closed BEFORE any fictitious customer, draft or order is written.
+async function assertFixture(client, expectedPartnerId) {
+  const result = await client("/summary");
+  assert.equal(result.status, 200, "Não foi possível validar a identidade de homologação");
+  assert.equal(result.json?.partner?.id === expectedPartnerId, true, "Recusado: parceiro não é a fixture esperada");
+  assert.equal(result.json?.partner?.companyId === "homolog-co", true, "Recusado: empresa não é a fixture de homologação");
+  assert.equal(result.json?.partner?.portalAccessLevel, "DISTRIBUTOR");
+}
+await assertFixture(signa, "homolog-partner-signa");
+await assertFixture(other, "homolog-partner-other");
+console.log("PASS identidade das duas fixtures isoladas confirmada antes de qualquer gravação");
+
 let options, recipients, endCustomer, draft, order;
 
 await check("sem sessão é recusado", async () => {
-  const response = await fetch(`${api}/partner-portal/summary`);
+  const response = await fetch(`${api}/partner-portal/summary`, { redirect: "error" });
   assert.ok([401, 403].includes(response.status), `HTTP ${response.status}`);
   return `HTTP ${response.status}`;
 });
@@ -191,6 +210,62 @@ await check("painel, histórico e relatórios carregam", async () => {
   for (const path of ["/summary", "/end-customer-history", "/commercial-reports"]) {
     const r = await signa(path); assert.equal(r.status, 200, `${path} HTTP ${r.status}`);
   }
+});
+
+await check("pedido novo não simula pagamento e não aparece no financeiro de outro parceiro", async () => {
+  const id = order?.id ?? order?.order?.id;
+  assert.ok(id, "pedido de homologação ausente");
+  const own = await signa("/summary");
+  assert.equal(own.status, 200);
+  assert.ok(Array.isArray(own.json.partnerOrders));
+  const row = own.json.partnerOrders.find((x) => x.id === id);
+  assert.ok(row, "pedido não visível ao parceiro de origem");
+  for (const field of ["receivableStatus", "receivableAmount", "openAmount", "paymentDate", "dueDate"]) {
+    assert.equal(row[field], null, `campo financeiro ${field} indevidamente preenchido`);
+  }
+  assert.notEqual(row.billingAvailable, true, "cobrança sem título autorizada");
+  const foreign = await other("/summary");
+  assert.equal(foreign.status, 200);
+  assert.ok(Array.isArray(foreign.json.partnerOrders));
+  assert.equal(foreign.json.partnerOrders.some((x) => x.id === id), false, "pedido de outro parceiro exposto");
+});
+
+await check("Pix de título existente: leitura repetida, acesso privado e ausência de baixa", async () => {
+  // Fixed seed fixture in the isolated database only. Do not log QR/copyPaste:
+  // the current static Pix key belongs to Bispo and must never be paid in tests.
+  const fixture = "/orders/homolog-order-pix/pix";
+  const readTitle = async () => {
+    const summary = await signa("/summary");
+    assert.equal(summary.status, 200);
+    const row = summary.json.partnerOrders.find((item) => item.id === "homolog-order-pix");
+    assert.ok(row, "Título fictício ausente no financeiro");
+    return { status: row.receivableStatus, amount: Number(row.receivableAmount), open: Number(row.openAmount), paidAt: row.paymentDate, due: row.dueDate };
+  };
+  const titleBefore = await readTitle();
+  assert.equal(titleBefore.status, "OPEN");
+  assert.equal(titleBefore.amount, 76.8);
+  assert.equal(titleBefore.open, 76.8);
+  assert.equal(titleBefore.paidAt, null);
+  const first = await signa(fixture);
+  assert.equal(first.status, 200, "Pix da fixture indisponível");
+  assert.match(first.headers.get("cache-control") ?? "", /no-store/);
+  assert.equal(first.json.orderCode, "H-PIX-0001");
+  assert.equal(first.json.amountCents, 7680);
+  assert.equal(first.json.openCents, 7680);
+  assert.match(first.json.dueDate, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(typeof first.json.copyPaste === "string" && first.json.copyPaste.startsWith("000201"), "BR Code ausente");
+  assert.ok(typeof first.json.qrSvg === "string" && first.json.qrSvg.includes("<svg"), "QR ausente");
+  const again = await signa(fixture);
+  assert.equal(again.status, 200);
+  assert.equal(again.json.openCents, 7680, "consulta alterou saldo");
+  assert.equal(again.json.copyPaste === first.json.copyPaste, true, "consulta alterou BR Code");
+  const foreign = await other(fixture);
+  assert.ok([403, 404].includes(foreign.status), "Pix de outro parceiro acessível");
+  const id = order?.id ?? order?.order?.id;
+  assert.ok(id, "pedido de homologação ausente");
+  const noTitle = await signa(`/orders/${id}/pix`);
+  assert.equal(noTitle.status, 400, "Pix liberado sem título");
+  assert.deepEqual(await readTitle(), titleBefore, "Consultas Pix não podem alterar o título financeiro");
 });
 
 const failed = results.filter((r) => !r.ok);
