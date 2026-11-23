@@ -1,5 +1,14 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — estrutura de deduplicação transacional Signa (WIP; NÃO PUBLICAR)
+
+- [x] Modelado `PartnerOrderSubmission` no Prisma, com chave única de `companyId/partnerId/userId/submissionKey`, hash SHA-256 de 64 caracteres, estados `CLAIMED/COMPLETED`, referência única a `SalesOrder` e data de conclusão.
+- [x] Migração aditiva `20261123150000_signa_order_submission_claims`: unicidade no banco, CHECK de hash, CHECK que impede alegar conclusão sem pedido persistido, FKs; sem qualquer UPDATE/DELETE de pedidos, financeiro, Pix, fiscal ou Bling. **Migração não executada** em nenhum banco.
+- [x] Teste de contrato em `signa-order-idempotency.test.ts` exige escopo e restrições. Commits `f4d3465`, `93a249a`, `842cc0f`, `d2bef39` na PR #67. Teste automatizado via [PR CI temporária #112](https://github.com/rezendeantonio1410-ops/bbos/pull/112) (não integrar nem publicar). 
+- [ ] **Crítico e ainda pendente:** integrar a reserva de chave e o hash na mesma transação que cria `SalesOrder`; `SalesOrdersService.create` hoje já abre sua própria transação e a rota faz atualizações/avisos adicionais fora dela. Refatorar fronteira transacional antes de expor chave na API/UI; implementar replay da mesma chave (resultado original), 409 para payload diferente ou claim em andamento e teste concorrente real. **A tabela sozinha não previne pedidos duplicados.**
+- [ ] Executar migration dry-run e rollback em PostgreSQL totalmente isolado, testar duas contas/dispositivos, validar observabilidade e autorizações. PR #67 segue draft/conflitada. Manter release bloqueada.
+- [ ] Prévia visual da ficha "Novo pedido" foi apresentada para aprovação; **não alterar sua interface antes do aceite visual.** PRs #92 e #108 já publicadas, sem retrabalho.
+
 ## Incremento em 23/11/2026 — contrato de idempotência para envio (WIP; NÃO PUBLICAR)
 
 - [x] Criado `apps/api/src/signa-order-idempotency.ts` para validação estrita da chave de submissão (16–128 caracteres), serialização canônica e SHA-256 do corpo completo do pedido. Alterar cliente, destinatário fiscal, itens, quantidades ou condição de pagamento produz fingerprint diferente. O hash é para comparar requisições; **não efetua deduplicação sem persistência e controle transacional**.
