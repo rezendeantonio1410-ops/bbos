@@ -127,8 +127,8 @@ const money = new Intl.NumberFormat("pt-BR", {
 });
 const cents = (value: number) => money.format(Number(value || 0) / 100);
 
-// The Signa logo is hosted by the partner's own site (hashed asset). If it
-// is unavailable or renamed, show the brand name instead of a broken image.
+// Signa's official logo, versioned in apps/web/public/brand/partners (copied
+// from signacoffee.com.br). If it ever fails to load, show the brand name.
 function SignaWordmark() {
   const [failed, setFailed] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -147,7 +147,7 @@ function SignaWordmark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
+      src="/brand/partners/signa-coffee-logo.svg"
       ref={imageRef}
       alt="Signa Coffee"
       className="h-7 w-auto"
@@ -219,9 +219,10 @@ export default function PartnerPortalPage() {
     router.replace("/login?returnTo=%2Fparceiro");
   };
 
+  const isDistributorPortal = data?.partner.portalAccessLevel === "DISTRIBUTOR";
   return (
-    <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "lg:pl-52" : ""}`}>
-      <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-white/95 text-[#102338] shadow-sm" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
+    <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "signa-portal lg:pl-52" : ""}`}>
+      {!isDistributorPortal && <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-white/95 text-[#102338] shadow-sm" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-3">
           <div className="flex min-w-0 items-center gap-3 sm:gap-5">
             <div
@@ -280,18 +281,23 @@ export default function PartnerPortalPage() {
             </button>
           </div>
         </div>
-      </header>
+      </header>}
 
       <div
         className={`mx-auto max-w-7xl px-4 py-5 sm:px-8 sm:py-7 ${
           data?.partner.portalAccessLevel === "DISTRIBUTOR"
-            ? "space-y-4 pb-24 sm:pb-7"
+            ? "space-y-4 pb-24 pt-20 sm:pb-7 sm:pt-20"
             : "space-y-7"
         }`}
       >
         {loading && !data && (
-          <div className="rounded-3xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
-            Carregando seus negócios…
+          <div role="status" aria-label="Carregando o portal" className="space-y-4">
+            <span className="sr-only">Carregando seus negócios…</span>
+            <div className="h-10 w-64 animate-pulse rounded-lg bg-black/[.06]" />
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-black/[.04] sm:grid-cols-5">
+              {[0, 1, 2, 3, 4].map((n) => <div key={n} className="h-16 animate-pulse bg-white/70" />)}
+            </div>
+            <div className="h-72 animate-pulse rounded-xl bg-white/80" />
           </div>
         )}
         {error && (
@@ -374,7 +380,7 @@ export default function PartnerPortalPage() {
 
         {data && (
           <>
-            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} events={data.notifications} />}
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} events={data.notifications} onLogout={() => void logout()} />}
             {data.partner.portalAccessLevel !== "DISTRIBUTOR" && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${
@@ -384,16 +390,6 @@ export default function PartnerPortalPage() {
               }`}
             >
               <div className="min-w-0 max-w-3xl">
-                {false && (
-                  <div className="mb-3 flex items-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
-                      alt="Signa Coffee"
-                      className="h-8 w-auto sm:h-10"
-                    />
-                  </div>
-                )}
                 {true && (
                   <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                     Visão exclusiva
@@ -877,7 +873,7 @@ function DistributorOrderQueue({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <a
-                    href="#historico-pedidos"
+                    href="#pedidos-signa"
                     className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 text-xs font-bold text-[var(--bbos-text-primary)]"
                   >
                     Ver pedido <ChevronRight size={14} />
@@ -1004,28 +1000,6 @@ function DistributorOrderHistory({
         </div>
       </details>
 
-      <section
-        id="historico-pedidos-desktop"
-        className="hidden rounded-2xl border border-[var(--bbos-surface-border)] bg-white p-4 shadow-sm sm:block"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">
-              Histórico dos pedidos
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--bbos-text-muted)]">
-              Consulte as etapas concluídas de cada pedido.
-            </p>
-          </div>
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bbos-nav-active)] text-[var(--bbos-coffee-green)]">
-            <Bell size={16} />
-          </span>
-        </div>
-        <DistributorOrderHistoryList
-          history={history}
-          eventsByOrder={eventsByOrder}
-        />
-      </section>
     </>
   );
 }

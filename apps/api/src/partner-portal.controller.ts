@@ -807,6 +807,51 @@ export class PartnerPortalController {
     response.send(pdf);
   }
 
+  /**
+   * Order detail for the partner "object page": items with the partner's
+   * catalog names, totals and document availability. Same access scope as the
+   * PDFs (assertPartnerOrder). Read-only.
+   */
+  @Get("orders/:orderId/detail")
+  @Header("Cache-Control", "private, no-store")
+  async orderDetail(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const items = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT item.id,item.sku,item.quantity,item."unitPrice"::float AS "unitPrice",
+              item."totalAmount"::float AS "totalAmount",
+              COALESCE(catalog."displayProductName",item."productName") AS product,
+              catalog."displayLineName" AS line,
+              variant."netWeightGrams" AS grams
+         FROM "SalesOrderItem" item
+         JOIN "SalesOrder" so ON so.id=item."salesOrderId" AND so."companyId"=item."companyId"
+         LEFT JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
+         LEFT JOIN LATERAL (
+           SELECT c."displayProductName",c."displayLineName"
+             FROM "CustomerCatalogProduct" c
+            WHERE c."companyId"=so."companyId" AND c."productVariantId"=item."productVariantId"
+            ORDER BY (c."customerId"=so."customerId") DESC, c.active DESC
+            LIMIT 1
+         ) catalog ON TRUE
+        WHERE item."salesOrderId"=$1 AND item."companyId"=$2
+        ORDER BY item."createdAt" ASC`,
+      orderId,
+      actor.companyId,
+    );
+    const [order] = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT so.id,COALESCE(so."orderNumber",so.code) AS code,so.status::text AS status,
+              so."totalAmount"::float AS "totalAmount",so."orderedAt",so."paymentType"::text AS "paymentType",
+              so."customerReference",so.notes,so."expectedDeliveryDate"
+         FROM "SalesOrder" so WHERE so.id=$1 AND so."companyId"=$2`,
+      orderId,
+      actor.companyId,
+    );
+    return { order: order ?? null, items };
+  }
+
   @Get("orders/:orderId/pix")
   async orderPix(
     @Req() request: { user?: PartnerActor },

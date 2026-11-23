@@ -358,3 +358,27 @@ label:has(input[name="productionHarvest"]) {
     text-wrap: balance;
   }
 }
+
+/* Partner portal: light, calm reading surface within the Bispo palette.
+   Page in a soft sand tone, cards in true white with gentle elevation, so
+   content stands forward instead of sinking into gray. */
+.signa-portal {
+  background-color: #f4f4f1;
+}
+.signa-portal .bg-white {
+  background-color: #ffffff;
+}
+.signa-portal section.border,
+.signa-portal article.border {
+  border-color: #e6e6e1;
+}
+.signa-portal section.shadow-sm {
+  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.03), 0 8px 24px rgba(10, 10, 10, 0.04);
+}
+@keyframes slideIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fadeIn { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Fixed shell bar: anchors (#inicio, #pedidos-signa, ...) and restored
+   scroll positions must land below it, never hidden behind it. */
+html:has(.signa-portal) {
+  scroll-padding-top: 5rem;
+}

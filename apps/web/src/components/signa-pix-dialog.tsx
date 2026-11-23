@@ -1,6 +1,8 @@
 "use client";
 
+import { showToast } from "@/components/portal-toast";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type PixView = {
   orderCode: string;
@@ -51,7 +53,7 @@ export function SignaPixButton({ orderId, orderCode }: { orderId: string; orderC
 
   async function copy() {
     if (!data) return;
-    try { await navigator.clipboard.writeText(data.copyPaste); setCopied(true); }
+    try { await navigator.clipboard.writeText(data.copyPaste); setCopied(true); showToast("Código Pix copiado. Cole no app do seu banco."); }
     catch { setCopied(false); setError("Não foi possível copiar automaticamente. Selecione o código e copie."); }
   }
 
@@ -59,7 +61,7 @@ export function SignaPixButton({ orderId, orderCode }: { orderId: string; orderC
     <button type="button" onClick={() => void show()} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25734c]">
       Pagar com Pix
     </button>
-    {open && <div role="dialog" aria-modal="true" aria-labelledby={`pix-title-${orderId}`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+    {open && createPortal(<div role="dialog" aria-modal="true" aria-labelledby={`pix-title-${orderId}`} className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -84,6 +86,6 @@ export function SignaPixButton({ orderId, orderCode }: { orderId: string; orderC
           <p className="mt-3 text-xs text-slate-500">{data.notice}</p>
         </>}
       </div>
-    </div>}
+    </div>, document.body)}
   </>;
 }
