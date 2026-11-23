@@ -39,6 +39,7 @@ import {
 
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
+import { fourteenDayDueDate, parseTermCorrection } from "./sales-order-term-correction";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 import {
@@ -756,6 +757,109 @@ export class SalesOrdersController {
       "Cache-Control": "private, no-store",
     });
     response.send(pdf);
+  }
+
+  @Get(":id/billing/summary")
+  async billingSummary(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actorForOrder(request, id);
+    const order = await this.salesOrders.database.salesOrder.findFirst({
+      where: { id, companyId: actor.companyId },
+      select: { id: true, paymentType: true, paymentTermsSnapshot: true, orderType: true },
+    });
+    if (!order) throw new BadRequestException("Pedido não encontrado.");
+    const receivable = await this.salesOrders.database.accountsReceivable.findFirst({
+      where: { companyId: actor.companyId, salesOrderId: id },
+      select: { dueDate: true, amount: true, openAmount: true, status: true },
+    });
+    return {
+      paymentType: order.paymentType,
+      paymentTerms: order.paymentTermsSnapshot,
+      dueDate: receivable?.dueDate ?? null,
+      amount: receivable ? Number(receivable.amount) : null,
+      openAmount: receivable ? Number(receivable.openAmount) : null,
+      status: receivable?.status ?? null,
+      billingPdfAvailable: order.paymentType === "TERM" &&
+        order.orderType !== "SAMPLE" && receivable !== null &&
+        Number(receivable.openAmount) > 0,
+    };
+  }
+
+  /**
+   * Administrative correction for an incorrectly registered cash/Pix sale.
+   * Updates only the payment condition and outstanding title in one transaction.
+   * Never touches NF-e, delivery, Pix provider, or registered payment.
+   */
+  @Patch(":id/correct-term")
+  async correctTerm(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: unknown,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!isDesignatedTermCreditApprover(actor)) {
+      throw new ForbiddenException("Somente José ou Suzi podem corrigir condições financeiras após o faturamento.");
+    }
+    let correction: ReturnType<typeof parseTermCorrection>;
+    try { correction = parseTermCorrection(body); }
+    catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Prazo inválido.");
+    }
+    return this.salesOrders.database.$transaction(async tx => {
+      const locked = await tx.$queryRawUnsafe<Array<{id: string}>>(
+        `SELECT id FROM "SalesOrder" WHERE id=$1 AND "companyId"=$2 FOR UPDATE`,
+        id, actor.companyId,
+      );
+      if (!locked.length) throw new BadRequestException("Pedido não encontrado.");
+      const order = await tx.salesOrder.findFirst({
+        where: { id, companyId: actor.companyId },
+        include: { customer: { select: { creditStatus: true } } },
+      });
+      if (!order || order.orderType === "SAMPLE" ||
+          order.status === "DRAFT" || order.status === "CANCELLED" ||
+          order.paymentType !== "CASH" || String(order.currency ?? "BRL") !== "BRL" ||
+          !["Pix", "À vista", "A vista"].includes(String(order.paymentTermsSnapshot ?? ""))) {
+        throw new BadRequestException("Somente pedidos comerciais à vista, ativos e ainda não pagos podem ser corrigidos.");
+      }
+      if (order.customer.creditStatus !== "APPROVED") {
+        throw new BadRequestException("O cliente precisa ter crédito aprovado para compra a prazo.");
+      }
+      const receivable = await tx.accountsReceivable.findUnique({ where: { salesOrderId: id } });
+      if (!receivable || receivable.companyId !== actor.companyId ||
+          receivable.status !== "OPEN" ||
+          Number(receivable.openAmount) !== Number(receivable.amount) ||
+          Math.round(Number(receivable.amount)*100) !== Math.round(Number(order.totalAmount)*100)) {
+        throw new BadRequestException("Título inexistente, parcialmente recebido ou divergente: correção bloqueada.");
+      }
+      const [recordedPayments, paidAttempts] = await Promise.all([
+        tx.payment.count({ where: { accountsReceivableId: receivable.id } }),
+        tx.$queryRawUnsafe<Array<{count: bigint}>>(
+          `SELECT COUNT(*)::bigint AS count FROM "SalesOrderPaymentAttempt"
+             WHERE "salesOrderId"=$1 AND status IN ('PAID','APPROVED','PROCESSING')`, id),
+      ]);
+      if (recordedPayments || Number(paidAttempts[0]?.count ?? 0)) {
+        throw new BadRequestException("Há recebimento ou cobrança em processamento: correção financeira bloqueada.");
+      }
+      const previousDueDate = receivable.dueDate;
+      const dueDate = fourteenDayDueDate(order.orderedAt);
+      await tx.salesOrder.update({
+        where: { id }, data: { paymentType: "TERM", paymentTermsSnapshot: "14 dias" },
+      });
+      await tx.accountsReceivable.update({ where: { id: receivable.id }, data: { dueDate } });
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "SalesOrderEditAudit"
+        (id,"companyId","salesOrderId","actorId","actorName","actorRole",reason,
+         "beforeSnapshot","afterSnapshot","createdAt")
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,NOW())`,
+        randomUUID(), actor.companyId, id, actor.id, actor.name, actor.role,
+        correction.reason,
+        JSON.stringify({ paymentType: order.paymentType, paymentTermsSnapshot: order.paymentTermsSnapshot,
+          dueDate: previousDueDate, amount: Number(receivable.amount) }),
+        JSON.stringify({ paymentType: "TERM", paymentTermsSnapshot: "14 dias",
+          dueDate, amount: Number(receivable.amount) }),
+      );
+      return { ok: true, orderId: id, paymentType: "TERM", paymentTerms: "14 dias",
+        dueDate, amount: Number(receivable.amount), status: "OPEN" };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   @Post()

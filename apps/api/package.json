@@ -9,6 +9,7 @@
     "start": "corepack pnpm --filter @bbos/database migrate:deploy && node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
+    "test:sales-order-term-correction": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-term-correction.test.ts",
     "test:purchase-validation": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-validation.test.ts",
     "test:customer-fiscal-readiness": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/customer-fiscal-readiness.test.ts",
     "test:signa-ready-date": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-ready-date.test.ts",

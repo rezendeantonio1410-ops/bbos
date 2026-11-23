@@ -583,6 +583,7 @@ const displayStatus = (order: Order) => {
     return "REEXPEDITION_READY";
   }
   if (
+    order.paymentType !== "TERM" &&
     ["CREATING", "AWAITING_PAYMENT", "PROCESSING", "ERROR"].includes(
       order.payment?.status ?? "",
     )
@@ -3912,6 +3913,18 @@ function OrderDrawer({
     null,
   );
   const [termApprovalNote, setTermApprovalNote] = useState("");
+  const [billingSummary, setBillingSummary] = useState<{
+    paymentType: string;
+    paymentTerms?: string | null;
+    dueDate?: string | null;
+    amount?: number | null;
+    openAmount?: number | null;
+    status?: string | null;
+  } | null>(null);
+  const [termCorrectionBusy, setTermCorrectionBusy] = useState(false);
+  const [termCorrectionError, setTermCorrectionError] = useState("");
+  const [termCorrectionReason, setTermCorrectionReason] = useState("");
+  const [termCorrectionOpen, setTermCorrectionOpen] = useState(false);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -3966,6 +3979,43 @@ function OrderDrawer({
     void loadRequests();
   }, [order.id]);
 
+  const loadBillingSummary = async () => {
+    const response = await fetch(`${salesOrdersApi()}/${order.id}/billing/summary`, {
+      credentials: "include", cache: "no-store",
+    });
+    if (response.ok) setBillingSummary(await response.json());
+  };
+  useEffect(() => {
+    void loadBillingSummary();
+  }, [order.id, order.paymentType]);
+  const correctPaymentTerm = async () => {
+    if (termCorrectionBusy || termCorrectionReason.trim().length < 10) return;
+    setTermCorrectionBusy(true);
+    setTermCorrectionError("");
+    try {
+      const response = await fetch(`${salesOrdersApi()}/${order.id}/correct-term`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 14, reason: termCorrectionReason.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível corrigir o prazo.");
+      setBillingSummary({
+        paymentType: "TERM",
+        paymentTerms: "14 dias",
+        dueDate: payload.dueDate,
+        amount: payload.amount,
+        openAmount: payload.amount,
+        status: "OPEN",
+      });
+      setTermCorrectionOpen(false);
+      await onChanged();
+    } catch (cause) {
+      setTermCorrectionError(cause instanceof Error ? cause.message : "Falha ao corrigir o vencimento.");
+    } finally {
+      setTermCorrectionBusy(false);
+    }
+  };
   const loadTermApproval = async () => {
     if (order.paymentType !== "TERM" || order.orderType === "SAMPLE") {
       setTermApproval(null);
@@ -4172,11 +4222,15 @@ function OrderDrawer({
     setBusy(false);
   };
 
+  const isTermPayment = billingSummary?.paymentType === "TERM" || order.paymentType === "TERM";
+  const paymentDue = billingSummary?.dueDate
+    ? new Date(billingSummary.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+    : null;
   const paymentLabel =
     order.orderType === "SAMPLE"
       ? "Sem cobrança · amostra"
-      : order.paymentType === "TERM"
-        ? order.paymentTermsSnapshot || "A prazo"
+      : isTermPayment
+        ? billingSummary?.paymentTerms || order.paymentTermsSnapshot || "A prazo"
         : "À vista";
   const deliveryLabel = order.expectedDeliveryDate
     ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
@@ -4569,7 +4623,7 @@ function OrderDrawer({
                     : ""}
                 </a>
               )}
-            {order.paymentType === "TERM" &&
+            {isTermPayment &&
               order.orderType !== "SAMPLE" &&
               fulfillment?.fiscalStatus === "AUTHORIZED" && (
                 <OrderBillingPdfButton
@@ -4694,7 +4748,7 @@ function OrderDrawer({
                 </section>
               )}
 
-            {displayStatus(order) === "AWAITING_PAYMENT" && (
+            {displayStatus(order) === "AWAITING_PAYMENT" && !isTermPayment && (
               <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -4889,6 +4943,55 @@ function OrderDrawer({
               </section>
             )}
 
+            {order.paymentType === "CASH" && order.orderType !== "SAMPLE" &&
+              ["Pix", "À vista", "A vista"].includes(order.paymentTermsSnapshot ?? "") &&
+              ["DELIVERED", "SHIPPED", "INVOICED", "READY_TO_SHIP"].includes(order.status) &&
+              canOperate && (
+                <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-amber-950">Corrigir condição de pagamento</p>
+                      <p className="mt-1 text-xs text-amber-900">
+                        Venda lançada como Pix à vista? José ou Suzi podem corrigir para 14 dias,
+                        com vencimento e registro de auditoria, sem alterar NF-e ou entrega.
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => setTermCorrectionOpen(v => !v)}
+                      className="min-h-10 rounded-xl border border-amber-400 bg-white px-4 text-xs font-bold text-amber-950">
+                      {termCorrectionOpen ? "Cancelar" : "Corrigir para 14 dias"}
+                    </button>
+                  </div>
+                  {termCorrectionOpen && (
+                    <div className="mt-3 space-y-3">
+                      <textarea value={termCorrectionReason}
+                        onChange={event => setTermCorrectionReason(event.target.value)}
+                        placeholder="Justificativa da correção, por exemplo: prazo de 14 dias negociado com o cliente."
+                        maxLength={500}
+                        className="min-h-20 w-full rounded-xl border border-amber-300 bg-white p-3 text-xs"
+                      />
+                      {termCorrectionError && <p className="text-xs text-red-700" role="alert">{termCorrectionError}</p>}
+                      <button type="button" disabled={termCorrectionBusy || termCorrectionReason.trim().length < 10}
+                        onClick={() => void correctPaymentTerm()}
+                        className="min-h-10 rounded-xl bg-amber-950 px-4 text-xs font-bold text-white disabled:opacity-50">
+                        {termCorrectionBusy ? "Atualizando…" : "Confirmar prazo de 14 dias"}
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
+            {isTermPayment && paymentDue && billingSummary?.openAmount != null &&
+              billingSummary.openAmount > 0 && (
+                <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-bold text-emerald-950">Cobrança a prazo · vence em {paymentDue}</p>
+                  <p className="mt-1 text-xs text-emerald-900">
+                    Saldo em aberto: {money.format(billingSummary.openAmount)}. Documento com QR Code Pix,
+                    copia e cola e vencimento. A geração não confirma pagamento.
+                  </p>
+                  <div className="mt-3">
+                    <OrderBillingPdfButton orderId={order.id} orderNumber={order.orderNumber ?? order.code} />
+                  </div>
+                </section>
+              )}
             <div className="mt-5 space-y-2 sm:mt-6">
               {order.items.map((item) => (
                 <div
@@ -5081,6 +5184,10 @@ function OrderDrawer({
               <p className="text-xs font-bold">Condições comerciais</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <MiniValue label="Pagamento" value={paymentLabel} />
+                {paymentDue && <MiniValue label="VENCIMENTO" value={paymentDue} />}
+                {billingSummary?.openAmount != null && (
+                  <MiniValue label="Saldo a receber" value={money.format(billingSummary.openAmount)} />
+                )}
                 <MiniValue label="Frete" value={freightLabel} />
                 <MiniValue label="Entrega" value={deliveryLabel} />
                 {order.carrierName && (
