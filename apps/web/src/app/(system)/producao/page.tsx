@@ -242,7 +242,7 @@ const mapProductionOrder = (
     product: String(row.productName ?? "Produto não definido"),
     sku: String(row.sku ?? variant?.sku ?? "—"),
     plannedQuantity,
-    producedQuantity: finishedOutputKg || Number(row.actualOutputKg ?? 0),
+    producedQuantity: Math.max(finishedOutputKg, roastedOutputKg, Number(row.actualOutputKg ?? 0)),
     unit: String(row.unit ?? "kg"),
     plannedAt: String(row.plannedAt ?? ""),
     startedAt: row.startedAt ? String(row.startedAt) : undefined,
@@ -337,6 +337,14 @@ const readApiError = async (response: Response, fallback: string) => {
   return Array.isArray(payload.message)
     ? payload.message.join(" ")
     : (payload.message ?? fallback);
+};
+
+// Planned dates arrive as ISO timestamps; show their calendar day, not the time suffix.
+const productionDay = (value: string) => {
+  const isoDay = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDay)) return "—";
+  const [year, month, day] = isoDay.split("-");
+  return `${day}/${month}/${year}`;
 };
 
 const localDateTimeValue = (date: Date) => {
@@ -2082,8 +2090,8 @@ function OrderDrawer({
               icon={Target}
             />
             <SummaryCard
-              label="Produzido"
-              value={`${number.format(order.producedQuantity)} kg`}
+              label="Torrado"
+              value={`${number.format(order.costs.roastedOutputKg)} kg`}
               icon={PackageCheck}
             />
             <SummaryCard
@@ -2093,7 +2101,7 @@ function OrderDrawer({
             />
             <SummaryCard
               label="Data"
-              value={order.plannedAt.slice(5).split("-").reverse().join("/")}
+              value={productionDay(order.plannedAt)}
               icon={Clock3}
             />
           </section>
@@ -2766,10 +2774,13 @@ export default function ProductionPage() {
                       </p>
                     </span>
                     <span>
-                      <small className="text-stone-400">Produzido</small>
+                      <small className="text-stone-400">Torrado</small>
                       <p className="mt-1 text-sm font-bold">
-                        {number.format(order.producedQuantity)} kg
+                        {number.format(order.costs.roastedOutputKg)} kg
                       </p>
+                      <small className="mt-1 block text-stone-500">
+                        Empacotado: {number.format(order.costs.finishedOutputKg)} kg
+                      </small>
                     </span>
                     <span>
                       <small className="text-stone-400">Responsável</small>
@@ -2780,11 +2791,7 @@ export default function ProductionPage() {
                     <span>
                       <small className="text-stone-400">Data</small>
                       <p className="mt-1 text-sm font-bold">
-                        {order.plannedAt
-                          .slice(5)
-                          .split("-")
-                          .reverse()
-                          .join("/")}
+                        {productionDay(order.plannedAt)}
                       </p>
                     </span>
                   </div>
