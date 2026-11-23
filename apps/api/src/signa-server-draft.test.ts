@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseSignaServerDraftPayload, parseSignaDraftVersion } from "./signa-server-draft";
+import { parseSignaServerDraftPayload, parseSignaDraftVersion, hasSignaServerDraftCapacity, MAX_SIGNA_SERVER_DRAFTS_PER_USER } from "./signa-server-draft";
 
 test("accepts an incomplete server draft without triggering an order or payment", () => {
   assert.deepEqual(parseSignaServerDraftPayload({}), {
@@ -69,4 +69,13 @@ test("rejects invalid concurrency versions", () => {
     assert.throws(() => parseSignaDraftVersion(value));
   }
   assert.equal(parseSignaDraftVersion(3), 3);
+});
+
+test("draft capacity matches the 100-row list: refuse hidden extra copies", () => {
+  assert.equal(MAX_SIGNA_SERVER_DRAFTS_PER_USER, 100);
+  assert.equal(hasSignaServerDraftCapacity(0n), true);
+  assert.equal(hasSignaServerDraftCapacity(99n), true);
+  assert.equal(hasSignaServerDraftCapacity(100n), false);
+  assert.equal(hasSignaServerDraftCapacity(101n), false);
+  assert.equal(hasSignaServerDraftCapacity(-1n), false);
 });
