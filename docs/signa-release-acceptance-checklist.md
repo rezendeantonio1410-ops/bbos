@@ -1,5 +1,14 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — isolamento seguro de rascunhos locais (WIP)
+
+- [x] Alterada a chave de armazenamento do rascunho local de **cliente fiscal apenas** para `companyId/partnerId/userId/customerId`, identidade devolvida exclusivamente por `GET /partner-portal/order-options` após autorização do parceiro; não é usada identidade fornecida pelo navegador.
+- [x] Recuperação, autosave, descarte e limpeza após pedido utilizam a mesma chave por usuário. Controles ficam desabilitados quando a sessão não fornece o escopo. A versão local v1 permanece intacta no navegador, **mas não é lida nem automaticamente migrada**: impossível provar quem era seu proprietário em navegadores compartilhados.
+- [x] Adicionados testes para isolamento entre empresas, parceiros, usuários e compradores, colisões de chave e ausência de identificador. A informação de rascunho continua limitada a variantes, quantidades, modalidade e data; nunca inclui valores, dados fiscais ou dados pessoais.
+- [ ] **Verificação de CI do commit final, autenticação real e inspeção visual** antes de aceite. Este incremento ainda não cria rascunhos no servidor; recuperação entre dispositivos, edição integral, exclusão, idempotência e migração de banco da issue #93 permanecem pendentes.
+- [ ] **Não publicar PR #67 nem #92 separadamente.** A PR #67 segue em rascunho com conflitos; PR #92 exige validação visual real. Dados, pedidos, NF-e, Pix, preços e Bling não foram alterados por este incremento.
+
+
 > Estado em 22/11/2026. A PR #67 permanece WIP e **não deve ser publicada** sem aceite completo.
 > A entrega antecipada do Reserva 500 g/1 kg é isolada na PR #70 e deve seguir seu próprio rito de testes.
 
