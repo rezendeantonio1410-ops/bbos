@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   approvedPurchaseCorrectionEligible,
+  approvedPurchaseFiscalCorrectionEligible,
   parseApprovedPurchaseValueCorrection,
 } from "./approved-purchase-value-correction";
 
@@ -46,5 +47,28 @@ test("only unreceived, unaccepted BRL cash purchases without commission are elig
     ["pricePerBag", 1500],
   ] as const) {
     assert.equal(approvedPurchaseCorrectionEligible({ ...purchase, [field]: value }), false, field);
+  }
+});
+
+test("correcting to the authorized linked NF-e amount keeps the invoice unchanged", () => {
+  const invoice = {
+    allocationType: "GREEN_COFFEE_PURCHASE",
+    direction: "INBOUND",
+    status: "AUTHORIZED",
+    matchStatus: "DIVERGENT",
+    totalAmount: 9100,
+  };
+  assert.equal(approvedPurchaseFiscalCorrectionEligible([], 9100), true);
+  assert.equal(approvedPurchaseFiscalCorrectionEligible([invoice], 9100), true);
+  assert.equal(approvedPurchaseFiscalCorrectionEligible([invoice], 9000), false);
+  assert.equal(approvedPurchaseFiscalCorrectionEligible([invoice, invoice], 9100), false);
+  for (const [field, value] of [
+    ["allocationType", "OTHER"],
+    ["direction", "OUTBOUND"],
+    ["status", "REJECTED"],
+    ["matchStatus", "MATCHED"],
+    ["totalAmount", 9300],
+  ] as const) {
+    assert.equal(approvedPurchaseFiscalCorrectionEligible([{ ...invoice, [field]: value }], 9100), false, field);
   }
 });
