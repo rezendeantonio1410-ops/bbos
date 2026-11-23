@@ -1259,20 +1259,20 @@ export class PartnerPortalController {
     };
   }
 
-  // Commercial end customers are scoped to this partner and never become fiscal recipients.
+  // Commercial end customers are isolated from fiscal recipients and scoped by tenant/partner.
   @Get("end-customers")
+  @Header("Cache-Control", "private, no-store")
   async listEndCustomers(@Req() request: { user?: PartnerActor }) {
     const { actor, partner } = await this.context(request);
     if (partner.portalAccessLevel !== "DISTRIBUTOR") {
       throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
     }
     const customers = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,name,"taxId",email,phone,city,state,notes,"createdAt"
+      `SELECT id,name,"taxId",email,phone,"postalCode",street,number,district,complement,city,state,notes,"createdAt"
          FROM "PartnerEndCustomer"
         WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true
         ORDER BY name ASC LIMIT 500`,
-      actor.companyId,
-      partner.id,
+      actor.companyId, partner.id,
     );
     return { customers };
   }
@@ -1280,34 +1280,32 @@ export class PartnerPortalController {
   @Post("end-customers")
   async createEndCustomer(
     @Req() request: { user?: PartnerActor },
-    @Body() body: { name?: string; taxId?: string; email?: string; phone?: string; city?: string; state?: string; notes?: string },
+    @Body() body: Record<string, unknown>,
   ) {
     const { actor, partner } = await this.context(request);
     if (partner.portalAccessLevel !== "DISTRIBUTOR") {
       throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
     }
-    const name = String(body.name ?? "").trim();
-    const state = String(body.state ?? "").trim().toUpperCase();
-    if (name.length < 2 || name.length > 180) {
-      throw new BadRequestException("Informe o nome do cliente (2 a 180 caracteres).");
+    let values: ReturnType<typeof parsePartnerEndCustomerPatch>;
+    try {
+      values = parsePartnerEndCustomerPatch(body);
+    } catch (cause) {
+      throw new BadRequestException(cause instanceof Error ? cause.message : "Cadastro inválido.");
     }
-    if (state && !/^[A-Z]{2}$/.test(state)) {
-      throw new BadRequestException("Informe a UF com duas letras.");
-    }
-    const clean = (value: unknown, max: number) => String(value ?? "").trim().slice(0, max) || null;
+    if (!values.name) throw new BadRequestException("Informe a razão social do cliente.");
     const id = randomUUID();
     await this.database.$executeRawUnsafe(
       `INSERT INTO "PartnerEndCustomer"
-        (id,"companyId","partnerId",name,"taxId",email,phone,city,state,notes,"createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())`,
-      id, actor.companyId, partner.id, name, clean(body.taxId, 32),
-      clean(body.email, 254), clean(body.phone, 40), clean(body.city, 120),
-      state || null, clean(body.notes, 1000),
+        (id,"companyId","partnerId",name,"taxId","postalCode",street,number,district,complement,city,state,"createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
+      id, actor.companyId, partner.id, values.name, values.taxId ?? null,
+      values.postalCode ?? null, values.street ?? null, values.number ?? null,
+      values.district ?? null, values.complement ?? null, values.city ?? null, values.state ?? null,
     );
-    return { id, name, message: "Cliente comercial cadastrado." };
+    return { id, ...values, message: "Cliente comercial cadastrado." };
   }
 
-  // Commercial identity only. Never change partnerId, companyId or fiscal Customer.
+  // Scoped commercial record only: never update fiscal Customer or billing recipient.
   @Patch("end-customers/:customerId")
   async updateEndCustomer(
     @Req() request: { user?: PartnerActor },
@@ -1322,35 +1320,24 @@ export class PartnerPortalController {
     try {
       changes = parsePartnerEndCustomerPatch(body);
     } catch (cause) {
-      throw new BadRequestException(
-        cause instanceof Error ? cause.message : "Dados inválidos do cliente comercial.",
-      );
+      throw new BadRequestException(cause instanceof Error ? cause.message : "Dados inválidos.");
     }
-    const has = (field: "name" | "city" | "state") =>
-      Object.prototype.hasOwnProperty.call(changes, field);
-    const updated = await this.database.$queryRawUnsafe<
-      Array<{ id: string; name: string; city: string | null; state: string | null }>
-    >(
+    const fields = ["name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state"] as const;
+    const keys = fields.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
+    const assignments = keys.map((key, index) => `"${key}"=$${index + 4}`).join(", ");
+    const values = keys.map(key => changes[key] ?? null);
+    const updated = await this.database.$queryRawUnsafe<Array<{
+      id: string; name: string; taxId: string | null; postalCode: string | null;
+      street: string | null; number: string | null; district: string | null;
+      complement: string | null; city: string | null; state: string | null;
+    }>>(
       `UPDATE "PartnerEndCustomer"
-          SET name=CASE WHEN $4::boolean THEN $5::text ELSE name END,
-              city=CASE WHEN $6::boolean THEN $7::text ELSE city END,
-              state=CASE WHEN $8::boolean THEN $9::text ELSE state END,
-              "updatedAt"=NOW()
+          SET ${assignments}, "updatedAt"=NOW()
         WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true
-        RETURNING id,name,city,state`,
-      customerId,
-      actor.companyId,
-      partner.id,
-      has("name"),
-      changes.name ?? null,
-      has("city"),
-      changes.city ?? null,
-      has("state"),
-      changes.state ?? null,
+        RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state`,
+      customerId, actor.companyId, partner.id, ...values,
     );
-    if (!updated[0]) {
-      throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
-    }
+    if (!updated[0]) throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
     return { ...updated[0], message: "Cadastro comercial atualizado." };
   }
 
