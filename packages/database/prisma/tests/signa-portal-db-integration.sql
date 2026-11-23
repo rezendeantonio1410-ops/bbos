@@ -61,6 +61,37 @@ BEGIN
   ASSERT n=1, 'commercial registration must not create fiscal Customer rows';
 END $$;
 
+-- ---------- 1b. database-enforced active CNPJ uniqueness under races ----------
+-- These statements bypass API preflight and prove a concurrent INSERT or PATCH
+-- cannot create a second active commercial customer with the same normalized
+-- CNPJ in a single partner portfolio. Identical CNPJs in different portfolios
+-- are permitted; historical punctuation does not bypass the index.
+DO $
+BEGIN
+  BEGIN
+    INSERT INTO "PartnerEndCustomer"
+      (id,"companyId","partnerId",name,"taxId","createdAt","updatedAt")
+    VALUES ('it-ec-duplicate','it-co-a','it-signa','Duplicado','11.222.333/0001-81',NOW(),NOW());
+    RAISE EXCEPTION 'duplicate active normalized CNPJ was accepted by database';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  INSERT INTO "PartnerEndCustomer"
+    (id,"companyId","partnerId",name,"taxId","createdAt","updatedAt")
+  VALUES ('it-ec-other','it-co-a','it-other','Carteira distinta','11222333000181',NOW(),NOW());
+  INSERT INTO "PartnerEndCustomer"
+    (id,"companyId","partnerId",name,"taxId","createdAt","updatedAt")
+  VALUES ('it-ec-update','it-co-a','it-signa','Para edição','11222333000199',NOW(),NOW());
+  BEGIN
+    UPDATE "PartnerEndCustomer" SET "taxId"='11.222.333/0001-81'
+      WHERE id='it-ec-update' AND "companyId"='it-co-a' AND "partnerId"='it-signa';
+    RAISE EXCEPTION 'PATCH accepted an already registered CNPJ';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  INSERT INTO "PartnerEndCustomer"
+    (id,"companyId","partnerId",name,"taxId",active,"createdAt","updatedAt")
+  VALUES ('it-ec-inactive','it-co-a','it-signa','Registro inativo','11222333000181',false,NOW(),NOW());
+END $;
+
 -- ---------- 2. drafts: scope, optimistic version, constraints ----------
 INSERT INTO "PartnerOrderDraft"(id,"companyId","partnerId","userId",status,version,payload,"createdAt","updatedAt")
 VALUES ('it-draft-1','it-co-a','it-signa','it-user-1','DRAFT',1,'{"items":[]}'::jsonb,NOW(),NOW());
