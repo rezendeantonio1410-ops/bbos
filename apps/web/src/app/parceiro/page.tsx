@@ -127,8 +127,8 @@ const money = new Intl.NumberFormat("pt-BR", {
 });
 const cents = (value: number) => money.format(Number(value || 0) / 100);
 
-// The Signa logo is hosted by the partner's own site (hashed asset). If it
-// is unavailable or renamed, show the brand name instead of a broken image.
+// Signa's official logo, versioned in apps/web/public/brand/partners (copied
+// from signacoffee.com.br). If it ever fails to load, show the brand name.
 function SignaWordmark() {
   const [failed, setFailed] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -147,7 +147,7 @@ function SignaWordmark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
+      src="/brand/partners/signa-coffee-logo.svg"
       ref={imageRef}
       alt="Signa Coffee"
       className="h-7 w-auto"
@@ -384,16 +384,6 @@ export default function PartnerPortalPage() {
               }`}
             >
               <div className="min-w-0 max-w-3xl">
-                {false && (
-                  <div className="mb-3 flex items-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
-                      alt="Signa Coffee"
-                      className="h-8 w-auto sm:h-10"
-                    />
-                  </div>
-                )}
                 {true && (
                   <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--bbos-coffee-green)]">
                     Visão exclusiva

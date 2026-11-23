@@ -197,6 +197,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
   const [menuOpen,setMenuOpen] = useState(false);
   const [activeSection,setActiveSection] = useState("inicio");
   const [hello,setHello] = useState("Olá");
+  const isSigna = partnerName.trim().toLowerCase() === "signa coffee";
   useEffect(()=>setHello(greeting()),[]);
   // Highlights the section in view (SAP Fiori / Microsoft 365 style navigation).
   useEffect(()=>{
@@ -228,21 +229,24 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
   return (
     <section id="inicio" className="relative scroll-mt-24 space-y-5 [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_h4]:font-display" aria-label="Painel comercial">
       <button type="button" onClick={()=>setMenuOpen(v=>!v)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold lg:hidden" aria-expanded={menuOpen} aria-controls="signa-portal-nav">Menu do portal</button>
-      <aside id="signa-portal-nav" className={`${menuOpen?"block":"hidden"} rounded-xl bg-[#0A0A0A] p-4 text-white lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:block lg:w-52 lg:rounded-none lg:px-4 lg:pt-24`}>
-        <p className="mb-5 border-b border-white/15 pb-4 text-[11px] font-semibold uppercase tracking-[.16em] text-white/60">Portal do parceiro</p>
+      <aside id="signa-portal-nav" className={`${menuOpen?"block":"hidden"} rounded-xl border border-[#e6e6e1] bg-white p-4 text-[#0A0A0A] lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:block lg:w-52 lg:rounded-none lg:border-y-0 lg:border-l-0 lg:px-3 lg:pt-24`}>
+        <p className="mb-4 border-b border-[#ececE7] px-3 pb-4 text-[11px] font-semibold uppercase tracking-[.16em] text-[#8a8a84]">Portal do parceiro</p>
         <nav aria-label="Seções do portal" className="space-y-0.5">
           {menu.map(({label,href,icon:Icon})=>{
             const current=activeSection===href.slice(1);
-            return <a key={label} href={href} aria-current={current?"location":undefined} onClick={()=>setMenuOpen(false)} className={`relative flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${current?"bg-white text-[#0A0A0A] font-semibold":"font-medium text-white/80 hover:bg-white/10 hover:text-white"}`}><Icon size={17} aria-hidden/>{label}</a>;
+            return <a key={label} href={href} aria-current={current?"location":undefined} onClick={()=>setMenuOpen(false)} className={`relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0A0A0A] ${current?"bg-[#f4f4f1] font-semibold text-[#0A0A0A] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-[#0A0A0A]":"font-medium text-[#55554f] hover:bg-[#f7f7f4] hover:text-[#0A0A0A]"}`}><Icon size={17} aria-hidden className={current?"text-[#0A0A0A]":"text-[#8a8a84]"}/>{label}</a>;
           })}
         </nav>
-        <p className="mt-8 border-t border-white/15 pt-4 text-xs text-white/55">{partnerName} · Bispo Coffees</p>
+        <p className="mt-8 border-t border-[#ececE7] px-3 pt-4 text-xs text-[#8a8a84]">{partnerName} · Bispo Coffees</p>
       </aside>
       <header className="relative overflow-hidden rounded-2xl border border-[#e6e6e1] bg-white shadow-sm">
         <BispoSeal className="pointer-events-none absolute -right-8 -top-10 hidden size-52 text-[#0A0A0A]/[.05] sm:block" />
         <div className="relative flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-8 sm:py-7">
           <div className="flex min-w-0 items-center gap-5">
-            <BispoSeal className="hidden size-14 shrink-0 text-[#0A0A0A] sm:block" />
+            {isSigna
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src="/brand/partners/signa-coffee-mark.svg" alt="" aria-hidden="true" className="hidden size-14 shrink-0 sm:block" />
+              : <BispoSeal className="hidden size-14 shrink-0 text-[#0A0A0A] sm:block" />}
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[.18em] text-[#6b6b66]">{hello} · Bispo Coffees</p>
               <h1 className="sr-only mt-1 truncate text-3xl font-semibold tracking-tight text-[#0A0A0A] sm:not-sr-only sm:block">{partnerName}</h1>
