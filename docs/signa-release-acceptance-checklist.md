@@ -1,5 +1,17 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — rascunhos persistentes no servidor (WIP, sem publicação)
+
+- [x] Criada a migração **aditiva e ainda não aplicada** 20261123030000_signa_order_drafts: tabela separada PartnerOrderDraft, FKs para empresa/parceiro/usuário, JSON de conteúdo, índice por escopo e data, versão para concorrência, estado DRAFT. Não altera registros existentes, pedidos, estoque, Bling, NF-e, Pix nem preços.
+- [x] Implementados endpoints autenticados GET/POST/PATCH/DELETE /partner-portal/order-drafts (incluindo consulta por ID) na **branch feature da PR #67**. Toda leitura, edição e exclusão exige companyId, partnerId e userId da sessão. Apenas distribuidor Signa autenticado pode operar; IDs comerciais e fiscais são validados contra vínculos autorizados, e variantes são checadas no catálogo privado ativo.
+- [x] Payload parcial (inclusive vazio), sem preços nem dados tributários livres; suporta cliente comercial, seleção fiscal, itens, entrega, data solicitada e notas. Limites de comprimento, quantidades, data e whitelist de campos impedem inserção de preço, valor total, campo de pagamento ou escopo falsificado. PATCH/DELETE exigem **versão exata** para evitar sobrescrita concorrente; conflito retorna erro sem gravar.
+- [x] Formulário Signa na branch oferece **Salvar na conta, Listar, Recuperar e Excluir**, preservando os rascunhos locais anteriores. Ao recuperar, checa comprador e catálogo atual, limpa a cotação e exige confirmação/revisão antes de enviar. Os novos endpoints ainda **não estão disponíveis na versão publicada**.
+- [x] Testes do validador adicionados ao teste principal. A primeira execução CI da PR temporária #101 encontrou um teste estático antigo que exigia exatamente três chamadas de catálogo; com a quarta validação legítima no servidor, o teste foi corrigido e CI repetido.
+- [x] **CI de validação isolada aprovado** em [Actions #45115959659](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45115959659): typecheck, lint, testes e build concluídos. PR temporária #101 fechada **sem merge** e branch principal continua em draft. Este CI valida o código com um documento auxiliar apenas na branch temporária, mas **não é teste autenticado E2E nem migração aplicada**.
+- [ ] **Gate permanece fechado:** executar migração em ambiente isolado com ensaio de rollback/compatibilidade; testes autenticados de isolamento empresa/parceiro/usuário, acesso cruzado, recuperação entre dispositivos, concorrência e expiração; teste real de catálogo e pedido 500g/1kg sem mexer em dados de produção; fluxo idempotente de conversão rascunho para SalesOrder; duplicação e limpeza pós-submissão; inspeção visual desktop/mobile e aceite da PR #92; resolver conflitos da PR #67, fiscal/Pix/NF-e/Bling/BI. **Não fazer merge nem deploy da PR #67.**
+- [x] **Render consultado sem alterações**: bbos-api-rc1 e bbos-app-rc1 continuam com deploy live do commit 07c6b9f (anterior a este incremento). Nenhuma migração, merge ou deploy novo foi disparado nesta execução.
+
+
 ## Incremento em 23/11/2026 — isolamento seguro de rascunhos locais (WIP)
 
 - [x] Alterada a chave de armazenamento do rascunho local de **cliente fiscal apenas** para `companyId/partnerId/userId/customerId`, identidade devolvida exclusivamente por `GET /partner-portal/order-options` após autorização do parceiro; não é usada identidade fornecida pelo navegador.
