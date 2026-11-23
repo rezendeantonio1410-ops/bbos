@@ -83,3 +83,63 @@ jobs:
 
       - name: Integration, isolation, concurrency and price tests
         run: scripts/signa-db-integration.sh
+
+  empty-database-bootstrap:
+    name: Empty database bootstrap through deploy path
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bbos_bootstrap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bbos_bootstrap_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @bbos/database build
+
+      - name: Without the flag, an empty database still fails as before
+        run: |
+          if pnpm db:migrate:deploy; then echo "expected legacy failure without flag" >&2; exit 1; fi
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+      - name: Bootstrap the empty database (flag set)
+        env:
+          BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
+        run: pnpm db:migrate:deploy
+
+      - name: History complete and second deploy is a no-op
+        env:
+          BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
+        run: |
+          expected=$(ls -d packages/database/prisma/migrations/*/ | wc -l)
+          applied=$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL")
+          echo "applied=$applied expected=$expected"; test "$applied" = "$expected"
+          pnpm db:migrate:deploy | tee deploy.log; grep -q "No pending migrations" deploy.log
+          psql "$DATABASE_URL" -Atc "SELECT to_regclass('public.\"PartnerOrderDraft\"'), to_regclass('public.\"PartnerOrderSubmission\"'), to_regclass('public.\"PartnerEndCustomer_active_scoped_cnpj_unique\"')" | grep -qx '"PartnerOrderDraft"|"PartnerOrderSubmission"|"PartnerEndCustomer_active_scoped_cnpj_unique"'
