@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey } from "./signa-order-draft";
+import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget } from "./signa-order-draft";
 
 const allowed = new Set(["reserva-500", "reserva-1000"]);
 
@@ -63,4 +63,15 @@ test("shared-browser drafts are isolated by company, partner and authenticated u
   assert.notEqual(signaOrderDraftKey(scope, "a:b"), signaOrderDraftKey(scope, "a%3Ab"));
   assert.throws(() => signaOrderDraftKey({ ...scope, userId: "" }, "commercial-buyer"));
   assert.throws(() => signaOrderDraftKey(scope, ""));
+});
+
+test("selection alone cannot overwrite an unrelated or stale server draft", () => {
+  const authorized = new Set(["draft-a", "draft-b"]);
+  assert.equal(signaServerDraftEditTarget("draft-a", "draft-a", authorized), "draft-a");
+  assert.equal(signaServerDraftEditTarget("draft-b", "draft-a", authorized), null);
+  assert.equal(signaServerDraftEditTarget("draft-b", "", authorized), null);
+  assert.equal(signaServerDraftEditTarget("", "draft-a", authorized), null);
+  assert.equal(signaServerDraftEditTarget("draft-missing", "draft-missing", authorized), null);
+  // Selecting a different draft and then returning to the recovered one is safe.
+  assert.equal(signaServerDraftEditTarget("draft-a", "draft-a", authorized), "draft-a");
 });
