@@ -83,4 +83,6 @@ test("form edits a persisted draft only after an explicit recovery", () => {
   assert.match(form, /const previous = serverDrafts\.find\(draft => draft\.id === editTarget\)/);
   assert.match(form, /setRecoveredServerDraftId\(saved\.id\)/);
   assert.match(form, /setRecoveredServerDraftId\(""\)/);
+  // A rejected save must revoke the in-form edit authority before refreshing versions.
+  assert.match(form, /setRecoveredServerDraftId\(""\);\s*await refreshServerDrafts\(\)/);
 });
