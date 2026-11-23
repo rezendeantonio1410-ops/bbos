@@ -2,6 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CreditCard, FileText, LayoutDashboard, MapPinned, Package, Plus, Search, ShoppingCart, Users } from "lucide-react";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
+import { BrazilSalesPanel } from "@/components/brazil-sales-map";
+import { signaStateSales } from "@/lib/signa-region-map";
+import { SignaPixButton } from "@/components/signa-pix-dialog";
+import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
+import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { getSignaOrderTimelineEvents } from "@/lib/signa-order-timeline";
 import { emptySignaEndCustomerForm, formatCnpj, validateSignaEndCustomerForm, type SignaEndCustomerForm } from "@/lib/signa-end-customer-form";
@@ -9,12 +14,12 @@ import { emptySignaEndCustomerForm, formatCnpj, validateSignaEndCustomerForm, ty
 export type SignaOrderSummary = {
   id: string; code: string; status: string; totalAmount: number | string; orderedAt: string;
   customerName: string; billingRecipientName?: string | null; endCustomerName?: string | null; volumeKg?: number | string | null; paymentDate?: string | null; dueDate?: string | null; paymentType?: "CASH" | "TERM" | null; receivableAmount?: number | string | null; openAmount?: number | string | null; receivableStatus?: string | null; invoiceStatus?: string | null;
-  invoicePdfAvailable?: boolean; invoiceNumber?: string | null; billingAvailable?: boolean;
+  invoicePdfAvailable?: boolean; invoiceNumber?: string | null; billingAvailable?: boolean; pixAvailable?: boolean;
 };
 type CommercialReport = {
   monthly: Array<{month:string;orders:number;kilograms:number;orderValue:number}>;
   products: Array<{sku:string;product:string;units:number;kilograms:number;orderValue:number}>;
-  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number}>;
+  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number;customers?:number}>;
   notice:string;
   availableYears:string[];
   selectedYear:number|null;
@@ -69,6 +74,9 @@ function SignaReports() {
       </div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal · dados detalhados</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
+      <div id="mapa-signa" className="scroll-mt-24">
+        <BrazilSalesPanel stateSales={signaStateSales(data.regions)} detailsHref={false} title="Mapa de compras — Brasil" subtitle="Valor e volume dos pedidos por UF dos clientes finais informados"/>
+      </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <h4 className="text-sm font-semibold text-[#0E191D]">Compras por região</h4>
         <p className="mb-4 text-xs text-slate-500">Volume (kg) por UF · apenas clientes com região informada</p>
@@ -103,6 +111,19 @@ function SignaCustomerHistory() {
     postalCode: form.postalCode,
     enabled: expanded,
     onResolved: result => setForm(previous => ({...previous, street: result.address, district: result.district, city: result.city, state: result.state})),
+  });
+  // Complete CNPJ → Receita Federal lookup; fills only EMPTY fields. IE stays manual.
+  const cnpjLookup = useCnpjRegistryAutofill({
+    cnpj: form.taxId,
+    enabled: expanded,
+    onResolved: record => {
+      setForm(previous => fillEmptyFromCnpj(previous as unknown as Record<string,string>, record, {
+        name: "legalName", postalCode: "postalCode", street: "street", number: "number",
+        district: "district", complement: "complement", city: "city", state: "state",
+      }) as unknown as SignaEndCustomerForm);
+      setPhone(current => current.trim() ? current : record.phone ?? "");
+      setEmail(current => current.trim() ? current : record.email ?? "");
+    },
   });
   const [refresh,setRefresh] = useState(0);
   useEffect(()=>{
@@ -145,6 +166,7 @@ function SignaCustomerHistory() {
         <label className="text-xs font-semibold sm:col-span-6">Nome / Razão social *<input required minLength={2} maxLength={180} autoComplete="organization" value={form.name} onChange={e=>setField("name",e.target.value)} placeholder="Nome ou razão social" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-3">CNPJ *<input required inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(form.taxId)} onChange={e=>setField("taxId",e.target.value.replace(/\D/g,"").slice(0,14))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-3">CEP *<input required inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(form.postalCode)} onChange={e=>setField("postalCode",brazilianCepDigits(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        {cnpjLookup.statusText&&<p role="status" className={`text-xs sm:col-span-6 ${cnpjLookup.warning?"font-semibold text-amber-800":"text-slate-600"}`}>{cnpjLookup.statusText}</p>}
         {cepLookup.statusText&&<p role="status" className="text-xs text-slate-600 sm:col-span-6">{cepLookup.statusText}</p>}
         <label className="text-xs font-semibold sm:col-span-4">Rua *<input required maxLength={180} value={form.street} onChange={e=>setField("street",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">Número *<input required maxLength={30} placeholder="S/N" value={form.number} onChange={e=>setField("number",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
@@ -152,6 +174,7 @@ function SignaCustomerHistory() {
         <label className="text-xs font-semibold sm:col-span-3">Complemento<input maxLength={120} value={form.complement} onChange={e=>setField("complement",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-4">Cidade *<input required maxLength={120} value={form.city} onChange={e=>setField("city",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">UF *<input required maxLength={2} pattern="[A-Za-z]{2}" value={form.state} onChange={e=>setField("state",e.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} placeholder="PR" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">Inscrição estadual<input maxLength={20} placeholder="Números ou ISENTO (opcional)" value={form.stateRegistration??""} onChange={e=>setField("stateRegistration",e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/><span className="mt-1 block font-normal text-slate-500">A Receita não informa a IE; preencha se houver.</span></label>
         <label className="text-xs font-semibold sm:col-span-3">Telefone<input maxLength={40} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone de contato" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-3">E-mail<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail do cliente" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-6">Observações<textarea maxLength={1000} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
@@ -175,7 +198,7 @@ const menu = [
   {label:"Faturamento",href:"#historico-pedidos",icon:FileText},
   {label:"Pagamentos",href:"#pagamentos-signa",icon:CreditCard},
   {label:"Relatórios",href:"#relatorios-signa",icon:BarChart3},
-  {label:"Mapas",href:null,icon:MapPinned},
+  {label:"Mapas",href:"#mapa-signa",icon:MapPinned},
 ];
 type OrderTimelineEvent = {id:string;orderId:string;title:string;detail:string;occurredAt:string};
 export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:SignaOrderSummary[];partnerName:string;events?:OrderTimelineEvent[]}) {
@@ -256,7 +279,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
       <section id="pagamentos-signa" aria-label="Pagamentos vinculados aos pedidos" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-[#0E191D]">Pagamentos</h3>
-          <p className="mt-1 text-xs text-slate-600">Consulta dos títulos do Contas a Receber já vinculados aos seus pedidos no BBOS. A confirmação de Pix e outros pagamentos depende do registro financeiro da Bispo; o parceiro não pode dar baixa ou confirmar recebimentos.</p>
+          <p className="mt-1 text-xs text-slate-600">Consulta dos títulos do Contas a Receber já vinculados aos seus pedidos no BBOS. Títulos em aberto podem ser pagos com um clique pelo Pix da Bispo Coffees. A confirmação do recebimento continua com o financeiro da Bispo; o parceiro não dá baixa em pagamentos.</p>
         </div>
         {receivableOrders.length===0 ? <p role="status" className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Nenhum título financeiro vinculado aos pedidos disponíveis. Isso não significa que algum pagamento tenha sido realizado.</p> :
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -273,6 +296,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
               <div><dt className="text-slate-500">Pago em</dt><dd className="mt-1 font-medium">{o.receivableStatus==="PAID"&&o.paymentDate?new Date(o.paymentDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</dd></div>
             </dl>
             {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-[#0E191D] underline underline-offset-2">Consultar cobrança</a>}
+            {o.pixAvailable&&<SignaPixButton orderId={o.id} orderCode={o.code}/>}
           </article>)}
         </div>}
         <p className="mt-3 text-xs text-slate-500">Visão dos títulos mais recentes associados aos pedidos desta consulta; não substitui extrato bancário ou conciliação do financeiro da Bispo.</p>

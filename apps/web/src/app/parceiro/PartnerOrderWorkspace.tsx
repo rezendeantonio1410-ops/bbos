@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
 import { formatCnpj, validateSignaEndCustomerForm } from "@/lib/signa-end-customer-form";
 import { parseSignaOrderSubmission, reuseOrCreateSignaOrderSubmission, signaOrderSubmissionStorageKey, type SignaOrderSubmission } from "@/lib/signa-order-submission";
@@ -281,7 +282,7 @@ export function PartnerOrderWorkspace({
   }>>([]);
   const [billingRecipientId, setBillingRecipientId] = useState("");
 
-  const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null}>>([]);
+  const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null;stateRegistration?:string|null}>>([]);
   const [partnerEndCustomerId, setPartnerEndCustomerId] = useState("");
   const [endCustomerSearch, setEndCustomerSearch] = useState("");
   const [newEndCustomerName, setNewEndCustomerName] = useState("");
@@ -293,6 +294,7 @@ export function PartnerOrderWorkspace({
   const [newEndCustomerComplement, setNewEndCustomerComplement] = useState("");
   const [newEndCustomerCity, setNewEndCustomerCity] = useState("");
   const [newEndCustomerState, setNewEndCustomerState] = useState("");
+  const [newEndCustomerStateRegistration, setNewEndCustomerStateRegistration] = useState("");
   const [savingEndCustomer, setSavingEndCustomer] = useState(false);
   const [editingEndCustomerId, setEditingEndCustomerId] = useState("");
   // CEP loaded from a saved record: re-opening it for edit must not overwrite
@@ -354,6 +356,27 @@ export function PartnerOrderWorkspace({
       setNewEndCustomerCity(result.city);
       setNewEndCustomerState(result.state);
       endCustomerNumberInput.current?.focus();
+    },
+  });
+  // Typing a complete CNPJ looks it up in the Receita Federal registry and
+  // fills only EMPTY fields (anything typed is kept). IE stays manual.
+  const endCustomerCnpjLookup = useCnpjRegistryAutofill({
+    cnpj: newEndCustomerTaxId,
+    enabled: showOrder && isDistributor && !editingEndCustomerId,
+    onResolved: record => {
+      const keep = (current: string, value: string | null) => (current.trim() ? current : value ?? "");
+      setNewEndCustomerName(current => keep(current, record.legalName));
+      if (record.postalCode) {
+        // The registry already brings the address: skip the CEP lookup overwrite.
+        endCustomerLoadedCep.current = record.postalCode;
+        setNewEndCustomerCep(current => keep(current, record.postalCode));
+      }
+      setNewEndCustomerStreet(current => keep(current, record.street));
+      setNewEndCustomerNumber(current => keep(current, record.number));
+      setNewEndCustomerDistrict(current => keep(current, record.district));
+      setNewEndCustomerComplement(current => keep(current, record.complement));
+      setNewEndCustomerCity(current => keep(current, record.city));
+      setNewEndCustomerState(current => keep(current, record.state));
     },
   });
   const customerCepLookup = useBrazilianCepAutofill({
@@ -885,6 +908,7 @@ export function PartnerOrderWorkspace({
     setNewEndCustomerNumber(""); setNewEndCustomerDistrict(""); setNewEndCustomerComplement("");
     setNewEndCustomerCity("");
     setNewEndCustomerState("");
+    setNewEndCustomerStateRegistration("");
   }
 
   async function saveEndCustomer() {
@@ -892,6 +916,7 @@ export function PartnerOrderWorkspace({
       name: newEndCustomerName, taxId: newEndCustomerTaxId, postalCode: newEndCustomerCep,
       street: newEndCustomerStreet, number: newEndCustomerNumber, district: newEndCustomerDistrict,
       complement: newEndCustomerComplement, city: newEndCustomerCity, state: newEndCustomerState,
+      stateRegistration: newEndCustomerStateRegistration,
     });
     if (!validation.ok) { setError(validation.error); return; }
     const payload = validation.payload;
@@ -899,7 +924,7 @@ export function PartnerOrderWorkspace({
     setError("");
     const editingId = editingEndCustomerId;
     try {
-      const result = await portalApi<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null}>(
+      const result = await portalApi<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null;stateRegistration?:string|null}>(
         editingId ? `/end-customers/${encodeURIComponent(editingId)}` : "/end-customers",
         {
           method: editingId ? "PATCH" : "POST",
@@ -912,6 +937,7 @@ export function PartnerOrderWorkspace({
         street: result.street ?? payload.street, number: result.number ?? payload.number,
         district: result.district ?? payload.district, complement: result.complement ?? (payload.complement || null),
         city: result.city ?? payload.city, state: result.state ?? payload.state,
+        stateRegistration: result.stateRegistration ?? (payload.stateRegistration || null),
       };
       setEndCustomers(previous => (
         editingId ? previous.map(customer => customer.id === editingId ? entry : customer) : [...previous, entry]
@@ -1725,6 +1751,7 @@ export function PartnerOrderWorkspace({
                      setNewEndCustomerTaxId(chosen.taxId ?? "");setNewEndCustomerCep(chosen.postalCode ?? "");setNewEndCustomerStreet(chosen.street ?? "");setNewEndCustomerNumber(chosen.number ?? "");setNewEndCustomerDistrict(chosen.district ?? "");setNewEndCustomerComplement(chosen.complement ?? "");
                     setNewEndCustomerCity(chosen.city ?? "");
                     setNewEndCustomerState(chosen.state ?? "");
+                    setNewEndCustomerStateRegistration(chosen.stateRegistration ?? "");
                   }}>Editar cliente selecionado</button>
                 )}
                 <details key={editingEndCustomerId ? "edit" : "new"} open={Boolean(editingEndCustomerId)} className="mt-3">
@@ -1734,6 +1761,7 @@ export function PartnerOrderWorkspace({
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social *<input aria-label="Nome / Razão social do cliente final" aria-required="true" autoComplete="organization" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ *<input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP *<input aria-label="CEP do cliente final" aria-required="true" inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+{endCustomerCnpjLookup.statusText && <p role="status" className={`text-xs sm:col-span-6 ${endCustomerCnpjLookup.warning ? "font-semibold text-amber-800" : "text-stone-600"}`}>{endCustomerCnpjLookup.statusText}</p>}
 {endCustomerCepLookup.statusText && <p role="status" className="text-xs text-stone-600 sm:col-span-6">{endCustomerCepLookup.statusText}</p>}
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro *<input aria-label="Rua / Logradouro do cliente final" aria-required="true" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número *<input aria-label="Número do cliente final" ref={endCustomerNumberInput} aria-required="true" placeholder="S/N" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
@@ -1741,6 +1769,7 @@ export function PartnerOrderWorkspace({
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Complemento<input aria-label="Complemento do cliente final" value={newEndCustomerComplement} onChange={event=>setNewEndCustomerComplement(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Cidade *<input aria-label="Cidade do cliente final" aria-required="true" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">UF *<input aria-label="UF do cliente final" aria-required="true" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Inscrição estadual<input aria-label="Inscrição estadual do cliente final" placeholder="Números ou ISENTO (opcional)" maxLength={20} value={newEndCustomerStateRegistration} onChange={event=>setNewEndCustomerStateRegistration(event.target.value.toUpperCase())} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /><span className="font-normal text-stone-500">A Receita não informa a IE; preencha manualmente se houver.</span></label>
 </div>
 <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-md bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : editingEndCustomerId ? "Salvar alterações" : "Salvar cliente"}</button>
                   {editingEndCustomerId && <button type="button" className="ml-3 text-sm underline" onClick={resetEndCustomerForm}>Cancelar edição</button>}

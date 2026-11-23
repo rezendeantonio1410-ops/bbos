@@ -11,6 +11,7 @@ export type PartnerEndCustomerPatch = Partial<{
   complement: string | null;
   city: string | null;
   state: string | null;
+  stateRegistration: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -20,7 +21,7 @@ export type PartnerEndCustomerInputMode = "create" | "update";
 
 export const partnerEndCustomerFields = [
   "name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state",
-  "email", "phone", "notes",
+  "stateRegistration", "email", "phone", "notes",
 ] as const;
 type Field = typeof partnerEndCustomerFields[number];
 
@@ -36,6 +37,7 @@ export const partnerEndCustomerRequiredFields: readonly Field[] = [
 const labels: Record<Field, string> = {
   name: "Nome / Razão social", taxId: "CNPJ", postalCode: "CEP", street: "Rua",
   number: "Número", district: "Bairro", complement: "Complemento", city: "Cidade", state: "UF",
+  stateRegistration: "Inscrição estadual",
   email: "E-mail", phone: "Telefone", notes: "Observações",
 };
 const maxLength: Partial<Record<Field, number>> = {
@@ -81,6 +83,17 @@ export function parsePartnerEndCustomerPatch(
       const state = value.toUpperCase();
       if (state && !brazilianStates.has(state)) throw new Error("Informe uma UF válida.");
       values.state = state || null;
+    } else if (key === "stateRegistration") {
+      // Optional and manual (public CNPJ data has no IE): digits or ISENTO.
+      const normalized = value.toUpperCase();
+      if (normalized === "ISENTO" || normalized === "ISENTA") values.stateRegistration = "ISENTO";
+      else {
+        const digits = normalized.replace(/[.\-/\s]/g, "");
+        if (digits && !/^[0-9A-Z]{2,14}$/.test(digits)) {
+          throw new Error("Inscrição estadual: informe só números (até 14) ou ISENTO.");
+        }
+        values.stateRegistration = digits || null;
+      }
     } else if (key === "email") {
       if (value && (value.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) {
         throw new Error("Informe um e-mail válido.");

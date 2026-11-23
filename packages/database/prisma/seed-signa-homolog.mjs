@@ -61,7 +61,10 @@ export async function seedSignaHomolog(prisma = new PrismaClient()) {
   const otherCnpj = fictitiousCnpj(90000002);
   await prisma.$transaction(async (tx) => {
     const exec = (sql, ...params) => tx.$executeRawUnsafe(sql, ...params);
-    await exec(`INSERT INTO "Company"(id,name,"tradeName","taxId","updatedAt") VALUES ($1,'Bispo Coffees (Homologação)','Bispo Homologação',$2,NOW()) ON CONFLICT (id) DO NOTHING`, CO, fictitiousCnpj(90000000));
+    // The static Pix is only generated when the company CNPJ is the Bispo Pix
+    // key, so homologation uses Bispo's public CNPJ to exercise that flow.
+    // NOTE: a QR generated here is a real Pix to Bispo's account.
+    await exec(`INSERT INTO "Company"(id,name,"tradeName","taxId","updatedAt") VALUES ($1,'Bispo Coffees (Homologação)','Bispo Homologação',$2,NOW()) ON CONFLICT (id) DO UPDATE SET "taxId"=EXCLUDED."taxId"`, CO, "13008726000112");
     await exec(`INSERT INTO "SalesChannel"(id,"companyId",code,name,type,active,"updatedAt") VALUES ('homolog-ch-dist',$1,'DISTRIBUIDOR','Distribuidores','DISTRIBUIDOR',true,NOW()) ON CONFLICT (id) DO NOTHING`, CO);
     let sort = 0;
     for (const group of CATALOG) {
@@ -99,6 +102,17 @@ export async function seedSignaHomolog(prisma = new PrismaClient()) {
     ];
     for (const [id, name, email, role, partnerId] of users)
       await exec(`INSERT INTO "User"(id,"companyId",name,email,"passwordHash",role,active,"storefrontPartnerId","updatedAt") VALUES ($1,$2,$3,$4,$5,$6::"UserRole",true,$7,NOW()) ON CONFLICT (id) DO UPDATE SET "passwordHash"=EXCLUDED."passwordHash"`, id, CO, name, email, hashPassword(password), role, partnerId);
+    // Fictitious invoiced order with an OPEN receivable so the one-click Pix
+    // can be accepted end to end. The NF-e is a marker row (never sent to any
+    // SEFAZ/Bling); its 44-digit key starts with 9999 to be clearly fake.
+    await exec(`INSERT INTO "SalesOrder"(id,"companyId","customerId",code,"orderNumber",status,"paymentType",quantity,"unitPrice","totalAmount","createdByStorefrontPartnerId","orderedAt","updatedAt")
+      VALUES ('homolog-order-pix',$1,'homolog-cust-signa','H-PIX-0001','H-PIX-0001','INVOICED','CASH',1,76.80,76.80,'homolog-partner-signa',NOW(),NOW()) ON CONFLICT (id) DO NOTHING`, CO);
+    await exec(`INSERT INTO "SalesOrderItem"(id,"companyId","salesOrderId","productVariantId","productName",sku,quantity,"unitPrice","totalAmount","updatedAt")
+      VALUES ('homolog-order-pix-item',$1,'homolog-order-pix','homolog-var-rar-wlr-500','Reserva 500 g','RAR-WLR-500',1,76.80,76.80,NOW()) ON CONFLICT (id) DO NOTHING`, CO);
+    await exec(`INSERT INTO "AccountsReceivable"(id,"companyId","customerId","salesOrderId","issueDate","dueDate",amount,"openAmount",status,"updatedAt")
+      VALUES ('homolog-ar-pix',$1,'homolog-cust-signa','homolog-order-pix',NOW(),NOW() + INTERVAL '7 days',76.80,76.80,'OPEN',NOW()) ON CONFLICT (id) DO NOTHING`, CO);
+    await exec(`INSERT INTO "FiscalDocument"(id,"companyId",direction,"salesOrderId",status,number,series,"accessKey","updatedAt")
+      VALUES ('homolog-nfe-pix',$1,'OUTBOUND','homolog-order-pix','AUTHORIZED','999001','1','99990000000000000000000000000000000000000001',NOW()) ON CONFLICT (id) DO NOTHING`, CO);
   });
   console.log("Semente Signa de homologação aplicada (dados fictícios).");
 }

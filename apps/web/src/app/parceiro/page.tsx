@@ -87,6 +87,7 @@ type PortalData = {
     invoiceStatus?: string | null;
     invoicePdfAvailable?: boolean;
     billingAvailable?: boolean;
+    pixAvailable?: boolean;
   }>;
   notifications: Array<{
     id: string;

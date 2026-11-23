@@ -66,6 +66,8 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   Record<string, readonly BbosRole[]>
 > = {
   AuthController: AUTHENTICATED,
+  // Public Receita Federal data used to pre-fill registrations (BBOS and partner portal).
+  CnpjRegistryController: AUTHENTICATED,
   NotificationsController: ALL,
   MobileNotificationsController: ALL,
   IntelligenceController: CORE,

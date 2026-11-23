@@ -93,3 +93,10 @@ test("violação concorrente de CNPJ no banco é mapeada para conflito, sem masc
     assert.equal(isPartnerEndCustomerUniqueViolation(error), false);
   }
 });
+
+test("inscrição estadual manual e opcional: números, pontuação removida, ISENTO ou vazia", () => {
+  assert.equal(parsePartnerEndCustomerPatch({ stateRegistration: "901.234.56-78" }).stateRegistration, "9012345678");
+  assert.equal(parsePartnerEndCustomerPatch({ stateRegistration: "isento" }).stateRegistration, "ISENTO");
+  assert.equal(parsePartnerEndCustomerPatch({ stateRegistration: "" }).stateRegistration, null);
+  assert.throws(() => parsePartnerEndCustomerPatch({ stateRegistration: "123456789012345678" }), /Inscrição estadual/);
+});

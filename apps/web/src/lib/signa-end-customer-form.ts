@@ -13,11 +13,13 @@ export type SignaEndCustomerForm = {
   complement: string;
   city: string;
   state: string;
+  /** Optional, manual: public CNPJ data has no IE. Digits or ISENTO. */
+  stateRegistration?: string;
 };
 
 export const emptySignaEndCustomerForm: SignaEndCustomerForm = {
   name: "", taxId: "", postalCode: "", street: "", number: "",
-  district: "", complement: "", city: "", state: "",
+  district: "", complement: "", city: "", state: "", stateRegistration: "",
 };
 
 const digits = (value: string) => value.replace(/\D/g, "");
@@ -50,6 +52,12 @@ const brazilianStates = new Set([
   "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ]);
 
+export function normalizeStateRegistration(value: string): string {
+  const upper = value.trim().toUpperCase();
+  if (upper === "ISENTO" || upper === "ISENTA") return "ISENTO";
+  return upper.replace(/[.\-\/\s]/g, "");
+}
+
 /** Returns the normalized payload or the first message to show the user. */
 export function validateSignaEndCustomerForm(
   form: SignaEndCustomerForm,
@@ -64,6 +72,7 @@ export function validateSignaEndCustomerForm(
     complement: form.complement.trim(),
     city: form.city.trim(),
     state: form.state.trim().toUpperCase(),
+    stateRegistration: normalizeStateRegistration(form.stateRegistration ?? ""),
   };
   if (payload.name.length < 2) return { ok: false, error: "Informe o nome ou a razão social." };
   if (!isValidCnpj(payload.taxId)) return { ok: false, error: "CNPJ inválido. Confira os 14 dígitos." };
@@ -73,5 +82,7 @@ export function validateSignaEndCustomerForm(
   if (!payload.district) return { ok: false, error: "Informe o bairro." };
   if (!payload.city) return { ok: false, error: "Informe a cidade." };
   if (!brazilianStates.has(payload.state)) return { ok: false, error: "Informe uma UF válida." };
+  if (payload.stateRegistration && payload.stateRegistration !== "ISENTO" && !/^[0-9A-Z]{2,14}$/.test(payload.stateRegistration))
+    return { ok: false, error: "Inscrição estadual: informe só números (até 14) ou ISENTO." };
   return { ok: true, payload };
 }

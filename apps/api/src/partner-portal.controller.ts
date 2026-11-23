@@ -1385,7 +1385,7 @@ export class PartnerPortalController {
       throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
     }
     const customers = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,name,"taxId",email,phone,"postalCode",street,number,district,complement,city,state,notes,"createdAt"
+      `SELECT id,name,"taxId",email,phone,"postalCode",street,number,district,complement,city,state,"stateRegistration",notes,"createdAt"
          FROM "PartnerEndCustomer"
         WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true
         ORDER BY name ASC LIMIT 500`,
@@ -1470,12 +1470,12 @@ export class PartnerPortalController {
     await this.database.$executeRawUnsafe(
       `INSERT INTO "PartnerEndCustomer"
         (id,"companyId","partnerId",name,"taxId","postalCode",street,number,district,complement,city,state,
-         email,phone,notes,"createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())`,
+         email,phone,notes,"stateRegistration","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NOW())`,
       id, actor.companyId, partner.id, values.name, values.taxId ?? null,
       values.postalCode ?? null, values.street ?? null, values.number ?? null,
       values.district ?? null, values.complement ?? null, values.city ?? null, values.state ?? null,
-      values.email ?? null, values.phone ?? null, values.notes ?? null,
+      values.email ?? null, values.phone ?? null, values.notes ?? null, values.stateRegistration ?? null,
     ).catch((error: unknown) => {
       if (isPartnerEndCustomerUniqueViolation(error)) {
         throw new ConflictException("CNPJ já cadastrado nesta carteira. Selecione o cliente existente.");
@@ -1518,7 +1518,7 @@ export class PartnerPortalController {
       `UPDATE "PartnerEndCustomer"
           SET ${assignments}, "updatedAt"=NOW()
         WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true
-        RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state,email,phone,notes`,
+        RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state,"stateRegistration",email,phone,notes`,
       customerId, actor.companyId, partner.id, ...values,
     ).catch((error: unknown) => {
       if (isPartnerEndCustomerUniqueViolation(error)) {

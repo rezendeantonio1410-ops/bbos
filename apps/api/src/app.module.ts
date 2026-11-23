@@ -30,6 +30,7 @@ import { CommerceService } from "./commerce.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
+import { CnpjRegistryController } from "./cnpj-registry.controller";
 import { RoleAccessGuard } from "./role-access.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { AdminUsersController } from "./admin-users.controller";
@@ -94,6 +95,7 @@ import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
 
 @Module({
   controllers: [
+    CnpjRegistryController,
     HealthController,
     NotificationsController,
     MobileNotificationsController,
