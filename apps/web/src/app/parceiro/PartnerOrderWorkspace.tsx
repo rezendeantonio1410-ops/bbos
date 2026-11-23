@@ -298,6 +298,21 @@ export function PartnerOrderWorkspace({
     setRecoveredServerDraftId("");
   }
 
+  // The main New order button must invalidate any in-flight draft recovery.
+  // Toggling showOrder directly allowed a delayed GET to reopen stale form data.
+  function toggleOrderForm() {
+    if (showOrder) {
+      closeOrder();
+      return;
+    }
+    serverDraftRecoveryEpoch.current += 1;
+    setServerDraftId("");
+    setRecoveredServerDraftId("");
+    setBillingRecipientId("");
+    setPartnerEndCustomerId("");
+    setShowOrder(true);
+  }
+
 
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -1016,7 +1031,7 @@ export function PartnerOrderWorkspace({
           )}
           <button
             type="button"
-            onClick={() => setShowOrder((value) => !value)}
+            onClick={toggleOrderForm}
             disabled={
               (isDistributor && customers.length !== 1) || !variants.length
             }
