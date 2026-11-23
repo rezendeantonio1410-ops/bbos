@@ -297,6 +297,54 @@ export class StorefrontPartnersController {
     };
   }
 
+  /**
+   * Rename an existing partner login without resetting its password or
+   * disconnecting any customers, drafts or sales orders.
+   */
+  @Patch(":id/portal-email")
+  async updatePortalEmail(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: { email?: unknown },
+  ) {
+    const actor = await this.actor(request);
+    this.ensureAdministrator(actor);
+    const email = String(body?.email ?? "").trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254) {
+      throw new BadRequestException("Informe um endereço de e-mail válido.");
+    }
+    return this.database.$transaction(async (tx) => {
+      const partner = await tx.storefrontPartner.findFirst({
+        where: { id, companyId: actor.companyId, active: true },
+      });
+      if (!partner || !partner.isSalesPartner) {
+        throw new BadRequestException("Parceiro comercial ativo não encontrado.");
+      }
+      const user = await tx.user.findUnique({ where: { storefrontPartnerId: id } });
+      if (!user || !user.active || user.companyId !== actor.companyId || user.role !== UserRole.PARTNER) {
+        throw new BadRequestException("Acesso ativo do parceiro não encontrado.");
+      }
+      const owner = await tx.user.findUnique({ where: { email } });
+      if (owner && owner.id !== user.id) {
+        throw new BadRequestException("E-mail já utilizado por outro usuário do BBOS.");
+      }
+      const previousPartnerEmail = partner.email;
+      const previousLoginEmail = user.email;
+      await tx.storefrontPartner.update({ where: { id }, data: { email } });
+      await tx.user.update({ where: { id: user.id }, data: { email } });
+      // This is a login-identifier correction, not a password reset.
+      // Keep the user ID and password hash unchanged.
+      return {
+        partnerId: partner.id,
+        portalUserId: user.id,
+        email,
+        previousPartnerEmail,
+        previousLoginEmail,
+        passwordPreserved: true,
+      };
+    });
+  }
+
   @Post(":id/portal-access")
   async portalAccess(
     @Param("id") id: string,
