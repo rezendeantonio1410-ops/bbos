@@ -1,5 +1,16 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — finalização Signa na branch `claude/signa-finalizacao` (NÃO PUBLICAR sem aceite)
+
+- [x] **Cadastro comercial completo:** Nome/Razão social, CNPJ com dígito verificador, CEP logo após o CNPJ com preenchimento automático de rua/bairro/cidade/UF, número e complemento manuais; telefone, e-mail e observações opcionais. Ficha completa obrigatória na criação; edição parcial não apaga campos obrigatórios; CNPJ único por carteira ativa (409). Pesquisa por nome, CNPJ, cidade ou UF. O formulário do painel (`SignaCustomerHistory`, release) e o do Novo pedido usam a mesma validação e a mesma API. Nenhuma escrita em `Customer` fiscal.
+- [x] **Envio idempotente e transacional:** `POST /partner-portal/orders` (Signa) exige `submissionKey`; reserva `PartnerOrderSubmission`, numeração, `SalesOrder`, itens, campos acessórios e conclusão na mesma transação (base da PR #114). Mesmo conteúdo + mesma chave devolve o pedido original (`replayed=true`); conteúdo diferente ou envio em andamento → 409. A interface mantém a chave por conteúdo em `sessionStorage` isolado por empresa/parceiro/usuário.
+- [x] **Banco PostgreSQL 16 isolado (local e job de CI `signa-database`):** todas as migrações Signa aplicadas em modo estrito; persistência e isolamento do cliente comercial; escopo e versão otimista dos rascunhos; restrições da reserva de envio; preços Reserva 38,00 / 76,80 / 148,00 recalculados pela migração. Concorrência real: 10 envios simultâneos → 1 pedido e 9 replays; falha dentro da transação não deixa reserva órfã; 5 pedidos distintos simultâneos → 5 números distintos; edição simultânea de rascunho → 1 vencedor.
+- [x] **Rollback ensaiado:** `prisma/rollback/signa-portal-rollback.sql` remove rascunhos, reservas e colunas de endereço comercial, preserva `SalesOrder`; reaplicação das três migrações pendentes aprovada.
+- [x] **Financeiro somente leitura:** teste de regressão garante que o portal do parceiro não grava contas a receber, Pix, NF-e ou Bling (a Signa não confirma recebimentos).
+- [x] **Conflitos com `release/bbos-rc1-consolidation` resolvidos** (merge na branch). A histórica migração `20260807143000` falha em banco vazio (índice duplicado após a baseline); problema anterior, fora do escopo Signa; scripts de teste aplicam o legado em modo tolerante.
+- [ ] TypeScript, lint, build e suíte completa dependem do GitHub Actions desta PR (instalação de pacotes indisponível no ambiente de desenvolvimento usado).
+- [ ] Pendentes de aceite humano: teste autenticado em navegador (desktop/mobile) com contas reais de homologação, aplicação das migrações em staging com backup, limpeza do rascunho da conta após envio (decisão de produto), integração fiscal/Bling/Pix ponta a ponta. **Não fazer merge/deploy sem validação integral.**
+
 ## Incremento em 23/11/2026 — estrutura de deduplicação transacional Signa (WIP; NÃO PUBLICAR)
 
 - [x] Modelado `PartnerOrderSubmission` no Prisma, com chave única de `companyId/partnerId/userId/submissionKey`, hash SHA-256 de 64 caracteres, estados `CLAIMED/COMPLETED`, referência única a `SalesOrder` e data de conclusão.
