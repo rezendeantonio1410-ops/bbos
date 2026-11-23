@@ -1,5 +1,14 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — Pix com um clique, mapa realista e cadastro por CNPJ com IE (NÃO PUBLICADO)
+
+- [x] **Pix estático da Bispo com um clique** (`49b4fd7`, `d186e9e`): botão "Pagar com Pix" nos títulos em aberto → QR Code, valor, vencimento, favorecido e copia e cola; inclui pedidos à vista. Só leitura, a baixa continua com o financeiro. Homologação: pedido fictício `H-PIX-0001` (R$ 76,80) → 200, BR Code válido; outro distribuidor 403; pedido sem título 400.
+- [x] **Mapa de compras realista** (`7158627`): contornos reais dos 27 estados (svg-maps, CC BY 4.0), cor por valor ou volume, bolhas animadas, detalhes por estado com cidades, ranking, teclado e redução de movimento. Playwright desktop e iPhone 13 sem erros.
+- [x] **Cadastro por CNPJ** (`d186e9e`, `c55110a`), padrão para a Signa e para os clientes da Bispo: `GET /api/company-registry/cnpj/:cnpj` consulta a BrasilAPI e usa `publica.cnpj.ws` como reserva e fonte de IE; preenche só campos vazios, sinaliza situação diferente de ATIVA e sugere a IE ativa da UF (campo editável). Render: Bispo → reserva, IE 9120194892 (PR); Petrobras → BrasilAPI, IE 81281882 (RJ).
+- [x] **IE manual no cliente final Signa**: migração aditiva `20261124090000_signa_end_customer_state_registration` (coluna nula), aplicada pelo deploy normal na homologação e incluída no rollback.
+- [x] **Release sincronizada** na branch (#125, #128, #122). CI [#45274557909](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45274557909) verde nos 3 jobs; E2E 15/15 no Render.
+- [ ] **Publicação depende de:** backup verificável do `bbos-postgres-staging` (agora são 5 migrações pendentes em produção) e aceite visual dos operadores.
+
 ## Homologação em 23/11/2026 — banco isolado, E2E autenticado e correções (NÃO PUBLICAR sem aceite)
 
 - [x] **Migração histórica em banco vazio resolvida sem alterar o histórico** (`a3521d1`, `73aca7e`). Produção chegou ao estado atual marcando 34 migrações antigas como aplicadas (`applied_steps_count=0`). Com `BBOS_EMPTY_DATABASE_BOOTSTRAP=true` e **somente em banco sem tabelas**, o deploy reaplica as migrações anteriores a `20261122010000` numa única transação (savepoint por comando), registra-as com o checksum do Prisma e aplica as migrações Signa em modo estrito por `prisma migrate deploy`. Sem a variável, ou com tabelas (produção), nada muda. Esquema reconstruído = produção em todas as tabelas usadas pela Signa; as diferenças restantes vêm de 3 migrações de loja virtual aplicadas em produção a partir de outra branch (`20260919190000`, `20260919213000`, `20260919223000`), que não estão na release. Job de CI `Empty database bootstrap through deploy path` aprovado.
