@@ -45,7 +45,7 @@ test("edição de cliente comercial tem escopo de empresa/parceiro e não altera
   assert.match(segment, /portalAccessLevel !== "DISTRIBUTOR"/);
   assert.match(segment, /parsePartnerEndCustomerPatch\(body\)/);
   assert.match(segment, /WHERE id=\$1 AND "companyId"=\$2 AND "partnerId"=\$3 AND active=true/);
-  assert.match(segment, /RETURNING id,name,city,state/);
+  assert.match(segment, /RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state/);
   assert.doesNotMatch(segment, /UPDATE "Customer"/);
 });
 
