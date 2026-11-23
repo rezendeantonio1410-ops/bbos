@@ -62,8 +62,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Free instances cannot receive private-network traffic, so the app
+      # reaches the homologation API through its public URL (set on the
+      # service to the generated https://bbos-api-homolog-XXXX.onrender.com).
+      # Never point it at an RC1/production API.
       - key: BBOS_API_INTERNAL_URL
-        fromService:
-          type: web
-          name: bbos-api-homolog
-          property: hostport
+        sync: false
