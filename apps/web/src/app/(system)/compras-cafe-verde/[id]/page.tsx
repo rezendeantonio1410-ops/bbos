@@ -363,7 +363,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
            </label>
          </div>
          <p className="mt-3 text-xs text-amber-800">
-           A operação será recusada se houver aceite do fornecedor, NF/XML vinculado, contas a pagar, pagamento ou recebimento.
+           Correção bloqueada após aceite, pagamento, recebimento ou confirmação contratual. Se houver NF-e vinculada, o novo total deve ser idêntico ao valor da nota autorizada; a conciliação fiscal permanece sujeita à conferência.
          </p>
          <div className="mt-4 flex flex-wrap justify-end gap-2">
            <button type="button" disabled={busy} onClick={() => setApprovedCorrectionOpen(false)}
