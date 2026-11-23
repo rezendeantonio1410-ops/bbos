@@ -51,6 +51,7 @@
     "test:mobile-push": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/mobile-push.test.ts",
     "test:sales-order-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-billing.test.ts ../../apps/api/src/sales-order-receivable.test.ts",
     "test:sales-map": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-map.test.ts",
+    "test:signa-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-billing-recipient.test.ts",
     "test:signa-reserva": "corepack pnpm --filter @bbos/database exec tsx --tsconfig ../../apps/api/tsconfig.json --test ../../apps/api/src/partner-portal-signa-reserva.test.ts"
   },
   "dependencies": {
