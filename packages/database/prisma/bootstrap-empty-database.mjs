@@ -10,11 +10,12 @@
 // production history are left untouched.
 //
 // How: legacy migrations (before LEGACY_CUTOFF) are replayed statement by
-// statement, tolerating "already exists"-style failures exactly like `psql`
-// without ON_ERROR_STOP, and are then recorded with `prisma migrate resolve
-// --applied`. Every later migration (all Signa migrations) is applied STRICTLY
+// statement inside ONE transaction (a savepoint per statement tolerates
+// "already exists"-style failures), and recorded as applied exactly as
+// `prisma migrate resolve --applied` would. Every later migration (all Signa migrations) is applied STRICTLY
 // by `prisma migrate deploy`, the same command production uses.
 import { spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -104,6 +105,17 @@ export async function databaseIsEmpty(prisma) {
   return Number(rows[0]?.n ?? -1) === 0;
 }
 
+const PRISMA_MIGRATIONS_TABLE = `CREATE TABLE "_prisma_migrations" (
+  "id" VARCHAR(36) PRIMARY KEY NOT NULL,
+  "checksum" VARCHAR(64) NOT NULL,
+  "finished_at" TIMESTAMPTZ,
+  "migration_name" VARCHAR(255) NOT NULL,
+  "logs" TEXT,
+  "rolled_back_at" TIMESTAMPTZ,
+  "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "applied_steps_count" INTEGER NOT NULL DEFAULT 0
+)`;
+
 export async function bootstrapEmptyDatabase() {
   if (process.env.BBOS_EMPTY_DATABASE_BOOTSTRAP !== "true")
     throw new Error("Recusado: defina BBOS_EMPTY_DATABASE_BOOTSTRAP=true somente em bancos isolados.");
@@ -116,23 +128,43 @@ export async function bootstrapEmptyDatabase() {
       .map((entry) => entry.name)
       .filter((name) => existsSync(join(migrationsDir, name, "migration.sql")))
       .sort();
-    let tolerated = 0;
-    for (const name of legacy) {
-      const sql = readFileSync(join(migrationsDir, name, "migration.sql"), "utf8");
-      for (const statement of splitSqlStatements(sql)) {
-        try {
-          await prisma.$executeRawUnsafe(statement);
-        } catch {
-          tolerated += 1;
+    // One transaction, one savepoint per statement: tolerated failures roll
+    // back only that statement, and an interrupted bootstrap leaves the
+    // database EMPTY, so the next start simply retries from scratch.
+    const tolerated = await prisma.$transaction(async (tx) => {
+      let ignored = 0;
+      for (const name of legacy) {
+        const sql = readFileSync(join(migrationsDir, name, "migration.sql"), "utf8");
+        for (const statement of splitSqlStatements(sql)) {
+          // A few legacy files carry their own BEGIN/COMMIT; inside this
+          // single transaction they would end it early, so skip them.
+          if (/^(BEGIN|COMMIT|START\s+TRANSACTION|END)(\s+(WORK|TRANSACTION))?$/i.test(statement.trim())) continue;
+          await tx.$executeRawUnsafe("SAVEPOINT bbos_bootstrap");
+          try {
+            await tx.$executeRawUnsafe(statement);
+            await tx.$executeRawUnsafe("RELEASE SAVEPOINT bbos_bootstrap");
+          } catch {
+            await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT bbos_bootstrap");
+            ignored += 1;
+          }
         }
       }
-    }
-    console.log(`Bootstrap: ${legacy.length} migrações históricas reaplicadas (${tolerated} comandos já existentes ignorados).`);
-    await prisma.$disconnect();
-    for (const name of legacy) runPrisma(["migrate", "resolve", "--applied", name, "--schema=prisma/schema.prisma"]);
-    console.log("Bootstrap: histórico registrado; aplicando migrações recentes em modo estrito.");
+      // Same record `prisma migrate resolve --applied` writes (checksum is
+      // the SHA-256 of migration.sql), so later deploys treat them as applied.
+      await tx.$executeRawUnsafe(PRISMA_MIGRATIONS_TABLE);
+      for (const name of legacy) {
+        const checksum = createHash("sha256").update(readFileSync(join(migrationsDir, name, "migration.sql"))).digest("hex");
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "_prisma_migrations"(id,checksum,finished_at,migration_name,logs,started_at,applied_steps_count) VALUES ($1,$2,now(),$3,'',now(),0)`,
+          randomUUID(), checksum, name,
+        );
+      }
+      return ignored;
+    }, { timeout: 15 * 60 * 1000, maxWait: 60 * 1000 });
+    console.log(`Bootstrap: ${legacy.length} migrações históricas reaplicadas e registradas (${tolerated} comandos já existentes ignorados).`);
   } finally {
     await prisma.$disconnect();
   }
+  console.log("Bootstrap: aplicando migrações recentes em modo estrito.");
   runPrisma(["migrate", "deploy", "--schema=prisma/schema.prisma"]);
 }
