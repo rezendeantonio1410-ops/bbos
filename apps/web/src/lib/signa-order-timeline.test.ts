@@ -23,7 +23,7 @@ test("Ver detalhes apresenta somente eventos do pedido selecionado, na ordem tem
 test("sem seleção ou sem eventos não mostra o histórico de outros pedidos", () => {
   assert.deepEqual(getSignaOrderTimelineEvents(events, null), []);
   assert.deepEqual(getSignaOrderTimelineEvents(events, "inexistente"), []);
-  assert.equal(events[0].id, "late"); // no mutation
+  assert.equal(events.at(0)?.id, "late"); // no mutation
 });
 
 test("interface conecta Ver detalhes ao painel individual e recebe os eventos reais", () => {
