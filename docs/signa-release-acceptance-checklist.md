@@ -1,5 +1,15 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — ignorar resposta atrasada na recuperação de rascunhos (WIP; NÃO PUBLICAR)
+
+- [x] Corrigida a condição de corrida no formulário Signa: um GET de rascunho retornando depois de mudança de seleção, fechamento do pedido, abertura de novo pedido, restauração local ou perda do escopo não pode reaplicar dados antigos nem autorizar PATCH de outro rascunho. A lista de seleção fica indisponível enquanto houver operação de rascunho em andamento.
+- [x] Novo guarda `signaServerDraftRecoveryIsCurrent` valida ID solicitado, ID retornado e geração da requisição antes de alterar o formulário; teste unitário e teste de regressão de integração estática adicionados. Commits na feature: `fc4fc72`, `3a9dfa3`, `c2d52f1` e `769eb51`.
+- [x] **CI GitHub Actions [#45162255020](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45162255020) passou integralmente** em TypeScript, lint, testes e build; PR temporária [#107](https://github.com/rezendeantonio1410-ops/bbos/pull/107) validou a mesma implementação com marcador documental e sem publicação. Este CI **não** comprova fluxo autenticado entre dispositivos, concorrência real no banco nem teste visual.
+- [x] Verificação somente leitura: PostgreSQL identificado como staging continua **sem** a tabela `PartnerOrderDraft` e sem a migração `20261123030000_signa_order_drafts` aplicada.
+- [x] Situação da PR #92 mudou durante a execução: GitHub confirmou **merge anterior** em 23/11/2026 (commit `330f209`); Render reporta **app RC1 e API RC1 live** nesse commit, deploy encerrado às 10:22 UTC. É apenas a correção isolada da coluna e ação "Ver detalhes" já publicada; **não** confirma o aceite completo da Signa, nem validação visual autenticada. Este incremento da PR #67 não foi publicado.
+- [ ] **Gate fechado:** testar migração aditiva e rollback em banco isolado, recuperação autenticada entre sessões/usuários, concorrência real e ciclo idempotente de submissão; verificar isolamento em mudança de conta, NF-e/Pix/Bling/BI, catálogo exclusivo e aprovação visual desktop/mobile. PR #67 segue draft e com conflitos. Não fazer merge/deploy, não alterar dados existentes, preços ou integrações.
+
+
 ## Incremento em 23/11/2026 — recuperação local não pode sobrescrever rascunho da conta (WIP, NÃO PUBLICAR)
 
 - [x] **Código alterado na PR #67:** ao restaurar um rascunho deste navegador, a interface agora limpa **ambos** os identificadores de seleção e autorização de edição do rascunho da conta, antes de modificar o formulário. Isso evita que o clique posterior em **Salvar na conta** substitua acidentalmente um documento persistido diferente. Rascunho local expirado/inválido não altera o formulário. Commits `3ec9f21` e `5af8d1b`.
