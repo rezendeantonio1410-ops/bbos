@@ -66,7 +66,7 @@ END $$;
 -- cannot create a second active commercial customer with the same normalized
 -- CNPJ in a single partner portfolio. Identical CNPJs in different portfolios
 -- are permitted; historical punctuation does not bypass the index.
-DO $
+DO $signa_cnpj$
 BEGIN
   BEGIN
     INSERT INTO "PartnerEndCustomer"
@@ -90,7 +90,7 @@ BEGIN
   INSERT INTO "PartnerEndCustomer"
     (id,"companyId","partnerId",name,"taxId",active,"createdAt","updatedAt")
   VALUES ('it-ec-inactive','it-co-a','it-signa','Registro inativo','11222333000181',false,NOW(),NOW());
-END $;
+END $signa_cnpj$;
 
 -- ---------- 2. drafts: scope, optimistic version, constraints ----------
 INSERT INTO "PartnerOrderDraft"(id,"companyId","partnerId","userId",status,version,payload,"createdAt","updatedAt")
