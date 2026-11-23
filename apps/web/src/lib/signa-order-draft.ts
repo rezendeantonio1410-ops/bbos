@@ -31,7 +31,9 @@ function validLine(line: unknown): line is { productVariantId: string; quantity:
 function validDate(value: unknown): value is string {
   if (value === "") return true;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
   if (year < 1900 || year > 9999) return false;
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year &&
