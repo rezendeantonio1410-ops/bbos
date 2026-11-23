@@ -104,3 +104,18 @@ export function parseSignaOrderDraft(
     return null;
   }
 }
+
+/**
+ * A dropdown selection alone must never authorize overwriting an unrelated
+ * account draft. PATCH is permitted only after that exact draft was recovered
+ * into the form; otherwise Save creates a new independent draft.
+ */
+export function signaServerDraftEditTarget(
+  selectedId: string,
+  recoveredId: string,
+  accessibleIds: ReadonlySet<string>,
+): string | null {
+  return selectedId !== "" && selectedId === recoveredId && accessibleIds.has(selectedId)
+    ? selectedId
+    : null;
+}
