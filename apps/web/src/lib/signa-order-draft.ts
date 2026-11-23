@@ -12,8 +12,16 @@ const MAX_DRAFT_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_LINES = 50;
 const MAX_QUANTITY = 99999;
 
-export function signaOrderDraftKey(commercialCustomerId: string): string {
-  return `bbos:signa-order-draft:v1:${commercialCustomerId}`;
+export type SignaOrderDraftScope = { companyId: string; partnerId: string; userId: string };
+
+// Do not read/migrate the legacy customer-only key: a shared browser cannot prove
+// which signed-in user owned it. Server drafts will use the same identity scope.
+export function signaOrderDraftKey(scope: SignaOrderDraftScope, commercialCustomerId: string): string {
+  const parts = [scope.companyId, scope.partnerId, scope.userId, commercialCustomerId];
+  if (parts.some(part => typeof part !== "string" || !part.trim() || part.length > 200)) {
+    throw new Error("Identidade do rascunho incompleta.");
+  }
+  return `bbos:signa-order-draft:v2:${parts.map(encodeURIComponent).join(":")}`;
 }
 
 function validLine(line: unknown): line is { productVariantId: string; quantity: number } {
