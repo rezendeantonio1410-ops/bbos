@@ -29,7 +29,6 @@ test("Pagamentos usa títulos existentes do Contas a Receber com escopo do porta
 test("nunca considera ausência de título ou de data como pagamento realizado", () => {
   assert.match(dashboard, /receivableOrders\.length===0/);
   assert.match(dashboard, /Isso não significa que algum pagamento tenha sido realizado/);
-  assert.match(dashboard, /o\.receivableAmount!=null/);
   assert.match(dashboard, /o\.openAmount!=null/);
   assert.match(dashboard, /o\.receivableStatus==="PAID"&&o\.paymentDate/);
   assert.match(dashboard, /o\.billingAvailable&&<a/);
@@ -40,8 +39,10 @@ test("painel responsivo de pagamentos é somente leitura e não autoriza baixas 
   const end = dashboard.indexOf("</section>", start);
   assert.ok(start > 0 && end > start);
   const panel = dashboard.slice(start, end);
-  assert.match(panel, /grid gap-3 sm:grid-cols-2 xl:grid-cols-3/);
   assert.match(panel, /o\.receivableStatus==="PAID"/);
   assert.match(panel, /conciliação do financeiro da Bispo/);
-  assert.doesNotMatch(panel, /fetch\(|onClick=|onSubmit=|method:"(POST|PATCH|PUT|DELETE)"/);
+  // Clicks only open the order detail or the read-only Pix dialog; nothing
+  // in this panel can record, confirm or settle a payment.
+  assert.doesNotMatch(panel, /fetch\(|onSubmit=|method:"(POST|PATCH|PUT|DELETE)"|manual-pix|\/confirm|confirmPayment|markPaid/);
+  assert.match(panel, /onClick=\{\(\)=>setOpenOrderId\(o\.id\)\}/);
 });

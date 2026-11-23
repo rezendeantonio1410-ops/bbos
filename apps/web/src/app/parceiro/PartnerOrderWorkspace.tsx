@@ -1,5 +1,6 @@
 "use client";
 
+import { showToast } from "@/components/portal-toast";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
@@ -946,6 +947,7 @@ export function PartnerOrderWorkspace({
       setEndCustomerSearch("");
       setPartnerEndCustomerId(result.id);
       resetEndCustomerForm();
+      showToast(editingId ? "Cliente atualizado." : "Cliente cadastrado.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível salvar o cliente comercial.");
     } finally { setSavingEndCustomer(false); }
@@ -1019,6 +1021,7 @@ export function PartnerOrderWorkspace({
         try { window.sessionStorage.removeItem(submissionStorageKey); } catch { /* ignore */ }
       }
       setMessage(order.replayed ? order.message : `${order.code} criado. ${order.message}`);
+      showToast(order.replayed ? `Pedido ${order.code} já havia sido enviado.` : `Pedido ${order.code} enviado para aprovação.`);
       // Only remove the local draft after the server confirms the order.
       if (draftKey) {
         try { window.localStorage.removeItem(draftKey); } catch { /* Storage may be disabled. */ }
@@ -2257,10 +2260,10 @@ export function PartnerOrderWorkspace({
         </div>
       )}
       {isDistributor && !showOrder && (
-        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-emerald-900/10 bg-white/95 p-1.5 shadow-xl backdrop-blur md:hidden">
+        <nav aria-label="Atalhos" className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-2xl border border-[#e6e6e1] bg-[#ffffff]/95 p-1.5 shadow-xl backdrop-blur md:hidden">
           <a
             href="#catalogo-signa"
-            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#087568]"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[11px] font-semibold text-[#3d3d39]"
           >
             <ClipboardCheck size={17} />
             Produtos
@@ -2269,14 +2272,14 @@ export function PartnerOrderWorkspace({
             type="button"
             onClick={() => setShowOrder(true)}
             disabled={customers.length !== 1 || !variants.length}
-            className="flex min-h-12 flex-col items-center justify-center rounded-xl bg-[#14201d] text-[10px] font-bold text-white disabled:opacity-45"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl bg-[#0A0A0A] text-[11px] font-semibold text-white disabled:opacity-45"
           >
             <Plus size={17} />
             Novo pedido
           </button>
           <a
-            href="#pedidos-em-andamento"
-            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-[#087568]"
+            href="#pedidos-signa"
+            className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[11px] font-semibold text-[#3d3d39]"
           >
             <History size={17} />
             Pedidos

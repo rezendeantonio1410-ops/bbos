@@ -219,9 +219,10 @@ export default function PartnerPortalPage() {
     router.replace("/login?returnTo=%2Fparceiro");
   };
 
+  const isDistributorPortal = data?.partner.portalAccessLevel === "DISTRIBUTOR";
   return (
     <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "signa-portal lg:pl-52" : ""}`}>
-      <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-white/95 text-[#102338] shadow-sm" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
+      {!isDistributorPortal && <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-white/95 text-[#102338] shadow-sm" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-3">
           <div className="flex min-w-0 items-center gap-3 sm:gap-5">
             <div
@@ -280,18 +281,23 @@ export default function PartnerPortalPage() {
             </button>
           </div>
         </div>
-      </header>
+      </header>}
 
       <div
         className={`mx-auto max-w-7xl px-4 py-5 sm:px-8 sm:py-7 ${
           data?.partner.portalAccessLevel === "DISTRIBUTOR"
-            ? "space-y-4 pb-24 sm:pb-7"
+            ? "space-y-4 pb-24 pt-20 sm:pb-7 sm:pt-20"
             : "space-y-7"
         }`}
       >
         {loading && !data && (
-          <div className="rounded-3xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
-            Carregando seus negócios…
+          <div role="status" aria-label="Carregando o portal" className="space-y-4">
+            <span className="sr-only">Carregando seus negócios…</span>
+            <div className="h-10 w-64 animate-pulse rounded-lg bg-black/[.06]" />
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-black/[.04] sm:grid-cols-5">
+              {[0, 1, 2, 3, 4].map((n) => <div key={n} className="h-16 animate-pulse bg-white/70" />)}
+            </div>
+            <div className="h-72 animate-pulse rounded-xl bg-white/80" />
           </div>
         )}
         {error && (
@@ -374,7 +380,7 @@ export default function PartnerPortalPage() {
 
         {data && (
           <>
-            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} events={data.notifications} />}
+            {data.partner.portalAccessLevel === "DISTRIBUTOR" && <SignaEnterpriseDashboard orders={data.partnerOrders} partnerName={data.partner.name} events={data.notifications} onLogout={() => void logout()} />}
             {data.partner.portalAccessLevel !== "DISTRIBUTOR" && <section
               id="inicio"
               className={`flex flex-wrap items-end justify-between gap-4 ${

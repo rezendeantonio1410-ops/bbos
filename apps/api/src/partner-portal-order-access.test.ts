@@ -80,3 +80,13 @@ test("portal do parceiro só lê financeiro: não confirma recebimentos, Pix, NF
   assert.deepEqual(source.match(writes) ?? [], []);
   assert.doesNotMatch(source, /\.(accountsReceivable|fiscalDocument|pixCharge|payment)\.(create|update|upsert|delete)/);
 });
+
+test("detalhe do pedido do parceiro exige o mesmo escopo dos PDFs e não é armazenado em cache", () => {
+  const start = source.indexOf('@Get("orders/:orderId/detail")');
+  assert.ok(start >= 0);
+  const segment = source.slice(start, source.indexOf('@Get("orders/:orderId/pix")', start));
+  assert.match(segment, /@Header\("Cache-Control", "private, no-store"\)/);
+  assert.match(segment, /assertPartnerOrder\(partner, actor\.companyId, orderId\)/);
+  assert.match(segment, /item\."companyId"=\$2/);
+  assert.doesNotMatch(segment, /UPDATE |INSERT |DELETE /);
+});

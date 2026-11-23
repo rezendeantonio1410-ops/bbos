@@ -35,8 +35,8 @@ test("interface conecta Ver detalhes ao painel individual e recebe os eventos re
     new URL("../app/parceiro/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(dashboard, /setExpandedOrder\(value=>value===o\.id\?null:o\.id\)/);
-  assert.match(dashboard, /getSignaOrderTimelineEvents\(events,expandedOrder\)/);
-  assert.match(dashboard, /id="signa-order-timeline"/);
+  assert.match(dashboard, /setOpenOrderId\(o\.id\)/);
+  assert.match(dashboard, /getSignaOrderTimelineEvents\(events,openOrderId\)/);
+  assert.match(dashboard, /<SignaOrderPanel order=\{openOrder\}[^>]*events=\{orderEvents\}/);
   assert.match(page, /events=\{data\.notifications\}/);
 });
