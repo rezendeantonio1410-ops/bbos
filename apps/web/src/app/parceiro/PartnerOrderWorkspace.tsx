@@ -605,6 +605,8 @@ export function PartnerOrderWorkspace({
 
   async function restoreServerDraft() {
     if (!serverDraftId || serverDraftBusy) return;
+    // A failed or interrupted recovery must not retain permission to PATCH a prior draft.
+    setRecoveredServerDraftId("");
     setServerDraftBusy(true);
     try {
       const saved = await portalApi<ServerOrderDraft>("/order-drafts/" + serverDraftId);
@@ -1580,7 +1582,7 @@ export function PartnerOrderWorkspace({
                 <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança. Para alterar um rascunho existente, selecione e use Recuperar da conta antes de salvar; apenas selecionar não o substitui.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" disabled={busy || serverDraftBusy} onClick={() => void saveServerDraft()} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar na conta</button>
-                  <select aria-label="Selecionar rascunho da conta" value={serverDraftId} onChange={event => setServerDraftId(event.target.value)} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
+                  <select aria-label="Selecionar rascunho da conta" value={serverDraftId} onChange={event => { setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
                     <option value="">Selecionar rascunho</option>
                     {serverDrafts.map(draft => (
                       <option key={draft.id} value={draft.id}>{new Date(draft.updatedAt).toLocaleString("pt-BR")} · {draft.payload.items.length} item(ns)</option>
