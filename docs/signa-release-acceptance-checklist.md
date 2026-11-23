@@ -1,5 +1,13 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — limite transacional de rascunhos da conta (WIP, SEM PUBLICAR)
+
+- [x] **Código implementado na branch feature da PR #67** (commits `123af79`, `b4ece89`, `9f47851`, `325c85b`): criação de rascunhos Signa limitada a **100 registros DRAFT por companyId/partnerId/userId**. A API usa transação PostgreSQL com `pg_advisory_xact_lock` por escopo, executa a contagem após obter o lock e retorna **409 Conflict** com orientação para excluir uma cópia antiga quando o limite é atingido. A listagem já usa LIMIT 100; a proteção evita que novos rascunhos fiquem inacessíveis na UI. Não remove rascunhos existentes.
+- [x] Testes unitários cobrem 0, 99, 100, 101 e contagem negativa. **CI completo aprovado** em [Actions #45129125534](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45129125534): TypeScript, lint, testes e build, no código da feature mais um arquivo de validação isolado da PR temporária [#103](https://github.com/rezendeantonio1410-ops/bbos/pull/103). CI não comprova concorrência real nem execução transacional no banco.
+- [x] **Verificação SQL sem mutação em Render staging:** `EXPLAIN (VERBOSE)` confirmou que a expressão de lock `pg_advisory_xact_lock(hashtextextended(...)) IS NULL` é aceita pelo PostgreSQL. Consulta somente leitura confirmou **ausência da tabela `PartnerOrderDraft` e da migração `20261123030000_signa_order_drafts`** nessa instância identificada como staging. Nenhuma migração aplicada.
+- [x] Render: serviços `bbos-api-rc1` e `bbos-app-rc1` permanecem com último deploy **live** no commit prévio `07c6b9f`; auto-deploy aponta para `release/bbos-rc1-consolidation`. Nenhuma alteração na release, no banco, em pedidos, pagamentos, NF-e ou Bling.
+- [ ] **Porta de publicação ainda fechada:** ensaio da migração em banco isolado com rollback, testes de concorrência e autorização reais, E2E em duas sessões/dispositivos, envio idempotente de pedido, aceite visual da PR #92, resolução de conflitos da PR #67, aprovação fiscal/financeira e demais integrações.
+
 ## Incremento em 23/11/2026 — duplicação segura de rascunhos Signa (WIP, sem publicação)
 
 - [x] Implementada no formulário a ação **Duplicar na conta** para um rascunho selecionado. A interface busca o rascunho pelo endpoint autenticado (escopo `companyId/partnerId/userId`) e cria **um novo** registro pelo POST de rascunhos, enviando **somente `saved.payload`**. O original não é modificado; não chama a rota de pedido, não altera pagamentos, estoque ou fiscal. A nova cópia é selecionada para recuperação e revisão antes de qualquer eventual envio.
