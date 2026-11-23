@@ -8,7 +8,7 @@
 - [x] **Rollback ensaiado:** `prisma/rollback/signa-portal-rollback.sql` remove rascunhos, reservas e colunas de endereço comercial, preserva `SalesOrder`; reaplicação das três migrações pendentes aprovada.
 - [x] **Financeiro somente leitura:** teste de regressão garante que o portal do parceiro não grava contas a receber, Pix, NF-e ou Bling (a Signa não confirma recebimentos).
 - [x] **Conflitos com `release/bbos-rc1-consolidation` resolvidos** (merge na branch). A histórica migração `20260807143000` falha em banco vazio (índice duplicado após a baseline); problema anterior, fora do escopo Signa; scripts de teste aplicam o legado em modo tolerante.
-- [ ] TypeScript, lint, build e suíte completa dependem do GitHub Actions desta PR (instalação de pacotes indisponível no ambiente de desenvolvimento usado).
+- [x] **GitHub Actions [#45218761287](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45218761287) aprovado** na PR #115 (commit `d26bfa1`): TypeScript, lint, suíte completa (inclui `test:signa-reserva` da release, agora com chave de envio, transação e replay), build e job `signa-database`. CI não substitui teste autenticado em navegador.
 - [ ] Pendentes de aceite humano: teste autenticado em navegador (desktop/mobile) com contas reais de homologação, aplicação das migrações em staging com backup, limpeza do rascunho da conta após envio (decisão de produto), integração fiscal/Bling/Pix ponta a ponta. **Não fazer merge/deploy sem validação integral.**
 
 ## Incremento em 23/11/2026 — estrutura de deduplicação transacional Signa (WIP; NÃO PUBLICAR)
