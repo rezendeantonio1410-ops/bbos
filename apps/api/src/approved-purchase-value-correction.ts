@@ -50,3 +50,31 @@ export function approvedPurchaseCorrectionEligible(purchase: {
     purchase.brokerCommissionAmount == null &&
     purchase.pricePerBag == null;
 }
+
+export type PurchaseFiscalAllocation = {
+  allocationType: string;
+  direction: string;
+  status: string;
+  matchStatus: string;
+  totalAmount: number;
+};
+
+/**
+ * If an inbound NF-e has already been linked, an approved value correction
+ * is allowed only when it reconciles the purchase total to that exact invoice.
+ * Never alter fiscal documents or silently mark them matched.
+ */
+export function approvedPurchaseFiscalCorrectionEligible(
+  allocations: PurchaseFiscalAllocation[],
+  correctedTotal: number,
+): boolean {
+  if (allocations.length === 0) return true;
+  if (allocations.length !== 1) return false;
+  const invoice = allocations[0]!;
+  return invoice.allocationType === "GREEN_COFFEE_PURCHASE" &&
+    invoice.direction === "INBOUND" &&
+    invoice.status === "AUTHORIZED" &&
+    invoice.matchStatus === "DIVERGENT" &&
+    Number.isFinite(invoice.totalAmount) &&
+    Math.round(invoice.totalAmount * 100) === Math.round(correctedTotal * 100);
+}
