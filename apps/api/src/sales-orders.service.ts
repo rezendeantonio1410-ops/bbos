@@ -32,6 +32,7 @@ import {
   customerFiscalReadinessMessage,
 } from "./customer-fiscal-readiness";
 import { salesOrderPortfolioWhere } from "./sales-portfolio";
+import { scheduledJobsDisabled } from "./scheduled-jobs";
 
 export type CreateSalesOrderInput = {
   code: string;
@@ -743,6 +744,8 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
+    // Preview instances sharing the production database must stay passive.
+    if (scheduledJobsDisabled()) return;
     void this.reconcileAutomaticPackaging();
     this.automaticPackagingTimer = setInterval(
       () => void this.reconcileAutomaticPackaging(),

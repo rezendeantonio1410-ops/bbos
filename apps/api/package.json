@@ -13,7 +13,7 @@
     "test:signa-ready-date": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-ready-date.test.ts",
     "test:signa-report-period": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-report-period.test.ts",
     "test:signa-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-billing-recipient.test.ts",
-    "test:signa-idempotency": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-order-idempotency.test.ts",
+    "test:signa-idempotency": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-order-idempotency.test.ts ../../apps/api/src/scheduled-jobs.test.ts",
     "test:signa-order-isolation": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-portal-order-access.test.ts ../../apps/api/src/partner-end-customer-input.test.ts ../../apps/api/src/signa-catalog-visibility.test.ts ../../apps/api/src/signa-server-draft.test.ts",
     "test:customer-visit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-visit-input.test.ts",
     "test:customer-sales-history": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-sales-history.test.ts",
