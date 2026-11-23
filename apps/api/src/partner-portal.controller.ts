@@ -1372,6 +1372,7 @@ export class PartnerPortalController {
   }
 
   @Get("end-customer-history")
+  @Header("Cache-Control", "private, no-store")
   async endCustomerHistory(@Req() request: { user?: PartnerActor }) {
     const { actor, partner } = await this.context(request);
     if (partner.portalAccessLevel !== "DISTRIBUTOR") {
@@ -1399,6 +1400,7 @@ export class PartnerPortalController {
   }
 
   @Get("end-customers/:endCustomerId/orders")
+  @Header("Cache-Control", "private, no-store")
   async endCustomerOrders(
     @Req() request: { user?: PartnerActor },
     @Param("endCustomerId") endCustomerId: string,
