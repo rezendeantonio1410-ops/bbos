@@ -95,3 +95,14 @@ export function parseSignaDraftVersion(raw: unknown): number {
   }
   return raw as number;
 }
+
+/**
+ * The API lists at most 100 drafts per user. Block new copies once that
+ * bound is reached, instead of silently hiding older drafts from the owner.
+ * SQL COUNT(*) from PostgreSQL is returned as bigint.
+ */
+export const MAX_SIGNA_SERVER_DRAFTS_PER_USER = 100;
+
+export function hasSignaServerDraftCapacity(activeDraftCount: bigint): boolean {
+  return activeDraftCount >= 0n && activeDraftCount < BigInt(MAX_SIGNA_SERVER_DRAFTS_PER_USER);
+}
