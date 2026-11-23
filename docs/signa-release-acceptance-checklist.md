@@ -1,5 +1,13 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — duplicação segura de rascunhos Signa (WIP, sem publicação)
+
+- [x] Implementada no formulário a ação **Duplicar na conta** para um rascunho selecionado. A interface busca o rascunho pelo endpoint autenticado (escopo `companyId/partnerId/userId`) e cria **um novo** registro pelo POST de rascunhos, enviando **somente `saved.payload`**. O original não é modificado; não chama a rota de pedido, não altera pagamentos, estoque ou fiscal. A nova cópia é selecionada para recuperação e revisão antes de qualquer eventual envio.
+- [x] Acrescentado teste de regressão para recusar metadados de identificação/escopo/versão na cópia e revalidar apenas o payload permitido, sem transportar campos de preço e proprietário.
+- [x] **GitHub Actions CI #45122052528 aprovado** na PR temporária [#102](https://github.com/rezendeantonio1410-ops/bbos/pull/102): typecheck, lint, testes e build; validação sobre o código da feature nos commits `5b05670` e `0ea2b58`. PR #102 de validação **não será integrada** na branch principal nem na release.
+- [ ] **Aceite integral ainda bloqueado:** ensaio da migração de rascunhos em banco isolado e rollback; E2E autenticado entre dispositivos e usuários; limitação de volume/expiração; conversão idempotente para pedido com limpeza/auditoria; revisão visual desktop/mobile da PR #92; resolução de conflitos da PR #67 e testes fiscais, Bling, Pix, relatórios e produção.
+- [ ] **Render não foi revalidado nesta execução:** conexão não tinha workspace selecionado. Não inferir deploy, banco ou migração a partir do CI. Nenhum merge/deploy ou mutação de registros reais autorizado por este incremento.
+
 ## Incremento em 23/11/2026 — rascunhos persistentes no servidor (WIP, sem publicação)
 
 - [x] Criada a migração **aditiva e ainda não aplicada** 20261123030000_signa_order_drafts: tabela separada PartnerOrderDraft, FKs para empresa/parceiro/usuário, JSON de conteúdo, índice por escopo e data, versão para concorrência, estado DRAFT. Não altera registros existentes, pedidos, estoque, Bling, NF-e, Pix nem preços.
