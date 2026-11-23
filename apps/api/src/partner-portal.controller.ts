@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ConflictException,
+  Delete,
   ForbiddenException,
   Get,
   NotFoundException,
@@ -27,6 +29,7 @@ import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
 import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
 import { selectDistributorCatalogVisibility } from "./signa-catalog-visibility";
+import { parseSignaServerDraftPayload, parseSignaDraftVersion, type SignaServerDraftPayload } from "./signa-server-draft";
 
 type PartnerActor = {
   id?: string | null;
@@ -1348,6 +1351,157 @@ export class PartnerPortalController {
       throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
     }
     return { ...updated[0], message: "Cadastro comercial atualizado." };
+  }
+
+  /**
+   * Private partner drafts are NOT SalesOrders. All reads/writes include the
+   * authenticated user, company and distributor, and never trigger production,
+   * stock reservation, NF-e, receivables, Pix or Bling.
+   */
+  private async signaDraftContext(request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (!this.isSignaDistributor(partner) || !actor.id) {
+      throw new ForbiddenException("Rascunhos estão disponíveis apenas para o usuário Signa autenticado.");
+    }
+    return { actor, partner, userId: actor.id };
+  }
+
+  private async validatedSignaDraft(raw: unknown, actor: PartnerActor, partner: any) {
+    let draft: SignaServerDraftPayload;
+    try {
+      draft = parseSignaServerDraftPayload(raw);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Rascunho inválido.");
+    }
+    if (draft.customerId) {
+      await this.assertCustomer(partner, actor.companyId, draft.customerId);
+    }
+    if (draft.items.length) {
+      if (!draft.customerId) {
+        throw new BadRequestException("Selecione o comprador antes de salvar produtos.");
+      }
+      const visible = await this.distributorCatalog(actor.companyId, draft.customerId, true);
+      if (draft.items.some(item => !visible.variantIds.has(item.productVariantId))) {
+        throw new BadRequestException("Produto fora do catálogo exclusivo Signa.");
+      }
+    }
+    if (draft.partnerEndCustomerId) {
+      const rows = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "PartnerEndCustomer"
+          WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true LIMIT 1`,
+        draft.partnerEndCustomerId, actor.companyId, partner.id,
+      );
+      if (!rows[0]) throw new BadRequestException("Cliente final não liberado para este parceiro.");
+    }
+    if (draft.billingRecipientId) {
+      if (!draft.customerId) {
+        throw new BadRequestException("Selecione o comprador antes do destinatário fiscal.");
+      }
+      const recipients = await this.findSignaBillingRecipients(actor.companyId, partner);
+      if (!recipients.some(row =>
+        row.id === draft.billingRecipientId && row.pricingCustomerId === draft.customerId
+      )) {
+        throw new BadRequestException("Destinatário fiscal não autorizado.");
+      }
+    }
+    return draft;
+  }
+
+  @Get("order-drafts")
+  async listOrderDrafts(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    const drafts = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,version,payload,"createdAt","updatedAt"
+         FROM "PartnerOrderDraft"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND "userId"=$3 AND status='DRAFT'
+        ORDER BY "updatedAt" DESC LIMIT 100`,
+      actor.companyId, partner.id, userId,
+    );
+    return { drafts };
+  }
+
+  @Get("order-drafts/:draftId")
+  async getOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Param("draftId") draftId: string,
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,version,payload,"createdAt","updatedAt"
+         FROM "PartnerOrderDraft"
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND "userId"=$4 AND status='DRAFT'
+        LIMIT 1`,
+      draftId, actor.companyId, partner.id, userId,
+    );
+    if (!rows[0]) throw new NotFoundException("Rascunho não encontrado neste acesso.");
+    return rows[0];
+  }
+
+  @Post("order-drafts")
+  async createOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Body() body: { payload?: unknown },
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    const payload = await this.validatedSignaDraft(body?.payload, actor, partner);
+    const id = randomUUID();
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `INSERT INTO "PartnerOrderDraft"
+         (id,"companyId","partnerId","userId",status,version,payload,"createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,'DRAFT',1,$5::jsonb,NOW(),NOW())
+         RETURNING id,version,payload,"createdAt","updatedAt"`,
+      id, actor.companyId, partner.id, userId, JSON.stringify(payload),
+    );
+    return rows[0];
+  }
+
+  @Patch("order-drafts/:draftId")
+  async updateOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Param("draftId") draftId: string,
+    @Body() body: { version?: unknown; payload?: unknown },
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    let version: number;
+    try {
+      version = parseSignaDraftVersion(body?.version);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Versão inválida.");
+    }
+    const payload = await this.validatedSignaDraft(body?.payload, actor, partner);
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `UPDATE "PartnerOrderDraft"
+          SET payload=$6::jsonb,version=version+1,"updatedAt"=NOW()
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND "userId"=$4
+          AND version=$5 AND status='DRAFT'
+        RETURNING id,version,payload,"createdAt","updatedAt"`,
+      draftId, actor.companyId, partner.id, userId, version, JSON.stringify(payload),
+    );
+    if (!rows[0]) throw new ConflictException("Rascunho não encontrado ou alterado em outra sessão. Recarregue antes de salvar.");
+    return rows[0];
+  }
+
+  @Delete("order-drafts/:draftId")
+  async deleteOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Param("draftId") draftId: string,
+    @Body() body: { version?: unknown },
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    let version: number;
+    try {
+      version = parseSignaDraftVersion(body?.version);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Versão inválida.");
+    }
+    const rows = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      `DELETE FROM "PartnerOrderDraft"
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND "userId"=$4
+          AND version=$5 AND status='DRAFT' RETURNING id`,
+      draftId, actor.companyId, partner.id, userId, version,
+    );
+    if (!rows[0]) throw new ConflictException("Rascunho não encontrado ou alterado em outra sessão.");
+    return { ok: true };
   }
 
   @Post("orders")
