@@ -1192,7 +1192,11 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async create(companyId: string, input: CreateSalesOrderInput) {
+  async create(
+    companyId: string,
+    input: CreateSalesOrderInput,
+    externalTransaction?: Prisma.TransactionClient,
+  ) {
     const orderType = resolveSalesOrderType(input.orderType);
     if (!input.items.length)
       throw new BadRequestException("O pedido deve possuir ao menos um item.");
@@ -1223,8 +1227,7 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
       unitPrice:
         orderType === "SAMPLE" ? SAMPLE_FISCAL_PACKAGE_VALUE : item.unitPrice,
     }));
-    return this.database.$transaction(
-      async (transaction) => {
+    const createInTransaction = async (transaction: Prisma.TransactionClient) => {
         const customer = await transaction.customer.findFirst({
           where: { id: input.customerId, companyId },
         });
@@ -1402,9 +1405,14 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
           },
           include: this.orderInclude,
         });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
-    );
+    };
+    // When called as part of partner submission, the caller owns commit/rollback.
+    // Existing callers retain the same standalone transaction and isolation level.
+    return externalTransaction
+      ? createInTransaction(externalTransaction)
+      : this.database.$transaction(createInTransaction, {
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+        });
   }
 
   async confirm(companyId: string, id: string) {
