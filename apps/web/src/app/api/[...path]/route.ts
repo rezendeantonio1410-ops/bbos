@@ -1,28 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mayRetryOnAnotherUpstream, proxyUpstreamBases } from "@/lib/api-proxy-upstreams";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ path: string[] }> };
-
-function normalizeApiBase(value: string) {
-  const base = value.trim().replace(/\/$/, "");
-  return base.endsWith("/api") ? base : `${base}/api`;
-}
-
-function apiBaseUrls() {
-  const candidates = [
-    process.env.BBOS_API_INTERNAL_URL,
-    process.env.API_INTERNAL_URL,
-    process.env.NEXT_PUBLIC_API_URL,
-    "https://bbos-api-staging.onrender.com",
-  ]
-    .map((value) => value?.trim())
-    .filter((value): value is string => Boolean(value))
-    .map(normalizeApiBase);
-
-  return [...new Set(candidates)];
-}
 
 function upstreamHeaders(request: NextRequest) {
   const headers = new Headers();
@@ -80,7 +62,7 @@ async function fetchUpstream(
 }
 
 async function proxy(request: NextRequest, context: RouteContext) {
-  const bases = apiBaseUrls();
+  const bases = proxyUpstreamBases(process.env);
   if (bases.length === 0) {
     console.error("BBOS API proxy failed: no upstream configured");
     return NextResponse.json(
@@ -148,6 +130,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
         path: request.nextUrl.pathname,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (!mayRetryOnAnotherUpstream(method)) break;
     }
   }
 
