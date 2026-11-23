@@ -632,6 +632,33 @@ export function PartnerOrderWorkspace({
     }
   }
 
+  // Copy the selected server draft as a new draft; never create or alter a SalesOrder.
+  // Re-read under the current session so stale browser data cannot bypass server scope.
+  async function duplicateServerDraft() {
+    if (!draftScope || !serverDraftId || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    setDraftStatus("");
+    try {
+      const saved = await portalApi<ServerOrderDraft>(
+        "/order-drafts/" + encodeURIComponent(serverDraftId),
+      );
+      const copy = await portalApi<ServerOrderDraft>("/order-drafts", {
+        method: "POST",
+        body: JSON.stringify({ payload: saved.payload }),
+      });
+      setServerDrafts(current =>
+        [copy, ...current].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      );
+      setServerDraftId(copy.id);
+      setDraftStatus("Cópia independente criada na conta. Recupere-a para editar e confira os dados antes de enviar.");
+    } catch (cause) {
+      setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível duplicar o rascunho.");
+      await refreshServerDrafts().catch(() => {});
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
+
   async function discardServerDraft() {
     const previous = serverDrafts.find(draft => draft.id === serverDraftId);
     if (!previous || serverDraftBusy) return;
@@ -1543,7 +1570,8 @@ export function PartnerOrderWorkspace({
                     ))}
                   </select>
                   <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void restoreServerDraft()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40">Recuperar da conta</button>
-                  <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void discardServerDraft()} className="px-2 py-2 text-xs font-semibold text-red-700 underline disabled:opacity-40">Excluir da conta</button>
+                  <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void duplicateServerDraft()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40">Duplicar na conta</button>
+                   <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void discardServerDraft()} className="px-2 py-2 text-xs font-semibold text-red-700 underline disabled:opacity-40">Excluir da conta</button>
                 </div>
               </div>
             )}
