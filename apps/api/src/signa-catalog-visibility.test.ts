@@ -35,4 +35,9 @@ test("controller consistently applies the Signa-only strict policy to options, q
   assert.equal((controller.match(/this\.distributorCatalog\(/g) ?? []).length, 3);
   assert.equal((controller.match(/this\.isSignaDistributor\(partner\)/g) ?? []).length, 4);
   assert.match(controller, /if \(!visible\.needsLegacyFallback\)/);
+  assert.match(
+    controller,
+    /: partner\.portalAccessLevel === "DISTRIBUTOR"\s*\? \[\]\s*: internalOptions\.variants/,
+    "Distributor order options must never expose the unrestricted internal product list",
+  );
 });
