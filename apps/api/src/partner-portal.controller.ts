@@ -22,6 +22,7 @@ import { SalesOrderTermApprovalService } from "./sales-order-term-approval.servi
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
+import { buildPartnerPixView } from "./partner-pix";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { pdfContentDisposition } from "./sales-order-pdf-download";
 import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
@@ -598,7 +599,11 @@ export class PartnerPortalController {
                 fiscal.status::text AS "invoiceStatus",
                 fiscal."pdfAvailable" AS "invoicePdfAvailable",
                 (so."paymentType"='TERM' AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
-                  AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
+                  AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable",
+                (so."paymentType" IN ('TERM','CASH') AND so."orderType"<>'SAMPLE'
+                  AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
+                  AND ar."openAmount">0 AND ar."dueDate" IS NOT NULL
+                  AND fiscal.status='AUTHORIZED') AS "pixAvailable"
            FROM "SalesOrder" so
            JOIN "Customer" c ON c.id=so."customerId"
            LEFT JOIN "PartnerEndCustomer" endcustomer ON endcustomer.id=so."partnerEndCustomerId"
@@ -800,6 +805,25 @@ export class PartnerPortalController {
       "Cache-Control": "private, no-store",
     });
     response.send(pdf);
+  }
+
+  @Get("orders/:orderId/pix")
+  async orderPix(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Res({ passthrough: true }) response: any,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const order = await this.salesOrders.get(actor.companyId, orderId);
+    const data = await loadSalesOrderBillingData(
+      this.database,
+      order,
+      actor.companyId,
+      { allowCash: true },
+    );
+    response.set({ "Cache-Control": "private, no-store" });
+    return buildPartnerPixView(data);
   }
 
   @Get("orders/:orderId/invoice/pdf")
@@ -1299,6 +1323,7 @@ export class PartnerPortalController {
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT ec.state,ec.city,count(DISTINCT so.id)::int AS orders,
+                count(DISTINCT ec.id)::int AS customers,
                 COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
                 COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
            FROM "SalesOrder" so

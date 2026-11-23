@@ -14,6 +14,7 @@
     "test:customer-fiscal-readiness": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/customer-fiscal-readiness.test.ts",
     "test:signa-ready-date": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-ready-date.test.ts",
     "test:signa-report-period": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-report-period.test.ts",
+    "test:partner-pix": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-pix.test.ts",
     "test:signa-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-billing-recipient.test.ts",
     "test:signa-idempotency": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-order-idempotency.test.ts ../../apps/api/src/scheduled-jobs.test.ts",
     "test:signa-order-isolation": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-portal-order-access.test.ts ../../apps/api/src/partner-end-customer-input.test.ts ../../apps/api/src/signa-catalog-visibility.test.ts ../../apps/api/src/signa-server-draft.test.ts",

@@ -6,16 +6,22 @@ export async function loadSalesOrderBillingData(
   database: any,
   order: any,
   companyId: string,
+  options: { allowCash?: boolean } = {},
 ) {
   if (order.companyId !== companyId)
     throw new BadRequestException("Pedido não pertence à empresa.");
+  // Partner portal: cash (à vista) orders invoiced with an open receivable
+  // are paid by the same static Bispo Pix. Admin billing keeps TERM only.
+  const allowedPaymentTypes = options.allowCash ? ["TERM", "CASH"] : ["TERM"];
   if (
-    order.paymentType !== "TERM" ||
+    !allowedPaymentTypes.includes(order.paymentType) ||
     order.orderType === "SAMPLE" ||
     ["DRAFT", "CANCELLED"].includes(order.status)
   ) {
     throw new BadRequestException(
-      "A cobrança está disponível para pedidos comerciais a prazo confirmados.",
+      options.allowCash
+        ? "O Pix está disponível para pedidos comerciais confirmados."
+        : "A cobrança está disponível para pedidos comerciais a prazo confirmados.",
     );
   }
   if (String(order.currency ?? "BRL") !== "BRL")
