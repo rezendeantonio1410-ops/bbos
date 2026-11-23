@@ -470,6 +470,7 @@ model Company {
   supplierBankAccounts         SupplierBankAccount[]
   brokers                      Broker[]
   storefrontPartners           StorefrontPartner[]
+  partnerOrderDrafts           PartnerOrderDraft[]
   cuppingSessions              CuppingSession[]
   cuppingParticipantInvites    CuppingParticipantInvite[]
   cuppingTrainingSessions      CuppingTrainingSession[]
@@ -510,6 +511,7 @@ model User {
   mobileNotifications MobileNotification[]
   pushSubscriptions   PushSubscription[]
   customerVisits      CustomerVisit[]
+  partnerOrderDrafts   PartnerOrderDraft[]
 
   @@index([companyId])
 }
@@ -631,12 +633,31 @@ model StorefrontPartner {
   customers                 StorefrontPartnerCustomer[]
   salesOrders               SalesOrder[]
   customerVisits            CustomerVisit[]
+  partnerOrderDrafts         PartnerOrderDraft[]
   createdAt                 DateTime                     @default(now())
   updatedAt                 DateTime                     @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
   @@index([companyId, isSalesPartner, isSalesBroker, isGreenCoffeeBroker, active], map: "StorefrontPartner_companyId_roles_idx")
+}
+
+
+model PartnerOrderDraft {
+  id        String            @id @default(uuid())
+  companyId String
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   StorefrontPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String            @default("DRAFT") @db.VarChar(16)
+  version   Int               @default(1)
+  payload   Json
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([companyId, partnerId, userId, updatedAt(sort: Desc)], map: "PartnerOrderDraft_scope_updatedAt_idx")
 }
 
 model StorefrontPartnerCustomer {
