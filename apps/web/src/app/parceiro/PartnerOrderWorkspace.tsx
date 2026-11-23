@@ -16,7 +16,7 @@ import {
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
-import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey } from "@/lib/signa-order-draft";
+import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -236,10 +236,14 @@ export function PartnerOrderWorkspace({
   const [message, setMessage] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
   const [draftDirty, setDraftDirty] = useState(false);
+  const [draftScope, setDraftScope] = useState<SignaOrderDraftScope | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
+  const draftKey = useMemo(() => isDistributor && draftScope && customerId
+    ? signaOrderDraftKey(draftScope, customerId) : null,
+    [isDistributor, draftScope, customerId]);
   const [billingEnabled, setBillingEnabled] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingRecipients, setBillingRecipients] = useState<Array<{
@@ -308,11 +312,14 @@ export function PartnerOrderWorkspace({
         customers: Customer[];
         variants: Variant[];
         catalog: CatalogInfo;
+        draftScope: SignaOrderDraftScope | null;
       }>("/order-options");
       setCustomers(result.customers);
       setVariants(result.variants);
       setCatalog(result.catalog);
+      setDraftScope(result.draftScope ?? null);
     } catch (cause) {
+      setDraftScope(null);
       setError(
         cause instanceof Error
           ? cause.message
@@ -434,7 +441,7 @@ export function PartnerOrderWorkspace({
   // Only product/quantity/date drafts persist locally. Customer, fiscal and prices never do.
   // Do not overwrite a previously saved valid draft with incomplete edits.
   useEffect(() => {
-    if (!draftDirty || !isDistributor || !showOrder || !customerId || !variants.length) return;
+    if (!draftDirty || !draftKey || !showOrder || !variants.length) return;
     const allowed = new Set(variants.map(variant => variant.productVariantId));
     const draft = createSignaOrderDraft(lines, allowed, deliveryMode, expectedDeliveryDate);
     if (!draft) {
@@ -442,18 +449,18 @@ export function PartnerOrderWorkspace({
       return;
     }
     try {
-      window.localStorage.setItem(signaOrderDraftKey(customerId), JSON.stringify(draft));
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
       setDraftDirty(false);
       setDraftStatus("Rascunho atualizado automaticamente neste navegador. Revise e recalcule a cotação antes de enviar.");
     } catch {
       setDraftStatus("Não foi possível salvar automaticamente. Use Salvar rascunho ou confira a privacidade do navegador.");
     }
-  }, [draftDirty, isDistributor, showOrder, customerId, variants, lines, deliveryMode, expectedDeliveryDate]);
+  }, [draftDirty, draftKey, showOrder, variants, lines, deliveryMode, expectedDeliveryDate]);
 
   // Deliberately stores only a short-lived product/quantity draft in this browser.
   // Never persist clients, billing recipient, notes, payment details or quoted prices.
   function saveOrderDraft() {
-    if (!isDistributor || !customerId || !variants.length) return;
+    if (!draftKey || !variants.length) return;
     const allowed = new Set(variants.map(variant => variant.productVariantId));
     const draft = createSignaOrderDraft(lines, allowed, deliveryMode, expectedDeliveryDate);
     if (!draft) {
@@ -461,7 +468,7 @@ export function PartnerOrderWorkspace({
       return;
     }
     try {
-      window.localStorage.setItem(signaOrderDraftKey(customerId), JSON.stringify(draft));
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
       setDraftDirty(false);
       setDraftStatus("Rascunho parcial salvo neste navegador. Preços e dados fiscais não foram guardados.");
     } catch {
@@ -470,9 +477,9 @@ export function PartnerOrderWorkspace({
   }
 
   function restoreOrderDraft() {
-    if (!isDistributor || !customerId || !variants.length) return;
+    if (!draftKey || !variants.length) return;
     try {
-      const raw = window.localStorage.getItem(signaOrderDraftKey(customerId));
+      const raw = window.localStorage.getItem(draftKey);
       const allowed = new Set(variants.map(variant => variant.productVariantId));
       const draft = parseSignaOrderDraft(raw, allowed);
       if (!draft) {
@@ -496,9 +503,9 @@ export function PartnerOrderWorkspace({
   }
 
   function clearOrderDraft() {
-    if (!isDistributor || !customerId) return;
+    if (!draftKey) return;
     try {
-      window.localStorage.removeItem(signaOrderDraftKey(customerId));
+      window.localStorage.removeItem(draftKey);
       setDraftDirty(false);
       setDraftStatus("Rascunho deste navegador descartado. Nenhum pedido ou dado do servidor foi alterado.");
     } catch {
@@ -704,8 +711,8 @@ export function PartnerOrderWorkspace({
       );
       setMessage(`${order.code} criado. ${order.message}`);
       // Only remove the local draft after the server confirms the order.
-      if (isDistributor && customerId) {
-        try { window.localStorage.removeItem(signaOrderDraftKey(customerId)); } catch { /* Storage may be disabled. */ }
+      if (draftKey) {
+        try { window.localStorage.removeItem(draftKey); } catch { /* Storage may be disabled. */ }
         setDraftStatus("");
         setDraftDirty(false);
       }
