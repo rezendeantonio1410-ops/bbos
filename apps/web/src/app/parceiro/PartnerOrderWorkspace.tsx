@@ -235,6 +235,7 @@ export function PartnerOrderWorkspace({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
+  const [draftDirty, setDraftDirty] = useState(false);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
@@ -425,7 +426,29 @@ export function PartnerOrderWorkspace({
     [lines],
   );
 
-  const invalidateQuote = () => setQuote(null);
+  const invalidateQuote = () => {
+    setQuote(null);
+    if (isDistributor) setDraftDirty(true);
+  };
+
+  // Only product/quantity/date drafts persist locally. Customer, fiscal and prices never do.
+  // Do not overwrite a previously saved valid draft with incomplete edits.
+  useEffect(() => {
+    if (!draftDirty || !isDistributor || !showOrder || !customerId || !variants.length) return;
+    const allowed = new Set(variants.map(variant => variant.productVariantId));
+    const draft = createSignaOrderDraft(lines, allowed, deliveryMode, expectedDeliveryDate);
+    if (!draft) {
+      setDraftStatus("Alterações ainda não salvas: confira produtos, quantidades e data.");
+      return;
+    }
+    try {
+      window.localStorage.setItem(signaOrderDraftKey(customerId), JSON.stringify(draft));
+      setDraftDirty(false);
+      setDraftStatus("Rascunho atualizado automaticamente neste navegador. Revise e recalcule a cotação antes de enviar.");
+    } catch {
+      setDraftStatus("Não foi possível salvar automaticamente. Use Salvar rascunho ou confira a privacidade do navegador.");
+    }
+  }, [draftDirty, isDistributor, showOrder, customerId, variants, lines, deliveryMode, expectedDeliveryDate]);
 
   // Deliberately stores only a short-lived product/quantity draft in this browser.
   // Never persist clients, billing recipient, notes, payment details or quoted prices.
@@ -439,6 +462,7 @@ export function PartnerOrderWorkspace({
     }
     try {
       window.localStorage.setItem(signaOrderDraftKey(customerId), JSON.stringify(draft));
+      setDraftDirty(false);
       setDraftStatus("Rascunho parcial salvo neste navegador. Preços e dados fiscais não foram guardados.");
     } catch {
       setDraftStatus("O navegador não permitiu salvar o rascunho. Confira suas configurações de privacidade.");
@@ -464,6 +488,7 @@ export function PartnerOrderWorkspace({
       setPartnerEndCustomerId("");
       setBillingRecipientId("");
       setQuote(null);
+      setDraftDirty(false);
       setDraftStatus("Rascunho recuperado. Escolha novamente o destinatário fiscal, revise entrega e solicite nova cotação antes de enviar.");
     } catch {
       setDraftStatus("Não foi possível ler o rascunho neste navegador.");
@@ -474,6 +499,7 @@ export function PartnerOrderWorkspace({
     if (!isDistributor || !customerId) return;
     try {
       window.localStorage.removeItem(signaOrderDraftKey(customerId));
+      setDraftDirty(false);
       setDraftStatus("Rascunho deste navegador descartado. Nenhum pedido ou dado do servidor foi alterado.");
     } catch {
       setDraftStatus("Não foi possível descartar o rascunho neste navegador.");
@@ -681,6 +707,7 @@ export function PartnerOrderWorkspace({
       if (isDistributor && customerId) {
         try { window.localStorage.removeItem(signaOrderDraftKey(customerId)); } catch { /* Storage may be disabled. */ }
         setDraftStatus("");
+        setDraftDirty(false);
       }
       closeOrder();
       setLines([newLine()]);
@@ -1594,11 +1621,10 @@ export function PartnerOrderWorkspace({
               <PortalField label="Entrega">
                 <select
                   value={deliveryMode}
-                  onChange={(event) =>
-                    setDeliveryMode(
-                      event.target.value as "PICKUP" | "CUSTOMER_CARRIER",
-                    )
-                  }
+                  onChange={(event) => {
+                    setDeliveryMode(event.target.value as "PICKUP" | "CUSTOMER_CARRIER");
+                    setDraftDirty(true);
+                  }}
                 >
                   <option value="PICKUP">Retirada na Bispo</option>
                   <option value="CUSTOMER_CARRIER">
@@ -1625,9 +1651,10 @@ export function PartnerOrderWorkspace({
                 <input
                   type="date"
                   value={expectedDeliveryDate}
-                  onChange={(event) =>
-                    setExpectedDeliveryDate(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setExpectedDeliveryDate(event.target.value);
+                    setDraftDirty(true);
+                  }}
                 />
                 {isDistributor && (
                   <span className="mt-1 block text-[10px] leading-4 text-stone-500">
