@@ -1384,11 +1384,11 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="rounded-xl border border-[#d5dedc] bg-[#F3F6F5] p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={saveOrderDraft} disabled={!customerId || !variants.length || busy} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar rascunho</button>
-                  <button type="button" onClick={restoreOrderDraft} disabled={!customerId || !variants.length || busy} className="rounded-lg border border-[#bacac6] bg-white px-3 py-2 text-xs font-semibold text-[#0E191D] disabled:opacity-40">Recuperar rascunho</button>
-                  <button type="button" onClick={clearOrderDraft} disabled={!customerId || busy} className="px-2 py-2 text-xs font-semibold text-slate-600 underline disabled:opacity-40">Descartar rascunho</button>
+                  <button type="button" onClick={saveOrderDraft} disabled={!draftKey || !variants.length || busy} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar rascunho</button>
+                  <button type="button" onClick={restoreOrderDraft} disabled={!draftKey || !variants.length || busy} className="rounded-lg border border-[#bacac6] bg-white px-3 py-2 text-xs font-semibold text-[#0E191D] disabled:opacity-40">Recuperar rascunho</button>
+                  <button type="button" onClick={clearOrderDraft} disabled={!draftKey || busy} className="px-2 py-2 text-xs font-semibold text-slate-600 underline disabled:opacity-40">Descartar rascunho</button>
                 </div>
-                <p className="mt-2 text-xs text-slate-600">Salvo por até 30 dias somente neste navegador: produtos, quantidades, modalidade e data desejada. Dados pessoais, fiscais, notas e preços não são armazenados. Para concluir, confirme tudo e recalcule a cotação.</p>
+                <p className="mt-2 text-xs text-slate-600">Salvo por até 30 dias somente neste navegador e neste acesso: produtos, quantidades, modalidade e data desejada. Dados pessoais, fiscais, notas e preços não são armazenados. Para concluir, confirme tudo e recalcule a cotação.</p>
                 {draftStatus && <p role="status" className="mt-2 text-xs font-medium text-[#0E3A31]">{draftStatus}</p>}
               </div>
             )}
