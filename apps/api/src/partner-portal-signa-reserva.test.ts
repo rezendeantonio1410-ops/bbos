@@ -16,8 +16,32 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   const createdOrders: Array<Record<string, unknown>> = [];
   const writtenSql: string[] = [];
   const lifecycle: string[] = [];
+  const lifecycleKeys = new Set<string>();
+  const claims = new Map<string, { id: string; requestHash: string; status: string; salesOrderId: string | null }>();
+  let transactions = 0;
   const fakeDatabase = {
+    async $transaction<T>(callback: (tx: unknown) => Promise<T>) {
+      transactions += 1;
+      return callback(fakeDatabase);
+    },
     async $queryRawUnsafe(sql: string, ...args: unknown[]) {
+      if (sql.includes('INSERT INTO "PartnerOrderSubmission"')) {
+        const key = String(args[4]);
+        if (claims.has(key)) return [];
+        const claim = { id: String(args[0]), requestHash: String(args[5]), status: "CLAIMED", salesOrderId: null };
+        claims.set(key, claim);
+        return [{ id: claim.id }];
+      }
+      if (sql.includes('FROM "PartnerOrderSubmission"')) {
+        const claim = claims.get(String(args[3]));
+        return claim ? [{ status: claim.status, requestHash: claim.requestHash, salesOrderId: claim.salesOrderId }] : [];
+      }
+      if (sql.includes("pg_advisory_xact_lock")) return [{ locked: false }];
+      if (sql.includes('"partnerRequestedReadyDate"') && sql.includes('FROM "SalesOrder"')) {
+        const order = createdOrders.find((entry) => entry.id === args[0]);
+        return order ? [{ id: order.id, code: order.orderNumber, status: "DRAFT", totalAmount: 224.8,
+          paymentType: "CASH", paymentTermsSnapshot: "À vista na emissão da NF-e", partnerRequestedReadyDate: null }] : [];
+      }
       if (sql.includes('FROM "StorefrontPartner"') && sql.includes("LIMIT 1")) {
         return [{
           id: partnerId, name: "Signa Coffee", contactName: "Signa",
@@ -73,8 +97,14 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
         }));
       },
     },
-    async $executeRawUnsafe(sql: string) {
+    async $executeRawUnsafe(sql: string, ...args: unknown[]) {
       writtenSql.push(sql);
+      if (sql.includes('UPDATE "PartnerOrderSubmission"')) {
+        const claim = [...claims.values()].find((entry) => entry.id === args[0]);
+        if (!claim || claim.status !== "CLAIMED") return 0;
+        claim.status = "COMPLETED";
+        claim.salesOrderId = String(args[1]);
+      }
       return 1;
     },
   };
@@ -82,10 +112,12 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
     async options() {
       return { variants: [] };
     },
-    async create(orderCompanyId: string, input: Record<string, unknown>) {
+    async create(orderCompanyId: string, input: Record<string, unknown>, transaction?: unknown) {
       assert.equal(orderCompanyId, companyId);
-      createdOrders.push(input);
-      return { id: "order-signa-test", totalAmount: 224.8 };
+      assert.equal(transaction, fakeDatabase, "pedido deve ser criado na transação da reserva de envio");
+      const id = `order-signa-test-${createdOrders.length + 1}`;
+      createdOrders.push({ ...input, id });
+      return { id, totalAmount: 224.8 };
     },
   };
   const fakeTermApprovals = {
@@ -94,8 +126,10 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
     },
   };
   const fakeLifecycle = {
-    async record(_orderId: string, event: string) {
-      lifecycle.push(event);
+    async record(_orderId: string, event: string, _title: string, _detail: string, _source: string, key: string) {
+      // The real service deduplicates by idempotency key.
+      if (!lifecycleKeys.has(key)) lifecycle.push(event);
+      lifecycleKeys.add(key);
     },
   };
   const controller = new PartnerPortalController(
@@ -105,7 +139,7 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   );
   (controller as unknown as { database: unknown }).database = fakeDatabase;
   const request = {
-    user: { role: "PARTNER", companyId, storefrontPartnerId: partnerId },
+    user: { id: "user-signa-test", role: "PARTNER", companyId, storefrontPartnerId: partnerId },
   };
   const options = await controller.orderOptions(request);
   assert.equal(options.catalog.exclusive, true);
@@ -124,22 +158,29 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
   const quote = await controller.quote(request, { customerId, items });
   assert.equal(quote.totalAmount, 224.8);
   assert.deepEqual(quote.items.map((i) => i.unitPrice), [76.8, 148]);
-  const submitted = await controller.createOrder(request, {
-    customerId, billingRecipientId: customerId, items, paymentType: "CASH",
-  });
+  await assert.rejects(
+    controller.createOrder(request, { customerId, billingRecipientId: customerId, items, paymentType: "CASH" }),
+    /Identificador de envio inválido/,
+  );
+  const firstBody = {
+    customerId, billingRecipientId: customerId, items, paymentType: "CASH" as const,
+    submissionKey: "signa-test-key-0000000001",
+  };
+  const submitted = await controller.createOrder(request, firstBody);
   assert.equal(submitted.status, "DRAFT");
   assert.equal(submitted.totalAmount, 224.8);
   assert.equal(createdOrders.length, 1);
   assert.equal(createdOrders[0]!.customerId, customerId);
   const submittedRodrigo = await controller.createOrder(request, {
     customerId, billingRecipientId: rodrigoId, items, paymentType: "CASH",
+    submissionKey: "signa-test-key-0000000002",
   });
   assert.equal(submittedRodrigo.totalAmount, 224.8);
   assert.equal(createdOrders[1]!.customerId, rodrigoId);
   const rodrigoItems = createdOrders[1]!.items as Array<{unitPrice:number}>;
   assert.deepEqual(rodrigoItems.map((i) => i.unitPrice), [76.8, 148]);
   await assert.rejects(
-    controller.createOrder(request, {customerId, billingRecipientId:"unapproved", items}),
+    controller.createOrder(request, {customerId, billingRecipientId:"unapproved", items, submissionKey:"signa-test-key-0000000003"}),
     /Selecione um destinatário fiscal válido/,
   );
 
@@ -157,4 +198,18 @@ test("Signa: catálogo isolado, cotação e pedido Reserva 500 g/1 kg", async ()
     }),
     /Produto não liberado/,
   );
+
+  // Retry of the same submission (double click, timeout) returns the original order.
+  const replay = await controller.createOrder(request, { ...firstBody });
+  assert.equal(replay.id, submitted.id);
+  assert.equal(replay.replayed, true);
+  assert.equal(createdOrders.length, 2, "reenvio não pode criar outro pedido");
+  assert.deepEqual(lifecycle, ["ORDER_SUBMITTED", "ORDER_SUBMITTED"]);
+  // Same key with different content is refused.
+  await assert.rejects(
+    controller.createOrder(request, { ...firstBody, items: [{ productVariantId: "reserve-500", quantity: 2 }] }),
+    /outro conteúdo/,
+  );
+  assert.equal(createdOrders.length, 2);
+  assert.equal(transactions, 2);
 });

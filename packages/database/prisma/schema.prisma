@@ -470,6 +470,8 @@ model Company {
   supplierBankAccounts         SupplierBankAccount[]
   brokers                      Broker[]
   storefrontPartners           StorefrontPartner[]
+  partnerOrderDrafts           PartnerOrderDraft[]
+  partnerOrderSubmissions      PartnerOrderSubmission[]
   cuppingSessions              CuppingSession[]
   cuppingParticipantInvites    CuppingParticipantInvite[]
   cuppingTrainingSessions      CuppingTrainingSession[]
@@ -510,6 +512,8 @@ model User {
   mobileNotifications MobileNotification[]
   pushSubscriptions   PushSubscription[]
   customerVisits      CustomerVisit[]
+  partnerOrderDrafts   PartnerOrderDraft[]
+  partnerOrderSubmissions PartnerOrderSubmission[]
 
   @@index([companyId])
 }
@@ -631,12 +635,55 @@ model StorefrontPartner {
   customers                 StorefrontPartnerCustomer[]
   salesOrders               SalesOrder[]
   customerVisits            CustomerVisit[]
+  partnerOrderDrafts         PartnerOrderDraft[]
+  partnerOrderSubmissions    PartnerOrderSubmission[]
   createdAt                 DateTime                     @default(now())
   updatedAt                 DateTime                     @updatedAt
 
   @@unique([companyId, taxId])
   @@index([companyId, active])
   @@index([companyId, isSalesPartner, isSalesBroker, isGreenCoffeeBroker, active], map: "StorefrontPartner_companyId_roles_idx")
+}
+
+
+model PartnerOrderDraft {
+  id        String            @id @default(uuid())
+  companyId String
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   StorefrontPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String            @default("DRAFT") @db.VarChar(16)
+  version   Int               @default(1)
+  payload   Json
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([companyId, partnerId, userId, updatedAt(sort: Desc)], map: "PartnerOrderDraft_scope_updatedAt_idx")
+}
+
+/// WIP: database claim for idempotent Signa order submissions.
+/// A claim must be committed atomically with the SalesOrder it represents.
+model PartnerOrderSubmission {
+  id             String            @id @default(uuid())
+  companyId      String
+  company        Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partnerId      String
+  partner        StorefrontPartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  submissionKey  String            @db.VarChar(128)
+  requestHash    String            @db.VarChar(64)
+  status         String            @default("CLAIMED") @db.VarChar(16)
+  salesOrderId   String?           @unique
+  salesOrder     SalesOrder?       @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  completedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([companyId, partnerId, userId, submissionKey], map: "PartnerOrderSubmission_scope_key_unique")
+  @@index([companyId, partnerId, userId, createdAt(sort: Desc)], map: "PartnerOrderSubmission_scope_createdAt_idx")
 }
 
 model StorefrontPartnerCustomer {
@@ -2110,6 +2157,7 @@ model SalesOrder {
   greenCoffeeSalesReservations GreenCoffeeSalesReservation[]
   finishedGoodsMovements       FinishedGoodsMovement[]
   accountsReceivable           AccountsReceivable[]
+  partnerOrderSubmissions      PartnerOrderSubmission[]
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
 

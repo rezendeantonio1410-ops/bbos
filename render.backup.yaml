@@ -1,0 +1,51 @@
+# Verifiable backup of the PRODUCTION database (bbos-postgres-staging) and a
+# migration rehearsal on real data, before publishing the Signa release.
+# - Production is only READ (pg_dump + SELECT count).
+# - The copy lives in a NEW isolated database with no external access.
+# - Both jobs are triggered manually; schedules are far-off placeholders.
+# - Credentials are injected by Render (fromDatabase) and never printed.
+databases:
+  - name: bbos-postgres-backup
+    plan: basic_256mb
+    region: virginia
+    postgresMajorVersion: "18"
+    databaseName: bbos_backup
+    user: bbos_backup
+    ipAllowList: []
+
+services:
+  - type: cron
+    name: bbos-db-backup-job
+    runtime: docker
+    region: virginia
+    plan: starter
+    branch: feature/signa-private-customers-analytics
+    dockerfilePath: ./infra/db-backup/Dockerfile
+    dockerContext: ./infra/db-backup
+    schedule: "0 4 1 1 *"
+    envVars:
+      - key: SOURCE_DATABASE_URL
+        fromDatabase:
+          name: bbos-postgres-staging
+          property: connectionString
+      - key: BACKUP_DATABASE_URL
+        fromDatabase:
+          name: bbos-postgres-backup
+          property: connectionString
+      - key: REHEARSAL_DATABASE_NAME
+        value: bbos_rehearsal
+
+  - type: cron
+    name: bbos-migration-rehearsal-job
+    runtime: node
+    region: virginia
+    plan: starter
+    branch: feature/signa-private-customers-analytics
+    schedule: "0 5 1 1 *"
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/database build
+    startCommand: REHEARSAL_DATABASE_URL="${BACKUP_DATABASE_URL%/*}/bbos_rehearsal" bash scripts/rehearse-migrations.sh
+    envVars:
+      - key: BACKUP_DATABASE_URL
+        fromDatabase:
+          name: bbos-postgres-backup
+          property: connectionString

@@ -1,0 +1,70 @@
+# Signa homologation — ISOLATED from production.
+# Own PostgreSQL (no external access), fictitious seed data, no scheduled
+# jobs/workers and NO payment, Bling, NF-e, e-mail, push, Melhor Envio or
+# Mercado Livre credentials. Never point DATABASE_URL at bbos-postgres-staging.
+databases:
+  - name: bbos-postgres-homolog
+    plan: free
+    region: virginia
+    postgresMajorVersion: "18"
+    databaseName: bbos_homolog
+    user: bbos_homolog
+    ipAllowList: []
+
+services:
+  - type: web
+    name: bbos-api-homolog
+    runtime: node
+    plan: free
+    region: virginia
+    branch: feature/signa-private-customers-analytics
+    autoDeployTrigger: commit
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/database build && pnpm --filter @bbos/shared build && pnpm --filter @bbos/api build
+    # Empty database: bootstrap reproducing production history, then the
+    # fictitious seed. Both refuse to run against a database with real data.
+    startCommand: pnpm --filter @bbos/database migrate:deploy && pnpm --filter @bbos/database exec node prisma/seed-signa-homolog.mjs && node apps/api/dist/main.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bbos-postgres-homolog
+          property: connectionString
+      - key: BBOS_EMPTY_DATABASE_BOOTSTRAP
+        value: "true"
+      # Only this database name may be recreated after an INCOMPLETE bootstrap.
+      - key: BBOS_RESETTABLE_DATABASE_NAME
+        value: bbos_homolog
+      - key: BBOS_HOMOLOG_SEED
+        value: "true"
+      - key: BBOS_HOMOLOG_PASSWORD
+        sync: false
+      # Fictitious approver for distributor orders (production uses José/Suzi).
+      - key: BBOS_TERM_CREDIT_APPROVER_EMAILS
+        value: admin@homolog.test
+      - key: BBOS_SCHEDULED_JOBS_DISABLED
+        value: "true"
+      - key: BBOS_BACKGROUND_JOBS_ENABLED
+        value: "false"
+      - key: BBOS_RELEASE
+        value: signa-homolog
+
+  - type: web
+    name: bbos-app-homolog
+    runtime: node
+    plan: free
+    region: virginia
+    branch: feature/signa-private-customers-analytics
+    autoDeployTrigger: commit
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/shared build && pnpm --filter @bbos/ui build && pnpm --filter @bbos/web build
+    startCommand: pnpm --filter @bbos/web start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Free instances cannot receive private-network traffic, so the app
+      # reaches the homologation API through its public URL (set on the
+      # service to the generated https://bbos-api-homolog-XXXX.onrender.com).
+      # Never point it at an RC1/production API.
+      - key: BBOS_API_INTERNAL_URL
+        sync: false

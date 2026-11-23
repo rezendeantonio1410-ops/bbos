@@ -192,3 +192,58 @@ test("seller approval links cannot reveal ecommerce or platform orders", () => {
   assert.match(source, /importedAt: null/);
   assert.match(source, /type: \{ not: "ECOMMERCE" \}/);
 });
+
+test("partner order can use caller-owned transaction without nested commits", async () => {
+  const calls: string[] = [];
+  let created: Record<string, unknown> | undefined;
+  const tx = {
+    customer: {
+      findFirst: async () => {
+        calls.push("customer");
+        return {
+          id: "fiscal-customer", companyId: "company-a", name: "Cliente",
+          taxId: "529.982.247-25", postalCode: "86027-750",
+          address: "Rua Exemplo", addressNumber: "100", district: "Centro",
+          city: "Londrina", state: "PR",
+        };
+      },
+    },
+    productVariant: {
+      findMany: async () => {
+        calls.push("variants");
+        return [{
+          id: "variant-a", sku: "TEST-500", active: true,
+          product: { name: "Café Teste", active: true, productLine: { active: true, companyId: "company-a" } },
+        }];
+      },
+    },
+    salesOrder: {
+      create: async (args: Record<string, unknown>) => {
+        calls.push("create");
+        created = args;
+        return { id: "sales-order-a", totalAmount: 68 };
+      },
+    },
+  };
+  const service = new SalesOrdersService({} as never);
+  Object.defineProperty(service, "database", {
+    value: {
+      $transaction: async () => { throw new Error("nested transaction must not start"); },
+    },
+  });
+  const input = {
+    code: "P-TEST-000001", customerId: "fiscal-customer",
+    items: [{ productVariantId: "variant-a", warehouseId: "warehouse-a", quantity: 1, unitPrice: 68 }],
+  };
+  const order = await service.create("company-a", input, tx as never);
+  assert.equal(order.id, "sales-order-a");
+  assert.deepEqual(calls, ["customer", "variants", "create"]);
+  const data = created?.data as Record<string, unknown>;
+  assert.equal(data.companyId, "company-a");
+  assert.equal(data.customerId, "fiscal-customer");
+  assert.equal(data.totalAmount, 68);
+
+  // The external transaction controls rollback when the order insert fails.
+  tx.salesOrder.create = async () => { throw new Error("simulate rollback"); };
+  await assert.rejects(service.create("company-a", input, tx as never), /simulate rollback/);
+});

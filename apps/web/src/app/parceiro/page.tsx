@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -87,6 +87,7 @@ type PortalData = {
     invoiceStatus?: string | null;
     invoicePdfAvailable?: boolean;
     billingAvailable?: boolean;
+    pixAvailable?: boolean;
   }>;
   notifications: Array<{
     id: string;
@@ -125,6 +126,35 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 const cents = (value: number) => money.format(Number(value || 0) / 100);
+
+// The Signa logo is hosted by the partner's own site (hashed asset). If it
+// is unavailable or renamed, show the brand name instead of a broken image.
+function SignaWordmark() {
+  const [failed, setFailed] = useState(false);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  useEffect(() => {
+    // A load error that happened before hydration does not fire onError.
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth === 0) setFailed(true);
+  }, []);
+  if (failed) {
+    return (
+      <span className="font-serif text-lg font-semibold leading-none text-[var(--bbos-text-strong,#111)]">
+        Signa Coffee
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
+      ref={imageRef}
+      alt="Signa Coffee"
+      className="h-7 w-auto"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export default function PartnerPortalPage() {
   const router = useRouter();
@@ -205,12 +235,7 @@ export default function PartnerPortalPage() {
             </div>
             {data?.partner.portalAccessLevel === "DISTRIBUTOR" && (
               <div className="flex items-center gap-3 sm:hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="https://signacoffee.com.br/assets/logo-signa-coffee-Ds-PlOe8.svg"
-                  alt="Signa Coffee"
-                  className="h-7 w-auto"
-                />
+                <SignaWordmark />
                 <div className="border-l border-[var(--bbos-surface-border)] pl-3">
                   <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">
                     Portal de pedidos

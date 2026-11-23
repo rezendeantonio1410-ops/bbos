@@ -32,6 +32,7 @@ import {
 } from "./storefront-order-sync";
 import { reserveMelhorEnvioFreight } from "./storefront-shipping-finance";
 import { recordPaidStorefrontOrder } from "./storefront-payment-finance";
+import { scheduledJobsDisabled } from "./scheduled-jobs";
 
 const groundProductIds = new Set(["essencial", "intenso"]);
 const preparationFor = (id: string) =>
@@ -95,6 +96,8 @@ export class StorefrontOrdersController
   ) {}
 
   async onModuleInit() {
+    // Preview instances sharing the production database must stay passive.
+    if (scheduledJobsDisabled()) return;
     const pending = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT so.id
          FROM "StorefrontOrder" so

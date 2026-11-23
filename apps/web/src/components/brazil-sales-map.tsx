@@ -46,6 +46,8 @@ export type BrazilSalesMapProps = {
   onRegionClick?: (region: BrazilStateSales["region"]) => void;
   detailsHref?: string | false;
   compact?: boolean;
+  title?: string;
+  subtitle?: string;
 };
 
 const brl = new Intl.NumberFormat("pt-BR", {
@@ -412,6 +414,8 @@ export function BrazilSalesPanel({
   onRegionClick,
   detailsHref = "/vendas?view=geografia",
   compact = false,
+  title = "Vendas por Região — Brasil",
+  subtitle = "Performance comercial nacional",
 }: BrazilSalesMapProps) {
   const [mode, setMode] = useState<"brasil" | "states">("brasil");
   const [hovered, setHovered] = useState<BrazilStateSales | null>(null);
@@ -524,10 +528,10 @@ export function BrazilSalesPanel({
         <div>
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">
             <MapPinned size={14} />
-            Vendas por Região — Brasil
+            {title}
           </div>
           <p className="mt-1 text-xs text-stone-500">
-            Performance comercial nacional
+            {subtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">

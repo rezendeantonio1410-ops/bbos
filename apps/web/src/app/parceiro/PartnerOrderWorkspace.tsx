@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ClipboardCheck,
@@ -15,7 +15,11 @@ import {
 } from "lucide-react";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
+import { formatCnpj, validateSignaEndCustomerForm } from "@/lib/signa-end-customer-form";
+import { parseSignaOrderSubmission, reuseOrCreateSignaOrderSubmission, signaOrderSubmissionStorageKey, type SignaOrderSubmission } from "@/lib/signa-order-submission";
+import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, signaServerDraftRecoveryIsCurrent, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -71,6 +75,22 @@ type Order = {
   billingAvailable?: boolean;
 };
 type Line = { id: string; productVariantId: string; quantity: number };
+type ServerOrderDraft = {
+  id: string;
+  version: number;
+  updatedAt: string;
+  payload: {
+    customerId: string | null;
+    partnerEndCustomerId: string | null;
+    billingRecipientId: string | null;
+    items: Array<{ productVariantId: string; quantity: number }>;
+    deliveryMode: "PICKUP" | "CUSTOMER_CARRIER";
+    carrierName: string;
+    expectedDeliveryDate: string;
+    customerReference: string;
+    notes: string;
+  };
+};
 type Quote = {
   items: Array<{
     productVariantId: string;
@@ -233,10 +253,24 @@ export function PartnerOrderWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [draftStatus, setDraftStatus] = useState("");
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [draftScope, setDraftScope] = useState<SignaOrderDraftScope | null>(null);
+  const [serverDrafts, setServerDrafts] = useState<ServerOrderDraft[]>([]);
+  const [serverDraftId, setServerDraftId] = useState("");
+  // Only the draft actually recovered into this form can be overwritten.
+  const [recoveredServerDraftId, setRecoveredServerDraftId] = useState("");
+  const [serverDraftBusy, setServerDraftBusy] = useState(false);
+  // Invalidate an in-flight GET when the selection, form or account context changes.
+  const serverDraftRecoveryEpoch = useRef(0);
+  const pendingSubmission = useRef<SignaOrderSubmission | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
   const [showOrder, setShowOrder] = useState(false);
   const [customerId, setCustomerId] = useState("");
+  const draftKey = useMemo(() => isDistributor && draftScope && customerId
+    ? signaOrderDraftKey(draftScope, customerId) : null,
+    [isDistributor, draftScope, customerId]);
   const [billingEnabled, setBillingEnabled] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingRecipients, setBillingRecipients] = useState<Array<{
@@ -248,19 +282,50 @@ export function PartnerOrderWorkspace({
   }>>([]);
   const [billingRecipientId, setBillingRecipientId] = useState("");
 
-  const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;city?:string|null;state?:string|null}>>([]);
+  const [endCustomers, setEndCustomers] = useState<Array<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null;stateRegistration?:string|null}>>([]);
   const [partnerEndCustomerId, setPartnerEndCustomerId] = useState("");
   const [endCustomerSearch, setEndCustomerSearch] = useState("");
   const [newEndCustomerName, setNewEndCustomerName] = useState("");
+  const [newEndCustomerTaxId, setNewEndCustomerTaxId] = useState("");
+  const [newEndCustomerCep, setNewEndCustomerCep] = useState("");
+  const [newEndCustomerStreet, setNewEndCustomerStreet] = useState("");
+  const [newEndCustomerNumber, setNewEndCustomerNumber] = useState("");
+  const [newEndCustomerDistrict, setNewEndCustomerDistrict] = useState("");
+  const [newEndCustomerComplement, setNewEndCustomerComplement] = useState("");
   const [newEndCustomerCity, setNewEndCustomerCity] = useState("");
   const [newEndCustomerState, setNewEndCustomerState] = useState("");
+  const [newEndCustomerStateRegistration, setNewEndCustomerStateRegistration] = useState("");
   const [savingEndCustomer, setSavingEndCustomer] = useState(false);
+  const [editingEndCustomerId, setEditingEndCustomerId] = useState("");
+  // CEP loaded from a saved record: re-opening it for edit must not overwrite
+  // the stored street/district/city with a fresh lookup.
+  const endCustomerLoadedCep = useRef("");
+  const endCustomerNumberInput = useRef<HTMLInputElement | null>(null);
 
   function closeOrder() {
+    serverDraftRecoveryEpoch.current += 1;
     setBillingRecipientId("");
     setPartnerEndCustomerId("");
     setEndCustomerSearch("");
+    setEditingEndCustomerId("");
     setShowOrder(false);
+    setServerDraftId("");
+    setRecoveredServerDraftId("");
+  }
+
+  // The main New order button must invalidate any in-flight draft recovery.
+  // Toggling showOrder directly allowed a delayed GET to reopen stale form data.
+  function toggleOrderForm() {
+    if (showOrder) {
+      closeOrder();
+      return;
+    }
+    serverDraftRecoveryEpoch.current += 1;
+    setServerDraftId("");
+    setRecoveredServerDraftId("");
+    setBillingRecipientId("");
+    setPartnerEndCustomerId("");
+    setShowOrder(true);
   }
 
 
@@ -281,6 +346,40 @@ export function PartnerOrderWorkspace({
   const [showCredit, setShowCredit] = useState(false);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [visitsLoading, setVisitsLoading] = useState(false);
+  const endCustomerCepLookup = useBrazilianCepAutofill({
+    postalCode: newEndCustomerCep,
+    enabled: showOrder && isDistributor,
+    onResolved: result => {
+      if (result.postalCode && result.postalCode === endCustomerLoadedCep.current) return;
+      setNewEndCustomerStreet(result.address);
+      setNewEndCustomerDistrict(result.district);
+      setNewEndCustomerCity(result.city);
+      setNewEndCustomerState(result.state);
+      endCustomerNumberInput.current?.focus();
+    },
+  });
+  // Typing a complete CNPJ looks it up in the Receita Federal registry and
+  // fills only EMPTY fields (anything typed is kept). IE stays manual.
+  const endCustomerCnpjLookup = useCnpjRegistryAutofill({
+    cnpj: newEndCustomerTaxId,
+    enabled: showOrder && isDistributor && !editingEndCustomerId,
+    onResolved: record => {
+      const keep = (current: string, value: string | null) => (current.trim() ? current : value ?? "");
+      setNewEndCustomerName(current => keep(current, record.legalName));
+      if (record.postalCode) {
+        // The registry already brings the address: skip the CEP lookup overwrite.
+        endCustomerLoadedCep.current = record.postalCode;
+        setNewEndCustomerCep(current => keep(current, record.postalCode));
+      }
+      setNewEndCustomerStreet(current => keep(current, record.street));
+      setNewEndCustomerNumber(current => keep(current, record.number));
+      setNewEndCustomerDistrict(current => keep(current, record.district));
+      setNewEndCustomerComplement(current => keep(current, record.complement));
+      setNewEndCustomerCity(current => keep(current, record.city));
+      setNewEndCustomerState(current => keep(current, record.state));
+      setNewEndCustomerStateRegistration(current => keep(current, record.suggestedStateRegistration ?? null));
+    },
+  });
   const customerCepLookup = useBrazilianCepAutofill({
     postalCode: customerAddress.postalCode,
     enabled: showCustomer,
@@ -303,11 +402,14 @@ export function PartnerOrderWorkspace({
         customers: Customer[];
         variants: Variant[];
         catalog: CatalogInfo;
+        draftScope: SignaOrderDraftScope | null;
       }>("/order-options");
       setCustomers(result.customers);
       setVariants(result.variants);
       setCatalog(result.catalog);
+      setDraftScope(result.draftScope ?? null);
     } catch (cause) {
+      setDraftScope(null);
       setError(
         cause instanceof Error
           ? cause.message
@@ -369,10 +471,13 @@ export function PartnerOrderWorkspace({
   useEffect(() => {
     if (!isDistributor) return;
     const openNewOrder = () => {
+      serverDraftRecoveryEpoch.current += 1;
       setError("");
       setMessage("");
       setBillingRecipientId("");
       setPartnerEndCustomerId("");
+      setServerDraftId("");
+      setRecoveredServerDraftId("");
       setEndCustomerSearch("");
       setShowOrder(true);
     };
@@ -421,7 +526,257 @@ export function PartnerOrderWorkspace({
     [lines],
   );
 
-  const invalidateQuote = () => setQuote(null);
+  const invalidateQuote = () => {
+    setQuote(null);
+    if (isDistributor) setDraftDirty(true);
+  };
+
+  // Only product/quantity/date drafts persist locally. Customer, fiscal and prices never do.
+  // Do not overwrite a previously saved valid draft with incomplete edits.
+  useEffect(() => {
+    if (!draftDirty || !draftKey || !showOrder || !variants.length) return;
+    const allowed = new Set(variants.map(variant => variant.productVariantId));
+    const draft = createSignaOrderDraft(lines, allowed, deliveryMode, expectedDeliveryDate);
+    if (!draft) {
+      setDraftStatus("Alterações ainda não salvas: confira produtos, quantidades e data.");
+      return;
+    }
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
+      setDraftDirty(false);
+      setDraftStatus("Rascunho atualizado automaticamente neste navegador. Revise e recalcule a cotação antes de enviar.");
+    } catch {
+      setDraftStatus("Não foi possível salvar automaticamente. Use Salvar rascunho ou confira a privacidade do navegador.");
+    }
+  }, [draftDirty, draftKey, showOrder, variants, lines, deliveryMode, expectedDeliveryDate]);
+
+  // Deliberately stores only a short-lived product/quantity draft in this browser.
+  // Never persist clients, billing recipient, notes, payment details or quoted prices.
+  function saveOrderDraft() {
+    if (!draftKey || !variants.length) return;
+    const allowed = new Set(variants.map(variant => variant.productVariantId));
+    const draft = createSignaOrderDraft(lines, allowed, deliveryMode, expectedDeliveryDate);
+    if (!draft) {
+      setDraftStatus("Preencha produtos autorizados com quantidades inteiras positivas e uma data válida antes de salvar.");
+      return;
+    }
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
+      setDraftDirty(false);
+      setDraftStatus("Rascunho parcial salvo neste navegador. Preços e dados fiscais não foram guardados.");
+    } catch {
+      setDraftStatus("O navegador não permitiu salvar o rascunho. Confira suas configurações de privacidade.");
+    }
+  }
+
+  function restoreOrderDraft() {
+    if (!draftKey || !variants.length) return;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      const allowed = new Set(variants.map(variant => variant.productVariantId));
+      const draft = parseSignaOrderDraft(raw, allowed);
+      if (!draft) {
+        setDraftStatus("Nenhum rascunho válido: pode ter expirado ou o catálogo mudou. Nada foi enviado.");
+        return;
+      }
+      serverDraftRecoveryEpoch.current += 1;
+      // A local-browser draft is an independent document. Restoring it must
+      // revoke the edit target of any account draft previously recovered here;
+      // otherwise the next "Salvar na conta" could overwrite that other draft.
+      setServerDraftId("");
+      setRecoveredServerDraftId("");
+      setLines(draft.lines.map(line => ({ id: crypto.randomUUID(), ...line })));
+      setDeliveryMode(draft.deliveryMode);
+      setExpectedDeliveryDate(draft.expectedDeliveryDate);
+      setCarrierName("");
+      setNotes("");
+      setCustomerReference("");
+      setPartnerEndCustomerId("");
+      setBillingRecipientId("");
+      setQuote(null);
+      setDraftDirty(false);
+      setDraftStatus("Rascunho recuperado. Escolha novamente o destinatário fiscal, revise entrega e solicite nova cotação antes de enviar.");
+    } catch {
+      setDraftStatus("Não foi possível ler o rascunho neste navegador.");
+    }
+  }
+
+  function clearOrderDraft() {
+    if (!draftKey) return;
+    try {
+      window.localStorage.removeItem(draftKey);
+      setDraftDirty(false);
+      setDraftStatus("Rascunho deste navegador descartado. Nenhum pedido ou dado do servidor foi alterado.");
+    } catch {
+      setDraftStatus("Não foi possível descartar o rascunho neste navegador.");
+    }
+  }
+
+
+  // Server drafts belong to the signed-in Signa user, never to a shared browser.
+  // The API validates the current catalog, fiscal recipient and commercial buyer.
+  const refreshServerDrafts = useCallback(async () => {
+    if (!isDistributor || !draftScope) return;
+    const response = await portalApi<{ drafts: ServerOrderDraft[] }>("/order-drafts");
+    setServerDrafts(response.drafts);
+  }, [isDistributor, draftScope]);
+
+  useEffect(() => {
+    if (!draftScope || !isDistributor) {
+      serverDraftRecoveryEpoch.current += 1;
+      setServerDrafts([]);
+      setServerDraftId("");
+      setRecoveredServerDraftId("");
+      return;
+    }
+    void refreshServerDrafts().catch(() => {
+      setDraftStatus("Não foi possível carregar rascunhos da conta. O envio de pedidos não foi afetado.");
+    });
+  }, [draftScope, isDistributor, refreshServerDrafts]);
+
+  async function saveServerDraft() {
+    if (!draftScope || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    setDraftStatus("");
+    try {
+      const payload = {
+        customerId: customerId || null,
+        partnerEndCustomerId: partnerEndCustomerId || null,
+        billingRecipientId: billingRecipientId || null,
+        items: cleanItems,
+        deliveryMode, carrierName, expectedDeliveryDate, customerReference, notes,
+      };
+      const editTarget = signaServerDraftEditTarget(
+        serverDraftId, recoveredServerDraftId, new Set(serverDrafts.map(draft => draft.id)),
+      );
+      const previous = serverDrafts.find(draft => draft.id === editTarget);
+      const result = previous
+        ? await portalApi<ServerOrderDraft>("/order-drafts/" + previous.id, {
+            method: "PATCH", body: JSON.stringify({ version: previous.version, payload }),
+          })
+        : await portalApi<ServerOrderDraft>("/order-drafts", {
+            method: "POST", body: JSON.stringify({ payload }),
+          });
+      setServerDraftId(result.id);
+      setRecoveredServerDraftId(result.id);
+      setServerDrafts(current =>
+        [result, ...current.filter(draft => draft.id !== result.id)]
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      );
+      setDraftStatus("Rascunho salvo na conta. Pode recuperar noutro dispositivo. Recalcule a cotação antes de enviar.");
+    } catch (cause) {
+      setDraftStatus(
+        (cause instanceof Error ? cause.message : "Não foi possível guardar o rascunho na conta.") +
+        " Para editar o registro existente, recupere-o novamente; salvar sem recuperar cria uma cópia independente.",
+      );
+      // After a 409, refreshing list versions must not permit a blind second PATCH:
+      // discard recovered edit authority until the user explicitly loads the current version.
+      setRecoveredServerDraftId("");
+      await refreshServerDrafts().catch(() => {});
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
+
+  async function restoreServerDraft() {
+    if (!serverDraftId || serverDraftBusy) return;
+    const requestedId = serverDraftId;
+    const requestEpoch = ++serverDraftRecoveryEpoch.current;
+    // A failed or interrupted recovery must not retain permission to PATCH a prior draft.
+    setRecoveredServerDraftId("");
+    setServerDraftBusy(true);
+    try {
+      const saved = await portalApi<ServerOrderDraft>("/order-drafts/" + encodeURIComponent(requestedId));
+      // Never apply a late response after selection, form or account context changes.
+      if (!signaServerDraftRecoveryIsCurrent(requestedId, saved.id, requestEpoch, serverDraftRecoveryEpoch.current)) return;
+      const allowed = new Set(variants.map(variant => variant.productVariantId));
+      if (saved.payload.items.some(item => !allowed.has(item.productVariantId))) {
+        setDraftStatus("Catálogo alterado. Este rascunho não pode ser recuperado sem revisão pela Bispo.");
+        return;
+      }
+      if (saved.payload.customerId && !customers.some(customer => customer.id === saved.payload.customerId)) {
+        setDraftStatus("O comprador do rascunho já não está autorizado para este acesso.");
+        return;
+      }
+      setCustomerId(saved.payload.customerId || "");
+      setLines(saved.payload.items.length
+        ? saved.payload.items.map(item => ({ id: crypto.randomUUID(), ...item }))
+        : [newLine()]);
+      setPartnerEndCustomerId(
+        endCustomers.some(customer => customer.id === saved.payload.partnerEndCustomerId)
+          ? saved.payload.partnerEndCustomerId || "" : "",
+      );
+      setBillingRecipientId(
+        billingRecipients.some(recipient => recipient.id === saved.payload.billingRecipientId)
+          ? saved.payload.billingRecipientId || "" : "",
+      );
+      setDeliveryMode(saved.payload.deliveryMode);
+      setCarrierName(saved.payload.carrierName);
+      setExpectedDeliveryDate(saved.payload.expectedDeliveryDate);
+      setCustomerReference(saved.payload.customerReference);
+      setNotes(saved.payload.notes);
+      setQuote(null);
+      setDraftDirty(false);
+      setShowOrder(true);
+      setRecoveredServerDraftId(saved.id);
+      setServerDrafts(current => [saved, ...current.filter(draft => draft.id !== saved.id)]);
+      setDraftStatus("Rascunho recuperado da conta. Confirme destinatário fiscal, disponibilidade e cotação antes de enviar.");
+    } catch (cause) {
+      if (requestEpoch === serverDraftRecoveryEpoch.current) {
+        setDraftStatus(cause instanceof Error ? cause.message : "Falha na recuperação do rascunho.");
+      }
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
+
+  // Copy the selected server draft as a new draft; never create or alter a SalesOrder.
+  // Re-read under the current session so stale browser data cannot bypass server scope.
+  async function duplicateServerDraft() {
+    if (!draftScope || !serverDraftId || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    setDraftStatus("");
+    try {
+      const saved = await portalApi<ServerOrderDraft>(
+        "/order-drafts/" + encodeURIComponent(serverDraftId),
+      );
+      const copy = await portalApi<ServerOrderDraft>("/order-drafts", {
+        method: "POST",
+        body: JSON.stringify({ payload: saved.payload }),
+      });
+      setServerDrafts(current =>
+        [copy, ...current].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      );
+      setServerDraftId(copy.id);
+      setRecoveredServerDraftId("");
+      setDraftStatus("Cópia independente criada na conta. Recupere-a para editar e confira os dados antes de enviar.");
+    } catch (cause) {
+      setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível duplicar o rascunho.");
+      await refreshServerDrafts().catch(() => {});
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
+
+  async function discardServerDraft() {
+    const previous = serverDrafts.find(draft => draft.id === serverDraftId);
+    if (!previous || serverDraftBusy) return;
+    setServerDraftBusy(true);
+    try {
+      await portalApi("/order-drafts/" + previous.id, {
+        method: "DELETE", body: JSON.stringify({ version: previous.version }),
+      });
+      setServerDrafts(current => current.filter(draft => draft.id !== previous.id));
+      setServerDraftId("");
+      if (recoveredServerDraftId === previous.id) setRecoveredServerDraftId("");
+      setDraftStatus("Rascunho descartado da conta. Nenhum pedido foi alterado.");
+    } catch (cause) {
+      setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível descartar o rascunho.");
+      await refreshServerDrafts().catch(() => {});
+    } finally {
+      setServerDraftBusy(false);
+    }
+  }
 
   async function createCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -546,28 +901,59 @@ export function PartnerOrderWorkspace({
     }
   }
 
+  function resetEndCustomerForm() {
+    endCustomerLoadedCep.current = "";
+    setEditingEndCustomerId("");
+    setNewEndCustomerName("");
+    setNewEndCustomerTaxId(""); setNewEndCustomerCep(""); setNewEndCustomerStreet("");
+    setNewEndCustomerNumber(""); setNewEndCustomerDistrict(""); setNewEndCustomerComplement("");
+    setNewEndCustomerCity("");
+    setNewEndCustomerState("");
+    setNewEndCustomerStateRegistration("");
+  }
+
   async function saveEndCustomer() {
-    if (!newEndCustomerName.trim()) { setError("Informe o nome do cliente final."); return; }
+    const validation = validateSignaEndCustomerForm({
+      name: newEndCustomerName, taxId: newEndCustomerTaxId, postalCode: newEndCustomerCep,
+      street: newEndCustomerStreet, number: newEndCustomerNumber, district: newEndCustomerDistrict,
+      complement: newEndCustomerComplement, city: newEndCustomerCity, state: newEndCustomerState,
+      stateRegistration: newEndCustomerStateRegistration,
+    });
+    if (!validation.ok) { setError(validation.error); return; }
+    const payload = validation.payload;
     setSavingEndCustomer(true);
     setError("");
+    const editingId = editingEndCustomerId;
     try {
-      const result = await portalApi<{id:string;name:string}>("/end-customers", {
-        method: "POST",
-        body: JSON.stringify({name:newEndCustomerName,city:newEndCustomerCity,state:newEndCustomerState}),
-      });
-      setEndCustomers(previous => [...previous, {id:result.id,name:result.name,city:newEndCustomerCity,state:newEndCustomerState}].sort((a,b)=>a.name.localeCompare(b.name)));
+      const result = await portalApi<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null;stateRegistration?:string|null}>(
+        editingId ? `/end-customers/${encodeURIComponent(editingId)}` : "/end-customers",
+        {
+          method: editingId ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      const entry = {
+        id: result.id, name: result.name ?? payload.name,
+        taxId: result.taxId ?? payload.taxId, postalCode: result.postalCode ?? payload.postalCode,
+        street: result.street ?? payload.street, number: result.number ?? payload.number,
+        district: result.district ?? payload.district, complement: result.complement ?? (payload.complement || null),
+        city: result.city ?? payload.city, state: result.state ?? payload.state,
+        stateRegistration: result.stateRegistration ?? (payload.stateRegistration || null),
+      };
+      setEndCustomers(previous => (
+        editingId ? previous.map(customer => customer.id === editingId ? entry : customer) : [...previous, entry]
+      ).sort((left,right) => left.name.localeCompare(right.name)));
       setEndCustomerSearch("");
       setPartnerEndCustomerId(result.id);
-      setNewEndCustomerName("");
-      setNewEndCustomerCity("");
-      setNewEndCustomerState("");
+      resetEndCustomerForm();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o cliente.");
+      setError(cause instanceof Error ? cause.message : "Não foi possível salvar o cliente comercial.");
     } finally { setSavingEndCustomer(false); }
   }
 
   async function createOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     if (billingLoading) {
       setError("Aguarde a consulta dos destinatários fiscais antes de enviar o pedido.");
       return;
@@ -580,14 +966,9 @@ export function PartnerOrderWorkspace({
       setError("Confira o pedido antes de enviá-lo.");
       return;
     }
-    setBusy(true);
-    setError("");
-    try {
-      const order = await portalApi<{ code: string; message: string }>(
-        "/orders",
-        {
-          method: "POST",
-          body: JSON.stringify({
+    // Must match the server fingerprint: the same content keeps the same key
+    // across double clicks, timeouts and reloads; any change gets a new key.
+    const orderBody = JSON.stringify({
             partnerEndCustomerId: isDistributor ? partnerEndCustomerId || null : undefined,
             customerId,
             billingRecipientId: billingEnabled ? billingRecipientId : undefined,
@@ -602,10 +983,48 @@ export function PartnerOrderWorkspace({
             expectedDeliveryDate,
             customerReference,
             notes,
-          }),
+    });
+    const submissionStorageKey = signaOrderSubmissionStorageKey(draftScope);
+    let submission: SignaOrderSubmission;
+    try {
+      let stored: SignaOrderSubmission | null = null;
+      try {
+        stored = submissionStorageKey
+          ? parseSignaOrderSubmission(window.sessionStorage.getItem(submissionStorageKey))
+          : null;
+      } catch { /* Storage may be disabled; the in-memory key still blocks double clicks. */ }
+      submission = reuseOrCreateSignaOrderSubmission(
+        stored ?? pendingSubmission.current, orderBody, Date.now(), () => window.crypto.randomUUID(),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível preparar o envio.");
+      return;
+    }
+    pendingSubmission.current = submission;
+    if (submissionStorageKey) {
+      try { window.sessionStorage.setItem(submissionStorageKey, JSON.stringify(submission)); } catch { /* ignore */ }
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const order = await portalApi<{ code: string; message: string; replayed?: boolean }>(
+        "/orders",
+        {
+          method: "POST",
+          body: JSON.stringify({ ...JSON.parse(orderBody), submissionKey: submission.key }),
         },
       );
-      setMessage(`${order.code} criado. ${order.message}`);
+      pendingSubmission.current = null;
+      if (submissionStorageKey) {
+        try { window.sessionStorage.removeItem(submissionStorageKey); } catch { /* ignore */ }
+      }
+      setMessage(order.replayed ? order.message : `${order.code} criado. ${order.message}`);
+      // Only remove the local draft after the server confirms the order.
+      if (draftKey) {
+        try { window.localStorage.removeItem(draftKey); } catch { /* Storage may be disabled. */ }
+        setDraftStatus("");
+        setDraftDirty(false);
+      }
       closeOrder();
       setLines([newLine()]);
       const distributorCustomer =
@@ -705,7 +1124,7 @@ export function PartnerOrderWorkspace({
           )}
           <button
             type="button"
-            onClick={() => setShowOrder((value) => !value)}
+            onClick={toggleOrderForm}
             disabled={
               (isDistributor && customers.length !== 1) || !variants.length
             }
@@ -1271,6 +1690,35 @@ export function PartnerOrderWorkspace({
                 </button>
               </div>
             )}
+            {isDistributor && (
+              <div className="rounded-xl border border-[#d5dedc] bg-[#F3F6F5] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={saveOrderDraft} disabled={!draftKey || !variants.length || busy} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar rascunho</button>
+                  <button type="button" onClick={restoreOrderDraft} disabled={!draftKey || !variants.length || busy} className="rounded-lg border border-[#bacac6] bg-white px-3 py-2 text-xs font-semibold text-[#0E191D] disabled:opacity-40">Recuperar rascunho</button>
+                  <button type="button" onClick={clearOrderDraft} disabled={!draftKey || busy} className="px-2 py-2 text-xs font-semibold text-slate-600 underline disabled:opacity-40">Descartar rascunho</button>
+                </div>
+                <p className="mt-2 text-xs text-slate-600">Salvo por até 30 dias somente neste navegador e neste acesso: produtos, quantidades, modalidade e data desejada. Dados pessoais, fiscais, notas e preços não são armazenados. Para concluir, confirme tudo e recalcule a cotação.</p>
+                {draftStatus && <p role="status" className="mt-2 text-xs font-medium text-[#0E3A31]">{draftStatus}</p>}
+              </div>
+            )}
+            {isDistributor && draftScope && (
+              <div className="rounded-xl border border-[#d5dedc] bg-white p-3">
+                <p className="text-xs font-semibold text-[#0E191D]">Rascunhos da conta Signa</p>
+                <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança. Para alterar um rascunho existente, selecione e use Recuperar da conta antes de salvar; apenas selecionar não o substitui.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={busy || serverDraftBusy} onClick={() => void saveServerDraft()} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar na conta</button>
+                  <select aria-label="Selecionar rascunho da conta" value={serverDraftId} disabled={busy || serverDraftBusy} onChange={event => { serverDraftRecoveryEpoch.current += 1; setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
+                    <option value="">Selecionar rascunho</option>
+                    {serverDrafts.map(draft => (
+                      <option key={draft.id} value={draft.id}>{new Date(draft.updatedAt).toLocaleString("pt-BR")} · {draft.payload.items.length} item(ns)</option>
+                    ))}
+                  </select>
+                  <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void restoreServerDraft()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40">Recuperar da conta</button>
+                  <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void duplicateServerDraft()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40">Duplicar na conta</button>
+                   <button type="button" disabled={!serverDraftId || busy || serverDraftBusy} onClick={() => void discardServerDraft()} className="px-2 py-2 text-xs font-semibold text-red-700 underline disabled:opacity-40">Excluir da conta</button>
+                </div>
+              </div>
+            )}
             {isDistributor && customers.length === 1 && customers[0] && (
               <div className="rounded-md border border-[#D5DEDC] bg-[#E0EAE9]/30 px-3 py-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
@@ -1289,19 +1737,43 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="rounded-md border border-[#D5DEDC] bg-white p-3">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
-                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); }} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" />
-                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>setPartnerEndCustomerId(event.target.value)} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]">
+                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, CNPJ, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" />
+                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>{ setPartnerEndCustomerId(event.target.value); setEditingEndCustomerId(""); }} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]">
                   <option value="">Não indicar cliente final</option>
                   {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
                 </select>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">Cadastrar novo cliente final</summary>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                    <input aria-label="Nome do cliente final" placeholder="Nome ou razão social" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
-                    <input aria-label="Cidade do cliente final" placeholder="Cidade" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
-                    <input aria-label="UF do cliente final" placeholder="UF" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"/>
-                  </div>
-                  <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-2 rounded-md bg-[#0E191D] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : "Salvar cliente"}</button>
+                {partnerEndCustomerId && (
+                  <button type="button" className="mt-2 text-sm font-semibold text-[#0E191D] underline" onClick={()=>{
+                    const chosen = endCustomers.find(customer => customer.id === partnerEndCustomerId);
+                    if (!chosen) return;
+                    endCustomerLoadedCep.current = (chosen.postalCode ?? "").replace(/\D/g, "");
+                    setEditingEndCustomerId(chosen.id);
+                    setNewEndCustomerName(chosen.name);
+                     setNewEndCustomerTaxId(chosen.taxId ?? "");setNewEndCustomerCep(chosen.postalCode ?? "");setNewEndCustomerStreet(chosen.street ?? "");setNewEndCustomerNumber(chosen.number ?? "");setNewEndCustomerDistrict(chosen.district ?? "");setNewEndCustomerComplement(chosen.complement ?? "");
+                    setNewEndCustomerCity(chosen.city ?? "");
+                    setNewEndCustomerState(chosen.state ?? "");
+                    setNewEndCustomerStateRegistration(chosen.stateRegistration ?? "");
+                  }}>Editar cliente selecionado</button>
+                )}
+                <details key={editingEndCustomerId ? "edit" : "new"} open={Boolean(editingEndCustomerId)} className="mt-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">{editingEndCustomerId ? "Editar cliente comercial" : "Cadastrar novo cliente final"}</summary>
+                  {/* Nested inside the order form: Enter must never submit the order. */}
+                  <div className="mt-2 grid gap-2 sm:grid-cols-6" onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social *<input aria-label="Nome / Razão social do cliente final" aria-required="true" autoComplete="organization" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ *<input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP *<input aria-label="CEP do cliente final" aria-required="true" inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+{endCustomerCnpjLookup.statusText && <p role="status" className={`text-xs sm:col-span-6 ${endCustomerCnpjLookup.warning ? "font-semibold text-amber-800" : "text-stone-600"}`}>{endCustomerCnpjLookup.statusText}</p>}
+{endCustomerCepLookup.statusText && <p role="status" className="text-xs text-stone-600 sm:col-span-6">{endCustomerCepLookup.statusText}</p>}
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro *<input aria-label="Rua / Logradouro do cliente final" aria-required="true" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número *<input aria-label="Número do cliente final" ref={endCustomerNumberInput} aria-required="true" placeholder="S/N" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Bairro *<input aria-label="Bairro do cliente final" aria-required="true" value={newEndCustomerDistrict} onChange={event=>setNewEndCustomerDistrict(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Complemento<input aria-label="Complemento do cliente final" value={newEndCustomerComplement} onChange={event=>setNewEndCustomerComplement(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Cidade *<input aria-label="Cidade do cliente final" aria-required="true" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">UF *<input aria-label="UF do cliente final" aria-required="true" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Inscrição estadual<input aria-label="Inscrição estadual do cliente final" placeholder="Números ou ISENTO (opcional)" maxLength={20} value={newEndCustomerStateRegistration} onChange={event=>setNewEndCustomerStateRegistration(event.target.value.toUpperCase())} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /><span className="font-normal text-stone-500">Sugerida pelo cadastro público quando houver; confira.</span></label>
+</div>
+<button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-md bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : editingEndCustomerId ? "Salvar alterações" : "Salvar cliente"}</button>
+                  {editingEndCustomerId && <button type="button" className="ml-3 text-sm underline" onClick={resetEndCustomerForm}>Cancelar edição</button>}
                 </details>
               </div>
             )}
@@ -1386,7 +1858,7 @@ export function PartnerOrderWorkspace({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-stone-700">Produtos</p>
+                <p className="text-sm font-semibold text-[#14201d]">Produtos</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -1398,10 +1870,15 @@ export function PartnerOrderWorkspace({
                   <Plus size={13} /> Produto
                 </button>
               </div>
+              {isDistributor && (
+                <div className="hidden items-center gap-2 px-2 text-[11px] font-semibold uppercase text-stone-500 sm:grid sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" aria-hidden="true">
+                  <span>Produto</span><span>Quantidade</span><span className="text-right">Unitário</span><span className="text-right">Subtotal</span><span />
+                </div>
+              )}
               {lines.map((line, index) => (
                 <div
                   key={line.id}
-                  className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_100px_40px]"
+                  className={`grid items-center gap-2 rounded-lg border border-stone-200 bg-white p-2 ${isDistributor ? "sm:grid-cols-[minmax(0,1fr)_88px_100px_100px_32px]" : "sm:grid-cols-[minmax(0,1fr)_88px_32px]"}`}
                 >
                   <select
                     value={line.productVariantId}
@@ -1462,6 +1939,22 @@ export function PartnerOrderWorkspace({
                       invalidateQuote();
                     }}
                   />
+                  {isDistributor && (
+                    <>
+                      <span className="text-right text-xs text-stone-600 sm:text-sm" aria-label={`Preço unitário do produto ${index + 1}`}>
+                        <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Unitário:</span>
+                        {quote?.items.find(item => item.productVariantId === line.productVariantId)?.unitPrice != null
+                          ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.unitPrice)
+                          : "—"}
+                      </span>
+                      <span className="text-right text-xs font-semibold text-[#14201d] sm:text-sm" aria-label={`Subtotal do produto ${index + 1}`}>
+                        <span className="mr-1 text-[10px] text-stone-500 sm:hidden">Subtotal:</span>
+                        {quote?.items.find(item => item.productVariantId === line.productVariantId)?.totalAmount != null
+                          ? money.format(quote.items.find(item => item.productVariantId === line.productVariantId)!.totalAmount)
+                          : "—"}
+                      </span>
+                    </>
+                  )}
                   <button
                     type="button"
                     aria-label={`Remover produto ${index + 1}`}
@@ -1491,11 +1984,10 @@ export function PartnerOrderWorkspace({
               <PortalField label="Entrega">
                 <select
                   value={deliveryMode}
-                  onChange={(event) =>
-                    setDeliveryMode(
-                      event.target.value as "PICKUP" | "CUSTOMER_CARRIER",
-                    )
-                  }
+                  onChange={(event) => {
+                    setDeliveryMode(event.target.value as "PICKUP" | "CUSTOMER_CARRIER");
+                    setDraftDirty(true);
+                  }}
                 >
                   <option value="PICKUP">Retirada na Bispo</option>
                   <option value="CUSTOMER_CARRIER">
@@ -1522,9 +2014,10 @@ export function PartnerOrderWorkspace({
                 <input
                   type="date"
                   value={expectedDeliveryDate}
-                  onChange={(event) =>
-                    setExpectedDeliveryDate(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setExpectedDeliveryDate(event.target.value);
+                    setDraftDirty(true);
+                  }}
                 />
                 {isDistributor && (
                   <span className="mt-1 block text-[10px] leading-4 text-stone-500">

@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
+import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
+import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { CustomerTaxIdSuggestionWorkflow } from "@/components/customer-tax-id-suggestion-workflow";
 
@@ -395,6 +397,36 @@ export default function CustomersPage() {
         city: result.city,
         state: result.state,
       })),
+  });
+
+  // Complete CNPJ → public Receita Federal data (BrasilAPI via BBOS API).
+  // Fills only EMPTY fields; the state registration (IE) stays manual.
+  const cnpjLookup = useCnpjRegistryAutofill({
+    cnpj: form.taxId.replace(/\D/g, "").length === 14 ? form.taxId : "",
+    enabled: form.countryCode === "BR" && (showNew || Boolean(editCustomer)),
+    onResolved: (record) =>
+      setForm((current) => {
+        const filled = fillEmptyFromCnpj(current as unknown as Record<string, string>, record, {
+          legalName: "legalName",
+          tradeName: "tradeName",
+          name: (r) => r.tradeName || r.legalName,
+          postalCode: "postalCode",
+          address: "street",
+          addressNumber: "number",
+          addressComplement: "complement",
+          district: "district",
+          city: "city",
+          state: "state",
+          email: "email",
+          // This field is a mobile number (11 digits); landlines stay manual.
+          phone: (r) => (r.phone && /^\d{2}9\d{8}$/.test(r.phone) ? r.phone : null),
+          stateRegistration: (r) => r.suggestedStateRegistration ?? null,
+        }) as unknown as typeof current;
+        // A suggested IE means the state registration type is "number".
+        return !current.stateRegistrationType && !current.stateRegistration && filled.stateRegistration
+          ? { ...filled, stateRegistrationType: "NUMBER" }
+          : filled;
+      }),
   });
 
   const [requestCustomer, setRequestCustomer] = useState<Customer | null>(null);
@@ -1086,6 +1118,7 @@ export default function CustomersPage() {
                   label="CPF / CNPJ *"
                   fieldKey="taxId"
                   error={formErrors.taxId}
+                  help={cnpjLookup.statusText || undefined}
                 >
                   <input
                     value={form.taxId}
@@ -1542,6 +1575,7 @@ export default function CustomersPage() {
                   label="CPF / CNPJ *"
                   fieldKey="taxId"
                   error={formErrors.taxId}
+                  help={cnpjLookup.statusText || undefined}
                 >
                   <input
                     value={form.taxId}

@@ -15,6 +15,7 @@ import {
   assessMelhorEnvioRecipient,
   melhorEnvioRecipientError,
 } from "./melhor-envio-recipient-policy";
+import { scheduledJobsDisabled } from "./scheduled-jobs";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -142,6 +143,8 @@ export class MelhorEnvioShipmentService
   ) {}
 
   async onModuleInit() {
+    // Preview instances sharing the production database must stay passive.
+    if (scheduledJobsDisabled()) return;
     // O status comercial continua protegido pelas regras de estoque.
     // Aqui sincronizamos apenas o que o Melhor Envio informar sobre remessas ativas.
     await this.auditRecentDeliveredShipments();

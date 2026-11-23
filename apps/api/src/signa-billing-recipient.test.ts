@@ -61,11 +61,30 @@ test("não permite pedidos ou cotações com preços nulos, gratuitos ou inváli
   assert.equal(parseBillableUnitPrice("0.01"), 0.01);
 });
 
+test("preços privados exigem valores em centavos, sem arredondamento implícito", () => {
+  for (const invalid of [
+    0.011, 76.801, "76.805", "76.8001", "7.68e1", "0x4c",
+    "76,80", "76.80abc", "0.009", "999999999999999.99",
+  ]) {
+    assert.equal(parseBillableUnitPrice(invalid), null, String(invalid));
+  }
+  for (const [value, expected] of [
+    ["76.8000", 76.8],
+    [" 76.80 ", 76.8],
+    [76.8, 76.8],
+    [148, 148],
+    [0.29, 0.29],
+  ] as const) {
+    assert.equal(parseBillableUnitPrice(value), expected, String(value));
+  }
+});
+
 test("preços vindos do banco como Prisma.Decimal (consulta SQL direta) são aceitos", () => {
   assert.equal(parseBillableUnitPrice(new Prisma.Decimal("38.00")), 38);
   assert.equal(parseBillableUnitPrice(new Prisma.Decimal("76.80")), 76.8);
   assert.equal(parseBillableUnitPrice(new Prisma.Decimal("148")), 148);
-  for (const invalid of ["0", "-1"]) {
+  assert.equal(parseBillableUnitPrice(new Prisma.Decimal("19.5")), 19.5);
+  for (const invalid of ["0", "-1", "76.805", "0.001"]) {
     assert.equal(parseBillableUnitPrice(new Prisma.Decimal(invalid)), null, invalid);
   }
 });

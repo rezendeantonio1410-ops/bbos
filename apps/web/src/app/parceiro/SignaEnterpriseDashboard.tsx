@@ -1,16 +1,25 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CreditCard, FileText, LayoutDashboard, MapPinned, Package, Plus, Search, ShoppingCart, Users } from "lucide-react";
+import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
+import { SignaPurchasesMap } from "@/components/signa-purchases-map";
+import { signaStatePurchases } from "@/lib/signa-region-map";
+import { SignaPixButton } from "@/components/signa-pix-dialog";
+import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
+import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
+import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { getSignaOrderTimelineEvents } from "@/lib/signa-order-timeline";
+import { emptySignaEndCustomerForm, formatCnpj, validateSignaEndCustomerForm, type SignaEndCustomerForm } from "@/lib/signa-end-customer-form";
 
 export type SignaOrderSummary = {
   id: string; code: string; status: string; totalAmount: number | string; orderedAt: string;
-  customerName: string; billingRecipientName?: string | null; endCustomerName?: string | null; volumeKg?: number | string | null; paymentDate?: string | null; openAmount?: number | string | null; receivableStatus?: string | null; invoiceStatus?: string | null;
-  invoicePdfAvailable?: boolean; invoiceNumber?: string | null; billingAvailable?: boolean;
+  customerName: string; billingRecipientName?: string | null; endCustomerName?: string | null; volumeKg?: number | string | null; paymentDate?: string | null; dueDate?: string | null; paymentType?: "CASH" | "TERM" | null; receivableAmount?: number | string | null; openAmount?: number | string | null; receivableStatus?: string | null; invoiceStatus?: string | null;
+  invoicePdfAvailable?: boolean; invoiceNumber?: string | null; billingAvailable?: boolean; pixAvailable?: boolean;
 };
 type CommercialReport = {
   monthly: Array<{month:string;orders:number;kilograms:number;orderValue:number}>;
   products: Array<{sku:string;product:string;units:number;kilograms:number;orderValue:number}>;
-  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number}>;
+  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number;customers?:number}>;
   notice:string;
   availableYears:string[];
   selectedYear:number|null;
@@ -65,6 +74,9 @@ function SignaReports() {
       </div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal · dados detalhados</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
+      <div id="mapa-signa" className="scroll-mt-24">
+        <SignaPurchasesMap states={signaStatePurchases(data.regions)}/>
+      </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <h4 className="text-sm font-semibold text-[#0E191D]">Compras por região</h4>
         <p className="mb-4 text-xs text-slate-500">Volume (kg) por UF · apenas clientes com região informada</p>
@@ -90,12 +102,30 @@ function SignaCustomerHistory() {
   const [search,setSearch] = useState("");
   const [expanded,setExpanded] = useState(false);
   const [saving,setSaving] = useState(false);
-  const [name,setName] = useState("");
-  const [city,setCity] = useState("");
-  const [state,setState] = useState("");
+  const [form,setForm] = useState<SignaEndCustomerForm>(emptySignaEndCustomerForm);
   const [phone,setPhone] = useState("");
   const [email,setEmail] = useState("");
   const [notes,setNotes] = useState("");
+  const setField = (field: keyof SignaEndCustomerForm, value: string) => setForm(previous => ({...previous,[field]:value}));
+  const cepLookup = useBrazilianCepAutofill({
+    postalCode: form.postalCode,
+    enabled: expanded,
+    onResolved: result => setForm(previous => ({...previous, street: result.address, district: result.district, city: result.city, state: result.state})),
+  });
+  // Complete CNPJ → Receita Federal lookup; fills only EMPTY fields. IE stays manual.
+  const cnpjLookup = useCnpjRegistryAutofill({
+    cnpj: form.taxId,
+    enabled: expanded,
+    onResolved: record => {
+      setForm(previous => fillEmptyFromCnpj(previous as unknown as Record<string,string>, record, {
+        name: "legalName", postalCode: "postalCode", street: "street", number: "number",
+        district: "district", complement: "complement", city: "city", state: "state",
+        stateRegistration: r => r.suggestedStateRegistration ?? null,
+      }) as unknown as SignaEndCustomerForm);
+      setPhone(current => current.trim() ? current : record.phone ?? "");
+      setEmail(current => current.trim() ? current : record.email ?? "");
+    },
+  });
   const [refresh,setRefresh] = useState(0);
   useEffect(()=>{
     const controller = new AbortController();
@@ -109,15 +139,17 @@ function SignaCustomerHistory() {
   const saveCustomer=async (event:React.FormEvent<HTMLFormElement>)=>{
     event.preventDefault();
     if(saving)return;
+    const validation=validateSignaEndCustomerForm(form);
+    if(!validation.ok){setError(validation.error);setNotice("");return;}
     setSaving(true);setError("");setNotice("");
     try{
       const response=await fetch("/api/partner-portal/end-customers",{
         method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({name:name.trim(),city:city.trim(),state:state.trim().toUpperCase(),phone:phone.trim(),email:email.trim(),notes:notes.trim()}),
+        body:JSON.stringify({...validation.payload,phone:phone.trim(),email:email.trim(),notes:notes.trim()}),
       });
       const payload=await response.json().catch(()=>({}));
-      if(!response.ok)throw new Error(payload.message||"Não foi possível cadastrar o cliente.");
-      setName("");setCity("");setState("");setPhone("");setEmail("");setNotes("");
+      if(!response.ok)throw new Error(Array.isArray(payload.message)?payload.message.join(" "):payload.message||"Não foi possível cadastrar o cliente.");
+      setForm(emptySignaEndCustomerForm);setPhone("");setEmail("");setNotes("");
       setExpanded(false);setNotice("Cliente comercial cadastrado com sucesso.");setRefresh(value=>value+1);
       window.dispatchEvent(new Event("bbos:signa-customers:updated"));
     }catch(cause){setError(cause instanceof Error?cause.message:"Erro ao cadastrar cliente.");}
@@ -131,15 +163,24 @@ function SignaCustomerHistory() {
     {expanded&&<form onSubmit={saveCustomer} className="mt-4 space-y-3 rounded-xl border border-[#c7d8d3] bg-[#E0EAE9]/40 p-4">
       <p className="text-sm font-semibold text-[#0E191D]">Novo cliente atendido pela Signa</p>
       <p className="text-xs text-slate-600">Cadastro somente comercial. Não altera o cliente fiscal, a NF-e nem os preços dos pedidos.</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-semibold">Nome do cliente *<input required minLength={2} maxLength={180} value={name} onChange={e=>setName(e.target.value)} placeholder="Nome ou razão social" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold">Cidade<input maxLength={120} value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold">UF<input maxLength={2} pattern="[A-Za-z]{2}" value={state} onChange={e=>setState(e.target.value.toUpperCase())} placeholder="PR" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold">Telefone<input maxLength={40} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone de contato" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold sm:col-span-2">E-mail<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail do cliente" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold sm:col-span-2">Observações<textarea maxLength={1000} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+      <div className="grid gap-3 sm:grid-cols-6">
+        <label className="text-xs font-semibold sm:col-span-6">Nome / Razão social *<input required minLength={2} maxLength={180} autoComplete="organization" value={form.name} onChange={e=>setField("name",e.target.value)} placeholder="Nome ou razão social" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">CNPJ *<input required inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(form.taxId)} onChange={e=>setField("taxId",e.target.value.replace(/\D/g,"").slice(0,14))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">CEP *<input required inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(form.postalCode)} onChange={e=>setField("postalCode",brazilianCepDigits(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        {cnpjLookup.statusText&&<p role="status" className={`text-xs sm:col-span-6 ${cnpjLookup.warning?"font-semibold text-amber-800":"text-slate-600"}`}>{cnpjLookup.statusText}</p>}
+        {cepLookup.statusText&&<p role="status" className="text-xs text-slate-600 sm:col-span-6">{cepLookup.statusText}</p>}
+        <label className="text-xs font-semibold sm:col-span-4">Rua *<input required maxLength={180} value={form.street} onChange={e=>setField("street",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-2">Número *<input required maxLength={30} placeholder="S/N" value={form.number} onChange={e=>setField("number",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">Bairro *<input required maxLength={120} value={form.district} onChange={e=>setField("district",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">Complemento<input maxLength={120} value={form.complement} onChange={e=>setField("complement",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-4">Cidade *<input required maxLength={120} value={form.city} onChange={e=>setField("city",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-2">UF *<input required maxLength={2} pattern="[A-Za-z]{2}" value={form.state} onChange={e=>setField("state",e.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} placeholder="PR" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">Inscrição estadual<input maxLength={20} placeholder="Números ou ISENTO (opcional)" value={form.stateRegistration??""} onChange={e=>setField("stateRegistration",e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/><span className="mt-1 block font-normal text-slate-500">Sugerida pelo cadastro público quando houver; confira.</span></label>
+        <label className="text-xs font-semibold sm:col-span-3">Telefone<input maxLength={40} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone de contato" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-3">E-mail<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail do cliente" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
+        <label className="text-xs font-semibold sm:col-span-6">Observações<textarea maxLength={1000} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
       </div>
-      <button type="submit" disabled={saving||!name.trim()} className="rounded-lg bg-[#0E191D] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando...":"Salvar cliente comercial"}</button>
+      <button type="submit" disabled={saving||!form.name.trim()} className="rounded-lg bg-[#0E191D] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando...":"Salvar cliente comercial"}</button>
     </form>}
     {error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
     {notice&&<p role="status" className="mt-3 text-sm font-semibold text-emerald-800">{notice}</p>}
@@ -156,9 +197,9 @@ const menu = [
   {label:"Produtos",href:"#catalogo-signa",icon:Package},
   {label:"Clientes",href:"#clientes-signa",icon:Users},
   {label:"Faturamento",href:"#historico-pedidos",icon:FileText},
-  {label:"Pagamentos",href:null,icon:CreditCard},
+  {label:"Pagamentos",href:"#pagamentos-signa",icon:CreditCard},
   {label:"Relatórios",href:"#relatorios-signa",icon:BarChart3},
-  {label:"Mapas",href:null,icon:MapPinned},
+  {label:"Mapas",href:"#mapa-signa",icon:MapPinned},
 ];
 type OrderTimelineEvent = {id:string;orderId:string;title:string;detail:string;occurredAt:string};
 export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:SignaOrderSummary[];partnerName:string;events?:OrderTimelineEvent[]}) {
@@ -167,12 +208,14 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
   const [menuOpen,setMenuOpen] = useState(false);
   const [expandedOrder,setExpandedOrder] = useState<string | null>(null);
   useEffect(()=>{if(expandedOrder)document.getElementById("signa-order-timeline")?.scrollIntoView({behavior:"smooth",block:"start"});},[expandedOrder]);
+  const timelineEvents = useMemo(()=>getSignaOrderTimelineEvents(events,expandedOrder),[events,expandedOrder]);
   const filtered = useMemo(()=>orders.filter(o=>{
     const text = (o.code+" "+o.customerName).toLocaleLowerCase("pt-BR");
     const matches = !search || text.includes(search.toLocaleLowerCase("pt-BR"));
     return matches && (filter==="Todos" || (filter==="Em produção" ? o.status==="IN_PRODUCTION" : filter==="Faturado" ? o.status==="INVOICED" : filter==="Concluído" ? o.status==="DELIVERED" : !["INVOICED","DELIVERED","CANCELLED"].includes(o.status)));
   }),[orders,search,filter]);
   const activeOrders = useMemo(()=>orders.filter(o=>!["DELIVERED","CANCELLED"].includes(o.status)),[orders]);
+  const receivableOrders = useMemo(()=>orders.filter(o=>Boolean(o.receivableStatus)),[orders]);
   const orderProgress: Record<string,number> = {DRAFT:1,CONFIRMED:2,RESERVED:2,IN_PRODUCTION:3,PICKING:4,READY_TO_SHIP:4,INVOICED:5,SHIPPED:5,DELIVERED:6};
   const sum=orders.reduce((s,o)=>s+Number(o.totalAmount||0),0);
   const invoiced = orders.filter(o=>o.invoiceStatus==="AUTHORIZED").reduce((s,o)=>s+Number(o.totalAmount||0),0);
@@ -234,6 +277,31 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
         </div>
         <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-xs"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Pedido","Data","Faturar para","Cliente (registro)","Volume (kg)","Valor","Situação","Pagamento","Pago em","Documentos"].map(x=><th key={x} scope="col" className={`px-5 py-3 font-semibold ${x==="Pedido"?"sticky left-0 z-20 min-w-[145px] bg-slate-50 shadow-[2px_0_4px_-3px_#64748b]":""}`}>{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map(o=><tr key={o.id} className="hover:bg-slate-50"><td className="sticky left-0 z-10 min-w-[145px] bg-white px-3 py-3 font-semibold shadow-[2px_0_4px_-3px_#64748b]"><button type="button" aria-expanded={expandedOrder===o.id} aria-controls="signa-order-timeline" aria-label={`Ver detalhes do pedido ${o.code}`} onClick={()=>setExpandedOrder(value=>value===o.id?null:o.id)} className="flex flex-col items-start gap-1 text-left font-semibold text-[#0E191D] hover:text-[#25734c] focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25734c]"><span className="underline decoration-slate-400 underline-offset-4">{o.code}</span><span className="text-[11px] font-medium underline underline-offset-2">Ver detalhes</span></button></td><td className="px-3 py-3">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td><td className="px-5 py-4">{o.billingRecipientName||o.customerName}</td><td className="px-5 py-4">{o.endCustomerName||"Não informado"}</td><td className="px-5 py-4">{Number(o.volumeKg||0).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td className="px-5 py-4">{currency.format(Number(o.totalAmount))}</td><td className="px-5 py-4"><span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{stages[o.status]||o.status}</span></td><td className="px-5 py-4"><span className={`rounded-md px-2 py-1 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-emerald-100 text-emerald-800":o.receivableStatus==="PARTIALLY_PAID"?"bg-amber-100 text-amber-800":"bg-slate-100 text-slate-700"}`}>{o.receivableStatus==="PAID"?"Pago":o.receivableStatus==="PARTIALLY_PAID"?"Parcialmente pago":o.receivableStatus==="OVERDUE"?"Vencido":o.receivableStatus==="OPEN"?"Pendente":"Não confirmado"}</span></td><td className="px-5 py-4">{o.receivableStatus==="PAID"&&o.paymentDate?new Date(o.paymentDate).toLocaleDateString("pt-BR"):"—"}</td><td className="px-5 py-4">{o.invoiceStatus==="AUTHORIZED"&&o.invoicePdfAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/invoice/pdf`} target="_blank" rel="noreferrer">Ver NF</a>:o.billingAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer">Ver cobrança</a>:<span className="text-xs text-slate-500">Aguardando</span>}</td></tr>)}</tbody></table>{!filtered.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}</div>
       </section>
+      <section id="pagamentos-signa" aria-label="Pagamentos vinculados aos pedidos" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-[#0E191D]">Pagamentos</h3>
+          <p className="mt-1 text-xs text-slate-600">Consulta dos títulos do Contas a Receber já vinculados aos seus pedidos no BBOS. Títulos em aberto podem ser pagos com um clique pelo Pix da Bispo Coffees. A confirmação do recebimento continua com o financeiro da Bispo; o parceiro não dá baixa em pagamentos.</p>
+        </div>
+        {receivableOrders.length===0 ? <p role="status" className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Nenhum título financeiro vinculado aos pedidos disponíveis. Isso não significa que algum pagamento tenha sido realizado.</p> :
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {receivableOrders.map(o=><article key={o.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-sm text-[#0E191D]">{o.code}</strong>
+              <span className={`rounded-md px-2 py-1 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-emerald-100 text-emerald-800":o.receivableStatus==="OVERDUE"?"bg-red-100 text-red-800":o.receivableStatus==="PARTIALLY_PAID"?"bg-amber-100 text-amber-800":"bg-slate-200 text-slate-700"}`}>{o.receivableStatus==="PAID"?"Pago":o.receivableStatus==="PARTIALLY_PAID"?"Parcialmente pago":o.receivableStatus==="OVERDUE"?"Vencido":o.receivableStatus==="OPEN"?"Em aberto":"A conferir"}</span>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-600" title={o.billingRecipientName||o.customerName}>{o.billingRecipientName||o.customerName}</p>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div><dt className="text-slate-500">Valor do título</dt><dd className="mt-1 font-semibold tabular-nums">{o.receivableAmount!=null?currency.format(Number(o.receivableAmount)):"—"}</dd></div>
+              <div><dt className="text-slate-500">Saldo em aberto</dt><dd className="mt-1 font-semibold tabular-nums">{o.openAmount!=null?currency.format(Number(o.openAmount)):"—"}</dd></div>
+              <div><dt className="text-slate-500">Vencimento</dt><dd className="mt-1 font-medium">{o.dueDate?new Date(o.dueDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</dd></div>
+              <div><dt className="text-slate-500">Pago em</dt><dd className="mt-1 font-medium">{o.receivableStatus==="PAID"&&o.paymentDate?new Date(o.paymentDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</dd></div>
+            </dl>
+            {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-[#0E191D] underline underline-offset-2">Consultar cobrança</a>}
+            {o.pixAvailable&&<SignaPixButton orderId={o.id} orderCode={o.code}/>}
+          </article>)}
+        </div>}
+        <p className="mt-3 text-xs text-slate-500">Visão dos títulos mais recentes associados aos pedidos desta consulta; não substitui extrato bancário ou conciliação do financeiro da Bispo.</p>
+      </section>
       <section aria-label="Pedidos em andamento" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Pedidos em andamento</h3><span className="text-xs text-slate-500">{activeOrders.length} pedido(s)</span></div>
         {activeOrders.length===0?<p className="text-sm text-slate-500">Nenhum pedido em andamento.</p>:
@@ -253,8 +321,8 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
         <p className="mt-1 text-xs text-slate-500">Datas e horários registrados pelo BBOS; etapas sem registro não são estimadas.</p>
         <ol className="mt-4 space-y-3 border-l-2 border-[#25734c] pl-5">
           <li className="relative text-sm"><span className="font-semibold">Pedido registrado</span><time className="ml-2 text-slate-600">{orders.find(o=>o.id===expandedOrder)?.orderedAt?new Date(orders.find(o=>o.id===expandedOrder)!.orderedAt).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"Data indisponível"}</time></li>
-          {events.filter(e=>e.orderId===expandedOrder).sort((a,b)=>new Date(a.occurredAt).getTime()-new Date(b.occurredAt).getTime()).map(e=><li key={e.id} className="text-sm"><span className="font-semibold">{e.title}</span><time className="ml-2 text-slate-600">{new Date(e.occurredAt).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</time><p className="text-xs text-slate-500">{e.detail}</p></li>)}
-          {!events.some(e=>e.orderId===expandedOrder)&&<li className="text-sm text-slate-500">Sem eventos adicionais registrados para este pedido.</li>}
+          {timelineEvents.map(e=><li key={e.id} className="text-sm"><span className="font-semibold">{e.title}</span><time className="ml-2 text-slate-600">{new Date(e.occurredAt).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</time><p className="text-xs text-slate-500">{e.detail}</p></li>)}
+          {!timelineEvents.length&&<li className="text-sm text-slate-500">Sem eventos adicionais registrados para este pedido.</li>}
         </ol>
       </section>}
       <div className="sticky bottom-3 z-20 mx-auto w-fit rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur md:hidden">

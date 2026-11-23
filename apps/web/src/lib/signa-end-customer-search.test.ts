@@ -28,3 +28,13 @@ test("não modifica o cadastro recebido", () => {
   searchSignaEndCustomers(customers, "cafe");
   assert.equal(JSON.stringify(customers), before);
 });
+
+test("pesquisa por CNPJ com ou sem máscara, sem confundir com texto", () => {
+  const withTaxId = [
+    { id: "a", name: "Alfa", taxId: "11222333000181" },
+    { id: "b", name: "Beta", taxId: null },
+  ];
+  assert.deepEqual(searchSignaEndCustomers(withTaxId, "11.222.333/0001-81").map((x) => x.id), ["a"]);
+  assert.deepEqual(searchSignaEndCustomers(withTaxId, "2223").map((x) => x.id), ["a"]);
+  assert.deepEqual(searchSignaEndCustomers(withTaxId, "999").map((x) => x.id), []);
+});

@@ -2,28 +2,42 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ConflictException,
+  Delete,
   ForbiddenException,
   Get,
+  Header,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Query,
   Req,
   Res,
 } from "@nestjs/common";
-import { prisma } from "@bbos/database";
+import { Prisma, prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
-import { SalesOrdersService } from "./sales-orders.service";
+import { SalesOrdersService, type CreateSalesOrderInput } from "./sales-orders.service";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
+import { buildPartnerPixView } from "./partner-pix";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { pdfContentDisposition } from "./sales-order-pdf-download";
 import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
+import { parsePartnerEndCustomerPatch, partnerEndCustomerFields, isPartnerEndCustomerUniqueViolation } from "./partner-end-customer-input";
+import {
+  hashSignaOrderSubmissionRequest,
+  parseSignaOrderSubmissionKey,
+  resolveSignaSubmissionReplay,
+  splitSignaSubmission,
+} from "./signa-order-idempotency";
+import { selectDistributorCatalogVisibility } from "./signa-catalog-visibility";
+import { parseSignaServerDraftPayload, parseSignaDraftVersion, hasSignaServerDraftCapacity, MAX_SIGNA_SERVER_DRAFTS_PER_USER, type SignaServerDraftPayload } from "./signa-server-draft";
 
 type PartnerActor = {
   id?: string | null;
@@ -32,6 +46,14 @@ type PartnerActor = {
   role: string;
   storefrontPartnerId?: string | null;
 };
+
+/** Another request committed the same scoped submission key first. */
+class SignaSubmissionClaimedElsewhere extends Error {
+  constructor() {
+    super("Envio já registrado por outra requisição.");
+    this.name = "SignaSubmissionClaimedElsewhere";
+  }
+}
 
 @Controller("partner-portal")
 export class PartnerPortalController {
@@ -122,6 +144,7 @@ export class PartnerPortalController {
             OR ($5::boolean AND (so."createdByStorefrontPartnerId"=$1 OR EXISTS (
               SELECT 1 FROM "StorefrontPartnerCustomer" link
                WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
+                 AND so."createdByStorefrontPartnerId" IS NULL
             ) OR EXISTS (
               SELECT 1 FROM "StorefrontPartner" signa
               JOIN "Customer" recipient ON recipient.id=so."customerId"
@@ -318,9 +341,15 @@ export class PartnerPortalController {
     };
   }
 
+  private isSignaDistributor(partner: { portalAccessLevel?: string; name?: string }): boolean {
+    return partner.portalAccessLevel === "DISTRIBUTOR" &&
+      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+  }
+
   private async distributorCatalog(
     companyId: string,
     customerId: string,
+    requireExplicitCatalog = false,
   ): Promise<{ variantIds: Set<string>; exclusive: boolean }> {
     const catalogRows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT catalog."productVariantId"
@@ -338,13 +367,14 @@ export class PartnerPortalController {
       companyId,
       customerId,
     );
-    if (catalogRows.length > 0) {
-      return {
-        variantIds: new Set(
-          catalogRows.map((row) => String(row.productVariantId)),
-        ),
-        exclusive: true,
-      };
+    const visible = selectDistributorCatalogVisibility(
+      catalogRows.map((row) => String(row.productVariantId)),
+      requireExplicitCatalog,
+    );
+    // Signa's private catalog must fail closed if its explicit allowlist is
+    // absent, not fall back to generic distributor prices.
+    if (!visible.needsLegacyFallback) {
+      return { variantIds: visible.variantIds, exclusive: true };
     }
     const explicitRows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT cpp."productVariantId"
@@ -477,10 +507,13 @@ export class PartnerPortalController {
       );
   }
 
-  private async nextOrderNumber(companyId: string) {
+  private async nextOrderNumber(
+    companyId: string,
+    client: Prisma.TransactionClient | typeof prisma = this.database,
+  ) {
     const year = new Date().getFullYear();
     const prefix = `P-${year}-`;
-    const rows = await this.database.$queryRawUnsafe<any[]>(
+    const rows = await client.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(MAX(RIGHT(COALESCE("orderNumber",code),6)::int),0)+1 AS next
          FROM "SalesOrder"
         WHERE "companyId"=$1 AND COALESCE("orderNumber",code) LIKE $2`,
@@ -566,7 +599,11 @@ export class PartnerPortalController {
                 fiscal.status::text AS "invoiceStatus",
                 fiscal."pdfAvailable" AS "invoicePdfAvailable",
                 (so."paymentType"='TERM' AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
-                  AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
+                  AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable",
+                (so."paymentType" IN ('TERM','CASH') AND so."orderType"<>'SAMPLE'
+                  AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE')
+                  AND ar."openAmount">0 AND ar."dueDate" IS NOT NULL
+                  AND fiscal.status='AUTHORIZED') AS "pixAvailable"
            FROM "SalesOrder" so
            JOIN "Customer" c ON c.id=so."customerId"
            LEFT JOIN "PartnerEndCustomer" endcustomer ON endcustomer.id=so."partnerEndCustomerId"
@@ -596,6 +633,7 @@ export class PartnerPortalController {
               OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                 SELECT 1 FROM "StorefrontPartnerCustomer" link
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+                 AND so."createdByStorefrontPartnerId" IS NULL
               ) OR ${this.signaHistoricalOrderScope()}))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
@@ -619,6 +657,7 @@ export class PartnerPortalController {
                 OR ($4::boolean AND (so."createdByStorefrontPartnerId"=$2 OR EXISTS (
                   SELECT 1 FROM "StorefrontPartnerCustomer" link
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
+                 AND so."createdByStorefrontPartnerId" IS NULL
                 ) OR ${this.signaHistoricalOrderScope()}))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )
@@ -698,15 +737,24 @@ export class PartnerPortalController {
         ? customers[0]
         : null;
     const catalog = distributorCustomer
-      ? await this.distributorCatalog(actor.companyId, distributorCustomer.id)
+      ? await this.distributorCatalog(
+          actor.companyId,
+          distributorCustomer.id,
+          this.isSignaDistributor(partner),
+        )
       : null;
+    // Never return the unrestricted internal product list to a distributor.
+    // An ambiguous pricing customer must result in no visible catalog until
+    // the account configuration is fixed, not a leak across price lists.
     const variants = catalog
       ? await this.distributorVariantOptions(
           actor.companyId,
           distributorCustomer.id,
           catalog.variantIds,
         )
-      : internalOptions.variants;
+      : partner.portalAccessLevel === "DISTRIBUTOR"
+        ? []
+        : internalOptions.variants;
     return {
       customers: customers.map((customer) => ({
         ...customer,
@@ -724,6 +772,10 @@ export class PartnerPortalController {
         exclusive: catalog?.exclusive ?? false,
         productCount: variants.length,
       },
+      // Scope browser drafts by authenticated principal; never use a buyer-only key.
+      draftScope: partner.portalAccessLevel === "DISTRIBUTOR" && actor.id
+        ? { companyId: actor.companyId, partnerId: partner.id, userId: actor.id }
+        : null,
     };
   }
 
@@ -753,6 +805,25 @@ export class PartnerPortalController {
       "Cache-Control": "private, no-store",
     });
     response.send(pdf);
+  }
+
+  @Get("orders/:orderId/pix")
+  async orderPix(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Res({ passthrough: true }) response: any,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const order = await this.salesOrders.get(actor.companyId, orderId);
+    const data = await loadSalesOrderBillingData(
+      this.database,
+      order,
+      actor.companyId,
+      { allowCash: true },
+    );
+    response.set({ "Cache-Control": "private, no-store" });
+    return buildPartnerPixView(data);
   }
 
   @Get("orders/:orderId/invoice/pdf")
@@ -1123,7 +1194,11 @@ export class PartnerPortalController {
       throw new BadRequestException("Adicione ao menos um produto.");
     const distributorCatalog =
       partner.portalAccessLevel === "DISTRIBUTOR"
-        ? await this.distributorCatalog(actor.companyId, customerId)
+        ? await this.distributorCatalog(
+            actor.companyId,
+            customerId,
+            this.isSignaDistributor(partner),
+          )
         : null;
     const quoted = [];
     let salesChannelId = "";
@@ -1248,6 +1323,7 @@ export class PartnerPortalController {
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT ec.state,ec.city,count(DISTINCT so.id)::int AS orders,
+                count(DISTINCT ec.id)::int AS customers,
                 COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
                 COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
            FROM "SalesOrder" so
@@ -1280,20 +1356,40 @@ export class PartnerPortalController {
     };
   }
 
-  // Commercial end customers are scoped to this partner and never become fiscal recipients.
+  /** One active commercial record per CNPJ inside the same company/partner wallet. */
+  private async assertEndCustomerTaxIdAvailable(
+    companyId: string,
+    partnerId: string,
+    taxId: string | null,
+    exceptId: string | null,
+  ) {
+    if (!taxId) return;
+    const rows = await this.database.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+      `SELECT id,name FROM "PartnerEndCustomer"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true AND "taxId"=$3
+          AND ($4::text IS NULL OR id<>$4)
+        LIMIT 1`,
+      companyId, partnerId, taxId, exceptId,
+    );
+    if (rows[0]) {
+      throw new ConflictException(`CNPJ já cadastrado para ${rows[0].name}. Selecione o cliente existente.`);
+    }
+  }
+
+  // Commercial end customers are isolated from fiscal recipients and scoped by tenant/partner.
   @Get("end-customers")
+  @Header("Cache-Control", "private, no-store")
   async listEndCustomers(@Req() request: { user?: PartnerActor }) {
     const { actor, partner } = await this.context(request);
     if (partner.portalAccessLevel !== "DISTRIBUTOR") {
       throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
     }
     const customers = await this.database.$queryRawUnsafe<any[]>(
-      `SELECT id,name,"taxId",email,phone,city,state,notes,"createdAt"
+      `SELECT id,name,"taxId",email,phone,"postalCode",street,number,district,complement,city,state,"stateRegistration",notes,"createdAt"
          FROM "PartnerEndCustomer"
         WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true
         ORDER BY name ASC LIMIT 500`,
-      actor.companyId,
-      partner.id,
+      actor.companyId, partner.id,
     );
     return { customers };
   }
@@ -1356,31 +1452,255 @@ export class PartnerPortalController {
   @Post("end-customers")
   async createEndCustomer(
     @Req() request: { user?: PartnerActor },
-    @Body() body: { name?: string; taxId?: string; email?: string; phone?: string; city?: string; state?: string; notes?: string },
+    @Body() body: Record<string, unknown>,
   ) {
     const { actor, partner } = await this.context(request);
     if (partner.portalAccessLevel !== "DISTRIBUTOR") {
       throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
     }
-    const name = String(body.name ?? "").trim();
-    const state = String(body.state ?? "").trim().toUpperCase();
-    if (name.length < 2 || name.length > 180) {
-      throw new BadRequestException("Informe o nome do cliente (2 a 180 caracteres).");
+    let values: ReturnType<typeof parsePartnerEndCustomerPatch>;
+    try {
+      values = parsePartnerEndCustomerPatch(body, "create");
+    } catch (cause) {
+      throw new BadRequestException(cause instanceof Error ? cause.message : "Cadastro inválido.");
     }
-    if (state && !/^[A-Z]{2}$/.test(state)) {
-      throw new BadRequestException("Informe a UF com duas letras.");
-    }
-    const clean = (value: unknown, max: number) => String(value ?? "").trim().slice(0, max) || null;
+    if (!values.name) throw new BadRequestException("Informe a razão social do cliente.");
+    await this.assertEndCustomerTaxIdAvailable(actor.companyId, partner.id, values.taxId ?? null, null);
     const id = randomUUID();
     await this.database.$executeRawUnsafe(
       `INSERT INTO "PartnerEndCustomer"
-        (id,"companyId","partnerId",name,"taxId",email,phone,city,state,notes,"createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())`,
-      id, actor.companyId, partner.id, name, clean(body.taxId, 32),
-      clean(body.email, 254), clean(body.phone, 40), clean(body.city, 120),
-      state || null, clean(body.notes, 1000),
+        (id,"companyId","partnerId",name,"taxId","postalCode",street,number,district,complement,city,state,
+         email,phone,notes,"stateRegistration","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NOW())`,
+      id, actor.companyId, partner.id, values.name, values.taxId ?? null,
+      values.postalCode ?? null, values.street ?? null, values.number ?? null,
+      values.district ?? null, values.complement ?? null, values.city ?? null, values.state ?? null,
+      values.email ?? null, values.phone ?? null, values.notes ?? null, values.stateRegistration ?? null,
+    ).catch((error: unknown) => {
+      if (isPartnerEndCustomerUniqueViolation(error)) {
+        throw new ConflictException("CNPJ já cadastrado nesta carteira. Selecione o cliente existente.");
+      }
+      throw error;
+    });
+    return { id, ...values, message: "Cliente comercial cadastrado." };
+  }
+
+  // Scoped commercial record only: never update fiscal Customer or billing recipient.
+  @Patch("end-customers/:customerId")
+  async updateEndCustomer(
+    @Req() request: { user?: PartnerActor },
+    @Param("customerId") customerId: string,
+    @Body() body: unknown,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Cadastro disponível apenas para distribuidores.");
+    }
+    let changes: ReturnType<typeof parsePartnerEndCustomerPatch>;
+    try {
+      changes = parsePartnerEndCustomerPatch(body, "update");
+    } catch (cause) {
+      throw new BadRequestException(cause instanceof Error ? cause.message : "Dados inválidos.");
+    }
+    if (changes.taxId) {
+      await this.assertEndCustomerTaxIdAvailable(actor.companyId, partner.id, changes.taxId, customerId);
+    }
+    const fields = partnerEndCustomerFields;
+    const keys = fields.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
+    const assignments = keys.map((key, index) => `"${key}"=$${index + 4}`).join(", ");
+    const values = keys.map(key => changes[key] ?? null);
+    const updated = await this.database.$queryRawUnsafe<Array<{
+      id: string; name: string; taxId: string | null; postalCode: string | null;
+      street: string | null; number: string | null; district: string | null;
+      complement: string | null; city: string | null; state: string | null;
+      email: string | null; phone: string | null; notes: string | null;
+    }>>(
+      `UPDATE "PartnerEndCustomer"
+          SET ${assignments}, "updatedAt"=NOW()
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true
+        RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state,"stateRegistration",email,phone,notes`,
+      customerId, actor.companyId, partner.id, ...values,
+    ).catch((error: unknown) => {
+      if (isPartnerEndCustomerUniqueViolation(error)) {
+        throw new ConflictException("CNPJ já cadastrado nesta carteira. Selecione o cliente existente.");
+      }
+      throw error;
+    });
+    if (!updated[0]) throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
+    return { ...updated[0], message: "Cadastro comercial atualizado." };
+  }
+
+  /**
+   * Private partner drafts are NOT SalesOrders. All reads/writes include the
+   * authenticated user, company and distributor, and never trigger production,
+   * stock reservation, NF-e, receivables, Pix or Bling.
+   */
+  private async signaDraftContext(request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (!this.isSignaDistributor(partner) || !actor.id) {
+      throw new ForbiddenException("Rascunhos estão disponíveis apenas para o usuário Signa autenticado.");
+    }
+    return { actor, partner, userId: actor.id };
+  }
+
+  private async validatedSignaDraft(raw: unknown, actor: PartnerActor, partner: any) {
+    let draft: SignaServerDraftPayload;
+    try {
+      draft = parseSignaServerDraftPayload(raw);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Rascunho inválido.");
+    }
+    if (draft.customerId) {
+      await this.assertCustomer(partner, actor.companyId, draft.customerId);
+    }
+    if (draft.items.length) {
+      if (!draft.customerId) {
+        throw new BadRequestException("Selecione o comprador antes de salvar produtos.");
+      }
+      const visible = await this.distributorCatalog(actor.companyId, draft.customerId, true);
+      if (draft.items.some(item => !visible.variantIds.has(item.productVariantId))) {
+        throw new BadRequestException("Produto fora do catálogo exclusivo Signa.");
+      }
+    }
+    if (draft.partnerEndCustomerId) {
+      const rows = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "PartnerEndCustomer"
+          WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true LIMIT 1`,
+        draft.partnerEndCustomerId, actor.companyId, partner.id,
+      );
+      if (!rows[0]) throw new BadRequestException("Cliente final não liberado para este parceiro.");
+    }
+    if (draft.billingRecipientId) {
+      if (!draft.customerId) {
+        throw new BadRequestException("Selecione o comprador antes do destinatário fiscal.");
+      }
+      const recipients = await this.findSignaBillingRecipients(actor.companyId, partner);
+      if (!recipients.some(row =>
+        row.id === draft.billingRecipientId && row.pricingCustomerId === draft.customerId
+      )) {
+        throw new BadRequestException("Destinatário fiscal não autorizado.");
+      }
+    }
+    return draft;
+  }
+
+  @Get("order-drafts")
+  @Header("Cache-Control", "private, no-store")
+  async listOrderDrafts(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    const drafts = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,version,payload,"createdAt","updatedAt"
+         FROM "PartnerOrderDraft"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND "userId"=$3 AND status='DRAFT'
+        ORDER BY "updatedAt" DESC LIMIT 100`,
+      actor.companyId, partner.id, userId,
     );
-    return { id, name, message: "Cliente comercial cadastrado." };
+    return { drafts };
+  }
+
+  @Get("order-drafts/:draftId")
+  @Header("Cache-Control", "private, no-store")
+  async getOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Param("draftId") draftId: string,
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id,version,payload,"createdAt","updatedAt"
+         FROM "PartnerOrderDraft"
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND "userId"=$4 AND status='DRAFT'
+        LIMIT 1`,
+      draftId, actor.companyId, partner.id, userId,
+    );
+    if (!rows[0]) throw new NotFoundException("Rascunho não encontrado neste acesso.");
+    return rows[0];
+  }
+
+  @Post("order-drafts")
+  async createOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Body() body: { payload?: unknown },
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    const payload = await this.validatedSignaDraft(body?.payload, actor, partner);
+    const id = randomUUID();
+
+    // Serialise creation within the same company/partner/user scope.
+    // Without the transaction lock, simultaneous clicks can bypass the
+    // per-user limit and push older drafts outside the 100-row listing.
+    const rows = await this.database.$transaction(async tx => {
+      await tx.$queryRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2 || ':' || $3, 0)) IS NULL AS acquired`,
+        actor.companyId, partner.id, userId,
+      );
+      const counts = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) AS count FROM "PartnerOrderDraft"
+          WHERE "companyId"=$1 AND "partnerId"=$2 AND "userId"=$3 AND status='DRAFT'`,
+        actor.companyId, partner.id, userId,
+      );
+      if (!hasSignaServerDraftCapacity(counts[0]?.count ?? BigInt(MAX_SIGNA_SERVER_DRAFTS_PER_USER))) {
+        throw new ConflictException(
+          `Limite de ${MAX_SIGNA_SERVER_DRAFTS_PER_USER} rascunhos na conta. Exclua um rascunho antigo antes de criar outro.`,
+        );
+      }
+      return tx.$queryRawUnsafe<any[]>(
+        `INSERT INTO "PartnerOrderDraft"
+           (id,"companyId","partnerId","userId",status,version,payload,"createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,'DRAFT',1,$5::jsonb,NOW(),NOW())
+           RETURNING id,version,payload,"createdAt","updatedAt"`,
+        id, actor.companyId, partner.id, userId, JSON.stringify(payload),
+      );
+    });
+    return rows[0];
+  }
+
+  @Patch("order-drafts/:draftId")
+  async updateOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Param("draftId") draftId: string,
+    @Body() body: { version?: unknown; payload?: unknown },
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    let version: number;
+    try {
+      version = parseSignaDraftVersion(body?.version);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Versão inválida.");
+    }
+    const payload = await this.validatedSignaDraft(body?.payload, actor, partner);
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `UPDATE "PartnerOrderDraft"
+          SET payload=$6::jsonb,version=version+1,"updatedAt"=NOW()
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND "userId"=$4
+          AND version=$5 AND status='DRAFT'
+        RETURNING id,version,payload,"createdAt","updatedAt"`,
+      draftId, actor.companyId, partner.id, userId, version, JSON.stringify(payload),
+    );
+    if (!rows[0]) throw new ConflictException("Rascunho não encontrado ou alterado em outra sessão. Recarregue antes de salvar.");
+    return rows[0];
+  }
+
+  @Delete("order-drafts/:draftId")
+  async deleteOrderDraft(
+    @Req() request: { user?: PartnerActor },
+    @Param("draftId") draftId: string,
+    @Body() body: { version?: unknown },
+  ) {
+    const { actor, partner, userId } = await this.signaDraftContext(request);
+    let version: number;
+    try {
+      version = parseSignaDraftVersion(body?.version);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Versão inválida.");
+    }
+    const rows = await this.database.$queryRawUnsafe<Array<{ id: string }>>(
+      `DELETE FROM "PartnerOrderDraft"
+        WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND "userId"=$4
+          AND version=$5 AND status='DRAFT' RETURNING id`,
+      draftId, actor.companyId, partner.id, userId, version,
+    );
+    if (!rows[0]) throw new ConflictException("Rascunho não encontrado ou alterado em outra sessão.");
+    return { ok: true };
   }
 
   @Post("orders")
@@ -1403,15 +1723,39 @@ export class PartnerPortalController {
       billingRecipientId?: string;
       customerReference?: string;
       notes?: string;
+      submissionKey?: string;
     },
   ) {
     const { actor, partner } = await this.context(request);
     this.assertCanCreateOrders(partner);
+    const signaDistributor = this.isSignaDistributor(partner);
+    // Signa submissions are idempotent: the same key + same payload returns the
+    // original order; a different payload or an in-flight key is refused.
+    let submission: { key: string; hash: string; userId: string } | null = null;
+    if (signaDistributor) {
+      if (!actor.id) {
+        throw new ForbiddenException("Envio disponível apenas para o usuário Signa autenticado.");
+      }
+      try {
+        const { submissionKey, payload } = splitSignaSubmission(body);
+        submission = {
+          key: parseSignaOrderSubmissionKey(submissionKey),
+          hash: hashSignaOrderSubmissionRequest(payload),
+          userId: actor.id,
+        };
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error
+            ? `${error.message} Atualize a página e envie novamente.`
+            : "Envio inválido.",
+        );
+      }
+      const previous = await this.replaySignaSubmission(actor, partner, submission);
+      if (previous) return previous;
+    }
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
     let fiscalCustomerId = customerId;
-    const signaDistributor = partner.portalAccessLevel === "DISTRIBUTOR" &&
-      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
     if (signaDistributor) {
       const available = await this.findSignaBillingRecipients(actor.companyId, partner);
       const selected = selectSignaFiscalRecipient(
@@ -1447,7 +1791,11 @@ export class PartnerPortalController {
       throw new BadRequestException("Adicione ao menos um produto.");
     const distributorCatalog =
       partner.portalAccessLevel === "DISTRIBUTOR"
-        ? await this.distributorCatalog(actor.companyId, customerId)
+        ? await this.distributorCatalog(
+            actor.companyId,
+            customerId,
+            this.isSignaDistributor(partner),
+          )
         : null;
     const options = distributorCatalog
       ? {
@@ -1469,7 +1817,7 @@ export class PartnerPortalController {
         )
         .map((variant) => [variant.productVariantId, variant]),
     );
-    const pricedItems = [];
+    const pricedItems: CreateSalesOrderInput["items"] = [];
     let salesChannelId = "";
     for (const item of items) {
       const productVariantId = String(item.productVariantId ?? "").trim();
@@ -1541,60 +1889,217 @@ export class PartnerPortalController {
     ) {
       throw new BadRequestException("Informe uma data válida para o produto pronto.");
     }
-    const orderNumber = await this.nextOrderNumber(actor.companyId);
-    const order = await this.salesOrders.create(actor.companyId, {
-      code: orderNumber,
+    const customerReference = String(body.customerReference ?? "").trim() || null;
+    const orderNotes = [
+      `Criado no portal por ${partner.name}.`,
+      signaDistributor ? `Conta de preços: Signa Coffee. Destinatário fiscal: ${fiscalCustomerId === customerId ? "Signa (CNPJ)" : "Rodrigo (CPF)"}.` : "",
+      partner.portalAccessLevel === "DISTRIBUTOR"
+        ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
+        : "",
+      String(body.notes ?? "").trim(),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    // Claim, order number, SalesOrder, items, accessory fields and claim
+    // completion commit or roll back together. A concurrent request with the
+    // same scoped key blocks on the unique index and then sees the claim.
+    const created = await this.database
+      .$transaction(
+        async (transaction) => {
+          let claimId: string | null = null;
+          if (submission) {
+            const claimed = await transaction.$queryRawUnsafe<Array<{ id: string }>>(
+              `INSERT INTO "PartnerOrderSubmission"
+                 (id,"companyId","partnerId","userId","submissionKey","requestHash",status,"createdAt","updatedAt")
+               VALUES ($1,$2,$3,$4,$5,$6,'CLAIMED',NOW(),NOW())
+               ON CONFLICT ("companyId","partnerId","userId","submissionKey") DO NOTHING
+               RETURNING id`,
+              randomUUID(), actor.companyId, partner.id, submission.userId,
+              submission.key, submission.hash,
+            );
+            if (!claimed[0]) throw new SignaSubmissionClaimedElsewhere();
+            claimId = claimed[0].id;
+          }
+          // Serialise portal order numbering per company until commit.
+          await transaction.$queryRawUnsafe(
+            `SELECT pg_advisory_xact_lock(hashtextextended('partner-order-number:' || $1, 0)) IS NULL AS locked`,
+            actor.companyId,
+          );
+          const orderNumber = await this.nextOrderNumber(actor.companyId, transaction);
+          const order = await this.salesOrders.create(
+            actor.companyId,
+            {
+              code: orderNumber,
+              orderNumber,
+              customerId: fiscalCustomerId,
+              createdByStorefrontPartnerId: partner.id,
+              salesChannelId,
+              freight: 0,
+              notes: orderNotes,
+              expectedDeliveryDate: body.expectedDeliveryDate || undefined,
+              items: pricedItems,
+            },
+            transaction,
+          );
+          await transaction.$executeRawUnsafe(
+            `UPDATE "SalesOrder"
+                SET "createdByStorefrontPartnerId"=$2,"paymentType"=$3,
+                    "paymentTermsSnapshot"=$4,"freightResponsibility"=$5,
+                    "carrierName"=$6,"customerReference"=$7,"updatedAt"=NOW()
+              WHERE id=$1 AND "companyId"=$8`,
+            order.id,
+            partner.id,
+            paymentType,
+            paymentTermsSnapshot,
+            deliveryMode,
+            carrierName || null,
+            customerReference,
+            actor.companyId,
+          );
+          if (partnerEndCustomerId) {
+            await transaction.$executeRawUnsafe(
+              `UPDATE "SalesOrder" SET "partnerEndCustomerId"=$3
+                WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$4`,
+              order.id, actor.companyId, partnerEndCustomerId, partner.id,
+            );
+          }
+          if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
+            await transaction.$executeRawUnsafe(
+              `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
+                WHERE id=$1 AND "companyId"=$2`,
+              order.id,
+              actor.companyId,
+              requestedReadyDate,
+            );
+          }
+          if (claimId) {
+            const completed = await transaction.$executeRawUnsafe(
+              `UPDATE "PartnerOrderSubmission"
+                  SET status='COMPLETED',"salesOrderId"=$2,"completedAt"=NOW(),"updatedAt"=NOW()
+                WHERE id=$1 AND "companyId"=$3 AND "partnerId"=$4 AND status='CLAIMED'`,
+              claimId, order.id, actor.companyId, partner.id,
+            );
+            if (completed !== 1) throw new ConflictException("Envio do pedido não pôde ser confirmado.");
+          }
+          return { orderId: order.id, orderNumber, totalAmount: Number(order.totalAmount) };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          maxWait: 10_000,
+          timeout: 30_000,
+        },
+      )
+      .catch((error: unknown) => {
+        if (error instanceof SignaSubmissionClaimedElsewhere) return null;
+        throw error;
+      });
+    if (!created) {
+      // Another request committed this key first: answer with its outcome.
+      const previous = submission
+        ? await this.replaySignaSubmission(actor, partner, submission)
+        : null;
+      if (previous) return previous;
+      throw new ConflictException("Este pedido já está sendo enviado. Aguarde alguns segundos e atualize a lista.");
+    }
+    const { orderId, orderNumber } = created;
+    await this.afterPartnerOrderCommitted(actor, partner, {
+      orderId,
       orderNumber,
-      customerId: fiscalCustomerId,
-      createdByStorefrontPartnerId: partner.id,
-      salesChannelId,
-      freight: 0,
-      notes: [
-        `Criado no portal por ${partner.name}.`,
-        signaDistributor ? `Conta de preços: Signa Coffee. Destinatário fiscal: ${fiscalCustomerId === customerId ? "Signa (CNPJ)" : "Rodrigo (CPF)"}.` : "",
-        partner.portalAccessLevel === "DISTRIBUTOR"
-          ? "Pedido de distribuidor sob encomenda: aguardando aprovação de José ou Suzi, confirmação da data de entrega e liberação para produção."
-          : "",
-        String(body.notes ?? "").trim(),
-      ]
-        .filter(Boolean)
-        .join(" "),
-      expectedDeliveryDate: body.expectedDeliveryDate || undefined,
-      items: pricedItems,
+      paymentType,
+      requestedDeliveryDate: body.expectedDeliveryDate || null,
     });
-    await this.database.$executeRawUnsafe(
-      `UPDATE "SalesOrder"
-          SET "createdByStorefrontPartnerId"=$2,"paymentType"=$3,
-              "paymentTermsSnapshot"=$4,"freightResponsibility"=$5,
-              "carrierName"=$6,"customerReference"=$7,"updatedAt"=NOW()
-        WHERE id=$1 AND "companyId"=$8`,
-      order.id,
-      partner.id,
+    return {
+      id: orderId,
+      code: orderNumber,
+      status: "DRAFT",
+      totalAmount: created.totalAmount,
       paymentType,
       paymentTermsSnapshot,
-      deliveryMode,
-      carrierName || null,
-      String(body.customerReference ?? "").trim() || null,
-      actor.companyId,
+      replayed: false,
+      message: this.partnerOrderMessage(partner),
+    };
+  }
+
+  private partnerOrderMessage(partner: any) {
+    return partner.portalAccessLevel === "DISTRIBUTOR"
+      ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."
+      : "Pedido enviado para conferência da equipe Bispo.";
+  }
+
+  /**
+   * Returns the original response for a repeated Signa submission, refuses a
+   * reused key with a different payload, or null when the key is unused.
+   */
+  private async replaySignaSubmission(
+    actor: PartnerActor,
+    partner: any,
+    submission: { key: string; hash: string; userId: string },
+  ) {
+    const rows = await this.database.$queryRawUnsafe<Array<{
+      status: string; requestHash: string; salesOrderId: string | null;
+    }>>(
+      `SELECT status,"requestHash","salesOrderId" FROM "PartnerOrderSubmission"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND "userId"=$3 AND "submissionKey"=$4
+        LIMIT 1`,
+      actor.companyId, partner.id, submission.userId, submission.key,
     );
-    if (partnerEndCustomerId) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "SalesOrder" SET "partnerEndCustomerId"=$3
-          WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$4`,
-        order.id, actor.companyId, partnerEndCustomerId, partner.id,
+    if (!rows[0]) return null;
+    const decision = resolveSignaSubmissionReplay(rows[0], submission.hash);
+    if (decision.kind === "payload-mismatch") {
+      throw new ConflictException(
+        "Este envio já foi usado para um pedido com outro conteúdo. Atualize a página e envie novamente.",
       );
     }
-    if (partner.portalAccessLevel === "DISTRIBUTOR" && requestedReadyDate) {
-      await this.database.$executeRawUnsafe(
-        `UPDATE "SalesOrder" SET "partnerRequestedReadyDate"=$3::timestamp
-          WHERE id=$1 AND "companyId"=$2`,
-        order.id,
-        actor.companyId,
-        requestedReadyDate,
-      );
+    if (decision.kind === "in-progress") {
+      throw new ConflictException("Este pedido já está sendo enviado. Aguarde alguns segundos e atualize a lista.");
     }
-    if (paymentType === "TERM") {
-      await this.termApprovals.ensureForOrder(actor.companyId, order.id, {
+    const orders = await this.database.$queryRawUnsafe<Array<{
+      id: string; code: string; status: string; totalAmount: unknown;
+      paymentType: string | null; paymentTermsSnapshot: string | null;
+      partnerRequestedReadyDate: Date | null;
+    }>>(
+      `SELECT id,COALESCE("orderNumber",code) AS code,status::text AS status,"totalAmount",
+              "paymentType"::text AS "paymentType","paymentTermsSnapshot","partnerRequestedReadyDate"
+         FROM "SalesOrder"
+        WHERE id=$1 AND "companyId"=$2 AND "createdByStorefrontPartnerId"=$3 LIMIT 1`,
+      decision.salesOrderId, actor.companyId, partner.id,
+    );
+    const order = orders[0];
+    if (!order) throw new ConflictException("Pedido original deste envio não está disponível.");
+    // Completes any post-commit step interrupted by a timeout. All are idempotent.
+    await this.afterPartnerOrderCommitted(actor, partner, {
+      orderId: order.id,
+      orderNumber: order.code,
+      paymentType: order.paymentType === "TERM" ? "TERM" : "CASH",
+      requestedDeliveryDate: order.partnerRequestedReadyDate
+        ? order.partnerRequestedReadyDate.toISOString().slice(0, 10)
+        : null,
+    });
+    return {
+      id: order.id,
+      code: order.code,
+      status: order.status,
+      totalAmount: Number(order.totalAmount),
+      paymentType: order.paymentType,
+      paymentTermsSnapshot: order.paymentTermsSnapshot,
+      replayed: true,
+      message: `Pedido ${order.code} já havia sido recebido. Nenhum pedido duplicado foi criado.`,
+    };
+  }
+
+  /** Post-commit side effects. Each one is idempotent so a retry can re-run it. */
+  private async afterPartnerOrderCommitted(
+    actor: PartnerActor,
+    partner: any,
+    order: {
+      orderId: string;
+      orderNumber: string;
+      paymentType: "CASH" | "TERM";
+      requestedDeliveryDate: string | null;
+    },
+  ) {
+    if (order.paymentType === "TERM") {
+      await this.termApprovals.ensureForOrder(actor.companyId, order.orderId, {
         id: actor.id ?? partner.id,
         companyId: actor.companyId,
         name: String(actor.name ?? partner.contactName ?? partner.name),
@@ -1603,22 +2108,22 @@ export class PartnerPortalController {
       });
     }
     await this.customerLifecycle.record(
-      order.id,
+      order.orderId,
       "ORDER_SUBMITTED",
       "Pedido enviado para aprovação",
-      `${partner.name} enviou o pedido ${orderNumber} para aprovação da Bispo Coffees.`,
+      `${partner.name} enviou o pedido ${order.orderNumber} para aprovação da Bispo Coffees.`,
       "BBOS",
-      `partner-order:submitted:${order.id}`,
+      `partner-order:submitted:${order.orderId}`,
       {
         partnerId: partner.id,
-        requestedDeliveryDate: body.expectedDeliveryDate || null,
+        requestedDeliveryDate: order.requestedDeliveryDate,
       },
       false,
     );
     if (partner.portalAccessLevel === "DISTRIBUTOR") {
-      const notificationMessage = `${partner.name} enviou o pedido ${orderNumber}. Confirme a data de entrega e aprove a liberação para produção.`;
+      const notificationMessage = `${partner.name} enviou o pedido ${order.orderNumber}. Confirme a data de entrega e aprove a liberação para produção.`;
       for (const targetRole of ["ADMIN", "EXECUTIVE"]) {
-        const notificationType = `SALES_DISTRIBUTOR_ORDER:${order.id}:${targetRole}`;
+        const notificationType = `SALES_DISTRIBUTOR_ORDER:${order.orderId}:${targetRole}`;
         await this.database.$executeRawUnsafe(
           `INSERT INTO "OperationalNotification"
             (id,"companyId",type,title,message,"targetRole","createdAt")
@@ -1636,17 +2141,5 @@ export class PartnerPortalController {
         );
       }
     }
-    return {
-      id: order.id,
-      code: orderNumber,
-      status: "DRAFT",
-      totalAmount: Number(order.totalAmount),
-      paymentType,
-      paymentTermsSnapshot,
-      message:
-        partner.portalAccessLevel === "DISTRIBUTOR"
-          ? "Pedido enviado para aprovação de José ou Suzi. A data desejada será confirmada antes da liberação para produção."
-          : "Pedido enviado para conferência da equipe Bispo.",
-    };
   }
 }
