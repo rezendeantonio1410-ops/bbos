@@ -37,7 +37,7 @@ test("nunca considera ausência de título ou de data como pagamento realizado",
 
 test("painel responsivo de pagamentos é somente leitura e não autoriza baixas financeiras", () => {
   const start = dashboard.indexOf('id="pagamentos-signa"');
-  const end = dashboard.indexOf('<section aria-label="Pedidos em andamento"', start);
+  const end = dashboard.indexOf("</section>", start);
   assert.ok(start > 0 && end > start);
   const panel = dashboard.slice(start, end);
   assert.match(panel, /grid gap-3 sm:grid-cols-2 xl:grid-cols-3/);

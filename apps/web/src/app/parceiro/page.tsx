@@ -220,7 +220,7 @@ export default function PartnerPortalPage() {
   };
 
   return (
-    <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "lg:pl-52" : ""}`}>
+    <main className={`min-h-screen bg-[var(--bbos-surface-page)] text-[var(--bbos-text-primary)] ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "signa-portal lg:pl-52" : ""}`}>
       <header className={`sticky top-0 z-40 border-b border-[var(--bbos-surface-border)] backdrop-blur ${data?.partner.portalAccessLevel === "DISTRIBUTOR" ? "bg-white/95 text-[#102338] shadow-sm" : "bg-[var(--bbos-surface)]/95 sm:static"}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-3">
           <div className="flex min-w-0 items-center gap-3 sm:gap-5">
@@ -877,7 +877,7 @@ function DistributorOrderQueue({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <a
-                    href="#historico-pedidos"
+                    href="#pedidos-signa"
                     className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 text-xs font-bold text-[var(--bbos-text-primary)]"
                   >
                     Ver pedido <ChevronRight size={14} />
@@ -1004,28 +1004,6 @@ function DistributorOrderHistory({
         </div>
       </details>
 
-      <section
-        id="historico-pedidos-desktop"
-        className="hidden rounded-2xl border border-[var(--bbos-surface-border)] bg-white p-4 shadow-sm sm:block"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">
-              Histórico dos pedidos
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--bbos-text-muted)]">
-              Consulte as etapas concluídas de cada pedido.
-            </p>
-          </div>
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bbos-nav-active)] text-[var(--bbos-coffee-green)]">
-            <Bell size={16} />
-          </span>
-        </div>
-        <DistributorOrderHistoryList
-          history={history}
-          eventsByOrder={eventsByOrder}
-        />
-      </section>
     </>
   );
 }
