@@ -1451,7 +1451,7 @@ export class PartnerPortalController {
     // per-user limit and push older drafts outside the 100-row listing.
     const rows = await this.database.$transaction(async tx => {
       await tx.$queryRawUnsafe(
-        `SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2 || ':' || $3, 0))`,
+        `SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2 || ':' || $3, 0)) IS NULL AS acquired`,
         actor.companyId, partner.id, userId,
       );
       const counts = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
