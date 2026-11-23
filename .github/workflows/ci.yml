@@ -78,6 +78,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Signa staging preflight syntax and fail-closed policy
+        run: |
+          bash -n scripts/signa-db-readiness.sh
+          if DATABASE_URL=postgresql://invalid:invalid@127.0.0.1:1/invalid bash scripts/signa-db-readiness.sh /tmp/signa-backup-does-not-exist.dump; then
+            echo "Signa preflight must reject missing backup" >&2
+            exit 1
+          fi
+
       - name: Apply migrations to disposable database
         run: scripts/signa-db-prepare.sh
 
