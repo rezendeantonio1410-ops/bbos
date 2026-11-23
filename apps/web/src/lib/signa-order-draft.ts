@@ -119,3 +119,16 @@ export function signaServerDraftEditTarget(
     ? selectedId
     : null;
 }
+
+/** Reject out-of-order account-draft GETs and mismatched server responses.
+ * Selection/form changes increment the epoch before touching the form.
+ */
+export function signaServerDraftRecoveryIsCurrent(
+  requestedId: string,
+  returnedId: string,
+  startedEpoch: number,
+  currentEpoch: number,
+): boolean {
+  return requestedId.length > 0 && requestedId === returnedId &&
+    Number.isSafeInteger(startedEpoch) && startedEpoch === currentEpoch;
+}
