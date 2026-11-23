@@ -102,3 +102,21 @@ test("form edits a persisted draft only after an explicit recovery", () => {
   // A rejected save must revoke the in-form edit authority before refreshing versions.
   assert.match(form, /setRecoveredServerDraftId\(""\);\s*await refreshServerDrafts\(\)/);
 });
+
+
+test("restoring a browser draft must revoke account draft editing authority", () => {
+  const form = readFileSync(new URL("../app/parceiro/PartnerOrderWorkspace.tsx", import.meta.url), "utf8");
+  const restoreStart = form.indexOf("  function restoreOrderDraft() {");
+  const restoreEnd = form.indexOf("  function clearOrderDraft() {", restoreStart);
+  assert.ok(restoreStart !== -1 && restoreEnd > restoreStart);
+  const restore = form.slice(restoreStart, restoreEnd);
+  const localValidation = restore.indexOf("if (!draft) {");
+  const revokedSelection = restore.indexOf('setServerDraftId("");');
+  const revokedEdit = restore.indexOf('setRecoveredServerDraftId("");');
+  const formChange = restore.indexOf("setLines(draft.lines.map(");
+  // Do not revoke ownership merely for an expired/invalid local draft.
+  // Once valid, revoke BOTH selection and PATCH authority before changing the form.
+  assert.ok(localValidation >= 0 && revokedSelection > localValidation);
+  assert.ok(revokedEdit > revokedSelection && formChange > revokedEdit);
+  assert.equal(signaServerDraftEditTarget("", "", new Set(["draft-a"])), null);
+});
