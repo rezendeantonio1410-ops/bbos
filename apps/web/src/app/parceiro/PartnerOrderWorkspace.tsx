@@ -1575,23 +1575,23 @@ export function PartnerOrderWorkspace({
             onSubmit={createOrder}
             className={
               isDistributor
-                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-3xl space-y-4 overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl sm:inset-x-5 sm:p-5"
-                : "mt-6 space-y-4 rounded-2xl bg-white p-4 sm:p-5"
+                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-5xl space-y-3 overflow-y-auto rounded-2xl bg-white p-3 shadow-2xl sm:inset-x-5 sm:p-4"
+                : "mt-6 space-y-3 rounded-2xl bg-white p-3 sm:p-4"
             }
           >
             {isDistributor && (
-              <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-center justify-between gap-4 border-b border-stone-100 bg-white/95 px-4 py-3 backdrop-blur sm:-top-5 sm:-mx-5 sm:-mt-5 sm:px-5">
+              <div className="sticky -top-3 z-10 -mx-3 -mt-3 flex items-center justify-between gap-3 border-b border-stone-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:-top-4 sm:-mx-4 sm:-mt-4 sm:px-4">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#087568]">
                     Novo pedido Signa
                   </p>
-                  <h3 className="text-lg font-semibold">Monte seu pedido</h3>
+                  <h3 className="text-lg font-semibold">Novo pedido</h3>
                 </div>
                 <button
                   type="button"
                   aria-label="Cancelar e fechar"
                   onClick={() => closeOrder()}
-                  className="grid size-10 place-items-center rounded-full bg-stone-100 text-stone-600"
+                  className="grid size-9 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
                 >
                   <X size={18} />
                 </button>
@@ -1627,14 +1627,14 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && customers.length === 1 && customers[0] && (
-              <div className="rounded-xl border border-emerald-900/10 bg-[#f7faf8] p-4">
+              <div className="rounded-lg border border-emerald-900/10 bg-[#f7faf8] px-3 py-2.5">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
                   Comprador
                 </p>
                 <p className="mt-1 text-sm font-bold text-[#14201d]">
                   {customers[0].tradeName || customers[0].name}
                 </p>
-                <p className="mt-1 text-xs text-stone-500">
+                <p className="mt-0.5 text-xs text-stone-500">
                   Escolha os produtos e as quantidades para o seu próximo
                   pedido. {catalog?.productCount ?? 0} apresentação(ões)
                   disponíveis.
@@ -1642,7 +1642,7 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
                 <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
                 <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>{ setPartnerEndCustomerId(event.target.value); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
@@ -1677,14 +1677,14 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && (billingEnabled || billingLoading) && (
-              <div className="rounded-xl border border-[#d5dedc] bg-white p-4">
+              <div className="rounded-lg border border-[#d5dedc] bg-white p-3">
                 <fieldset>
                   <legend className="text-sm font-semibold text-[#0E191D]">Faturar para <span className="text-red-700">*</span></legend>
                   <p className="mt-1 text-xs text-slate-600">Escolha quem receberá a nota fiscal. Nenhuma opção vem selecionada.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {billingRecipients.map((recipient) => (
                       <label key={recipient.id}
-                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
+                        className={`flex min-h-12 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
                         <input type="radio" name="signa-billing-recipient" required
                           disabled={billingLoading} value={recipient.id} checked={billingRecipientId === recipient.id}
                           onChange={() => setBillingRecipientId(recipient.id)}
@@ -1757,7 +1757,7 @@ export function PartnerOrderWorkspace({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-stone-700">Produtos</p>
+                <p className="text-sm font-semibold text-[#14201d]">Produtos</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -1772,7 +1772,7 @@ export function PartnerOrderWorkspace({
               {lines.map((line, index) => (
                 <div
                   key={line.id}
-                  className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_100px_40px]"
+                  className="grid items-center gap-2 rounded-lg border border-stone-200 bg-white p-2 sm:grid-cols-[minmax(0,1fr)_88px_32px]"
                 >
                   <select
                     value={line.productVariantId}
