@@ -590,8 +590,13 @@ export function PartnerOrderWorkspace({
       );
       setDraftStatus("Rascunho salvo na conta. Pode recuperar noutro dispositivo. Recalcule a cotação antes de enviar.");
     } catch (cause) {
-      setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível guardar o rascunho na conta.");
-      // A version conflict must not be overwritten; reload versions for an informed choice.
+      setDraftStatus(
+        (cause instanceof Error ? cause.message : "Não foi possível guardar o rascunho na conta.") +
+        " Para editar o registro existente, recupere-o novamente; salvar sem recuperar cria uma cópia independente.",
+      );
+      // After a 409, refreshing list versions must not permit a blind second PATCH:
+      // discard recovered edit authority until the user explicitly loads the current version.
+      setRecoveredServerDraftId("");
       await refreshServerDrafts().catch(() => {});
     } finally {
       setServerDraftBusy(false);
