@@ -57,18 +57,25 @@ function readyDate(daysAhead = 12) {
 }
 
 const run = Date.now() % 100000000;
-const signa = client(await login("signa@homolog.test"));
-const other = client(await login("outro@homolog.test"));
+const signaCookie = await login("signa@homolog.test");
+const otherCookie = await login("outro@homolog.test");
+const signa = client(signaCookie);
+const other = client(otherCookie);
 // Fail closed BEFORE any fictitious customer, draft or order is written.
-async function assertFixture(client, expectedPartnerId) {
+async function assertFixture(client, cookie, expectedPartnerId, expectedUserId) {
+  const response = await fetch(`${api}/auth/me`, { redirect: "error", headers: { cookie } });
+  assert.equal(response.status, 200, "Não foi possível validar a sessão de homologação");
+  const session = await response.json();
+  assert.equal(session?.user?.id === expectedUserId, true, "Recusado: usuário não é a fixture esperada");
+  assert.equal(session?.user?.companyId === "homolog-co", true, "Recusado: empresa não é a fixture de homologação");
+  assert.equal(session?.user?.role, "PARTNER");
   const result = await client("/summary");
   assert.equal(result.status, 200, "Não foi possível validar a identidade de homologação");
   assert.equal(result.json?.partner?.id === expectedPartnerId, true, "Recusado: parceiro não é a fixture esperada");
-  assert.equal(result.json?.partner?.companyId === "homolog-co", true, "Recusado: empresa não é a fixture de homologação");
   assert.equal(result.json?.partner?.portalAccessLevel, "DISTRIBUTOR");
 }
-await assertFixture(signa, "homolog-partner-signa");
-await assertFixture(other, "homolog-partner-other");
+await assertFixture(signa, signaCookie, "homolog-partner-signa", "homolog-user-signa");
+await assertFixture(other, otherCookie, "homolog-partner-other", "homolog-user-other");
 console.log("PASS identidade das duas fixtures isoladas confirmada antes de qualquer gravação");
 
 let options, recipients, endCustomer, draft, order;
