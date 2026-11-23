@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CreditCard, FileText, LayoutDashboard, MapPinned, Package, Plus, Search, ShoppingCart, Users } from "lucide-react";
+import { getSignaOrderTimelineEvents } from "@/lib/signa-order-timeline";
 
 export type SignaOrderSummary = {
   id: string; code: string; status: string; totalAmount: number | string; orderedAt: string;
@@ -71,10 +72,15 @@ const menu = [
   {label:"Relatórios",href:"#relatorios-signa",icon:BarChart3},
   {label:"Mapas",href:null,icon:MapPinned},
 ];
-export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrderSummary[];partnerName:string}) {
+type OrderTimelineEvent = {id:string;orderId:string;title:string;detail:string;occurredAt:string};
+export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:SignaOrderSummary[];partnerName:string;events?:OrderTimelineEvent[]}) {
   const [search,setSearch] = useState("");
   const [filter,setFilter] = useState("Todos");
   const [menuOpen,setMenuOpen] = useState(false);
+  const [expandedOrder,setExpandedOrder] = useState<string | null>(null);
+  useEffect(()=>{if(expandedOrder)document.getElementById("signa-order-timeline")?.scrollIntoView({behavior:"smooth",block:"start"});},[expandedOrder]);
+  const selectedOrder = useMemo(()=>orders.find(o=>o.id===expandedOrder)||null,[orders,expandedOrder]);
+  const timelineEvents = useMemo(()=>getSignaOrderTimelineEvents(events,expandedOrder),[events,expandedOrder]);
   const filtered = useMemo(()=>orders.filter(o=>{
     const text = (o.code+" "+o.customerName).toLocaleLowerCase("pt-BR");
     const matches = !search || text.includes(search.toLocaleLowerCase("pt-BR"));
@@ -130,10 +136,19 @@ export function SignaEnterpriseDashboard({orders,partnerName}:{orders:SignaOrder
             <div className="mt-3 flex gap-1" role="img" aria-label={`Etapa ${orderProgress[o.status]??1} de 6: ${stages[o.status]||o.status}`}>
               {[1,2,3,4,5,6].map(n=><span key={n} className={`h-1.5 flex-1 rounded-full ${n<=(orderProgress[o.status]??1)?"bg-[#0E191D]":"bg-slate-200"}`}/>)}
             </div>
-            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><a href="#historico-pedidos" className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</a></div>
+            <div className="mt-3 flex items-center justify-between gap-2"><span className="text-xs font-semibold">{currency.format(Number(o.totalAmount||0))}</span><button type="button" aria-expanded={expandedOrder===o.id} aria-controls="signa-order-timeline" onClick={()=>setExpandedOrder(value=>value===o.id?null:o.id)} className="text-xs font-semibold text-[#0E191D] underline">Ver detalhes</button></div>
           </article>)}
         </div>}
       </section>
+      {selectedOrder&&<section id="signa-order-timeline" className="scroll-mt-28 rounded-xl border border-[#b4c6c1] bg-white p-5" aria-label="Linha do tempo do pedido">
+        <div className="flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Linha do tempo · {selectedOrder.code}</h3><button type="button" onClick={()=>setExpandedOrder(null)} className="text-sm font-semibold underline">Fechar</button></div>
+        <p className="mt-1 text-xs text-slate-500">Datas e horários registrados pelo BBOS; etapas sem registro não são estimadas.</p>
+        <ol className="mt-4 space-y-3 border-l-2 border-[#25734c] pl-5">
+          <li className="text-sm"><span className="font-semibold">Pedido registrado</span><time className="ml-2 text-slate-600">{selectedOrder.orderedAt?new Date(selectedOrder.orderedAt).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"Data indisponível"}</time></li>
+          {timelineEvents.map(event=><li key={event.id} className="text-sm"><span className="font-semibold">{event.title}</span><time className="ml-2 text-slate-600">{new Date(event.occurredAt).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</time><p className="text-xs text-slate-500">{event.detail}</p></li>)}
+          {!timelineEvents.length&&<li className="text-sm text-slate-500">Sem eventos adicionais registrados para este pedido.</li>}
+        </ol>
+      </section>}
       <section id="pedidos-em-andamento" className="rounded-lg border border-slate-200 bg-white shadow-sm" aria-label="Tabela de pedidos">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
           <div><h3 className="text-lg font-semibold text-[#102338]">Meus pedidos</h3><p className="text-xs text-slate-500">Acompanhamento operacional e financeiro</p></div>
