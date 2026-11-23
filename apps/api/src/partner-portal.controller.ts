@@ -710,6 +710,10 @@ export class PartnerPortalController {
         exclusive: catalog?.exclusive ?? false,
         productCount: variants.length,
       },
+      // Scope browser drafts by authenticated principal; never use a buyer-only key.
+      draftScope: partner.portalAccessLevel === "DISTRIBUTOR" && actor.id
+        ? { companyId: actor.companyId, partnerId: partner.id, userId: actor.id }
+        : null,
     };
   }
 
