@@ -8,7 +8,7 @@ import { emptySignaEndCustomerForm, formatCnpj, validateSignaEndCustomerForm, ty
 
 export type SignaOrderSummary = {
   id: string; code: string; status: string; totalAmount: number | string; orderedAt: string;
-  customerName: string; billingRecipientName?: string | null; endCustomerName?: string | null; volumeKg?: number | string | null; paymentDate?: string | null; openAmount?: number | string | null; receivableStatus?: string | null; invoiceStatus?: string | null;
+  customerName: string; billingRecipientName?: string | null; endCustomerName?: string | null; volumeKg?: number | string | null; paymentDate?: string | null; dueDate?: string | null; paymentType?: "CASH" | "TERM" | null; receivableAmount?: number | string | null; openAmount?: number | string | null; receivableStatus?: string | null; invoiceStatus?: string | null;
   invoicePdfAvailable?: boolean; invoiceNumber?: string | null; billingAvailable?: boolean;
 };
 type CommercialReport = {
@@ -173,7 +173,7 @@ const menu = [
   {label:"Produtos",href:"#catalogo-signa",icon:Package},
   {label:"Clientes",href:"#clientes-signa",icon:Users},
   {label:"Faturamento",href:"#historico-pedidos",icon:FileText},
-  {label:"Pagamentos",href:null,icon:CreditCard},
+  {label:"Pagamentos",href:"#pagamentos-signa",icon:CreditCard},
   {label:"Relatórios",href:"#relatorios-signa",icon:BarChart3},
   {label:"Mapas",href:null,icon:MapPinned},
 ];
@@ -191,6 +191,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
     return matches && (filter==="Todos" || (filter==="Em produção" ? o.status==="IN_PRODUCTION" : filter==="Faturado" ? o.status==="INVOICED" : filter==="Concluído" ? o.status==="DELIVERED" : !["INVOICED","DELIVERED","CANCELLED"].includes(o.status)));
   }),[orders,search,filter]);
   const activeOrders = useMemo(()=>orders.filter(o=>!["DELIVERED","CANCELLED"].includes(o.status)),[orders]);
+  const receivableOrders = useMemo(()=>orders.filter(o=>Boolean(o.receivableStatus)),[orders]);
   const orderProgress: Record<string,number> = {DRAFT:1,CONFIRMED:2,RESERVED:2,IN_PRODUCTION:3,PICKING:4,READY_TO_SHIP:4,INVOICED:5,SHIPPED:5,DELIVERED:6};
   const sum=orders.reduce((s,o)=>s+Number(o.totalAmount||0),0);
   const invoiced = orders.filter(o=>o.invoiceStatus==="AUTHORIZED").reduce((s,o)=>s+Number(o.totalAmount||0),0);
@@ -251,6 +252,30 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[]}:{orders:
           {!filtered.length&&<p className="p-5 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}
         </div>
         <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-xs"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Pedido","Data","Faturar para","Cliente (registro)","Volume (kg)","Valor","Situação","Pagamento","Pago em","Documentos"].map(x=><th key={x} scope="col" className={`px-5 py-3 font-semibold ${x==="Pedido"?"sticky left-0 z-20 min-w-[145px] bg-slate-50 shadow-[2px_0_4px_-3px_#64748b]":""}`}>{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map(o=><tr key={o.id} className="hover:bg-slate-50"><td className="sticky left-0 z-10 min-w-[145px] bg-white px-3 py-3 font-semibold shadow-[2px_0_4px_-3px_#64748b]"><button type="button" aria-expanded={expandedOrder===o.id} aria-controls="signa-order-timeline" aria-label={`Ver detalhes do pedido ${o.code}`} onClick={()=>setExpandedOrder(value=>value===o.id?null:o.id)} className="flex flex-col items-start gap-1 text-left font-semibold text-[#0E191D] hover:text-[#25734c] focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25734c]"><span className="underline decoration-slate-400 underline-offset-4">{o.code}</span><span className="text-[11px] font-medium underline underline-offset-2">Ver detalhes</span></button></td><td className="px-3 py-3">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td><td className="px-5 py-4">{o.billingRecipientName||o.customerName}</td><td className="px-5 py-4">{o.endCustomerName||"Não informado"}</td><td className="px-5 py-4">{Number(o.volumeKg||0).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td className="px-5 py-4">{currency.format(Number(o.totalAmount))}</td><td className="px-5 py-4"><span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{stages[o.status]||o.status}</span></td><td className="px-5 py-4"><span className={`rounded-md px-2 py-1 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-emerald-100 text-emerald-800":o.receivableStatus==="PARTIALLY_PAID"?"bg-amber-100 text-amber-800":"bg-slate-100 text-slate-700"}`}>{o.receivableStatus==="PAID"?"Pago":o.receivableStatus==="PARTIALLY_PAID"?"Parcialmente pago":o.receivableStatus==="OVERDUE"?"Vencido":o.receivableStatus==="OPEN"?"Pendente":"Não confirmado"}</span></td><td className="px-5 py-4">{o.receivableStatus==="PAID"&&o.paymentDate?new Date(o.paymentDate).toLocaleDateString("pt-BR"):"—"}</td><td className="px-5 py-4">{o.invoiceStatus==="AUTHORIZED"&&o.invoicePdfAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/invoice/pdf`} target="_blank" rel="noreferrer">Ver NF</a>:o.billingAvailable?<a className="font-semibold text-emerald-800 underline" href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer">Ver cobrança</a>:<span className="text-xs text-slate-500">Aguardando</span>}</td></tr>)}</tbody></table>{!filtered.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum pedido encontrado.</p>}</div>
+      </section>
+      <section id="pagamentos-signa" aria-label="Pagamentos vinculados aos pedidos" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-[#0E191D]">Pagamentos</h3>
+          <p className="mt-1 text-xs text-slate-600">Consulta dos títulos do Contas a Receber já vinculados aos seus pedidos no BBOS. A confirmação de Pix e outros pagamentos depende do registro financeiro da Bispo; o parceiro não pode dar baixa ou confirmar recebimentos.</p>
+        </div>
+        {receivableOrders.length===0 ? <p role="status" className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">Nenhum título financeiro vinculado aos pedidos disponíveis. Isso não significa que algum pagamento tenha sido realizado.</p> :
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {receivableOrders.map(o=><article key={o.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-sm text-[#0E191D]">{o.code}</strong>
+              <span className={`rounded-md px-2 py-1 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-emerald-100 text-emerald-800":o.receivableStatus==="OVERDUE"?"bg-red-100 text-red-800":o.receivableStatus==="PARTIALLY_PAID"?"bg-amber-100 text-amber-800":"bg-slate-200 text-slate-700"}`}>{o.receivableStatus==="PAID"?"Pago":o.receivableStatus==="PARTIALLY_PAID"?"Parcialmente pago":o.receivableStatus==="OVERDUE"?"Vencido":o.receivableStatus==="OPEN"?"Em aberto":"A conferir"}</span>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-600" title={o.billingRecipientName||o.customerName}>{o.billingRecipientName||o.customerName}</p>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div><dt className="text-slate-500">Valor do título</dt><dd className="mt-1 font-semibold tabular-nums">{o.receivableAmount!=null?currency.format(Number(o.receivableAmount)):"—"}</dd></div>
+              <div><dt className="text-slate-500">Saldo em aberto</dt><dd className="mt-1 font-semibold tabular-nums">{o.openAmount!=null?currency.format(Number(o.openAmount)):"—"}</dd></div>
+              <div><dt className="text-slate-500">Vencimento</dt><dd className="mt-1 font-medium">{o.dueDate?new Date(o.dueDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</dd></div>
+              <div><dt className="text-slate-500">Pago em</dt><dd className="mt-1 font-medium">{o.receivableStatus==="PAID"&&o.paymentDate?new Date(o.paymentDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</dd></div>
+            </dl>
+            {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-[#0E191D] underline underline-offset-2">Consultar cobrança</a>}
+          </article>)}
+        </div>}
+        <p className="mt-3 text-xs text-slate-500">Visão dos títulos mais recentes associados aos pedidos desta consulta; não substitui extrato bancário ou conciliação do financeiro da Bispo.</p>
       </section>
       <section aria-label="Pedidos em andamento" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-[#0E191D]">Pedidos em andamento</h3><span className="text-xs text-slate-500">{activeOrders.length} pedido(s)</span></div>
