@@ -26,6 +26,7 @@ import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-peri
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
 import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
+import { selectDistributorCatalogVisibility } from "./signa-catalog-visibility";
 
 type PartnerActor = {
   id?: string | null;
@@ -293,9 +294,15 @@ export class PartnerPortalController {
     };
   }
 
+  private isSignaDistributor(partner: { portalAccessLevel?: string; name?: string }): boolean {
+    return partner.portalAccessLevel === "DISTRIBUTOR" &&
+      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+  }
+
   private async distributorCatalog(
     companyId: string,
     customerId: string,
+    requireExplicitCatalog = false,
   ): Promise<{ variantIds: Set<string>; exclusive: boolean }> {
     const catalogRows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT catalog."productVariantId"
@@ -313,13 +320,14 @@ export class PartnerPortalController {
       companyId,
       customerId,
     );
-    if (catalogRows.length > 0) {
-      return {
-        variantIds: new Set(
-          catalogRows.map((row) => String(row.productVariantId)),
-        ),
-        exclusive: true,
-      };
+    const visible = selectDistributorCatalogVisibility(
+      catalogRows.map((row) => String(row.productVariantId)),
+      requireExplicitCatalog,
+    );
+    // Signa's private catalog must fail closed if its explicit allowlist is
+    // absent, not fall back to generic distributor prices.
+    if (!visible.needsLegacyFallback) {
+      return { variantIds: visible.variantIds, exclusive: true };
     }
     const explicitRows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT cpp."productVariantId"
@@ -667,7 +675,11 @@ export class PartnerPortalController {
         ? customers[0]
         : null;
     const catalog = distributorCustomer
-      ? await this.distributorCatalog(actor.companyId, distributorCustomer.id)
+      ? await this.distributorCatalog(
+          actor.companyId,
+          distributorCustomer.id,
+          this.isSignaDistributor(partner),
+        )
       : null;
     const variants = catalog
       ? await this.distributorVariantOptions(
@@ -1092,7 +1104,11 @@ export class PartnerPortalController {
       throw new BadRequestException("Adicione ao menos um produto.");
     const distributorCatalog =
       partner.portalAccessLevel === "DISTRIBUTOR"
-        ? await this.distributorCatalog(actor.companyId, customerId)
+        ? await this.distributorCatalog(
+            actor.companyId,
+            customerId,
+            this.isSignaDistributor(partner),
+          )
         : null;
     const quoted = [];
     let salesChannelId = "";
@@ -1352,8 +1368,7 @@ export class PartnerPortalController {
     const customerId = String(body.customerId ?? "").trim();
     await this.assertCustomer(partner, actor.companyId, customerId);
     let fiscalCustomerId = customerId;
-    const signaDistributor = partner.portalAccessLevel === "DISTRIBUTOR" &&
-      String(partner.name ?? "").trim().toLowerCase() === "signa coffee";
+    const signaDistributor = this.isSignaDistributor(partner);
     if (signaDistributor) {
       const available = await this.findSignaBillingRecipients(actor.companyId, partner);
       const selected = selectSignaFiscalRecipient(
@@ -1389,7 +1404,11 @@ export class PartnerPortalController {
       throw new BadRequestException("Adicione ao menos um produto.");
     const distributorCatalog =
       partner.portalAccessLevel === "DISTRIBUTOR"
-        ? await this.distributorCatalog(actor.companyId, customerId)
+        ? await this.distributorCatalog(
+            actor.companyId,
+            customerId,
+            this.isSignaDistributor(partner),
+          )
         : null;
     const options = distributorCatalog
       ? {
