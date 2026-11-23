@@ -43,7 +43,8 @@ test("edição de cliente comercial tem escopo de empresa/parceiro e não altera
   assert.ok(start >= 0 && end > start);
   const segment = source.slice(start, end);
   assert.match(segment, /portalAccessLevel !== "DISTRIBUTOR"/);
-  assert.match(segment, /parsePartnerEndCustomerPatch\(body\)/);
+  assert.match(segment, /parsePartnerEndCustomerPatch\(body, "update"\)/);
+  assert.match(segment, /assertEndCustomerTaxIdAvailable\(actor\.companyId, partner\.id, changes\.taxId, customerId\)/);
   assert.match(segment, /WHERE id=\$1 AND "companyId"=\$2 AND "partnerId"=\$3 AND active=true/);
   assert.match(segment, /RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state/);
   assert.doesNotMatch(segment, /UPDATE "Customer"/);
@@ -58,4 +59,18 @@ test("dados pessoais dos rascunhos da conta Signa não podem ser armazenados em 
     const declaration = source.slice(start, methodStart);
     assert.match(declaration, /@Header\("Cache-Control", "private, no-store"\)/);
   }
+});
+
+test("cadastro de cliente comercial exige ficha completa, impede CNPJ duplicado na carteira e grava somente PartnerEndCustomer", () => {
+  const start = source.indexOf('@Post("end-customers")');
+  const end = source.indexOf('@Patch("end-customers/:customerId")', start);
+  assert.ok(start >= 0 && end > start);
+  const segment = source.slice(start, end);
+  assert.match(segment, /portalAccessLevel !== "DISTRIBUTOR"/);
+  assert.match(segment, /parsePartnerEndCustomerPatch\(body, "create"\)/);
+  assert.match(segment, /assertEndCustomerTaxIdAvailable\(actor\.companyId, partner\.id/);
+  assert.match(segment, /INSERT INTO "PartnerEndCustomer"/);
+  assert.doesNotMatch(segment, /"Customer"|billingRecipient/);
+  const guard = source.slice(source.indexOf("private async assertEndCustomerTaxIdAvailable"));
+  assert.match(guard, /WHERE "companyId"=\$1 AND "partnerId"=\$2 AND active=true AND "taxId"=\$3/);
 });

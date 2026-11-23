@@ -16,6 +16,7 @@ import {
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
+import { formatCnpj, validateSignaEndCustomerForm } from "@/lib/signa-end-customer-form";
 import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, signaServerDraftRecoveryIsCurrent, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
@@ -292,6 +293,10 @@ export function PartnerOrderWorkspace({
   const [newEndCustomerState, setNewEndCustomerState] = useState("");
   const [savingEndCustomer, setSavingEndCustomer] = useState(false);
   const [editingEndCustomerId, setEditingEndCustomerId] = useState("");
+  // CEP loaded from a saved record: re-opening it for edit must not overwrite
+  // the stored street/district/city with a fresh lookup.
+  const endCustomerLoadedCep = useRef("");
+  const endCustomerNumberInput = useRef<HTMLInputElement | null>(null);
 
   function closeOrder() {
     serverDraftRecoveryEpoch.current += 1;
@@ -341,10 +346,12 @@ export function PartnerOrderWorkspace({
     postalCode: newEndCustomerCep,
     enabled: showOrder && isDistributor,
     onResolved: result => {
+      if (result.postalCode && result.postalCode === endCustomerLoadedCep.current) return;
       setNewEndCustomerStreet(result.address);
       setNewEndCustomerDistrict(result.district);
       setNewEndCustomerCity(result.city);
       setNewEndCustomerState(result.state);
+      endCustomerNumberInput.current?.focus();
     },
   });
   const customerCepLookup = useBrazilianCepAutofill({
@@ -868,18 +875,27 @@ export function PartnerOrderWorkspace({
     }
   }
 
+  function resetEndCustomerForm() {
+    endCustomerLoadedCep.current = "";
+    setEditingEndCustomerId("");
+    setNewEndCustomerName("");
+    setNewEndCustomerTaxId(""); setNewEndCustomerCep(""); setNewEndCustomerStreet("");
+    setNewEndCustomerNumber(""); setNewEndCustomerDistrict(""); setNewEndCustomerComplement("");
+    setNewEndCustomerCity("");
+    setNewEndCustomerState("");
+  }
+
   async function saveEndCustomer() {
-    if (!newEndCustomerName.trim()) { setError("Informe o nome do cliente final."); return; }
+    const validation = validateSignaEndCustomerForm({
+      name: newEndCustomerName, taxId: newEndCustomerTaxId, postalCode: newEndCustomerCep,
+      street: newEndCustomerStreet, number: newEndCustomerNumber, district: newEndCustomerDistrict,
+      complement: newEndCustomerComplement, city: newEndCustomerCity, state: newEndCustomerState,
+    });
+    if (!validation.ok) { setError(validation.error); return; }
+    const payload = validation.payload;
     setSavingEndCustomer(true);
     setError("");
     const editingId = editingEndCustomerId;
-    const city = newEndCustomerCity.trim();
-    const state = newEndCustomerState.trim().toUpperCase();
-    const taxId = newEndCustomerTaxId.replace(/\D/g, "");
-    const postalCode = brazilianCepDigits(newEndCustomerCep);
-    if (taxId && taxId.length !== 14) { setError("CNPJ deve ter 14 dígitos."); setSavingEndCustomer(false); return; }
-    if (postalCode && postalCode.length !== 8) { setError("CEP deve ter 8 dígitos."); setSavingEndCustomer(false); return; }
-    const payload = {name:newEndCustomerName.trim(),taxId,postalCode,street:newEndCustomerStreet.trim(),number:newEndCustomerNumber.trim(),district:newEndCustomerDistrict.trim(),complement:newEndCustomerComplement.trim(),city,state};
     try {
       const result = await portalApi<{id:string;name:string;taxId?:string|null;postalCode?:string|null;street?:string|null;number?:string|null;district?:string|null;complement?:string|null;city?:string|null;state?:string|null}>(
         editingId ? `/end-customers/${encodeURIComponent(editingId)}` : "/end-customers",
@@ -889,20 +905,18 @@ export function PartnerOrderWorkspace({
         },
       );
       const entry = {
-        id: result.id, name: result.name, taxId:result.taxId ?? taxId,postalCode:result.postalCode ?? postalCode,street:result.street ?? payload.street,number:result.number ?? payload.number,district:result.district ?? payload.district,complement:result.complement ?? payload.complement,
-        city: result.city ?? (city || null),
-        state: result.state ?? (state || null),
+        id: result.id, name: result.name ?? payload.name,
+        taxId: result.taxId ?? payload.taxId, postalCode: result.postalCode ?? payload.postalCode,
+        street: result.street ?? payload.street, number: result.number ?? payload.number,
+        district: result.district ?? payload.district, complement: result.complement ?? (payload.complement || null),
+        city: result.city ?? payload.city, state: result.state ?? payload.state,
       };
       setEndCustomers(previous => (
         editingId ? previous.map(customer => customer.id === editingId ? entry : customer) : [...previous, entry]
       ).sort((left,right) => left.name.localeCompare(right.name)));
       setEndCustomerSearch("");
       setPartnerEndCustomerId(result.id);
-      setEditingEndCustomerId("");
-      setNewEndCustomerName("");
-      setNewEndCustomerTaxId("");setNewEndCustomerCep("");setNewEndCustomerStreet("");setNewEndCustomerNumber("");setNewEndCustomerDistrict("");setNewEndCustomerComplement("");
-      setNewEndCustomerCity("");
-      setNewEndCustomerState("");
+      resetEndCustomerForm();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível salvar o cliente comercial.");
     } finally { setSavingEndCustomer(false); }
@@ -1666,7 +1680,7 @@ export function PartnerOrderWorkspace({
             {isDistributor && (
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
-                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, CNPJ, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
                 <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>{ setPartnerEndCustomerId(event.target.value); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
                   <option value="">Não indicar cliente final</option>
                   {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
@@ -1675,6 +1689,7 @@ export function PartnerOrderWorkspace({
                   <button type="button" className="mt-2 text-sm font-semibold text-[#0E191D] underline" onClick={()=>{
                     const chosen = endCustomers.find(customer => customer.id === partnerEndCustomerId);
                     if (!chosen) return;
+                    endCustomerLoadedCep.current = (chosen.postalCode ?? "").replace(/\D/g, "");
                     setEditingEndCustomerId(chosen.id);
                     setNewEndCustomerName(chosen.name);
                      setNewEndCustomerTaxId(chosen.taxId ?? "");setNewEndCustomerCep(chosen.postalCode ?? "");setNewEndCustomerStreet(chosen.street ?? "");setNewEndCustomerNumber(chosen.number ?? "");setNewEndCustomerDistrict(chosen.district ?? "");setNewEndCustomerComplement(chosen.complement ?? "");
@@ -1684,25 +1699,21 @@ export function PartnerOrderWorkspace({
                 )}
                 <details key={editingEndCustomerId ? "edit" : "new"} open={Boolean(editingEndCustomerId)} className="mt-3">
                   <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">{editingEndCustomerId ? "Editar cliente comercial" : "Cadastrar novo cliente final"}</summary>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-6">
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social<input aria-label="Nome / Razão social do cliente final" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ<input aria-label="CNPJ do cliente final" value={newEndCustomerTaxId} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP<input aria-label="CEP do cliente final" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+                  {/* Nested inside the order form: Enter must never submit the order. */}
+                  <div className="mt-2 grid gap-2 sm:grid-cols-6" onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social *<input aria-label="Nome / Razão social do cliente final" aria-required="true" autoComplete="organization" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ *<input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP *<input aria-label="CEP do cliente final" aria-required="true" inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
 {endCustomerCepLookup.statusText && <p role="status" className="text-xs text-stone-600 sm:col-span-6">{endCustomerCepLookup.statusText}</p>}
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro<input aria-label="Rua / Logradouro do cliente final" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número<input aria-label="Número do cliente final" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Bairro<input aria-label="Bairro do cliente final" value={newEndCustomerDistrict} onChange={event=>setNewEndCustomerDistrict(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro *<input aria-label="Rua / Logradouro do cliente final" aria-required="true" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número *<input aria-label="Número do cliente final" ref={endCustomerNumberInput} aria-required="true" placeholder="S/N" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Bairro *<input aria-label="Bairro do cliente final" aria-required="true" value={newEndCustomerDistrict} onChange={event=>setNewEndCustomerDistrict(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Complemento<input aria-label="Complemento do cliente final" value={newEndCustomerComplement} onChange={event=>setNewEndCustomerComplement(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Cidade<input aria-label="Cidade do cliente final" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">UF<input aria-label="UF do cliente final" value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value.toUpperCase())} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Cidade *<input aria-label="Cidade do cliente final" aria-required="true" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">UF *<input aria-label="UF do cliente final" aria-required="true" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
 </div>
 <button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : editingEndCustomerId ? "Salvar alterações" : "Salvar cliente"}</button>
-                  {editingEndCustomerId && <button type="button" className="ml-3 text-sm underline" onClick={()=>{
-                    setEditingEndCustomerId("");
-                    setNewEndCustomerName("");
-                    setNewEndCustomerCity("");
-                    setNewEndCustomerState("");
-                  }}>Cancelar edição</button>}
+                  {editingEndCustomerId && <button type="button" className="ml-3 text-sm underline" onClick={resetEndCustomerForm}>Cancelar edição</button>}
                 </details>
               </div>
             )}

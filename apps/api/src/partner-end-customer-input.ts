@@ -1,3 +1,5 @@
+import { isValidCnpj } from "./supplier-verification";
+
 // Commercial end-customer data stays isolated from fiscal Customer and billing recipients.
 export type PartnerEndCustomerPatch = Partial<{
   name: string;
@@ -11,22 +13,48 @@ export type PartnerEndCustomerPatch = Partial<{
   state: string | null;
 }>;
 
-const editableFields = ["name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state"] as const;
-const maxLength: Partial<Record<typeof editableFields[number], number>> = {
+export type PartnerEndCustomerInputMode = "create" | "update";
+
+export const partnerEndCustomerFields = [
+  "name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state",
+] as const;
+type Field = typeof partnerEndCustomerFields[number];
+
+/**
+ * Fields that a complete commercial registration must carry. Only the
+ * complement is optional. On update, a required field may be omitted (partial
+ * change) but can never be cleared.
+ */
+export const partnerEndCustomerRequiredFields: readonly Field[] = [
+  "name", "taxId", "postalCode", "street", "number", "district", "city", "state",
+];
+
+const labels: Record<Field, string> = {
+  name: "Nome / Razão social", taxId: "CNPJ", postalCode: "CEP", street: "Rua",
+  number: "Número", district: "Bairro", complement: "Complemento", city: "Cidade", state: "UF",
+};
+const maxLength: Partial<Record<Field, number>> = {
   street: 180, number: 30, district: 120, complement: 120, city: 120,
 };
+const brazilianStates = new Set([
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
+  "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+]);
 
-export function parsePartnerEndCustomerPatch(input: unknown): PartnerEndCustomerPatch {
+export function parsePartnerEndCustomerPatch(
+  input: unknown,
+  mode: PartnerEndCustomerInputMode = "update",
+): PartnerEndCustomerPatch {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Informe os campos do cliente comercial.");
   }
   const source = input as Record<string, unknown>;
   const keys = Object.keys(source);
-  if (!keys.length || keys.some(key => !editableFields.includes(key as typeof editableFields[number]))) {
+  if (!keys.length || keys.some(key => !partnerEndCustomerFields.includes(key as Field))) {
     throw new Error("Campos não permitidos no cliente comercial.");
   }
   const values: Record<string, string | null> = {};
-  for (const key of keys) {
+  for (const key of keys as Field[]) {
     const raw = source[key];
     if (typeof raw !== "string") throw new Error("Os campos do cliente devem ser textos.");
     const value = raw.trim();
@@ -35,7 +63,9 @@ export function parsePartnerEndCustomerPatch(input: unknown): PartnerEndCustomer
       values.name = value;
     } else if (key === "taxId") {
       const digits = value.replace(/\D/g, "");
-      if (value && digits.length !== 14) throw new Error("Informe um CNPJ com 14 dígitos.");
+      if (value && (digits.length !== 14 || !isValidCnpj(digits))) {
+        throw new Error("CNPJ inválido. Confira os 14 dígitos.");
+      }
       values.taxId = digits || null;
     } else if (key === "postalCode") {
       const digits = value.replace(/\D/g, "");
@@ -43,13 +73,19 @@ export function parsePartnerEndCustomerPatch(input: unknown): PartnerEndCustomer
       values.postalCode = digits || null;
     } else if (key === "state") {
       const state = value.toUpperCase();
-      if (state && !/^[A-Z]{2}$/.test(state)) throw new Error("Informe a UF com duas letras.");
+      if (state && !brazilianStates.has(state)) throw new Error("Informe uma UF válida.");
       values.state = state || null;
     } else {
-      if (value.length > (maxLength[key as typeof editableFields[number]] ?? 120)) {
+      if (value.length > (maxLength[key] ?? 120)) {
         throw new Error("Campo de endereço demasiado longo.");
       }
       values[key] = value || null;
+    }
+  }
+  for (const field of partnerEndCustomerRequiredFields) {
+    const present = Object.prototype.hasOwnProperty.call(values, field);
+    if ((mode === "create" && !present) || (present && values[field] == null)) {
+      throw new Error(`Informe ${labels[field]} do cliente comercial.`);
     }
   }
   return values as PartnerEndCustomerPatch;

@@ -1259,6 +1259,26 @@ export class PartnerPortalController {
     };
   }
 
+  /** One active commercial record per CNPJ inside the same company/partner wallet. */
+  private async assertEndCustomerTaxIdAvailable(
+    companyId: string,
+    partnerId: string,
+    taxId: string | null,
+    exceptId: string | null,
+  ) {
+    if (!taxId) return;
+    const rows = await this.database.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+      `SELECT id,name FROM "PartnerEndCustomer"
+        WHERE "companyId"=$1 AND "partnerId"=$2 AND active=true AND "taxId"=$3
+          AND ($4::text IS NULL OR id<>$4)
+        LIMIT 1`,
+      companyId, partnerId, taxId, exceptId,
+    );
+    if (rows[0]) {
+      throw new ConflictException(`CNPJ já cadastrado para ${rows[0].name}. Selecione o cliente existente.`);
+    }
+  }
+
   // Commercial end customers are isolated from fiscal recipients and scoped by tenant/partner.
   @Get("end-customers")
   @Header("Cache-Control", "private, no-store")
@@ -1288,11 +1308,12 @@ export class PartnerPortalController {
     }
     let values: ReturnType<typeof parsePartnerEndCustomerPatch>;
     try {
-      values = parsePartnerEndCustomerPatch(body);
+      values = parsePartnerEndCustomerPatch(body, "create");
     } catch (cause) {
       throw new BadRequestException(cause instanceof Error ? cause.message : "Cadastro inválido.");
     }
     if (!values.name) throw new BadRequestException("Informe a razão social do cliente.");
+    await this.assertEndCustomerTaxIdAvailable(actor.companyId, partner.id, values.taxId ?? null, null);
     const id = randomUUID();
     await this.database.$executeRawUnsafe(
       `INSERT INTO "PartnerEndCustomer"
@@ -1318,9 +1339,12 @@ export class PartnerPortalController {
     }
     let changes: ReturnType<typeof parsePartnerEndCustomerPatch>;
     try {
-      changes = parsePartnerEndCustomerPatch(body);
+      changes = parsePartnerEndCustomerPatch(body, "update");
     } catch (cause) {
       throw new BadRequestException(cause instanceof Error ? cause.message : "Dados inválidos.");
+    }
+    if (changes.taxId) {
+      await this.assertEndCustomerTaxIdAvailable(actor.companyId, partner.id, changes.taxId, customerId);
     }
     const fields = ["name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state"] as const;
     const keys = fields.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
