@@ -29,7 +29,8 @@ test("recovery requires current catalog permission, valid storage and 30-day TTL
   assert.equal(parseSignaOrderDraft(JSON.stringify(draft), allowed, 100000 + 31 * 86400000), null);
   assert.equal(parseSignaOrderDraft("{bad", allowed), null);
   assert.equal(parseSignaOrderDraft(JSON.stringify({ ...draft, savedAt: 200000 }), allowed, 100000), null);
-  assert.notEqual(signaOrderDraftKey("partner-a"), signaOrderDraftKey("partner-b"));
+  const scope = { companyId: "bispo", partnerId: "signa", userId: "user-1" };
+  assert.notEqual(signaOrderDraftKey(scope, "buyer-a"), signaOrderDraftKey(scope, "buyer-b"));
 });
 
 
@@ -48,4 +49,18 @@ test("recovery strips injected customer, fiscal and pricing fields from forged l
   for (const sensitive of ["private-customer", "private-billing", "private-tax-id", "76.8", "99999"]) {
     assert.equal(JSON.stringify(restored).includes(sensitive), false);
   }
+});
+
+
+test("shared-browser drafts are isolated by company, partner and authenticated user", () => {
+  const scope = { companyId: "bispo", partnerId: "signa", userId: "person-1" };
+  const original = signaOrderDraftKey(scope, "commercial-buyer");
+  assert.equal(original.startsWith("bbos:signa-order-draft:v2:"), true);
+  assert.notEqual(original, signaOrderDraftKey({ ...scope, userId: "person-2" }, "commercial-buyer"));
+  assert.notEqual(original, signaOrderDraftKey({ ...scope, partnerId: "another-partner" }, "commercial-buyer"));
+  assert.notEqual(original, signaOrderDraftKey({ ...scope, companyId: "other-company" }, "commercial-buyer"));
+  assert.notEqual(original, "bbos:signa-order-draft:v1:commercial-buyer");
+  assert.notEqual(signaOrderDraftKey(scope, "a:b"), signaOrderDraftKey(scope, "a%3Ab"));
+  assert.throws(() => signaOrderDraftKey({ ...scope, userId: "" }, "commercial-buyer"));
+  assert.throws(() => signaOrderDraftKey(scope, ""));
 });
