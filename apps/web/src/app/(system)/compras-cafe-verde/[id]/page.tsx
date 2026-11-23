@@ -102,6 +102,9 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState("");
   const [correctionRequest, setCorrectionRequest] = useState("");
+  const [approvedCorrectionOpen, setApprovedCorrectionOpen] = useState(false);
+  const [approvedCorrectionTotal, setApprovedCorrectionTotal] = useState("");
+  const [approvedCorrectionReason, setApprovedCorrectionReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptanceUrl, setAcceptanceUrl] = useState("");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
@@ -212,6 +215,41 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível devolver para ajuste."); }
     finally { setBusy(false); }
   };
+  const correctApprovedValue = async () => {
+    if (!actor || !purchase || busy) return;
+    const corrected = Number(approvedCorrectionTotal);
+    if (!Number.isFinite(corrected) || corrected <= 0 ||
+        Math.abs(corrected * 100 - Math.round(corrected * 100)) > 0.000001 ||
+        approvedCorrectionReason.trim().length < 10) {
+      setError("Informe o valor correto em reais e uma justificativa com pelo menos 10 caracteres.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_ROOT}/green-coffee-purchases/${purchase.id}/correct-approved-value`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expectedTotalValue: purchase.totalValue,
+          totalValue: corrected,
+          reason: approvedCorrectionReason.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message ?? "Correção não autorizada.");
+      await load(purchase.id);
+      setApprovedCorrectionOpen(false);
+      setApprovedCorrectionTotal("");
+      setApprovedCorrectionReason("");
+      setNotice("Valor da compra e parcela corrigidos com registro de auditoria.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível corrigir a compra.");
+    } finally {
+      setBusy(false);
+    }
+  };
   const uploadInvoiceXml = async (file: File) => {
     setXmlBusy(true); setError(""); setNotice("");
     try {
@@ -282,7 +320,16 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
       {purchase.approvalStatus === "DRAFT" && <><span className={`rounded-xl px-4 py-3 text-sm font-semibold ${returnedForAdjustment ? "bg-amber-50 text-amber-900" : "bg-stone-100 text-stone-700"}`}>{returnedForAdjustment ? "Devolvida para ajuste" : "Rascunho"}</span><Link className="inline-flex min-h-11 items-center rounded-xl border px-4 py-2.5 text-sm font-semibold" href={`/compras-cafe-verde/${purchase.id}/editar`}>Editar compra</Link>{approvalMissing().length === 0 && <Button disabled={busy} onClick={() => void submitForApproval()}>{returnedForAdjustment ? "Reenviar para aprovação" : "Enviar para aprovação"}</Button>}</>}
       {purchase.approvalStatus === "PENDING_APPROVAL" && actor && <><Button disabled={busy} onClick={() => void decision("approve")}>Aprovar compra</Button><button disabled={busy} className="min-h-11 rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-semibold text-amber-800" onClick={() => setReturnOpen(true)}>Devolver para ajuste</button></>}
       {purchase.approvalStatus === "PENDING_APPROVAL" && !actor && <span className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Aguardando aprovação da Diretoria</span>}
-      {purchase.approvalStatus === "APPROVED" && !businessConfirmed && <>{(purchase.supplier.contacts?.length ?? 0) > 1 && <select aria-label="Enviar confirmação para" className="min-h-11 rounded-xl border px-3 py-2.5 text-sm" value={selectedContactId} onChange={(event) => setSelectedContactId(event.target.value)}><option value="">Enviar confirmação para</option>{purchase.supplier.contacts?.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.role ? ` · ${contact.role}` : ""}{contact.whatsapp ? ` · ${contact.whatsapp}` : contact.email ? ` · ${contact.email}` : ""}</option>)}</select>}<Button disabled={busy} onClick={() => void sendAcceptance()}><Send size={15} />{purchase.supplier.whatsapp ? "Enviar por WhatsApp" : "Gerar link de confirmação"}</Button><button className="min-h-11 rounded-xl border px-4 py-2.5 text-sm font-semibold" onClick={() => setContractOpen((value) => !value)}>{contractOpen ? "Fechar contrato" : "Visualizar contrato"}</button></>}
+      {purchase.approvalStatus === "APPROVED" && actor && !businessConfirmed && purchase.receivedKg === 0 && purchase.financial.paid === 0 && (
+         <button type="button" disabled={busy} onClick={() => {
+           setApprovedCorrectionTotal(purchase.totalValue.toFixed(2));
+           setApprovedCorrectionReason("");
+           setApprovedCorrectionOpen(true);
+         }} className="inline-flex min-h-11 items-center rounded-xl border border-amber-300 bg-amber-50 px-4 text-sm font-bold text-amber-950">
+           Corrigir valor aprovado
+         </button>
+       )}
+       {purchase.approvalStatus === "APPROVED" && !businessConfirmed && <>{(purchase.supplier.contacts?.length ?? 0) > 1 && <select aria-label="Enviar confirmação para" className="min-h-11 rounded-xl border px-3 py-2.5 text-sm" value={selectedContactId} onChange={(event) => setSelectedContactId(event.target.value)}><option value="">Enviar confirmação para</option>{purchase.supplier.contacts?.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.role ? ` · ${contact.role}` : ""}{contact.whatsapp ? ` · ${contact.whatsapp}` : contact.email ? ` · ${contact.email}` : ""}</option>)}</select>}<Button disabled={busy} onClick={() => void sendAcceptance()}><Send size={15} />{purchase.supplier.whatsapp ? "Enviar por WhatsApp" : "Gerar link de confirmação"}</Button><button className="min-h-11 rounded-xl border px-4 py-2.5 text-sm font-semibold" onClick={() => setContractOpen((value) => !value)}>{contractOpen ? "Fechar contrato" : "Visualizar contrato"}</button></>}
       {purchase.approvalStatus === "APPROVED" && businessConfirmed && <><span className="inline-flex min-h-11 items-center rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800">✓ {matchedInvoice ? "Negócio confirmado pela NF-e" : "Negócio confirmado"}</span><button className="min-h-11 rounded-xl border px-4 py-2.5 text-sm font-semibold" onClick={() => setContractOpen((value) => !value)}>{contractOpen ? "Fechar contrato" : "Visualizar contrato"}</button></>}
       {purchase.approvalStatus === "APPROVED" && purchase.externalAcceptanceStatus === "ACCEPTED" && <a className="inline-flex min-h-11 items-center rounded-xl border px-4 py-2.5 text-sm font-semibold text-forest-800" href={`${API_ROOT}/green-coffee-purchases/${purchase.id}/contract.pdf`}>Baixar PDF</a>}
     </div></div></Card>
@@ -293,7 +340,43 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     {approvalConfirmOpen && <Card className="mt-4 border-forest-100 bg-forest-50 p-5"><h2 className="text-base font-bold text-forest-950">Confirmar aprovação</h2><p className="mt-1 text-sm text-stone-600">{purchase.purchaseNumber}</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><Detail label="Fornecedor" value={purchase.supplier.name} /><Detail label="Café" value={`${speciesLabel[purchase.species] ?? formatCatalog(purchase.species)} / ${purchase.qualityCategory ?? "—"} / ${purchase.harvest}`} /><Detail label="Quantidade" value={`${purchase.contractedWeightKg.toLocaleString("pt-BR")} kg`} /><Detail label="Preço" value={money(purchase.pricePerKg ?? 0)} /><Detail label="Valor total" value={money(purchase.totalValue)} /><Detail label="Entrega" value={date(purchase.expectedAt ?? undefined)} /><Detail label="Pagamento" value={formatCatalog(purchase.paymentTermType)} /></div><p className="mt-4 text-sm text-stone-700">Ao confirmar, esta compra será aprovada internamente e seguirá para formalização e aceite do fornecedor.</p><div className="mt-4 flex justify-end gap-2"><button className="min-h-11 rounded-xl border bg-white px-4 text-sm font-semibold" onClick={() => setApprovalConfirmOpen(false)}>Cancelar</button><Button disabled={busy} onClick={() => { setApprovalConfirmOpen(false); void decision("approve", true); }}>Aprovar compra</Button></div></Card>}
     {rejectOpen && <Card className="mt-4 border-red-100 p-5"><h2 className="text-sm font-bold text-red-800">Reprovar compra</h2><p className="mt-1 text-sm text-stone-500">O motivo ficará registrado na auditoria.</p><textarea className="mt-4 min-h-24 w-full rounded-xl border p-3 text-sm" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="Informe o motivo" /><div className="mt-3 flex justify-end gap-2"><button className="min-h-11 rounded-xl border px-4 text-sm font-semibold" onClick={() => setRejectOpen(false)}>Cancelar</button><button className="min-h-11 rounded-xl bg-red-700 px-4 text-sm font-semibold text-white" disabled={busy || !rejectReason.trim()} onClick={() => void decision("reject")}>Confirmar reprovação</button></div></Card>}
     {returnOpen && <Card className="mt-4 border-amber-200 bg-amber-50 p-5"><h2 className="text-sm font-bold text-amber-900">Devolver para ajuste</h2><p className="mt-1 text-sm text-amber-800">Os dois campos são obrigatórios e ficarão preservados no histórico.</p><label className="mt-4 block text-sm font-semibold text-stone-700">Motivo da devolução<textarea required className="mt-2 min-h-20 w-full rounded-xl border p-3 text-sm" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /></label><label className="mt-3 block text-sm font-semibold text-stone-700">Correção solicitada<textarea required className="mt-2 min-h-20 w-full rounded-xl border p-3 text-sm" value={correctionRequest} onChange={(event) => setCorrectionRequest(event.target.value)} /></label><div className="mt-3 flex justify-end gap-2"><button className="min-h-11 rounded-xl border bg-white px-4 text-sm font-semibold" onClick={() => setReturnOpen(false)}>Cancelar</button><button className="min-h-11 rounded-xl bg-amber-700 px-4 text-sm font-semibold text-white" disabled={busy || !returnReason.trim() || !correctionRequest.trim()} onClick={() => void returnForAdjustment()}>Confirmar devolução</button></div></Card>}
-    {contractOpen && <ContractCard purchase={purchase} money={money} date={date} />}
+    {approvedCorrectionOpen && actor && (
+       <Card className="mt-4 border-amber-200 bg-amber-50 p-5">
+         <h2 className="text-base font-bold text-amber-950">Corrigir valor de compra aprovada</h2>
+         <p className="mt-2 text-sm text-amber-900">
+           Compra {purchase.purchaseNumber} · {purchase.contractedWeightKg.toLocaleString("pt-BR")} kg · valor atual {money(purchase.totalValue)}.
+           A correção altera apenas o total e a parcela ainda não paga; a justificativa fica na auditoria.
+         </p>
+         <div className="mt-4 grid gap-3 sm:grid-cols-2">
+           <label className="grid gap-1 text-sm font-semibold text-stone-800">
+             Valor correto (R$)
+             <input type="number" min="0.01" step="0.01" required value={approvedCorrectionTotal}
+               onChange={event => setApprovedCorrectionTotal(event.target.value)}
+               className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 text-sm"/>
+           </label>
+           <label className="grid gap-1 text-sm font-semibold text-stone-800 sm:col-span-2">
+             Justificativa obrigatória
+             <textarea rows={2} maxLength={500} required value={approvedCorrectionReason}
+               onChange={event => setApprovedCorrectionReason(event.target.value)}
+               placeholder="Ex.: valor total lançado incorretamente antes de receber o XML."
+               className="rounded-xl border border-amber-300 bg-white p-3 text-sm"/>
+           </label>
+         </div>
+         <p className="mt-3 text-xs text-amber-800">
+           Correção bloqueada após aceite, pagamento, recebimento ou confirmação contratual. Se houver NF-e vinculada, o novo total deve ser idêntico ao valor da nota autorizada; a conciliação fiscal permanece sujeita à conferência.
+         </p>
+         <div className="mt-4 flex flex-wrap justify-end gap-2">
+           <button type="button" disabled={busy} onClick={() => setApprovedCorrectionOpen(false)}
+             className="min-h-11 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold">Cancelar</button>
+           <button type="button" disabled={busy || !approvedCorrectionReason.trim() || !approvedCorrectionTotal}
+             onClick={() => void correctApprovedValue()}
+             className="min-h-11 rounded-xl bg-amber-900 px-4 text-sm font-bold text-white disabled:opacity-50">
+             {busy ? "Corrigindo…" : "Confirmar correção"}
+           </button>
+         </div>
+       </Card>
+     )}
+     {contractOpen && <ContractCard purchase={purchase} money={money} date={date} />}
     <div className="mt-7 grid gap-4 md:grid-cols-2">
       <Block title="Identificação"><Detail label="Fornecedor" value={purchase.supplier.name} /><Detail label="Fazenda / propriedade" value={purchase.farmName ?? purchase.supplier.farmName} /><Detail label="Município / estado" value={`${purchase.municipality ?? purchase.supplier.city ?? "—"} / ${purchase.state ?? purchase.supplier.state ?? "—"}`} /><Detail label="Região" value={purchase.originRegion} /><Detail label="Espécie" value={speciesLabel[purchase.species] ?? formatCatalog(purchase.species)} /><Detail label="Variedade" value={formatCatalog(purchase.variety)} /><Detail label="Safra" value={purchase.harvest} /><Detail label="Processo" value={processLabel[purchase.process ?? ""] ?? formatCatalog(purchase.process)} /><Detail label="Lote fornecedor" value={purchase.supplierLotCode} /></Block>
       <Block title="Qualidade contratada"><Detail label="Categoria" value={purchase.qualityCategory} /><Detail label="Peneira" value={purchase.contractedScreen} /><Detail label="Máx. defeitos" value={purchase.maxDefects} /><Detail label="Umidade máxima" value={purchase.maxMoisturePercent ? `${purchase.maxMoisturePercent}%` : "—"} /><Detail label="Pontuação mínima" value={purchase.minimumScore} /></Block>
