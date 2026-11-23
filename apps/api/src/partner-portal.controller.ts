@@ -46,6 +46,14 @@ type PartnerActor = {
   storefrontPartnerId?: string | null;
 };
 
+/** Another request committed the same scoped submission key first. */
+class SignaSubmissionClaimedElsewhere extends Error {
+  constructor() {
+    super("Envio já registrado por outra requisição.");
+    this.name = "SignaSubmissionClaimedElsewhere";
+  }
+}
+
 @Controller("partner-portal")
 export class PartnerPortalController {
   private readonly database = prisma;
@@ -1859,7 +1867,6 @@ export class PartnerPortalController {
     ]
       .filter(Boolean)
       .join(" ");
-    const lostRace = Symbol("signa-submission-claimed-elsewhere");
     // Claim, order number, SalesOrder, items, accessory fields and claim
     // completion commit or roll back together. A concurrent request with the
     // same scoped key blocks on the unique index and then sees the claim.
@@ -1877,7 +1884,7 @@ export class PartnerPortalController {
               randomUUID(), actor.companyId, partner.id, submission.userId,
               submission.key, submission.hash,
             );
-            if (!claimed[0]) throw lostRace;
+            if (!claimed[0]) throw new SignaSubmissionClaimedElsewhere();
             claimId = claimed[0].id;
           }
           // Serialise portal order numbering per company until commit.
@@ -1950,7 +1957,7 @@ export class PartnerPortalController {
         },
       )
       .catch((error: unknown) => {
-        if (error === lostRace) return null;
+        if (error instanceof SignaSubmissionClaimedElsewhere) return null;
         throw error;
       });
     if (!created) {

@@ -112,7 +112,8 @@ test("POST /partner-portal/orders grava reserva, pedido e conclusão na mesma tr
   // No accessory write escapes the transaction.
   const inside = tx.slice(0, tx.indexOf(".catch("));
   assert.doesNotMatch(inside, /this\.database\.\$executeRawUnsafe/);
-  assert.match(route, /if \(error === lostRace\) return null;/);
+  assert.match(route, /if \(error instanceof SignaSubmissionClaimedElsewhere\) return null;/);
+  assert.match(tx, /throw new SignaSubmissionClaimedElsewhere\(\)/);
   // Side effects only after commit, and re-run idempotently on replay.
   assert.ok(route.indexOf("afterPartnerOrderCommitted") > route.indexOf(".catch("));
   const replay = source.slice(source.indexOf("private async replaySignaSubmission"));
