@@ -1,5 +1,13 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — privacidade dos rascunhos Signa no transporte HTTP (WIP, NÃO PUBLICAR)
+
+- [x] **Mudança isolada na PR #67:** respostas autenticadas de `GET /partner-portal/order-drafts` e `GET /partner-portal/order-drafts/:draftId` agora declaram `Cache-Control: private, no-store`, evitando armazenamento HTTP de payloads que podem conter notas, escolhas de clientes e destinatários fiscais. Nenhuma mudança nas permissões, preço, banco, envio de pedidos ou integrações. Commits `84a4426` e `029e2bd`.
+- [x] **Regressão adicionada** a `partner-portal-order-access.test.ts` exigindo o cabeçalho em ambas as rotas. PR temporária CI [#110](https://github.com/rezendeantonio1410-ops/bbos/pull/110) contém somente marcador documental além do código da feature; não integrar a PR temporária.
+- [ ] **CI:** confirmar resultado da execução [#45180630691](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45180630691) antes de considerar o incremento validado; não inferir aprovação de execução ainda em andamento.
+- [x] **Render e banco somente leitura:** último deploy `live` de aplicação/API RC1 é `46f8a7c`, anterior a esta correção. O PostgreSQL com rótulo `bbos-postgres-staging` não tem a tabela `PartnerOrderDraft` e nenhum registro da migração `20261123030000_signa_order_drafts`. Nenhum deploy/migração realizado.
+- [ ] **Gate integral permanece fechado:** retry idempotente de pedidos, migração ensaiada e rollback seguro, E2E autenticado/concorrente em duas sessões, validação fiscal/Pix/Bling/BI, aceite visual da PR #92 e da #108 e resolução dos conflitos da PR #67. Cabeçalho de cache isolado não torna o fluxo publicável.
+
 ## Incremento em 23/11/2026 — toggle Novo pedido revoga recuperação pendente (WIP, NÃO PUBLICAR)
 
 - [x] **Correção real na PR #67:** o botão principal **Novo pedido** já não faz `setShowOrder(value => !value)` diretamente. Fechar passa por `closeOrder()` e abrir invalida o epoch de recuperação, limpa seleção/autoridade PATCH de rascunhos da conta e seleção fiscal. Um GET iniciado antes do toggle não pode reintroduzir dados de outro documento no formulário. Commits `75a81e5` e `fe6565a`, teste de regressão em `signa-order-draft.test.ts`.
