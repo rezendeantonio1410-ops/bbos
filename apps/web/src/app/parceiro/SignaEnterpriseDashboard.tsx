@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CreditCard, FileText, LayoutDashboard, MapPinned, Package, Plus, Search, ShoppingCart, Users } from "lucide-react";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
-import { BrazilSalesPanel } from "@/components/brazil-sales-map";
-import { signaStateSales } from "@/lib/signa-region-map";
+import { SignaPurchasesMap } from "@/components/signa-purchases-map";
+import { signaStatePurchases } from "@/lib/signa-region-map";
 import { SignaPixButton } from "@/components/signa-pix-dialog";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
 import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
@@ -75,7 +75,7 @@ function SignaReports() {
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Evolução mensal · dados detalhados</h4><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
       <div id="mapa-signa" className="scroll-mt-24">
-        <BrazilSalesPanel stateSales={signaStateSales(data.regions)} detailsHref={false} title="Mapa de compras — Brasil" subtitle="Valor e volume dos pedidos por UF dos clientes finais informados"/>
+        <SignaPurchasesMap states={signaStatePurchases(data.regions)}/>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <h4 className="text-sm font-semibold text-[#0E191D]">Compras por região</h4>

@@ -96,6 +96,9 @@ importers:
       '@fontsource/montserrat':
         specifier: ^5.3.0
         version: 5.3.0
+      '@svg-maps/brazil':
+        specifier: 2.0.0
+        version: 2.0.0
       lucide-react:
         specifier: ^0.542.0
         version: 0.542.0(react@19.2.8)
@@ -935,6 +938,9 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@svg-maps/brazil@2.0.0':
+    resolution: {integrity: sha512-6le594K1tO6c8Y/0KgWyurksyLnSU/8mTSnr48cKH0eaiG153UQP8aadQ/pKoeCBVd8khLVdmV7wKbkfIAbqBA==}
 
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
@@ -2610,6 +2616,7 @@ packages:
 
   node-abort-controller@3.1.1:
     resolution: {integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==}
+    deprecated: This package is no longer needed on supported Node.js versions. Node.js 16+ includes AbortController and AbortSignal as built-in globals. All Node.js versions requiring this polyfill are end-of-life. Use the built-in globals instead.
 
   node-emoji@1.11.0:
     resolution: {integrity: sha512-wo2DpQkQp7Sjm2A0cq+sN7EHKO6Sl0ctXeBdFZrL9T9+UywORbufTcTZxom8YqpLQt/FqNMUkOpkZrJVYSKD3A==}
@@ -4162,6 +4169,8 @@ snapshots:
   '@rushstack/eslint-patch@1.16.1': {}
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@svg-maps/brazil@2.0.0': {}
 
   '@swc/helpers@0.5.15':
     dependencies:

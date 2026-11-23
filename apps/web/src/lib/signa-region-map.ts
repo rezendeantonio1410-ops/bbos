@@ -39,3 +39,39 @@ export function signaStateSales(rows: readonly SignaRegionRow[]): BrazilStateSal
     .map((state) => ({ ...state, revenue: Math.round(state.revenue * 100) / 100, volumeKg: Math.round(state.volumeKg * 1000) / 1000 }))
     .sort((a, b) => b.revenue - a.revenue);
 }
+
+export type SignaStatePurchase = {
+  uf: string;
+  revenue: number;
+  volumeKg: number;
+  customers: number;
+  orders: number;
+  cities: Array<{ city: string; revenue: number; volumeKg: number }>;
+};
+
+/** Per-UF totals with the top cities, for the interactive purchases map. */
+export function signaStatePurchases(rows: readonly SignaRegionRow[]): SignaStatePurchase[] {
+  const byState = new Map<string, SignaStatePurchase>();
+  for (const row of rows) {
+    const uf = String(row.state ?? "").trim().toUpperCase();
+    if (!UFS.has(uf)) continue;
+    const entry = byState.get(uf) ?? { uf, revenue: 0, volumeKg: 0, customers: 0, orders: 0, cities: [] };
+    const revenue = Number(row.orderValue) || 0;
+    const volumeKg = Number(row.kilograms) || 0;
+    entry.revenue += revenue;
+    entry.volumeKg += volumeKg;
+    entry.customers += Number(row.customers) || 0;
+    entry.orders += Number(row.orders) || 0;
+    if (row.city) entry.cities.push({ city: row.city, revenue, volumeKg });
+    byState.set(uf, entry);
+  }
+  return [...byState.values()]
+    .filter((state) => state.revenue > 0 || state.volumeKg > 0)
+    .map((state) => ({
+      ...state,
+      revenue: Math.round(state.revenue * 100) / 100,
+      volumeKg: Math.round(state.volumeKg * 1000) / 1000,
+      cities: state.cities.sort((a, b) => b.revenue - a.revenue).slice(0, 5),
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
