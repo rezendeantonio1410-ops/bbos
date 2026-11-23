@@ -16,13 +16,14 @@ test("normaliza edição comercial sem interferir no cadastro fiscal", () => {
   });
 });
 
-test("bloqueia alterações de parceiro, empresa, dados fiscais e campos arbitrários", () => {
+test("bloqueia alterações de parceiro, empresa, destinatário fiscal e campos arbitrários", () => {
   for (const attempt of [
     {},
     { partnerId: "outro-parceiro" },
     { companyId: "outra-empresa" },
     { active: false },
     { taxId: "12345678901" },
+    { postalCode: "1234" },
     { name: "Loja", customerId: "destinatario-nfe" },
     { name: null },
     { name: "A" },
@@ -35,4 +36,17 @@ test("bloqueia alterações de parceiro, empresa, dados fiscais e campos arbitr�
   ]) {
     assert.throws(() => parsePartnerEndCustomerPatch(attempt));
   }
+});
+
+
+test("normaliza CNPJ, CEP e endereço comercial sem alterar destinatário fiscal", () => {
+  assert.deepEqual(parsePartnerEndCustomerPatch({
+    name: " Café Central ", taxId: "12.345.678/0001-95", postalCode: "86010-010",
+    street: " Rua Exemplo ", number: " 25 ", district: " Centro ",
+    complement: " Sala 2 ", city: " Londrina ", state: " pr ",
+  }), {
+    name: "Café Central", taxId: "12345678000195", postalCode: "86010010",
+    street: "Rua Exemplo", number: "25", district: "Centro",
+    complement: "Sala 2", city: "Londrina", state: "PR",
+  });
 });
