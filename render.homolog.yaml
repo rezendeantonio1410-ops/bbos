@@ -40,6 +40,9 @@ services:
         value: "true"
       - key: BBOS_HOMOLOG_PASSWORD
         sync: false
+      # Fictitious approver for distributor orders (production uses José/Suzi).
+      - key: BBOS_TERM_CREDIT_APPROVER_EMAILS
+        value: admin@homolog.test
       - key: BBOS_SCHEDULED_JOBS_DISABLED
         value: "true"
       - key: BBOS_BACKGROUND_JOBS_ENABLED
