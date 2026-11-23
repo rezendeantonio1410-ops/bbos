@@ -1,5 +1,14 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — revogar autorização de edição ao trocar/recuperar rascunhos (WIP, NÃO PUBLICAR)
+
+- [x] Na interface Signa, trocar o rascunho selecionado **revoga imediatamente a autorização de PATCH** do registro anteriormente recuperado. O usuário deve recuperar explicitamente o novo registro antes de editá-lo. Iniciar uma nova recuperação também revoga o vínculo anterior **antes de chamar a API**; se o GET falhar ou encontrar itens sem autorização, não permanece um alvo de gravação silenciosa.
+- [x] Adicionado teste de regressão de interface/escopo que exige ambas as revogações e verifica que o alvo de edição é nulo quando a identidade recuperada difere da selecionada. Alterações somente em `apps/web/src/app/parceiro/PartnerOrderWorkspace.tsx` e `apps/web/src/lib/signa-order-draft.test.ts`; commits `154acb2`, `35de221`, `d94cfb3`.
+- [x] GitHub Actions [#45143422802](https://github.com/rezendeantonio1410-ops/bbos/actions/runs/45143422802) **aprovado**: TypeScript, lint, testes e build, sobre a branch temporária [PR #105](https://github.com/rezendeantonio1410-ops/bbos/pull/105), cujo único diff relativo à feature era um marcador CI. PR temporária encerrada sem merge. Este CI **não comprova** testes autenticados de dois dispositivos nem ensaio de migração.
+- [x] Render **somente leitura**: bancos listados incluem `bbos-postgres-staging`; nesta instância, `PartnerOrderDraft` não existe e a migração `20261123030000_signa_order_drafts` **não consta aplicada**. Serviços RC1 app/API permanecem com último deploy `live` da release anterior `07c6b9f`. Nenhum dado real modificado.
+- [ ] **Bloqueio:** ensaio de migração em banco isolado, autenticação E2E e concorrência real, submissão idempotente de pedido, aceite visual da PR #92, conflito da PR #67 e integrações fiscais/financeiras. **Não fazer merge/deploy parcial.**
+
+
 ## Incremento em 23/11/2026 — proteção contra sobrescrita acidental de rascunhos (WIP, NÃO PUBLICAR)
 
 - [x] A seleção de um rascunho no menu **não autoriza sua edição**. O botão **Salvar na conta** só faz PATCH (com versão otimista) quando o ID selecionado é o mesmo rascunho efetivamente **recuperado para o formulário** e permanece na lista autorizada. Caso contrário cria um registro novo, sem sobrescrever o selecionado. A cópia duplicada só vira editável depois de recuperação explícita.
