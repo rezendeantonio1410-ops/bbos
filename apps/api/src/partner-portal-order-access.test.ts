@@ -61,6 +61,28 @@ test("dados pessoais dos rascunhos da conta Signa não podem ser armazenados em 
   }
 });
 
+test("histórico comercial e pedidos de cliente final não são armazenados em caches compartilhados", () => {
+  for (const route of ["end-customer-history", "end-customers/:endCustomerId/orders"]) {
+    const marker = `@Get("${route}")`;
+    const start = source.indexOf(marker);
+    assert.ok(start >= 0, `Rota ausente: ${route}`);
+    const methodStart = source.indexOf("async ", start);
+    const decorators = source.slice(start, methodStart);
+    assert.match(decorators, /@Header\("Cache-Control", "private, no-store"\)/);
+  }
+});
+
+test("pedidos históricos de cliente comercial exigem o mesmo escopo da carteira", () => {
+  const start = source.indexOf('@Get("end-customers/:endCustomerId/orders")');
+  const end = source.indexOf('@Post("end-customers")', start);
+  assert.ok(start >= 0 && end > start);
+  const route = source.slice(start, end);
+  assert.match(route, /"companyId"=\$2 AND "partnerId"=\$3 AND active=true/);
+  assert.match(route, /so\."companyId"=\$1 AND so\."createdByStorefrontPartnerId"=\$2/);
+  assert.match(route, /so\."partnerEndCustomerId"=\$3/);
+  assert.match(route, /throw new NotFoundException\("Cliente não encontrado\."\)/);
+});
+
 test("cadastro de cliente comercial exige ficha completa, impede CNPJ duplicado na carteira e grava somente PartnerEndCustomer", () => {
   const start = source.indexOf('@Post("end-customers")');
   const end = source.indexOf('@Patch("end-customers/:customerId")', start);
