@@ -2312,7 +2312,9 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
         await this.ship(companyId, id, {
           allowMissingCarrierLabel: true,
           skipCustomerNotification: true,
-          unpaidReleaseAuthorizedBy: input.unpaidReleaseAuthorizedBy,
+          ...(input.unpaidReleaseAuthorizedBy
+            ? { unpaidReleaseAuthorizedBy: input.unpaidReleaseAuthorizedBy }
+            : {}),
         });
       } catch (error) {
         if (isFinishedGoodsLotCoverageError(error)) {
