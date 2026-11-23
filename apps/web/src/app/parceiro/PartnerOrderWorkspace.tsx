@@ -16,7 +16,7 @@ import {
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
-import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
+import { createSignaOrderDraft, parseSignaOrderDraft, signaOrderDraftKey, signaServerDraftEditTarget, type SignaOrderDraftScope } from "@/lib/signa-order-draft";
 
 type AccessLevel = "VIEWER" | "SELLER" | "SALES_MANAGER" | "DISTRIBUTOR";
 type Customer = {
@@ -255,6 +255,8 @@ export function PartnerOrderWorkspace({
   const [draftScope, setDraftScope] = useState<SignaOrderDraftScope | null>(null);
   const [serverDrafts, setServerDrafts] = useState<ServerOrderDraft[]>([]);
   const [serverDraftId, setServerDraftId] = useState("");
+  // Only the draft actually recovered into this form can be overwritten.
+  const [recoveredServerDraftId, setRecoveredServerDraftId] = useState("");
   const [serverDraftBusy, setServerDraftBusy] = useState(false);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerAddress, setCustomerAddress] = useState(emptyCustomerAddress);
@@ -290,6 +292,7 @@ export function PartnerOrderWorkspace({
     setEditingEndCustomerId("");
     setShowOrder(false);
     setServerDraftId("");
+    setRecoveredServerDraftId("");
   }
 
 
@@ -406,6 +409,7 @@ export function PartnerOrderWorkspace({
       setBillingRecipientId("");
       setPartnerEndCustomerId("");
       setServerDraftId("");
+      setRecoveredServerDraftId("");
       setEndCustomerSearch("");
       setShowOrder(true);
     };
@@ -547,6 +551,7 @@ export function PartnerOrderWorkspace({
     if (!draftScope || !isDistributor) {
       setServerDrafts([]);
       setServerDraftId("");
+      setRecoveredServerDraftId("");
       return;
     }
     void refreshServerDrafts().catch(() => {
@@ -566,7 +571,10 @@ export function PartnerOrderWorkspace({
         items: cleanItems,
         deliveryMode, carrierName, expectedDeliveryDate, customerReference, notes,
       };
-      const previous = serverDrafts.find(draft => draft.id === serverDraftId);
+      const editTarget = signaServerDraftEditTarget(
+        serverDraftId, recoveredServerDraftId, new Set(serverDrafts.map(draft => draft.id)),
+      );
+      const previous = serverDrafts.find(draft => draft.id === editTarget);
       const result = previous
         ? await portalApi<ServerOrderDraft>("/order-drafts/" + previous.id, {
             method: "PATCH", body: JSON.stringify({ version: previous.version, payload }),
@@ -575,6 +583,7 @@ export function PartnerOrderWorkspace({
             method: "POST", body: JSON.stringify({ payload }),
           });
       setServerDraftId(result.id);
+      setRecoveredServerDraftId(result.id);
       setServerDrafts(current =>
         [result, ...current.filter(draft => draft.id !== result.id)]
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -623,6 +632,7 @@ export function PartnerOrderWorkspace({
       setQuote(null);
       setDraftDirty(false);
       setShowOrder(true);
+      setRecoveredServerDraftId(saved.id);
       setServerDrafts(current => [saved, ...current.filter(draft => draft.id !== saved.id)]);
       setDraftStatus("Rascunho recuperado da conta. Confirme destinatário fiscal, disponibilidade e cotação antes de enviar.");
     } catch (cause) {
@@ -650,6 +660,7 @@ export function PartnerOrderWorkspace({
         [copy, ...current].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
       );
       setServerDraftId(copy.id);
+      setRecoveredServerDraftId("");
       setDraftStatus("Cópia independente criada na conta. Recupere-a para editar e confira os dados antes de enviar.");
     } catch (cause) {
       setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível duplicar o rascunho.");
@@ -669,6 +680,7 @@ export function PartnerOrderWorkspace({
       });
       setServerDrafts(current => current.filter(draft => draft.id !== previous.id));
       setServerDraftId("");
+      if (recoveredServerDraftId === previous.id) setRecoveredServerDraftId("");
       setDraftStatus("Rascunho descartado da conta. Nenhum pedido foi alterado.");
     } catch (cause) {
       setDraftStatus(cause instanceof Error ? cause.message : "Não foi possível descartar o rascunho.");
@@ -1560,7 +1572,7 @@ export function PartnerOrderWorkspace({
             {isDistributor && draftScope && (
               <div className="rounded-xl border border-[#d5dedc] bg-white p-3">
                 <p className="text-xs font-semibold text-[#0E191D]">Rascunhos da conta Signa</p>
-                <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança.</p>
+                <p className="mt-1 text-xs text-slate-600">Guardados com o seu acesso, também disponíveis noutros dispositivos. Não criam pedido, estoque reservado, NF-e ou cobrança. Para alterar um rascunho existente, selecione e use Recuperar da conta antes de salvar; apenas selecionar não o substitui.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" disabled={busy || serverDraftBusy} onClick={() => void saveServerDraft()} className="rounded-lg bg-[#0E191D] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Salvar na conta</button>
                   <select aria-label="Selecionar rascunho da conta" value={serverDraftId} onChange={event => setServerDraftId(event.target.value)} className="min-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs">
