@@ -82,7 +82,7 @@ test("authorized cash shipment carries executive identity and does not mark a pa
   });
   service.ship = async (...args: unknown[]) => {
     shipments.push(args);
-    return { orderId: "order-cash", idempotent: false };
+    return { orderId: "order-cash", idempotent: false, movementIds: [], greenReservationIds: [] };
   };
   await service.deliver("company-1", "order-cash", {
     method: "PICKUP",
