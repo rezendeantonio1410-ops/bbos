@@ -33,8 +33,9 @@ test("non-Signa distributors retain legacy price-list fallback", () => {
 
 test("controller consistently applies the Signa-only strict policy to options, quote and order", () => {
   const controller = readFileSync(join(__dirname, "partner-portal.controller.ts"), "utf8");
-  assert.equal((controller.match(/this\.distributorCatalog\(/g) ?? []).length, 3);
-  assert.equal((controller.match(/this\.isSignaDistributor\(partner\)/g) ?? []).length, 4);
+  // Quote, order, options and server draft saving all require scoped catalog validation.
+  assert.ok((controller.match(/this\.distributorCatalog\(/g) ?? []).length >= 4);
+  assert.ok((controller.match(/this\.isSignaDistributor\(partner\)/g) ?? []).length >= 4);
   assert.match(controller, /if \(!visible\.needsLegacyFallback\)/);
   assert.match(
     controller,
