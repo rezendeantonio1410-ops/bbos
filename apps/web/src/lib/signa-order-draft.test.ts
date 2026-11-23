@@ -87,7 +87,7 @@ test("switching drafts or retrying recovery revokes the previous PATCH authority
   assert.ok(restore.includes('setRecoveredServerDraftId("");'));
   assert.ok(restore.indexOf('setRecoveredServerDraftId("")') < restore.indexOf('await portalApi<ServerOrderDraft>("/order-drafts/"'));
   // Changing the selected ID must not retain the previous draft's edit authority.
-  assert.ok(form.includes('onChange={event => { setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }}'));
+  assert.ok(form.includes('onChange={event => { serverDraftRecoveryEpoch.current += 1; setServerDraftId(event.target.value); setRecoveredServerDraftId(""); }}'));
   const allowed = new Set(["draft-a", "draft-b"]);
   assert.equal(signaServerDraftEditTarget("draft-a", "", allowed), null);
   assert.equal(signaServerDraftEditTarget("draft-b", "draft-a", allowed), null);
