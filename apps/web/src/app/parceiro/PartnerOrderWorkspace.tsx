@@ -1641,23 +1641,23 @@ export function PartnerOrderWorkspace({
             onSubmit={createOrder}
             className={
               isDistributor
-                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-5xl space-y-3 overflow-y-auto rounded-2xl bg-white p-3 shadow-2xl sm:inset-x-5 sm:p-4"
-                : "mt-6 space-y-3 rounded-2xl bg-white p-3 sm:p-4"
+                ? "fixed inset-x-2 bottom-2 top-2 z-50 mx-auto max-w-5xl space-y-3 overflow-y-auto rounded-lg border border-[#D5DEDC] bg-white p-3 shadow-xl sm:inset-x-5 sm:p-4"
+                : "mt-6 space-y-4 rounded-2xl bg-white p-4 sm:p-5"
             }
           >
             {isDistributor && (
-              <div className="sticky -top-3 z-10 -mx-3 -mt-3 flex items-center justify-between gap-3 border-b border-stone-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:-top-4 sm:-mx-4 sm:-mt-4 sm:px-4">
+              <div className="sticky -top-3 z-20 -mx-3 -mt-3 flex items-center justify-between gap-3 border-b border-[#D5DEDC] bg-white px-3 py-2 sm:-top-4 sm:-mx-4 sm:-mt-4 sm:px-4">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[#087568]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#0E3A31]">
                     Novo pedido Signa
                   </p>
-                  <h3 className="text-lg font-semibold">Novo pedido</h3>
+                  <h3 className="text-lg font-semibold text-[#0E191D]">Novo pedido</h3>
                 </div>
                 <button
                   type="button"
                   aria-label="Cancelar e fechar"
                   onClick={() => closeOrder()}
-                  className="grid size-9 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                  className="grid size-9 place-items-center rounded-md border border-[#D5DEDC] bg-white text-[#0E191D] hover:bg-[#EBEBEB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E3A31]"
                 >
                   <X size={18} />
                 </button>
@@ -1693,14 +1693,14 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && customers.length === 1 && customers[0] && (
-              <div className="rounded-lg border border-emerald-900/10 bg-[#f7faf8] px-3 py-2.5">
+              <div className="rounded-md border border-[#D5DEDC] bg-[#E0EAE9]/30 px-3 py-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#087568]">
                   Comprador
                 </p>
                 <p className="mt-1 text-sm font-bold text-[#14201d]">
                   {customers[0].tradeName || customers[0].name}
                 </p>
-                <p className="mt-0.5 text-xs text-stone-500">
+                <p className="text-[11px] text-stone-500">
                   Escolha os produtos e as quantidades para o seu próximo
                   pedido. {catalog?.productCount ?? 0} apresentação(ões)
                   disponíveis.
@@ -1708,10 +1708,10 @@ export function PartnerOrderWorkspace({
               </div>
             )}
             {isDistributor && (
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="rounded-md border border-[#D5DEDC] bg-white p-3">
                 <label htmlFor="signa-end-customer" className="block text-sm font-semibold text-slate-900">Cliente final (registro comercial, não consta na NF-e)</label>
-                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, CNPJ, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>{ setPartnerEndCustomerId(event.target.value); setEditingEndCustomerId(""); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                <input type="search" aria-label="Pesquisar cliente atendido" placeholder="Pesquisar pelo nome, CNPJ, cidade ou UF" value={endCustomerSearch} onChange={event=>{ setEndCustomerSearch(event.target.value); setPartnerEndCustomerId(""); setEditingEndCustomerId(""); }} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" />
+                <select id="signa-end-customer" value={partnerEndCustomerId} onChange={event=>{ setPartnerEndCustomerId(event.target.value); setEditingEndCustomerId(""); }} className="mt-1.5 w-full rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]">
                   <option value="">Não indicar cliente final</option>
                   {searchSignaEndCustomers(endCustomers, endCustomerSearch).map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.city ? ` — ${customer.city}` : ""}</option>)}
                 </select>
@@ -1731,31 +1731,31 @@ export function PartnerOrderWorkspace({
                   <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">{editingEndCustomerId ? "Editar cliente comercial" : "Cadastrar novo cliente final"}</summary>
                   {/* Nested inside the order form: Enter must never submit the order. */}
                   <div className="mt-2 grid gap-2 sm:grid-cols-6" onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social *<input aria-label="Nome / Razão social do cliente final" aria-required="true" autoComplete="organization" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ *<input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP *<input aria-label="CEP do cliente final" aria-required="true" inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social *<input aria-label="Nome / Razão social do cliente final" aria-required="true" autoComplete="organization" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ *<input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP *<input aria-label="CEP do cliente final" aria-required="true" inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 {endCustomerCepLookup.statusText && <p role="status" className="text-xs text-stone-600 sm:col-span-6">{endCustomerCepLookup.statusText}</p>}
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro *<input aria-label="Rua / Logradouro do cliente final" aria-required="true" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número *<input aria-label="Número do cliente final" ref={endCustomerNumberInput} aria-required="true" placeholder="S/N" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Bairro *<input aria-label="Bairro do cliente final" aria-required="true" value={newEndCustomerDistrict} onChange={event=>setNewEndCustomerDistrict(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Complemento<input aria-label="Complemento do cliente final" value={newEndCustomerComplement} onChange={event=>setNewEndCustomerComplement(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Cidade *<input aria-label="Cidade do cliente final" aria-required="true" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">UF *<input aria-label="UF do cliente final" aria-required="true" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro *<input aria-label="Rua / Logradouro do cliente final" aria-required="true" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número *<input aria-label="Número do cliente final" ref={endCustomerNumberInput} aria-required="true" placeholder="S/N" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Bairro *<input aria-label="Bairro do cliente final" aria-required="true" value={newEndCustomerDistrict} onChange={event=>setNewEndCustomerDistrict(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">Complemento<input aria-label="Complemento do cliente final" value={newEndCustomerComplement} onChange={event=>setNewEndCustomerComplement(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Cidade *<input aria-label="Cidade do cliente final" aria-required="true" value={newEndCustomerCity} onChange={event=>setNewEndCustomerCity(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">UF *<input aria-label="UF do cliente final" aria-required="true" maxLength={2} value={newEndCustomerState} onChange={event=>setNewEndCustomerState(event.target.value.replace(/[^a-z]/gi,"").toUpperCase().slice(0,2))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 </div>
-<button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-lg bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : editingEndCustomerId ? "Salvar alterações" : "Salvar cliente"}</button>
+<button type="button" disabled={savingEndCustomer || !newEndCustomerName.trim()} onClick={()=>void saveEndCustomer()} className="mt-3 rounded-md bg-[#0E191D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEndCustomer ? "Salvando..." : editingEndCustomerId ? "Salvar alterações" : "Salvar cliente"}</button>
                   {editingEndCustomerId && <button type="button" className="ml-3 text-sm underline" onClick={resetEndCustomerForm}>Cancelar edição</button>}
                 </details>
               </div>
             )}
             {isDistributor && (billingEnabled || billingLoading) && (
-              <div className="rounded-lg border border-[#d5dedc] bg-white p-3">
+              <div className="rounded-md border border-[#D5DEDC] bg-white p-3">
                 <fieldset>
                   <legend className="text-sm font-semibold text-[#0E191D]">Faturar para <span className="text-red-700">*</span></legend>
-                  <p className="mt-1 text-xs text-slate-600">Escolha quem receberá a nota fiscal. Nenhuma opção vem selecionada.</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <p className="text-xs text-slate-600">Destinatário da nota fiscal</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {billingRecipients.map((recipient) => (
                       <label key={recipient.id}
-                        className={`flex min-h-12 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
+                        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[#0E3A31] ${billingRecipientId === recipient.id ? "border-[#0E191D] bg-[#E0EAE9]" : "border-[#d5dedc] bg-white hover:bg-[#F3F6F5]"}`}>
                         <input type="radio" name="signa-billing-recipient" required
                           disabled={billingLoading} value={recipient.id} checked={billingRecipientId === recipient.id}
                           onChange={() => setBillingRecipientId(recipient.id)}
@@ -1766,7 +1766,7 @@ export function PartnerOrderWorkspace({
                       </label>
                     ))}
                   </div>
-                  {!billingRecipientId && <p className="mt-2 text-xs font-medium text-amber-800">Seleção obrigatória para finalizar o pedido.</p>}
+                  {!billingRecipientId && <p className="mt-2 text-xs font-medium text-amber-800">Selecione o destinatário fiscal antes de enviar o pedido.</p>}
                   {!billingLoading && billingRecipients.length === 0 && <p className="mt-2 text-xs font-medium text-red-700">Nenhum destinatário fiscal disponível. Contacte a Bispo.</p>}
                 </fieldset>
                 <p className="mt-2 text-xs text-slate-600">
@@ -1943,7 +1943,7 @@ export function PartnerOrderWorkspace({
               ))}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {isDistributor && (
                 <PortalField label="Condição de pagamento">
                   <div className="flex min-h-10 items-center rounded-xl border border-emerald-900/15 bg-[#f7faf8] px-3 py-2.5 text-sm font-semibold text-[#14201d]">
@@ -2044,7 +2044,7 @@ export function PartnerOrderWorkspace({
             <div
               className={`flex flex-wrap items-center justify-end gap-2 ${
                 isDistributor
-                  ? "sticky -bottom-4 z-10 -mx-4 -mb-4 border-t border-stone-100 bg-white/95 p-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:px-5"
+                  ? "sticky -bottom-3 z-10 -mx-3 -mb-3 border-t border-stone-100 bg-white/95 px-3 py-2 backdrop-blur sm:-bottom-4 sm:-mx-4 sm:-mb-4 sm:px-4"
                   : ""
               }`}
             >

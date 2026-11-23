@@ -46,7 +46,7 @@ test("edição de cliente comercial tem escopo de empresa/parceiro e não altera
   assert.match(segment, /parsePartnerEndCustomerPatch\(body, "update"\)/);
   assert.match(segment, /assertEndCustomerTaxIdAvailable\(actor\.companyId, partner\.id, changes\.taxId, customerId\)/);
   assert.match(segment, /WHERE id=\$1 AND "companyId"=\$2 AND "partnerId"=\$3 AND active=true/);
-  assert.match(segment, /RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state/);
+  assert.match(segment, /RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state,email,phone,notes/);
   assert.doesNotMatch(segment, /UPDATE "Customer"/);
 });
 

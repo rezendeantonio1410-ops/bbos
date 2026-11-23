@@ -11,12 +11,16 @@ export type PartnerEndCustomerPatch = Partial<{
   complement: string | null;
   city: string | null;
   state: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
 }>;
 
 export type PartnerEndCustomerInputMode = "create" | "update";
 
 export const partnerEndCustomerFields = [
   "name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state",
+  "email", "phone", "notes",
 ] as const;
 type Field = typeof partnerEndCustomerFields[number];
 
@@ -32,9 +36,11 @@ export const partnerEndCustomerRequiredFields: readonly Field[] = [
 const labels: Record<Field, string> = {
   name: "Nome / Razão social", taxId: "CNPJ", postalCode: "CEP", street: "Rua",
   number: "Número", district: "Bairro", complement: "Complemento", city: "Cidade", state: "UF",
+  email: "E-mail", phone: "Telefone", notes: "Observações",
 };
 const maxLength: Partial<Record<Field, number>> = {
   street: 180, number: 30, district: 120, complement: 120, city: 120,
+  email: 254, phone: 40, notes: 1000,
 };
 const brazilianStates = new Set([
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
@@ -75,9 +81,14 @@ export function parsePartnerEndCustomerPatch(
       const state = value.toUpperCase();
       if (state && !brazilianStates.has(state)) throw new Error("Informe uma UF válida.");
       values.state = state || null;
+    } else if (key === "email") {
+      if (value && (value.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) {
+        throw new Error("Informe um e-mail válido.");
+      }
+      values.email = value.toLowerCase() || null;
     } else {
       if (value.length > (maxLength[key] ?? 120)) {
-        throw new Error("Campo de endereço demasiado longo.");
+        throw new Error(`${labels[key]}: texto muito longo.`);
       }
       values[key] = value || null;
     }

@@ -17,7 +17,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
-import { SalesOrdersService } from "./sales-orders.service";
+import { SalesOrdersService, type CreateSalesOrderInput } from "./sales-orders.service";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifecycle.service";
 import { assessCustomerFiscalReadiness } from "./customer-fiscal-readiness";
@@ -28,7 +28,7 @@ import { isValidPartnerRequestedReadyDate } from "./partner-ready-date";
 import { parseSignaReportYear, signaReportYearBounds } from "./signa-report-period";
 import { selectSignaFiscalRecipient } from "./signa-billing-recipient";
 import { parseBillableUnitPrice } from "./partner-price-validation";
-import { parsePartnerEndCustomerPatch } from "./partner-end-customer-input";
+import { parsePartnerEndCustomerPatch, partnerEndCustomerFields } from "./partner-end-customer-input";
 import {
   hashSignaOrderSubmissionRequest,
   parseSignaOrderSubmissionKey,
@@ -136,6 +136,15 @@ export class PartnerPortalController {
               SELECT 1 FROM "StorefrontPartnerCustomer" link
                WHERE link."partnerId"=$1 AND link."customerId"=so."customerId"
                  AND so."createdByStorefrontPartnerId" IS NULL
+            ) OR EXISTS (
+              SELECT 1 FROM "StorefrontPartner" signa
+              JOIN "Customer" recipient ON recipient.id=so."customerId"
+              WHERE signa.id=$1 AND signa."companyId"=so."companyId"
+                AND signa.active=true AND signa."portalAccessLevel"='DISTRIBUTOR'
+                AND LOWER(TRIM(signa.name))='signa coffee'
+                AND recipient."companyId"=signa."companyId" AND recipient.active=true
+                AND ((LOWER(TRIM(recipient.name))='signa coffee' AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+                  OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas' AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11))
             )))
             OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
           )
@@ -151,6 +160,25 @@ export class PartnerPortalController {
         "Este pedido não pertence à carteira deste distribuidor.",
       );
     }
+  }
+
+  // Legacy BBOS orders invoiced to Signa or Rodrigo are visible to Signa only.
+  // This is read-only portfolio visibility: never reassign fiscal customer or order owner.
+  private signaHistoricalOrderScope() {
+    return `EXISTS (
+      SELECT 1 FROM "StorefrontPartner" signa
+      JOIN "Customer" recipient ON recipient.id=so."customerId"
+      WHERE signa.id=$2 AND signa."companyId"=so."companyId"
+        AND signa.active=true AND signa."portalAccessLevel"='DISTRIBUTOR'
+        AND LOWER(TRIM(signa.name))='signa coffee'
+        AND recipient."companyId"=signa."companyId" AND recipient.active=true
+        AND (
+          (LOWER(TRIM(recipient.name))='signa coffee'
+            AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+          OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas'
+            AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11)
+        )
+    )`;
   }
 
   private async resolvePrice(
@@ -550,7 +578,13 @@ export class PartnerPortalController {
       this.database.$queryRawUnsafe<any[]>(
         `SELECT so.id,so.code,so.status::text AS status,so."totalAmount",so."orderedAt",
                 so."paymentType"::text AS "paymentType",so."paymentTermsSnapshot",
-                c.name AS "customerName",ar.status::text AS "receivableStatus",
+                c.name AS "customerName",c.name AS "billingRecipientName",
+                endcustomer.name AS "endCustomerName",
+                COALESCE((SELECT sum(oi.quantity * pv."netWeightGrams") / 1000.0
+                  FROM "SalesOrderItem" oi
+                  JOIN "ProductVariant" pv ON pv.id=oi."productVariantId"
+                  WHERE oi."salesOrderId"=so.id),0)::float AS "volumeKg",
+                ar.status::text AS "receivableStatus",
                 ar."dueDate",ar.amount AS "receivableAmount",ar."openAmount",
                 ar."paymentDate",fiscal.number AS "invoiceNumber",
                 fiscal.status::text AS "invoiceStatus",
@@ -559,6 +593,8 @@ export class PartnerPortalController {
                   AND ar."openAmount">0 AND fiscal.status='AUTHORIZED') AS "billingAvailable"
            FROM "SalesOrder" so
            JOIN "Customer" c ON c.id=so."customerId"
+           LEFT JOIN "PartnerEndCustomer" endcustomer ON endcustomer.id=so."partnerEndCustomerId"
+             AND endcustomer."companyId"=so."companyId" AND endcustomer."partnerId"=$2
            LEFT JOIN LATERAL (
              SELECT title.status,title."dueDate",title.amount,title."openAmount",title."paymentDate"
                FROM "AccountsReceivable" title
@@ -586,6 +622,7 @@ export class PartnerPortalController {
                  WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
                  AND so."createdByStorefrontPartnerId" IS NULL
               )))
+              ) OR ${this.signaHistoricalOrderScope()}))
               OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
             )
             AND so.status <> 'CANCELLED'
@@ -610,6 +647,7 @@ export class PartnerPortalController {
                    WHERE link."partnerId"=$2 AND link."customerId"=so."customerId"
                  AND so."createdByStorefrontPartnerId" IS NULL
                 )))
+                ) OR ${this.signaHistoricalOrderScope()}))
                 OR (NOT $4::boolean AND so."createdByStorefrontPartnerId"=$2)
               )
             ORDER BY event."occurredAt" DESC
@@ -1209,7 +1247,7 @@ export class PartnerPortalController {
            FROM "SalesOrder" so
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
@@ -1218,7 +1256,15 @@ export class PartnerPortalController {
         actor.companyId, partner.id, start, end,
       ),
       this.database.$queryRawUnsafe<any[]>(
-        `SELECT item.sku,item."productName" AS product,
+        `SELECT item.sku,
+                COALESCE(NULLIF(TRIM(catalog."displayProductName"),''),
+                  CASE
+                    WHEN product.code IN ('WHITE_LABEL_ESSENCIAL','WHITE_LABEL_CLASSICO_500GR') THEN 'Clássicos'
+                    WHEN product.code='WHITE_LABEL_CLASSICO' THEN 'Caramelo'
+                    WHEN product.code='WHITE_LABEL_FRUTADO' THEN 'Frutado'
+                    WHEN product.code='WHITE_LABEL_RARO' THEN 'Reserva'
+                    ELSE item."productName"
+                  END) AS product,
                 count(DISTINCT so.id)::int AS orders,
                 COALESCE(sum(item.quantity),0)::int AS units,
                 COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
@@ -1226,11 +1272,22 @@ export class PartnerPortalController {
            FROM "SalesOrder" so
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+           JOIN "Product" product ON product.id=variant."productId"
+           LEFT JOIN LATERAL (
+             SELECT cp."displayProductName"
+               FROM "CustomerCatalogProduct" cp
+               JOIN "Customer" customer ON customer.id=cp."customerId"
+              WHERE cp."companyId"=so."companyId"
+                AND cp."productVariantId"=variant.id
+                AND cp.active=true
+                AND LOWER(TRIM(customer.name))='signa coffee'
+              ORDER BY cp."updatedAt" DESC LIMIT 1
+           ) catalog ON TRUE
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
-          GROUP BY item.sku,item."productName"
+          GROUP BY item.sku,item."productName",catalog."displayProductName",product.code
           ORDER BY "orderValue" DESC LIMIT 100`,
         actor.companyId, partner.id, start, end,
       ),
@@ -1243,7 +1300,7 @@ export class PartnerPortalController {
              AND ec."partnerId"=$2 AND ec."companyId"=$1
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
@@ -1253,7 +1310,7 @@ export class PartnerPortalController {
       this.database.$queryRawUnsafe<Array<{ year: number }>>(
         `SELECT DISTINCT EXTRACT(YEAR FROM so."createdAt")::int AS year
            FROM "SalesOrder" so
-          WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
           ORDER BY year DESC LIMIT 30`,
         actor.companyId, partner.id,
@@ -1306,6 +1363,61 @@ export class PartnerPortalController {
     return { customers };
   }
 
+  @Get("end-customer-history")
+  async endCustomerHistory(@Req() request: { user?: PartnerActor }) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Histórico disponível apenas para distribuidores.");
+    }
+    const customers = await this.database.$queryRawUnsafe<Array<{
+      id: string; name: string; city: string | null; state: string | null;
+      orderCount: number; totalOrders: number; lastOrderAt: Date | null;
+    }>>(
+      `SELECT ec.id,ec.name,ec.city,ec.state,
+        count(so.id)::int AS "orderCount",
+        COALESCE(sum(so."totalAmount"),0)::float AS "totalOrders",
+        max(so."createdAt") AS "lastOrderAt"
+       FROM "PartnerEndCustomer" ec
+       LEFT JOIN "SalesOrder" so ON so."partnerEndCustomerId"=ec.id
+         AND so."companyId"=ec."companyId"
+         AND so."createdByStorefrontPartnerId"=ec."partnerId"
+         AND so.status::text <> 'CANCELLED'
+       WHERE ec."companyId"=$1 AND ec."partnerId"=$2 AND ec.active=true
+       GROUP BY ec.id,ec.name,ec.city,ec.state
+       ORDER BY ec.name ASC LIMIT 500`,
+      actor.companyId, partner.id,
+    );
+    return { customers, notice: "Valores de pedidos; não representam faturamento ou recebimentos." };
+  }
+
+  @Get("end-customers/:endCustomerId/orders")
+  async endCustomerOrders(
+    @Req() request: { user?: PartnerActor },
+    @Param("endCustomerId") endCustomerId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Histórico disponível apenas para distribuidores.");
+    }
+    const customers = await this.database.$queryRawUnsafe<Array<{id:string}>>(
+      `SELECT id FROM "PartnerEndCustomer" WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true LIMIT 1`,
+      endCustomerId,actor.companyId,partner.id,
+    );
+    if (!customers.length) throw new NotFoundException("Cliente não encontrado.");
+    const orders = await this.database.$queryRawUnsafe<Array<{
+      id:string; code:string; status:string; totalAmount:number; orderedAt:Date;
+    }>>(
+      `SELECT so.id,so.code,so.status::text AS status,so."totalAmount"::float AS "totalAmount",
+              so."createdAt" AS "orderedAt"
+         FROM "SalesOrder" so
+        WHERE so."companyId"=$1 AND so."createdByStorefrontPartnerId"=$2
+          AND so."partnerEndCustomerId"=$3
+        ORDER BY so."createdAt" DESC LIMIT 200`,
+      actor.companyId,partner.id,endCustomerId,
+    );
+    return { orders };
+  }
+
   @Post("end-customers")
   async createEndCustomer(
     @Req() request: { user?: PartnerActor },
@@ -1326,11 +1438,13 @@ export class PartnerPortalController {
     const id = randomUUID();
     await this.database.$executeRawUnsafe(
       `INSERT INTO "PartnerEndCustomer"
-        (id,"companyId","partnerId",name,"taxId","postalCode",street,number,district,complement,city,state,"createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
+        (id,"companyId","partnerId",name,"taxId","postalCode",street,number,district,complement,city,state,
+         email,phone,notes,"createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())`,
       id, actor.companyId, partner.id, values.name, values.taxId ?? null,
       values.postalCode ?? null, values.street ?? null, values.number ?? null,
       values.district ?? null, values.complement ?? null, values.city ?? null, values.state ?? null,
+      values.email ?? null, values.phone ?? null, values.notes ?? null,
     );
     return { id, ...values, message: "Cliente comercial cadastrado." };
   }
@@ -1355,7 +1469,7 @@ export class PartnerPortalController {
     if (changes.taxId) {
       await this.assertEndCustomerTaxIdAvailable(actor.companyId, partner.id, changes.taxId, customerId);
     }
-    const fields = ["name", "taxId", "postalCode", "street", "number", "district", "complement", "city", "state"] as const;
+    const fields = partnerEndCustomerFields;
     const keys = fields.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
     const assignments = keys.map((key, index) => `"${key}"=$${index + 4}`).join(", ");
     const values = keys.map(key => changes[key] ?? null);
@@ -1363,11 +1477,12 @@ export class PartnerPortalController {
       id: string; name: string; taxId: string | null; postalCode: string | null;
       street: string | null; number: string | null; district: string | null;
       complement: string | null; city: string | null; state: string | null;
+      email: string | null; phone: string | null; notes: string | null;
     }>>(
       `UPDATE "PartnerEndCustomer"
           SET ${assignments}, "updatedAt"=NOW()
         WHERE id=$1 AND "companyId"=$2 AND "partnerId"=$3 AND active=true
-        RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state`,
+        RETURNING id,name,"taxId","postalCode",street,number,district,complement,city,state,email,phone,notes`,
       customerId, actor.companyId, partner.id, ...values,
     );
     if (!updated[0]) throw new NotFoundException("Cliente comercial não encontrado nesta carteira.");
@@ -1661,7 +1776,7 @@ export class PartnerPortalController {
         )
         .map((variant) => [variant.productVariantId, variant]),
     );
-    const pricedItems = [];
+    const pricedItems: CreateSalesOrderInput["items"] = [];
     let salesChannelId = "";
     for (const item of items) {
       const productVariantId = String(item.productVariantId ?? "").trim();

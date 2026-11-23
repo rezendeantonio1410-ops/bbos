@@ -73,3 +73,14 @@ test("cadastro novo exige nome, CNPJ, CEP, rua, número, bairro, cidade e UF; co
     assert.throws(() => parsePartnerEndCustomerPatch({ ...complete, [field]: "" }, "create"), undefined, field);
   }
 });
+
+test("contato opcional: e-mail validado, telefone e observações com limite", () => {
+  assert.deepEqual(
+    parsePartnerEndCustomerPatch({ email: " Compras@Cafe.com.br ", phone: " (43) 99999-0000 ", notes: " Entrega pela manhã " }),
+    { email: "compras@cafe.com.br", phone: "(43) 99999-0000", notes: "Entrega pela manhã" },
+  );
+  assert.deepEqual(parsePartnerEndCustomerPatch({ email: "", phone: "", notes: "" }), { email: null, phone: null, notes: null });
+  assert.throws(() => parsePartnerEndCustomerPatch({ email: "sem-arroba" }), /e-mail/);
+  assert.throws(() => parsePartnerEndCustomerPatch({ phone: "9".repeat(41) }));
+  assert.throws(() => parsePartnerEndCustomerPatch({ notes: "x".repeat(1001) }));
+});
