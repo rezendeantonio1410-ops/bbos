@@ -1,5 +1,13 @@
 # Signa — checklist de aceite antes da publicação integral
 
+## Incremento em 23/11/2026 — proteção contra sobrescrita acidental de rascunhos (WIP, NÃO PUBLICAR)
+
+- [x] A seleção de um rascunho no menu **não autoriza sua edição**. O botão **Salvar na conta** só faz PATCH (com versão otimista) quando o ID selecionado é o mesmo rascunho efetivamente **recuperado para o formulário** e permanece na lista autorizada. Caso contrário cria um registro novo, sem sobrescrever o selecionado. A cópia duplicada só vira editável depois de recuperação explícita.
+- [x] Ao recuperar, salvar ou fechar o formulário, a interface atualiza ou limpa o vínculo com o rascunho em edição. Exclusão desse rascunho limpa o vínculo. A interface explica a necessidade de **Recuperar da conta** antes de editar um registro.
+- [x] Testes unitários adicionados para seleção cruzada, rascunho inexistente e atualização do próprio rascunho, além de verificação estática do vínculo com a UI. Implementação exclusivamente na branch da PR #67; commits `4c373f2`, `22035be`, `2b60218`, `cf780eb`.
+- [ ] CI completo do HEAD e teste manual com duas sessões em andamento: PR de validação **temporária e sem merge #104** (branch `ci/signa-draft-recovery-guard-20261123`). Não confundir sucesso unitário/CI com validação de migração, autenticação, concorrência real ou teste visual.
+- [ ] Bloqueios inalterados: migração aditiva em banco isolado com rollback; fluxo idempotente de submissão; E2E autenticado entre dispositivos; revisão PR #92; conflitos da PR #67; fiscal, financeiro, Bling, Pix, relatórios e smoke. **Nenhum merge na release, deploy ou modificação de dados reais autorizado.**
+
 ## Incremento em 23/11/2026 — limite transacional de rascunhos da conta (WIP, SEM PUBLICAR)
 
 - [x] **Código implementado na branch feature da PR #67** (commits `123af79`, `b4ece89`, `9f47851`, `325c85b`): criação de rascunhos Signa limitada a **100 registros DRAFT por companyId/partnerId/userId**. A API usa transação PostgreSQL com `pg_advisory_xact_lock` por escopo, executa a contagem após obter o lock e retorna **409 Conflict** com orientação para excluir uma cópia antiga quando o limite é atingido. A listagem já usa LIMIT 100; a proteção evita que novos rascunhos fiquem inacessíveis na UI. Não remove rascunhos existentes.
