@@ -6,6 +6,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   NotFoundException,
   Param,
   Patch,
@@ -1408,6 +1409,7 @@ export class PartnerPortalController {
   }
 
   @Get("order-drafts")
+  @Header("Cache-Control", "private, no-store")
   async listOrderDrafts(@Req() request: { user?: PartnerActor }) {
     const { actor, partner, userId } = await this.signaDraftContext(request);
     const drafts = await this.database.$queryRawUnsafe<any[]>(
@@ -1421,6 +1423,7 @@ export class PartnerPortalController {
   }
 
   @Get("order-drafts/:draftId")
+  @Header("Cache-Control", "private, no-store")
   async getOrderDraft(
     @Req() request: { user?: PartnerActor },
     @Param("draftId") draftId: string,
