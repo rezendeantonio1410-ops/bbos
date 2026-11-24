@@ -97,6 +97,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   OrderPackagingController: OPERATIONS,
   BrokersController: COMMERCIAL,
   CustomersController: COMMERCIAL,
+  ProspectsController: CORE,
   CuppingController: OPERATIONS,
   CuppingTrainingController: OPERATIONS,
   ProfessionalSamplesController: OPERATIONS,
@@ -243,6 +244,9 @@ const HANDLER_ROLE_POLICY: Readonly<
   BrokersController: {
     create: COMMERCIAL_WITHOUT_SALES,
     update: COMMERCIAL_WITHOUT_SALES,
+  },
+  ProspectsController: {
+    import: LEADERSHIP,
   },
   CustomersController: {
     list: [...COMMERCIAL, "ACCOUNTANT"],

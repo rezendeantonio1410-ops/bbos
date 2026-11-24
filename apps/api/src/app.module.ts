@@ -51,6 +51,7 @@ import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
 import { BrokersController } from "./brokers.controller";
 import { CustomersController } from "./customers.controller";
+import { ProspectsController } from "./prospects.controller";
 import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
@@ -130,6 +131,7 @@ import { BillingEmailService } from "./billing-email.service";
     OrderPackagingController,
     BrokersController,
     CustomersController,
+    ProspectsController,
     CuppingController,
     CuppingTrainingController,
     ProfessionalSamplesController,
