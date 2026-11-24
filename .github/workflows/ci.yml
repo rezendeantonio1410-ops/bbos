@@ -132,7 +132,34 @@ jobs:
       - name: Bootstrap the empty database (flag set)
         env:
           BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
-        run: pnpm db:migrate:deploy
+        run: |
+          set -o pipefail
+          pnpm db:migrate:deploy 2>&1 | tee "$RUNNER_TEMP/bbos-bootstrap.log"
+
+      - name: Detect new legacy omissions and verify empty-bootstrap prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Diagnostic baseline only; known historical omissions remain release blockers.
+          # Fail on any new statement or SQLSTATE, including UNKNOWN.
+          while IFS= read -r omission; do
+            case "$omission" in
+              "migration=20260807143000_product_catalog_persistence_v1 statement=5 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=8 sqlstate=42701"|"migration=20260807230000_cost_engine_v1_traceability statement=12 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=13 sqlstate=42710"|"migration=20261012173000_roaster_operational_load_17kg statement=3 sqlstate=55P04"|"migration=20261015124500_storefront_payment_fiscal_recovery statement=1 sqlstate=42703"|"migration=20261015124500_storefront_payment_fiscal_recovery statement=5 sqlstate=42703"|"migration=20261015124500_storefront_payment_fiscal_recovery statement=6 sqlstate=42703")
+                echo "::warning::Known historical omission (not release acceptance): $omission"
+                ;;
+              *) echo "::error::Unexpected legacy omission: $omission"; exit 1 ;;
+            esac
+          done < <(sed -n 's/^.*Bootstrap: legacy statement skipped //p' "$RUNNER_TEMP/bbos-bootstrap.log")
+          # Data-recovery statements are relevant to populated databases; this gate
+          # proves only the empty rehearsal has no source orders or cost events.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL' | grep -qx 't|t|t|t|t'
+          SELECT
+            NOT EXISTS (SELECT 1 FROM "ProductionOrder"),
+            NOT EXISTS (SELECT 1 FROM "CostEvent"),
+            NOT EXISTS (SELECT 1 FROM "StorefrontOrder"),
+            EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='StorefrontOrder' AND column_name='salesOrderId'),
+            EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid=t.oid WHERE t.typname='CostType' AND e.enumlabel='GAS');
+          SQL
 
       - name: History complete and second deploy is a no-op
         env:
