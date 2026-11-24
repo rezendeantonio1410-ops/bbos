@@ -275,6 +275,44 @@ await check("Pix de título existente: leitura repetida, acesso privado e ausên
   assert.deepEqual(await readTitle(), titleBefore, "Consultas Pix não podem alterar o título financeiro");
 });
 
+// Financial mutation probes run ONLY in the local disposable CI database.
+// Never send a settlement request to Render (even to homologation).
+if (local && process.env.CI === "true") {
+  await check("parceiro não pode acessar nem executar baixas financeiras internas", async () => {
+    const snapshot = async () => {
+      const r = await signa("/summary");
+      assert.equal(r.status, 200);
+      const row = r.json.partnerOrders.find((x) => x.id === "homolog-order-pix");
+      assert.ok(row, "título fictício ausente");
+      return { status: row.receivableStatus, amount: row.receivableAmount, open: row.openAmount, paidAt: row.paymentDate, due: row.dueDate };
+    };
+    const before = await snapshot();
+    assert.equal(before.status, "OPEN");
+    const probes = [
+      ["GET", "/finance/receivables"],
+      ["GET", "/finance/reconciliation/summary"],
+      ["GET", "/sales-orders/homolog-order-pix/manual-pix"],
+      ["POST", "/finance/receivables/homolog-ar-pix/payments", { financialAccountId: "homolog-denied-account", amount: 76.8, method: "PIX", idempotencyKey: randomUUID() }],
+      ["POST", "/sales-orders/homolog-order-pix/manual-pix/confirm", { financialAccountId: "homolog-denied-account", reference: "DENIED-CI-ONLY" }],
+      ["POST", "/finance/reconciliation-assisted/homolog-denied-item/settle", {}],
+      ["POST", "/finance/reconciliation/safe-auto-match", { financialAccountId: "homolog-denied-account", mode: "APPLY" }],
+    ];
+    for (const cookie of [signaCookie, otherCookie]) {
+      for (const [method, path, body] of probes) {
+        const response = await fetch(`${api}${path}`, {
+          method, redirect: "error",
+          headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        assert.equal(response.status, 403, `${method} ${path}: acesso financeiro deve ser proibido`);
+        await response.text();
+      }
+    }
+    assert.deepEqual(await snapshot(), before, "tentativa de baixa alterou título fictício");
+    return "14 acessos negados; título preservado";
+  });
+}
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} verificações aprovadas.`);
 process.exitCode = failed.length ? 1 : 0;
