@@ -162,6 +162,22 @@ export async function bootstrapEmptyDatabase() {
     const tolerated = await prisma.$transaction(async (tx) => {
       let ignored = 0;
       for (const name of legacy) {
+        // The legacy recovery SQL and the runtime storefront payment controller
+        // both reference this nullable text link, absent in a fresh historical
+        // replay. Supply only the schema prerequisite in the empty bootstrap;
+        // never repair or backfill a populated database from this path.
+        if (name === "20261015124500_storefront_payment_fiscal_recovery") {
+          const [source] = await tx.$queryRawUnsafe(
+            `SELECT NOT EXISTS (SELECT 1 FROM "StorefrontOrder") AND NOT EXISTS (SELECT 1 FROM "StorefrontPaymentAttempt") AS empty`,
+          );
+          if (source?.empty !== true) {
+            throw new Error("Bootstrap: storefront recovery requires empty source tables.");
+          }
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE "StorefrontOrder" ADD COLUMN IF NOT EXISTS "salesOrderId" TEXT`,
+          );
+          console.log("Bootstrap: ensured legacy storefront link in empty database only.");
+        }
         const sql = readFileSync(join(migrationsDir, name, "migration.sql"), "utf8");
         const statements = splitSqlStatements(sql);
         for (const [statementIndex, statement] of statements.entries()) {
