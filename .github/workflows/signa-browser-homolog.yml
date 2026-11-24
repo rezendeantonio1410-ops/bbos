@@ -181,12 +181,12 @@ jobs:
                 await page.getByRole('button',{name:'Entrar no BBOS'}).click();
                 const loginResponse=await loginResponsePromise;
                 assert.ok(loginResponse.ok(),'real login HTTP '+loginResponse.status());
-                const loginPayload=await loginResponse.json();
-                assert.equal(loginPayload.user.id,'homolog-user-signa');
-                assert.equal(loginPayload.user.role,'PARTNER');
-                assert.ok((await context.cookies(origin)).some(cookie=>cookie.name==='bbos_session' && cookie.httpOnly),'session cookie missing');
+                // The login client immediately navigates to the portal; Chromium
+                // may discard the POST body before Playwright can read it. Verify
+                // the authenticated identity via the real session endpoint instead.
                 await page.waitForURL(url=>url.origin===origin && url.pathname==='/parceiro',{timeout:45000});
-                const sessionResponse=await context.request.get(origin+'/api/auth/me');
+                assert.ok((await context.cookies(origin)).some(cookie=>cookie.name==='bbos_session' && cookie.httpOnly),'session cookie missing');
+                const sessionResponse=await context.request.get(origin+'/api/auth/me',{maxRedirects:0});
                 assert.equal(sessionResponse.status(),200);
                 const session=await sessionResponse.json();
                 assert.equal(session.user.id,'homolog-user-signa');
