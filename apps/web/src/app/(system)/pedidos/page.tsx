@@ -1005,7 +1005,7 @@ export default function OrdersPage() {
                     onClick={() => setSelected(order)}
                     className={`cursor-pointer hover:bg-stone-50 ${compactShipmentException ? "bg-red-50/40" : ""}`}
                   >
-                    <td className="px-3 py-2">
+                    <td className="whitespace-nowrap px-3 py-2">
                       <button
                         type="button"
                         onClick={(event) => {
@@ -1016,16 +1016,16 @@ export default function OrdersPage() {
                       >
                         {order.orderNumber ?? order.code}
                       </button>
-                      <span className="mt-0.5 flex flex-wrap gap-1">
-                        {order.orderType === "SAMPLE" && <span className="rounded bg-amber-50 px-1.5 text-[9px] font-bold uppercase text-amber-900">Amostra</span>}
-                        {order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR" && <span className="rounded bg-violet-50 px-1.5 text-[9px] font-bold uppercase text-violet-800">Sob encomenda</span>}
-                        {order.salesChannel?.name && <span className="rounded bg-stone-100 px-1.5 text-[9px] font-bold uppercase text-stone-600">{order.salesChannel.name}</span>}
-                      </span>
+                      {order.orderType === "SAMPLE" && <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">Amostra</span>}
+                      {order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR" && <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-violet-800">Encomenda</span>}
                     </td>
-                    <td className="max-w-[16rem] truncate px-3 py-2 text-stone-700" title={order.customer.name}>{order.customer.name}</td>
-                    <td className="px-3 py-2 tabular-nums text-stone-600">{new Date(order.orderedAt).toLocaleDateString("pt-BR")}</td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{money.format(Number(order.totalAmount))}</td>
-                    <td className="px-3 py-2">
+                    <td className="max-w-[15rem] px-3 py-2" title={order.customer.name}>
+                      <span className="block truncate text-stone-800">{order.customer.name}</span>
+                      {order.salesChannel?.name && <span className="block truncate text-[10px] text-stone-500">{order.salesChannel.name}</span>}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-stone-600">{new Date(order.orderedAt).toLocaleDateString("pt-BR")}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">{money.format(Number(order.totalAmount))}</td>
+                    <td className="whitespace-nowrap px-3 py-2">
                       <Status status={displayStatus(order)} />
                       {order.shipment && (
                         <span className="mt-0.5 block text-[10px] text-stone-500">
@@ -1035,27 +1035,26 @@ export default function OrdersPage() {
                     </td>
                     <td className="px-3 py-2 text-xs text-stone-600">
                       {paymentConfirmed ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-800"><Check size={12} strokeWidth={3} /> Pago {paymentDate}</span>
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap text-emerald-800"><Check size={12} strokeWidth={3} /> Pago {paymentDate}</span>
                       ) : (
                         <span className="text-stone-400">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      {exception ? (
-                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${exception.tone === "danger" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
+                      {exception && exception.label !== (statusLabel[displayStatus(order)] ?? "") ? (
+                        <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 font-semibold ${exception.tone === "danger" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
                           {exception.tone === "danger" ? <ShieldAlert size={12} /> : <Clock3 size={12} />}
                           {exception.label}
                         </span>
                       ) : null}
                     </td>
                     <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
-                      <span className="flex items-center justify-end gap-1.5">
+                      <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                         {order.status === "DRAFT" && canEditOrders && (
                           <button type="button" onClick={() => setEditing(order)} aria-label={`Editar ${order.orderNumber ?? order.code}`} className="rounded-md p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900">
                             <Pencil size={14} />
                           </button>
                         )}
-                        <OrderPdfLink orderId={order.id} compact provisional={order.status === "DRAFT"} />
                         {canOperateOrders && ["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && (
                           <button
                             type="button"

@@ -17,6 +17,7 @@ import {
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
+import { CnpjRegistryPanel, CnpjSearchButton } from "@/components/cnpj-registry-panel";
 import { searchSignaEndCustomers } from "@/lib/signa-end-customer-search";
 import { formatCnpj, validateSignaEndCustomerForm } from "@/lib/signa-end-customer-form";
 import { parseSignaOrderSubmission, reuseOrCreateSignaOrderSubmission, signaOrderSubmissionStorageKey, type SignaOrderSubmission } from "@/lib/signa-order-submission";
@@ -359,26 +360,30 @@ export function PartnerOrderWorkspace({
       endCustomerNumberInput.current?.focus();
     },
   });
-  // Typing a complete CNPJ looks it up in the Receita Federal registry and
-  // fills only EMPTY fields (anything typed is kept). IE stays manual.
+  // Typing a complete CNPJ looks it up in the Receita Federal registry (free)
+  // and fills every empty field; "Buscar na Receita" refills all. Editable.
   const endCustomerCnpjLookup = useCnpjRegistryAutofill({
     cnpj: newEndCustomerTaxId,
     enabled: showOrder && isDistributor && !editingEndCustomerId,
-    onResolved: record => {
-      const keep = (current: string, value: string | null) => (current.trim() ? current : value ?? "");
-      setNewEndCustomerName(current => keep(current, record.legalName));
+    onResolved: (record, context) => {
+      const before = context.previous;
+      const take = (current: string, value: string | null | undefined, previous: string | null | undefined) =>
+        value && (context.overwrite || !current.trim() || current === previous) ? value : current;
+      const keep = (current: string, value: string | null, key?: keyof typeof record) =>
+        take(current, value, key && before ? (before[key] as string | null) : null);
+      setNewEndCustomerName(current => keep(current, record.legalName, "legalName"));
       if (record.postalCode) {
         // The registry already brings the address: skip the CEP lookup overwrite.
         endCustomerLoadedCep.current = record.postalCode;
-        setNewEndCustomerCep(current => keep(current, record.postalCode));
+        setNewEndCustomerCep(current => keep(current, record.postalCode, "postalCode"));
       }
-      setNewEndCustomerStreet(current => keep(current, record.street));
-      setNewEndCustomerNumber(current => keep(current, record.number));
-      setNewEndCustomerDistrict(current => keep(current, record.district));
-      setNewEndCustomerComplement(current => keep(current, record.complement));
-      setNewEndCustomerCity(current => keep(current, record.city));
-      setNewEndCustomerState(current => keep(current, record.state));
-      setNewEndCustomerStateRegistration(current => keep(current, record.suggestedStateRegistration ?? null));
+      setNewEndCustomerStreet(current => keep(current, record.street, "street"));
+      setNewEndCustomerNumber(current => keep(current, record.number, "number"));
+      setNewEndCustomerDistrict(current => keep(current, record.district, "district"));
+      setNewEndCustomerComplement(current => keep(current, record.complement, "complement"));
+      setNewEndCustomerCity(current => keep(current, record.city, "city"));
+      setNewEndCustomerState(current => keep(current, record.state, "state"));
+      setNewEndCustomerStateRegistration(current => keep(current, record.suggestedStateRegistration ?? null, "suggestedStateRegistration"));
     },
   });
   const customerCepLookup = useBrazilianCepAutofill({
@@ -1896,10 +1901,11 @@ export function PartnerOrderWorkspace({
                   <summary className="cursor-pointer text-sm font-semibold text-[#0E191D]">{editingEndCustomerId ? "Editar cliente comercial" : "Cadastrar novo cliente final"}</summary>
                   {/* Nested inside the order form: Enter must never submit the order. */}
                   <div className="mt-2 grid gap-2 sm:grid-cols-6" onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}>
+<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">CNPJ *<span className="flex gap-2"><input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="min-w-0 flex-1 rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /><CnpjSearchButton onClick={endCustomerCnpjLookup.search} busy={endCustomerCnpjLookup.busy}/></span></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-6">Nome / Razão social *<input aria-label="Nome / Razão social do cliente final" aria-required="true" autoComplete="organization" value={newEndCustomerName} onChange={event=>setNewEndCustomerName(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
-<label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CNPJ *<input aria-label="CNPJ do cliente final" aria-required="true" inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(newEndCustomerTaxId)} onChange={event=>setNewEndCustomerTaxId(event.target.value.replace(/\D/g,"").slice(0,14))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-3">CEP *<input aria-label="CEP do cliente final" aria-required="true" inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(newEndCustomerCep)} onChange={event=>setNewEndCustomerCep(brazilianCepDigits(event.target.value))} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 {endCustomerCnpjLookup.statusText && <p role="status" className={`text-xs sm:col-span-6 ${endCustomerCnpjLookup.warning ? "font-semibold text-amber-800" : "text-stone-600"}`}>{endCustomerCnpjLookup.statusText}</p>}
+{endCustomerCnpjLookup.record && <div className="sm:col-span-6"><CnpjRegistryPanel record={endCustomerCnpjLookup.record} /></div>}
 {endCustomerCepLookup.statusText && <p role="status" className="text-xs text-stone-600 sm:col-span-6">{endCustomerCepLookup.statusText}</p>}
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-4">Rua / Logradouro *<input aria-label="Rua / Logradouro do cliente final" aria-required="true" value={newEndCustomerStreet} onChange={event=>setNewEndCustomerStreet(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
 <label className="grid gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">Número *<input aria-label="Número do cliente final" ref={endCustomerNumberInput} aria-required="true" placeholder="S/N" value={newEndCustomerNumber} onChange={event=>setNewEndCustomerNumber(event.target.value)} className="rounded-md border border-[#B7C5C3] bg-white px-3 py-2 text-sm text-[#0E191D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#0E3A31]" /></label>
