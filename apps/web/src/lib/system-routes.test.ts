@@ -90,7 +90,7 @@ test("atalhos móveis respeitam o perfil e deixam o menu completo como saída se
     assert.equal(mobileNavigationForRole(role)[1]?.href, "/por-perto", role);
   assert.deepEqual(
     mobileNavigationForRole("SALES").map((item) => item.href),
-    ["/home", "/por-perto", "/atendimento", "/pedidos"],
+    ["/home", "/por-perto", "/pedidos", "/clientes"],
   );
   assert.deepEqual(
     mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
@@ -285,4 +285,12 @@ test("menu: cada área tem ícone próprio e contadores vêm das notificações 
     { href: "/fora-do-menu", readAt: null },
   ]);
   assert.deepEqual(counts, { commercial: 3 });
+});
+
+test("Por perto, Atendimento e Prospecção ficam juntos em Visitas", () => {
+  const sales = navigationForRole("SALES").flatMap((group) => group.items);
+  const visits = sales.filter((item) => item.subgroup?.id === "visitas").map((item) => item.href);
+  assert.deepEqual(visits, ["/por-perto", "/atendimento", "/prospeccao"]);
+  const firstIndex = sales.findIndex((item) => item.href === "/por-perto");
+  assert.deepEqual(sales.slice(firstIndex, firstIndex + 3).map((item) => item.href), visits);
 });

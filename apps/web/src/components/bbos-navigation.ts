@@ -18,6 +18,7 @@ import {
   MapPinned,
   PackageCheck,
   PackageOpen,
+  Route,
   FileInput,
   Settings,
   Ship,
@@ -45,7 +46,14 @@ export type BbosNavItem = {
   icon: LucideIcon;
   roles: BbosRole[];
   keywords?: string[];
+  /** Items sharing a subgroup show as sub-lines under one menu entry. */
+  subgroup?: BbosNavSubgroup;
 };
+
+export type BbosNavSubgroup = { id: string; label: string; icon: LucideIcon };
+
+/** One entry for field work: nearby, customer visits and prospects. */
+export const VISITS_SUBGROUP: BbosNavSubgroup = { id: "visitas", label: "Visitas", icon: Route };
 
 export type BbosNavGroup = {
   id:
@@ -119,20 +127,22 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["cliente", "credito"],
       },
       {
-        href: "/atendimento",
-        label: "Atendimento",
-        description: "Visitas, relatos e próximas ações",
-        icon: ClipboardList,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
-        keywords: ["visita", "relato", "vendedor", "follow-up"],
-      },
-      {
         href: "/por-perto",
         label: "Por perto",
         description: "Clientes e pré-cadastros perto de você",
         icon: LocateFixed,
         roles: ALL,
         keywords: ["perto", "mapa", "localizacao", "gps", "rota", "visita"],
+        subgroup: VISITS_SUBGROUP,
+      },
+      {
+        href: "/atendimento",
+        label: "Atendimento",
+        description: "Visitas, relatos e próximas ações",
+        icon: ClipboardList,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["visita", "relato", "vendedor", "follow-up"],
+        subgroup: VISITS_SUBGROUP,
       },
       {
         href: "/prospeccao",
@@ -141,6 +151,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: MapPinned,
         roles: ["ADMIN", "EXECUTIVE", "SALES"],
         keywords: ["pre cadastro", "prospect", "lead", "visita", "cnpj"],
+        subgroup: VISITS_SUBGROUP,
       },
       {
         href: "/pedidos",
@@ -400,7 +411,7 @@ const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
   INDUSTRIAL: ["/home", "/por-perto", "/producao", "/estoque"],
   FINANCE: ["/home", "/por-perto", "/pedidos", "/financeiro"],
   ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
-  SALES: ["/home", "/por-perto", "/atendimento", "/pedidos"],
+  SALES: ["/home", "/por-perto", "/pedidos", "/clientes"],
   MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
 };
 

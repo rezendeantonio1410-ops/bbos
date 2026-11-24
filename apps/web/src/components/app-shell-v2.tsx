@@ -76,8 +76,8 @@ const mobileShortLabelByHref: Record<string, string> = {
   "/dashboard": "Executivo",
   "/dashboard-industrial": "Industrial",
   "/clientes": "Clientes",
-  "/atendimento": "Visitas",
-  "/por-perto": "Por perto",
+  "/atendimento": "Atendimento",
+  "/por-perto": "Visitas",
   "/prospeccao": "Prospecção",
   "/pedidos": "Pedidos",
   "/estoque": "Estoque",
@@ -267,7 +267,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       )?.label ?? "Visão geral",
     [navGroups, pathname],
   );
+  const currentSubgroup = useMemo(
+    () =>
+      navGroups
+        .flatMap((group) => group.items)
+        .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+        .sort((a, b) => b.href.length - a.href.length)[0]?.subgroup?.label ?? null,
+    [navGroups, pathname],
+  );
   const [expandedGroup, setExpandedGroup] = useState(activeGroup);
+  const [openSubgroup, setOpenSubgroup] = useState("");
 
   useEffect(() => setExpandedGroup(activeGroup), [activeGroup]);
 
@@ -411,6 +420,38 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
   };
 
+  const isRouteActive = (href: string) =>
+    pathname === href || (href !== "/home" && pathname.startsWith(`${href}/`));
+  const pendingFor = (href: string) =>
+    notifications.filter(
+      (item) => !item.readAt && (item.href.split(/[?#]/)[0] === href || item.href.startsWith(`${href}/`)),
+    ).length;
+  const renderNavLink = (
+    { href, label, icon: Icon }: BbosNavItem,
+    tone: (typeof toneClasses)[keyof typeof toneClasses],
+    mobile: boolean,
+  ) => {
+    const active = isRouteActive(href);
+    const itemPending = pendingFor(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        aria-current={active ? "page" : undefined}
+        onClick={() => mobile && setMobileOpen(false)}
+        className={`group flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 transition lg:min-h-10 ${active ? tone.active : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
+      >
+        <Icon size={18} aria-hidden className={`shrink-0 ${active ? "" : tone.text}`} />
+        <span className="min-w-0 truncate text-sm font-medium">{label}</span>
+        {itemPending > 0 && (
+          <span className="ml-auto min-w-6 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-xs font-bold tabular-nums text-white">
+            {itemPending > 99 ? "99+" : itemPending}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
     <div
       className={`flex h-full flex-col ${mobile ? "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]" : ""}`}
@@ -476,35 +517,42 @@ export function AppShellV2({ children }: { children: ReactNode }) {
               )}
               {isOpen && (
                 <div className={`space-y-0.5 ${group.alwaysOpen ? "" : "mt-0.5 border-l border-stone-200 pl-1.5 ml-[1.15rem]"}`}>
-                  {group.items.map(({ href, label, icon: Icon }) => {
-                    const active =
-                      pathname === href ||
-                      (href !== "/home" && pathname.startsWith(`${href}/`));
-                    const itemPending = notifications.filter(
-                      (item) => !item.readAt && (item.href.split(/[?#]/)[0] === href || item.href.startsWith(`${href}/`)),
-                    ).length;
+                  {group.items.map((item, index) => {
+                    const sub = item.subgroup;
+                    if (sub && group.items[index - 1]?.subgroup?.id === sub.id) return null;
+                    if (!sub) return renderNavLink(item, tone, mobile);
+                    const children = group.items.filter((candidate) => candidate.subgroup?.id === sub.id);
+                    const subActive = children.some((child) => isRouteActive(child.href));
+                    const subOpen = subActive || openSubgroup === sub.id;
+                    const subPending = children.reduce((total, child) => total + pendingFor(child.href), 0);
+                    const SubIcon = sub.icon;
                     return (
-                      <Link
-                        key={href}
-                        href={href}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => mobile && setMobileOpen(false)}
-                        className={`group flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 transition lg:min-h-10 ${active ? tone.active : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
-                      >
-                        <Icon
-                          size={18}
-                          aria-hidden
-                          className={`shrink-0 ${active ? "" : tone.text}`}
-                        />
-                        <span className="min-w-0 truncate text-sm font-medium">
-                          {label}
-                        </span>
-                        {itemPending > 0 && (
-                          <span className="ml-auto min-w-6 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-xs font-bold tabular-nums text-white">
-                            {itemPending > 99 ? "99+" : itemPending}
-                          </span>
+                      <div key={sub.id}>
+                        <button
+                          type="button"
+                          aria-expanded={subOpen}
+                          onClick={() => setOpenSubgroup(subOpen && !subActive ? "" : sub.id)}
+                          className={`flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition lg:min-h-10 ${subActive ? "font-semibold text-[var(--bbos-text-primary)]" : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
+                        >
+                          <SubIcon size={18} aria-hidden className={`shrink-0 ${tone.text}`} />
+                          <span className="min-w-0 truncate text-sm font-medium">{sub.label}</span>
+                          {!subOpen && subPending > 0 && (
+                            <span className="ml-auto min-w-6 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-xs font-bold tabular-nums text-white">
+                              {subPending > 99 ? "99+" : subPending}
+                            </span>
+                          )}
+                          <ChevronDown
+                            size={15}
+                            aria-hidden
+                            className={`shrink-0 text-stone-400 transition-transform ${subOpen ? "rotate-180" : ""} ${!subOpen && subPending ? "" : "ml-auto"}`}
+                          />
+                        </button>
+                        {subOpen && (
+                          <div className="ml-[1.15rem] space-y-0.5 border-l border-stone-200 pl-1.5">
+                            {children.map((child) => renderNavLink(child, tone, mobile))}
+                          </div>
                         )}
-                      </Link>
+                      </div>
                     );
                   })}
                 </div>
@@ -572,6 +620,12 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                   {activeGroup && activeGroup !== currentLabel && (
                     <li className="hidden shrink-0 items-center gap-1.5 text-[var(--bbos-text-muted)] sm:flex">
                       {activeGroup}
+                      <ChevronRight size={14} aria-hidden />
+                    </li>
+                  )}
+                  {currentSubgroup && (
+                    <li className="hidden shrink-0 items-center gap-1.5 text-[var(--bbos-text-muted)] sm:flex">
+                      {currentSubgroup}
                       <ChevronRight size={14} aria-hidden />
                     </li>
                   )}
@@ -872,9 +926,15 @@ export function AppShellV2({ children }: { children: ReactNode }) {
         >
           {mobileQuickLinks.map((item) => {
             const Icon = item.icon;
-            const active =
-              pathname === item.href ||
-              (item.href !== "/home" && pathname.startsWith(`${item.href}/`));
+            // A shortcut of a subgroup (Visitas) stays lit on its sibling pages.
+            const siblings = item.subgroup
+              ? navGroups.flatMap((group) => group.items).filter((other) => other.subgroup?.id === item.subgroup?.id)
+              : [item];
+            const active = siblings.some(
+              (other) =>
+                pathname === other.href ||
+                (other.href !== "/home" && pathname.startsWith(`${other.href}/`)),
+            );
             return (
               <Link
                 key={item.href}
