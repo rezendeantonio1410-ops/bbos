@@ -619,7 +619,7 @@ export default async function LojaPage() {
               <img
                 src={
                   mediaLibrary.slots["founder.jose.portrait"]?.url ??
-                  "/brand/founders/jose-rezende.jpg"
+                  "/brand/story/jose-origem.jpeg"
                 }
                 alt={
                   mediaLibrary.slots["founder.jose.portrait"]?.altText ??
@@ -632,7 +632,7 @@ export default async function LojaPage() {
               <img
                 src={
                   mediaLibrary.slots["founder.suzi.portrait"]?.url ??
-                  "/brand/founders/suzi-ninov.jpg"
+                  "/brand/story/suzi-fragrancia.jpeg"
                 }
                 alt={
                   mediaLibrary.slots["founder.suzi.portrait"]?.altText ??
