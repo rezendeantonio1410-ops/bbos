@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS "Prospect" (
   longitude DOUBLE PRECISION,
   "geocodedAt" TIMESTAMP(3),
   "geocodeSource" TEXT,
+  "geocodeAttemptedAt" TIMESTAMP(3),
+  "suggestedTaxId" TEXT,
+  "suggestedTaxIdConfidence" TEXT,
+  "suggestedTaxIdReason" TEXT,
   "lastContactAt" TIMESTAMP(3),
   "nextAction" TEXT,
   "nextActionAt" TIMESTAMP(3),
@@ -47,6 +51,8 @@ CREATE TABLE IF NOT EXISTS "Prospect" (
   CONSTRAINT "Prospect_potential_check" CHECK (potential IN ('MUITO_ALTA','ALTA','MEDIA','BAIXA','A_VERIFICAR')),
   CONSTRAINT "Prospect_machine_check" CHECK ("espressoMachine" IN ('SIM','NAO','NAO_VERIFICADO')),
   CONSTRAINT "Prospect_stage_check" CHECK (stage IN ('NAO_CONTATADO','CONTATADO','VISITADO','DEGUSTACAO','PROPOSTA','CLIENTE','SEM_INTERESSE')),
+  CONSTRAINT "Prospect_suggested_tax_id_check" CHECK ("suggestedTaxId" IS NULL OR "suggestedTaxId" ~ '^[0-9]{14}$'),
+  CONSTRAINT "Prospect_suggested_confidence_check" CHECK ("suggestedTaxIdConfidence" IS NULL OR "suggestedTaxIdConfidence" IN ('ALTA','MEDIA','BAIXA')),
   CONSTRAINT "Prospect_volume_check" CHECK ("monthlyVolumeKg" IS NULL OR "monthlyVolumeKg" >= 0),
   CONSTRAINT "Prospect_coordinates_check" CHECK (
     (latitude IS NULL AND longitude IS NULL) OR
@@ -87,6 +93,7 @@ ALTER TABLE "Customer"
   ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
   ADD COLUMN IF NOT EXISTS "geocodedAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "geocodeSource" TEXT,
+  ADD COLUMN IF NOT EXISTS "geocodeAttemptedAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "monthlyVolumeKg" DECIMAL(10,2);
 
 -- Original voice transcript kept next to the corrected visit report.

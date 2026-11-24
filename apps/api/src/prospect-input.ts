@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { isValidCnpj } from "./supplier-verification";
 
 export const PROSPECT_SEGMENTS = {
   CAFETERIA: "Cafeteria",
@@ -152,6 +153,10 @@ export type ProspectImportRow = {
   monthlyVolumeKg: number | null;
   stage: ProspectStage;
   notes: string | null;
+  /** CNPJ found in the Receita open data; confirmed only at the visit. */
+  suggestedTaxId: string | null;
+  suggestedTaxIdConfidence: "ALTA" | "MEDIA" | "BAIXA" | null;
+  suggestedTaxIdReason: string | null;
 };
 
 const HEADERS: Record<string, string[]> = {
@@ -170,7 +175,21 @@ const HEADERS: Record<string, string[]> = {
   kg: ["consumo kg mes", "consumo mensal kg"],
   stage: ["status", "status do contato", "status da prospeccao"],
   notes: ["observacoes"],
+  suggestedTaxId: ["cnpj sugerido"],
+  confidence: ["confianca"],
+  reason: ["motivo"],
 };
+
+function parseSuggestion(cnpj: string | null, confidence: string | null, reason: string | null) {
+  const digits = (cnpj ?? "").replace(/\D/g, "");
+  if (!isValidCnpj(digits)) return { suggestedTaxId: null, suggestedTaxIdConfidence: null, suggestedTaxIdReason: null };
+  const level = normalizeText(confidence);
+  return {
+    suggestedTaxId: digits,
+    suggestedTaxIdConfidence: level === "alta" ? "ALTA" : level === "media" ? "MEDIA" : "BAIXA",
+    suggestedTaxIdReason: reason ? reason.slice(0, 200) : null,
+  } as const;
+}
 
 /**
  * Maps spreadsheet rows (first row = headers) into prospects. Accepts the
@@ -245,6 +264,7 @@ export function mapProspectSheet(
       monthlyVolumeKg: parseKg(get(row, "kg")),
       stage: parseStage(get(row, "stage")),
       notes: get(row, "notes"),
+      ...parseSuggestion(get(row, "suggestedTaxId"), get(row, "confidence"), get(row, "reason")),
     });
   }
   return { prospects, skipped, duplicates };

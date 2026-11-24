@@ -30,7 +30,8 @@ const PROSPECT_COLUMNS = `p.id,p.name,p.segment,p."taxId",p."legalName",p."trade
   p."postalCode",p.address,p."addressNumber",p.district,p.city,p.state,p.profile,p."openingHours",p.potential,
   p."espressoMachine",p."machineNotes",p."currentSupplier",p."monthlyVolumeKg"::float AS "monthlyVolumeKg",p.stage,
   p."lostReason",p.notes,p.latitude,p.longitude,p."lastContactAt",p."nextAction",p."nextActionAt",
-  p."customerId",p."convertedAt",p."createdAt",p."updatedAt"`;
+  p."customerId",p."convertedAt",p."createdAt",p."updatedAt",p."geocodeSource",
+  p."suggestedTaxId",p."suggestedTaxIdConfidence",p."suggestedTaxIdReason"`;
 
 /** Fields a visit can change: an edit to one of these resets the coordinates. */
 const ADDRESS_FIELDS = ["postalCode", "address", "addressNumber", "district", "city", "state"];
@@ -262,8 +263,9 @@ export class ProspectsController {
       `INSERT INTO "Prospect"
         (id,"companyId","importKey",name,segment,city,state,district,address,"addressNumber",phone,
          "contactName",profile,"openingHours",potential,"espressoMachine","machineNotes","currentSupplier",
-         "monthlyVolumeKg",stage,notes,"createdByUserId","createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),NOW())
+         "monthlyVolumeKg",stage,notes,"createdByUserId","suggestedTaxId","suggestedTaxIdConfidence",
+         "suggestedTaxIdReason","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW(),NOW())
        ON CONFLICT ("companyId","importKey") WHERE "importKey" IS NOT NULL DO NOTHING`,
       randomUUID(),
       actor.companyId,
@@ -287,6 +289,9 @@ export class ProspectsController {
       p.stage,
       p.notes,
       actor.id ?? null,
+      p.suggestedTaxId,
+      p.suggestedTaxIdConfidence,
+      p.suggestedTaxIdReason,
     );
   }
 }

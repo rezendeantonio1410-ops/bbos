@@ -145,3 +145,17 @@ test("xlsx reader handles shared, inline, numeric and sparse cells", () => {
   assert.deepEqual(readXlsxRows(book), [["outra"]]);
   assert.throws(() => readXlsxRows(Buffer.from("not a zip")), /inválido/);
 });
+
+test("import keeps a valid suggested CNPJ (never as confirmed)", () => {
+  const { prospects } = mapProspectSheet([
+    ["Estabelecimento", "Cidade", "CNPJ sugerido", "Confiança", "Motivo"],
+    ["Natû Funcional", "Londrina", "31.536.243/0001-72", "Alta", "rua e número, nome fantasia"],
+    ["Café X", "Londrina", "11.111.111/1111-11", "Alta", ""],
+    ["Café Y", "Londrina", "", "Sem sugestão", ""],
+  ]);
+  assert.equal(prospects[0]?.suggestedTaxId, "31536243000172");
+  assert.equal(prospects[0]?.suggestedTaxIdConfidence, "ALTA");
+  assert.equal(prospects[0]?.suggestedTaxIdReason, "rua e número, nome fantasia");
+  assert.equal(prospects[1]?.suggestedTaxId, null);
+  assert.equal(prospects[2]?.suggestedTaxIdConfidence, null);
+});

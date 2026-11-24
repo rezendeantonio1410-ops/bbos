@@ -52,6 +52,8 @@ import { UnconfiguredStateRegistrationProvider } from "./state-registration.prov
 import { BrokersController } from "./brokers.controller";
 import { CustomersController } from "./customers.controller";
 import { ProspectsController } from "./prospects.controller";
+import { NearbyController } from "./nearby.controller";
+import { GeocodingService } from "./geocoding.service";
 import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
@@ -132,6 +134,7 @@ import { BillingEmailService } from "./billing-email.service";
     BrokersController,
     CustomersController,
     ProspectsController,
+    NearbyController,
     CuppingController,
     CuppingTrainingController,
     ProfessionalSamplesController,
@@ -175,6 +178,7 @@ import { BillingEmailService } from "./billing-email.service";
     MobileNotificationService,
     SalesReceivableAlertService,
     BillingEmailService,
+    GeocodingService,
     SalesOrderCustomerLifecycleService,
     SalesOrderPaymentsService,
     SalesOrderTermApprovalService,

@@ -98,6 +98,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   BrokersController: COMMERCIAL,
   CustomersController: COMMERCIAL,
   ProspectsController: CORE,
+  NearbyController: CORE,
   CuppingController: OPERATIONS,
   CuppingTrainingController: OPERATIONS,
   ProfessionalSamplesController: OPERATIONS,
