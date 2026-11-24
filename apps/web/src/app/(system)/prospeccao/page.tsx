@@ -654,7 +654,7 @@ function Field({ label, hint, filled, children }: { label: string; hint?: string
   );
 }
 
-type ImportSummary = { total: number; new: number; alreadyImported: number; duplicatesInFile: number; skipped: number; imported: number; preview: Array<{ name: string; city: string | null; segment: string; suggestedTaxId: string | null }> };
+type ImportSummary = { total: number; new: number; alreadyImported: number; suggestionsToFill?: number; suggestionsFilled?: number; duplicatesInFile: number; skipped: number; imported: number; preview: Array<{ name: string; city: string | null; segment: string; suggestedTaxId: string | null }> };
 
 function ImportPanel({ onDone }: { onDone: (message: string) => void }) {
   const [file, setFile] = useState<File | null>(null);
@@ -671,7 +671,10 @@ function ImportPanel({ onDone }: { onDone: (message: string) => void }) {
     if (confirm) form.append("confirm", "true");
     try {
       const result = await api<ImportSummary>("/api/prospects/import", { method: "POST", body: form });
-      if (confirm) onDone(`${result.imported} pré-cadastros importados.`);
+      if (confirm) {
+        const parts = [result.imported ? `${result.imported} pré-cadastros importados` : "", result.suggestionsFilled ? `${result.suggestionsFilled} receberam CNPJ sugerido` : ""].filter(Boolean);
+        onDone(parts.length ? `${parts.join(" e ")}.` : "Nada novo para importar.");
+      }
       else setSummary(result);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível ler a planilha.");
@@ -691,7 +694,8 @@ function ImportPanel({ onDone }: { onDone: (message: string) => void }) {
       {summary && (
         <div className="mt-4">
           <p className="text-sm">
-            <strong>{summary.new}</strong> novos · {summary.alreadyImported} já existem · {summary.duplicatesInFile} repetidos na planilha · {summary.skipped} linhas sem nome
+            <strong>{summary.new}</strong> novos · {summary.alreadyImported} já existem
+            {summary.suggestionsToFill ? <> (<strong>{summary.suggestionsToFill}</strong> vão receber o CNPJ sugerido)</> : null} · {summary.duplicatesInFile} repetidos na planilha · {summary.skipped} linhas sem nome
           </p>
           <ul className="mt-2 max-h-56 overflow-auto rounded-xl border border-stone-100 text-sm">
             {summary.preview.map((row) => (
@@ -701,8 +705,8 @@ function ImportPanel({ onDone }: { onDone: (message: string) => void }) {
               </li>
             ))}
           </ul>
-          <button type="button" disabled={busy || !summary.new} onClick={() => void send(true)} className="mt-3 min-h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white disabled:opacity-50">
-            Importar {summary.new} pré-cadastros
+          <button type="button" disabled={busy || (!summary.new && !summary.suggestionsToFill)} onClick={() => void send(true)} className="mt-3 min-h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white disabled:opacity-50">
+            {summary.new ? `Importar ${summary.new} pré-cadastros` : `Preencher ${summary.suggestionsToFill ?? 0} CNPJs sugeridos`}
           </button>
         </div>
       )}

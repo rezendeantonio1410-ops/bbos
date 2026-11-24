@@ -232,30 +232,43 @@ export class ProspectsController {
       throw new BadRequestException(error instanceof Error ? error.message : "Planilha inválida.");
     }
     const { prospects, skipped, duplicates } = mapProspectSheet(rows, { defaultState: body.state });
-    const existing = new Set(
-      (
-        await this.db.$queryRawUnsafe(
-          `SELECT "importKey" FROM "Prospect" WHERE "companyId"=$1 AND "importKey"=ANY($2::text[])`,
-          actor.companyId,
-          prospects.map((p) => p.importKey),
-        )
-      ).map((row: { importKey: string }) => row.importKey),
+    const existingRows: Array<{ importKey: string; needsSuggestion: boolean }> = await this.db.$queryRawUnsafe(
+      `SELECT "importKey",("taxId" IS NULL AND "suggestedTaxId" IS NULL) AS "needsSuggestion"
+         FROM "Prospect" WHERE "companyId"=$1 AND "importKey"=ANY($2::text[])`,
+      actor.companyId,
+      prospects.map((p) => p.importKey),
     );
+    const existing = new Map(existingRows.map((row) => [row.importKey, row.needsSuggestion]));
     const fresh = prospects.filter((p) => !existing.has(p.importKey));
+    // Existing prospects are never overwritten; the only exception is filling
+    // a suggested CNPJ where the prospect has no CNPJ and no suggestion yet.
+    const suggestions = prospects.filter((p) => p.suggestedTaxId && existing.get(p.importKey) === true);
     const summary = {
       total: prospects.length,
       new: fresh.length,
       alreadyImported: prospects.length - fresh.length,
+      suggestionsToFill: suggestions.length,
       duplicatesInFile: duplicates,
       skipped,
       preview: fresh.slice(0, 200),
     };
-    if (body.confirm !== "true") return { ...summary, imported: 0 };
+    if (body.confirm !== "true") return { ...summary, imported: 0, suggestionsFilled: 0 };
     let imported = 0;
+    let suggestionsFilled = 0;
     await this.db.$transaction(async (tx: any) => {
       for (const prospect of fresh) imported += await this.insertImported(tx, actor, prospect);
+      for (const p of suggestions)
+        suggestionsFilled += await tx.$executeRawUnsafe(
+          `UPDATE "Prospect" SET "suggestedTaxId"=$3,"suggestedTaxIdConfidence"=$4,"suggestedTaxIdReason"=$5,"updatedAt"=NOW()
+            WHERE "companyId"=$1 AND "importKey"=$2 AND "taxId" IS NULL AND "suggestedTaxId" IS NULL`,
+          actor.companyId,
+          p.importKey,
+          p.suggestedTaxId,
+          p.suggestedTaxIdConfidence,
+          p.suggestedTaxIdReason,
+        );
     });
-    return { ...summary, preview: [], imported };
+    return { ...summary, preview: [], imported, suggestionsFilled };
   }
 
   private insertImported(tx: any, actor: { companyId: string; id?: string }, p: ProspectImportRow) {
