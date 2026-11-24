@@ -13,6 +13,8 @@ import {
   House,
   Images,
   LayoutDashboard,
+  LocateFixed,
+  MapPinned,
   PackageCheck,
   PackageOpen,
   FileInput,
@@ -116,6 +118,22 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: ClipboardList,
         roles: ["ADMIN", "EXECUTIVE", "SALES"],
         keywords: ["visita", "relato", "vendedor", "follow-up"],
+      },
+      {
+        href: "/por-perto",
+        label: "Por perto",
+        description: "Clientes e pré-cadastros perto de você",
+        icon: LocateFixed,
+        roles: ALL,
+        keywords: ["perto", "mapa", "localizacao", "gps", "rota", "visita"],
+      },
+      {
+        href: "/prospeccao",
+        label: "Prospecção",
+        description: "Pré-cadastros para visitar e confirmar",
+        icon: MapPinned,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["pre cadastro", "prospect", "lead", "visita", "cnpj"],
       },
       {
         href: "/pedidos",
@@ -369,7 +387,7 @@ const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
   INDUSTRIAL: ["/home", "/producao", "/estoque", "/dashboard-industrial"],
   FINANCE: ["/home", "/pedidos", "/financeiro", "/notas-entrada"],
   ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
-  SALES: ["/home", "/clientes", "/atendimento", "/pedidos"],
+  SALES: ["/home", "/por-perto", "/atendimento", "/pedidos"],
   MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
 };
 

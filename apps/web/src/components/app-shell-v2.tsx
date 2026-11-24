@@ -75,6 +75,8 @@ const mobileShortLabelByHref: Record<string, string> = {
   "/dashboard-industrial": "Industrial",
   "/clientes": "Clientes",
   "/atendimento": "Visitas",
+  "/por-perto": "Por perto",
+  "/prospeccao": "Prospecção",
   "/pedidos": "Pedidos",
   "/estoque": "Estoque",
   "/producao": "Produção",

@@ -292,7 +292,7 @@ export function parseProspectPatch(body: Record<string, unknown>) {
   if ("name" in patch && !patch.name) throw new BadRequestException("Informe o nome do estabelecimento.");
   if ("taxId" in patch && patch.taxId) {
     const digits = String(patch.taxId).replace(/\D/g, "");
-    if (digits.length !== 14) throw new BadRequestException("CNPJ inválido.");
+    if (!isValidCnpj(digits)) throw new BadRequestException("CNPJ inválido. Confira os dígitos.");
     patch.taxId = digits;
   }
   if ("postalCode" in patch && patch.postalCode)

@@ -85,7 +85,7 @@ test("atalhos móveis respeitam o perfil e deixam o menu completo como saída se
   );
   assert.deepEqual(
     mobileNavigationForRole("SALES").map((item) => item.href),
-    ["/home", "/clientes", "/atendimento", "/pedidos"],
+    ["/home", "/por-perto", "/atendimento", "/pedidos"],
   );
   assert.deepEqual(
     mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
