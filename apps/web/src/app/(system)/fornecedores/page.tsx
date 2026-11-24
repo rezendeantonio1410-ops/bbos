@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { brazilianCepDigits, formatBrazilianCep, lookupBrazilianCep } from "@/lib/brazil-address";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
+import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
+import { CnpjRegistryPanel, CnpjSearchButton } from "@/components/cnpj-registry-panel";
 
 const API = `${getApiBaseUrl()}/green-coffee-purchases`;
 const input =
@@ -303,6 +305,38 @@ export default function SuppliersPage() {
   const [contactAuthorized, setContactAuthorized] = useState(false);
   const [contactActive, setContactActive] = useState(true);
   const [contactMessage, setContactMessage] = useState("");
+  const supplierFormRef = useRef<HTMLFormElement | null>(null);
+  // Street + number from the Receita lookup survive the CEP lookup that follows.
+  const pendingAddressRef = useRef<{ cep: string; address: string } | null>(null);
+  // CNPJ first: the free Receita Federal registry fills the form; all editable.
+  const supplierCnpjLookup = useCnpjRegistryAutofill({
+    cnpj: supplierTaxId.replace(/\D/g, "").length === 14 ? supplierTaxId : "",
+    enabled: supplierOpen && !editingSupplier,
+    onResolved: (record, context) => {
+      const form = supplierFormRef.current;
+      const put = (name: string, value: string | null | undefined, previous: string | null | undefined) => {
+        const field = form?.elements.namedItem(name) as HTMLInputElement | null;
+        if (!field || !value) return;
+        const current = field.value.trim();
+        if (context.overwrite || !current || current === (previous ?? "")) field.value = value;
+      };
+      const before = context.previous;
+      put("name", record.legalName, before?.legalName);
+      put("tradeName", record.tradeName, before?.tradeName);
+      put("contactPhone", record.phone, before?.phone);
+      put("contactEmail", record.email, before?.email);
+      if (record.suggestedStateRegistration) {
+        setStateRegistrationType("NUMBER");
+        window.setTimeout(() => put("stateRegistration", record.suggestedStateRegistration, before?.suggestedStateRegistration), 0);
+      }
+      if (record.postalCode) {
+        const street = [record.street, record.number].filter(Boolean).join(", ");
+        pendingAddressRef.current = street ? { cep: record.postalCode, address: street } : null;
+        if (record.complement) setSupplierComplement((current) => (context.overwrite || !current ? record.complement ?? "" : current));
+        setSupplierCep(record.postalCode);
+      }
+    },
+  });
   const unitCepLookup = useBrazilianCepAutofill({
     postalCode: unitCep,
     enabled: Boolean(unitSupplier),
@@ -491,7 +525,9 @@ export default function SuppliersPage() {
       setSupplierCity(result.city);
       setSupplierIbgeCityCode(result.ibgeCityCode ?? "");
       setSupplierDistrict(result.district);
-      setSupplierAddress(result.address);
+      const pending = pendingAddressRef.current;
+      setSupplierAddress(pending && pending.cep === digits ? pending.address : result.address);
+      pendingAddressRef.current = null;
       setMunicipalities((current) =>
         current.some((item) => item.name === result.city)
           ? current
@@ -685,104 +721,109 @@ export default function SuppliersPage() {
           <option value="">Todos</option>
         </select>
       </div>
-      <div className="mt-6 space-y-4">
-        {filtered.map((supplier) => (
-          <Card key={supplier.id} className="p-5">
-            <div className="flex flex-col justify-between gap-4 md:flex-row">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-bold">
-                    {supplier.tradeName || supplier.name}
-                  </h2>
-                  <span className="rounded-full bg-stone-100 px-2 py-1 text-[11px] font-bold">
-                    {supplier.active ? "Ativo" : "Inativo"}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-stone-500">
-                  {supplier.legalName || supplier.name} ·{" "}
-                  {supplier.taxId || "Documento não informado"}
-                </p>
-                {supplier.taxIdVerificationStatus && (
-                  <p className="mt-1 text-xs text-stone-500">
-                    {verificationText[supplier.taxIdVerificationStatus]}
-                    {supplier.taxIdVerifiedAt
-                      ? ` · Consultado em ${new Date(supplier.taxIdVerifiedAt).toLocaleString("pt-BR")}`
-                      : ""}
-                  </p>
-                )}
-                <p className="mt-1 text-xs text-stone-500">
-                  {supplier.city || "—"}/{supplier.state || "—"}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => {
-                    setEditingSupplier(supplier);
-                    setSupplierState(supplier.state ?? "");
-                    setSupplierTaxId(supplier.taxId ?? "");
-                    setSupplierCountry(supplier.country ?? "Brasil");
-                    setSupplierOpen(true);
-                  }}
-                  className="min-h-10 rounded-xl border px-3 text-xs font-bold"
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() => setDetailsSupplier(supplier)}
-                  className="min-h-10 rounded-xl border px-3 text-xs font-bold"
-                >
-                  Detalhes
-                </button>
-                <button
-                  onClick={() => {
-                    setUnitSupplier(supplier);
-                    setUnitState(supplier.state ?? "");
-                  }}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold"
-                >
-                  <Plus size={14} />
-                  {originVocabulary(supplier.supplierType).action}
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2">
-              {supplier.originUnits.map((unit) => (
-                <div
-                  key={unit.id}
-                  className="rounded-xl bg-stone-50 p-3 text-sm"
-                >
-                  <p className="font-semibold">
-                    {unit.name}{" "}
-                    <span className="text-xs font-normal text-stone-500">
-                      · {unit.active ? "Ativa" : "Inativa"}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-forest-700">
-                    {originTypeText[unit.originType] ?? "Origem"}
-                  </p>
-                  <p className="mt-1 text-xs text-stone-500">
-                    {unit.municipality || "—"}/{unit.state} ·{" "}
-                    {unit.coffeeRegion?.name || "Região não informada"}
-                  </p>
-                </div>
-              ))}
-              {supplier.originUnits.length === 0 && (
-                <p className="rounded-xl border border-dashed p-4 text-sm text-stone-500">
-                  {originVocabulary(supplier.supplierType).empty}
-                </p>
-              )}
-            </div>
-          </Card>
-        ))}
+      {/* List report (SAP Fiori): one row per supplier, actions at the end. */}
+      <section aria-label="Fornecedores" className="mt-5 overflow-hidden rounded-2xl border bg-white">
+        <ul className="divide-y divide-stone-100 md:hidden">
+          {filtered.map((supplier) => (
+            <li key={supplier.id}>
+              <button type="button" onClick={() => setDetailsSupplier(supplier)} className="grid w-full grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-4 py-3 text-left">
+                <span className="truncate font-semibold">{supplier.tradeName || supplier.name}</span>
+                <span className="text-xs text-stone-500">{supplier.state || "—"}</span>
+                <span className="truncate text-xs text-stone-500">{supplier.taxId || "Documento não informado"} · {supplier.city || "—"}</span>
+                <span className="text-xs text-stone-500">{supplier.originUnits.length} unid.</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead className="bg-stone-50 text-[11px] text-stone-500">
+              <tr>
+                <th scope="col" className="px-4 py-2.5 font-medium">Fornecedor</th>
+                <th scope="col" className="px-4 py-2.5 font-medium">Tipo</th>
+                <th scope="col" className="px-4 py-2.5 font-medium">CPF / CNPJ</th>
+                <th scope="col" className="px-4 py-2.5 font-medium">Cidade</th>
+                <th scope="col" className="px-4 py-2.5 font-medium">Unidades e origens</th>
+                <th scope="col" className="px-4 py-2.5 font-medium">Situação</th>
+                <th scope="col" className="px-4 py-2.5 font-medium"><span className="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {filtered.map((supplier) => {
+                const verified = supplier.taxIdVerificationStatus === "VERIFIED_ACTIVE";
+                return (
+                  <tr key={supplier.id} className="hover:bg-stone-50">
+                    <td className="max-w-[18rem] px-4 py-2.5">
+                      <button type="button" onClick={() => setDetailsSupplier(supplier)} className="block max-w-full truncate text-left font-semibold underline decoration-stone-300 underline-offset-4 hover:decoration-stone-800">
+                        {supplier.tradeName || supplier.name}
+                      </button>
+                      {supplier.legalName && supplier.legalName !== (supplier.tradeName || supplier.name) && (
+                        <span className="block truncate text-[11px] text-stone-500">{supplier.legalName}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-stone-600">{types.find(([value]) => value === supplier.supplierType)?.[1] ?? supplier.supplierType}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-stone-700">
+                      {supplier.taxId || "—"}
+                      <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold ${verified ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
+                        {verified ? "verificado" : "não verificado"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-stone-700">{supplier.city || "—"}{supplier.state ? `/${supplier.state}` : ""}</td>
+                    <td className="px-4 py-2.5 text-xs text-stone-600">
+                      {supplier.originUnits.length ? (
+                        <button type="button" onClick={() => setDetailsSupplier(supplier)} className="underline underline-offset-2">
+                          {supplier.originUnits.length} {supplier.originUnits.length === 1 ? "unidade" : "unidades"}
+                        </button>
+                      ) : (
+                        <span className="text-stone-400">nenhuma</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${supplier.active ? "bg-emerald-50 text-emerald-800" : "bg-stone-100 text-stone-600"}`}>
+                        {supplier.active ? "Ativo" : "Inativo"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        aria-label={`Editar ${supplier.tradeName || supplier.name}`}
+                        onClick={() => {
+                          setEditingSupplier(supplier);
+                          setSupplierState(supplier.state ?? "");
+                          setSupplierTaxId(supplier.taxId ?? "");
+                          setSupplierCountry(supplier.country ?? "Brasil");
+                          setSupplierOpen(true);
+                        }}
+                        className="rounded-md p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUnitSupplier(supplier);
+                          setUnitState(supplier.state ?? "");
+                        }}
+                        className="ml-1 rounded-md px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-100"
+                      >
+                        + {supplier.supplierType === "COOPERATIVE" ? "Unidade" : "Origem"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {filtered.length === 0 && (
-          <div className="rounded-2xl border border-dashed p-12 text-center text-sm text-stone-500">
-            Nenhum fornecedor encontrado.
-          </div>
+          <div className="p-12 text-center text-sm text-stone-500">Nenhum fornecedor encontrado.</div>
         )}
-      </div>
+        <p className="border-t border-stone-100 px-4 py-2 text-[11px] text-stone-400">{filtered.length} fornecedor(es)</p>
+      </section>
       {supplierOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-3">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-forest-950/30 p-3">
           <form
+            ref={supplierFormRef}
             key={editingSupplier?.id ?? "new"}
             onSubmit={(event) => void saveSupplier(event)}
             className="flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white p-6 shadow-2xl"
@@ -819,25 +860,9 @@ export default function SuppliersPage() {
                     ))}
                   </select>
                 </label>
-                <label className="text-sm font-semibold">
-                  Nome/Razão social
-                  <input
-                    name="name"
-                    required
-                    defaultValue={editingSupplier?.name ?? ""}
-                    className={input}
-                  />
-                </label>
-                <label className="text-sm font-semibold">
-                  Nome fantasia
-                  <input
-                    name="tradeName"
-                    defaultValue={editingSupplier?.tradeName ?? ""}
-                    className={input}
-                  />
-                </label>
-                <label className="text-sm font-semibold">
+                <label className="text-sm font-semibold sm:col-span-2">
                   CPF/CNPJ
+                  <span className="flex gap-2">
                   <input
                     name="taxId"
                     value={formatTaxId(supplierTaxId)}
@@ -848,6 +873,15 @@ export default function SuppliersPage() {
                     }}
                     className={input}
                   />
+                  {supplierTaxId.replace(/\D/g, "").length >= 12 && (
+                    <CnpjSearchButton onClick={supplierCnpjLookup.search} busy={supplierCnpjLookup.busy} className="mt-1" />
+                  )}
+                  </span>
+                  {supplierCnpjLookup.statusText && (
+                    <span className={`mt-1 block text-xs font-medium ${supplierCnpjLookup.warning ? "text-amber-800" : "text-stone-500"}`}>
+                      {supplierCnpjLookup.statusText}
+                    </span>
+                  )}
                   <span className="mt-1 block text-xs font-medium text-stone-500">
                     Situação cadastral:{" "}
                     {editingSupplier?.taxIdVerificationStatus
@@ -889,6 +923,28 @@ export default function SuppliersPage() {
                       )}
                     </div>
                   )}
+                </label>
+                {supplierCnpjLookup.record && (
+                  <div className="sm:col-span-2">
+                    <CnpjRegistryPanel record={supplierCnpjLookup.record} />
+                  </div>
+                )}
+                <label className="text-sm font-semibold">
+                  Nome/Razão social
+                  <input
+                    name="name"
+                    required
+                    defaultValue={editingSupplier?.name ?? ""}
+                    className={input}
+                  />
+                </label>
+                <label className="text-sm font-semibold">
+                  Nome fantasia
+                  <input
+                    name="tradeName"
+                    defaultValue={editingSupplier?.tradeName ?? ""}
+                    className={input}
+                  />
                 </label>
                 <label className="text-sm font-semibold">
                   Situação da IE
@@ -946,6 +1002,7 @@ export default function SuppliersPage() {
                     </div>
                   )}
                 </label>
+                <p className="mt-2 text-xs font-bold uppercase tracking-[.1em] text-stone-500 sm:col-span-2">Contato</p>
                 <label className="text-sm font-semibold">
                   Telefone
                   <input name="contactPhone" className={input} />
@@ -961,6 +1018,37 @@ export default function SuppliersPage() {
                 <label className="text-sm font-semibold">
                   Contato principal
                   <input name="contactName" className={input} />
+                </label>
+                <p className="mt-2 text-xs font-bold uppercase tracking-[.1em] text-stone-500 sm:col-span-2">Endereço</p>
+                <label className="text-sm font-semibold">
+                  CEP
+                  <input
+                    name="postalCode"
+                    inputMode="numeric"
+                    pattern="[0-9]{5}-?[0-9]{3}"
+                    placeholder="00000-000"
+                    value={supplierCep.replace(/(\d{5})(\d)/, "$1-$2")}
+                    onChange={(event) => {
+                      setCepStatus("idle");
+                      setSupplierCep(
+                        event.target.value.replace(/\D/g, "").slice(0, 8),
+                      );
+                    }}
+                    className={input}
+                  />
+                  {cepStatus !== "idle" && (
+                    <span className="mt-1 block text-xs text-stone-500">
+                      {cepStatus === "loading"
+                        ? "Consultando CEP..."
+                        : cepStatus === "found"
+                          ? supplierAddress || supplierDistrict
+                            ? "Endereço preenchido automaticamente."
+                            : "CEP geral: município e estado preenchidos. Informe o logradouro."
+                          : cepStatus === "not-found"
+                            ? "CEP não encontrado."
+                            : "Serviço de CEP indisponível."}
+                    </span>
+                  )}
                 </label>
                 <label className="text-sm font-semibold">
                   País
@@ -1022,36 +1110,6 @@ export default function SuppliersPage() {
                   value={supplierIbgeCityCode}
                 />
                 <label className="text-sm font-semibold">
-                  CEP
-                  <input
-                    name="postalCode"
-                    inputMode="numeric"
-                    pattern="[0-9]{5}-?[0-9]{3}"
-                    placeholder="00000-000"
-                    value={supplierCep.replace(/(\d{5})(\d)/, "$1-$2")}
-                    onChange={(event) => {
-                      setCepStatus("idle");
-                      setSupplierCep(
-                        event.target.value.replace(/\D/g, "").slice(0, 8),
-                      );
-                    }}
-                    className={input}
-                  />
-                  {cepStatus !== "idle" && (
-                    <span className="mt-1 block text-xs text-stone-500">
-                      {cepStatus === "loading"
-                        ? "Consultando CEP..."
-                        : cepStatus === "found"
-                          ? supplierAddress || supplierDistrict
-                            ? "Endereço preenchido automaticamente."
-                            : "CEP geral: município e estado preenchidos. Informe o logradouro."
-                          : cepStatus === "not-found"
-                            ? "CEP não encontrado."
-                            : "Serviço de CEP indisponível."}
-                    </span>
-                  )}
-                </label>
-                <label className="text-sm font-semibold">
                   Bairro / Distrito / Localidade
                   <input
                     name="district"
@@ -1112,7 +1170,7 @@ export default function SuppliersPage() {
         </div>
       )}
       {detailsSupplier && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-3">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-forest-950/30 p-3">
           <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">Detalhes do fornecedor</h2>
@@ -1197,7 +1255,7 @@ export default function SuppliersPage() {
         </div>
       )}
       {unitSupplier && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-forest-950/30 p-3">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-forest-950/30 p-3">
           <form
             onSubmit={(event) => void saveUnit(event)}
             className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
