@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   Search,
+  PlugZap,
   Settings,
   Sparkles,
   Smartphone,
@@ -776,6 +777,18 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                           >
                             <Smartphone size={15} />
                             Aplicativo no iPhone
+                          </Link>
+                        )}
+                        {(["ADMIN", "EXECUTIVE"] as string[]).includes(
+                          user.role,
+                        ) && (
+                          <Link
+                            href="/integracoes"
+                            onClick={() => setProfileOpen(false)}
+                            className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
+                          >
+                            <PlugZap size={15} />
+                            Integrações
                           </Link>
                         )}
                         {user.role === "ADMIN" && (
