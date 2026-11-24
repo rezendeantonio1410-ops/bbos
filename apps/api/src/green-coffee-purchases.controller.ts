@@ -1812,7 +1812,11 @@ export class GreenCoffeePurchasesController {
             },
           },
         });
-        if (approved) await ensureBrokerCommissionPayable(tx, purchase as any);
+        if (approved) {
+          await ensureBrokerCommissionPayable(tx, purchase as any);
+          // Each approved installment becomes an account payable (cash flow).
+          await this.commitInstallments(tx, purchase.id);
+        }
         if (action === "SUBMIT") {
           await tx.greenCoffeeAuditEvent.create({
             data: {
@@ -1868,6 +1872,27 @@ export class GreenCoffeePurchasesController {
     });
   }
 
+  /**
+   * Repair for purchases approved before installments generated accounts
+   * payable: creates the missing payables (open). The payment, with date and
+   * bank account, is then registered in Contas a pagar as usual.
+   */
+  @Post(":id/financial-commitment")
+  async createFinancialCommitment(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.sessionActor(request);
+    return this.db.$transaction(async (tx) => {
+      const purchase = await tx.greenCoffeePurchase.findFirst({
+        where: { id, companyId: actor.companyId },
+        select: { id: true, companyId: true, approvalStatus: true },
+      });
+      if (!purchase) throw new NotFoundException("Compra não encontrada.");
+      await this.requireApprover(tx, purchase.companyId, actor);
+      if (purchase.approvalStatus !== PurchaseApprovalStatus.APPROVED)
+        throw new BadRequestException("Só compras aprovadas geram contas a pagar.");
+      return { created: await this.commitInstallments(tx, purchase.id) };
+    });
+  }
+
   @Patch(":id/approve")
   async approve(@Param("id") id: string, @Req() request: any) {
     const actor = await this.sessionActor(request);
@@ -1915,6 +1940,7 @@ export class GreenCoffeePurchasesController {
             actorName: actor.userName,
           },
         });
+        await this.commitInstallments(tx, id);
         const approvedPurchase = await tx.greenCoffeePurchase.findUnique({
           where: { id },
           include: this.include,
@@ -2411,8 +2437,10 @@ export class GreenCoffeePurchasesController {
       include: { installments: true },
     });
     if (!purchase) throw new NotFoundException("Compra não encontrada.");
+    let created = 0;
     for (const installment of purchase.installments) {
       if (installment.accountsPayableId) continue;
+      created += 1;
       const payable = await tx.accountsPayable.create({
         data: {
           companyId: purchase.companyId,
@@ -2435,6 +2463,7 @@ export class GreenCoffeePurchasesController {
         },
       });
     }
+    if (!created) return 0;
     await tx.greenCoffeeAuditEvent.create({
       data: {
         companyId: purchase.companyId,
@@ -2442,9 +2471,10 @@ export class GreenCoffeePurchasesController {
         action: "FINANCIAL_COMMITMENT_CREATED",
         actorId: purchase.createdByUserId,
         actorName: purchase.createdByName,
-        metadata: { installmentCount: purchase.installments.length },
+        metadata: { installmentCount: created },
       },
     });
+    return created;
   }
 
   private async requireApprover(

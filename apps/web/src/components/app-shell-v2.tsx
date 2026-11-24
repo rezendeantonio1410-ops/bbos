@@ -71,6 +71,17 @@ const corporateTitleByRole: Record<string, string> = {
   MARKETPLACE_OPERATOR: "Operador de marketplace",
 };
 
+/** Pages reached through in-page tabs (not in the side menu). */
+const subpageLabels: Record<string, string> = {
+  "/financeiro/receber": "Contas a receber",
+  "/financeiro/pagar": "Contas a pagar",
+  "/financeiro/agenda-vendas": "Agenda de vendas",
+  "/financeiro/fluxo-caixa": "Fluxo de caixa",
+  "/financeiro/bancos-contas": "Bancos e contas",
+  "/financeiro/conciliacao": "Conciliação",
+  "/financeiro/parametros": "Parâmetros",
+};
+
 const mobileShortLabelByHref: Record<string, string> = {
   "/home": "Início",
   "/dashboard": "Executivo",
@@ -379,7 +390,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
   const currentLabel =
     isSales && pathname === "/home"
       ? "Painel comercial"
-      : (pageLabels[pathname] ?? "BBOS");
+      : (pageLabels[pathname] ?? subpageLabels[pathname] ?? pageLabels[
+          navGroups.flatMap((group) => group.items).filter((item) => pathname.startsWith(`${item.href}/`)).sort((a, b) => b.href.length - a.href.length)[0]?.href ?? ""
+        ] ?? "BBOS");
   const openAssistant = () =>
     window.dispatchEvent(new Event("bbos:open-assistant"));
   const logout = async () => {

@@ -23,6 +23,8 @@ import {
   type CashFlowProjectionSource,
   type CashFlowTransaction,
   type GreenCoffeeProjectionSource,
+  type TaxProjectionSource,
+  firstBelowMinimum,
 } from "@/lib/finance-cashflow";
 
 type Summary = {
@@ -37,6 +39,18 @@ type Summary = {
   receivableProjection?: CashFlowProjectionSource[];
   payableProjection?: CashFlowProjectionSource[];
   greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
+  taxProjection?: TaxProjectionSource[];
+  settings?: {
+    minimumCashBalance: number;
+    monthlyRevenueTarget: number | null;
+    taxRegime: string;
+    configured: boolean;
+    taxRatesConfirmed: boolean;
+    icmsEstimated: boolean;
+  };
+  dataGaps?: {
+    greenCoffeePurchasesWithoutPayable: Array<{ id: string; purchaseNumber: string; supplier: string | null; totalValue: number }>;
+  };
 };
 
 type Filter = "ALL" | CashFlowKind;
@@ -71,6 +85,7 @@ const filterOptions: Array<{ value: Filter; label: string }> = [
   { value: "RECEIVABLE", label: "A receber" },
   { value: "PAYABLE", label: "A pagar" },
   { value: "PURCHASE", label: "Compras previstas" },
+  { value: "TAX", label: "Impostos (estimados)" },
 ];
 
 export default function CashFlowPage() {
@@ -79,6 +94,7 @@ export default function CashFlowPage() {
     "loading",
   );
   const [filter, setFilter] = React.useState<Filter>("ALL");
+  const [reload, setReload] = React.useState(0);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -106,7 +122,7 @@ export default function CashFlowPage() {
         setStatus("error");
       });
     return () => controller.abort();
-  }, []);
+  }, [reload]);
 
   const projection = React.useMemo(
     () =>
@@ -115,9 +131,32 @@ export default function CashFlowPage() {
         receivables: data.receivableProjection,
         payables: data.payableProjection,
         purchases: data.greenCoffeePurchaseProjection,
+        taxes: data.taxProjection,
       }),
     [data],
   );
+  const minimum = data.settings?.minimumCashBalance ?? 0;
+  const belowMinimum = React.useMemo(() => firstBelowMinimum(projection, minimum), [projection, minimum]);
+  const [gapBusy, setGapBusy] = React.useState<string | null>(null);
+  const [gapMessage, setGapMessage] = React.useState("");
+  const createCoffeePayables = async (purchaseId: string) => {
+    setGapBusy(purchaseId);
+    setGapMessage("");
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/green-coffee-purchases/${encodeURIComponent(purchaseId)}/financial-commitment`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message ?? "Não foi possível gerar as contas a pagar.");
+      setGapMessage(`${body.created} conta(s) a pagar criada(s). Se já foi pago, registre o pagamento em Pagar.`);
+      setReload((value) => value + 1);
+    } catch (error) {
+      setGapMessage(error instanceof Error ? error.message : "Não foi possível gerar as contas a pagar.");
+    } finally {
+      setGapBusy(null);
+    }
+  };
   const series = React.useMemo(
     () =>
       buildCashFlowSeries({
@@ -131,7 +170,8 @@ export default function CashFlowPage() {
     () => projection.filter((item) => filter === "ALL" || item.kind === filter),
     [filter, projection],
   );
-  const projectedFromLines = projection.at(-1)?.balance ?? data.cash;
+  const estimatedTaxes = projection.filter((line) => line.kind === "TAX").reduce((sum, line) => sum + line.amount, 0);
+  const projectedFromLines = (projection.at(-1)?.balance ?? data.cash) + estimatedTaxes;
   const reconciled =
     Math.abs(projectedFromLines - data.projectedBalance) < 0.01;
 
@@ -155,6 +195,67 @@ export default function CashFlowPage() {
         </div>
         <DataStatus status={status} />
       </header>
+
+      {status === "ready" && (
+        <div className="mt-4 grid gap-3">
+          {minimum > 0 && data.cash < minimum ? (
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <strong>O caixa de hoje ({money.format(data.cash)}) já está abaixo do saldo mínimo de {money.format(minimum)}.</strong>{" "}
+              Faltam {money.format(minimum - data.cash)}.{" "}
+              {(projection.at(-1)?.balance ?? data.cash) >= minimum
+                ? "Pela previsão, o saldo volta ao mínimo dentro do período."
+                : "Pela previsão, o saldo não volta ao mínimo dentro do período."}
+            </div>
+          ) : belowMinimum ? (
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <strong>O caixa previsto fica abaixo do saldo mínimo de {money.format(minimum)}</strong> em{" "}
+              {date.format(new Date(belowMinimum.dueDate))}, com {money.format(belowMinimum.balance)}, depois de “{belowMinimum.document}”.
+            </div>
+          ) : minimum > 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              O caixa previsto fica acima do saldo mínimo de {money.format(minimum)} em todo o período.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Defina o saldo mínimo e os impostos em{" "}
+              <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros</Link> para o sistema avisar antes de o caixa ficar curto.
+            </div>
+          )}
+          {data.settings && !data.settings.taxRatesConfirmed && (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Impostos calculados com as alíquotas padrão do {data.settings.taxRegime === "LUCRO_REAL" ? "Lucro Real" : "regime escolhido"}
+              {data.settings.icmsEstimated ? "" : ", sem ICMS"}. Confirme com o contador em{" "}
+              <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros</Link>.
+            </p>
+          )}
+          {!!data.dataGaps?.greenCoffeePurchasesWithoutPayable.length && (
+            <div className="rounded-2xl border border-amber-200 bg-white p-4 text-sm">
+              <p className="font-semibold text-amber-900">Compras de café aprovadas sem conta a pagar</p>
+              <p className="mt-1 text-stone-600">
+                Elas não aparecem nas saídas. Gere as contas a pagar; se já foram pagas, registre o pagamento em Pagar com a data e a conta usadas.
+              </p>
+              <ul className="mt-3 grid gap-2">
+                {data.dataGaps.greenCoffeePurchasesWithoutPayable.map((purchase) => (
+                  <li key={purchase.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-2">
+                    <span>
+                      <strong>{purchase.purchaseNumber}</strong> · {purchase.supplier ?? "fornecedor"} · {money.format(purchase.totalValue)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void createCoffeePayables(purchase.id)}
+                      disabled={gapBusy !== null}
+                      className="min-h-10 rounded-xl bg-stone-950 px-3 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {gapBusy === purchase.id ? "Gerando..." : "Gerar contas a pagar"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {gapMessage && <p role="status" className="mt-2 text-sm text-stone-700">{gapMessage}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       <section className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Metric
@@ -443,12 +544,16 @@ function ProjectionRow({ line }: { line: CashFlowLine }) {
     ? "A receber"
     : line.kind === "PAYABLE"
       ? "A pagar"
-      : "Compra prevista";
+      : line.kind === "TAX"
+        ? "Imposto estimado"
+        : "Compra prevista";
   const typeClass = incoming
     ? "bg-emerald-50 text-emerald-800"
     : line.kind === "PAYABLE"
       ? "bg-rose-50 text-rose-800"
-      : "bg-amber-50 text-amber-900";
+      : line.kind === "TAX"
+        ? "bg-violet-50 text-violet-800"
+        : "bg-amber-50 text-amber-900";
   const statusClass =
     line.status === "Vencido"
       ? "bg-red-50 text-red-700"

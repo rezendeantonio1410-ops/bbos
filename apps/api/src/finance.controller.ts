@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Put,
   Post,
   Req,
   UnauthorizedException,
@@ -21,6 +22,13 @@ export class FinanceController {
     const actor = await this.auth.resolve(this.auth.readToken(req));
     if (!actor) throw new UnauthorizedException("Sessão inválida.");
     return actor;
+  }
+  @Get("settings") async settings(@Req() req: Request) {
+    return this.finance.getSettings((await this.actor(req)).companyId);
+  }
+  @Put("settings") async updateSettings(@Req() req: Request, @Body() body: Record<string, unknown>) {
+    const actor = await this.actor(req);
+    return this.finance.updateSettings(actor.companyId, actor.name, body ?? {});
   }
   @Get("summary") async summary(@Req() req: Request) {
     return this.finance.summary((await this.actor(req)).companyId);

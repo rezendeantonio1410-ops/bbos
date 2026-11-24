@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { planInboundPayables } from "./inbound-payables";
 import { prisma } from "@bbos/database";
 import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
@@ -201,6 +202,62 @@ export class FiscalInboundService {
       await transaction.$executeRawUnsafe(`UPDATE "FiscalDocument" SET "supplierId"=COALESCE("supplierId",$2),"matchStatus"=$3,"updatedAt"=NOW() WHERE id=$1`, documentId, purchase.supplierId, valueDifference <= tolerance ? "MATCHED" : "DIVERGENT");
     });
     return { matched: true, matchStatus: valueDifference <= tolerance ? "MATCHED" : "DIVERGENT", valueDifference, accountsPayableCreated: false };
+  }
+
+  /**
+   * Creates the accounts payable of a purchase invoice that is not a green
+   * coffee purchase (those already generate payables per installment).
+   * Idempotent: each installment has a fixed creation key.
+   */
+  async createPayables(companyId: string, actor: Pick<Actor, "id" | "name">, documentId: string, input: { category?: string; costCenterId?: string }) {
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT d.id,d.number,d."issueDate",d."totalAmount",d."paymentSnapshot",d."supplierId",d."issuerName",d.status,
+              EXISTS (SELECT 1 FROM "FiscalDocumentAllocation" a WHERE a."fiscalDocumentId"=d.id AND a."allocationType"='GREEN_COFFEE_PURCHASE') AS "isGreenCoffee"
+         FROM "FiscalDocument" d WHERE d.id=$1 AND d."companyId"=$2 AND d.direction='INBOUND' LIMIT 1`,
+      documentId, companyId,
+    );
+    const document = rows[0];
+    if (!document) throw new BadRequestException("Nota de entrada não encontrada.");
+    if (document.status !== "AUTHORIZED") throw new BadRequestException("Só notas autorizadas geram contas a pagar.");
+    if (document.isGreenCoffee) throw new BadRequestException("Esta nota é de uma compra de café verde: as contas a pagar vêm das parcelas da compra.");
+    const plan = planInboundPayables(document);
+    if (!plan.length) throw new BadRequestException("A nota não tem valor nem vencimento para gerar contas a pagar.");
+    const category = String(input.category ?? "").trim().slice(0, 80) || "INSUMOS_E_SERVICOS";
+    let costCenterId: string | null = null;
+    if (input.costCenterId) {
+      const center = await this.database.costCenter.findFirst({ where: { id: input.costCenterId, companyId }, select: { id: true } });
+      if (!center) throw new BadRequestException("Centro de custo inválido.");
+      costCenterId = center.id;
+    }
+    let created = 0;
+    await this.database.$transaction(async (transaction) => {
+      for (const item of plan) {
+        const exists = await transaction.accountsPayable.findUnique({ where: { creationKey: item.key }, select: { id: true } });
+        if (exists) continue;
+        await transaction.accountsPayable.create({
+          data: {
+            companyId,
+            supplierId: document.supplierId ?? null,
+            costCenterId,
+            description: `NF ${document.number ?? ""} · ${document.issuerName ?? "fornecedor"} · ${item.number}/${plan.length}`.slice(0, 200),
+            issueDate: document.issueDate ?? new Date(),
+            dueDate: new Date(`${item.dueDate}T12:00:00Z`),
+            amount: item.amount,
+            openAmount: item.amount,
+            category,
+            documentType: "NFE",
+            documentNumber: `${document.number ?? ""}-${item.number}`,
+            source: "NFE_ENTRADA",
+            creationKey: item.key,
+            createdById: actor.id ?? null,
+            createdByName: actor.name,
+            notes: `Gerado da nota de entrada ${document.number ?? documentId}`,
+          },
+        });
+        created += 1;
+      }
+    });
+    return { created, total: plan.length, alreadyExisting: plan.length - created };
   }
 
   async allocateItem(companyId: string, actor: Pick<Actor, "id" | "name">, documentId: string, input: { itemId?: string; allocationType?: string; purchaseId?: string; costCenterId?: string; targetReferenceId?: string; category?: string; description?: string }) {
