@@ -13,7 +13,8 @@ permissions:
 jobs:
   browser:
     name: Signa desktop and mobile browser smoke (isolated)
-    runs-on: ubuntu-latest
+    # Pin the runner to the Ubuntu LTS supported by Playwright 1.56.1.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
