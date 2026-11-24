@@ -317,6 +317,7 @@ if (local && process.env.CI === "true") {
  // Positive receipt test: no bank, provider, or fiscal calls. Never run against
  // Render; use only the disposable CI database and verify the admin fixture.
 if (local && process.env.CI === "true") {
+  let receiptContext;
   await check("baixa administrativa fictícia: uma única baixa e reflexo no portal", async () => {
     assert.ok(results.every((r) => r.ok), "verificações anteriores falharam; baixa de teste cancelada");
     const adminCookie = await login("admin@homolog.test");
@@ -392,7 +393,79 @@ if (local && process.env.CI === "true") {
     const foreign = await other("/summary");
     assert.equal(foreign.status, 200);
     assert.equal(foreign.json.partnerOrders.some((x) => x.id === "homolog-order-pix"), false);
+    receiptContext = { internal, titles, accountId: account.json.id, movement: movements[0], paymentId: first.json.payment.id };
     return "1 título, 1 pagamento, 1 movimento; quitação visível somente à Signa";
+  });
+
+  await check("extrato CSV fictício: importação e conciliação de recebimento sem duplicidade", async () => {
+    assert.ok(receiptContext, "baixa fictícia anterior não foi validada");
+    const { internal, titles, accountId, movement, paymentId } = receiptContext;
+    const before = await titles();
+    assert.equal(before.status, "PAID");
+    assert.equal(before.payments.length, 1);
+    assert.ok(movement.id);
+    const externalId = "CI-ONLY-" + randomUUID();
+    const date = new Date(movement.occurredAt).toISOString().slice(0, 10);
+    const statement = {
+      financialAccountId: accountId, format: "CSV", fileName: "extrato-ficticio-ci.csv",
+      content: ["data;descricao;valor;id", date + ";Recebimento fictício CI;76,80;" + externalId].join("\n"),
+    };
+    const imported = await internal("/finance/reconciliation/import", statement);
+    assert.ok([200, 201].includes(imported.status), `importação HTTP ${imported.status}`);
+    assert.equal(imported.json.imported, 1);
+    assert.equal(imported.json.duplicates, 0);
+    const reimported = await internal("/finance/reconciliation/import", statement);
+    assert.ok([200, 201].includes(reimported.status));
+    assert.equal(reimported.json.imported, 0);
+    assert.equal(reimported.json.duplicates, 1);
+    const bankPath = "/finance/reconciliation/bank-transactions?financialAccountId=" + encodeURIComponent(accountId);
+    const bankBefore = await internal(bankPath);
+    assert.equal(bankBefore.status, 200);
+    assert.equal(bankBefore.json.length, 1);
+    const bank = bankBefore.json[0];
+    assert.equal(bank.externalId, externalId);
+    assert.equal(bank.reconciliationStatus, "PENDING");
+    assert.equal(bank.reconciliationItem.status, "PENDING");
+    assert.equal(bank.reconciliationItem.financialTransactionId, null);
+    const matchPath = "/finance/reconciliation/" + bank.reconciliationItem.id + "/match";
+    const match = await internal(matchPath, { financialTransactionId: movement.id });
+    assert.ok([200, 201].includes(match.status), `conciliação HTTP ${match.status}`);
+    assert.equal(match.json.idempotent, false);
+    assert.equal(match.json.item.status, "MATCHED");
+    assert.equal(Number(match.json.item.matchedAmount), 76.8);
+    assert.equal(Number(match.json.item.difference), 0);
+    const repeated = await internal(matchPath, { financialTransactionId: movement.id });
+    assert.ok([200, 201].includes(repeated.status));
+    assert.equal(repeated.json.idempotent, true);
+    const bankAfter = await internal(bankPath);
+    assert.equal(bankAfter.status, 200);
+    assert.equal(bankAfter.json.length, 1);
+    assert.equal(bankAfter.json[0].reconciliationStatus, "MATCHED");
+    assert.equal(bankAfter.json[0].reconciliationItem.financialTransactionId, movement.id);
+    const reconciliation = await internal("/finance/reconciliation?financialAccountId=" + encodeURIComponent(accountId));
+    assert.equal(reconciliation.status, 200);
+    assert.equal(reconciliation.json.length, 1);
+    assert.equal(reconciliation.json[0].events.filter((event) => event.action === "MATCHED").length, 1);
+    const after = await titles();
+    assert.equal(after.status, "PAID");
+    assert.equal(Number(after.openAmount), 0);
+    assert.equal(after.paymentDate, before.paymentDate);
+    assert.equal(after.payments.length, 1);
+    assert.equal(after.payments[0].id, paymentId);
+    const finance = await internal("/finance/summary");
+    assert.equal(finance.status, 200);
+    const movements = finance.json.transactions.filter((x) => x.financialAccountId === accountId);
+    assert.equal(movements.length, 1);
+    assert.equal(movements[0].id, movement.id);
+    const portal = await signa("/summary");
+    assert.equal(portal.status, 200);
+    const row = portal.json.partnerOrders.find((x) => x.id === "homolog-order-pix");
+    assert.ok(row);
+    assert.equal(row.receivableStatus, "PAID");
+    assert.equal(Number(row.openAmount), 0);
+    assert.equal(new Date(row.paymentDate).toISOString(), new Date(after.paymentDate).toISOString());
+    assert.equal(row.pixAvailable, false);
+    return "1 crédito, 1 conciliação, 1 evento MATCHED, 1 pagamento e 1 movimento financeiro";
   });
 }
 
