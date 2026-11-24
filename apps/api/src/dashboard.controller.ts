@@ -1,7 +1,8 @@
-import { Controller, Get, Query, Req } from "@nestjs/common";
+import { Controller, Get, NotFoundException, Param, Query, Req, ServiceUnavailableException } from "@nestjs/common";
 import type { ExecutiveDashboard, Period } from "@bbos/shared";
 import { DashboardService } from "./dashboard.service";
 import { salesPortfolioPartnerId } from "./sales-portfolio";
+import { getStateShapes } from "./municipality-shapes";
 
 @Controller("dashboard")
 export class DashboardController {
@@ -24,6 +25,34 @@ export class DashboardController {
       request.user!.role === "SALES",
       portfolioPartnerId,
     );
+  }
+
+  @Get("sales-geography")
+  salesGeography(
+    @Req()
+    request: { user?: { companyId: string; role: string; storefrontPartnerId?: string | null } },
+    @Query("period") period: Period = "month",
+  ) {
+    const safePeriod: Period = ["day", "week", "month", "year"].includes(period) ? period : "month";
+    return this.dashboard.salesGeography(
+      request.user!.companyId,
+      safePeriod,
+      request.user!.role === "SALES",
+      salesPortfolioPartnerId(request.user!),
+    );
+  }
+
+  /** Real municipality outlines (IBGE) for the sales map of one state. */
+  @Get("geo/states/:state")
+  async stateShapes(@Param("state") state: string) {
+    let shapes;
+    try {
+      shapes = await getStateShapes(String(state ?? "").slice(0, 2));
+    } catch {
+      throw new ServiceUnavailableException("Mapa do IBGE indisponível agora. Tente novamente em instantes.");
+    }
+    if (!shapes) throw new NotFoundException("Estado não encontrado.");
+    return shapes;
   }
 
   @Get("industrial")

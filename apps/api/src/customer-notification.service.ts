@@ -7,6 +7,8 @@ import {
   renderPartnerOrderConfirmedEmail,
 } from "./customer-email-template";
 import { buildCustomerOrderPdf } from "./customer-order-pdf";
+import { isBillingEmailTemplate } from "./billing-emails";
+import { NotificationSkipped, composeBillingEmail } from "./billing-email.service";
 
 type TransactionalEmail = {
   destination: string;
@@ -70,6 +72,15 @@ export class CustomerNotificationService {
 
   private async sendEmail(row: any) {
     const payload = row.payload || {};
+    if (isBillingEmailTemplate(row.template)) {
+      const email = await composeBillingEmail(this.database, row, {
+        assets: this.emailAssets(),
+      });
+      return this.sendTransactionalEmail({
+        destination: row.destination,
+        ...email,
+      });
+    }
     if (row.template === "ORDER_PREPARATION") {
       return this.sendTransactionalEmail({
         destination: row.destination,
@@ -152,6 +163,14 @@ export class CustomerNotificationService {
       return { processed: true, sent: true, id: row.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (error instanceof NotificationSkipped) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "CustomerNotificationOutbox" SET status='CANCELLED',"lastError"=$2,"updatedAt"=NOW() WHERE id=$1`,
+          row.id,
+          message.slice(0, 2000),
+        );
+        return { processed: true, skipped: true, id: row.id };
+      }
       const retryMinutes = Math.min(
         120,
         Math.max(5, 2 ** Math.min(Number(row.attempts || 1), 6)),

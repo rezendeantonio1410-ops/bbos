@@ -6,7 +6,6 @@ import {
   ArrowRight,
   ClipboardCheck,
   Factory,
-  PackageCheck,
   Plus,
   ShieldAlert,
   ShoppingBag,
@@ -15,7 +14,6 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
-import { Card } from "@bbos/ui";
 import {
   getApiRoot,
   fetchSessionIdentity,
@@ -28,6 +26,48 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 const kg = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const percent = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+
+/* Small hand-drawn illustrations for the coffee path (decorative). */
+function SackArt() {
+  return (
+    <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><path d="M8 10c0-3 18-3 18 0l-2 18c0 2-14 2-14 0z" fill="#E6D3B8" stroke="#8A5A35" strokeWidth="1.5" /><ellipse cx="14" cy="18" rx="2" ry="3" fill="#6B8F4E" /><ellipse cx="20" cy="20" rx="2" ry="3" fill="#6B8F4E" /></svg>
+  );
+}
+function FlaskArt() {
+  return (
+    <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><path d="M13 6h8M15 6v8l-6 12c-1 2 0 3 2 3h12c2 0 3-1 2-3l-6-12V6" fill="none" stroke="#2F6B57" strokeWidth="1.8" /><path d="M11 22h12" stroke="#2F6B57" strokeWidth="1.5" /></svg>
+  );
+}
+function RoasterArt() {
+  return (
+    <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><rect x="7" y="12" width="20" height="14" rx="3" fill="#F3E1C4" stroke="#9A5B06" strokeWidth="1.5" /><path d="M12 12c0-3 2-4 2-6M17 12c0-3 2-4 2-6M22 12c0-3 2-4 2-6" stroke="#9A5B06" strokeWidth="1.4" fill="none" /></svg>
+  );
+}
+function BoxArt() {
+  return (
+    <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><rect x="8" y="10" width="18" height="18" rx="2" fill="#EFE7DA" stroke="#56615C" strokeWidth="1.4" /><path d="M8 15h18" stroke="#56615C" /><circle cx="17" cy="21" r="3" fill="#8A5A35" /></svg>
+  );
+}
+function InvoiceArt() {
+  return (
+    <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><path d="M9 7h16v20H9z" fill="#fff" stroke="#2F6B57" strokeWidth="1.5" /><path d="M12 12h10M12 16h10M12 20h6" stroke="#2F6B57" strokeWidth="1.4" /></svg>
+  );
+}
+function TruckArt() {
+  return (
+    <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><path d="M4 12h16v11H4zM20 15h5l4 4v4h-9z" fill="#fff" stroke="#56615C" strokeWidth="1.5" /><circle cx="9" cy="24" r="2.5" fill="#56615C" /><circle cx="24" cy="24" r="2.5" fill="#56615C" /></svg>
+  );
+}
+function ProgressRing({ value }: { value: number }) {
+  const circumference = 2 * Math.PI * 19;
+  return (
+    <svg aria-hidden width="46" height="46" viewBox="0 0 46 46" className="shrink-0">
+      <circle cx="23" cy="23" r="19" fill="none" stroke="#E3E8E2" strokeWidth="6" />
+      <circle cx="23" cy="23" r="19" fill="none" stroke="#2F6B57" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(Math.max(0, Math.min(100, value)) / 100) * circumference} ${circumference}`} transform="rotate(-90 23 23)" />
+    </svg>
+  );
+}
 
 type AlertTone = "CRÍTICO" | "ATENÇÃO" | "INFORMATIVO" | "POSITIVO";
 type HomeData = {
@@ -165,40 +205,10 @@ export function HomeCommandV3() {
             ? "insufficient"
             : "healthy";
 
-  const hero = getHeroState(state, critical, attention);
   const openAI = () => window.dispatchEvent(new Event("bbos:open-assistant"));
   const finishedAvailable = Math.max(
     0,
     home.finishedGoodsUnits - home.finishedGoodsReserved,
-  );
-  const flowSteps = [
-    {
-      label: "Pedido",
-      value: home.orderFlow.order,
-      detail: "rascunhos e confirmados",
-      icon: ShoppingBag,
-    },
-    {
-      label: "Preparação",
-      value: home.orderFlow.preparation,
-      detail: "reserva, separação e produção",
-      icon: Factory,
-    },
-    {
-      label: "Fiscal",
-      value: home.orderFlow.fiscal,
-      detail: "prontos para emissão",
-      icon: ClipboardCheck,
-    },
-    {
-      label: "Expedição",
-      value: home.orderFlow.shipping,
-      detail: "faturados ou em trânsito",
-      icon: PackageCheck,
-    },
-  ];
-  const bottleneck = flowSteps.reduce((largest, step) =>
-    step.value > largest.value ? step : largest,
   );
 
   if (loaded && isSales) {
@@ -213,198 +223,233 @@ export function HomeCommandV3() {
     );
   }
 
+  const plannedKg = home.productionPlannedKg;
+  const roastPercent = plannedKg > 0 ? Math.min(100, (home.productionActualKg / plannedKg) * 100) : 0;
+  const sacks = greenAvailable / 60;
+  const dateLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  // The coffee's path today (SAP Fiori process flow): each step opens its list.
+  const coffeePath: Array<{
+    key: string;
+    label: string;
+    value: string;
+    href: string;
+    tone: "neutral" | "ok" | "attention" | "critical";
+    badge?: string;
+    art: React.ReactNode;
+  }> = [
+    {
+      key: "purchase",
+      label: "Compras a receber",
+      value: String(home.openPurchases),
+      href: "/cafe-verde",
+      tone: "neutral",
+      art: <SackArt />,
+    },
+    {
+      key: "lab",
+      label: "No laboratório",
+      value: String(home.pendingLab),
+      href: "/laboratorio",
+      tone: home.pendingLab ? "attention" : "ok",
+      badge: home.pendingLab ? "aguardando análise" : "em dia",
+      art: <FlaskArt />,
+    },
+    {
+      key: "roast",
+      label: "Torra no mês",
+      value: plannedKg > 0 ? `${kg.format(home.productionActualKg)} / ${kg.format(plannedKg)} kg` : `${kg.format(home.productionActualKg)} kg`,
+      href: "/producao",
+      tone: plannedKg > 0 && roastPercent < 50 ? "attention" : "neutral",
+      badge: plannedKg > 0 ? `${percent.format(roastPercent)}% do plano` : undefined,
+      art: <RoasterArt />,
+    },
+    {
+      key: "stock",
+      label: "Produto acabado livre",
+      value: `${kg.format(finishedAvailable)} un.`,
+      href: "/estoque",
+      tone: finishedAvailable > 0 ? "neutral" : "attention",
+      art: <BoxArt />,
+    },
+    {
+      key: "fiscal",
+      label: "Prontos para NF-e",
+      value: String(home.orderFlow.fiscal),
+      href: "/pedidos",
+      tone: home.orderFlow.fiscal ? "ok" : "neutral",
+      badge: home.orderFlow.fiscal ? "emitir" : undefined,
+      art: <InvoiceArt />,
+    },
+    {
+      key: "shipping",
+      label: "Na expedição",
+      value: String(home.orderFlow.shipping),
+      href: home.overdueOrders ? "/pedidos?filtro=atrasados" : "/pedidos",
+      tone: home.overdueOrders ? "critical" : "neutral",
+      badge: home.overdueOrders ? `${home.overdueOrders} sem entrega registrada` : undefined,
+      art: <TruckArt />,
+    },
+  ];
+  const toneRing = {
+    neutral: "bg-[var(--bbos-surface-subtle)] border-[var(--bbos-border)]",
+    ok: "bg-[var(--bbos-success-soft)] border-[#cfe6d8]",
+    attention: "bg-[var(--bbos-warning-soft)] border-[#f1d9a8]",
+    critical: "bg-[#fdecea] border-[#f3c1bb]",
+  } as const;
+  const toneBadge = {
+    neutral: "bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-secondary)]",
+    ok: "bg-[var(--bbos-success-soft)] text-[var(--bbos-success)]",
+    attention: "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]",
+    critical: "bg-[#fdecea] text-[var(--bbos-danger)]",
+  } as const;
+  const decisions = home.alerts.filter((alert) => alert.tone === "CRÍTICO" || alert.tone === "ATENÇÃO");
+  const summary =
+    state === "loading"
+      ? "Reunindo a operação de hoje…"
+      : state === "unavailable"
+        ? "A conexão com os dados está sendo retomada."
+        : decisions.length
+          ? `${decisions.length} ${decisions.length === 1 ? "coisa pede" : "coisas pedem"} você hoje. O resto está andando.`
+          : "Nada pede decisão agora. A operação está andando.";
+
   return (
     <div className="mx-auto w-full max-w-[1500px] space-y-4 pb-6">
-      <section className="flex flex-col gap-4 rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_8px_24px_rgba(21,58,51,.045)] sm:flex-row sm:items-center sm:justify-between">
+      <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-extrabold uppercase tracking-[.15em] text-[var(--bbos-coffee-green)]">
-            Bispo Coffees · Fluxo operacional
+          <p className="text-[11px] font-bold uppercase tracking-[.12em] text-[var(--bbos-coffee-green)] first-letter:uppercase">
+            {dateLabel}
           </p>
-          <h1 className="mt-1 text-[clamp(26px,2.6vw,36px)] font-semibold leading-tight tracking-[-.035em]">
-            {greeting}, {firstName}.
+          <h1 className="mt-1 text-[clamp(24px,2.4vw,32px)] font-semibold leading-tight tracking-[-.02em]">
+            {greeting}{firstName ? `, ${firstName}` : ""}.
           </h1>
-          <p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">
-            {hero.summary}
-          </p>
+          <p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">{summary}</p>
         </div>
         <button
           type="button"
           onClick={openAI}
-          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-4 text-xs font-bold text-[var(--bbos-intelligence)] hover:bg-[var(--bbos-intelligence-soft)]"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 self-start rounded-full border border-[var(--bbos-border)] bg-white px-4 text-xs font-semibold text-[var(--bbos-intelligence)] hover:bg-[var(--bbos-intelligence-soft)] sm:self-auto"
         >
           <Sparkles size={15} /> Perguntar ao BBOS
         </button>
       </section>
 
-      <section className="overflow-hidden rounded-[18px] border bg-[var(--bbos-surface-card)] shadow-[0_6px_20px_rgba(21,58,51,.035)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
-              Do pedido à entrega
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--bbos-text-muted)]">
-              {bottleneck.value > 0
-                ? `Maior concentração agora: ${bottleneck.label.toLowerCase()} (${bottleneck.value}).`
-                : "Nenhum pedido ativo nas etapas operacionais."}
-            </p>
-          </div>
-          <Link
-            href="/pedidos"
-            className="inline-flex items-center gap-1 text-xs font-bold text-[var(--bbos-coffee-green)]"
-          >
-            Abrir pedidos <ArrowRight size={13} />
+      <section aria-labelledby="coffee-path-title" className="rounded-2xl border bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="coffee-path-title" className="text-base font-semibold">O caminho do café hoje</h2>
+          <Link href="/pedidos" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--bbos-coffee-green)]">
+            Ver pedidos <ArrowRight size={13} />
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-px bg-[var(--bbos-surface-border)] xl:grid-cols-4">
-          {flowSteps.map((step, index) => (
-            <FlowStep
-              key={step.label}
-              {...step}
-              index={index + 1}
-              highlighted={step.value > 0 && step.label === bottleneck.label}
-            />
+        <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {coffeePath.map((step, index) => (
+            <li key={step.key} className="relative">
+              {index < coffeePath.length - 1 && (
+                <span aria-hidden className="absolute left-[calc(50%+38px)] right-[-12px] top-[34px] hidden border-t-2 border-dashed border-[#c9d2cb] xl:block" />
+              )}
+              <Link
+                href={step.href}
+                className="group flex flex-col items-center rounded-xl px-2 py-2 text-center transition hover:bg-[var(--bbos-surface-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--bbos-focus-ring)]"
+              >
+                <span className={`grid size-[60px] place-items-center rounded-2xl border transition group-hover:-translate-y-0.5 ${toneRing[step.tone]}`}>
+                  {step.art}
+                </span>
+                <span className="mt-2 text-lg font-semibold tabular-nums leading-tight">{step.value}</span>
+                <span className="text-[12px] text-[var(--bbos-text-secondary)]">{step.label}</span>
+                {step.badge && (
+                  <span className={`mt-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${toneBadge[step.tone]}`}>
+                    {step.badge}
+                  </span>
+                )}
+              </Link>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section
-          id="prioridades"
-          className="rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_6px_20px_rgba(21,58,51,.035)]"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
-                Fila que precisa avançar
-              </p>
-              <h2 className="mt-1 text-lg font-bold tracking-tight">
-                O que merece sua atenção
-              </h2>
-            </div>
-            {home.alerts.length > 0 && (
-              <span className="rounded-full bg-[var(--bbos-danger-soft)] px-2.5 py-1 text-[11px] font-extrabold text-[var(--bbos-danger)]">
-                {home.alerts.length}{" "}
-                {home.alerts.length === 1 ? "pendência" : "pendências"}
-              </span>
-            )}
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <section aria-labelledby="decisions-title" className="rounded-2xl border bg-white p-4">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 id="decisions-title" className="text-base font-semibold">Para resolver agora</h2>
+            <span className="text-xs text-[var(--bbos-text-secondary)]">{decisions.length}</span>
           </div>
-          <div className="mt-3 space-y-2">
-            {home.alerts.length ? (
-              home.alerts
-                .slice(0, 4)
-                .map((item) => (
-                  <ActionCard key={`${item.tone}-${item.title}`} {...item} />
-                ))
-            ) : (
-              <CompactDecision state={state} isSales={isSales} />
-            )}
-          </div>
+          {decisions.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[var(--bbos-text-secondary)]">
+              {state === "loading" ? "Carregando…" : "Nada pendente. Bom trabalho."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-[#eef1ed]">
+              {decisions.map((alert) => (
+                <li key={alert.title} className="flex flex-wrap items-center gap-3 py-3">
+                  <span
+                    aria-hidden
+                    className={`grid size-9 shrink-0 place-items-center rounded-xl ${alert.tone === "CRÍTICO" ? "bg-[#fdecea] text-[var(--bbos-danger)]" : "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]"}`}
+                  >
+                    <ShieldAlert size={17} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{alert.title}</p>
+                    <p className="text-xs text-[var(--bbos-text-secondary)]">{alert.impact}</p>
+                  </div>
+                  <Link
+                    href={alert.href}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-[var(--bbos-action-primary)] px-3 text-xs font-semibold text-white hover:bg-[var(--bbos-action-primary-hover)]"
+                  >
+                    {alert.action} <ArrowRight size={13} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
-        <aside className="space-y-4">
-          <section className="rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_6px_20px_rgba(21,58,51,.035)]">
-            <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
-              Capacidade disponível
-            </p>
-            <div className="mt-3 divide-y">
-              <CapacityRow
-                label="Café torrado livre"
-                value={`${kg.format(home.roastedStock.availableKg)} kg`}
-                note={`${kg.format(home.roastedStock.reservedKg)} kg reservados`}
-                href="/estoque"
-              />
-              <CapacityRow
-                label="Produção planejada"
-                value={`${kg.format(home.productionPlannedKg)} kg`}
-                note={`${kg.format(home.productionActualKg)} kg produzidos no período`}
-                href="/producao"
-              />
-              <CapacityRow
-                label="Produto acabado livre"
-                value={`${kg.format(finishedAvailable)} un.`}
-                note={`${kg.format(home.finishedGoodsReserved)} un. reservadas`}
-                href="/estoque"
-              />
-            </div>
-          </section>
-
-          <section className="rounded-[18px] border bg-[var(--bbos-surface-card)] p-4 shadow-[0_6px_20px_rgba(21,58,51,.035)]">
-            <p className="text-[11px] font-extrabold uppercase tracking-[.13em] text-[var(--bbos-coffee-green)]">
-              Ações rápidas
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <QuickAction
-                href="/pedidos?novo=1"
-                icon={Plus}
-                label="Novo pedido"
-              />
-              <QuickAction
-                href="/producao"
-                icon={Factory}
-                label="Programar torra"
-              />
-              <QuickAction
-                href="/estoque"
-                icon={PackageCheck}
-                label="Ver estoque"
-              />
-              <QuickAction
-                href="/pedidos"
-                icon={ClipboardCheck}
-                label="Avançar pedidos"
-              />
-            </div>
-          </section>
-        </aside>
+        <section aria-labelledby="today-title" className="rounded-2xl border bg-white p-4">
+          <h2 id="today-title" className="mb-3 text-base font-semibold">Hoje</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <Link href="/vendas" className="rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
+              <span className="block text-xs text-[var(--bbos-text-secondary)]">Vendas hoje</span>
+              <span className="mt-0.5 block text-lg font-semibold tabular-nums">{money.format(home.salesToday)}</span>
+              <span className="block text-[11px] text-[var(--bbos-text-secondary)]">mês: {money.format(home.salesMonth)}</span>
+            </Link>
+            <Link href="/producao" className="flex items-center gap-3 rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
+              <ProgressRing value={roastPercent} />
+              <span>
+                <span className="block text-xs text-[var(--bbos-text-secondary)]">Torra do mês</span>
+                <span className="block text-lg font-semibold tabular-nums">{plannedKg > 0 ? `${percent.format(roastPercent)}%` : "—"}</span>
+              </span>
+            </Link>
+            <Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
+              <span className="block text-xs text-[var(--bbos-text-secondary)]">Café torrado livre</span>
+              <span className="mt-0.5 block text-lg font-semibold tabular-nums">{kg.format(home.roastedStock.availableKg)} kg</span>
+              <span className="block text-[11px] text-[var(--bbos-text-secondary)]">{kg.format(home.roastedStock.reservedKg)} kg reservados</span>
+            </Link>
+            <Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
+              <span className="block text-xs text-[var(--bbos-text-secondary)]">Café verde</span>
+              <span className="mt-0.5 block text-lg font-semibold tabular-nums">{kg.format(greenAvailable)} kg</span>
+              <span className="block text-[11px] text-[var(--bbos-text-secondary)]">
+                {sacks >= 1 ? `≈ ${percent.format(sacks)} sacas de 60 kg` : "menos de 1 saca"}
+                {greenReserved > 0 ? ` · ${kg.format(greenReserved)} kg reservados` : ""}
+              </span>
+            </Link>
+          </div>
+        </section>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <PulseCard
-          icon={WalletCards}
-          label="Vendas hoje"
-          value={money.format(home.salesToday)}
-          note={`No mês: ${money.format(home.salesMonth)}`}
-          href="/vendas"
-          tone="green"
-        />
-        <PulseCard
-          icon={PackageCheck}
-          label="Pedidos em aberto"
-          value={String(home.openOrders)}
-          note={
-            home.overdueOrders
-              ? `${home.overdueOrders} atrasados`
-              : "Nenhum atraso"
-          }
-          href={home.overdueOrders ? "/pedidos?filtro=atrasados" : "/pedidos"}
-          tone={home.overdueOrders ? "amber" : "neutral"}
-        />
-        <PulseCard
-          icon={Sprout}
-          label="Café verde livre"
-          value={`${kg.format(Math.max(0, greenAvailable - greenReserved))} kg`}
-          note={`${kg.format(greenReserved)} kg reservados`}
-          href="/cafe-verde"
-          tone="neutral"
-        />
-        <PulseCard
-          icon={ClipboardCheck}
-          label="Qualidade"
-          value={`${home.pendingLab} em análise`}
-          note={
-            home.pendingLab
-              ? "Aguardando liberação"
-              : "Nenhuma análise pendente"
-          }
-          href="/laboratorio"
-          tone="violet"
-        />
-      </section>
-
-      <p className="text-[11px] leading-5 text-[var(--bbos-text-muted)]">
-        Estado de confiança: {confidenceLabel(state)}. O BBOS não converte
-        ausência de dados em certeza.
-      </p>
+      <nav aria-label="Ações rápidas" className="flex flex-wrap gap-2">
+        {[
+          { href: "/pedidos?novo=1", label: "Novo pedido", icon: Plus },
+          { href: "/clientes?novo=1", label: "Novo cliente", icon: UsersRound },
+          { href: "/producao", label: "Programar torra", icon: Factory },
+          { href: "/recebimento", label: "Registrar recebimento", icon: Sprout },
+        ].map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--bbos-border)] bg-white px-4 text-xs font-semibold hover:bg-[var(--bbos-surface-subtle)]"
+          >
+            <Icon size={15} /> {label}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }
@@ -639,159 +684,6 @@ function SalesMetric({
   );
 }
 
-function FlowStep({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  index,
-  highlighted,
-}: {
-  label: string;
-  value: number;
-  detail: string;
-  icon: typeof Factory;
-  index: number;
-  highlighted: boolean;
-}) {
-  return (
-    <Link
-      href="/pedidos"
-      className="group bg-[var(--bbos-surface-card)] p-3.5 transition hover:bg-[var(--bbos-surface-subtle)]"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className="flex items-center gap-2">
-          <span
-            className={`grid size-8 place-items-center rounded-lg ${
-              highlighted
-                ? "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]"
-                : "bg-[var(--bbos-nav-active)] text-[var(--bbos-coffee-green)]"
-            }`}
-          >
-            <Icon size={16} />
-          </span>
-          <span>
-            <small className="block text-[10px] font-bold text-[var(--bbos-text-muted)]">
-              Etapa {index}
-            </small>
-            <strong className="block text-sm">{label}</strong>
-          </span>
-        </span>
-        <strong className="text-2xl tracking-tight">{value}</strong>
-      </div>
-      <p className="mt-2 text-[11px] leading-4 text-[var(--bbos-text-muted)]">
-        {detail}
-      </p>
-    </Link>
-  );
-}
-
-function CapacityRow({
-  label,
-  value,
-  note,
-  href,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-    >
-      <span className="min-w-0">
-        <span className="block text-xs font-bold">{label}</span>
-        <span className="mt-0.5 block truncate text-[10px] text-[var(--bbos-text-muted)]">
-          {note}
-        </span>
-      </span>
-      <strong className="shrink-0 text-sm text-[var(--bbos-coffee-green)]">
-        {value}
-      </strong>
-    </Link>
-  );
-}
-
-function QuickAction({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string;
-  icon: typeof Factory;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-20 flex-col justify-between rounded-xl border bg-[var(--bbos-surface-subtle)] p-3 text-xs font-bold transition hover:border-[var(--bbos-control-border)] hover:bg-white"
-    >
-      <Icon size={17} className="text-[var(--bbos-coffee-green)]" />
-      <span>{label}</span>
-    </Link>
-  );
-}
-
-function getHeroState(
-  state: EvidenceState,
-  critical: number,
-  attention: number,
-) {
-  if (state === "loading")
-    return {
-      summary: "Estou reunindo o contexto da operação para você.",
-      aiTitle: "Estou conectando os sinais",
-      aiCopy:
-        "Assim que os dados chegarem, eu separo o que é ruído do que pede decisão.",
-    };
-  if (state === "unavailable")
-    return {
-      summary:
-        "A conexão operacional está sendo retomada. Não vou concluir nada até os dados voltarem.",
-      aiTitle: "Aguardando dados confiáveis",
-      aiCopy: "Indisponibilidade não será tratada como operação saudável.",
-    };
-  if (state === "critical")
-    return {
-      summary: `${critical} ponto${critical > 1 ? "s" : ""} crítico${critical > 1 ? "s" : ""} pede${critical > 1 ? "m" : ""} decisão agora.`,
-      aiTitle: "Há uma decisão prioritária",
-      aiCopy: "Posso explicar causa, impacto e o próximo passo mais seguro.",
-    };
-  if (state === "attention")
-    return {
-      summary: `${attention} ponto${attention > 1 ? "s" : ""} merece${attention > 1 ? "m" : ""} atenção hoje.`,
-      aiTitle: "Há algo para acompanhar",
-      aiCopy: "Posso ordenar por impacto e mostrar o que fazer primeiro.",
-    };
-  if (state === "insufficient")
-    return {
-      summary:
-        "Ainda preciso de alguns registros para entender a operação de hoje.",
-      aiTitle: "O que falta para eu avaliar?",
-      aiCopy:
-        "Eu mostro quais sinais ainda faltam e conduzo você ao próximo registro útil.",
-    };
-  return {
-    summary:
-      "A operação não apresenta exceção crítica com base nos dados disponíveis.",
-    aiTitle: "O que vale acompanhar agora?",
-    aiCopy:
-      "Eu conecto vendas, estoque, produção e qualidade para antecipar a próxima decisão.",
-  };
-}
-
-function confidenceLabel(state: EvidenceState) {
-  if (state === "insufficient")
-    return "dados insuficientes para classificar a operação";
-  if (state === "unavailable") return "conexão operacional indisponível";
-  if (state === "healthy") return "leitura baseada nos dados disponíveis";
-  if (state === "loading") return "contexto em atualização";
-  return "há exceções operacionais a avaliar";
-}
-
 function CompactDecision({
   state,
   isSales,
@@ -834,102 +726,5 @@ function CompactDecision({
         {action} <ArrowRight size={11} />
       </Link>
     </div>
-  );
-}
-
-function ActionCard({
-  tone,
-  title,
-  impact,
-  href,
-  action,
-}: HomeData["alerts"][number]) {
-  const Icon =
-    tone === "CRÍTICO"
-      ? ShieldAlert
-      : tone === "ATENÇÃO"
-        ? Factory
-        : tone === "POSITIVO"
-          ? WalletCards
-          : ClipboardCheck;
-  const toneClass =
-    tone === "CRÍTICO"
-      ? "text-red-700 bg-red-50"
-      : tone === "ATENÇÃO"
-        ? "text-amber-700 bg-amber-50"
-        : tone === "POSITIVO"
-          ? "text-emerald-700 bg-emerald-50"
-          : "text-stone-600 bg-stone-100";
-  return (
-    <Card className="rounded-xl border-[var(--bbos-surface-border)] p-3 shadow-none">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <span
-          className={`grid size-8 shrink-0 place-items-center rounded-lg ${toneClass}`}
-        >
-          <Icon size={15} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <span className="text-[10px] font-black tracking-wide text-[var(--bbos-text-muted)]">
-            {tone}
-          </span>
-          <h3 className="text-[13px] font-extrabold">{title}</h3>
-          <p className="mt-0.5 text-[11px] leading-4 text-[var(--bbos-text-secondary)]">
-            {impact}
-          </p>
-        </div>
-        <Link
-          href={href}
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1 rounded-lg border border-[var(--bbos-control-border)] bg-white px-3 text-[10px] font-black text-[var(--bbos-coffee-green)]"
-        >
-          {action} <ArrowRight size={11} />
-        </Link>
-      </div>
-    </Card>
-  );
-}
-
-function PulseCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  href,
-  tone,
-}: {
-  icon: typeof Factory;
-  label: string;
-  value: string;
-  note: string;
-  href: string;
-  tone: "green" | "neutral" | "amber" | "violet";
-}) {
-  const toneClass =
-    tone === "green"
-      ? "bg-emerald-50 text-emerald-700"
-      : tone === "amber"
-        ? "bg-amber-50 text-amber-700"
-        : tone === "violet"
-          ? "bg-violet-50 text-violet-700"
-          : "bg-stone-100 text-stone-600";
-  return (
-    <Link
-      href={href}
-      className="group block rounded-[16px] border bg-[var(--bbos-surface-card)] p-3.5 text-inherit shadow-[0_4px_14px_rgba(18,37,33,.03)] transition hover:-translate-y-0.5"
-    >
-      <span
-        className={`grid size-8 place-items-center rounded-xl ${toneClass}`}
-      >
-        <Icon size={16} />
-      </span>
-      <small className="mt-3 block text-[10px] font-extrabold uppercase tracking-[.09em] text-[var(--bbos-text-muted)]">
-        {label}
-      </small>
-      <strong className="mt-1 block text-[22px] tracking-tight text-stone-950">
-        {value}
-      </strong>
-      <p className="mt-1 text-[11px] text-[var(--bbos-text-secondary)]">
-        {note}
-      </p>
-    </Link>
   );
 }
