@@ -221,16 +221,36 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
     return ()=>window.removeEventListener("pageshow",toTop);
   },[]);
   // Highlights the section in view (SAP Fiori / Microsoft 365 style navigation).
+  // "#inicio" wraps the whole page and "#mapa-signa" sits inside the reports, so
+  // the active item is the last section whose top has passed the fixed bar.
   useEffect(()=>{
-    const ids=menu.map(item=>item.href.slice(1));
-    const observer=new IntersectionObserver(entries=>{
-      const visible=entries.filter(entry=>entry.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);
-      if(visible[0])setActiveSection(visible[0].target.id);
-    },{rootMargin:"-20% 0px -65% 0px"});
-    const observe=()=>ids.forEach(id=>{const element=document.getElementById(id);if(element)observer.observe(element);});
-    observe();
-    const retry=window.setTimeout(observe,1500);
-    return ()=>{window.clearTimeout(retry);observer.disconnect();};
+    const ids=menu.map(item=>item.href.slice(1)).filter(id=>id!=="inicio");
+    let frame=0;
+    let lockUntil=0;
+    const update=()=>{
+      frame=0;
+      if(Date.now()<lockUntil)return;
+      const line=140;
+      const atBottom=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-4;
+      const tops=ids.map(id=>[id,document.getElementById(id)?.getBoundingClientRect().top] as const)
+        .filter((entry):entry is readonly [string,number]=>typeof entry[1]==="number")
+        .sort((a,b)=>a[1]-b[1]);
+      const passed=tops.filter(([,top])=>top<=line);
+      const last=tops[tops.length-1];
+      setActiveSection(atBottom&&last&&last[1]<window.innerHeight?last[0]:passed.length?passed[passed.length-1]![0]:"inicio");
+    };
+    const onScroll=()=>{
+      // While a menu click is scrolling, keep the clicked item; release once scrolling settles.
+      if(Date.now()<lockUntil){lockUntil=Date.now()+180;return;}
+      if(!frame)frame=window.requestAnimationFrame(update);
+    };
+    const onHash=()=>{const id=window.location.hash.slice(1);if(menu.some(item=>item.href==="#"+id)){setActiveSection(id);lockUntil=Date.now()+700;}};
+    window.addEventListener("hashchange",onHash);
+    update();
+    window.addEventListener("scroll",onScroll,{passive:true});
+    window.addEventListener("resize",onScroll);
+    const retry=window.setTimeout(update,1500);
+    return ()=>{window.clearTimeout(retry);if(frame)window.cancelAnimationFrame(frame);window.removeEventListener("scroll",onScroll);window.removeEventListener("resize",onScroll);window.removeEventListener("hashchange",onHash);};
   },[]);
   const filtered = useMemo(()=>{
     const term=search.toLocaleLowerCase("pt-BR");
@@ -251,7 +271,11 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
   const openBalance = receivableOrders.filter(o=>["OPEN","PARTIALLY_PAID","OVERDUE"].includes(o.receivableStatus??"")).reduce((s,o)=>s+Number(o.openAmount||0),0);
   const sortBy=(key:SortKey)=>setSort(current=>current.key===key?{key,dir:current.dir==="asc"?"desc":"asc"}:{key,dir:key==="orderedAt"||key==="totalAmount"?"desc":"asc"});
   const ariaSort=(key:SortKey)=>sort.key===key?(sort.dir==="asc"?"ascending":"descending"):"none";
-  const columns:Array<[string,SortKey|null]>=[["Pedido","code"],["Data","orderedAt"],["Cliente atendido","endCustomerName"],["Faturar para",null],["Valor","totalAmount"],["Situação","status"],["Pagamento",null]];
+  // A column that is empty on every row only adds noise; it comes back as soon as one order has it.
+  const hasEndCustomer = orders.some(o=>Boolean(o.endCustomerName));
+  const columns:Array<[string,SortKey|null]>=[["Pedido","code"],["Data","orderedAt"],...(hasEndCustomer?[["Cliente atendido","endCustomerName"] as [string,SortKey]]:[]),["Faturar para",null],["Valor","totalAmount"],["Situação","status"],["Pagamento",null]];
+  const openReceivables = receivableOrders.filter(o=>o.receivableStatus!=="PAID");
+  const paidReceivables = receivableOrders.filter(o=>o.receivableStatus==="PAID");
   return (
     <section id="inicio" className="relative scroll-mt-20 space-y-5 [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_h4]:font-display" aria-label="Painel comercial">
       <SignaShellBar partnerName={partnerName} orders={orders} events={events} stages={stages} onOpenOrder={setOpenOrderId} onLogout={onLogout} onToggleMenu={()=>setMenuOpen(v=>!v)} menuOpen={menuOpen}/>
@@ -315,7 +339,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
           {visibleOrders.map(o=><li key={o.id}>
             <button type="button" onClick={()=>setOpenOrderId(o.id)} className="grid w-full grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-4 py-3 text-left">
               <span className="font-semibold">{o.code}</span><span className="tabular-nums font-semibold">{currency.format(Number(o.totalAmount))}</span>
-              <span className="truncate text-xs text-[#6b6b66]">{o.endCustomerName||"Cliente não informado"} · {new Date(o.orderedAt).toLocaleDateString("pt-BR")}</span><span className="text-xs text-[#55554f]">{stages[o.status]||o.status}</span>
+              <span className="truncate text-xs text-[#6b6b66]">{o.endCustomerName||o.billingRecipientName||o.customerName} · {new Date(o.orderedAt).toLocaleDateString("pt-BR")}</span><span className="text-xs text-[#55554f]">{stages[o.status]||o.status}</span>
             </button>
           </li>)}
         </ul>
@@ -330,7 +354,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
               {visibleOrders.map(o=><tr key={o.id} onClick={()=>setOpenOrderId(o.id)} className="cursor-pointer hover:bg-[#fafaf8]">
                 <td className="px-4 py-2.5"><button type="button" onClick={e=>{e.stopPropagation();setOpenOrderId(o.id);}} className="font-semibold text-[#0A0A0A] underline decoration-[#cfcfca] underline-offset-4 hover:decoration-[#0A0A0A]">{o.code}</button></td>
                 <td className="px-4 py-2.5 tabular-nums text-[#3d3d39]">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td>
-                <td className="px-4 py-2.5">{o.endCustomerName||<span className="text-[#8a8a84]">Não informado</span>}</td>
+                {hasEndCustomer&&<td className="px-4 py-2.5">{o.endCustomerName||<span className="text-[#8a8a84]">Não informado</span>}</td>}
                 <td className="px-4 py-2.5 text-[#3d3d39]">{o.billingRecipientName||o.customerName}</td>
                 <td className="px-4 py-2.5 tabular-nums font-medium">{currency.format(Number(o.totalAmount))}</td>
                 <td className="px-4 py-2.5"><StatusDot status={o.status}/>{stages[o.status]||o.status}</td>
@@ -349,8 +373,10 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
           <p className="text-xs text-[#6b6b66]">Pague títulos em aberto com um clique pelo Pix da Bispo Coffees. A confirmação do recebimento continua com o financeiro da Bispo.</p></div>
         </div>
         {receivableOrders.length===0 ? <p role="status" className="px-5 py-5 text-sm text-[#6b6b66]">Nenhum título vinculado aos seus pedidos ainda. Isso não significa que algum pagamento tenha sido realizado.</p> :
-        <ul className="mt-3 divide-y divide-[#f1f1ee] border-t border-[#ececE7]">
-          {receivableOrders.map(o=><li key={o.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
+        <>
+        {openReceivables.length===0
+          ? <p role="status" className="mt-3 flex items-center gap-2 border-t border-[#ececE7] px-4 py-3 text-sm text-[#1d5c3a] sm:px-5"><span aria-hidden className="size-2 rounded-full bg-[#25734c]"/>Nenhum título em aberto no momento.</p>
+          : <ul aria-label="Títulos em aberto" className="mt-3 divide-y divide-[#f1f1ee] border-t border-[#ececE7]">{openReceivables.map(o=><li key={o.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
             <button type="button" onClick={()=>setOpenOrderId(o.id)} className="min-w-24 text-left font-semibold underline decoration-[#cfcfca] underline-offset-4">{o.code}</button>
             <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-[#e3f2e8] text-[#1d5c3a]":o.receivableStatus==="OVERDUE"?"bg-[#fbe5e1] text-[#8f2d1f]":"bg-[#f1f1ee] text-[#3d3d39]"}`}>{paymentLabel(o.receivableStatus)}</span>
             <span className="text-sm text-[#3d3d39]">Saldo <strong className="tabular-nums text-[#0A0A0A]">{o.openAmount!=null?currency.format(Number(o.openAmount)):"—"}</strong></span>
@@ -360,8 +386,22 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
               {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="text-sm font-medium underline underline-offset-4">Cobrança</a>}
               {o.pixAvailable&&<SignaPixButton orderId={o.id} orderCode={o.code}/>}
             </span>
-          </li>)}
-        </ul>}
+          </li>)}</ul>}
+        {paidReceivables.length>0&&<details className="group border-t border-[#ececE7]">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium text-[#3d3d39] hover:bg-[#fafaf8] sm:px-5 [&::-webkit-details-marker]:hidden"><span aria-hidden className="text-[10px] transition group-open:rotate-90">▶</span>Títulos pagos <span className="rounded-md bg-[#f1f1ee] px-1.5 text-xs tabular-nums text-[#55554f]">{paidReceivables.length}</span></summary>
+          <ul aria-label="Títulos pagos" className="divide-y divide-[#f1f1ee] border-t border-[#f1f1ee]">{paidReceivables.map(o=><li key={o.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
+            <button type="button" onClick={()=>setOpenOrderId(o.id)} className="min-w-24 text-left font-semibold underline decoration-[#cfcfca] underline-offset-4">{o.code}</button>
+            <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-[#e3f2e8] text-[#1d5c3a]":o.receivableStatus==="OVERDUE"?"bg-[#fbe5e1] text-[#8f2d1f]":"bg-[#f1f1ee] text-[#3d3d39]"}`}>{paymentLabel(o.receivableStatus)}</span>
+            <span className="text-sm text-[#3d3d39]">Saldo <strong className="tabular-nums text-[#0A0A0A]">{o.openAmount!=null?currency.format(Number(o.openAmount)):"—"}</strong></span>
+            <span className="text-sm text-[#3d3d39]">Vence {o.dueDate?new Date(o.dueDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</span>
+            {o.receivableStatus==="PAID"&&o.paymentDate&&<span className="text-sm text-[#3d3d39]">Pago em {new Date(o.paymentDate).toLocaleDateString("pt-BR",{timeZone:"UTC"})}</span>}
+            <span className="ml-auto flex items-center gap-3">
+              {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="text-sm font-medium underline underline-offset-4">Cobrança</a>}
+              {o.pixAvailable&&<SignaPixButton orderId={o.id} orderCode={o.code}/>}
+            </span>
+          </li>)}</ul>
+        </details>}
+        </>}
         <p className="border-t border-[#ececE7] px-5 py-2.5 text-[11px] text-[#8a8a84]">Consulta dos títulos do contas a receber da Bispo; não substitui extrato bancário ou conciliação do financeiro da Bispo.</p>
       </section>
 
