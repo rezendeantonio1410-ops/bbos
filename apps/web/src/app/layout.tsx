@@ -14,6 +14,7 @@ import './sidebar-vnext.css';
 import './order-drawer-vnext.css';
 import { SYSTEM_CREATOR, SYSTEM_NAME } from '@bbos/shared';
 import { BbosAssistant } from '@/components/bbos-assistant';
+import { NumericFieldFocus } from '@/components/numeric-field-focus';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://loja.bispocoffees.com.br'),
@@ -40,5 +41,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body className="font-[var(--font-inter)] antialiased">{children}<BbosAssistant /></body></html>;
+  return <html lang="pt-BR"><body className="font-[var(--font-inter)] antialiased">{children}<BbosAssistant /><NumericFieldFocus /></body></html>;
 }

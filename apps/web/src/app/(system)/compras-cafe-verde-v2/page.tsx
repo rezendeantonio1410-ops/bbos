@@ -397,7 +397,7 @@ export default function PurchaseFormV2Page() {
 
         <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
           <Field label="Acondicionamento"><select className={input} value={packagingType} onChange={(e) => { const next = e.target.value; setPackagingType(next); const weight = packagingWeights[next] ?? null; if (weight !== null) setUnitWeight(weight); }}><option value="BAG_30_KG">Saca 30 kg</option><option value="BAG_60_KG">Saca 60 kg</option><option value="BIG_BAG">Big Bag</option><option value="OTHER">Outro</option></select></Field>
-          <Field label={packagingType === "BAG_60_KG" ? "Quantidade de sacas" : "Número de volumes"}><input required type="number" min="1" className={input} value={volumes} onChange={(e) => setVolumes(Math.max(1, Number(e.target.value)))} /></Field>
+          <Field label={packagingType === "BAG_60_KG" ? "Quantidade de sacas" : "Número de volumes"}><input required type="number" min="1" className={input} inputMode="numeric" value={volumes || ""} onChange={(e) => setVolumes(e.target.value === "" ? 0 : Math.max(1, Number(e.target.value)))} onBlur={() => setVolumes((v) => v || 1)} /></Field>
           <Field label="Peso nominal/volume"><input required type="number" min=".01" step=".01" className={input} value={unitWeight} readOnly={packagingWeights[packagingType] !== null} onChange={(e) => setUnitWeight(Number(e.target.value))} /></Field>
           <Field label="Tolerância de peso (%)"><input name="weightTolerancePercent" type="number" min="0" step=".01" defaultValue="0" className={input} /></Field>
           <Metric label="Peso total contratado" value={`${totalWeight.toLocaleString("pt-BR")} kg`} />
