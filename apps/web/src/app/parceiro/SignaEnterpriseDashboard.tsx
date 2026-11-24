@@ -10,7 +10,8 @@ import { SignaShellBar } from "@/components/signa-shell-bar";
 import { SignaOrderPanel, paymentLabel } from "@/components/signa-order-panel";
 import { PortalToaster, showToast } from "@/components/portal-toast";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
-import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
+import { applyCnpjRecord } from "@/lib/cnpj-registry";
+import { CnpjRegistryPanel, CnpjSearchButton } from "@/components/cnpj-registry-panel";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { getSignaOrderTimelineEvents } from "@/lib/signa-order-timeline";
 import { emptySignaEndCustomerForm, formatCnpj, validateSignaEndCustomerForm, type SignaEndCustomerForm } from "@/lib/signa-end-customer-form";
@@ -104,18 +105,21 @@ function SignaCustomerHistory() {
     enabled: expanded,
     onResolved: result => setForm(previous => ({...previous, street: result.address, district: result.district, city: result.city, state: result.state})),
   });
-  // Complete CNPJ → Receita Federal lookup; fills only EMPTY fields. IE stays manual.
+  // Complete CNPJ → Receita Federal lookup (free). Fills every empty field;
+  // "Buscar na Receita" refills all. Everything stays editable.
   const cnpjLookup = useCnpjRegistryAutofill({
     cnpj: form.taxId,
     enabled: expanded,
-    onResolved: record => {
-      setForm(previous => fillEmptyFromCnpj(previous as unknown as Record<string,string>, record, {
+    onResolved: (record, context) => {
+      setForm(previous => applyCnpjRecord(previous as unknown as Record<string,string>, record, {
         name: "legalName", postalCode: "postalCode", street: "street", number: "number",
         district: "district", complement: "complement", city: "city", state: "state",
         stateRegistration: r => r.suggestedStateRegistration ?? null,
-      }) as unknown as SignaEndCustomerForm);
-      setPhone(current => current.trim() ? current : record.phone ?? "");
-      setEmail(current => current.trim() ? current : record.email ?? "");
+      }, context) as unknown as SignaEndCustomerForm);
+      const take = (current: string, value: string | null, before: string | null | undefined) =>
+        value && (context.overwrite || !current.trim() || current === before) ? value : current;
+      setPhone(current => take(current, record.phone, context.previous?.phone));
+      setEmail(current => take(current, record.email, context.previous?.email));
     },
   });
   const [refresh,setRefresh] = useState(0);
@@ -156,10 +160,11 @@ function SignaCustomerHistory() {
       <p className="text-sm font-semibold text-[#0E191D]">Novo cliente atendido pela Signa</p>
       <p className="text-xs text-slate-600">Cadastro somente comercial. Não altera o cliente fiscal, a NF-e nem os preços dos pedidos.</p>
       <div className="grid gap-3 sm:grid-cols-6">
+        <label className="text-xs font-semibold sm:col-span-6">CNPJ *<span className="mt-1 flex gap-2"><input required inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(form.taxId)} onChange={e=>setField("taxId",e.target.value.replace(/\D/g,"").slice(0,14))} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/><CnpjSearchButton onClick={cnpjLookup.search} busy={cnpjLookup.busy}/></span></label>
         <label className="text-xs font-semibold sm:col-span-6">Nome / Razão social *<input required minLength={2} maxLength={180} autoComplete="organization" value={form.name} onChange={e=>setField("name",e.target.value)} placeholder="Nome ou razão social" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold sm:col-span-3">CNPJ *<input required inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(form.taxId)} onChange={e=>setField("taxId",e.target.value.replace(/\D/g,"").slice(0,14))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-3">CEP *<input required inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(form.postalCode)} onChange={e=>setField("postalCode",brazilianCepDigits(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         {cnpjLookup.statusText&&<p role="status" className={`text-xs sm:col-span-6 ${cnpjLookup.warning?"font-semibold text-amber-800":"text-slate-600"}`}>{cnpjLookup.statusText}</p>}
+        {cnpjLookup.record&&<div className="sm:col-span-6"><CnpjRegistryPanel record={cnpjLookup.record}/></div>}
         {cepLookup.statusText&&<p role="status" className="text-xs text-slate-600 sm:col-span-6">{cepLookup.statusText}</p>}
         <label className="text-xs font-semibold sm:col-span-4">Rua *<input required maxLength={180} value={form.street} onChange={e=>setField("street",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">Número *<input required maxLength={30} placeholder="S/N" value={form.number} onChange={e=>setField("number",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
@@ -221,16 +226,36 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
     return ()=>window.removeEventListener("pageshow",toTop);
   },[]);
   // Highlights the section in view (SAP Fiori / Microsoft 365 style navigation).
+  // "#inicio" wraps the whole page and "#mapa-signa" sits inside the reports, so
+  // the active item is the last section whose top has passed the fixed bar.
   useEffect(()=>{
-    const ids=menu.map(item=>item.href.slice(1));
-    const observer=new IntersectionObserver(entries=>{
-      const visible=entries.filter(entry=>entry.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);
-      if(visible[0])setActiveSection(visible[0].target.id);
-    },{rootMargin:"-20% 0px -65% 0px"});
-    const observe=()=>ids.forEach(id=>{const element=document.getElementById(id);if(element)observer.observe(element);});
-    observe();
-    const retry=window.setTimeout(observe,1500);
-    return ()=>{window.clearTimeout(retry);observer.disconnect();};
+    const ids=menu.map(item=>item.href.slice(1)).filter(id=>id!=="inicio");
+    let frame=0;
+    let lockUntil=0;
+    const update=()=>{
+      frame=0;
+      if(Date.now()<lockUntil)return;
+      const line=140;
+      const atBottom=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-4;
+      const tops=ids.map(id=>[id,document.getElementById(id)?.getBoundingClientRect().top] as const)
+        .filter((entry):entry is readonly [string,number]=>typeof entry[1]==="number")
+        .sort((a,b)=>a[1]-b[1]);
+      const passed=tops.filter(([,top])=>top<=line);
+      const last=tops[tops.length-1];
+      setActiveSection(atBottom&&last&&last[1]<window.innerHeight?last[0]:passed.length?passed[passed.length-1]![0]:"inicio");
+    };
+    const onScroll=()=>{
+      // While a menu click is scrolling, keep the clicked item; release once scrolling settles.
+      if(Date.now()<lockUntil){lockUntil=Date.now()+180;return;}
+      if(!frame)frame=window.requestAnimationFrame(update);
+    };
+    const onHash=()=>{const id=window.location.hash.slice(1);if(menu.some(item=>item.href==="#"+id)){setActiveSection(id);lockUntil=Date.now()+700;}};
+    window.addEventListener("hashchange",onHash);
+    update();
+    window.addEventListener("scroll",onScroll,{passive:true});
+    window.addEventListener("resize",onScroll);
+    const retry=window.setTimeout(update,1500);
+    return ()=>{window.clearTimeout(retry);if(frame)window.cancelAnimationFrame(frame);window.removeEventListener("scroll",onScroll);window.removeEventListener("resize",onScroll);window.removeEventListener("hashchange",onHash);};
   },[]);
   const filtered = useMemo(()=>{
     const term=search.toLocaleLowerCase("pt-BR");
@@ -251,7 +276,11 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
   const openBalance = receivableOrders.filter(o=>["OPEN","PARTIALLY_PAID","OVERDUE"].includes(o.receivableStatus??"")).reduce((s,o)=>s+Number(o.openAmount||0),0);
   const sortBy=(key:SortKey)=>setSort(current=>current.key===key?{key,dir:current.dir==="asc"?"desc":"asc"}:{key,dir:key==="orderedAt"||key==="totalAmount"?"desc":"asc"});
   const ariaSort=(key:SortKey)=>sort.key===key?(sort.dir==="asc"?"ascending":"descending"):"none";
-  const columns:Array<[string,SortKey|null]>=[["Pedido","code"],["Data","orderedAt"],["Cliente atendido","endCustomerName"],["Faturar para",null],["Valor","totalAmount"],["Situação","status"],["Pagamento",null]];
+  // A column that is empty on every row only adds noise; it comes back as soon as one order has it.
+  const hasEndCustomer = orders.some(o=>Boolean(o.endCustomerName));
+  const columns:Array<[string,SortKey|null]>=[["Pedido","code"],["Data","orderedAt"],...(hasEndCustomer?[["Cliente atendido","endCustomerName"] as [string,SortKey]]:[]),["Faturar para",null],["Valor","totalAmount"],["Situação","status"],["Pagamento",null]];
+  const openReceivables = receivableOrders.filter(o=>o.receivableStatus!=="PAID");
+  const paidReceivables = receivableOrders.filter(o=>o.receivableStatus==="PAID");
   return (
     <section id="inicio" className="relative scroll-mt-20 space-y-5 [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_h4]:font-display" aria-label="Painel comercial">
       <SignaShellBar partnerName={partnerName} orders={orders} events={events} stages={stages} onOpenOrder={setOpenOrderId} onLogout={onLogout} onToggleMenu={()=>setMenuOpen(v=>!v)} menuOpen={menuOpen}/>
@@ -315,7 +344,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
           {visibleOrders.map(o=><li key={o.id}>
             <button type="button" onClick={()=>setOpenOrderId(o.id)} className="grid w-full grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-4 py-3 text-left">
               <span className="font-semibold">{o.code}</span><span className="tabular-nums font-semibold">{currency.format(Number(o.totalAmount))}</span>
-              <span className="truncate text-xs text-[#6b6b66]">{o.endCustomerName||"Cliente não informado"} · {new Date(o.orderedAt).toLocaleDateString("pt-BR")}</span><span className="text-xs text-[#55554f]">{stages[o.status]||o.status}</span>
+              <span className="truncate text-xs text-[#6b6b66]">{o.endCustomerName||o.billingRecipientName||o.customerName} · {new Date(o.orderedAt).toLocaleDateString("pt-BR")}</span><span className="text-xs text-[#55554f]">{stages[o.status]||o.status}</span>
             </button>
           </li>)}
         </ul>
@@ -330,7 +359,7 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
               {visibleOrders.map(o=><tr key={o.id} onClick={()=>setOpenOrderId(o.id)} className="cursor-pointer hover:bg-[#fafaf8]">
                 <td className="px-4 py-2.5"><button type="button" onClick={e=>{e.stopPropagation();setOpenOrderId(o.id);}} className="font-semibold text-[#0A0A0A] underline decoration-[#cfcfca] underline-offset-4 hover:decoration-[#0A0A0A]">{o.code}</button></td>
                 <td className="px-4 py-2.5 tabular-nums text-[#3d3d39]">{new Date(o.orderedAt).toLocaleDateString("pt-BR")}</td>
-                <td className="px-4 py-2.5">{o.endCustomerName||<span className="text-[#8a8a84]">Não informado</span>}</td>
+                {hasEndCustomer&&<td className="px-4 py-2.5">{o.endCustomerName||<span className="text-[#8a8a84]">Não informado</span>}</td>}
                 <td className="px-4 py-2.5 text-[#3d3d39]">{o.billingRecipientName||o.customerName}</td>
                 <td className="px-4 py-2.5 tabular-nums font-medium">{currency.format(Number(o.totalAmount))}</td>
                 <td className="px-4 py-2.5"><StatusDot status={o.status}/>{stages[o.status]||o.status}</td>
@@ -349,8 +378,10 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
           <p className="text-xs text-[#6b6b66]">Pague títulos em aberto com um clique pelo Pix da Bispo Coffees. A confirmação do recebimento continua com o financeiro da Bispo.</p></div>
         </div>
         {receivableOrders.length===0 ? <p role="status" className="px-5 py-5 text-sm text-[#6b6b66]">Nenhum título vinculado aos seus pedidos ainda. Isso não significa que algum pagamento tenha sido realizado.</p> :
-        <ul className="mt-3 divide-y divide-[#f1f1ee] border-t border-[#ececE7]">
-          {receivableOrders.map(o=><li key={o.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
+        <>
+        {openReceivables.length===0
+          ? <p role="status" className="mt-3 flex items-center gap-2 border-t border-[#ececE7] px-4 py-3 text-sm text-[#1d5c3a] sm:px-5"><span aria-hidden className="size-2 rounded-full bg-[#25734c]"/>Nenhum título em aberto no momento.</p>
+          : <ul aria-label="Títulos em aberto" className="mt-3 divide-y divide-[#f1f1ee] border-t border-[#ececE7]">{openReceivables.map(o=><li key={o.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
             <button type="button" onClick={()=>setOpenOrderId(o.id)} className="min-w-24 text-left font-semibold underline decoration-[#cfcfca] underline-offset-4">{o.code}</button>
             <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-[#e3f2e8] text-[#1d5c3a]":o.receivableStatus==="OVERDUE"?"bg-[#fbe5e1] text-[#8f2d1f]":"bg-[#f1f1ee] text-[#3d3d39]"}`}>{paymentLabel(o.receivableStatus)}</span>
             <span className="text-sm text-[#3d3d39]">Saldo <strong className="tabular-nums text-[#0A0A0A]">{o.openAmount!=null?currency.format(Number(o.openAmount)):"—"}</strong></span>
@@ -360,8 +391,22 @@ export function SignaEnterpriseDashboard({orders,partnerName,events=[],onLogout}
               {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="text-sm font-medium underline underline-offset-4">Cobrança</a>}
               {o.pixAvailable&&<SignaPixButton orderId={o.id} orderCode={o.code}/>}
             </span>
-          </li>)}
-        </ul>}
+          </li>)}</ul>}
+        {paidReceivables.length>0&&<details className="group border-t border-[#ececE7]">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium text-[#3d3d39] hover:bg-[#fafaf8] sm:px-5 [&::-webkit-details-marker]:hidden"><span aria-hidden className="text-[10px] transition group-open:rotate-90">▶</span>Títulos pagos <span className="rounded-md bg-[#f1f1ee] px-1.5 text-xs tabular-nums text-[#55554f]">{paidReceivables.length}</span></summary>
+          <ul aria-label="Títulos pagos" className="divide-y divide-[#f1f1ee] border-t border-[#f1f1ee]">{paidReceivables.map(o=><li key={o.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
+            <button type="button" onClick={()=>setOpenOrderId(o.id)} className="min-w-24 text-left font-semibold underline decoration-[#cfcfca] underline-offset-4">{o.code}</button>
+            <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${o.receivableStatus==="PAID"?"bg-[#e3f2e8] text-[#1d5c3a]":o.receivableStatus==="OVERDUE"?"bg-[#fbe5e1] text-[#8f2d1f]":"bg-[#f1f1ee] text-[#3d3d39]"}`}>{paymentLabel(o.receivableStatus)}</span>
+            <span className="text-sm text-[#3d3d39]">Saldo <strong className="tabular-nums text-[#0A0A0A]">{o.openAmount!=null?currency.format(Number(o.openAmount)):"—"}</strong></span>
+            <span className="text-sm text-[#3d3d39]">Vence {o.dueDate?new Date(o.dueDate).toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—"}</span>
+            {o.receivableStatus==="PAID"&&o.paymentDate&&<span className="text-sm text-[#3d3d39]">Pago em {new Date(o.paymentDate).toLocaleDateString("pt-BR",{timeZone:"UTC"})}</span>}
+            <span className="ml-auto flex items-center gap-3">
+              {o.billingAvailable&&<a href={`/api/partner-portal/orders/${o.id}/billing/pdf`} target="_blank" rel="noreferrer" className="text-sm font-medium underline underline-offset-4">Cobrança</a>}
+              {o.pixAvailable&&<SignaPixButton orderId={o.id} orderCode={o.code}/>}
+            </span>
+          </li>)}</ul>
+        </details>}
+        </>}
         <p className="border-t border-[#ececE7] px-5 py-2.5 text-[11px] text-[#8a8a84]">Consulta dos títulos do contas a receber da Bispo; não substitui extrato bancário ou conciliação do financeiro da Bispo.</p>
       </section>
 

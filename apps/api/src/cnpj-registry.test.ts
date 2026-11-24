@@ -102,3 +102,50 @@ test("segunda fonte respeita o intervalo mínimo; sem ela, IE fica manual", asyn
   await c.lookup("19131243000197");
   assert.equal(f.calls.at(-1), "secondary");
 });
+
+test("traz todos os dados públicos gratuitos: abertura, CNAE, porte, Simples/MEI, capital e sócios", () => {
+  const record = mapBrasilApiCnpj({
+    ...sample,
+    data_inicio_atividade: "2010-05-20",
+    natureza_juridica: "Sociedade Empresária Limitada",
+    porte: "MICRO EMPRESA",
+    capital_social: 50000,
+    cnae_fiscal: 5611201,
+    cnae_fiscal_descricao: "Restaurantes e similares",
+    cnaes_secundarios: [{ codigo: 4721102, descricao: "Padaria e confeitaria" }, { codigo: 0, descricao: "" }],
+    opcao_pelo_simples: true,
+    data_opcao_pelo_simples: "2010-06-01",
+    opcao_pelo_mei: false,
+    ddd_telefone_2: "4399998888",
+    qsa: [{ nome_socio: "MARIA EXEMPLO", qualificacao_socio: "Sócio-Administrador", data_entrada_sociedade: "2010-05-20" }],
+  });
+  assert.equal(record.details.openingDate, "2010-05-20");
+  assert.equal(record.details.legalNature, "Sociedade Empresária Limitada");
+  assert.equal(record.details.companySize, "MICRO EMPRESA");
+  assert.equal(record.details.shareCapital, 50000);
+  assert.deepEqual(record.details.mainActivity, { code: "5611201", description: "Restaurantes e similares" });
+  assert.deepEqual(record.details.secondaryActivities, [{ code: "4721102", description: "Padaria e confeitaria" }]);
+  assert.equal(record.details.simplesOptant, true);
+  assert.equal(record.details.meiOptant, false);
+  assert.equal(record.details.secondaryPhone, "4399998888");
+  assert.deepEqual(record.details.partners, [{ name: "MARIA EXEMPLO", role: "Sócio-Administrador", since: "2010-05-20" }]);
+});
+
+test("dados ausentes na primeira fonte são completados pela segunda", async () => {
+  const ws = {
+    ...cnpjWs,
+    porte: { descricao: "Micro Empresa" },
+    natureza_juridica: { descricao: "Sociedade Empresária Limitada" },
+    simples: { simples: "Sim", data_opcao_simples: "2010-06-01", mei: "Não" },
+    socios: [{ nome: "MARIA EXEMPLO", qualificacao_socio: { descricao: "Sócio-Administrador" }, data_entrada: "2010-05-20" }],
+    estabelecimento: { ...cnpjWs.estabelecimento, atividade_principal: { id: "5611201", descricao: "Restaurantes e similares" } },
+  };
+  const { impl } = fakeFetch({ status: 200, body: sample }, { status: 200, body: ws });
+  const record = await new CnpjRegistryClient(impl as any).lookup("11222333000181");
+  assert.equal(record.details.companySize, "Micro Empresa");
+  assert.equal(record.details.simplesOptant, true);
+  assert.equal(record.details.meiOptant, false);
+  assert.equal(record.details.partners[0]?.name, "MARIA EXEMPLO");
+  assert.equal(record.details.mainActivity?.code, "5611201");
+  assert.equal(record.suggestedStateRegistration, "9012345678");
+});
