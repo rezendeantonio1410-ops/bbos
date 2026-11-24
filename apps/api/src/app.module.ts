@@ -92,6 +92,7 @@ import { IntelligenceService } from "./intelligence.service";
 import { MobileNotificationsController } from "./mobile-notifications.controller";
 import { MobileNotificationService } from "./mobile-notification.service";
 import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
+import { BillingEmailService } from "./billing-email.service";
 
 @Module({
   controllers: [
@@ -171,6 +172,7 @@ import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
     CustomerNotificationService,
     MobileNotificationService,
     SalesReceivableAlertService,
+    BillingEmailService,
     SalesOrderCustomerLifecycleService,
     SalesOrderPaymentsService,
     SalesOrderTermApprovalService,

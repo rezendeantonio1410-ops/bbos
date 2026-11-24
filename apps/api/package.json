@@ -40,7 +40,7 @@
     "test:sales-commission": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-commission.test.ts",
     "test:sales-portfolio": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-portfolio.test.ts",
     "test:business-partner-roles": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/business-partner-roles.test.ts",
-    "test:sales-order-partner-notification": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-partner-notification.test.ts ../../apps/api/src/customer-email-template.test.ts ../../apps/api/src/customer-order-pdf.test.ts ../../apps/api/src/sales-order-pdf-download.test.ts ../../apps/api/src/customer-notification-attachment.test.ts",
+    "test:sales-order-partner-notification": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-partner-notification.test.ts ../../apps/api/src/customer-email-template.test.ts ../../apps/api/src/customer-order-pdf.test.ts ../../apps/api/src/sales-order-pdf-download.test.ts ../../apps/api/src/customer-notification-attachment.test.ts ../../apps/api/src/billing-emails.test.ts",
     "test:purchase-confirmation-pdf": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/purchase-confirmation-pdf.test.ts",
     "test:white-label-naming": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/white-label-naming.test.ts",
     "test:bling-catalog-variants": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/bling-catalog-variant-policy.test.ts",
