@@ -163,7 +163,8 @@ export async function bootstrapEmptyDatabase() {
       let ignored = 0;
       for (const name of legacy) {
         const sql = readFileSync(join(migrationsDir, name, "migration.sql"), "utf8");
-        for (const statement of splitSqlStatements(sql)) {
+        const statements = splitSqlStatements(sql);
+        for (const [statementIndex, statement] of statements.entries()) {
           // A few legacy files carry their own BEGIN/COMMIT; inside this
           // single transaction they would end it early, so skip them.
           if (/^(BEGIN|COMMIT|START\s+TRANSACTION|END)(\s+(WORK|TRANSACTION))?$/i.test(statement.trim())) continue;
@@ -171,9 +172,15 @@ export async function bootstrapEmptyDatabase() {
           try {
             await tx.$executeRawUnsafe(statement);
             await tx.$executeRawUnsafe("RELEASE SAVEPOINT bbos_bootstrap");
-          } catch {
+          } catch (error) {
             await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT bbos_bootstrap");
             ignored += 1;
+            // Diagnostic only: never print SQL, parameters or raw error messages.
+            // Preserve legacy behavior until each skipped statement is reviewed.
+            const rawCode = error?.meta?.code;
+            const sqlState = typeof rawCode === "string" && /^[0-9A-Z]{5}$/.test(rawCode)
+              ? rawCode : "UNKNOWN";
+            console.warn(`Bootstrap: legacy statement skipped migration=${name} statement=${statementIndex + 1} sqlstate=${sqlState}`);
           }
         }
       }
@@ -189,7 +196,7 @@ export async function bootstrapEmptyDatabase() {
       }
       return ignored;
     }, { timeout: 15 * 60 * 1000, maxWait: 60 * 1000 });
-    console.log(`Bootstrap: ${legacy.length} migrações históricas reaplicadas e registradas (${tolerated} comandos já existentes ignorados).`);
+    console.log(`Bootstrap: ${legacy.length} migrações históricas reaplicadas e registradas (${tolerated} comandos com falha ignorados; revisar diagnósticos acima).`);
   } finally {
     await prisma.$disconnect();
   }
