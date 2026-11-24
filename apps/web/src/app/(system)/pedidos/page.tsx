@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  Search,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -525,23 +526,38 @@ const statusTone: Record<string, "neutral" | "success" | "warning" | "danger"> =
     CANCELLED: "danger",
   };
 
-const filters: Array<[string, string]> = [
-  ["ALL", "Todos"],
-  ["OVERDUE", "Atrasados"],
-  ["SAMPLE", "Amostras"],
-  ["DRAFT", "Rascunho"],
-  ["DISTRIBUTOR_APPROVAL", "Aprovação distribuidores"],
-  ["AWAITING_PAYMENT", "Aguardando Pix"],
-  ["CONFIRMED", "Confirmados"],
-  ["RESERVED", "Reservados"],
-  ["IN_PRODUCTION", "Aguardando embalagem"],
-  ["PICKING", "Separação"],
-  ["READY_TO_SHIP", "Prontos para NF-e"],
-  ["INVOICE_REQUESTED", "Emissão NF-e"],
-  ["INVOICED", "Faturados"],
-  ["SHIPPED", "Expedidos"],
-  ["DELIVERED", "Concluídos"],
+// Four stages in process order (SAP Fiori status tabs). Exceptions are row
+// markers, not extra filters.
+const orderStages: Array<{ key: string; label: string; statuses: string[] }> = [
+  { key: "NEW", label: "Novo", statuses: ["DRAFT", "DISTRIBUTOR_APPROVAL", "AWAITING_PAYMENT"] },
+  {
+    key: "PREPARING",
+    label: "Em preparação",
+    statuses: ["CONFIRMED", "RESERVED", "IN_PRODUCTION", "PICKING", "READY_TO_SHIP", "INVOICE_REQUESTED", "INVOICE_ERROR"],
+  },
+  { key: "INVOICED", label: "Faturado", statuses: ["INVOICED", "REEXPEDITION_READY", "SHIPPED"] },
+  { key: "DELIVERED", label: "Entregue", statuses: ["DELIVERED"] },
 ];
+
+type OrderException = { label: string; tone: "danger" | "warning" };
+
+const orderException = (order: Order, now = Date.now()): OrderException | null => {
+  if (hasOpenDeliveryException(order)) return { label: "Problema na entrega", tone: "danger" };
+  if (order.status === "INVOICE_ERROR") return { label: "Erro na NF-e", tone: "danger" };
+  if (isOverdueOrder(order, now)) {
+    const days = overdueDays(order, now);
+    // Billed but no shipment/delivery recorded: the step is missing, not the customer.
+    return ["INVOICED", "REEXPEDITION_READY"].includes(order.status)
+      ? { label: `Entrega não registrada · ${days} d`, tone: "warning" }
+      : { label: `Atrasado ${days} d`, tone: "danger" };
+  }
+  const shown = displayStatus(order);
+  if (shown === "AWAITING_PAYMENT") return { label: "Aguardando Pix", tone: "warning" };
+  if (shown === "DISTRIBUTOR_APPROVAL") return { label: "Aprovar distribuidor", tone: "warning" };
+  return null;
+};
+
+type OrderSortKey = "code" | "orderedAt" | "customer" | "totalAmount";
 
 const overdueTerminalStatuses = new Set(["SHIPPED", "DELIVERED", "CANCELLED"]);
 
@@ -621,7 +637,11 @@ export default function OrdersPage() {
   const [canCompleteDelivery, setCanCompleteDelivery] = useState(false);
   const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
-  const [filter, setFilter] = useState("ALL");
+  const [stage, setStage] = useState("ALL");
+  const [onlyExceptions, setOnlyExceptions] = useState(false);
+  const [onlySamples, setOnlySamples] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<{ key: OrderSortKey; dir: "asc" | "desc" }>({ key: "orderedAt", dir: "desc" });
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
@@ -694,7 +714,7 @@ export default function OrdersPage() {
       setCreating("COMMERCIAL");
     }
     if (searchParams.get("filtro") === "atrasados") {
-      setFilter("OVERDUE");
+      setOnlyExceptions(true);
     }
     void fetch(`${getApiBaseUrl()}/auth/me`, {
       credentials: "include",
@@ -740,32 +760,50 @@ export default function OrdersPage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const visible = useMemo(
-    () =>
-      filter === "ALL"
-        ? orders
-        : filter === "OVERDUE"
-          ? orders.filter((item) => isOverdueOrder(item))
-          : filter === "SAMPLE"
-            ? orders.filter((item) => item.orderType === "SAMPLE")
-            : orders.filter((item) => displayStatus(item) === filter),
-    [orders, filter],
-  );
+  const visible = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("pt-BR");
+    const stageDef = orderStages.find((item) => item.key === stage);
+    const list = orders.filter((item) => {
+      if (stageDef && !stageDef.statuses.includes(displayStatus(item))) return false;
+      if (onlyExceptions && !orderException(item)) return false;
+      if (onlySamples && item.orderType !== "SAMPLE") return false;
+      if (!term) return true;
+      return [item.orderNumber ?? item.code, item.customer.name, statusLabel[displayStatus(item)] ?? ""]
+        .join(" ")
+        .toLocaleLowerCase("pt-BR")
+        .includes(term);
+    });
+    const value = (item: Order) =>
+      sort.key === "totalAmount"
+        ? Number(item.totalAmount)
+        : sort.key === "customer"
+          ? item.customer.name
+          : sort.key === "code"
+            ? (item.orderNumber ?? item.code)
+            : item.orderedAt;
+    return [...list].sort((left, right) => {
+      const x = value(left);
+      const y = value(right);
+      const result =
+        typeof x === "number" && typeof y === "number"
+          ? x - y
+          : String(x).localeCompare(String(y), "pt-BR");
+      return sort.dir === "asc" ? result : -result;
+    });
+  }, [orders, stage, onlyExceptions, onlySamples, search, sort]);
+  const exceptionCount = orders.filter((item) => orderException(item)).length;
+  const sortBy = (key: OrderSortKey) =>
+    setSort((current) =>
+      current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "orderedAt" || key === "totalAmount" ? "desc" : "asc" },
+    );
   const open = orders.filter(
     (item) => !["DELIVERED", "CANCELLED", "SHIPPED"].includes(item.status),
   );
-  const commercialOrders = orders.filter((item) => item.orderType !== "SAMPLE");
   const commercialOpen = open.filter((item) => item.orderType !== "SAMPLE");
   const deliveryIssues = orders.filter(hasOpenDeliveryException);
-  const overdueOrders = orders.filter((item) => isOverdueOrder(item));
   const firstDeliveryIssue = deliveryIssues[0];
-  const avgTicket = commercialOrders.length
-    ? commercialOrders.reduce(
-        (sum, item) => sum + Number(item.totalAmount),
-        0,
-      ) / commercialOrders.length
-    : 0;
-
   const action = async (order: Order, endpoint: string) => {
     setBusy(order.id + endpoint);
     setMessage("");
@@ -799,29 +837,20 @@ export default function OrdersPage() {
 
   return (
     <div className="mx-auto max-w-[1600px]">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-violet-700">
-            <Sparkles size={13} /> Comercial inteligente
-          </p>
-          <h1 className="mt-1 text-3xl font-bold">Pedidos</h1>
-          <p className="mt-2 text-sm text-stone-500">
-            O BBOS acompanha cliente, preço, crédito e estoque antes de a venda
-            avançar.
-          </p>
-        </div>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
         <div className="flex flex-wrap gap-2">
           <button
             data-bbos-write-action
             onClick={() => openNewOrder("SAMPLE")}
-            className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-950"
+            className="flex min-h-10 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
           >
-            <PackagePlus size={15} /> Novo pedido de amostra
+            <PackagePlus size={15} /> Amostra
           </button>
           <button
             data-bbos-write-action
             onClick={() => openNewOrder("COMMERCIAL")}
-            className="flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-3 text-xs font-bold text-white"
+            className="flex min-h-10 items-center gap-2 rounded-lg bg-forest-900 px-4 text-xs font-bold text-white"
           >
             <Plus size={15} /> Novo pedido
           </button>
@@ -829,7 +858,7 @@ export default function OrdersPage() {
       </header>
 
       {message && (
-        <div className="mt-5 rounded-xl border border-forest-100 bg-forest-50 p-3 text-xs font-semibold text-forest-800">
+        <div role="status" className="mt-4 rounded-lg border border-forest-100 bg-forest-50 px-3 py-2 text-xs font-semibold text-forest-800">
           {message}
         </div>
       )}
@@ -838,322 +867,232 @@ export default function OrdersPage() {
         <button
           type="button"
           onClick={() => setSelected(firstDeliveryIssue)}
-          className="mt-5 flex w-full items-start gap-3 rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-left shadow-[0_10px_30px_rgba(185,28,28,.12)]"
+          className="mt-4 flex w-full items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-left text-xs text-red-900"
         >
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-600 text-white">
-            <ShieldAlert size={20} />
-          </span>
+          <ShieldAlert size={16} className="shrink-0 text-red-600" />
           <span className="min-w-0 flex-1">
-            <strong className="block text-sm text-red-950">
+            <strong>
               {deliveryIssues.length === 1
-                ? "1 entrega exige ação imediata"
-                : `${deliveryIssues.length} entregas exigem ação imediata`}
-            </strong>
-            <span className="mt-1 block text-xs leading-5 text-red-800">
-              {firstDeliveryIssue.orderNumber ?? firstDeliveryIssue.code} ·{" "}
-              {firstDeliveryIssue.customer.name}:{" "}
-              {firstDeliveryIssue.shipment?.latestEventTitle ??
-                "problema informado pela transportadora"}
-              .
-            </span>
-            <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-700">
-              Abrir pedido e resolver <ChevronRight size={12} />
-            </span>
+                ? "1 entrega exige ação"
+                : `${deliveryIssues.length} entregas exigem ação`}
+            </strong>{" "}
+            · {firstDeliveryIssue.orderNumber ?? firstDeliveryIssue.code} ·{" "}
+            {firstDeliveryIssue.customer.name}:{" "}
+            {firstDeliveryIssue.shipment?.latestEventTitle ??
+              "problema informado pela transportadora"}
           </span>
+          <ChevronRight size={14} />
         </button>
       )}
 
-      <section className="-mx-2.5 mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2.5 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-7">
-        <Kpi label="Pedidos em aberto" value={String(open.length)} />
-        <Kpi
-          label="Valor em carteira"
-          value={money.format(
-            commercialOpen.reduce(
-              (sum, item) => sum + Number(item.totalAmount),
-              0,
-            ),
-          )}
-        />
-        <Kpi
-          label="Aguardando Pix"
-          value={String(
-            orders.filter((item) => displayStatus(item) === "AWAITING_PAYMENT")
-              .length,
-          )}
-        />
-        <Kpi
-          label="Pedidos reservados"
-          value={String(
-            orders.filter((item) =>
-              ["RESERVED", "PICKING", "READY_TO_SHIP", "INVOICED"].includes(
-                item.status,
-              ),
-            ).length,
-          )}
-        />
-        <Kpi
-          label="Aguardando estoque"
-          value={String(
-            orders.filter((item) => item.status === "CONFIRMED").length,
-          )}
-        />
-        <Kpi
-          label="Prontos para emitir NF-e"
-          value={String(
-            orders.filter((item) => displayStatus(item) === "READY_TO_SHIP")
-              .length,
-          )}
-        />
-        <Kpi label="Ticket médio" value={money.format(avgTicket)} />
-      </section>
-
-      <div className="-mx-2.5 mt-5 overflow-x-auto px-2.5 pb-1 sm:mx-0 sm:overflow-visible sm:px-0">
-        <div className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
-          {filters.map(([value, label]) => (
+      <dl className="mt-4 grid grid-cols-3 divide-x divide-stone-100 rounded-xl border border-stone-200 bg-white">
+        <div className="px-4 py-3">
+          <dt className="text-[11px] text-stone-500">Em aberto</dt>
+          <dd className="mt-0.5 text-lg font-bold tabular-nums">{open.length}</dd>
+        </div>
+        <div className="px-4 py-3">
+          <dt className="text-[11px] text-stone-500">Valor em carteira</dt>
+          <dd className="mt-0.5 truncate text-lg font-bold tabular-nums">
+            {money.format(
+              commercialOpen.reduce((sum, item) => sum + Number(item.totalAmount), 0),
+            )}
+          </dd>
+        </div>
+        <div className="px-4 py-3">
+          <dt className="text-[11px] text-stone-500">Exceções</dt>
+          <dd className="mt-0.5">
             <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold ${filter === value ? "border-forest-200 bg-forest-50" : "bg-white"}`}
+              type="button"
+              onClick={() => setOnlyExceptions((value) => !value)}
+              className={`text-lg font-bold tabular-nums ${exceptionCount ? "text-amber-800 underline decoration-amber-300 underline-offset-4" : ""}`}
             >
-              {value === "OVERDUE" && overdueOrders.length > 0
-                ? `${label} (${overdueOrders.length})`
-                : label}
+              {exceptionCount}
             </button>
-          ))}
+          </dd>
         </div>
-      </div>
+      </dl>
 
-      <section className="mt-5">
-        <div className="mb-3 flex justify-between">
-          <h2 className="text-lg font-semibold">Pedidos recentes</h2>
-          <span className="text-xs text-stone-400">
-            {visible.length} pedidos
-          </span>
-        </div>
-        <div className="space-y-3">
-          {visible.map((order) => {
-            const compactShipmentStep = shipmentProgressIndex(
-              order.shipment,
-              order.status,
-            );
-            const compactShipmentProgress = Math.round(
-              ((compactShipmentStep + 1) / shipmentProgressSteps.length) * 100,
-            );
-            const compactShipmentCancelled =
-              order.shipment?.status === "CANCELLED";
-            const compactShipmentException = hasOpenDeliveryException(order);
-            const paymentDate = formatPaymentDate(order.payment?.paidAt);
-            const paymentConfirmed =
-              order.payment?.status === "PAID" && Boolean(paymentDate);
-            const overdue = isOverdueOrder(order);
-            const daysLate = overdue ? overdueDays(order) : 0;
-
-            return (
-              <Card
-                key={order.id}
-                className={`p-4 ${
-                  compactShipmentException
-                    ? "border-2 border-red-300 bg-red-50/35 shadow-[0_10px_30px_rgba(185,28,28,.10)]"
-                    : overdue
-                      ? "border-2 border-amber-300 bg-amber-50/25"
-                      : ""
-                }`}
+      <section className="mt-4 overflow-hidden rounded-xl border border-stone-200 bg-white" aria-label="Lista de pedidos">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-3 py-2.5">
+          <div role="group" aria-label="Etapas do pedido" className="flex gap-1 overflow-x-auto">
+            {[{ key: "ALL", label: "Todos", count: orders.length }, ...orderStages.map((item) => ({ key: item.key, label: item.label, count: orders.filter((order) => item.statuses.includes(displayStatus(order))).length }))].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                aria-pressed={stage === item.key}
+                onClick={() => setStage(item.key)}
+                className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ${stage === item.key ? "bg-forest-900 text-white" : "text-stone-600 hover:bg-stone-50"}`}
               >
-                {compactShipmentException && (
-                  <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-600 px-3 py-2.5 text-white">
-                    <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-wide">
-                        Pendência crítica na entrega
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-4 text-red-50">
-                        {order.shipment?.latestEventTitle ??
-                          "A transportadora informou um problema."}
-                        {order.shipment?.latestEventDetail
-                          ? ` — ${order.shipment.latestEventDetail}`
-                          : " Abra o pedido para verificar e agir."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {overdue && !compactShipmentException && (
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-100/70 px-3 py-2.5 text-amber-950">
-                    <div className="flex items-center gap-2">
-                      <Clock3 size={16} className="shrink-0" />
-                      <div>
-                        <p className="text-xs font-black uppercase tracking-wide">
-                          Pedido atrasado
-                        </p>
-                        <p className="mt-0.5 text-[11px]">
-                          Prazo vencido há {daysLate}{" "}
-                          {daysLate === 1 ? "dia" : "dias"}.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelected(order)}
-                      className="inline-flex min-h-10 items-center gap-1 rounded-xl bg-amber-950 px-3 text-[10px] font-black text-white"
-                    >
-                      Abrir e resolver <ChevronRight size={12} />
-                    </button>
-                  </div>
-                )}
-                <button
-                  onClick={() => setSelected(order)}
-                  className="w-full text-left"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-[12rem]">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <strong>{order.orderNumber ?? order.code}</strong>
-                        {order.orderType === "SAMPLE" && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-900">
-                            Amostra
-                          </span>
-                        )}
-                        {order.salesChannel?.name && (
-                          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-stone-600">
-                            {order.salesChannel.name}
-                          </span>
-                        )}
-                        {order.createdByStorefrontPartner?.portalAccessLevel ===
-                          "DISTRIBUTOR" && (
-                          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-800">
-                            Sob encomenda
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-stone-500">
-                        {order.customer.name}
-                      </p>
-                      {paymentConfirmed && (
-                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 ring-1 ring-emerald-200">
-                          <Check size={12} strokeWidth={3} /> Pagamento feito em{" "}
-                          {paymentDate}
-                        </span>
-                      )}
-                    </div>
-                    {order.shipment && (
-                      <div className="min-w-0 flex-1 text-xs sm:text-center">
-                        <span className="font-semibold text-forest-900">
-                          {shipmentStatusLabel[order.shipment.status] ??
-                            "Frete em acompanhamento"}
-                        </span>
-                        <span className="text-stone-500">
-                          {" "}
-                          · {order.shipment.carrierName ?? "Melhor Envio"}
-                        </span>
-                        {(order.shipment.authorizationCode ||
-                          order.shipment.trackingCode) && (
-                          <p className="mt-1 text-[11px] text-stone-600">
-                            Rastreio{" "}
-                            {order.shipment.authorizationCode ??
-                              order.shipment.trackingCode}
-                            {order.shipment.authorizationCode &&
-                            order.shipment.trackingCode &&
-                            order.shipment.authorizationCode !==
-                              order.shipment.trackingCode
-                              ? ` · ${order.shipment.trackingCode}`
-                              : ""}
-                          </p>
-                        )}
-                        <p className="text-[10px] text-stone-400">
-                          Sincronizado{" "}
-                          {new Date(order.shipment.updatedAt).toLocaleString(
-                            "pt-BR",
-                          )}
-                        </p>
-                        <div className="mx-auto mt-2 flex max-w-[19rem] items-center gap-2">
-                          <div
-                            className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-stone-100"
-                            aria-label={`Evolução do envio: ${compactShipmentProgress}%`}
-                          >
-                            <div
-                              className={`h-full rounded-full transition-[width] duration-700 ${
-                                compactShipmentCancelled
-                                  ? "bg-red-500"
-                                  : compactShipmentException
-                                    ? "bg-amber-500"
-                                    : "bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500"
-                              }`}
-                              style={{ width: `${compactShipmentProgress}%` }}
-                            />
-                          </div>
-                          <span
-                            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wide ${
-                              compactShipmentCancelled
-                                ? "bg-red-50 text-red-700"
-                                : compactShipmentException
-                                  ? "bg-amber-50 text-amber-800"
-                                  : "bg-emerald-50 text-emerald-800"
-                            }`}
-                          >
-                            {compactShipmentCancelled
-                              ? "Cancelado"
-                              : compactShipmentException
-                                ? "Atenção"
-                                : (shipmentProgressSteps[compactShipmentStep]
-                                    ?.detail ?? "Preparando")}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="ml-auto flex items-center gap-2">
-                      <Status status={displayStatus(order)} />
-                      <strong>{money.format(Number(order.totalAmount))}</strong>
-                      <ChevronRight size={16} />
-                    </div>
-                  </div>
+                {item.label}
+                <span className={`rounded px-1.5 text-[10px] tabular-nums ${stage === item.key ? "bg-white/20" : "bg-stone-100 text-stone-500"}`}>{item.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={onlyExceptions}
+              onClick={() => setOnlyExceptions((value) => !value)}
+              className={`min-h-9 rounded-lg border px-3 text-xs font-semibold ${onlyExceptions ? "border-amber-300 bg-amber-50 text-amber-900" : "border-stone-200 text-stone-600"}`}
+            >
+              Só exceções{exceptionCount ? ` (${exceptionCount})` : ""}
+            </button>
+            <button
+              type="button"
+              aria-pressed={onlySamples}
+              onClick={() => setOnlySamples((value) => !value)}
+              className={`min-h-9 rounded-lg border px-3 text-xs font-semibold ${onlySamples ? "border-forest-200 bg-forest-50 text-forest-900" : "border-stone-200 text-stone-600"}`}
+            >
+              Amostras
+            </button>
+            <label className="flex min-h-9 items-center gap-2 rounded-lg border border-stone-200 px-2.5">
+              <Search size={14} className="text-stone-400" aria-hidden />
+              <span className="sr-only">Buscar pedido ou cliente</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar pedido ou cliente"
+                className="w-44 bg-transparent text-xs outline-none"
+              />
+            </label>
+          </div>
+        </div>
+
+        <ul className="divide-y divide-stone-100 md:hidden">
+          {visible.map((order) => {
+            const exception = orderException(order);
+            return (
+              <li key={order.id}>
+                <button type="button" onClick={() => setSelected(order)} className="grid w-full grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-3 py-2.5 text-left">
+                  <span className="font-semibold">{order.orderNumber ?? order.code}</span>
+                  <span className="font-semibold tabular-nums">{money.format(Number(order.totalAmount))}</span>
+                  <span className="truncate text-xs text-stone-500">{order.customer.name}</span>
+                  <span className="text-right"><Status status={displayStatus(order)} /></span>
+                  {exception && <span className={`col-span-2 text-[11px] font-semibold ${exception.tone === "danger" ? "text-red-700" : "text-amber-800"}`}>{exception.label}</span>}
                 </button>
-                <div className="mt-3 flex gap-2">
-                  {order.status === "DRAFT" && canEditOrders && (
-                    <button
-                      type="button"
-                      onClick={() => setEditing(order)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-xs font-semibold text-forest-800"
-                    >
-                      <Pencil size={13} /> Editar pedido
-                    </button>
-                  )}
-                  {order.paymentType === "TERM" &&
-                    order.orderType !== "SAMPLE" &&
-                    order.fiscalStatus === "AUTHORIZED" && (
-                      <OrderBillingPdfButton
-                        orderId={order.id}
-                        orderNumber={order.orderNumber ?? order.code}
-                      />
-                    )}
-                  <OrderPdfLink
-                    orderId={order.id}
-                    compact
-                    provisional={order.status === "DRAFT"}
-                  />
-                  {canOperateOrders &&
-                    ["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(
-                      order.status,
-                    ) && (
-                      <button
-                        disabled={!!busy}
-                        onClick={() => void action(order, "cancel")}
-                        className="rounded-lg border px-3 py-2 text-xs"
-                      >
-                        Cancelar
-                      </button>
-                    )}
-                </div>
-              </Card>
+              </li>
             );
           })}
-          {!visible.length && (
-            <Card className="py-14 text-center">
-              <PackageCheck className="mx-auto text-stone-300" />
-              <p className="mt-3 text-sm font-semibold">
-                Nenhum pedido neste filtro
-              </p>
-            </Card>
-          )}
+        </ul>
+
+        <div className="hidden max-h-[calc(100vh-17rem)] overflow-auto md:block">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-stone-50 text-[11px] text-stone-500 shadow-[0_1px_0_#ece9e4]">
+              <tr>
+                {([["Pedido", "code"], ["Cliente", "customer"], ["Data", "orderedAt"], ["Valor", "totalAmount"]] as Array<[string, OrderSortKey]>).map(([label, key]) => (
+                  <th key={key} scope="col" aria-sort={sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} className={`px-3 py-2 font-medium ${key === "totalAmount" ? "text-right" : ""}`}>
+                    <button type="button" onClick={() => sortBy(key)} className="inline-flex items-center gap-1 hover:text-stone-900">
+                      {label}
+                      <span aria-hidden className="text-[9px]">{sort.key === key ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
+                    </button>
+                  </th>
+                ))}
+                <th scope="col" className="px-3 py-2 font-medium">Situação</th>
+                <th scope="col" className="px-3 py-2 font-medium">Pagamento</th>
+                <th scope="col" className="px-3 py-2 font-medium">Atenção</th>
+                <th scope="col" className="px-3 py-2 font-medium"><span className="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {visible.map((order) => {
+                const compactShipmentException = hasOpenDeliveryException(order);
+                const exception = orderException(order);
+                const paymentDate = formatPaymentDate(order.payment?.paidAt);
+                const paymentConfirmed = order.payment?.status === "PAID" && Boolean(paymentDate);
+                return (
+                  <tr
+                    key={order.id}
+                    onClick={() => setSelected(order)}
+                    className={`cursor-pointer hover:bg-stone-50 ${compactShipmentException ? "bg-red-50/40" : ""}`}
+                  >
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelected(order);
+                        }}
+                        className="font-semibold underline decoration-stone-300 underline-offset-4 hover:decoration-stone-800"
+                      >
+                        {order.orderNumber ?? order.code}
+                      </button>
+                      <span className="mt-0.5 flex flex-wrap gap-1">
+                        {order.orderType === "SAMPLE" && <span className="rounded bg-amber-50 px-1.5 text-[9px] font-bold uppercase text-amber-900">Amostra</span>}
+                        {order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR" && <span className="rounded bg-violet-50 px-1.5 text-[9px] font-bold uppercase text-violet-800">Sob encomenda</span>}
+                        {order.salesChannel?.name && <span className="rounded bg-stone-100 px-1.5 text-[9px] font-bold uppercase text-stone-600">{order.salesChannel.name}</span>}
+                      </span>
+                    </td>
+                    <td className="max-w-[16rem] truncate px-3 py-2 text-stone-700" title={order.customer.name}>{order.customer.name}</td>
+                    <td className="px-3 py-2 tabular-nums text-stone-600">{new Date(order.orderedAt).toLocaleDateString("pt-BR")}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{money.format(Number(order.totalAmount))}</td>
+                    <td className="px-3 py-2">
+                      <Status status={displayStatus(order)} />
+                      {order.shipment && (
+                        <span className="mt-0.5 block text-[10px] text-stone-500">
+                          {shipmentStatusLabel[order.shipment.status] ?? "Frete em acompanhamento"}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-stone-600">
+                      {paymentConfirmed ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-800"><Check size={12} strokeWidth={3} /> Pago {paymentDate}</span>
+                      ) : (
+                        <span className="text-stone-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {exception ? (
+                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${exception.tone === "danger" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
+                          {exception.tone === "danger" ? <ShieldAlert size={12} /> : <Clock3 size={12} />}
+                          {exception.label}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                      <span className="flex items-center justify-end gap-1.5">
+                        {order.status === "DRAFT" && canEditOrders && (
+                          <button type="button" onClick={() => setEditing(order)} aria-label={`Editar ${order.orderNumber ?? order.code}`} className="rounded-md p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900">
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        <OrderPdfLink orderId={order.id} compact provisional={order.status === "DRAFT"} />
+                        {canOperateOrders && ["DRAFT", "CONFIRMED", "RESERVED", "PICKING"].includes(order.status) && (
+                          <button
+                            type="button"
+                            disabled={!!busy}
+                            onClick={() => void action(order, "cancel")}
+                            className="rounded-md px-2 py-1 text-[11px] text-stone-500 hover:bg-red-50 hover:text-red-700"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+        {!visible.length && (
+          <div className="py-12 text-center">
+            <PackageCheck className="mx-auto text-stone-300" />
+            <p className="mt-2 text-sm font-semibold">Nenhum pedido com esses filtros</p>
+            <button
+              type="button"
+              onClick={() => {
+                setStage("ALL");
+                setOnlyExceptions(false);
+                setOnlySamples(false);
+                setSearch("");
+              }}
+              className="mt-2 text-xs font-semibold underline"
+            >
+              Ver todos
+            </button>
+          </div>
+        )}
+        <p className="border-t border-stone-100 px-3 py-2 text-[11px] text-stone-400">{visible.length} de {orders.length} pedidos</p>
       </section>
 
       {creating && (

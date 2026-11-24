@@ -66,6 +66,8 @@ const management: Journey = {
 };
 
 function journeyForPath(pathname: string): Journey | null {
+  // Pages with their own stage tabs do not repeat the journey above them.
+  if (pathname.startsWith("/pedidos")) return null;
   if (
     [
       "/cafe-verde",
