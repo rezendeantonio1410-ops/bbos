@@ -117,6 +117,32 @@ export type ExecutiveDashboard = {
   diagnostics: PerformanceDiagnostic[];
   salesMap: SalesMapNode;
   alerts: OperationalAlert[];
+  /** Raw figures for the executive panel; the metrics above are display text. */
+  numbers?: {
+    openReceivables: number;
+    overdueReceivables: number;
+    overdueReceivablesCount: number;
+    openPayables: number;
+    greenCoffeeKg: number;
+    finishedUnits: number;
+    approvedPurchases: number;
+  };
+  summary?: SalesSummaryData;
+};
+
+export type SalesGeoTotals = { revenue: number; orders: number; customers: number; volumeKg: number };
+export type SalesSummaryData = {
+  revenue: number;
+  previousRevenue: number;
+  growthPercent: number | null;
+  orders: number;
+  averageTicket: number;
+  volumeKg: number;
+  cumulative: Array<{ day: number; current: number; previous: number }>;
+  topCustomers: Array<{ id: string; name: string; revenue: number; orders: number }>;
+  byState: Array<SalesGeoTotals & { state: string; name: string }>;
+  byCity: Array<SalesGeoTotals & { state: string; city: string }>;
+  unlocated: { revenue: number; orders: number };
 };
 
 export type ExecutiveRankingItem = {
@@ -325,6 +351,17 @@ export type IndustrialDashboard = {
   productionChart: ProductionChartPoint[];
   history: ProductionHistoryItem[];
   alerts: SupplyAlert[];
+  /** Raw figures and series for the industrial panel (optional for older clients). */
+  numbers?: {
+    plannedKg: number;
+    actualKg: number;
+    greenInputKg: number;
+    roastedOutputKg: number;
+    lossPercent: number | null;
+    yieldPercent: number | null;
+  };
+  weekly?: Array<{ label: string; plannedKg: number; actualKg: number }>;
+  batchLosses?: Array<{ id: string; code: string; completedAt: string; lossPercent: number }>;
 };
 
 export type ReceiptStatus =

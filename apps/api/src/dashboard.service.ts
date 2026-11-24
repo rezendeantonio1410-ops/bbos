@@ -6,6 +6,7 @@ import type {
   Period,
 } from "@bbos/shared";
 import { buildSalesMap, previousPeriodWindow } from "./sales-map";
+import { buildSalesSummary } from "./sales-summary";
 import {
   customerPortfolioWhere,
   salesOrderPortfolioWhere,
@@ -44,6 +45,7 @@ const periodStart = (period: Period) => {
 const salesMapOrderSelect = {
   id: true,
   code: true,
+  orderedAt: true,
   totalAmount: true,
   quantity: true,
   customer: {
@@ -639,6 +641,48 @@ export class DashboardService implements OnModuleDestroy {
               : "open",
         completedAt: o.completedAt?.toLocaleString("pt-BR"),
       })),
+      numbers: {
+        plannedKg: planned,
+        actualKg: actual,
+        greenInputKg: green,
+        roastedOutputKg: roasted,
+        lossPercent: green ? Math.round(loss * 10) / 10 : null,
+        yieldPercent: green ? Math.round((roasted / green) * 1000) / 10 : null,
+      },
+      weekly: (() => {
+        // Planned × actual grouped by week of the planned date (oldest first).
+        const weeks = new Map<string, { label: string; plannedKg: number; actualKg: number; at: number }>();
+        for (const o of orders) {
+          const monday = new Date(o.plannedAt);
+          monday.setHours(0, 0, 0, 0);
+          monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+          const key = monday.toISOString().slice(0, 10);
+          const week = weeks.get(key) ?? {
+            label: monday.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+            plannedKg: 0,
+            actualKg: 0,
+            at: monday.getTime(),
+          };
+          week.plannedKg += toNumber(o.plannedWeightKg);
+          week.actualKg += toNumber(o.actualOutputKg);
+          weeks.set(key, week);
+        }
+        return [...weeks.values()]
+          .sort((a, b) => a.at - b.at)
+          .slice(-8)
+          .map(({ at: _at, ...week }) => week);
+      })(),
+      batchLosses: batches
+        .filter((b) => toNumber(b.greenInputKg) > 0)
+        .slice(0, 20)
+        .map((b) => ({
+          id: b.id,
+          code: b.code,
+          completedAt: b.completedAt.toISOString(),
+          lossPercent:
+            Math.round(((toNumber(b.greenInputKg) - toNumber(b.roastedOutputKg)) / toNumber(b.greenInputKg)) * 1000) / 10,
+        }))
+        .reverse(),
       alerts: pendingLab
         ? [
             {
@@ -843,6 +887,54 @@ export class DashboardService implements OnModuleDestroy {
       diagnostics: [],
       salesMap,
       alerts,
+      // Raw numbers for the executive panel (the metrics above are display text).
+      numbers: {
+        openReceivables,
+        overdueReceivables: overdueAmount,
+        overdueReceivablesCount: overdueReceivables._count._all,
+        openPayables,
+        greenCoffeeKg: toNumber(green._sum.currentWeightKg),
+        finishedUnits: toNumber(finished._sum.quantityOnHand),
+        approvedPurchases: toNumber(purchases._sum.totalValue),
+      },
+      summary: buildSalesSummary(salesOrders, previousSalesOrders, {
+        start,
+        now,
+        previousStart: previousWindow.start,
+      }),
     };
+  }
+
+  /** Sales by state and city for the sales map, scoped like the home panel. */
+  async salesGeography(
+    companyId: string,
+    period: Period,
+    excludePlatformOrders = false,
+    portfolioPartnerId: string | null = null,
+  ) {
+    const start = periodStart(period);
+    const now = new Date();
+    const previousWindow = previousPeriodWindow(period, start, now);
+    const visibility: Prisma.SalesOrderWhereInput[] = [];
+    if (excludePlatformOrders) {
+      visibility.push({
+        externalOrderId: null,
+        importedAt: null,
+        OR: [
+          { salesChannelId: null },
+          { salesChannel: { is: { type: { not: "ECOMMERCE" }, platformCode: null } } },
+        ],
+      });
+    }
+    if (portfolioPartnerId) visibility.push(salesOrderPortfolioWhere(portfolioPartnerId));
+    const base = { companyId, orderType: "COMMERCIAL" as const, status: { not: "CANCELLED" as const }, ...(visibility.length ? { AND: visibility } : {}) };
+    const [orders, previous] = await Promise.all([
+      this.db.salesOrder.findMany({ where: { ...base, orderedAt: { gte: start } }, select: salesMapOrderSelect }),
+      this.db.salesOrder.findMany({
+        where: { ...base, orderedAt: { gte: previousWindow.start, lt: previousWindow.end } },
+        select: salesMapOrderSelect,
+      }),
+    ]);
+    return buildSalesSummary(orders, previous, { start, now, previousStart: previousWindow.start });
   }
 }

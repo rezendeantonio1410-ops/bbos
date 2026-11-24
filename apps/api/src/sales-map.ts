@@ -80,6 +80,20 @@ const stateCodeByName = Object.fromEntries(
   ]),
 );
 
+/** "PR", "pr" or "Paraná" → "PR"; null when it is not a Brazilian state. */
+export function brazilStateCode(value: string | null | undefined): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+  if (upper.length === 2 && brazilStates[upper]) return upper;
+  return (stateCodeByName as Record<string, string>)[normalizedKey(raw)] ?? null;
+}
+
+export function brazilStateName(code: string): string {
+  return brazilStates[code]?.name ?? code;
+}
+
+
 const resolveBrazilStateCode = (value?: string | null) => {
   const normalized = normalizedKey(value ?? "");
   if (brazilStates[normalized]) return normalized;

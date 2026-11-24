@@ -119,6 +119,8 @@ const HANDLER_ROLE_POLICY: Readonly<
     home: [...CORE, "ACCOUNTANT"],
     executive: LEADERSHIP,
     industrial: OPERATIONS,
+    salesGeography: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
+    stateShapes: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
   },
   FinanceController: {
     summary: ACCOUNTING_READ,

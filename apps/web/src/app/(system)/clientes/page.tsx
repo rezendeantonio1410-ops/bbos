@@ -513,6 +513,9 @@ export default function CustomersPage() {
   };
   useEffect(() => {
     void load();
+    // "Ver clientes de <cidade>" from the sales map pre-fills the search.
+    const preset = new URLSearchParams(window.location.search).get("busca");
+    if (preset) setSearch(preset.slice(0, 80));
     if (new URLSearchParams(window.location.search).get("novo") === "1") {
       setError("");
       setFormErrors({});
