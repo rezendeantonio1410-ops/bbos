@@ -173,8 +173,9 @@ test("orders screen exposes explicit shipment and completion actions", () => {
   assert.match(page, /const canReconcileDeliveredException/);
   assert.match(page, /Confirmar entrega e encerrar pendência/);
   assert.match(page, /overflow-y-auto overscroll-contain/);
-  assert.match(page, /\["OVERDUE", "Atrasados"\]/);
-  assert.match(page, /searchParams\.get\("filtro"\) === "atrasados"/);
+  // The late-orders link from the dashboard opens the list filtered to exceptions.
+  assert.match(page, /searchParams\.get\("filtro"\) === "atrasados"\) \{\s*setOnlyExceptions\(true\)/);
+  assert.match(page, /Só exceções/);
   assert.match(page, /Abrir e resolver/);
   assert.match(page, /operationalAction\("deliver", \{ method \}\)/);
   assert.match(page, /setCanCompleteDelivery\([\s\S]*?"SALES"/);

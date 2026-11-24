@@ -19,7 +19,6 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Truck,
   X,
@@ -1042,10 +1041,19 @@ export default function OrdersPage() {
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {exception && exception.label !== (statusLabel[displayStatus(order)] ?? "") ? (
-                        <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 font-semibold ${exception.tone === "danger" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
+                        <button
+                          type="button"
+                          title="Abrir e resolver"
+                          aria-label={`Abrir e resolver ${order.orderNumber ?? order.code}: ${exception.label}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelected(order);
+                          }}
+                          className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 font-semibold hover:underline ${exception.tone === "danger" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}
+                        >
                           {exception.tone === "danger" ? <ShieldAlert size={12} /> : <Clock3 size={12} />}
                           {exception.label}
-                        </span>
+                        </button>
                       ) : null}
                     </td>
                     <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
