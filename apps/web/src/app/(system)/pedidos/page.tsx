@@ -28,6 +28,12 @@ import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
 import { OrderPdfLink } from "@/components/order-pdf-link";
+import {
+  buildCustomerOrderInsights,
+  cadenceText,
+  searchOrderCustomers,
+  type SalesHistoryEntry,
+} from "@/lib/customer-order-insights";
 import { OrderCustomerApprovalActions } from "@/components/order-customer-approval-actions";
 import {
   filterCustomersByOrderPurpose,
@@ -1630,6 +1636,10 @@ function NewOrder({
   const [discardConfirmationOpen, setDiscardConfirmationOpen] = useState(false);
   const [health, setHealth] = useState<CustomerHealth | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const [customerHistory, setCustomerHistory] = useState<SalesHistoryEntry[] | null>(null);
+  const [recentCustomerIds, setRecentCustomerIds] = useState<string[]>([]);
   const formScrollRef = useRef<HTMLDivElement>(null);
   const isSample = orderType === "SAMPLE";
 
@@ -1698,6 +1708,57 @@ function NewOrder({
   const customer = filteredCustomers.find(
     (candidate) => candidate.id === customerId,
   );
+  // Customer first: the purpose (segment) comes from the customer's record.
+  const allowedPurposeKeys = useMemo(
+    () => new Set(orderPurposes.map((purpose) => orderPurposeKey(purpose))),
+    [orderPurposes],
+  );
+  const pickableCustomers = useMemo(
+    () =>
+      customers.filter(
+        (candidate) =>
+          candidate.active !== false &&
+          allowedPurposeKeys.has(orderPurposeKey(candidate.segment)),
+      ),
+    [customers, allowedPurposeKeys],
+  );
+  const customerMatches = useMemo(
+    () => searchOrderCustomers(pickableCustomers, customerQuery, recentCustomerIds),
+    [pickableCustomers, customerQuery, recentCustomerIds],
+  );
+  const orderInsights = useMemo(
+    () => (customerHistory ? buildCustomerOrderInsights(customerHistory, variants) : null),
+    [customerHistory, variants],
+  );
+  const chooseCustomer = (chosen: Customer) => {
+    setOrderPurpose(String(chosen.segment ?? ""));
+    setCustomerId(chosen.id);
+    setCustomerQuery("");
+    setCustomerPickerOpen(false);
+    setError("");
+    setRecentCustomerIds((current) => {
+      const next = [chosen.id, ...current.filter((id) => id !== chosen.id)].slice(0, 6);
+      try {
+        window.localStorage.setItem("bbos:recent-order-customers", JSON.stringify(next));
+      } catch {
+        // Recents are a convenience; private mode simply has none.
+      }
+      return next;
+    });
+  };
+  const applySuggestedLines = (suggested: Array<{ variantId: string; quantity: number }>, replace: boolean) => {
+    if (!suggested.length) return;
+    setLines((current) => {
+      const kept = replace ? [] : current.filter((line) => line.variantId);
+      const merged = [...kept];
+      for (const item of suggested) {
+        const existing = merged.find((line) => line.variantId === item.variantId);
+        if (existing) continue;
+        merged.push({ ...newDraftLine(), variantId: item.variantId, quantity: item.quantity });
+      }
+      return merged.length ? merged : [newDraftLine()];
+    });
+  };
   const completeLines = useMemo(
     () => lines.filter(isCompleteOrderDraftLine),
     [lines],
@@ -1842,9 +1903,9 @@ function NewOrder({
   const advanceMobileStep = () => {
     setError("");
     if (mobileStep === 1) {
+      if (!customerId) return setError("Escolha o cliente para continuar.");
       if (!orderPurpose)
-        return setError("Escolha a finalidade para continuar.");
-      if (!customerId) return setError("Selecione o cliente para continuar.");
+        return setError("Este cliente não tem segmento no cadastro. Complete em Clientes.");
       if (customer?.fiscalReadiness?.ready === false)
         return setError(
           "Complete o cadastro fiscal do cliente antes de avançar.",
@@ -1881,6 +1942,37 @@ function NewOrder({
       return goToMobileStep(4);
     }
   };
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem("bbos:recent-order-customers") ?? "[]");
+      if (Array.isArray(stored)) setRecentCustomerIds(stored.filter((id): id is string => typeof id === "string"));
+    } catch {
+      setRecentCustomerIds([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!customerId) {
+      setCustomerHistory(null);
+      return;
+    }
+    const controller = new AbortController();
+    setCustomerHistory(null);
+    void fetch(`/api/customers/${encodeURIComponent(customerId)}/sales-history`, {
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => (response.ok ? ((await response.json()) as SalesHistoryEntry[]) : []))
+      .then((history) => {
+        if (!controller.signal.aborted) setCustomerHistory(Array.isArray(history) ? history : []);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCustomerHistory([]);
+      });
+    return () => controller.abort();
+  }, [customerId]);
 
   useEffect(() => {
     void fetch(`${salesOrdersApi()}/next-number`, {
@@ -2126,7 +2218,9 @@ function NewOrder({
 
   const submit = async () => {
     setError("");
-    if (!orderPurpose) return setError("Selecione a finalidade do pedido.");
+    if (!customerId) return setError("Escolha o cliente do pedido.");
+    if (!orderPurpose)
+      return setError("Este cliente não tem segmento no cadastro. Complete em Clientes.");
     if (!customerId || !completeLines.length)
       return setError("Selecione o cliente e ao menos um produto.");
     if (
@@ -2282,13 +2376,12 @@ function NewOrder({
             <span className="shrink-0 text-xs font-semibold text-stone-500">
               {orderNumber}
             </span>
-            <span className="min-w-0 truncate text-xs text-stone-500">
-              <b className="text-stone-800">Finalidade:</b>{" "}
-              {orderPurpose || "selecione"}
-              <span className="mx-2 text-stone-300">·</span>
-              <b className="text-stone-800">Comprador:</b>{" "}
-              {customer?.name ?? "selecione o cliente"}
-            </span>
+            {customer && (
+              <span className="min-w-0 truncate text-xs text-stone-500">
+                {customer.name}
+                {orderPurpose ? ` · ${orderPurpose}` : ""}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -2382,82 +2475,127 @@ function NewOrder({
               </div>
             )}
 
-            <section className="rounded-2xl border border-forest-100 bg-forest-50/60 p-3">
-              <p className="text-xs font-bold text-forest-950">
-                1 · Finalidade do pedido
+            <section aria-labelledby="new-order-customer-label" className="rounded-2xl border border-stone-200 bg-white p-3">
+              <p id="new-order-customer-label" className="text-xs font-bold text-stone-900">
+                Cliente
               </p>
-              <p className="mt-1 text-[10px] text-stone-500">
-                A finalidade define quais clientes e qual tabela comercial
-                poderão ser utilizados.
-              </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {orderPurposes.map((purpose) => {
-                  const total = filterCustomersByOrderPurpose(
-                    customers,
-                    purpose,
-                  ).length;
-                  const selected = orderPurpose === purpose;
-                  return (
+              {customer ? (
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="min-w-0 truncate text-sm">{customer.name}</strong>
+                    {orderPurpose && (
+                      <span className="rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-600">
+                        {orderPurpose}
+                      </span>
+                    )}
                     <button
-                      key={purpose}
                       type="button"
                       onClick={() => {
-                        if (purpose !== orderPurpose) setCustomerId("");
-                        setOrderPurpose(purpose);
-                        setError("");
+                        setCustomerId("");
+                        setOrderPurpose("");
+                        setCustomerPickerOpen(true);
                       }}
-                      className={`rounded-xl border px-3 py-3 text-left transition ${selected ? "border-forest-700 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-forest-300"}`}
+                      className="ml-auto rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-600 underline underline-offset-2 hover:bg-stone-50"
                     >
-                      <strong className="block text-xs">{purpose}</strong>
-                      <span
-                        className={`mt-1 block text-[10px] ${selected ? "text-white/65" : "text-stone-400"}`}
-                      >
-                        {total} cliente{total === 1 ? "" : "s"}
-                      </span>
+                      Trocar cliente
                     </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <div>
-              <label
-                htmlFor="new-order-customer"
-                className="block text-xs font-semibold"
-              >
-                2 · Cliente
-              </label>
-              <select
-                id="new-order-customer"
-                disabled={!orderPurpose}
-                value={customerId}
-                onChange={(event) => setCustomerId(event.target.value)}
-                className="mt-2 w-full rounded-xl border px-3 py-3 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
-              >
-                <option value="">
-                  {orderPurpose
-                    ? `Selecione um cliente de ${orderPurpose}`
-                    : "Selecione primeiro a finalidade"}
-                </option>
-                {filteredCustomers.map((item) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                    disabled={item.fiscalReadiness?.ready === false}
-                  >
-                    {item.name}
-                    {item.fiscalReadiness?.ready === false
-                      ? " · cadastro fiscal pendente"
-                      : ""}
-                  </option>
-                ))}
-              </select>
-              {orderPurpose && (
-                <span className="mt-1 block text-[10px] text-stone-400">
-                  Exibindo somente clientes ativos de {orderPurpose}.
-                </span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-stone-50 px-3 py-2 text-[11px] sm:grid-cols-4">
+                    <div>
+                      <dt className="text-stone-500">Último pedido</dt>
+                      <dd className="font-semibold text-stone-800">
+                        {customerHistory === null
+                          ? "Carregando…"
+                          : orderInsights?.lastOrder
+                            ? `${new Date(orderInsights.lastOrder.orderedAt).toLocaleDateString("pt-BR")} · ${money.format(orderInsights.lastOrder.totalAmount)}`
+                            : "Primeiro pedido"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-stone-500">Frequência</dt>
+                      <dd className="font-semibold text-stone-800">
+                        {orderInsights?.cadenceDays ? `a cada ~${orderInsights.cadenceDays} dias` : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-stone-500">Condição habitual</dt>
+                      <dd className="font-semibold text-stone-800">{customer.paymentTerms || "À vista"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-stone-500">Pedidos</dt>
+                      <dd className="font-semibold text-stone-800">{orderInsights?.ordersCount ?? "—"}</dd>
+                    </div>
+                  </dl>
+                  {orderInsights && cadenceText(orderInsights) && (
+                    <p className="text-[10px] text-stone-500">{cadenceText(orderInsights)}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="relative mt-2">
+                  <label htmlFor="new-order-customer" className="sr-only">
+                    Buscar cliente
+                  </label>
+                  <input
+                    id="new-order-customer"
+                    role="combobox"
+                    aria-expanded={customerPickerOpen}
+                    aria-controls="new-order-customer-results"
+                    autoComplete="off"
+                    value={customerQuery}
+                    onFocus={() => setCustomerPickerOpen(true)}
+                    onChange={(event) => {
+                      setCustomerQuery(event.target.value);
+                      setCustomerPickerOpen(true);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && customerMatches[0]) {
+                        event.preventDefault();
+                        if (customerMatches[0].fiscalReadiness?.ready !== false) chooseCustomer(customerMatches[0]);
+                      }
+                    }}
+                    placeholder="Buscar cliente pelo nome ou segmento"
+                    className="w-full rounded-xl border px-3 py-3 text-sm"
+                  />
+                  {customerPickerOpen && (
+                    <ul
+                      id="new-order-customer-results"
+                      role="listbox"
+                      className="mt-1 max-h-72 overflow-auto rounded-xl border border-stone-200 bg-white p-1 shadow-lg"
+                    >
+                      {!customerQuery && customerMatches.length > 0 && (
+                        <li className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+                          Recentes
+                        </li>
+                      )}
+                      {customerMatches.map((item) => {
+                        const blocked = item.fiscalReadiness?.ready === false;
+                        return (
+                          <li key={item.id} role="option" aria-selected={false} aria-disabled={blocked}>
+                            <button
+                              type="button"
+                              disabled={blocked}
+                              onClick={() => chooseCustomer(item)}
+                              className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <span className="min-w-0 truncate font-medium">{item.name}</span>
+                              <span className="shrink-0 text-[10px] text-stone-500">
+                                {blocked ? "cadastro fiscal pendente" : item.segment}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                      {customerQuery && customerMatches.length === 0 && (
+                        <li className="px-3 py-3 text-xs text-stone-500">Nenhum cliente encontrado.</li>
+                      )}
+                      {!customerQuery && customerMatches.length === 0 && (
+                        <li className="px-3 py-3 text-xs text-stone-500">Digite o nome do cliente.</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
               )}
-            </div>
+            </section>
 
             {customer?.fiscalReadiness?.ready === false && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
@@ -2470,20 +2608,22 @@ function NewOrder({
             )}
 
             {!isSample && (
-              <div>
-                <p className="text-xs font-semibold">Forma de pagamento</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold">Pagamento</p>
+                <div role="group" aria-label="Forma de pagamento" className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5">
                   <button
                     type="button"
+                    aria-pressed={paymentType === "CASH"}
                     onClick={() => setPaymentType("CASH")}
-                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "CASH" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "bg-white text-stone-600"}`}
+                    className={`min-h-9 rounded-md px-4 text-xs font-semibold ${paymentType === "CASH" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500"}`}
                   >
                     À vista
                   </button>
                   <button
                     type="button"
+                    aria-pressed={paymentType === "TERM"}
                     onClick={() => setPaymentType("TERM")}
-                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${paymentType === "TERM" ? "border-violet-300 bg-violet-50 text-violet-900" : "bg-white text-stone-600"}`}
+                    className={`min-h-9 rounded-md px-4 text-xs font-semibold ${paymentType === "TERM" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500"}`}
                   >
                     A prazo
                   </button>
@@ -2534,28 +2674,22 @@ function NewOrder({
                 <p className="text-xs font-bold">Produtos do pedido</p>
                 <p className="mt-0.5 text-[10px] text-stone-400">
                   {!customerId
-                    ? "Selecione a finalidade e o cliente antes dos produtos."
+                    ? "Escolha o cliente para ver o histórico e as sugestões."
                     : isSample
                       ? "Selecione os produtos e quantidades enviados como amostra."
-                      : `Produtos para o pedido de ${orderPurpose}. Informe o desconto em reais; o BBOS calcula o percentual e o preço final.`}
+                      : "Preço da tabela do cliente. Desconto em reais, se houver."}
                 </p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={!customerId}
-                  onClick={() =>
-                    setLines(
-                      variants.map((variant) => ({
-                        ...newDraftLine(),
-                        variantId: variant.productVariantId,
-                      })),
-                    )
-                  }
-                  className="rounded-lg border bg-white px-3 py-2 text-[10px] font-bold text-stone-600 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Adicionar todos
-                </button>
+              <div className="flex flex-wrap gap-2">
+                {orderInsights?.lastOrder && orderInsights.lastOrder.lines.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => applySuggestedLines(orderInsights.lastOrder!.lines, true)}
+                    className="rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-[11px] font-bold text-forest-900"
+                  >
+                    Repetir último pedido ({orderInsights.lastOrder.lines.length} {orderInsights.lastOrder.lines.length === 1 ? "item" : "itens"})
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={!customerId}
@@ -2569,6 +2703,26 @@ function NewOrder({
               </div>
             </div>
 
+            {orderInsights && orderInsights.usualProducts.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-stone-500">Costuma comprar:</span>
+                {orderInsights.usualProducts.map((item) => {
+                  const added = lines.some((line) => line.variantId === item.variantId);
+                  return (
+                    <button
+                      key={item.variantId}
+                      type="button"
+                      disabled={added}
+                      onClick={() => applySuggestedLines([item], false)}
+                      className="min-h-8 rounded-full border border-stone-200 bg-white px-3 text-[11px] font-semibold text-stone-700 hover:border-forest-300 disabled:border-transparent disabled:bg-stone-100 disabled:text-stone-400"
+                    >
+                      {added ? "✓ " : "+ "}
+                      {item.label} · {item.quantity}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="space-y-1.5">
               {lines.map((line, index) => {
                 const selectedVariant = variants.find(
@@ -2791,8 +2945,8 @@ function NewOrder({
               })}
             </div>
 
-            <div className="mt-2 flex items-center justify-between rounded-xl bg-forest-900 px-4 py-2 text-white">
-              <span className="text-[10px] font-semibold uppercase tracking-wider">
+            <div className="mt-2 flex items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-2 text-stone-900">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-500">
                 Subtotal dos produtos
               </span>
               <b className="text-sm">
@@ -3604,8 +3758,15 @@ function NewOrder({
               </div>
             )}
           {(!isMobileFlow || mobileStep === 4) && saveBlockedReason && (
-            <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-              {saveBlockedReason}
+            // Before the first product there is nothing wrong yet: a quiet hint, not an alert.
+            <p
+              className={
+                !customerId || !completeLines.length
+                  ? "px-1 text-[11px] text-stone-500"
+                  : "rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
+              }
+            >
+              {!customerId ? "Escolha o cliente para começar." : saveBlockedReason}
             </p>
           )}
           <div className="flex gap-2">

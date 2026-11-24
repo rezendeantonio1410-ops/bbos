@@ -20,7 +20,8 @@
     "test:finance-cashflow": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/finance-cashflow.test.ts",
     "test:production-order-submit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/web/src/lib/production-order-submit.test.ts",
     "test:order-draft-lines": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/order-draft-lines.test.ts",
-    "test:order-purpose-filter": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/order-purpose-filter.test.ts"
+    "test:order-purpose-filter": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/order-purpose-filter.test.ts",
+    "test:customer-order-insights": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/web/src/lib/customer-order-insights.test.ts"
   },
   "dependencies": {
     "@bbos/shared": "workspace:*",
