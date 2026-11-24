@@ -1331,7 +1331,7 @@ function EditDraftOrder({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex justify-end bg-black/25">
+    <div data-bbos-theme className="fixed inset-0 z-[70] flex justify-end bg-black/25">
       <button
         className="absolute inset-0"
         aria-label="Fechar"
@@ -2356,7 +2356,7 @@ function NewOrder({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex overflow-clip justify-end">
+    <div data-bbos-theme className="fixed inset-0 z-50 flex overflow-clip justify-end">
       <button
         aria-label="Fechar"
         onClick={requestClose}
@@ -2746,8 +2746,9 @@ function NewOrder({
                     key={line.id}
                     className="rounded-lg border bg-white px-2.5 py-2"
                   >
-                    <div className="grid items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_72px_100px_104px_122px_108px_30px]">
-                      <div>
+                    {/* Phone and tablet: product on its own row, figures in two columns. */}
+                    <div className="grid grid-cols-2 items-end gap-1.5 sm:grid-cols-[minmax(0,1fr)_72px_100px_104px_122px_108px_30px]">
+                      <div className="col-span-2 sm:col-span-1">
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-stone-400">
                           Produto / apresentação
                         </p>
@@ -3798,7 +3799,7 @@ function NewOrder({
                   ? advanceMobileStep()
                   : submit())
               }
-              className="min-h-12 flex-1 rounded-xl bg-forest-900 px-4 text-xs font-bold text-white shadow-[0_8px_24px_rgba(18,59,53,.18)] disabled:opacity-40"
+              className="min-h-12 flex-1 rounded-xl bg-forest-900 px-4 text-xs font-bold text-white shadow-[0_8px_24px_rgba(18,59,53,.18)] disabled:bg-stone-100 disabled:text-stone-500 disabled:shadow-none"
             >
               {isMobileFlow && mobileStep < 4
                 ? mobileStep === 1
@@ -4681,6 +4682,7 @@ function OrderDrawer({
 
   return createPortal(
     <div
+      data-bbos-theme
       data-bbos-mobile-task
       className="fixed inset-0 z-[80] flex justify-end overflow-hidden"
     >
