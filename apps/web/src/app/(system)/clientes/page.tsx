@@ -12,21 +12,20 @@ import {
   AlertTriangle,
   BadgeDollarSign,
   Building2,
-  CheckCircle2,
-  ChevronRight,
   Clock3,
   History,
   Info,
   MapPin,
+  MoreHorizontal,
   Pencil,
   Plus,
   Search,
   Send,
-  ShieldAlert,
   Sparkles,
   X,
 } from "lucide-react";
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
+import { QUICK_FILTERS, healthChip, matchesQuickFilter, taxIdNeedsCheck, type CustomerQuickFilter } from "@/lib/customer-list";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
 import { applyCnpjRecord } from "@/lib/cnpj-registry";
@@ -534,6 +533,7 @@ export default function CustomersPage() {
       .catch(() => setCanApproveCredit(false));
   }, []);
 
+  const [quick, setQuick] = useState<CustomerQuickFilter>("ALL");
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return customers;
@@ -553,6 +553,7 @@ export default function CustomersPage() {
         .some((v) => String(v).toLowerCase().includes(term)),
     );
   }, [customers, search]);
+  const visible = useMemo(() => filtered.filter((c) => matchesQuickFilter(c, quick)), [filtered, quick]);
 
   const createCustomer = async () => {
     if (!validateCustomerForm()) return;
@@ -869,9 +870,6 @@ export default function CustomersPage() {
     }
   };
 
-  const attention = customers.filter((c) =>
-    ["ATTENTION", "BLOCKED"].includes(c.financialHealth?.health),
-  ).length;
   const effectiveSales = salesHistory.filter(
     (sale) => sale.status !== "CANCELLED",
   );
@@ -889,17 +887,11 @@ export default function CustomersPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.18em] text-violet-700">
-            <Sparkles size={13} /> Comercial inteligente
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            Clientes
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            O BBOS organiza o cadastro, lê a saúde financeira e ajuda a decidir
-            o próximo passo.
+          <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
+          <p className="mt-0.5 text-sm text-stone-500">
+            {customers.filter((c) => c.active).length} ativos
           </p>
         </div>
         <button
@@ -910,56 +902,51 @@ export default function CustomersPage() {
             setForm(emptyCustomer);
             setShowNew(true);
           }}
-          className="inline-flex items-center gap-2 rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white"
         >
           <Plus size={17} /> Novo cliente
         </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Kpi
-          label="Clientes ativos"
-          value={customers.filter((c) => c.active).length}
-          tone="blue"
-        />
-        <Kpi
-          label="Saúde financeira ok"
-          value={
-            customers.filter((c) => c.financialHealth?.health === "HEALTHY")
-              .length
-          }
-          tone="green"
-        />
-        <Kpi
-          label="Pedem atenção"
-          value={attention}
-          tone={attention ? "amber" : "green"}
-        />
-        <Kpi
-          label="Crédito em análise"
-          value={
-            customers.filter(
-              (c) => c.creditReviewPending || c.creditStatus === "UNDER_REVIEW",
-            ).length
-          }
-          tone="violet"
-        />
-      </div>
-
       <div className="rounded-2xl border bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-          <div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-xl bg-stone-100 px-3 py-2.5 text-stone-500">
-            <Search size={16} />
+        <div className="grid gap-3 border-b p-3 sm:p-4">
+          <div className="flex min-w-0 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-stone-500">
+            <Search size={16} aria-hidden />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Busque por cliente, CNPJ, cidade ou segmento..."
-              className="w-full bg-transparent text-sm outline-none"
+              placeholder="Buscar cliente, CNPJ, cidade ou segmento"
+              aria-label="Buscar clientes"
+              className="min-h-11 w-full bg-transparent text-base outline-none sm:text-sm"
             />
           </div>
-          <span className="text-xs text-stone-500">
-            {filtered.length} cliente(s)
-          </span>
+          <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filtrar clientes">
+            {QUICK_FILTERS.map(({ key, label, tone }) => {
+              const count = customers.filter((c) => matchesQuickFilter(c, key)).length;
+              if (key !== "ALL" && count === 0) return null;
+              const active = quick === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setQuick(key)}
+                  className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition ${
+                    active ? "border-stone-950 bg-stone-950 text-white" : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                  }`}
+                >
+                  {label}
+                  <span
+                    className={`rounded-full px-1.5 text-xs font-semibold tabular-nums ${
+                      active ? "bg-white/20" : tone === "warn" ? "bg-amber-100 text-amber-900" : tone === "info" ? "bg-violet-100 text-violet-800" : "bg-stone-100 text-stone-600"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         {error && (
           <div className="m-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -967,32 +954,40 @@ export default function CustomersPage() {
           </div>
         )}
         {loading ? (
-          <div className="p-12 text-center text-sm text-stone-500">
-            Estou organizando seus clientes…
-          </div>
-        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center text-sm text-stone-500">Carregando clientes…</div>
+        ) : visible.length === 0 ? (
           <div className="p-14 text-center">
             <Building2 className="mx-auto text-stone-300" />
-            <p className="mt-3 font-semibold">Ainda não há clientes aqui</p>
+            <p className="mt-3 font-semibold">{customers.length ? "Nenhum cliente com esse filtro" : "Ainda não há clientes aqui"}</p>
             <p className="mt-1 text-sm text-stone-500">
-              Cadastre o primeiro. O BBOS vai guiando você.
+              {customers.length ? "Mude a busca ou o filtro acima." : "Cadastre o primeiro em Novo cliente."}
             </p>
           </div>
         ) : (
-          <div className="divide-y">
-            {filtered.map((customer) => (
-              <CustomerRow
-                key={customer.id}
-                customer={customer}
-                onEdit={() => openEdit(customer)}
-                onRequest={() => openRequest(customer)}
-                onCredit={() => openCredit(customer)}
-                onVisits={() => void openVisits(customer)}
-                onTaxIdReview={() => setTaxIdCustomer(customer)}
-                canApproveCredit={canApproveCredit}
-              />
-            ))}
-          </div>
+          <>
+            <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-x-4 border-b bg-stone-50 px-4 py-2 text-xs font-semibold text-stone-500 md:grid">
+              <span>Cliente</span>
+              <span>CPF/CNPJ</span>
+              <span>Situação</span>
+              <span>Crédito</span>
+              <span className="w-[136px] text-right">Ações</span>
+            </div>
+            <div className="divide-y">
+              {visible.map((customer) => (
+                <CustomerRow
+                  key={customer.id}
+                  customer={customer}
+                  onEdit={() => openEdit(customer)}
+                  onRequest={() => openRequest(customer)}
+                  onCredit={() => openCredit(customer)}
+                  onVisits={() => void openVisits(customer)}
+                  onTaxIdReview={() => setTaxIdCustomer(customer)}
+                  canApproveCredit={canApproveCredit}
+                />
+              ))}
+            </div>
+            <p className="border-t px-4 py-2 text-xs text-stone-500">{visible.length} de {customers.length} clientes</p>
+          </>
         )}
       </div>
 
@@ -2436,170 +2431,119 @@ function CustomerRow({
   canApproveCredit: boolean;
 }) {
   const h = customer.financialHealth;
-  const style =
-    h.health === "HEALTHY"
-      ? "bg-emerald-50 text-emerald-800 border-emerald-100"
-      : h.health === "INFO"
-        ? "bg-blue-50 text-blue-800 border-blue-100"
-        : h.health === "ATTENTION"
-          ? "bg-amber-50 text-amber-900 border-amber-100"
-          : "bg-red-50 text-red-800 border-red-100";
-  const Icon =
-    h.health === "HEALTHY"
-      ? CheckCircle2
-      : h.health === "BLOCKED"
-        ? ShieldAlert
-        : h.health === "ATTENTION"
-          ? AlertTriangle
-          : Info;
-  const taxIdDigits = (customer.taxId ?? "").replace(/\D/g, "");
-  const isBrazilian = (customer.countryCode ?? "BR") === "BR";
-  const cnpjRelevant =
-    isBrazilian && (taxIdDigits.length === 0 || taxIdDigits.length === 14);
-  const cnpjConfirmed =
-    customer.taxIdVerificationStatus === "VERIFIED_ACTIVE" ||
-    customer.taxIdVerificationStatus === "CONFIRMED_INTERNAL";
+  const chip = healthChip(h?.health);
+  const needsTaxId = taxIdNeedsCheck(customer);
+  const reviewing = customer.creditReviewPending || customer.creditStatus === "UNDER_REVIEW";
+  const actions: Array<{ label: string; icon: typeof Pencil; onClick: () => void; write?: boolean }> = [
+    { label: "Histórico comercial", icon: History, onClick: onVisits },
+    { label: "Editar cadastro", icon: Pencil, onClick: onEdit, write: true },
+    ...(needsTaxId ? [{ label: "Conferir CNPJ", icon: Search, onClick: onTaxIdReview, write: true }] : []),
+    ...(!reviewing ? [{ label: "Solicitar crédito", icon: Send, onClick: onRequest, write: true }] : []),
+    { label: reviewing && canApproveCredit ? "Analisar crédito" : "Ver crédito", icon: BadgeDollarSign, onClick: onCredit, write: true },
+  ];
   return (
-    <div className="p-5 transition hover:bg-stone-50/60">
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_1.5fr_auto] lg:items-center">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold">
-              {customer.tradeName || customer.name}
-            </p>
-            {customer.segment && (
-              <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">
-                {customer.segment}
-              </span>
-            )}
-            <span
-              className={`rounded-full px-2 py-1 text-[10px] font-semibold ${customer.fiscalReadiness?.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}
-            >
-              {customer.fiscalReadiness?.ready
-                ? "Fiscal completo"
-                : "Fiscal pendente"}
-            </span>
-            {cnpjRelevant && (
-              <span
-                className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
-                  cnpjConfirmed
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-amber-50 text-amber-800"
-                }`}
-              >
-                {cnpjConfirmed ? "CNPJ confirmado" : "CNPJ a conferir"}
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-stone-500">
-            {customer.taxId || "CPF/CNPJ ainda não informado"}
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3 transition hover:bg-stone-50/70 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] md:items-center">
+      <button type="button" onClick={onVisits} className="min-w-0 text-left" title="Abrir histórico comercial">
+        <p className="truncate font-semibold">{customer.tradeName || customer.name}</p>
+        <p className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-sm text-stone-500">
+          {customer.city && <MapPin size={13} className="shrink-0" aria-hidden />}
+          <span className="truncate">
+            {[customer.city && `${customer.city}${customer.state ? `/${customer.state}` : ""}`, customer.segment].filter(Boolean).join(" · ") || "Sem cidade"}
+          </span>
+        </p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
+          <span title={h?.guidance} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${chip.className}`}>{chip.label}</span>
+          <span className="text-xs text-stone-500">
+            Crédito: {creditLabel[customer.creditStatus]}
+            {customer.creditStatus === "APPROVED" ? ` · ${money(h.availableCredit)}` : ""}
+          </span>
+          {(needsTaxId || !customer.fiscalReadiness?.ready) && (
+            <span className="text-xs text-amber-800">{needsTaxId ? "CNPJ a conferir" : "Fiscal pendente"}</span>
+          )}
+        </p>
+      </button>
+      <div className="hidden min-w-0 text-sm md:block">
+        <p className="truncate tabular-nums text-stone-700">{customer.taxId || "Sem CPF/CNPJ"}</p>
+        {(needsTaxId || !customer.fiscalReadiness?.ready) && (
+          <p className="truncate text-xs text-amber-800" title={customer.fiscalReadiness?.issues.join(", ")}>
+            {needsTaxId ? "CNPJ a conferir" : "Cadastro fiscal pendente"}
           </p>
-          {customer.city && (
-            <p className="mt-1 flex items-center gap-1 text-xs text-stone-400">
-              <MapPin size={12} />
-              {customer.city}
-              {customer.state ? `/${customer.state}` : ""}
-            </p>
-          )}
-          {!customer.fiscalReadiness?.ready && (
-            <p className="mt-1 text-[11px] text-amber-700">
-              Falta:{" "}
-              {customer.fiscalReadiness?.issues.join(", ") ||
-                "revisar cadastro fiscal"}
-              .
-            </p>
-          )}
-        </div>
-        <div className={`rounded-xl border px-4 py-3 ${style}`}>
-          <div className="flex gap-2">
-            <Icon size={17} className="mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-bold">
-                {h.health === "HEALTHY"
-                  ? "Tudo em ordem"
-                  : h.health === "INFO"
-                    ? "BBOS orienta"
-                    : h.health === "ATTENTION"
-                      ? "Vale conferir"
-                      : "Atenção antes de vender"}
-              </p>
-              <p className="mt-1 text-xs leading-5 opacity-90">{h.guidance}</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <div className="mr-1 text-right">
-            <p className="text-[10px] uppercase tracking-wider text-stone-400">
-              Crédito
-            </p>
-            <p className="text-sm font-semibold">
-              {creditLabel[customer.creditStatus]}
-            </p>
-            {customer.creditStatus === "APPROVED" && (
-              <p className="text-xs text-stone-500">
-                Disponível {money(h.availableCredit)}
-              </p>
-            )}
-            {customer.creditReviewPending && (
-              <p className="text-[10px] font-semibold text-violet-700">
-                Revisão solicitada
-              </p>
-            )}
-          </div>
-          {cnpjRelevant && !cnpjConfirmed && (
-            <button
-              data-bbos-write-action
-              onClick={onTaxIdReview}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
-            >
-              <Search size={14} /> Conferir CNPJ
-            </button>
-          )}
-          <button
-            data-bbos-write-action
-            onClick={onEdit}
-            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
-          >
-            <Pencil size={14} /> Editar
-          </button>
-          <button
-            onClick={onVisits}
-            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
-          >
-            <History size={14} /> Histórico comercial
-          </button>
-          <Link
-            data-bbos-write-action
-            href={`/atendimento?cliente=${encodeURIComponent(customer.id)}`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-          >
-            <Plus size={14} /> Registrar visita
-          </Link>
-          {!customer.creditReviewPending &&
-            customer.creditStatus !== "UNDER_REVIEW" && (
-              <button
-                data-bbos-write-action
-                onClick={onRequest}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-              >
-                <Send size={14} /> Solicitar crédito
-              </button>
-            )}
-          <button
-            data-bbos-write-action
-            onClick={onCredit}
-            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-white"
-          >
-            <BadgeDollarSign size={15} />{" "}
-            {(customer.creditReviewPending ||
-              customer.creditStatus === "UNDER_REVIEW") &&
-            canApproveCredit
-              ? "Analisar"
-              : "Crédito"}
-            <ChevronRight size={14} />
-          </button>
-        </div>
+        )}
       </div>
+      <div className="hidden min-w-0 md:block">
+        <span title={h?.guidance} className={`inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-xs font-semibold ${chip.className}`}>
+          <span className="truncate">{chip.label}</span>
+        </span>
+      </div>
+      <div className="hidden min-w-0 text-sm md:block">
+        <p className="truncate font-medium">{creditLabel[customer.creditStatus]}</p>
+        {customer.creditStatus === "APPROVED" ? (
+          <p className="truncate text-xs text-stone-500">Disponível {money(h.availableCredit)}</p>
+        ) : customer.creditReviewPending ? (
+          <p className="truncate text-xs font-medium text-violet-700">Revisão solicitada</p>
+        ) : null}
+      </div>
+      <div className="flex items-start gap-2 self-start md:items-center md:self-auto md:justify-end">
+        <Link
+          data-bbos-write-action
+          href={`/atendimento?cliente=${encodeURIComponent(customer.id)}`}
+          aria-label={`Registrar visita a ${customer.tradeName || customer.name}`}
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold hover:bg-stone-50"
+        >
+          <Plus size={15} /> <span className="hidden sm:inline">Visita</span>
+        </Link>
+        <RowMenu label={`Mais ações para ${customer.tradeName || customer.name}`} actions={actions} />
+      </div>
+    </div>
+  );
+}
+
+function RowMenu({ label, actions }: { label: string; actions: Array<{ label: string; icon: typeof Pencil; onClick: () => void; write?: boolean }> }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="grid size-10 place-items-center rounded-xl border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
+          {actions.map(({ label: text, icon: Icon, onClick, write }) => (
+            <button
+              key={text}
+              type="button"
+              role="menuitem"
+              {...(write ? { "data-bbos-write-action": true } : {})}
+              onClick={() => {
+                setOpen(false);
+                onClick();
+              }}
+              className="flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm hover:bg-stone-50"
+            >
+              <Icon size={16} className="shrink-0 text-stone-500" /> {text}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2751,28 +2695,6 @@ function Mini({
       <p className={`mt-1 text-sm font-bold ${alert ? "text-amber-900" : ""}`}>
         {value}
       </p>
-    </div>
-  );
-}
-function Kpi({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "blue" | "green" | "amber" | "violet";
-}) {
-  const map = {
-    blue: "bg-blue-50 border-blue-100 text-blue-900",
-    green: "bg-emerald-50 border-emerald-100 text-emerald-900",
-    amber: "bg-amber-50 border-amber-100 text-amber-900",
-    violet: "bg-violet-50 border-violet-100 text-violet-900",
-  };
-  return (
-    <div className={`rounded-2xl border px-5 py-4 ${map[tone]}`}>
-      <p className="text-xs font-medium opacity-70">{label}</p>
-      <p className="mt-1.5 text-2xl font-bold">{value}</p>
     </div>
   );
 }
