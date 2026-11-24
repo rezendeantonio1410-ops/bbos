@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCashFlowLines, buildCashFlowSeries, firstBelowMinimum } from "./finance-cashflow";
+import { bucketCashFlow, buildCashFlowLines, buildCashFlowSeries, firstBelowMinimum, groupTotals, payableGroup } from "./finance-cashflow";
 
 test("cash flow orders receivables and payables and calculates the running balance", () => {
   const lines = buildCashFlowLines({
@@ -116,4 +116,31 @@ test("estimated taxes enter the projection and the minimum-balance alert", () =>
   const alert = firstBelowMinimum(lines, 100_000);
   assert.equal(alert?.id, "tax-COFINS-2026-11"); // 105 mil after the payable, 97 mil after the tax
   assert.equal(firstBelowMinimum(lines, 0), null);
+});
+
+test("weekly buckets, overdue in the first week, and group totals", () => {
+  const lines = buildCashFlowLines({
+    cash: 100_000,
+    receivables: [
+      { id: "late", counterparty: "Bar A", dueDate: "2026-11-10", amount: 1_000, status: "OPEN" },
+      { id: "r1", counterparty: "Café B", dueDate: "2026-12-02", amount: 5_000, status: "OPEN" },
+    ],
+    payables: [{ id: "p1", counterparty: "Fazenda", category: "COMPRA_CAFE_VERDE", dueDate: "2026-11-27", amount: 20_000, status: "OPEN" }],
+    taxes: [{ tax: "PIS", label: "PIS", competence: "2026-11", dueDate: "2026-12-24", amount: 300, basis: "" }],
+  });
+  const weeks = bucketCashFlow(lines, { cash: 100_000, today: new Date("2026-11-24T15:00:00Z"), granularity: "week", periods: 13 });
+  assert.equal(weeks[0]?.start, "2026-11-23"); // Monday
+  assert.equal(weeks[0]?.includesOverdue, true);
+  assert.equal(weeks[0]?.inflow, 1_000);
+  assert.equal(weeks[0]?.outflow, 20_000);
+  assert.equal(weeks[0]?.closing, 81_000);
+  assert.equal(weeks[1]?.inflow, 5_000);
+  assert.equal(weeks[4]?.outflow, 300);
+  assert.equal(weeks.at(-1)?.closing, 85_700);
+  const months = bucketCashFlow(lines, { cash: 100_000, today: new Date("2026-11-24T15:00:00Z"), granularity: "month", periods: 6 });
+  assert.equal(months[0]?.label, "nov/26");
+  assert.equal(months[1]?.inflow, 5_000);
+  assert.deepEqual(groupTotals(lines, "out"), [{ group: "Café verde", amount: 20_000 }, { group: "Impostos", amount: 300 }]);
+  assert.equal(payableGroup("Frete / logística · Melhor Envio"), "Frete / logística");
+  assert.equal(payableGroup("ALUGUEL"), "Aluguel");
 });
