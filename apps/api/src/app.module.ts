@@ -53,6 +53,8 @@ import { BrokersController } from "./brokers.controller";
 import { CustomersController } from "./customers.controller";
 import { ProspectsController } from "./prospects.controller";
 import { NearbyController } from "./nearby.controller";
+import { VisitTextController } from "./visit-text.controller";
+import { VisitTextPolishService } from "./visit-text-polish";
 import { GeocodingService } from "./geocoding.service";
 import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
@@ -135,6 +137,7 @@ import { BillingEmailService } from "./billing-email.service";
     CustomersController,
     ProspectsController,
     NearbyController,
+    VisitTextController,
     CuppingController,
     CuppingTrainingController,
     ProfessionalSamplesController,
@@ -179,6 +182,7 @@ import { BillingEmailService } from "./billing-email.service";
     SalesReceivableAlertService,
     BillingEmailService,
     GeocodingService,
+    VisitTextPolishService,
     SalesOrderCustomerLifecycleService,
     SalesOrderPaymentsService,
     SalesOrderTermApprovalService,

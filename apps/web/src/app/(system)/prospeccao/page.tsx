@@ -311,6 +311,9 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
   const [draft, setDraft] = useState<Draft | null>(null);
   const [filledByRegistry, setFilledByRegistry] = useState<Set<string>>(new Set());
   const [transcript, setTranscript] = useState("");
+  const [polishing, setPolishing] = useState(false);
+  const [polished, setPolished] = useState<string | null>(null);
+  const [polishError, setPolishError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [locating, setLocating] = useState(false);
@@ -361,6 +364,25 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
     setTranscript((current) => `${current}${current ? " " : ""}${text}`);
     setDraft((current) => (current ? { ...current, facts: `${current.facts}${current.facts && !current.facts.endsWith(" ") ? " " : ""}${text}` } : current));
   });
+
+  const polish = async () => {
+    if (!draft?.facts.trim()) return;
+    if (dictation.listening) dictation.stop();
+    setPolishing(true);
+    setPolishError("");
+    try {
+      const result = await api<{ text: string }>("/api/visit-text/polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: draft.facts }),
+      });
+      setPolished(result.text);
+    } catch (cause) {
+      setPolishError(cause instanceof Error ? cause.message : "Não foi possível corrigir agora.");
+    } finally {
+      setPolishing(false);
+    }
+  };
 
   const pinHere = () => {
     if (!prospect || !("geolocation" in navigator)) return;
@@ -561,6 +583,26 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
               className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-3 text-base outline-none sm:text-sm"
             />
             {dictation.interim && <p className="mt-1 text-sm italic text-stone-500">{dictation.interim}…</p>}
+            {draft.facts.trim().length > 0 && polished === null && (
+              <button type="button" onClick={() => void polish()} disabled={polishing} className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-sm font-semibold text-violet-800 disabled:opacity-60">
+                <Sparkles size={16} /> {polishing ? "Corrigindo..." : "Corrigir português"}
+              </button>
+            )}
+            {polishError && <p className="mt-1 text-sm text-rose-700">{polishError}</p>}
+            {polished !== null && (
+              <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">Texto corrigido — confira antes de usar</p>
+                <p className="mt-1 whitespace-pre-line text-sm text-stone-900">{polished}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => { set("facts", polished); setPolished(null); }} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-violet-800 px-4 text-sm font-semibold text-white">
+                    <CheckCircle2 size={16} /> Usar texto corrigido
+                  </button>
+                  <button type="button" onClick={() => setPolished(null)} className="min-h-11 rounded-xl border border-stone-200 bg-white px-4 text-sm font-semibold text-stone-700">
+                    Manter o meu
+                  </button>
+                </div>
+              </div>
+            )}
             {dictation.error && <p className="mt-1 text-sm text-rose-700">{dictation.error}</p>}
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-[1.4fr_1fr]">

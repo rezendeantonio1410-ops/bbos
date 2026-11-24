@@ -99,6 +99,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   CustomersController: COMMERCIAL,
   ProspectsController: CORE,
   NearbyController: CORE,
+  VisitTextController: CORE,
   CuppingController: OPERATIONS,
   CuppingTrainingController: OPERATIONS,
   ProfessionalSamplesController: OPERATIONS,
