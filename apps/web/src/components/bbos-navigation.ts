@@ -13,6 +13,8 @@ import {
   House,
   Images,
   LayoutDashboard,
+  LocateFixed,
+  MapPinned,
   PackageCheck,
   PackageOpen,
   FileInput,
@@ -118,6 +120,22 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["visita", "relato", "vendedor", "follow-up"],
       },
       {
+        href: "/por-perto",
+        label: "Por perto",
+        description: "Clientes e pré-cadastros perto de você",
+        icon: LocateFixed,
+        roles: ALL,
+        keywords: ["perto", "mapa", "localizacao", "gps", "rota", "visita"],
+      },
+      {
+        href: "/prospeccao",
+        label: "Prospecção",
+        description: "Pré-cadastros para visitar e confirmar",
+        icon: MapPinned,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["pre cadastro", "prospect", "lead", "visita", "cnpj"],
+      },
+      {
         href: "/pedidos",
         label: "Pedidos",
         description: "Cotação, promessa, reserva e entrega",
@@ -176,17 +194,17 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "supply",
-    label: "Suprimentos",
-    description: "Compra de café verde e insumos",
+    label: "Compras",
+    description: "Café verde, fornecedores e entradas",
     tone: "amber",
     items: [
       {
         href: "/cafe-verde",
-        label: "Compras de café verde",
+        label: "Café verde",
         description: "Comprar, receber e liberar",
         icon: PackageOpen,
         roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
-        keywords: ["compra", "recebimento", "lote", "fornecedor"],
+        keywords: ["compra", "suprimentos", "recebimento", "lote", "fornecedor"],
       },
       {
         href: "/fornecedores",
@@ -369,7 +387,7 @@ const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
   INDUSTRIAL: ["/home", "/producao", "/estoque", "/dashboard-industrial"],
   FINANCE: ["/home", "/pedidos", "/financeiro", "/notas-entrada"],
   ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
-  SALES: ["/home", "/clientes", "/atendimento", "/pedidos"],
+  SALES: ["/home", "/por-perto", "/atendimento", "/pedidos"],
   MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
 };
 

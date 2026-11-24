@@ -11,6 +11,7 @@ import { MercadoLivreService } from "./integrations/mercado-livre/mercado-livre.
 import { MobileNotificationService } from "./mobile-notification.service";
 import { SalesReceivableAlertService } from "./sales-receivable-alert.service";
 import { BillingEmailService } from "./billing-email.service";
+import { GeocodingService } from "./geocoding.service";
 
 @Injectable()
 export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -26,6 +27,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly mobileNotifications: MobileNotificationService,
     private readonly salesReceivableAlerts: SalesReceivableAlertService,
     private readonly billingEmails: BillingEmailService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   onModuleInit() {
@@ -52,6 +54,7 @@ export class IntegrationWorkerService implements OnModuleInit, OnModuleDestroy {
       await this.mercadoLivre.syncConnectedCompanies();
       await this.salesReceivableAlerts.sync();
       await this.billingEmails.sync();
+      await this.geocoding.sync();
       await this.mobileNotifications.processNext();
     } catch (error) {
       this.logger.error(error instanceof Error ? error.message : String(error));

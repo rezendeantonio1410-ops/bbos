@@ -19,7 +19,7 @@
     "test:signa-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-billing-recipient.test.ts",
     "test:signa-idempotency": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/signa-order-idempotency.test.ts ../../apps/api/src/scheduled-jobs.test.ts",
     "test:signa-order-isolation": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/partner-portal-order-access.test.ts ../../apps/api/src/partner-end-customer-input.test.ts ../../apps/api/src/signa-catalog-visibility.test.ts ../../apps/api/src/signa-server-draft.test.ts",
-    "test:customer-visit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-visit-input.test.ts",
+    "test:customer-visit": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-visit-input.test.ts ../../apps/api/src/prospect-input.test.ts ../../apps/api/src/nearby.test.ts ../../apps/api/src/visit-text-polish.test.ts",
     "test:customer-sales-history": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/customer-sales-history.test.ts",
     "test:sales-receivable-alert": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-receivable-alert.service.test.ts",
     "test:production-planning": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/production-planning.test.ts",
@@ -62,6 +62,7 @@
     "test:sales-summary": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-summary.test.ts ../../apps/api/src/municipality-shapes.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0",
     "@bbos/database": "workspace:*",
     "@bbos/shared": "workspace:*",
     "@nestjs/common": "^11.1.6",

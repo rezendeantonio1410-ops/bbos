@@ -51,6 +51,11 @@ import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
 import { BrokersController } from "./brokers.controller";
 import { CustomersController } from "./customers.controller";
+import { ProspectsController } from "./prospects.controller";
+import { NearbyController } from "./nearby.controller";
+import { VisitTextController } from "./visit-text.controller";
+import { VisitTextPolishService } from "./visit-text-polish";
+import { GeocodingService } from "./geocoding.service";
 import { CuppingController } from "./cupping.controller";
 import { CuppingTrainingController } from "./cupping-training.controller";
 import { ProfessionalSamplesController } from "./professional-samples.controller";
@@ -130,6 +135,9 @@ import { BillingEmailService } from "./billing-email.service";
     OrderPackagingController,
     BrokersController,
     CustomersController,
+    ProspectsController,
+    NearbyController,
+    VisitTextController,
     CuppingController,
     CuppingTrainingController,
     ProfessionalSamplesController,
@@ -173,6 +181,8 @@ import { BillingEmailService } from "./billing-email.service";
     MobileNotificationService,
     SalesReceivableAlertService,
     BillingEmailService,
+    GeocodingService,
+    VisitTextPolishService,
     SalesOrderCustomerLifecycleService,
     SalesOrderPaymentsService,
     SalesOrderTermApprovalService,

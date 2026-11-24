@@ -85,7 +85,7 @@ test("atalhos móveis respeitam o perfil e deixam o menu completo como saída se
   );
   assert.deepEqual(
     mobileNavigationForRole("SALES").map((item) => item.href),
-    ["/home", "/clientes", "/atendimento", "/pedidos"],
+    ["/home", "/por-perto", "/atendimento", "/pedidos"],
   );
   assert.deepEqual(
     mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
@@ -98,7 +98,7 @@ test("contabilidade recebe somente áreas de consulta fiscal e financeira", () =
   const routes = navigationForRole("ACCOUNTANT").flatMap((group) =>
     group.items.map((item) => item.href),
   );
-  // Order follows the work areas: Vendas, Suprimentos, Financeiro, Análises.
+  // Order follows the work areas: Vendas, Compras, Financeiro, Análises.
   assert.deepEqual(routes, [
     "/clientes",
     "/pedidos",
