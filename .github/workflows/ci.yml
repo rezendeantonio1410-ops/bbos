@@ -143,3 +143,70 @@ jobs:
           echo "applied=$applied expected=$expected"; test "$applied" = "$expected"
           pnpm db:migrate:deploy | tee deploy.log; grep -q "No pending migrations" deploy.log
           psql "$DATABASE_URL" -Atc "SELECT to_regclass('public.\"PartnerOrderDraft\"'), to_regclass('public.\"PartnerOrderSubmission\"'), to_regclass('public.\"PartnerEndCustomer_active_scoped_cnpj_unique\"')" | grep -qx '"PartnerOrderDraft"|"PartnerOrderSubmission"|"PartnerEndCustomer_active_scoped_cnpj_unique"'
+
+  signa-authenticated-e2e:
+    name: Signa authenticated API on disposable PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bbos_signa_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bbos_signa_e2e
+      BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
+      BBOS_SCHEDULED_JOBS_DISABLED: "true"
+      BBOS_HOMOLOG_SEED: "true"
+      SIGNA_E2E_API: http://127.0.0.1:3101/api
+      HOST: 127.0.0.1
+      PORT: "3101"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build API
+        run: pnpm --filter @bbos/api build
+      - name: Migrate empty database
+        run: pnpm db:migrate:deploy
+      - name: Seed synthetic accounts only
+        shell: bash
+        run: |
+          password="Aa1$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          echo "SIGNA_E2E_PASSWORD=$password" >> "$GITHUB_ENV"
+          BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+      - name: Start local API and run authenticated checks
+        shell: bash
+        run: |
+          (cd apps/api && node dist/main.js) > "$RUNNER_TEMP/signa-api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            status=$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' "$SIGNA_E2E_API/partner-portal/summary" || true)
+            case "$status" in 401|403) ready=1; break;; esac
+            if ! kill -0 "$api_pid" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo "Local API not ready"; exit 1; fi
+          node --check scripts/signa-homolog-e2e.mjs
+          node scripts/signa-homolog-e2e.mjs
