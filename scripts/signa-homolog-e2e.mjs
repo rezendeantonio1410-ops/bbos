@@ -526,6 +526,64 @@ if (local && process.env.CI === "true") {
   });
 }
 
+// Recover a server-side draft from a fresh session and prove that competing
+// edits cannot overwrite the winning version. Disposable CI database only.
+if (local && process.env.CI === "true") {
+  await check("rascunho recuperado em nova sessão; duas edições simultâneas preservam a vencedora", async () => {
+    assert.ok(results.every((r) => r.ok), "pré-condições falharam");
+    const payload = {
+      customerId: pricingCustomerId(), partnerEndCustomerId: endCustomer.id,
+      billingRecipientId: recipients.find((x) => x.documentType === "CNPJ").id,
+      items: items(), deliveryMode: "PICKUP", notes: "Recuperação fictícia CI",
+    };
+    const created = await signa("/order-drafts", { method: "POST", body: { payload } });
+    assert.ok([200, 201].includes(created.status));
+    const initial = created.json;
+    assert.ok(initial.id);
+    const path = "/order-drafts/" + encodeURIComponent(initial.id);
+    const freshCookie = await login("signa@homolog.test");
+    const fresh = client(freshCookie);
+    await assertFixture(fresh, freshCookie, "homolog-partner-signa", "homolog-user-signa");
+    const list = await fresh("/order-drafts");
+    assert.equal(list.status, 200);
+    assert.match(list.headers.get("cache-control") ?? "", /no-store/);
+    assert.equal(list.json.drafts.filter((x) => x.id === initial.id).length, 1);
+    const recovered = await fresh(path);
+    assert.equal(recovered.status, 200);
+    assert.match(recovered.headers.get("cache-control") ?? "", /no-store/);
+    assert.equal(recovered.json.version, initial.version);
+    assert.deepEqual(recovered.json.payload, initial.payload);
+    assert.equal(recovered.json.payload.partnerEndCustomerId, payload.partnerEndCustomerId);
+    assert.equal(recovered.json.payload.billingRecipientId, payload.billingRecipientId);
+    assert.deepEqual(recovered.json.payload.items, payload.items);
+    const edits = ["Edição concorrente A", "Edição concorrente B"];
+    const attempts = await Promise.all(edits.map((notes) => fresh(path, {
+      method: "PATCH", body: { version: initial.version, payload: { ...payload, notes } },
+    })));
+    assert.deepEqual(attempts.map((x) => x.status).sort((a, b) => a - b), [200, 409]);
+    const winner = attempts.find((x) => x.status === 200).json;
+    assert.equal(winner.version, initial.version + 1);
+    assert.ok(edits.includes(winner.payload.notes));
+    const persisted = await fresh(path);
+    assert.equal(persisted.status, 200);
+    assert.equal(persisted.json.version, winner.version);
+    assert.deepEqual(persisted.json.payload, winner.payload);
+    const foreignList = await other("/order-drafts");
+    if (foreignList.status === 200) {
+      assert.equal(foreignList.json.drafts.some((x) => x.id === initial.id), false);
+    } else {
+      assert.ok([403, 404].includes(foreignList.status));
+    }
+    const removed = await fresh(path, { method: "DELETE", body: { version: winner.version } });
+    assert.ok([200, 204].includes(removed.status));
+    assert.equal((await fresh(path)).status, 404);
+    const finalList = await fresh("/order-drafts");
+    assert.equal(finalList.status, 200);
+    assert.equal(finalList.json.drafts.some((x) => x.id === initial.id), false);
+    return "nova sessão recuperou o payload; 1 edição aceita, 1 conflito; exclusão confirmada";
+  });
+}
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} verificações aprovadas.`);
 process.exitCode = failed.length ? 1 : 0;
