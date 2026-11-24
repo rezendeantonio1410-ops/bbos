@@ -1,4 +1,14 @@
-export type CashFlowKind = "RECEIVABLE" | "PAYABLE" | "PURCHASE";
+export type CashFlowKind = "RECEIVABLE" | "PAYABLE" | "PURCHASE" | "TAX";
+
+/** Estimated tax payment (management estimate, from the finance settings). */
+export type TaxProjectionSource = {
+  tax: string;
+  label: string;
+  competence: string;
+  dueDate: string;
+  amount: number;
+  basis: string;
+};
 
 export type CashFlowProjectionSource = {
   id: string;
@@ -66,6 +76,7 @@ export function buildCashFlowLines(input: {
   receivables?: CashFlowProjectionSource[];
   payables?: CashFlowProjectionSource[];
   purchases?: GreenCoffeeProjectionSource[];
+  taxes?: TaxProjectionSource[];
 }) {
   const receivables = (input.receivables ?? [])
     .filter(
@@ -118,7 +129,24 @@ export function buildCashFlowLines(input: {
       signedAmount: -amount(item.amount),
     }));
 
-  const ordered = [...receivables, ...payables, ...purchases].sort(
+  const taxes = (input.taxes ?? [])
+    .filter((item) => amount(item.amount) > 0)
+    .map((item) => {
+      const [year, month] = item.competence.split("-");
+      return {
+        id: `tax-${item.tax}-${item.competence}`,
+        kind: "TAX" as const,
+        dueDate: item.dueDate,
+        document: `${item.label} ${month}/${year}`,
+        counterparty: item.tax === "ICMS" ? "Secretaria da Fazenda" : "Receita Federal",
+        description: item.basis,
+        status: "Estimado",
+        amount: amount(item.amount),
+        signedAmount: -amount(item.amount),
+      };
+    });
+
+  const ordered = [...receivables, ...payables, ...purchases, ...taxes].sort(
     (left, right) => {
       const byDate =
         new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime();
@@ -178,4 +206,10 @@ export function buildCashFlowSeries(input: {
     })),
   ];
   return { actual, projected };
+}
+
+/** First projected line whose running balance falls below the minimum. */
+export function firstBelowMinimum(lines: CashFlowLine[], minimum: number) {
+  if (!(minimum > 0)) return null;
+  return lines.find((line) => line.balance < minimum) ?? null;
 }

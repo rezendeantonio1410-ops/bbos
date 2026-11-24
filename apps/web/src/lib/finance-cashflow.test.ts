@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCashFlowLines, buildCashFlowSeries } from "./finance-cashflow";
+import { buildCashFlowLines, buildCashFlowSeries, firstBelowMinimum } from "./finance-cashflow";
 
 test("cash flow orders receivables and payables and calculates the running balance", () => {
   const lines = buildCashFlowLines({
@@ -100,4 +100,20 @@ test("realized series reconstructs opening balance and ends at current cash", ()
     [150, 130],
   );
   assert.equal(series.projected[0]?.balance, 130);
+});
+
+test("estimated taxes enter the projection and the minimum-balance alert", () => {
+  const lines = buildCashFlowLines({
+    cash: 120_000,
+    receivables: [{ id: "r1", counterparty: "Cafeteria", dueDate: "2026-12-05", amount: 10_000, status: "OPEN" }],
+    payables: [{ id: "p1", counterparty: "Fazenda", dueDate: "2026-12-10", amount: 25_000, status: "OPEN" }],
+    taxes: [{ tax: "COFINS", label: "COFINS", competence: "2026-11", dueDate: "2026-12-24", amount: 8_000, basis: "7,6%" }],
+  });
+  const tax = lines.find((line) => line.kind === "TAX");
+  assert.equal(tax?.document, "COFINS 11/2026");
+  assert.equal(tax?.status, "Estimado");
+  assert.equal(lines.at(-1)?.balance, 97_000);
+  const alert = firstBelowMinimum(lines, 100_000);
+  assert.equal(alert?.id, "tax-COFINS-2026-11"); // 105 mil after the payable, 97 mil after the tax
+  assert.equal(firstBelowMinimum(lines, 0), null);
 });
