@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Bell,
   ChevronDown,
+  ChevronRight,
   CornerDownLeft,
   Factory,
   LogOut,
@@ -26,6 +27,7 @@ import { UserAvatar } from "./user-avatar";
 import {
   mobileNavigationForRole,
   navigationForRole,
+  pendingCountByGroup,
   toneClasses,
   type BbosNavGroup,
   type BbosNavItem,
@@ -74,8 +76,8 @@ const mobileShortLabelByHref: Record<string, string> = {
   "/dashboard": "Executivo",
   "/dashboard-industrial": "Industrial",
   "/clientes": "Clientes",
-  "/atendimento": "Visitas",
-  "/por-perto": "Por perto",
+  "/atendimento": "Atendimento",
+  "/por-perto": "Visitas",
   "/prospeccao": "Prospecção",
   "/pedidos": "Pedidos",
   "/estoque": "Estoque",
@@ -251,6 +253,10 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       ),
     [navGroups],
   );
+  const pendingByGroup = useMemo(
+    () => pendingCountByGroup(navGroups, notifications),
+    [navGroups, notifications],
+  );
   const activeGroup = useMemo(
     () =>
       navGroups.find((group) =>
@@ -261,7 +267,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       )?.label ?? "Visão geral",
     [navGroups, pathname],
   );
+  const currentSubgroup = useMemo(
+    () =>
+      navGroups
+        .flatMap((group) => group.items)
+        .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+        .sort((a, b) => b.href.length - a.href.length)[0]?.subgroup?.label ?? null,
+    [navGroups, pathname],
+  );
   const [expandedGroup, setExpandedGroup] = useState(activeGroup);
+  const [openSubgroup, setOpenSubgroup] = useState("");
 
   useEffect(() => setExpandedGroup(activeGroup), [activeGroup]);
 
@@ -405,6 +420,38 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
   };
 
+  const isRouteActive = (href: string) =>
+    pathname === href || (href !== "/home" && pathname.startsWith(`${href}/`));
+  const pendingFor = (href: string) =>
+    notifications.filter(
+      (item) => !item.readAt && (item.href.split(/[?#]/)[0] === href || item.href.startsWith(`${href}/`)),
+    ).length;
+  const renderNavLink = (
+    { href, label, icon: Icon }: BbosNavItem,
+    tone: (typeof toneClasses)[keyof typeof toneClasses],
+    mobile: boolean,
+  ) => {
+    const active = isRouteActive(href);
+    const itemPending = pendingFor(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        aria-current={active ? "page" : undefined}
+        onClick={() => mobile && setMobileOpen(false)}
+        className={`group flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 transition lg:min-h-10 ${active ? tone.active : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
+      >
+        <Icon size={18} aria-hidden className={`shrink-0 ${active ? "" : tone.text}`} />
+        <span className="min-w-0 truncate text-sm font-medium">{label}</span>
+        {itemPending > 0 && (
+          <span className="ml-auto min-w-6 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-xs font-bold tabular-nums text-white">
+            {itemPending > 99 ? "99+" : itemPending}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
     <div
       className={`flex h-full flex-col ${mobile ? "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]" : ""}`}
@@ -426,73 +473,86 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           <Factory size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-bold">Bispo Coffees</p>
-          <p className="text-[10px] text-[var(--bbos-text-muted)]">
+          <p className="truncate text-sm font-semibold">Bispo Coffees</p>
+          <p className="text-xs text-[var(--bbos-text-muted)]">
             Operação integrada
           </p>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
+      <nav aria-label="Áreas do sistema" className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
         {navGroups.map((group) => {
           const tone = toneClasses[group.tone];
           const isOpen = group.alwaysOpen || expandedGroup === group.label;
           const hasActive = group.label === activeGroup;
+          const GroupIcon = group.icon;
+          const pending = pendingByGroup[group.id] ?? 0;
+          const badge = pending > 0 && (
+            <span
+              className="ml-auto min-w-6 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-xs font-bold tabular-nums text-white"
+              aria-label={`${pending} pendências`}
+            >
+              {pending > 99 ? "99+" : pending}
+            </span>
+          );
           return (
             <div key={group.id} className="rounded-xl">
-              {group.alwaysOpen ? (
-                <div className={`px-2.5 pb-1.5 pt-1 ${tone.text}`}>
-                  <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.12em]">
-                    <span className={`size-1.5 rounded-full ${tone.dot}`} />
-                    {group.label}
-                  </div>
-                </div>
-              ) : (
+              {!group.alwaysOpen && (
                 <button
                   type="button"
+                  aria-expanded={isOpen}
                   onClick={() =>
                     setExpandedGroup(isOpen && !hasActive ? "" : group.label)
                   }
-                  className={`w-full rounded-xl border px-2.5 py-2 text-left transition hover:bg-white ${hasActive ? `${tone.soft} border-transparent` : "border-transparent bg-transparent"}`}
+                  className={`flex min-h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-sm font-semibold transition hover:bg-white lg:min-h-10 ${hasActive ? `${tone.soft} text-[var(--bbos-text-primary)]` : "text-[var(--bbos-text-primary)]"}`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={`flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.1em] ${tone.text}`}
-                    >
-                      <span
-                        className={`grid size-6 place-items-center rounded-md ${tone.dot}`}
-                      >
-                        <span className="size-1.5 rounded-[2px] border-2 border-white/95" />
-                      </span>
-                      {group.label}
-                    </span>
-                    <ChevronDown
-                      size={14}
-                      className={`text-stone-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                    />
-                  </div>
+                  <GroupIcon size={18} className={`shrink-0 ${tone.text}`} aria-hidden />
+                  <span className="min-w-0 truncate">{group.label}</span>
+                  {!isOpen && badge}
+                  <ChevronDown
+                    size={16}
+                    aria-hidden
+                    className={`shrink-0 text-stone-400 transition-transform ${isOpen ? "rotate-180" : ""} ${!isOpen && pending ? "" : "ml-auto"}`}
+                  />
                 </button>
               )}
               {isOpen && (
-                <div className="mt-0.5 space-y-0.5">
-                  {group.items.map(({ href, label, icon: Icon }) => {
-                    const active =
-                      pathname === href ||
-                      (href !== "/home" && pathname.startsWith(`${href}/`));
+                <div className={`space-y-0.5 ${group.alwaysOpen ? "" : "mt-0.5 border-l border-stone-200 pl-1.5 ml-[1.15rem]"}`}>
+                  {group.items.map((item, index) => {
+                    const sub = item.subgroup;
+                    if (sub && group.items[index - 1]?.subgroup?.id === sub.id) return null;
+                    if (!sub) return renderNavLink(item, tone, mobile);
+                    const children = group.items.filter((candidate) => candidate.subgroup?.id === sub.id);
+                    const subActive = children.some((child) => isRouteActive(child.href));
+                    const subOpen = subActive || openSubgroup === sub.id;
+                    const subPending = children.reduce((total, child) => total + pendingFor(child.href), 0);
+                    const SubIcon = sub.icon;
                     return (
-                      <Link
-                        key={href}
-                        href={href}
-                        onClick={() => mobile && setMobileOpen(false)}
-                        className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition ${active ? tone.active : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
-                      >
-                        <Icon
-                          size={16}
-                          className={`shrink-0 ${active ? "" : tone.text}`}
-                        />
-                        <span className="min-w-0 truncate text-[12px] font-semibold">
-                          {label}
-                        </span>
-                      </Link>
+                      <div key={sub.id}>
+                        <button
+                          type="button"
+                          aria-expanded={subOpen}
+                          onClick={() => setOpenSubgroup(subOpen && !subActive ? "" : sub.id)}
+                          className={`flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition lg:min-h-10 ${subActive ? "font-semibold text-[var(--bbos-text-primary)]" : "text-[var(--bbos-text-secondary)] hover:bg-white/80"}`}
+                        >
+                          <SubIcon size={18} aria-hidden className={`shrink-0 ${tone.text}`} />
+                          <span className="min-w-0 truncate text-sm font-medium">{sub.label}</span>
+                          {!subOpen && subPending > 0 && (
+                            <span className="ml-auto min-w-6 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-xs font-bold tabular-nums text-white">
+                              {subPending > 99 ? "99+" : subPending}
+                            </span>
+                          )}
+                          <ChevronDown
+                            size={15}
+                            aria-hidden
+                            className={`shrink-0 text-stone-400 transition-transform ${subOpen ? "rotate-180" : ""} ${!subOpen && subPending ? "" : "ml-auto"}`}
+                          />
+                        </button>
+                        {subOpen && (
+                          <div className="ml-[1.15rem] space-y-0.5 border-l border-stone-200 pl-1.5">
+                            {children.map((child) => renderNavLink(child, tone, mobile))}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -501,21 +561,12 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           );
         })}
       </nav>
-      <div className="mx-3 mb-3 rounded-xl border bg-[var(--bbos-nav-active)] p-2.5">
-        <div className="flex items-center gap-2">
-          <span className="grid size-7 place-items-center rounded-lg bg-white text-[var(--bbos-coffee-green)]">
-            <Activity size={15} />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-[11px] font-bold text-[var(--bbos-nav-active-text)]">
-              Operação conectada
-            </p>
-            <p className="text-[10px] text-[var(--bbos-text-muted)]">
-              Dados disponíveis
-            </p>
-          </div>
+      {!notificationsAvailable && (
+        <div role="status" className="mx-3 mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900">
+          <Activity size={16} aria-hidden className="shrink-0" />
+          Sem conexão com o servidor. Tentando de novo…
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -564,22 +615,35 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                   <span className="hidden min-[430px]:inline">Voltar</span>
                 </Link>
               )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{currentLabel}</p>
-                <p className="hidden text-[10px] text-[var(--bbos-text-muted)] sm:block">
-                  Bispo Business Operating System
-                </p>
-              </div>
+              <nav aria-label="Caminho" className="min-w-0">
+                <ol className="flex min-w-0 items-center gap-1.5 text-sm">
+                  {activeGroup && activeGroup !== currentLabel && (
+                    <li className="hidden shrink-0 items-center gap-1.5 text-[var(--bbos-text-muted)] sm:flex">
+                      {activeGroup}
+                      <ChevronRight size={14} aria-hidden />
+                    </li>
+                  )}
+                  {currentSubgroup && (
+                    <li className="hidden shrink-0 items-center gap-1.5 text-[var(--bbos-text-muted)] sm:flex">
+                      {currentSubgroup}
+                      <ChevronRight size={14} aria-hidden />
+                    </li>
+                  )}
+                  <li aria-current="page" className="truncate font-semibold">
+                    {currentLabel}
+                  </li>
+                </ol>
+              </nav>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setCommandOpen(true)}
-                className="hidden min-h-9 items-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 text-[11px] font-semibold text-[var(--bbos-text-secondary)] transition hover:bg-[var(--bbos-surface-subtle)] md:flex"
+                className="hidden min-h-10 items-center gap-2 rounded-xl border border-[var(--bbos-control-border)] bg-white px-3 text-sm font-medium text-[var(--bbos-text-secondary)] transition hover:bg-[var(--bbos-surface-subtle)] md:flex"
               >
                 <Search size={15} />
                 <span>Buscar ou agir no BBOS</span>
-                <kbd className="ml-2 rounded-md bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold text-stone-400">
+                <kbd className="ml-2 rounded-md bg-stone-100 px-1.5 py-0.5 text-xs font-semibold text-stone-500">
                   ⌘K
                 </kbd>
               </button>
@@ -847,7 +911,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
         <main data-bbos-main className="p-2.5 sm:p-4 lg:p-5">
           {children}
         </main>
-        <footer className="border-t px-5 py-3 text-center text-[10px] text-[var(--bbos-text-muted)]">
+        <footer className="border-t px-5 py-3 text-center text-xs text-[var(--bbos-text-muted)]">
           {SYSTEM_CREATOR_CREDIT_PT}
         </footer>
       </div>
@@ -862,15 +926,21 @@ export function AppShellV2({ children }: { children: ReactNode }) {
         >
           {mobileQuickLinks.map((item) => {
             const Icon = item.icon;
-            const active =
-              pathname === item.href ||
-              (item.href !== "/home" && pathname.startsWith(`${item.href}/`));
+            // A shortcut of a subgroup (Visitas) stays lit on its sibling pages.
+            const siblings = item.subgroup
+              ? navGroups.flatMap((group) => group.items).filter((other) => other.subgroup?.id === item.subgroup?.id)
+              : [item];
+            const active = siblings.some(
+              (other) =>
+                pathname === other.href ||
+                (other.href !== "/home" && pathname.startsWith(`${other.href}/`)),
+            );
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-bold transition sm:min-h-16 sm:text-[11px] ${
+                className={`flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs font-semibold transition sm:min-h-16 sm:text-sm ${
                   active
                     ? "bg-emerald-50 text-emerald-800"
                     : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
@@ -884,7 +954,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-bold text-stone-500 transition hover:bg-stone-50 hover:text-stone-900 sm:min-h-16 sm:text-[11px]"
+            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs font-semibold text-stone-500 transition hover:bg-stone-50 hover:text-stone-900 sm:min-h-16 sm:text-sm"
             aria-label="Abrir todas as áreas"
           >
             <Menu size={20} />

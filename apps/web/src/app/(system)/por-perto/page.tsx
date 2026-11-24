@@ -1,5 +1,6 @@
 "use client";
 
+import { VisitsTabs } from "@/components/visits-tabs";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -170,6 +171,7 @@ export default function NearbyPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-28 pt-4 sm:px-6">
+      <VisitsTabs />
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">Vendas</p>

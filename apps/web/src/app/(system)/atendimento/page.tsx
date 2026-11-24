@@ -1,5 +1,6 @@
 "use client";
 
+import { VisitsTabs } from "@/components/visits-tabs";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -266,6 +267,7 @@ export default function AtendimentoPage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6">
+      <VisitsTabs />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[.18em] text-blue-700">

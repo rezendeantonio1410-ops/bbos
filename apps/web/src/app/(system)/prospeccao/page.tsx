@@ -1,5 +1,6 @@
 "use client";
 
+import { VisitsTabs } from "@/components/visits-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -211,6 +212,7 @@ export default function ProspectingPage() {
   const toVisit = visible.length;
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-6">
+      <VisitsTabs />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">Vendas</p>

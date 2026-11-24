@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   Factory,
+  Flame,
   FlaskConical,
   Gauge,
   Globe2,
@@ -17,10 +18,13 @@ import {
   MapPinned,
   PackageCheck,
   PackageOpen,
+  Route,
   FileInput,
   Settings,
   Ship,
   ShoppingBag,
+  ShoppingCart,
+  Truck,
   UsersRound,
   Warehouse,
 } from "lucide-react";
@@ -42,7 +46,14 @@ export type BbosNavItem = {
   icon: LucideIcon;
   roles: BbosRole[];
   keywords?: string[];
+  /** Items sharing a subgroup show as sub-lines under one menu entry. */
+  subgroup?: BbosNavSubgroup;
 };
+
+export type BbosNavSubgroup = { id: string; label: string; icon: LucideIcon };
+
+/** One entry for field work: nearby, customer visits and prospects. */
+export const VISITS_SUBGROUP: BbosNavSubgroup = { id: "visitas", label: "Visitas", icon: Route };
 
 export type BbosNavGroup = {
   id:
@@ -56,6 +67,8 @@ export type BbosNavGroup = {
     | "analytics";
   label: string;
   description: string;
+  /** Icon that stands for the area, always shown next to its name. */
+  icon: LucideIcon;
   alwaysOpen?: boolean;
   tone: "green" | "blue" | "amber" | "violet";
   items: BbosNavItem[];
@@ -82,6 +95,7 @@ const KNOWN_ROLES = new Set<BbosRole>([
 export const bbosNavigation: BbosNavGroup[] = [
   {
     id: "overview",
+    icon: House,
     label: "Início",
     description: "Alertas e próximas ações",
     alwaysOpen: true,
@@ -99,6 +113,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "commercial",
+    icon: ShoppingCart,
     label: "Vendas",
     description: "Clientes, pedidos e canais",
     tone: "blue",
@@ -112,20 +127,22 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["cliente", "credito"],
       },
       {
-        href: "/atendimento",
-        label: "Atendimento",
-        description: "Visitas, relatos e próximas ações",
-        icon: ClipboardList,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
-        keywords: ["visita", "relato", "vendedor", "follow-up"],
-      },
-      {
         href: "/por-perto",
         label: "Por perto",
         description: "Clientes e pré-cadastros perto de você",
         icon: LocateFixed,
         roles: ALL,
         keywords: ["perto", "mapa", "localizacao", "gps", "rota", "visita"],
+        subgroup: VISITS_SUBGROUP,
+      },
+      {
+        href: "/atendimento",
+        label: "Atendimento",
+        description: "Visitas, relatos e próximas ações",
+        icon: ClipboardList,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["visita", "relato", "vendedor", "follow-up"],
+        subgroup: VISITS_SUBGROUP,
       },
       {
         href: "/prospeccao",
@@ -134,6 +151,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: MapPinned,
         roles: ["ADMIN", "EXECUTIVE", "SALES"],
         keywords: ["pre cadastro", "prospect", "lead", "visita", "cnpj"],
+        subgroup: VISITS_SUBGROUP,
       },
       {
         href: "/pedidos",
@@ -194,6 +212,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "supply",
+    icon: Truck,
     label: "Compras",
     description: "Café verde, fornecedores e entradas",
     tone: "amber",
@@ -242,6 +261,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "quality",
+    icon: FlaskConical,
     label: "Qualidade",
     description: "Amostras, cupping e liberação",
     tone: "amber",
@@ -258,6 +278,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "roasting",
+    icon: Flame,
     label: "Torra",
     description: "Ordens de torra e receitas",
     tone: "amber",
@@ -282,6 +303,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "inventory",
+    icon: Warehouse,
     label: "Estoque",
     description: "Lotes e produtos",
     tone: "amber",
@@ -306,6 +328,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "finance",
+    icon: CircleDollarSign,
     label: "Financeiro",
     description: "Receber, pagar, caixa e custos",
     tone: "violet",
@@ -330,6 +353,7 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "analytics",
+    icon: BarChart3,
     label: "Análises",
     description: "Painéis e relatórios",
     tone: "green",
@@ -382,12 +406,12 @@ export function navigationForRole(role?: string | null) {
 }
 
 const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
-  ADMIN: ["/home", "/pedidos", "/estoque", "/financeiro"],
-  EXECUTIVE: ["/home", "/pedidos", "/estoque", "/dashboard"],
-  INDUSTRIAL: ["/home", "/producao", "/estoque", "/dashboard-industrial"],
-  FINANCE: ["/home", "/pedidos", "/financeiro", "/notas-entrada"],
+  ADMIN: ["/home", "/por-perto", "/pedidos", "/financeiro"],
+  EXECUTIVE: ["/home", "/por-perto", "/pedidos", "/dashboard"],
+  INDUSTRIAL: ["/home", "/por-perto", "/producao", "/estoque"],
+  FINANCE: ["/home", "/por-perto", "/pedidos", "/financeiro"],
   ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
-  SALES: ["/home", "/por-perto", "/atendimento", "/pedidos"],
+  SALES: ["/home", "/por-perto", "/pedidos", "/clientes"],
   MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
 };
 
@@ -399,6 +423,27 @@ export function mobileNavigationForRole(role?: string | null) {
     const item = items.find((candidate) => candidate.href === href);
     return item ? [item] : [];
   });
+}
+
+/**
+ * Unread notifications per navigation group (menu badges, like Outlook/Teams):
+ * a notification counts for the group whose item best matches its link.
+ */
+export function pendingCountByGroup(
+  groups: BbosNavGroup[],
+  notifications: Array<{ href: string; readAt: string | null }>,
+) {
+  const items = groups.flatMap((group) => group.items.map((item) => ({ group: group.id, href: item.href })));
+  const counts: Partial<Record<BbosNavGroup["id"], number>> = {};
+  for (const notification of notifications) {
+    if (notification.readAt) continue;
+    const path = notification.href.split(/[?#]/)[0] ?? "";
+    const match = items
+      .filter((item) => path === item.href || path.startsWith(`${item.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0];
+    if (match) counts[match.group] = (counts[match.group] ?? 0) + 1;
+  }
+  return counts;
 }
 
 export const toneClasses = {

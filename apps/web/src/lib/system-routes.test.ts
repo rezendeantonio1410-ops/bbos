@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   mobileNavigationForRole,
   navigationForRole,
+  bbosNavigation,
+  pendingCountByGroup,
 } from "../components/bbos-navigation";
 import { normalizeHostname, resolveDomainRedirect } from "./domain-routing";
 import { isProtectedSystemPath } from "./system-routes";
@@ -81,11 +83,14 @@ test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro",
 test("atalhos móveis respeitam o perfil e deixam o menu completo como saída segura", () => {
   assert.deepEqual(
     mobileNavigationForRole("ADMIN").map((item) => item.href),
-    ["/home", "/pedidos", "/estoque", "/financeiro"],
+    ["/home", "/por-perto", "/pedidos", "/financeiro"],
   );
+  // "Por perto" is a fixed phone shortcut for every field-capable role.
+  for (const role of ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE", "SALES"])
+    assert.equal(mobileNavigationForRole(role)[1]?.href, "/por-perto", role);
   assert.deepEqual(
     mobileNavigationForRole("SALES").map((item) => item.href),
-    ["/home", "/por-perto", "/atendimento", "/pedidos"],
+    ["/home", "/por-perto", "/pedidos", "/clientes"],
   );
   assert.deepEqual(
     mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
@@ -266,4 +271,26 @@ test("forwarded hosts are normalized before routing", () => {
     normalizeHostname("BBOS.BISPOCOFFEES.COM.BR:443, proxy.internal"),
     "bbos.bispocoffees.com.br",
   );
+});
+
+test("menu: cada área tem ícone próprio e contadores vêm das notificações não lidas", () => {
+  const icons = new Set(bbosNavigation.map((group) => group.icon));
+  assert.equal(icons.size, bbosNavigation.length);
+  for (const group of bbosNavigation) assert.notEqual(group.label, group.label.toUpperCase());
+  const counts = pendingCountByGroup(bbosNavigation, [
+    { href: "/pedidos/abc?aba=1", readAt: null },
+    { href: "/pedidos", readAt: null },
+    { href: "/financeiro", readAt: "2026-11-24" },
+    { href: "/commerce/marketplaces/x", readAt: null },
+    { href: "/fora-do-menu", readAt: null },
+  ]);
+  assert.deepEqual(counts, { commercial: 3 });
+});
+
+test("Por perto, Atendimento e Prospecção ficam juntos em Visitas", () => {
+  const sales = navigationForRole("SALES").flatMap((group) => group.items);
+  const visits = sales.filter((item) => item.subgroup?.id === "visitas").map((item) => item.href);
+  assert.deepEqual(visits, ["/por-perto", "/atendimento", "/prospeccao"]);
+  const firstIndex = sales.findIndex((item) => item.href === "/por-perto");
+  assert.deepEqual(sales.slice(firstIndex, firstIndex + 3).map((item) => item.href), visits);
 });
