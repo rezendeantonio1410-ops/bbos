@@ -45,6 +45,8 @@ type Summary = {
     configured: boolean;
     taxRatesConfirmed: boolean;
     icmsEstimated: boolean;
+    cashStartDate?: string | null;
+    cashStartBalance?: number | null;
   };
   dataGaps?: {
     greenCoffeePurchasesWithoutPayable: Array<{ id: string; purchaseNumber: string; supplier: string | null; totalValue: number }>;
@@ -208,6 +210,13 @@ export default function CashFlowPage() {
               <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros</Link> para o sistema avisar antes de o caixa ficar curto.
             </div>
           )}
+          {data.settings && !data.settings.cashStartDate && (
+            <p className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+              Informe o saldo real do Itaú e a data em{" "}
+              <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros → Início do controle de caixa</Link>{" "}
+              para o caixa de hoje bater com o banco.
+            </p>
+          )}
           {data.settings && !data.settings.taxRatesConfirmed && (
             <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
               Impostos calculados com as alíquotas padrão do {data.settings.taxRegime === "LUCRO_REAL" ? "Lucro Real" : "regime escolhido"}
@@ -248,7 +257,10 @@ export default function CashFlowPage() {
         <Metric
           label="Caixa hoje"
           value={money.format(data.cash)}
-          detail={minimum > 0 ? (data.cash >= minimum ? "Acima do mínimo" : `${money.format(minimum - data.cash)} abaixo do mínimo`) : "Saldo realizado"}
+          detail={[
+            data.settings?.cashStartDate ? `desde ${date.format(new Date(`${data.settings.cashStartDate}T12:00:00`))}` : "",
+            minimum > 0 ? (data.cash >= minimum ? "acima do mínimo" : `${money.format(minimum - data.cash)} abaixo do mínimo`) : "",
+          ].filter(Boolean).join(" · ") || "Saldo realizado"}
           icon={Landmark}
           tone={minimum > 0 && data.cash < minimum ? "negative" : undefined}
         />

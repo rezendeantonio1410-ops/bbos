@@ -27,6 +27,8 @@ type Settings = {
   taxRates: Rates;
   defaultTaxRates: Rates;
   taxRatesConfirmedAt: string | null;
+  cashStartDate: string | null;
+  cashStartBalance: number | null;
   updatedByName: string | null;
   updatedAt: string | null;
 };
@@ -61,6 +63,8 @@ export default function FinanceSettingsPage() {
     setForm({
       minimumCashBalance: toText(data.minimumCashBalance),
       monthlyRevenueTarget: toText(data.monthlyRevenueTarget),
+      cashStartDate: data.cashStartDate ?? "",
+      cashStartBalance: toText(data.cashStartBalance),
       pis: toText(data.taxRates.pis),
       cofins: toText(data.taxRates.cofins),
       icms: toText(data.taxRates.icms),
@@ -98,6 +102,8 @@ export default function FinanceSettingsPage() {
         body: JSON.stringify({
           minimumCashBalance: toNumber(form.minimumCashBalance ?? "") ?? 0,
           monthlyRevenueTarget: toNumber(form.monthlyRevenueTarget ?? ""),
+          cashStartDate: form.cashStartDate ?? "",
+          cashStartBalance: (form.cashStartBalance ?? "").trim() === "" ? null : toNumber(form.cashStartBalance ?? ""),
           taxRegime: regime,
           taxRatesConfirmed: confirmed && !settings?.taxRatesConfirmedAt,
           taxRates:
@@ -144,6 +150,21 @@ export default function FinanceSettingsPage() {
               </Field>
               <Field id="monthlyRevenueTarget" label="Meta de faturamento mensal (R$)" hint={target ? `Equivale a ${money.format(target / 22)} por dia útil.` : "Usada para comparar vendas e calcular o ponto de equilíbrio."}>
                 <input id="monthlyRevenueTarget" inputMode="decimal" value={form.monthlyRevenueTarget ?? ""} onChange={(e) => set("monthlyRevenueTarget", e.target.value)} placeholder="600.000" />
+              </Field>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm" aria-labelledby="start-title">
+            <h2 id="start-title" className="flex items-center gap-2 font-semibold"><Landmark size={18} className="text-sky-700" /> Início do controle de caixa</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Informe o saldo real da conta da empresa no Itaú em uma data. O fluxo de caixa parte desse saldo e soma só o que entrar e sair depois dela. Compras de café com vencimento anterior contam como já pagas.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field id="cashStartDate" label="Data" hint="Use o dia do extrato que você consultou.">
+                <input id="cashStartDate" type="date" max={new Date().toISOString().slice(0, 10)} value={form.cashStartDate ?? ""} onChange={(e) => set("cashStartDate", e.target.value)} />
+              </Field>
+              <Field id="cashStartBalance" label="Saldo no Itaú nessa data (R$)" hint="O saldo do fim do dia, como aparece no extrato.">
+                <input id="cashStartBalance" inputMode="decimal" value={form.cashStartBalance ?? ""} onChange={(e) => set("cashStartBalance", e.target.value)} placeholder="Ex.: 45.230,18" />
               </Field>
             </div>
           </section>

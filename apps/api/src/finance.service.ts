@@ -73,6 +73,9 @@ export class FinanceService implements OnModuleDestroy {
   }
 
   async summary(companyId?: string) {
+    const start = companyId ? await this.getSettings(companyId) : null;
+    // With a cash starting point, earlier movements are already in that balance.
+    const since = start?.cashStartDate ? new Date(`${start.cashStartDate}T03:00:00Z`) : null; // 00:00 in São Paulo
     const [
       accounts,
       receivables,
@@ -99,13 +102,13 @@ export class FinanceService implements OnModuleDestroy {
         },
       }),
       this.database.financialTransaction.findMany({
-        where: companyId ? { companyId } : undefined,
+        where: { ...(companyId ? { companyId } : {}), ...(since ? { occurredAt: { gte: since } } : {}) },
         orderBy: { occurredAt: "desc" },
         take: 200,
       }),
       this.database.financialTransaction.groupBy({
         by: ["type"],
-        where: companyId ? { companyId } : undefined,
+        where: { ...(companyId ? { companyId } : {}), ...(since ? { occurredAt: { gte: since } } : {}) },
         _sum: { amount: true },
       }),
       this.database.greenCoffeePurchaseInstallment.findMany({
@@ -113,6 +116,8 @@ export class FinanceService implements OnModuleDestroy {
           status: { in: ["PLANNED", "COMMITTED"] },
           // Installments with an account payable are already in the payables.
           accountsPayableId: null,
+          // Due before the cash starting point: settled outside the bank (e.g. partner contribution).
+          ...(since ? { dueDate: { gte: since } } : {}),
           ...(companyId ? { purchase: { companyId } } : {}),
         },
         include: {
@@ -129,10 +134,12 @@ export class FinanceService implements OnModuleDestroy {
       }),
     ]);
     const cash =
-      accounts.reduce(
-        (sum, account) => sum + Number(account.openingBalance),
-        0,
-      ) +
+      (since
+        ? Number(start?.cashStartBalance ?? 0)
+        : accounts.reduce(
+            (sum, account) => sum + Number(account.openingBalance),
+            0,
+          )) +
       transactionTotals.reduce(
         (sum, item) =>
           sum +
@@ -254,7 +261,8 @@ export class FinanceService implements OnModuleDestroy {
   async getSettings(companyId: string) {
     const rows: any[] = await (this.database as any).$queryRawUnsafe(
       `SELECT "minimumCashBalance"::float AS "minimumCashBalance","monthlyRevenueTarget"::float AS "monthlyRevenueTarget",
-              "taxRegime","taxRates","taxRatesConfirmedAt","updatedByName","updatedAt"
+              "taxRegime","taxRates","taxRatesConfirmedAt","updatedByName","updatedAt",
+              to_char("cashStartDate",'YYYY-MM-DD') AS "cashStartDate","cashStartBalance"::float AS "cashStartBalance"
          FROM "FinanceSettings" WHERE "companyId"=$1`,
       companyId,
     );
@@ -268,6 +276,9 @@ export class FinanceService implements OnModuleDestroy {
       taxRates: normalizeTaxRates(taxRegime, row?.taxRates ?? {}),
       defaultTaxRates: DEFAULT_TAX_RATES[taxRegime],
       taxRatesConfirmedAt: row?.taxRatesConfirmedAt ?? null,
+      /** Cash control starts here: real bank balance on this date. */
+      cashStartDate: (row?.cashStartDate as string | null) ?? null,
+      cashStartBalance: row?.cashStartBalance ?? null,
       updatedByName: row?.updatedByName ?? null,
       updatedAt: row?.updatedAt ?? null,
     };
@@ -292,14 +303,38 @@ export class FinanceService implements OnModuleDestroy {
     const minimum = body.minimumCashBalance === undefined ? current.minimumCashBalance : money(body.minimumCashBalance, "Saldo mínimo", false);
     const target = body.monthlyRevenueTarget === undefined ? current.monthlyRevenueTarget : money(body.monthlyRevenueTarget, "Meta de faturamento", true);
     const confirmed = body.taxRatesConfirmed === true;
+    let cashStartDate = current.cashStartDate;
+    let cashStartBalance = current.cashStartBalance;
+    if (body.cashStartDate !== undefined) {
+      const raw = String(body.cashStartDate ?? "").trim();
+      if (!raw) cashStartDate = null;
+      else {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(`${raw}T12:00:00Z`)))
+          throw new BadRequestException("Data de início do caixa inválida.");
+        if (raw > new Date().toISOString().slice(0, 10)) throw new BadRequestException("A data de início do caixa não pode ser futura.");
+        cashStartDate = raw;
+      }
+    }
+    if (body.cashStartBalance !== undefined) {
+      const value = body.cashStartBalance;
+      if (value === null || value === "") cashStartBalance = null;
+      else {
+        const number = typeof value === "number" ? value : Number(String(value).replace(/\./g, "").replace(",", "."));
+        if (!Number.isFinite(number) || Math.abs(number) > 1e11) throw new BadRequestException("Saldo inicial inválido.");
+        cashStartBalance = Math.round(number * 100) / 100;
+      }
+    }
+    if ((cashStartDate === null) !== (cashStartBalance === null))
+      throw new BadRequestException("Informe a data e o saldo do banco nessa data.");
     await (this.database as any).$executeRawUnsafe(
-      `INSERT INTO "FinanceSettings" ("companyId","minimumCashBalance","monthlyRevenueTarget","taxRegime","taxRates","taxRatesConfirmedAt","updatedByName","updatedAt")
-       VALUES ($1,$2,$3,$4,$5::jsonb,CASE WHEN $6 THEN NOW() ELSE NULL END,$7,NOW())
+      `INSERT INTO "FinanceSettings" ("companyId","minimumCashBalance","monthlyRevenueTarget","taxRegime","taxRates","taxRatesConfirmedAt","updatedByName","updatedAt","cashStartDate","cashStartBalance")
+       VALUES ($1,$2,$3,$4,$5::jsonb,CASE WHEN $6 THEN NOW() ELSE NULL END,$7,NOW(),$8::date,$9)
        ON CONFLICT ("companyId") DO UPDATE SET "minimumCashBalance"=EXCLUDED."minimumCashBalance",
          "monthlyRevenueTarget"=EXCLUDED."monthlyRevenueTarget","taxRegime"=EXCLUDED."taxRegime","taxRates"=EXCLUDED."taxRates",
          "taxRatesConfirmedAt"=CASE WHEN $6 THEN NOW() ELSE "FinanceSettings"."taxRatesConfirmedAt" END,
-         "updatedByName"=EXCLUDED."updatedByName","updatedAt"=NOW()`,
-      companyId, minimum, target, regime, JSON.stringify(rates), confirmed, actorName,
+         "updatedByName"=EXCLUDED."updatedByName","updatedAt"=NOW(),
+         "cashStartDate"=EXCLUDED."cashStartDate","cashStartBalance"=EXCLUDED."cashStartBalance"`,
+      companyId, minimum, target, regime, JSON.stringify(rates), confirmed, actorName, cashStartDate, cashStartBalance,
     );
     return this.getSettings(companyId);
   }
@@ -326,11 +361,21 @@ export class FinanceService implements OnModuleDestroy {
 
   /** Extras for planning: settings, estimated taxes still to pay, data gaps. */
   private async planningExtras(companyId: string) {
-    const [settings, months, coffeeWithoutPayable] = await Promise.all([
-      this.getSettings(companyId),
+    const settings = await this.getSettings(companyId);
+    const [months, coffeeWithoutPayable] = await Promise.all([
       this.monthlyFiscalFigures(companyId, 2),
       this.database.greenCoffeePurchase.findMany({
-        where: { companyId, approvalStatus: "APPROVED", installments: { some: { accountsPayableId: null, status: { in: ["PLANNED", "COMMITTED"] } } } },
+        where: {
+          companyId,
+          approvalStatus: "APPROVED",
+          installments: {
+            some: {
+              accountsPayableId: null,
+              status: { in: ["PLANNED", "COMMITTED"] },
+              ...(settings.cashStartDate ? { dueDate: { gte: new Date(`${settings.cashStartDate}T03:00:00Z`) } } : {}),
+            },
+          },
+        },
         select: { id: true, purchaseNumber: true, totalValue: true, supplier: { select: { name: true } } },
         orderBy: { purchaseNumber: "asc" },
       }),
@@ -345,6 +390,8 @@ export class FinanceService implements OnModuleDestroy {
         configured: settings.configured,
         taxRatesConfirmed: Boolean(settings.taxRatesConfirmedAt),
         icmsEstimated: settings.taxRates.icms !== null,
+        cashStartDate: settings.cashStartDate,
+        cashStartBalance: settings.cashStartBalance,
       },
       monthlyRevenue: months,
       taxProjection,
