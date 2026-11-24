@@ -213,6 +213,63 @@ await check("outro distribuidor não cria pedido com cliente Signa", async () =>
   assert.ok([400, 403, 404].includes(r.status), `HTTP ${r.status}`);
   return `HTTP ${r.status}`;
 });
+// Fiscal selection and DANFE access only on the disposable CI API.
+if (local && process.env.CI === "true") {
+  await check("destinatário fiscal CNPJ/CPF separado do cliente comercial; DANFE indisponível sem autorização", async () => {
+    assert.ok(results.every((r) => r.ok), "pré-condições falharam");
+    const corporate = recipients.find((x) => x.documentType === "CNPJ");
+    const personal = recipients.find((x) => x.documentType === "CPF");
+    assert.ok(corporate && personal && corporate.id !== personal.id);
+    const originalId = order?.id ?? order?.order?.id;
+    assert.ok(originalId);
+    const invalid = await signa("/orders", { method: "POST", body: {
+      ...orderBody(), billingRecipientId: endCustomer.id, submissionKey: randomUUID(),
+      customerReference: `HOMOLOG-FISCAL-INVALID-${run}`,
+    } });
+    assert.equal(invalid.status, 400, "cliente comercial não pode ser destinatário fiscal");
+    const cpf = await signa("/orders", { method: "POST", body: {
+      ...orderBody(), billingRecipientId: personal.id, submissionKey: randomUUID(),
+      customerReference: `HOMOLOG-FISCAL-CPF-${run}`,
+    } });
+    assert.ok([200, 201].includes(cpf.status), `pedido CPF HTTP ${cpf.status}`);
+    const cpfId = cpf.json.id ?? cpf.json.order?.id;
+    assert.ok(cpfId && cpfId !== originalId);
+    const summary = await signa("/summary");
+    assert.equal(summary.status, 200);
+    const cnpjRow = summary.json.partnerOrders.find((x) => x.id === originalId);
+    const cpfRow = summary.json.partnerOrders.find((x) => x.id === cpfId);
+    assert.ok(cnpjRow && cpfRow);
+    assert.equal(cnpjRow.billingRecipientName, corporate.name);
+    assert.equal(cpfRow.billingRecipientName, personal.name);
+    for (const row of [cnpjRow, cpfRow]) {
+      assert.equal(row.endCustomerName, endCustomer.name);
+      assert.equal(row.invoiceStatus, null, "pedido não deve emitir NF-e automaticamente");
+      assert.notEqual(row.invoicePdfAvailable, true);
+      const invoice = await signa(`/orders/${row.id}/invoice/pdf`);
+      assert.equal(invoice.status, 404, "DANFE sem autorização deve ficar indisponível");
+      const foreignInvoice = await other(`/orders/${row.id}/invoice/pdf`);
+      assert.ok([403, 404].includes(foreignInvoice.status));
+      const foreignDetail = await other(`/orders/${row.id}/detail`);
+      assert.ok([403, 404].includes(foreignDetail.status));
+    }
+    const a = await signa(`/orders/${originalId}/detail`);
+    const b = await signa(`/orders/${cpfId}/detail`);
+    assert.equal(a.status, 200);
+    assert.equal(b.status, 200);
+    const priceSnapshot = (r) => r.json.items.map((x) => [x.sku, Number(x.quantity), Number(x.unitPrice), Number(x.totalAmount)]).sort((x,y) => String(x[0]).localeCompare(String(y[0])));
+    assert.ok(a.json.items.length > 0);
+    assert.deepEqual(priceSnapshot(a), priceSnapshot(b), "escolha fiscal não pode alterar preço exclusivo");
+    assert.equal(Number(cnpjRow.totalAmount), Number(cpfRow.totalAmount));
+    const commercial = await signa("/end-customers");
+    assert.equal(commercial.status, 200);
+    const saved = commercial.json.customers.find((x) => x.id === endCustomer.id);
+    assert.ok(saved);
+    assert.equal(saved.taxId, taxId);
+    assert.equal(saved.name, endCustomer.name);
+    return "CNPJ/CPF separados; preço preservado; DANFE não autorizado bloqueado";
+  });
+}
+
 await check("painel, histórico e relatórios carregam", async () => {
   for (const path of ["/summary", "/end-customer-history", "/commercial-reports"]) {
     const r = await signa(path); assert.equal(r.status, 200, `${path} HTTP ${r.status}`);
