@@ -313,6 +313,89 @@ if (local && process.env.CI === "true") {
   });
 }
 
+
+ // Positive receipt test: no bank, provider, or fiscal calls. Never run against
+ // Render; use only the disposable CI database and verify the admin fixture.
+if (local && process.env.CI === "true") {
+  await check("baixa administrativa fictícia: uma única baixa e reflexo no portal", async () => {
+    assert.ok(results.every((r) => r.ok), "verificações anteriores falharam; baixa de teste cancelada");
+    const adminCookie = await login("admin@homolog.test");
+    const me = await fetch(`${api}/auth/me`, { redirect: "error", headers: { cookie: adminCookie } });
+    assert.equal(me.status, 200);
+    const session = await me.json();
+    assert.equal(session?.user?.id === "homolog-user-admin", true);
+    assert.equal(session?.user?.companyId === "homolog-co", true);
+    assert.equal(session?.user?.role, "ADMIN");
+    const internal = async (path, body) => {
+      const response = await fetch(`${api}${path}`, {
+        method: body === undefined ? "GET" : "POST", redirect: "error",
+        headers: { cookie: adminCookie, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, json: await response.json() };
+    };
+    const titles = async () => {
+      const r = await internal("/finance/receivables");
+      assert.equal(r.status, 200);
+      assert.ok(Array.isArray(r.json));
+      const matches = r.json.filter((x) => x.salesOrderId === "homolog-order-pix");
+      assert.equal(matches.length, 1, "pedido deve ter exatamente um título");
+      assert.equal(matches[0].id, "homolog-ar-pix");
+      assert.equal(matches[0].companyId, "homolog-co");
+      return matches[0];
+    };
+    const before = await titles();
+    assert.equal(before.status, "OPEN");
+    assert.equal(Number(before.openAmount), 76.8);
+    assert.equal(before.payments.length, 0);
+    const account = await internal("/finance/accounts", {
+      name: `Conta fictícia CI ${randomUUID()}`, type: "OTHER", currency: "BRL", openingBalance: 0,
+    });
+    assert.ok([200, 201].includes(account.status), `conta HTTP ${account.status}`);
+    assert.equal(account.json.companyId, "homolog-co");
+    assert.ok(account.json.id);
+    const paymentPath = "/finance/receivables/homolog-ar-pix/payments";
+    const payload = { financialAccountId: account.json.id, amount: 76.8, method: "PIX",
+      paidAt: new Date().toISOString(), idempotencyKey: randomUUID(), notes: "Simulação CI sem transferência bancária" };
+    const first = await internal(paymentPath, payload);
+    assert.ok([200, 201].includes(first.status), `baixa HTTP ${first.status}`);
+    assert.equal(first.json.idempotent, false);
+    assert.ok(first.json.payment?.id);
+    const replay = await internal(paymentPath, payload);
+    assert.ok([200, 201].includes(replay.status), `repetição HTTP ${replay.status}`);
+    assert.equal(replay.json.idempotent, true);
+    assert.equal(replay.json.payment?.id, first.json.payment.id);
+    const extra = await internal(paymentPath, { ...payload, idempotencyKey: randomUUID() });
+    assert.equal(extra.status, 400, "segunda baixa de título quitado deve ser recusada");
+    const after = await titles();
+    assert.equal(after.status, "PAID");
+    assert.equal(Number(after.amount), 76.8);
+    assert.equal(Number(after.openAmount), 0);
+    assert.ok(after.paymentDate);
+    assert.equal(after.payments.length, 1);
+    assert.equal(after.payments[0].id, first.json.payment.id);
+    const finance = await internal("/finance/summary");
+    assert.equal(finance.status, 200);
+    const movements = finance.json.transactions.filter((x) => x.financialAccountId === account.json.id);
+    assert.equal(movements.length, 1);
+    assert.equal(movements[0].paymentId, first.json.payment.id);
+    assert.equal(movements[0].type, "RECEIPT");
+    assert.equal(Number(movements[0].amount), 76.8);
+    const own = await signa("/summary");
+    assert.equal(own.status, 200);
+    const row = own.json.partnerOrders.find((x) => x.id === "homolog-order-pix");
+    assert.ok(row);
+    assert.equal(row.receivableStatus, "PAID");
+    assert.equal(Number(row.openAmount), 0);
+    assert.equal(new Date(row.paymentDate).toISOString(), new Date(after.paymentDate).toISOString());
+    assert.equal(row.pixAvailable, false);
+    const foreign = await other("/summary");
+    assert.equal(foreign.status, 200);
+    assert.equal(foreign.json.partnerOrders.some((x) => x.id === "homolog-order-pix"), false);
+    return "1 título, 1 pagamento, 1 movimento; quitação visível somente à Signa";
+  });
+}
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} verificações aprovadas.`);
 process.exitCode = failed.length ? 1 : 0;
