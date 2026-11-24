@@ -670,7 +670,7 @@ export class DashboardService implements OnModuleDestroy {
         return [...weeks.values()]
           .sort((a, b) => a.at - b.at)
           .slice(-8)
-          .map(({ at: _at, ...week }) => week);
+          .map((week) => ({ label: week.label, plannedKg: week.plannedKg, actualKg: week.actualKg }));
       })(),
       batchLosses: batches
         .filter((b) => toNumber(b.greenInputKg) > 0)
