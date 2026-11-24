@@ -166,51 +166,89 @@
 }
 
 /* Calm, higher-contrast theme for the authenticated operating system only.
-   The public storefront keeps its own established palette. */
-[data-bbos-app-shell] {
-  --surface-base: #fafbf9;
-  --surface-card: #fafbf9;
-  --surface-header: #fafbf9;
-  --surface-sidebar: #f6f8f5;
-  --surface-page: #eef1ed;
-  --surface-muted: #f3f5f2;
-  --surface-border: #cfd8d2;
-  --analytic-identity: #08685e;
-  --analytic-positive: #047857;
-  --analytic-coffee: #895108;
-  --analytic-finance: #0369a1;
+   The public storefront keeps its own established palette.
+   Palette approved on 2026-11-24 (research: positive polarity reduces visual
+   fatigue — Piepenbrock, Mayr & Buchner 2014; WCAG 2.2 contrast >= 4.5:1;
+   SAP Fiori Horizon: light neutral canvas with white containers):
+   canvas #F4F6F3, cards #FFFFFF, text #1C2421 (15.9:1), secondary #56615C
+   (6.4:1), muted #5F6A65 (>= 5.2:1), action #0E191D, accent #2F6B57. */
+:is([data-bbos-app-shell], [data-bbos-theme]) {
+  --surface-base: #ffffff;
+  --surface-card: #ffffff;
+  --surface-header: #ffffff;
+  --surface-sidebar: #f8faf7;
+  --surface-page: #f4f6f3;
+  --surface-muted: #f8faf7;
+  --surface-border: #dde2dc;
+  --analytic-identity: #2f6b57;
+  --analytic-positive: #1e7a4f;
+  --analytic-coffee: #9a5b06;
+  --analytic-finance: #1f5f8b;
   --analytic-projection: #654791;
-  --analytic-attention: #895108;
-  --analytic-critical: #a52f2f;
-  --bbos-surface-base: #fafbf9;
+  --analytic-attention: #9a5b06;
+  --analytic-critical: #b42318;
+  --bbos-surface-base: #ffffff;
   --bbos-surface-elevated: #ffffff;
-  --bbos-surface-subtle: #f3f5f2;
-  --bbos-surface-warm: #f6f3ea;
-  --bbos-surface-page: #eef1ed;
-  --bbos-text-primary: #19211e;
-  --bbos-text-secondary: #46554e;
-  --bbos-text-muted: #59675f;
-  --bbos-action-primary: #153a33;
-  --bbos-action-primary-hover: #0f2e29;
-  --bbos-action-secondary: #e4eae6;
-  --bbos-state-attention: #895108;
-  --bbos-warning: #895108;
-  --bbos-state-critical: #a52f2f;
-  --bbos-danger: #a52f2f;
+  --bbos-surface-subtle: #f8faf7;
+  --bbos-surface-warm: #f8faf7;
+  --bbos-surface-page: #f4f6f3;
+  --bbos-text-primary: #1c2421;
+  --bbos-text-secondary: #56615c;
+  --bbos-text-muted: #5f6a65;
+  --bbos-action-primary: #0e191d;
+  --bbos-action-primary-hover: #1b2b30;
+  --bbos-action-secondary: #eef2ed;
+  --bbos-state-success: #1e7a4f;
+  --bbos-success: #1e7a4f;
+  --bbos-success-soft: #e9f5ee;
+  --bbos-state-attention: #9a5b06;
+  --bbos-warning: #9a5b06;
+  --bbos-warning-soft: #fff7e8;
+  --bbos-state-critical: #b42318;
+  --bbos-danger: #b42318;
   --bbos-intelligence: #654791;
-  --bbos-surface: #fafbf9;
+  --bbos-surface: #ffffff;
   --bbos-surface-card: #ffffff;
-  --bbos-surface-border: #cfd8d2;
+  --bbos-surface-border: #dde2dc;
   --bbos-control-border: #87958d;
-  --bbos-nav-active: #e7efea;
-  --bbos-nav-active-text: #15473f;
+  --bbos-nav-active: #e8f2ec;
+  --bbos-nav-active-text: #1e4d3d;
   --bbos-spacing-section: 1rem;
-  --bbos-coffee-green: #08685e;
-  --bbos-coffee-roasted: #0369a1;
-  --bbos-coffee-caramel: #895108;
-  --bbos-border: #cfd8d2;
-  --bbos-focus-ring: #08685e;
+  --bbos-coffee-green: #2f6b57;
+  --bbos-coffee-roasted: #1f5f8b;
+  --bbos-coffee-caramel: #9a5b06;
+  --bbos-border: #dde2dc;
+  --bbos-focus-ring: #2f6b57;
   --bbos-radius-card: 0.875rem;
+  color: #1c2421;
+}
+/* In the brand config Tailwind "white" is the sand #EBEBEB (storefront). Inside
+   the operating system, cards and inputs must be real white so they separate
+   from the canvas (#EBEBEB on #F7F7F5 measured 1.11:1). */
+:is([data-bbos-app-shell], [data-bbos-theme]) .bg-white,
+:is([data-bbos-app-shell], [data-bbos-theme]) .hover\:bg-white:hover {
+  background-color: #ffffff;
+}
+:is([data-bbos-app-shell], [data-bbos-theme]) .bg-white\/80 {
+  background-color: rgb(255 255 255 / 0.8);
+}
+:is([data-bbos-app-shell], [data-bbos-theme]) .bg-white\/90 {
+  background-color: rgb(255 255 255 / 0.9);
+}
+:is([data-bbos-app-shell], [data-bbos-theme]) .bg-white\/95 {
+  background-color: rgb(255 255 255 / 0.95);
+}
+:is([data-bbos-app-shell], [data-bbos-theme]) .text-white {
+  color: #ffffff;
+}
+/* Light grays used for helper text measured 2.5:1; raise to >= 5.2:1. */
+:is([data-bbos-app-shell], [data-bbos-theme]) .text-stone-400,
+:is([data-bbos-app-shell], [data-bbos-theme]) .text-stone-300 {
+  color: #5f6a65;
+}
+:is([data-bbos-app-shell], [data-bbos-theme]) input::placeholder,
+:is([data-bbos-app-shell], [data-bbos-theme]) textarea::placeholder {
+  color: #6b7570;
 }
 * {
   border-color: var(--surface-border);
