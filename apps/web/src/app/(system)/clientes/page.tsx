@@ -29,7 +29,8 @@ import {
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
-import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
+import { applyCnpjRecord } from "@/lib/cnpj-registry";
+import { CnpjRegistryPanel, CnpjSearchButton } from "@/components/cnpj-registry-panel";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { CustomerTaxIdSuggestionWorkflow } from "@/components/customer-tax-id-suggestion-workflow";
 
@@ -399,14 +400,15 @@ export default function CustomersPage() {
       })),
   });
 
-  // Complete CNPJ → public Receita Federal data (BrasilAPI via BBOS API).
-  // Fills only EMPTY fields; the state registration (IE) stays manual.
+  // Complete CNPJ → public Receita Federal data (BrasilAPI + cnpj.ws, free).
+  // Typing the CNPJ fills every empty field; "Buscar na Receita" refills all.
+  // Fields stay editable; what the user typed by hand is kept unless they click.
   const cnpjLookup = useCnpjRegistryAutofill({
     cnpj: form.taxId.replace(/\D/g, "").length === 14 ? form.taxId : "",
     enabled: form.countryCode === "BR" && (showNew || Boolean(editCustomer)),
-    onResolved: (record) =>
+    onResolved: (record, context) =>
       setForm((current) => {
-        const filled = fillEmptyFromCnpj(current as unknown as Record<string, string>, record, {
+        const filled = applyCnpjRecord(current as unknown as Record<string, string>, record, {
           legalName: "legalName",
           tradeName: "tradeName",
           name: (r) => r.tradeName || r.legalName,
@@ -421,7 +423,7 @@ export default function CustomersPage() {
           // This field is a mobile number (11 digits); landlines stay manual.
           phone: (r) => (r.phone && /^\d{2}9\d{8}$/.test(r.phone) ? r.phone : null),
           stateRegistration: (r) => r.suggestedStateRegistration ?? null,
-        }) as unknown as typeof current;
+        }, context) as unknown as typeof current;
         // A suggested IE means the state registration type is "number".
         return !current.stateRegistrationType && !current.stateRegistration && filled.stateRegistration
           ? { ...filled, stateRegistrationType: "NUMBER" }
@@ -1086,6 +1088,48 @@ export default function CustomersPage() {
                   ))}
                 </select>
               </Field>
+              {form.countryCode === "BR" ? (
+                <>
+                <Field
+                  label="CPF / CNPJ *"
+                  fieldKey="taxId"
+                  error={formErrors.taxId}
+                  help={cnpjLookup.statusText || undefined}
+                  wide
+                >
+                  <div className="flex gap-2">
+                    <input
+                    className="min-w-0 flex-1 rounded-xl border px-3 py-3 text-sm"
+                    value={form.taxId}
+                    onChange={(e) =>
+                      setForm({ ...form, taxId: e.target.value })
+                    }
+                    placeholder="Somente números ou documento formatado"
+                  />
+                    <CnpjSearchButton onClick={cnpjLookup.search} busy={cnpjLookup.busy} />
+                  </div>
+                </Field>
+                {cnpjLookup.record && (
+                  <div className="sm:col-span-2">
+                    <CnpjRegistryPanel record={cnpjLookup.record} />
+                  </div>
+                )}
+                </>
+              ) : (
+                <Field
+                  label="Identificação fiscal estrangeira *"
+                  fieldKey="foreignTaxId"
+                  error={formErrors.foreignTaxId}
+                  help="Informe o número fiscal ou registro empresarial usado no país do cliente."
+                >
+                  <input
+                    value={form.foreignTaxId}
+                    onChange={(e) =>
+                      setForm({ ...form, foreignTaxId: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
               <Field
                 label="Como você chama este cliente?"
                 fieldKey="name"
@@ -1113,36 +1157,7 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              {form.countryCode === "BR" ? (
-                <Field
-                  label="CPF / CNPJ *"
-                  fieldKey="taxId"
-                  error={formErrors.taxId}
-                  help={cnpjLookup.statusText || undefined}
-                >
-                  <input
-                    value={form.taxId}
-                    onChange={(e) =>
-                      setForm({ ...form, taxId: e.target.value })
-                    }
-                    placeholder="Somente números ou documento formatado"
-                  />
-                </Field>
-              ) : (
-                <Field
-                  label="Identificação fiscal estrangeira *"
-                  fieldKey="foreignTaxId"
-                  error={formErrors.foreignTaxId}
-                  help="Informe o número fiscal ou registro empresarial usado no país do cliente."
-                >
-                  <input
-                    value={form.foreignTaxId}
-                    onChange={(e) =>
-                      setForm({ ...form, foreignTaxId: e.target.value })
-                    }
-                  />
-                </Field>
-              )}
+              
               <Field label="Segmento">
                 <select
                   value={form.segment}
@@ -1539,6 +1554,47 @@ export default function CustomersPage() {
                   ))}
                 </select>
               </Field>
+              {form.countryCode === "BR" ? (
+                <>
+                <Field
+                  label="CPF / CNPJ *"
+                  fieldKey="taxId"
+                  error={formErrors.taxId}
+                  help={cnpjLookup.statusText || undefined}
+                  wide
+                >
+                  <div className="flex gap-2">
+                    <input
+                    className="min-w-0 flex-1 rounded-xl border px-3 py-3 text-sm"
+                    value={form.taxId}
+                    onChange={(e) =>
+                      setForm({ ...form, taxId: e.target.value })
+                    }
+                  />
+                    <CnpjSearchButton onClick={cnpjLookup.search} busy={cnpjLookup.busy} />
+                  </div>
+                </Field>
+                {cnpjLookup.record && (
+                  <div className="sm:col-span-2">
+                    <CnpjRegistryPanel record={cnpjLookup.record} />
+                  </div>
+                )}
+                </>
+              ) : (
+                <Field
+                  label="Identificação fiscal estrangeira *"
+                  fieldKey="foreignTaxId"
+                  error={formErrors.foreignTaxId}
+                  help="Número fiscal ou registro empresarial do país do cliente."
+                >
+                  <input
+                    value={form.foreignTaxId}
+                    onChange={(e) =>
+                      setForm({ ...form, foreignTaxId: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
               <Field
                 label="Nome do cliente *"
                 fieldKey="name"
@@ -1570,35 +1626,7 @@ export default function CustomersPage() {
                   }
                 />
               </Field>
-              {form.countryCode === "BR" ? (
-                <Field
-                  label="CPF / CNPJ *"
-                  fieldKey="taxId"
-                  error={formErrors.taxId}
-                  help={cnpjLookup.statusText || undefined}
-                >
-                  <input
-                    value={form.taxId}
-                    onChange={(e) =>
-                      setForm({ ...form, taxId: e.target.value })
-                    }
-                  />
-                </Field>
-              ) : (
-                <Field
-                  label="Identificação fiscal estrangeira *"
-                  fieldKey="foreignTaxId"
-                  error={formErrors.foreignTaxId}
-                  help="Número fiscal ou registro empresarial do país do cliente."
-                >
-                  <input
-                    value={form.foreignTaxId}
-                    onChange={(e) =>
-                      setForm({ ...form, foreignTaxId: e.target.value })
-                    }
-                  />
-                </Field>
-              )}
+              
               <Field label="Segmento">
                 <select
                   value={form.segment}

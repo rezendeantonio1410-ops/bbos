@@ -10,7 +10,8 @@ import { SignaShellBar } from "@/components/signa-shell-bar";
 import { SignaOrderPanel, paymentLabel } from "@/components/signa-order-panel";
 import { PortalToaster, showToast } from "@/components/portal-toast";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
-import { fillEmptyFromCnpj } from "@/lib/cnpj-registry";
+import { applyCnpjRecord } from "@/lib/cnpj-registry";
+import { CnpjRegistryPanel, CnpjSearchButton } from "@/components/cnpj-registry-panel";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { getSignaOrderTimelineEvents } from "@/lib/signa-order-timeline";
 import { emptySignaEndCustomerForm, formatCnpj, validateSignaEndCustomerForm, type SignaEndCustomerForm } from "@/lib/signa-end-customer-form";
@@ -104,18 +105,21 @@ function SignaCustomerHistory() {
     enabled: expanded,
     onResolved: result => setForm(previous => ({...previous, street: result.address, district: result.district, city: result.city, state: result.state})),
   });
-  // Complete CNPJ → Receita Federal lookup; fills only EMPTY fields. IE stays manual.
+  // Complete CNPJ → Receita Federal lookup (free). Fills every empty field;
+  // "Buscar na Receita" refills all. Everything stays editable.
   const cnpjLookup = useCnpjRegistryAutofill({
     cnpj: form.taxId,
     enabled: expanded,
-    onResolved: record => {
-      setForm(previous => fillEmptyFromCnpj(previous as unknown as Record<string,string>, record, {
+    onResolved: (record, context) => {
+      setForm(previous => applyCnpjRecord(previous as unknown as Record<string,string>, record, {
         name: "legalName", postalCode: "postalCode", street: "street", number: "number",
         district: "district", complement: "complement", city: "city", state: "state",
         stateRegistration: r => r.suggestedStateRegistration ?? null,
-      }) as unknown as SignaEndCustomerForm);
-      setPhone(current => current.trim() ? current : record.phone ?? "");
-      setEmail(current => current.trim() ? current : record.email ?? "");
+      }, context) as unknown as SignaEndCustomerForm);
+      const take = (current: string, value: string | null, before: string | null | undefined) =>
+        value && (context.overwrite || !current.trim() || current === before) ? value : current;
+      setPhone(current => take(current, record.phone, context.previous?.phone));
+      setEmail(current => take(current, record.email, context.previous?.email));
     },
   });
   const [refresh,setRefresh] = useState(0);
@@ -156,10 +160,11 @@ function SignaCustomerHistory() {
       <p className="text-sm font-semibold text-[#0E191D]">Novo cliente atendido pela Signa</p>
       <p className="text-xs text-slate-600">Cadastro somente comercial. Não altera o cliente fiscal, a NF-e nem os preços dos pedidos.</p>
       <div className="grid gap-3 sm:grid-cols-6">
+        <label className="text-xs font-semibold sm:col-span-6">CNPJ *<span className="mt-1 flex gap-2"><input required inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(form.taxId)} onChange={e=>setField("taxId",e.target.value.replace(/\D/g,"").slice(0,14))} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/><CnpjSearchButton onClick={cnpjLookup.search} busy={cnpjLookup.busy}/></span></label>
         <label className="text-xs font-semibold sm:col-span-6">Nome / Razão social *<input required minLength={2} maxLength={180} autoComplete="organization" value={form.name} onChange={e=>setField("name",e.target.value)} placeholder="Nome ou razão social" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
-        <label className="text-xs font-semibold sm:col-span-3">CNPJ *<input required inputMode="numeric" placeholder="00.000.000/0000-00" value={formatCnpj(form.taxId)} onChange={e=>setField("taxId",e.target.value.replace(/\D/g,"").slice(0,14))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-3">CEP *<input required inputMode="numeric" placeholder="00000-000" value={formatBrazilianCep(form.postalCode)} onChange={e=>setField("postalCode",brazilianCepDigits(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         {cnpjLookup.statusText&&<p role="status" className={`text-xs sm:col-span-6 ${cnpjLookup.warning?"font-semibold text-amber-800":"text-slate-600"}`}>{cnpjLookup.statusText}</p>}
+        {cnpjLookup.record&&<div className="sm:col-span-6"><CnpjRegistryPanel record={cnpjLookup.record}/></div>}
         {cepLookup.statusText&&<p role="status" className="text-xs text-slate-600 sm:col-span-6">{cepLookup.statusText}</p>}
         <label className="text-xs font-semibold sm:col-span-4">Rua *<input required maxLength={180} value={form.street} onChange={e=>setField("street",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">Número *<input required maxLength={30} placeholder="S/N" value={form.number} onChange={e=>setField("number",e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"/></label>

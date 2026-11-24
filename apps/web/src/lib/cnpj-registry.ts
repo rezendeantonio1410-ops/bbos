@@ -1,7 +1,7 @@
 /**
  * CNPJ lookup in the public Receita Federal registry (served by the BBOS API
- * through BrasilAPI). Pre-fills registrations; the user still reviews every
- * field. State registration (IE) is not part of this data and stays manual.
+ * through BrasilAPI and cnpj.ws, both free). One lookup fills every field the
+ * form has and shows the rest of the public data; every field stays editable.
  */
 export type CnpjRegistryRecord = {
   cnpj: string;
@@ -22,6 +22,22 @@ export type CnpjRegistryRecord = {
   stateRegistrations?: Array<{ number: string; active: boolean; state: string | null }>;
   /** Active IE of the company's UF found in the public registry; user reviews it. */
   suggestedStateRegistration?: string | null;
+  details?: CnpjRegistryDetails;
+};
+
+export type CnpjRegistryDetails = {
+  openingDate: string | null;
+  statusReason: string | null;
+  legalNature: string | null;
+  companySize: string | null;
+  shareCapital: number | null;
+  mainActivity: { code: string; description: string } | null;
+  secondaryActivities: Array<{ code: string; description: string }>;
+  simplesOptant: boolean | null;
+  simplesSince: string | null;
+  meiOptant: boolean | null;
+  secondaryPhone: string | null;
+  partners: Array<{ name: string; role: string | null; since: string | null }>;
 };
 
 export type CnpjLookupOutcome =
@@ -70,7 +86,7 @@ export function cnpjRegistryStatusText(record: CnpjRegistryRecord): string {
     ? ` IE ${record.suggestedStateRegistration} (${record.state ?? "UF"}) encontrada no cadastro público; confira.`
     : " IE não encontrada; informe manualmente, se houver.";
   return record.active
-    ? `CNPJ ativo na Receita Federal: ${name}. Dados preenchidos.${ie}`
+    ? `CNPJ ativo na Receita Federal: ${name}. Dados preenchidos; confira e edite se precisar.${ie}`
     : `Atenção: CNPJ com situação ${record.registrationStatus} na Receita Federal (${name}). Confirme antes de cadastrar.`;
 }
 
@@ -87,4 +103,72 @@ export function fillEmptyFromCnpj<T extends Record<string, string>>(
     if (value != null && String(value).trim()) next[field] = String(value) as T[keyof T];
   }
   return next;
+}
+
+type CnpjFieldMapping<T> = Partial<Record<keyof T, keyof CnpjRegistryRecord | ((r: CnpjRegistryRecord) => string | null)>>;
+
+const mappedValue = <T,>(record: CnpjRegistryRecord, source: CnpjFieldMapping<T>[keyof T]) => {
+  if (!source) return null;
+  const value = typeof source === "function" ? source(record) : record[source as keyof CnpjRegistryRecord];
+  return value != null && String(value).trim() ? String(value) : null;
+};
+
+/**
+ * Applies a looked-up company to a form. A field is replaced when it is empty,
+ * when it still holds what the previous lookup put there (another CNPJ was
+ * typed), or always when `overwrite` is set (the user clicked "Buscar").
+ * Anything the user typed by hand is kept unless they asked to overwrite.
+ */
+export function applyCnpjRecord<T extends Record<string, string>>(
+  current: T,
+  record: CnpjRegistryRecord,
+  mapping: CnpjFieldMapping<T>,
+  options: { previous?: CnpjRegistryRecord | null; overwrite?: boolean } = {},
+): T {
+  const next = { ...current };
+  for (const [field, source] of Object.entries(mapping) as Array<[keyof T, CnpjFieldMapping<T>[keyof T]]>) {
+    const value = mappedValue(record, source);
+    if (value == null) continue;
+    const now = String(next[field] ?? "").trim();
+    const fromPrevious = options.previous ? mappedValue(options.previous, source) : null;
+    if (options.overwrite || !now || (fromPrevious != null && now === fromPrevious)) next[field] = value as T[keyof T];
+  }
+  return next;
+}
+
+const dateBr = (value: string | null) => {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+};
+
+const phoneBr = (value: string | null) => {
+  const d = (value ?? "").replace(/\D/g, "");
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  return value;
+};
+
+/** Rows for the "Dados da Receita Federal" summary, in reading order. */
+export function cnpjRegistrySummary(record: CnpjRegistryRecord): Array<{ label: string; value: string }> {
+  const d = record.details;
+  const rows: Array<{ label: string; value: string | null | undefined }> = [
+    { label: "Situação", value: `${record.registrationStatus}${record.statusDate ? ` desde ${dateBr(record.statusDate)}` : ""}${d?.statusReason && !record.active ? ` (${d.statusReason})` : ""}` },
+    { label: "Abertura", value: dateBr(d?.openingDate ?? null) },
+    { label: "Natureza jurídica", value: d?.legalNature },
+    { label: "Porte", value: d?.companySize },
+    {
+      label: "Simples Nacional",
+      value: d?.meiOptant ? "MEI" : d?.simplesOptant === true ? `Optante${d.simplesSince ? ` desde ${dateBr(d.simplesSince)}` : ""}` : d?.simplesOptant === false ? "Não optante" : null,
+    },
+    { label: "Capital social", value: d?.shareCapital != null ? d.shareCapital.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null },
+    { label: "Atividade principal", value: d?.mainActivity ? `${d.mainActivity.code} · ${d.mainActivity.description}` : null },
+    {
+      label: "Inscrição estadual",
+      value: record.stateRegistrations?.length
+        ? record.stateRegistrations.map((item) => `${item.number} (${item.state ?? "UF"}${item.active ? "" : ", inativa"})`).join(", ")
+        : null,
+    },
+    { label: "Outro telefone", value: phoneBr(d?.secondaryPhone ?? null) },
+  ];
+  return rows.filter((row): row is { label: string; value: string } => Boolean(row.value && String(row.value).trim()));
 }
