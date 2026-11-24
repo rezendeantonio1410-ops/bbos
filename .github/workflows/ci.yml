@@ -152,14 +152,26 @@ jobs:
           done < <(sed -n 's/^.*Bootstrap: legacy statement skipped //p' "$RUNNER_TEMP/bbos-bootstrap.log")
           # Data-recovery statements are relevant to populated databases; this gate
           # proves only the empty rehearsal has no source orders or cost events.
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL' | grep -qx 't|t|t|t|t'
-          SELECT
-            NOT EXISTS (SELECT 1 FROM "ProductionOrder"),
-            NOT EXISTS (SELECT 1 FROM "CostEvent"),
-            NOT EXISTS (SELECT 1 FROM "StorefrontOrder"),
-            EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='StorefrontOrder' AND column_name='salesOrderId'),
-            EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid=t.oid WHERE t.typname='CostType' AND e.enumlabel='GAS');
+          checks=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At -F '|' <<'SQL'
+          SELECT check_name, passed FROM (VALUES
+            ('production_orders_empty', NOT EXISTS (SELECT 1 FROM public."ProductionOrder")),
+            ('cost_events_empty', NOT EXISTS (SELECT 1 FROM public."CostEvent")),
+            ('storefront_orders_empty', NOT EXISTS (SELECT 1 FROM public."StorefrontOrder")),
+            ('storefront_sales_order_column_present', EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='StorefrontOrder' AND column_name='salesOrderId')),
+            ('gas_enum_present', EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid=t.oid JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typname='CostType' AND e.enumlabel='GAS'))
+          ) AS checks(check_name, passed) ORDER BY check_name;
           SQL
+          )
+          # Emit only fixed check names and booleans, never row contents.
+          printf '%s\n' "$checks"
+          failed=0
+          for check in production_orders_empty cost_events_empty storefront_orders_empty storefront_sales_order_column_present gas_enum_present; do
+            if ! grep -Fxq "$check|t" <<< "$checks"; then
+              echo "::error::Bootstrap prerequisite failed: $check"
+              failed=1
+            fi
+          done
+          test "$failed" -eq 0
 
       - name: History complete and second deploy is a no-op
         env:
