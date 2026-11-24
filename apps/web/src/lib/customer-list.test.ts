@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { healthChip, matchesQuickFilter, taxIdNeedsCheck } from "./customer-list";
+import { cityOptions, districtOptions, healthChip, matchesPlace, matchesQuickFilter, taxIdNeedsCheck } from "./customer-list";
 
 test("quick filters of the customer list", () => {
   const late = { financialHealth: { health: "BLOCKED" }, fiscalReadiness: { ready: true }, taxId: "12.345.678/0001-90", taxIdVerificationStatus: "VERIFIED_ACTIVE" };
@@ -15,4 +15,22 @@ test("quick filters of the customer list", () => {
   assert.equal(taxIdNeedsCheck(person), false); // CPF: not a CNPJ check
   assert.equal(healthChip("INFO").label, "Só à vista");
   assert.equal(healthChip("BLOCKED").label, "Prazo bloqueado");
+});
+
+test("city and district filters ignore accents, case and spaces", () => {
+  const customers = [
+    { city: "Londrina", state: "PR", district: "Centro" },
+    { city: "londrina ", state: "pr", district: "centro" },
+    { city: "Londrina", state: "PR", district: "Gleba Palhano" },
+    { city: "Cambé", state: "PR", district: "Jardim Ana Rosa" },
+    { city: "Cambe", state: "PR", district: null },
+    { city: null, state: null, district: null },
+  ];
+  const cities = cityOptions(customers);
+  assert.deepEqual(cities.map((c) => [c.label, c.count]), [["Cambé/PR", 2], ["Londrina/PR", 3]]);
+  const londrina = cities.find((c) => c.label === "Londrina/PR")!.value;
+  assert.deepEqual(districtOptions(customers, londrina).map((d) => [d.label, d.count]), [["Centro", 2], ["Gleba Palhano", 1]]);
+  assert.equal(customers.filter((c) => matchesPlace(c, londrina, "centro")).length, 2);
+  assert.equal(customers.filter((c) => matchesPlace(c, "", "")).length, 6);
+  assert.deepEqual(districtOptions(customers, ""), []);
 });

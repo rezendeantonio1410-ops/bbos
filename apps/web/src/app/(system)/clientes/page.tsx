@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
-import { QUICK_FILTERS, healthChip, matchesQuickFilter, taxIdNeedsCheck, type CustomerQuickFilter } from "@/lib/customer-list";
+import { QUICK_FILTERS, cityOptions, districtOptions, healthChip, matchesPlace, matchesQuickFilter, taxIdNeedsCheck, type CustomerQuickFilter } from "@/lib/customer-list";
 import { brazilianCepDigits, formatBrazilianCep } from "@/lib/brazil-address";
 import { useCnpjRegistryAutofill } from "@/lib/use-cnpj-registry-autofill";
 import { applyCnpjRecord } from "@/lib/cnpj-registry";
@@ -553,7 +553,14 @@ export default function CustomersPage() {
         .some((v) => String(v).toLowerCase().includes(term)),
     );
   }, [customers, search]);
-  const visible = useMemo(() => filtered.filter((c) => matchesQuickFilter(c, quick)), [filtered, quick]);
+  const [cityFilter, setCityFilter] = useState("");
+  const [districtFilter, setDistrictFilter] = useState("");
+  const cities = useMemo(() => cityOptions(customers), [customers]);
+  const districts = useMemo(() => districtOptions(customers, cityFilter), [customers, cityFilter]);
+  const visible = useMemo(
+    () => filtered.filter((c) => matchesQuickFilter(c, quick) && matchesPlace(c, cityFilter, districtFilter)),
+    [filtered, quick, cityFilter, districtFilter],
+  );
 
   const createCustomer = async () => {
     if (!validateCustomerForm()) return;
@@ -910,15 +917,47 @@ export default function CustomersPage() {
 
       <div className="rounded-2xl border bg-white shadow-sm">
         <div className="grid gap-3 border-b p-3 sm:p-4">
-          <div className="flex min-w-0 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-stone-500">
-            <Search size={16} aria-hidden />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar cliente, CNPJ, cidade ou segmento"
-              aria-label="Buscar clientes"
-              className="min-h-11 w-full bg-transparent text-base outline-none sm:text-sm"
-            />
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,220px)]">
+            <div className="flex min-w-0 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-stone-500">
+              <Search size={16} aria-hidden />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar cliente, CNPJ ou segmento"
+                aria-label="Buscar clientes"
+                className="min-h-11 w-full bg-transparent text-base outline-none sm:text-sm"
+              />
+            </div>
+            <select
+              aria-label="Filtrar por cidade"
+              value={cityFilter}
+              onChange={(e) => {
+                setCityFilter(e.target.value);
+                setDistrictFilter("");
+              }}
+              className="min-h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-base sm:text-sm"
+            >
+              <option value="">Todas as cidades</option>
+              {cities.map((city) => (
+                <option key={city.value} value={city.value}>
+                  {city.label} ({city.count})
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Filtrar por bairro"
+              value={districtFilter}
+              disabled={!cityFilter || districts.length === 0}
+              onChange={(e) => setDistrictFilter(e.target.value)}
+              className="min-h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-base disabled:bg-stone-50 disabled:text-stone-400 sm:text-sm"
+            >
+              <option value="">{cityFilter ? "Todos os bairros" : "Escolha a cidade"}</option>
+              {districts.map((district) => (
+                <option key={district.value} value={district.value}>
+                  {district.label} ({district.count})
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filtrar clientes">
             {QUICK_FILTERS.map(({ key, label, tone }) => {
@@ -2448,7 +2487,7 @@ function CustomerRow({
         <p className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-sm text-stone-500">
           {customer.city && <MapPin size={13} className="shrink-0" aria-hidden />}
           <span className="truncate">
-            {[customer.city && `${customer.city}${customer.state ? `/${customer.state}` : ""}`, customer.segment].filter(Boolean).join(" · ") || "Sem cidade"}
+            {[customer.city && `${customer.city}${customer.state ? `/${customer.state}` : ""}`, customer.district, customer.segment].filter(Boolean).join(" · ") || "Sem cidade"}
           </span>
         </p>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">

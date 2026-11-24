@@ -56,3 +56,63 @@ export function healthChip(health?: string) {
       return { label: "Só à vista", className: "bg-sky-50 text-sky-800" };
   }
 }
+
+// ---- Place filters (city and district), the base for mapping customers.
+
+type PlaceCustomer = { city?: string | null; state?: string | null; district?: string | null };
+
+const placeKey = (value?: string | null) =>
+  (value ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+
+/** "londrina|pr" — same city regardless of accents, case or spaces. */
+export function cityKey(customer: PlaceCustomer) {
+  const city = placeKey(customer.city);
+  return city ? `${city}|${placeKey(customer.state)}` : "";
+}
+
+const accents = (value: string) => value.normalize("NFD").length - value.length;
+
+export type PlaceOption = { value: string; label: string; count: number };
+
+function options(entries: Array<{ key: string; label: string }>): PlaceOption[] {
+  const byKey = new Map<string, { labels: Map<string, number>; count: number }>();
+  for (const { key, label } of entries) {
+    if (!key) continue;
+    const entry = byKey.get(key) ?? { labels: new Map(), count: 0 };
+    entry.count += 1;
+    entry.labels.set(label, (entry.labels.get(label) ?? 0) + 1);
+    byKey.set(key, entry);
+  }
+  return [...byKey.entries()]
+    .map(([value, { labels, count }]) => ({
+      value,
+      // The spelling used most often becomes the label.
+      // On a tie, prefer the accented spelling ("Cambé" over "Cambe").
+      label: [...labels.entries()].sort((a, b) => b[1] - a[1] || accents(b[0]) - accents(a[0]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))[0]![0], // "Centro" before "centro"
+      count,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+export function cityOptions(customers: PlaceCustomer[]) {
+  return options(
+    customers.map((c) => ({
+      key: cityKey(c),
+      label: `${(c.city ?? "").trim()}${c.state ? `/${c.state.trim().toUpperCase()}` : ""}`,
+    })),
+  );
+}
+
+export function districtOptions(customers: PlaceCustomer[], city: string) {
+  return options(
+    customers
+      .filter((c) => city && cityKey(c) === city)
+      .map((c) => ({ key: placeKey(c.district), label: (c.district ?? "").trim() })),
+  );
+}
+
+export function matchesPlace(customer: PlaceCustomer, city: string, district: string) {
+  if (city && cityKey(customer) !== city) return false;
+  if (district && placeKey(customer.district) !== district) return false;
+  return true;
+}
