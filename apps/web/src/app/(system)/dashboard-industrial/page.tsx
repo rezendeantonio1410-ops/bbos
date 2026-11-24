@@ -2,803 +2,213 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  Boxes,
-  ChevronRight,
-  CircleDollarSign,
-  Download,
-  Factory,
-  Gauge,
-  Leaf,
-  PackageCheck,
-  PackageOpen,
-  Plus,
-  Settings2,
-  SlidersHorizontal,
-  Target,
-  TrendingUp,
-  Warehouse,
-} from "lucide-react";
-import { Badge, Card } from "@bbos/ui";
-import type {
-  IndustrialMetric,
-  PerformanceStatus,
-  Period,
-  ProductionGoal,
-  ProductionHistoryItem,
-  IndustrialDashboard,
-} from "@bbos/shared";
-import { getApiBaseUrl } from "@/lib/api-url";
+import type { IndustrialDashboard } from "@bbos/shared";
+import { ExportButton, KpiStrip, Panel, PendingDataNote, PERIOD_OPTIONS, Segmented, downloadCsv, periodNoun, type PanelPeriod } from "@/components/analytics-ui";
 
-const periodOptions: Array<{ key: Period; label: string }> = [
-  { key: "day", label: "Dia" },
-  { key: "week", label: "Semana" },
-  { key: "month", label: "Mês" },
-  { key: "year", label: "Ano" },
-];
-const periodLabels: Record<Period, string> = {
-  day: "Dia",
-  week: "Semana",
-  month: "Mês",
-  year: "Ano",
-};
-const metricIcons = [
-  Gauge,
-  TrendingUp,
-  ArrowDownRight,
-  Leaf,
-  Factory,
-  PackageCheck,
-  CircleDollarSign,
-];
-const kg = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-const currency = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  maximumFractionDigits: 2,
-});
+const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const kilos = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const pct = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 
-const statuses: Record<
-  PerformanceStatus,
-  { label: string; text: string; bg: string; border: string; bar: string }
-> = {
-  "on-track": {
-    label: "Dentro da meta",
-    text: "text-emerald-700",
-    bg: "bg-emerald-50",
-    border: "border-emerald-200",
-    bar: "bg-emerald-600",
-  },
-  attention: {
-    label: "Atenção",
-    text: "text-amber-700",
-    bg: "bg-amber-50",
-    border: "border-amber-200",
-    bar: "bg-amber-500",
-  },
-  "off-track": {
-    label: "Abaixo da meta",
-    text: "text-red-700",
-    bg: "bg-red-50",
-    border: "border-red-200",
-    bar: "bg-red-600",
-  },
-};
+/** Typical roast loss band used to flag a batch (shown on the chart). */
+const LOSS_BAND = { min: 12, max: 20 };
 
-function Status({
-  status,
-  compact = false,
-}: {
-  status: PerformanceStatus;
-  compact?: boolean;
-}) {
-  const style = statuses[status];
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${style.bg} ${style.text}`}
-    >
-      <span className={`size-1.5 rounded-full ${style.bar}`} />
-      {compact ? style.label.split(" ")[0] : style.label}
-    </span>
-  );
-}
-
-function GoalCard({
-  goal,
-  active,
-  onClick,
-}: {
-  goal: ProductionGoal;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const style = statuses[goal.status];
-  return (
-    <button type="button" onClick={onClick} className="text-left">
-      <Card
-        className={`h-full p-5 transition hover:-translate-y-0.5 hover:shadow-lg ${active ? `border-2 ${style.border}` : ""}`}
-      >
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-bold">{periodLabels[goal.period]}</p>
-          <Status status={goal.status} compact />
-        </div>
-        <div className="mt-5 flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-stone-400">
-              Realizado
-            </p>
-            <p className="mt-1 text-xl font-bold">
-              {kg.format(goal.actualKg)} kg
-            </p>
-          </div>
-          <p className={`text-lg font-bold ${style.text}`}>
-            {goal.attainment.toLocaleString("pt-BR")}%
-          </p>
-        </div>
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-stone-100">
-          <div
-            className={`h-full rounded-full ${style.bar}`}
-            style={{ width: `${Math.min(goal.attainment, 100)}%` }}
-          />
-        </div>
-        <div className="mt-3 flex justify-between text-xs">
-          <span className="text-stone-400">
-            Meta {kg.format(goal.targetKg)} kg
-          </span>
-          <span className={`font-semibold ${style.text}`}>
-            {goal.differenceKg > 0 ? "+" : ""}
-            {kg.format(goal.differenceKg)} kg
-          </span>
-        </div>
-      </Card>
-    </button>
-  );
-}
-
-function MetricCard({
-  item,
-  index,
-}: {
-  item: IndustrialMetric;
-  index: number;
-}) {
-  const Icon = metricIcons[index] ?? Settings2;
-  const style = statuses[item.status];
-  const favorable =
-    item.id === "losses" || item.id === "average-cost"
-      ? (item.change ?? 0) <= 0
-      : (item.change ?? 0) >= 0;
-  return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-stone-500">{item.label}</p>
-        <span
-          className={`grid size-8 place-items-center rounded-lg ${style.bg} ${style.text}`}
-        >
-          <Icon size={16} />
-        </span>
-      </div>
-      <p className="mt-5 text-2xl font-bold tracking-tight">{item.value}</p>
-      <div className="mt-2 flex items-center gap-1.5">
-        <span
-          className={`flex items-center text-xs font-bold ${favorable ? "text-emerald-700" : "text-amber-700"}`}
-        >
-          {(item.change ?? 0) >= 0 ? (
-            <ArrowUpRight size={13} />
-          ) : (
-            <ArrowDownRight size={13} />
-          )}
-          {Math.abs(item.change ?? 0).toLocaleString("pt-BR")}%
-        </span>
-        <span className="truncate text-xs text-stone-400">
-          {item.supportingText}
-        </span>
-      </div>
-      {item.status !== "on-track" && (
-        <Link
-          href="/producao#alertas"
-          className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-forest-700"
-        >
-          Ver causas e ações <ChevronRight size={12} />
-        </Link>
-      )}
-    </Card>
-  );
-}
-
-function IndustrialKpi({ label, value, reference, change, icon: Icon, status = "on-track", href = "/producao" }: { label: string; value: string; reference: string; change: string; icon: typeof Factory; status?: PerformanceStatus; href?: string }) {
-  const style = statuses[status];
-  return <Link href={href} className="group min-w-0"><Card className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><span className="grid size-8 place-items-center rounded-lg bg-[#F0F0ED] text-forest-800"><Icon size={15} strokeWidth={1.7}/></span><span className={`text-[10px] font-bold ${style.text}`}>{change}</span></div><p className="mt-3 truncate text-[11px] font-semibold text-stone-600">{label}</p><p className="mt-1 text-xl font-bold tracking-tight">{value}</p><div className="mt-2 flex items-end justify-between gap-2"><p className="truncate text-[10px] text-stone-500">{reference}</p><svg viewBox="0 0 50 14" className="h-3.5 w-12" aria-hidden="true"><polyline points="1,11 9,9 17,10 25,5 33,7 41,3 49,4" fill="none" stroke="#0D1B1E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div></Card></Link>;
-}
-
-function ProductionChart({ points }: { points: Array<{ label: string; plannedKg: number; actualKg: number }> }) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const width = 760;
-  const height = 270;
-  const margin = { top: 14, right: 16, bottom: 38, left: 58 };
-  const plotWidth = width - margin.left - margin.right;
-  const plotHeight = height - margin.top - margin.bottom;
-  const maxKg = 2000;
-  const ticks = [0, 500, 1000, 1500, 2000];
-  const bandWidth = plotWidth / points.length;
-  const barWidth = Math.min(28, bandWidth * 0.32);
-  const y = (value: number) =>
-    margin.top + plotHeight - (value / maxKg) * plotHeight;
-  const hovered = hoveredIndex === null ? null : points[hoveredIndex];
-  const tooltipLeft =
-    hoveredIndex === null
-      ? 50
-      : ((margin.left + bandWidth * (hoveredIndex + 0.5)) / width) * 100;
-  return (
-    <Card className="p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="font-[var(--font-manrope)] text-base font-bold">
-            Produção planejada x realizada
-          </h2>
-          <p className="mt-1 text-xs text-stone-500">
-            Volume diário em quilogramas
-          </p>
-        </div>
-        <div className="flex gap-5 text-[13px] font-medium text-[#687371]">
-          <span className="flex items-center gap-2">
-            <span className="size-2.5 rounded-sm bg-[#C8CFCD]" />
-            Planejado
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="size-2.5 rounded-sm bg-[#0D1B1E]" />
-            Realizado
-          </span>
-        </div>
-      </div>
-      <div className="mt-6 overflow-x-auto pb-1">
-        <div className="relative min-w-[680px]">
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            className="h-[270px] w-full"
-            role="img"
-            aria-label="Gráfico de barras agrupadas da produção planejada e realizada por dia"
-          >
-            {ticks.map((tick) => {
-              const tickY = y(tick);
-              return (
-                <g key={tick}>
-                  <line
-                    x1={margin.left}
-                    x2={width - margin.right}
-                    y1={tickY}
-                    y2={tickY}
-                    stroke="#D7DEDC"
-                    strokeWidth="1"
-                    opacity="0.75"
-                  />
-                  <text
-                    x={margin.left - 10}
-                    y={tickY + 4}
-                    textAnchor="end"
-                    fill="#687371"
-                    fontSize="12"
-                    fontWeight="500"
-                  >
-                    {tick === 2000 ? "2.000 kg" : kg.format(tick)}
-                  </text>
-                </g>
-              );
-            })}
-            {points.map((point, index) => {
-              const center = margin.left + bandWidth * (index + 0.5);
-              const plannedY = y(point.plannedKg);
-              const actualY = y(point.actualKg);
-              const active = hoveredIndex === index;
-              return (
-                <g key={point.label}>
-                  {active && (
-                    <rect
-                      x={margin.left + bandWidth * index + 5}
-                      y={margin.top}
-                      width={bandWidth - 10}
-                      height={plotHeight}
-                      rx="8"
-                      fill="#F3F6F5"
-                    />
-                  )}
-                  <rect
-                    x={center - barWidth - 3}
-                    y={plannedY}
-                    width={barWidth}
-                    height={margin.top + plotHeight - plannedY}
-                    rx="3"
-                    fill="#C8CFCD"
-                  />
-                  <rect
-                    x={center + 3}
-                    y={actualY}
-                    width={barWidth}
-                    height={Math.max(margin.top + plotHeight - actualY, 2)}
-                    rx="3"
-                    fill="#0D1B1E"
-                  />
-                  <text
-                    x={center}
-                    y={height - 13}
-                    textAnchor="middle"
-                    fill="#687371"
-                    fontSize="12"
-                    fontWeight="500"
-                  >
-                    {point.label.replace(" ago", "")}
-                  </text>
-                  <rect
-                    x={margin.left + bandWidth * index}
-                    y={margin.top}
-                    width={bandWidth}
-                    height={plotHeight + margin.bottom}
-                    fill="transparent"
-                    className="cursor-pointer"
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`${point.label}: planejado ${kg.format(point.plannedKg)} kg, realizado ${kg.format(point.actualKg)} kg`}
-                    onMouseEnter={() => setHoveredIndex(index)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                    onFocus={() => setHoveredIndex(index)}
-                    onBlur={() => setHoveredIndex(null)}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-          {hovered && (
-            <div
-              role="tooltip"
-              className="pointer-events-none absolute top-2 z-10 min-w-48 -translate-x-1/2 rounded-[10px] border border-[#E1E6E4] bg-white px-3.5 py-3 text-xs shadow-[0_6px_20px_rgba(0,0,0,0.10)]"
-              style={{ left: `${Math.max(16, Math.min(84, tooltipLeft))}%` }}
-            >
-              <p className="font-semibold text-[#0D1B1E]">
-                Dia {hovered.label.replace(" ago", "")}
-              </p>
-              <div className="mt-2 space-y-1 text-[#687371]">
-                <p>Planejado: <strong className="font-semibold text-[#0D1B1E]">{kg.format(hovered.plannedKg)} kg</strong></p>
-                <p>Realizado: <strong className="font-semibold text-[#0D1B1E]">{kg.format(hovered.actualKg)} kg</strong></p>
-                <p>Desvio: <strong className="font-semibold text-[#0D1B1E]">{hovered.actualKg - hovered.plannedKg > 0 ? "+" : ""}{kg.format(hovered.actualKg - hovered.plannedKg)} kg</strong></p>
-                <p>Variação: <strong className="font-semibold text-[#0D1B1E]">{hovered.plannedKg ? (((hovered.actualKg - hovered.plannedKg) / hovered.plannedKg) * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0,0"}%</strong></p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-[#687371]">
-        Comparativo entre o volume planejado e o volume efetivamente produzido
-        por dia.
-      </p>
-    </Card>
-  );
-}
-
-function HistoryStatus({
-  status,
-}: {
-  status: ProductionHistoryItem["status"];
-}) {
-  if (status === "completed") return <Badge tone="success">Concluída</Badge>;
-  if (status === "in-progress")
-    return <Badge tone="warning">Em andamento</Badge>;
-  return <Badge tone="neutral">Aberta</Badge>;
-}
-
-function historyCatalog(item: ProductionHistoryItem) {
-  const name = item.blend.toLocaleLowerCase("pt-BR");
-  if (["caramelo", "doce de leite", "áureo"].some((product) => name.includes(product))) return { line: "Clássicos", product: item.blend, sku: "—" };
-  if (name.includes("melpo")) return { line: "Gourmet", product: item.blend, sku: "—" };
-  if (name.includes("raro")) return { line: "Raros", product: item.blend, sku: "—" };
-  if (name.includes("épico")) return { line: "Épicos", product: item.blend, sku: "—" };
-  return { line: "Não classificada", product: item.blend, sku: "—" };
-}
-
+/** Industrial panel (roast): plan × actual, losses and today's queue. Real data only. */
 export default function IndustrialDashboardPage() {
-  const [period, setPeriod] = useState<Period>("month");
-  const [dashboardData, setData] = useState<IndustrialDashboard | null>(null);
-  const [dataState, setDataState] = useState<"loading" | "available" | "unavailable">("loading");
-  const [costSummary, setCostSummary] = useState<{ metrics: { energy: number; gas: number; maintenance: number; averageCostPerKg: number } } | null>(null);
+  const [period, setPeriod] = useState<PanelPeriod>("month");
+  const [data, setData] = useState<IndustrialDashboard | null>(null);
+  const [error, setError] = useState("");
+
   useEffect(() => {
-    const root = getApiBaseUrl();
-    setDataState("loading");
-    void Promise.all([
-      fetch(`${root}/dashboard/industrial?period=${period}`, { credentials: "include", cache: "no-store" }).then(async (response) => {
-        if (!response.ok) throw new Error("dashboard unavailable");
-        return response.json() as Promise<IndustrialDashboard>;
-      }),
-      fetch(`${root}/costing/summary`, { credentials: "include", cache: "no-store" }).then((response) => response.ok ? response.json() : null).catch(() => null),
-    ])
-      .then(([dashboard, costs]) => {
-        setData(dashboard);
-        setCostSummary(costs);
-        setDataState("available");
+    const controller = new AbortController();
+    setError("");
+    setData(null);
+    void fetch(`/api/dashboard/industrial?period=${period}`, { credentials: "include", cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as IndustrialDashboard;
       })
-      .catch(() => setDataState("unavailable"));
+      .then((payload) => !controller.signal.aborted && setData(payload))
+      .catch(() => !controller.signal.aborted && setError("Não foi possível carregar o painel industrial agora."));
+    return () => controller.abort();
   }, [period]);
-  const emptyData: IndustrialDashboard = { updatedAt: new Date().toISOString(), inventory: { greenAvailableKg: 0, greenReservedKg: 0, greenStockValue: 0, finishedGoodsUnits: 0 }, metrics: [], goals: [], capacity: { usedKg: 0, totalKg: 0, utilization: 0, status: "attention" }, orders: { open: 0, inProgress: 0, completed: 0 }, productionChart: [], history: [], alerts: [] };
-  const current = dashboardData ?? emptyData;
-  const data = current;
-  const activeGoal = current.goals.find((goal) => goal.period === period) ?? { period, targetKg: 0, actualKg: 0, attainment: 0, differenceKg: 0, status: "attention" as const };
-  const greenAvailableKg = current.inventory.greenAvailableKg;
-  const lineMatchers = [
-    { name: "Raros", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("raro") },
-    { name: "Épicos", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("épico") },
-    { name: "Clássicos", match: (name: string) => ["caramelo", "doce de leite", "áureo"].some((product) => name.toLocaleLowerCase("pt-BR").includes(product)) },
-    { name: "Gourmet", match: (name: string) => name.toLocaleLowerCase("pt-BR").includes("melpo") },
-  ];
-  const productionByLine = lineMatchers.map((line) => {
-    const orders = current.history.filter((item) => line.match(item.blend));
-    const producedKg = orders.reduce((sum, item) => sum + item.producedKg, 0);
-    const plannedKg = orders.reduce((sum, item) => sum + item.plannedKg, 0);
-    const costBase = orders.filter((item) => item.costPerKg > 0);
-    return { name: line.name, producedKg, yieldPercent: plannedKg ? producedKg / plannedKg * 100 : 0, averageCost: costBase.length ? costBase.reduce((sum, item) => sum + item.costPerKg, 0) / costBase.length : 0 };
-  });
-  const classifiedProduction = productionByLine.reduce((sum, line) => sum + line.producedKg, 0);
+
+  const numbers = data?.numbers;
+  const planned = numbers?.plannedKg ?? data?.goals?.[0]?.targetKg ?? 0;
+  const actual = numbers?.actualKg ?? data?.goals?.[0]?.actualKg ?? 0;
+  const attainment = planned > 0 ? (actual / planned) * 100 : null;
+  const sacks = (data?.inventory.greenAvailableKg ?? 0) / 60;
+  const queue = (data?.history ?? []).filter((item) => item.status !== "completed").slice(0, 6);
+
+  const exportAll = () => {
+    if (!data) return;
+    downloadCsv(`painel-industrial-${period}.csv`, [
+      ["Indicador", "Valor"],
+      ["Planejado (kg)", planned],
+      ["Realizado (kg)", actual],
+      ["Rendimento (%)", numbers?.yieldPercent ?? ""],
+      ["Perda de torra (%)", numbers?.lossPercent ?? ""],
+      ["Café verde disponível (kg)", data.inventory.greenAvailableKg],
+      [],
+      ["Ordem", "Produto", "Planejado (kg)", "Produzido (kg)", "Situação"],
+      ...data.history.map((item) => [item.code, item.blend, item.plannedKg, item.producedKg, item.status]),
+    ]);
+  };
+
   return (
-    <div className="industrial-dashboard mx-auto max-w-[1600px]">
-      <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+    <div className="mx-auto w-full max-w-[1500px] space-y-4 pb-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.14em] text-forest-700">
-            <Factory size={14} />
-            Cockpit Industrial
-          </div>
-          <h1 className="font-[var(--font-manrope)] text-3xl font-bold tracking-tight text-stone-950">
-            Dashboard Industrial
-          </h1>
-          <p className="mt-2 text-sm text-stone-500">
-            Visão consolidada da operação industrial
-          </p>
+          <p className="text-[11px] font-bold uppercase tracking-[.12em] text-[var(--bbos-coffee-green)]">Análises</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Painel industrial</h1>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2"><div className="flex w-fit rounded-xl border border-[#E7E7E3] bg-white p-1">
-          {periodOptions.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setPeriod(item.key)}
-              aria-pressed={period === item.key}
-              className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${period === item.key ? "bg-[#F0F3F2] text-stone-950" : "bg-white text-stone-500 hover:bg-[#F7F9F8] hover:text-stone-900"}`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div><button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><SlidersHorizontal size={14}/>Filtros</button><button className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 hover:bg-[#F7F9F8]"><Download size={14}/>Exportar</button></div>
-      </div>
-
-      {dataState !== "available" && (
-        <div role="status" className={`mt-4 rounded-xl border px-4 py-3 text-xs ${dataState === "unavailable" ? "border-red-200 bg-red-50 text-red-800" : "border-stone-200 bg-white text-stone-600"}`}>
-          {dataState === "unavailable"
-            ? "A leitura industrial está temporariamente indisponível. Os últimos valores conhecidos permanecem na tela e não devem ser interpretados como atualização atual."
-            : "Atualizando os indicadores industriais a partir da base operacional…"}
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented label="Período" options={PERIOD_OPTIONS} value={period} onChange={setPeriod} />
+          <ExportButton onClick={exportAll} />
         </div>
-      )}
+      </header>
 
-      <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <IndustrialKpi label="Produção realizada" value={`${kg.format(activeGoal.actualKg)} kg`} reference={`${activeGoal.attainment.toLocaleString("pt-BR")}% da meta`} change={activeGoal.targetKg > 0 ? `${activeGoal.attainment.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "Sem meta"} icon={Factory} status={activeGoal.status}/>
-        <IndustrialKpi label="Produção planejada" value={`${kg.format(activeGoal.targetKg)} kg`} reference={periodLabels[period]} change="Meta" icon={Target}/>
-        <IndustrialKpi label="Eficiência" value={current.metrics[0]?.value ?? "—"} reference={current.metrics[0]?.supportingText ?? ""} change="" icon={Gauge}/>
-        <IndustrialKpi label="Rendimento" value={current.metrics[1]?.value ?? "—"} reference={current.metrics[1]?.supportingText ?? ""} change="" icon={TrendingUp} status="attention"/>
-        <IndustrialKpi label="Perda de torra" value={current.metrics[2]?.value ?? "—"} reference={current.metrics[2]?.supportingText ?? ""} change="" icon={ArrowDownRight}/>
-        <IndustrialKpi label="Custo médio/kg" value={current.metrics[6]?.value ?? "—"} reference={current.metrics[6]?.supportingText ?? ""} change="" icon={CircleDollarSign} href="/custos"/>
-        <IndustrialKpi label="OPs em andamento" value={String(current.orders.inProgress)} reference={`${current.orders.open} abertas`} change="Operação" icon={Boxes}/>
-      </section>
+      {error && <p role="alert" className="rounded-xl bg-[#fdecea] px-3 py-2 text-sm text-[var(--bbos-danger)]">{error}</p>}
 
-      <section className="mt-6 flex flex-wrap gap-2">
-        <Link
-          href="/recebimento"
-          className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-bold text-forest-800 shadow-sm transition hover:bg-forest-50"
-        >
-          <Plus size={15} />
-          Novo recebimento
-        </Link>
-        <Link
-          href="/producao"
-          className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-bold text-stone-700 shadow-sm transition hover:bg-stone-50"
-        >
-          <Factory size={15} />
-          Ver Produção
-        </Link>
-        <Link
-          href="/estoque"
-          className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-bold text-stone-700 shadow-sm transition hover:bg-stone-50"
-        >
-          <Warehouse size={15} />
-          Estoque
-        </Link>
-        <Link
-          href="/estoque"
-          className="flex items-center gap-2 rounded-xl border border-[#E7E7E3] bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-[#F7F9F8]"
-        >
-          <AlertTriangle size={15} />
-          Lotes em atenção
-        </Link>
-      </section>
+      <KpiStrip
+        items={[
+          {
+            label: `Torrado ${periodNoun[period]}`,
+            value: data ? `${kilos.format(actual)} kg` : "…",
+            note: attainment == null ? "sem plano no período" : `${pct.format(attainment)}% de ${kilos.format(planned)} kg`,
+            tone: attainment != null && attainment < 50 ? "attention" : "neutral",
+            href: "/producao",
+          },
+          { label: "Rendimento", value: numbers?.yieldPercent != null ? `${pct.format(numbers.yieldPercent)}%` : "—", note: "torrado ÷ verde" },
+          {
+            label: "Perda de torra",
+            value: numbers?.lossPercent != null ? `${pct.format(numbers.lossPercent)}%` : "—",
+            note: numbers?.lossPercent == null ? "sem lotes concluídos" : numbers.lossPercent > LOSS_BAND.max ? "acima da faixa" : "dentro da faixa",
+            tone: numbers?.lossPercent != null && numbers.lossPercent > LOSS_BAND.max ? "attention" : "ok",
+          },
+          { label: "Ordens abertas", value: data ? String(data.orders.open) : "…", note: data ? `${data.orders.inProgress} em andamento` : undefined, href: "/producao" },
+          { label: "Café verde", value: data ? `${kilos.format(data.inventory.greenAvailableKg)} kg` : "…", note: sacks >= 1 ? `≈ ${pct.format(sacks)} sacas de 60 kg` : "menos de 1 saca", href: "/estoque" },
+          { label: "Valor do café verde", value: data ? money.format(data.inventory.greenStockValue) : "…", note: "lotes disponíveis" },
+        ]}
+      />
 
-      <section className="mt-4 grid gap-3 sm:grid-cols-3">
-        <Link href="/estoque">
-          <Card className="p-4 transition hover:-translate-y-0.5">
-            <p className="text-[11px] text-stone-500">Café verde disponível</p>
-            <p className="mt-2 text-lg font-bold">
-              {dashboardData ? `${kg.format(greenAvailableKg)} kg` : "Sem leitura"}
-            </p>
-          </Card>
-        </Link>
-        <Link href="/estoque">
-          <Card className="p-4 transition hover:-translate-y-0.5">
-            <p className="text-[11px] text-stone-500">Cobertura</p>
-            <p className="mt-2 text-lg font-bold text-amber-700">
-              —
-            </p>
-          </Card>
-        </Link>
-        <Link href="/estoque">
-          <Card className="p-4 transition hover:-translate-y-0.5">
-            <p className="text-[11px] text-stone-500">Valor do estoque</p>
-            <p className="mt-2 text-lg font-bold">
-              {dashboardData ? currency.format(current.inventory.greenStockValue) : "Sem leitura"}
-            </p>
-          </Card>
-        </Link>
-      </section>
+      <PendingDataNote href="/custos" cta="Fazer o fechamento">
+        O custo por kg aparece aqui assim que o primeiro fechamento de custos for concluído.
+      </PendingDataNote>
 
-      <section className="mt-6 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Card className="relative overflow-hidden bg-white p-6 text-[#111514]">
-          <div className="absolute -right-16 -top-16 size-52 rounded-full border-[34px] border-[#F7F9F8]" />
-          <div className="relative">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-forest-700">
-                  <Target size={15} />
-                  Produção — {periodLabels[period]}
-                </div>
-                <p className="mt-5 text-4xl font-bold tracking-tight">
-                  {kg.format(activeGoal.actualKg)} kg
-                </p>
-                <p className="mt-2 text-sm text-stone-600">
-                  realizados de {kg.format(activeGoal.targetKg)} kg planejados
-                </p>
-              </div>
-              <Status status={activeGoal.status} />
-            </div>
-            <div className="mt-8 h-2 overflow-hidden rounded-full bg-[#E7E7E3]">
-              <div
-                className="h-full rounded-full bg-coffee-400"
-                style={{ width: `${Math.min(activeGoal.attainment, 100)}%` }}
-              />
-            </div>
-            <div className="mt-3 flex justify-between text-xs">
-              <span className="text-stone-500">Atingimento</span>
-              <span className="font-bold">
-                {activeGoal.attainment.toLocaleString("pt-BR")}%
-              </span>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">
-                Capacidade produtiva
-              </p>
-              <h2 className="mt-1 text-base font-bold">Utilização mensal</h2>
-            </div>
-            <span className="grid size-10 place-items-center rounded-xl bg-forest-50 text-forest-700">
-              <Gauge size={19} />
-            </span>
-          </div>
-          <p className="mt-6 text-3xl font-bold tracking-tight">
-            {current.capacity.utilization.toLocaleString("pt-BR")} %
-          </p>
-          <p className="mt-2 text-xs text-stone-500">
-            {kg.format(current.capacity.usedKg)} kg de{" "}
-            {kg.format(current.capacity.totalKg)} kg disponíveis
-          </p>
-          <div className="mt-6 h-2 overflow-hidden rounded-full bg-stone-100">
-            <div
-              className="h-full rounded-full bg-forest-800"
-              style={{ width: `${current.capacity.utilization}%` }}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs text-stone-400">
-              5.580 kg de capacidade livre
-            </span>
-            <Status status={current.capacity.status} compact />
-          </div>
-        </Card>
-      </section>
-
-      <section className="mt-6 grid gap-4 xl:grid-cols-[1.15fr_.85fr]">
-        <Card className="p-6">
-          <div className="flex items-start justify-between"><div><h2 className="font-[var(--font-manrope)] text-base font-bold">Produção por linha</h2><p className="mt-1 text-xs text-stone-500">Leitura baseada nas OPs identificadas no histórico disponível</p></div><Badge tone="neutral">Período atual</Badge></div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {productionByLine.map((line) => { const share = classifiedProduction ? line.producedKg / classifiedProduction * 100 : 0; return <Link href="/producao" key={line.name} className="rounded-xl border border-[#E7E7E3] bg-white p-4 transition hover:bg-[#F7F9F8]"><div className="flex items-center justify-between"><p className="text-sm font-bold">{line.name}</p><span className="text-[10px] font-semibold text-stone-500">{share.toLocaleString("pt-BR",{maximumFractionDigits:1})}%</span></div><p className="mt-3 text-lg font-bold">{kg.format(line.producedKg)} kg</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E7E7E3]"><div className="h-full rounded-full bg-forest-800" style={{width:`${Math.min(share,100)}%`}}/></div><div className="mt-3 flex justify-between text-[10px] text-stone-500"><span>Rendimento {line.yieldPercent ? `${line.yieldPercent.toLocaleString("pt-BR",{maximumFractionDigits:1})}%` : "sem dados"}</span><span>{line.averageCost ? `${currency.format(line.averageCost)}/kg` : "Custo pendente"}</span></div></Link> })}
-          </div>
-        </Card>
-        <Link href="/custos" className="group"><Card className="h-full p-6 transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start justify-between"><div><h2 className="font-[var(--font-manrope)] text-base font-bold">Cost Engine</h2><p className="mt-1 text-xs text-stone-500">Resumo industrial — leitura, sem duplicar o módulo</p></div><CircleDollarSign size={18} className="text-forest-700"/></div><div className="mt-5 space-y-4">{[["Energia",costSummary?.metrics.energy??0],["Gás",costSummary?.metrics.gas??0],["Máquina",0],["Manutenção",costSummary?.metrics.maintenance??0]].map(([label,value])=><div key={String(label)} className="flex items-center justify-between border-t border-[#E7E7E3] pt-3 first:border-0 first:pt-0"><span className="text-xs text-stone-600">{label}</span><strong className="text-sm">{currency.format(Number(value))}</strong></div>)}<div className="flex items-center justify-between border-t border-[#E7E7E3] pt-3"><span className="text-xs text-stone-600">Perdas</span><strong className="text-sm">{data.metrics[2]?.value}</strong></div></div><p className="mt-5 inline-flex items-center gap-1 text-[11px] font-bold text-forest-700">Abrir Custos <ChevronRight size={12}/></p></Card></Link>
-      </section>
-
-      <section className="mt-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <h2 className="font-[var(--font-manrope)] text-lg font-bold">
-              Metas de produção
-            </h2>
-            <p className="mt-1 text-xs text-stone-500">
-              Planejado x realizado por período
-            </p>
-          </div>
-          <p className="hidden text-xs text-stone-400 sm:block">
-            Clique em um período para atualizar o destaque
-          </p>
-        </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {current.goals.map((goal) => (
-            <GoalCard
-              key={goal.period}
-              goal={goal}
-              active={period === goal.period}
-              onClick={() => setPeriod(goal.period)}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {current.metrics.map((item, index) => (
-          <MetricCard key={item.id} item={item} index={index} />
-        ))}
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-stone-500">
-              Ordens de produção
-            </p>
-            <span className="grid size-8 place-items-center rounded-lg bg-forest-50 text-forest-700">
-              <Boxes size={16} />
-            </span>
-          </div>
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="text-2xl font-bold">{current.orders.open}</p>
-              <p className="mt-1 text-[10px] text-stone-400">Abertas</p>
-            </div>
-            <div className="border-x">
-              <p className="text-2xl font-bold text-amber-700">
-                {current.orders.inProgress}
-              </p>
-              <p className="mt-1 text-[10px] text-stone-400">Em curso</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-emerald-700">
-                {current.orders.completed}
-              </p>
-              <p className="mt-1 text-[10px] text-stone-400">Concluídas</p>
-            </div>
-          </div>
-        </Card>
-      </section>
-
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.65fr_1fr]">
-        <ProductionChart points={current.productionChart} />
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-[var(--font-manrope)] text-base font-bold">
-                Alertas de suprimentos
-              </h2>
-              <p className="mt-1 text-xs text-stone-500">
-                Matéria-prima, insumos e embalagens
-              </p>
-            </div>
-            <AlertTriangle size={18} className="text-amber-600" />
-          </div>
-          <div className="mt-5 divide-y">
-            {current.alerts.map((alert) => {
-              const style = statuses[alert.status];
-              const Icon =
-                alert.category === "raw-material"
-                  ? Leaf
-                  : alert.category === "packaging"
-                    ? PackageOpen
-                    : Settings2;
-              return (
-                <div
-                  key={alert.id}
-                  className="flex items-start gap-3 py-4 first:pt-1"
-                >
-                  <span
-                    className={`grid size-9 shrink-0 place-items-center rounded-xl ${style.bg} ${style.text}`}
-                  >
-                    <Icon size={17} />
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Panel title="Plano × realizado por semana" action={<span className="text-xs text-[var(--bbos-text-secondary)]">kg torrados</span>}>
+          {data ? <WeeklyBars weeks={data.weekly ?? []} /> : <div className="h-[210px] animate-pulse rounded-xl bg-[var(--bbos-surface-subtle)]" aria-hidden />}
+        </Panel>
+        <Panel title="Fila de torra" action={<Link href="/producao" className="text-xs font-semibold text-[var(--bbos-coffee-green)]">Abrir ordens →</Link>}>
+          {queue.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[var(--bbos-text-secondary)]">{data ? "Nenhuma ordem aberta." : "Carregando…"}</p>
+          ) : (
+            <ul className="divide-y divide-[#eef1ed]">
+              {queue.map((item) => (
+                <li key={item.id} className="flex items-center gap-3 py-2.5">
+                  <span aria-hidden className={`grid size-9 shrink-0 place-items-center rounded-xl ${item.status === "in-progress" ? "bg-[var(--bbos-warning-soft)]" : "bg-[var(--bbos-surface-subtle)]"}`}>
+                    {item.status === "in-progress" ? "🔥" : "☕"}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold">{alert.item}</p>
-                      <Status status={alert.status} compact />
-                    </div>
-                    <p className="mt-1 text-xs text-stone-500">
-                      {alert.message}
-                    </p>
-                    <p className="mt-2 text-[11px] text-stone-400">
-                      {alert.currentStock} • {alert.coverage}
-                    </p>
+                    <p className="truncate text-sm font-semibold">{item.status === "in-progress" ? "Torrando · " : ""}{item.blend}</p>
+                    <p className="text-xs text-[var(--bbos-text-secondary)]">{item.code} · {kilos.format(item.plannedKg)} kg planejados</p>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </section>
+                  <Link href="/producao" className="rounded-lg border border-[var(--bbos-border)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--bbos-surface-subtle)]">
+                    {item.status === "in-progress" ? "Concluir" : "Iniciar"}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
 
-      <section className="mt-6">
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between p-6">
-            <div>
-              <h2 className="font-[var(--font-manrope)] text-base font-bold">
-                Histórico de produção
-              </h2>
-              <p className="mt-1 text-xs text-stone-500">
-                Ordens recentes e seus resultados industriais
-              </p>
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Panel title="Perda de torra por lote" action={<span className="text-xs text-[var(--bbos-text-secondary)]">faixa {LOSS_BAND.min}–{LOSS_BAND.max}% sombreada</span>}>
+          {data ? <LossDots batches={data.batchLosses ?? []} /> : <div className="h-[170px] animate-pulse rounded-xl bg-[var(--bbos-surface-subtle)]" aria-hidden />}
+        </Panel>
+        <Panel title="Capacidade usada">
+          {data ? (
+            <div className="flex items-center gap-4">
+              <Ring value={data.capacity.utilization} />
+              <div>
+                <p className="text-2xl font-semibold tabular-nums">{pct.format(data.capacity.utilization)}%</p>
+                <p className="text-xs text-[var(--bbos-text-secondary)]">{kilos.format(data.capacity.usedKg)} kg de {kilos.format(data.capacity.totalKg)} kg disponíveis</p>
+                <p className="text-xs text-[var(--bbos-text-secondary)]">{kilos.format(Math.max(0, data.capacity.totalKg - data.capacity.usedKg))} kg livres para novos pedidos</p>
+              </div>
             </div>
-            <button className="flex items-center gap-1 text-xs font-semibold text-forest-700">
-              Ver histórico completo <ChevronRight size={14} />
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] border-t border-[#E7E7E3] text-left">
-              <thead className="bg-[#F7F9F8] text-[11px] uppercase tracking-wider text-stone-500">
-                <tr>
-                  <th className="px-6 py-3 font-semibold">Ordem</th>
-                  <th className="px-4 py-3 font-semibold">Linha</th>
-                  <th className="px-4 py-3 font-semibold">Produto</th>
-                  <th className="px-4 py-3 font-semibold">SKU</th>
-                  <th className="px-4 py-3 font-semibold">Planejado</th>
-                  <th className="px-4 py-3 font-semibold">Produzido</th>
-                  <th className="px-4 py-3 font-semibold">Rendimento</th>
-                  <th className="px-4 py-3 font-semibold">Custo/kg</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-6 py-3 font-semibold">Conclusão</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {current.history.map((item) => { const catalog = historyCatalog(item); return (
-                  <tr key={item.id} className="text-sm hover:bg-[#F7F9F8]">
-                    <td className="px-6 py-4 font-semibold"><Link href="/producao" className="hover:text-forest-700">{item.code}</Link></td>
-                    <td className="px-4 py-4 text-stone-600">{catalog.line}</td>
-                    <td className="px-4 py-4 text-stone-600">{catalog.product}</td>
-                    <td className="px-4 py-4 text-stone-600">{catalog.sku}</td>
-                    <td className="px-4 py-4 text-stone-600">
-                      {kg.format(item.plannedKg)} kg
-                    </td>
-                    <td className="px-4 py-4 font-medium">
-                      {item.producedKg
-                        ? `${kg.format(item.producedKg)} kg`
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-4 text-stone-600">
-                      {item.yieldPercent
-                        ? `${item.yieldPercent.toLocaleString("pt-BR")}%`
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-4 text-stone-600">
-                      {item.costPerKg ? currency.format(item.costPerKg) : "—"}
-                    </td>
-                    <td className="px-4 py-4">
-                      <HistoryStatus status={item.status} />
-                    </td>
-                    <td className="px-6 py-4 text-xs text-stone-400">
-                      {item.completedAt ?? "—"}
-                    </td>
-                  </tr>
-                )})}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </section>
+          ) : (
+            <div className="h-[100px] animate-pulse rounded-xl bg-[var(--bbos-surface-subtle)]" aria-hidden />
+          )}
+        </Panel>
+      </div>
     </div>
+  );
+}
+
+function WeeklyBars({ weeks }: { weeks: Array<{ label: string; plannedKg: number; actualKg: number }> }) {
+  if (!weeks.length) return <p className="py-8 text-center text-sm text-[var(--bbos-text-secondary)]">Nenhuma ordem de torra no período.</p>;
+  const width = 620;
+  const height = 210;
+  const max = Math.max(1, ...weeks.map((week) => Math.max(week.plannedKg, week.actualKg)));
+  const slot = (width - 20) / weeks.length;
+  const barW = Math.min(30, slot / 3);
+  const y = (value: number) => 170 - (value / max) * 150;
+  return (
+    <figure>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Plano e realizado por semana" className="h-auto w-full">
+        <line x1={10} x2={width - 10} y1={170} y2={170} stroke="#DDE2DC" />
+        {weeks.map((week, index) => {
+          const x = 10 + index * slot + slot / 2;
+          const behind = week.plannedKg > 0 && week.actualKg < week.plannedKg * 0.8;
+          return (
+            <g key={week.label}>
+              <rect x={x - barW - 2} y={y(week.plannedKg)} width={barW} height={170 - y(week.plannedKg)} rx={4} fill="#E3E8E2" />
+              <rect x={x + 2} y={y(week.actualKg)} width={barW} height={Math.max(0, 170 - y(week.actualKg))} rx={4} fill={behind ? "#9A5B06" : "#2F6B57"} />
+              <text x={x} y={190} textAnchor="middle" fontSize={11} fill="#56615C">sem. {week.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <figcaption className="flex gap-4 text-xs text-[var(--bbos-text-secondary)]">
+        <span><i className="mr-1 inline-block size-2.5 rounded-sm bg-[#E3E8E2] align-middle" />planejado</span>
+        <span><i className="mr-1 inline-block size-2.5 rounded-sm bg-[#2F6B57] align-middle" />realizado</span>
+        <span><i className="mr-1 inline-block size-2.5 rounded-sm bg-[#9A5B06] align-middle" />abaixo de 80% do plano</span>
+      </figcaption>
+    </figure>
+  );
+}
+
+function LossDots({ batches }: { batches: Array<{ id: string; code: string; completedAt: string; lossPercent: number }> }) {
+  if (!batches.length) return <p className="py-8 text-center text-sm text-[var(--bbos-text-secondary)]">Nenhum lote concluído no período.</p>;
+  const width = 620;
+  const height = 170;
+  const top = 30;
+  const max = Math.max(LOSS_BAND.max + 5, ...batches.map((batch) => batch.lossPercent));
+  const y = (value: number) => 150 - (value / max) * (150 - top);
+  const x = (index: number) => 20 + (batches.length === 1 ? (width - 40) / 2 : (index / (batches.length - 1)) * (width - 40));
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Perda de torra de cada lote" className="h-auto w-full">
+      <rect x={10} y={y(LOSS_BAND.max)} width={width - 20} height={y(LOSS_BAND.min) - y(LOSS_BAND.max)} fill="#E9F5EE" />
+      <line x1={10} x2={width - 10} y1={150} y2={150} stroke="#DDE2DC" />
+      {batches.map((batch, index) => {
+        const out = batch.lossPercent < LOSS_BAND.min || batch.lossPercent > LOSS_BAND.max;
+        return (
+          <circle key={batch.id} cx={x(index)} cy={y(batch.lossPercent)} r={out ? 7 : 5.5} fill={out ? "#9A5B06" : "#2F6B57"}>
+            <title>{`${batch.code}: ${pct.format(batch.lossPercent)}% em ${new Date(batch.completedAt).toLocaleDateString("pt-BR")}`}</title>
+          </circle>
+        );
+      })}
+    </svg>
+  );
+}
+
+function Ring({ value }: { value: number }) {
+  const circumference = 2 * Math.PI * 34;
+  return (
+    <svg aria-hidden width={84} height={84} viewBox="0 0 84 84" className="shrink-0">
+      <circle cx={42} cy={42} r={34} fill="none" stroke="#E3E8E2" strokeWidth={10} />
+      <circle cx={42} cy={42} r={34} fill="none" stroke="#2F6B57" strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(Math.max(0, Math.min(100, value)) / 100) * circumference} ${circumference}`} transform="rotate(-90 42 42)" />
+    </svg>
   );
 }
