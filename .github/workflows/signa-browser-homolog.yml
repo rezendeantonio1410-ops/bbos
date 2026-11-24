@@ -152,80 +152,7 @@ jobs:
                 await page.waitForFunction(()=>{
                   const form=document.querySelector('[data-bbos-login] form');
                   if (!form) return false;
-                  const props=node=>node[Object.keys(node).find(key=>key.startsWith('__reactProps
-                const sessionResponse=await context.request.get(origin+'/api/auth/me');
-                assert.equal(sessionResponse.status(),200);
-                const session=await sessionResponse.json();
-                assert.equal(session.user.id,'homolog-user-signa');
-                assert.equal(session.user.companyId,'homolog-co');
-                assert.equal(session.user.role,'PARTNER');
-
-                const payments=page.locator('#pagamentos-signa');
-                await payments.getByRole('heading',{name:'Pagamentos'}).waitFor();
-                await payments.getByRole('button',{name:'H-PIX-0001',exact:true}).waitFor();
-                assert.equal(await payments.getByRole('button',{name:/confirmar recebimento|dar baixa|conciliar/i}).count(),0);
-                await payments.scrollIntoViewIfNeeded();
-                await page.screenshot({path:'evidence/'+mode+'-payments.png'});
-
-                const customers=page.locator('#clientes-signa');
-                await customers.getByRole('button',{name:/Cadastrar cliente/}).click();
-                const name=customers.getByPlaceholder('Nome ou razão social');
-                const cnpj=customers.getByPlaceholder('00.000.000/0000-00');
-                const cep=customers.getByPlaceholder('00000-000');
-                await fieldsInOrder(name,cnpj,cep);
-                await cep.fill('86010010');
-                await value(customers.getByLabel('Rua *',{exact:true}),address.street);
-                await value(customers.getByLabel('Bairro *',{exact:true}),address.district);
-                await value(customers.getByLabel('Cidade *',{exact:true}),address.city);
-                await value(customers.getByLabel('UF *',{exact:true}),address.state);
-                const number=customers.getByLabel('Número *',{exact:true});
-                await value(number,'');
-                await number.fill('123');
-                await value(number,'123');
-                await insideViewport(cep);
-                await page.screenshot({path:'evidence/'+mode+'-customer.png'});
-                await customers.getByRole('button',{name:'Fechar cadastro'}).click();
-
-                const newOrder=mode==='mobile' ? page.getByRole('navigation',{name:'Atalhos'}).getByRole('button',{name:'Novo pedido'}) : page.locator('#inicio').getByRole('button',{name:'Novo pedido',exact:true});
-                await newOrder.click();
-                const dialog=page.getByRole('dialog',{name:'Novo pedido'});
-                await dialog.waitFor({state:'visible'});
-                const fiscal=dialog.locator('input[name=signa-billing-recipient]');
-                await fiscal.first().waitFor();
-                assert.equal(await fiscal.count(),2);
-                assert.equal(await dialog.locator('input[name=signa-billing-recipient]:checked').count(),0,'destinatário fiscal não pode vir pré-selecionado');
-                await dialog.getByText('Cadastrar novo cliente final',{exact:true}).click();
-                const orderName=dialog.getByLabel('Nome / Razão social do cliente final');
-                const orderCnpj=dialog.getByLabel('CNPJ do cliente final');
-                const orderCep=dialog.getByLabel('CEP do cliente final');
-                await fieldsInOrder(orderName,orderCnpj,orderCep);
-                await orderCep.fill('86010010');
-                for (const [label,expected] of [['Rua / Logradouro',address.street],['Bairro',address.district],['Cidade',address.city],['UF',address.state]])
-                  await value(dialog.getByLabel(label+' do cliente final',{exact:true}),expected);
-                const orderNumber=dialog.getByLabel('Número do cliente final',{exact:true});
-                await value(orderNumber,'');
-                await orderNumber.fill('456');
-                await value(orderNumber,'456');
-                await insideViewport(orderCep);
-                await page.screenshot({path:'evidence/'+mode+'-order-customer.png'});
-                await dialog.getByRole('button',{name:'Cancelar e fechar'}).click();
-                await dialog.waitFor({state:'hidden'});
-                console.log('PASS '+mode+': autenticação, pagamentos somente leitura, duas fichas, CEP simulado, número manual, destinatário fiscal sem seleção e fechamento.');
-              } finally { await context.close(); }
-            }
-          } finally { await browser.close(); }
-          JS
-          cd "$RUNNER_TEMP/signa-browser"
-          node smoke.mjs
-      - name: Upload synthetic browser evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: signa-browser-synthetic
-          path: ${{ runner.temp }}/signa-browser/evidence/*.png
-          if-no-files-found: ignore
-          retention-days: 7
-))];
+                  const props=node=>node[Object.keys(node).find(key=>key.startsWith('__reactProps$'))];
                   const email=form.querySelector('input[type=email]');
                   const pass=form.querySelector('input[type=password]');
                   return typeof props(form)?.onSubmit==='function' &&
@@ -308,6 +235,7 @@ jobs:
           } finally { await browser.close(); }
           JS
           cd "$RUNNER_TEMP/signa-browser"
+          node --check smoke.mjs
           node smoke.mjs
       - name: Upload synthetic browser evidence
         if: always()
