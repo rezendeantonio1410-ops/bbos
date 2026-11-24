@@ -1,3 +1,4 @@
+import { normalizeCnpj as normalizeSharedCnpj } from "@bbos/shared";
 import { isValidCnpj } from "./supplier-verification";
 
 /**
@@ -186,8 +187,8 @@ export function normalizePostalCode(
 }
 
 export function normalizeCnpj(value: string | null | undefined): string | null {
-  const digits = (value ?? "").replace(/\D/g, "");
-  return digits || null;
+  // Keeps letters of the new alphanumeric CNPJ (uppercased).
+  return normalizeSharedCnpj(value) || null;
 }
 
 export function normalizeState(

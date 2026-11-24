@@ -1,3 +1,4 @@
+import { isValidCnpj as isValidSharedCnpj, normalizeTaxId } from "@bbos/shared";
 export const onlyDigits = (value: string) => value.replace(/\D/g, "");
 
 export function isValidCpf(value: string): boolean {
@@ -14,30 +15,15 @@ export function isValidCpf(value: string): boolean {
 }
 
 export function isValidCnpj(value: string): boolean {
-  const digits = onlyDigits(value);
-  if (digits.length !== 14 || /^([0-9])\1+$/.test(digits)) return false;
-  const calculate = (length: number) => {
-    const weights =
-      length === 12
-        ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-        : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const sum = weights.reduce(
-      (total, weight, index) => total + Number(digits[index]) * weight,
-      0,
-    );
-    const remainder = sum % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-  return (
-    calculate(12) === Number(digits[12]) && calculate(13) === Number(digits[13])
-  );
+  // Numeric and alphanumeric (new Receita format) CNPJs.
+  return isValidSharedCnpj(value);
 }
 
 export function validateTaxId(value?: string | null): "CPF" | "CNPJ" | null {
   if (!value?.trim()) return null;
-  const digits = onlyDigits(value);
-  if (digits.length === 11 && isValidCpf(digits)) return "CPF";
-  if (digits.length === 14 && isValidCnpj(digits)) return "CNPJ";
+  const taxId = normalizeTaxId(value);
+  if (taxId.length === 11 && isValidCpf(taxId)) return "CPF";
+  if (taxId.length === 14 && isValidCnpj(taxId)) return "CNPJ";
   return null;
 }
 

@@ -1,3 +1,4 @@
+import { normalizeCnpj } from "@bbos/shared";
 import { isValidCnpj } from "./supplier-verification";
 
 // Commercial end-customer data stays isolated from fiscal Customer and billing recipients.
@@ -70,11 +71,11 @@ export function parsePartnerEndCustomerPatch(
       if (value.length < 2 || value.length > 180) throw new Error("Informe o nome do cliente (2 a 180 caracteres).");
       values.name = value;
     } else if (key === "taxId") {
-      const digits = value.replace(/\D/g, "");
-      if (value && (digits.length !== 14 || !isValidCnpj(digits))) {
-        throw new Error("CNPJ inválido. Confira os 14 dígitos.");
+      const cnpj = normalizeCnpj(value);
+      if (value && !isValidCnpj(cnpj)) {
+        throw new Error("CNPJ inválido. Confira os 14 caracteres (números e, no formato novo, letras).");
       }
-      values.taxId = digits || null;
+      values.taxId = cnpj || null;
     } else if (key === "postalCode") {
       const digits = value.replace(/\D/g, "");
       if (value && digits.length !== 8) throw new Error("Informe um CEP com 8 dígitos.");

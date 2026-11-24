@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { normalizeCnpj } from "@bbos/shared";
 import { isValidCnpj } from "./supplier-verification";
 
 export const PROSPECT_SEGMENTS = {
@@ -181,7 +182,7 @@ const HEADERS: Record<string, string[]> = {
 };
 
 function parseSuggestion(cnpj: string | null, confidence: string | null, reason: string | null) {
-  const digits = (cnpj ?? "").replace(/\D/g, "");
+  const digits = normalizeCnpj(cnpj);
   if (!isValidCnpj(digits)) return { suggestedTaxId: null, suggestedTaxIdConfidence: null, suggestedTaxIdReason: null };
   const level = normalizeText(confidence);
   return {
@@ -291,7 +292,7 @@ export function parseProspectPatch(body: Record<string, unknown>) {
     if (field in body) patch[field] = text(body[field], max);
   if ("name" in patch && !patch.name) throw new BadRequestException("Informe o nome do estabelecimento.");
   if ("taxId" in patch && patch.taxId) {
-    const digits = String(patch.taxId).replace(/\D/g, "");
+    const digits = normalizeCnpj(String(patch.taxId));
     if (!isValidCnpj(digits)) throw new BadRequestException("CNPJ inválido. Confira os dígitos.");
     patch.taxId = digits;
   }

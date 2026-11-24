@@ -38,3 +38,13 @@ test("pesquisa por CNPJ com ou sem máscara, sem confundir com texto", () => {
   assert.deepEqual(searchSignaEndCustomers(withTaxId, "2223").map((x) => x.id), ["a"]);
   assert.deepEqual(searchSignaEndCustomers(withTaxId, "999").map((x) => x.id), []);
 });
+
+test("search finds a customer by the new alphanumeric CNPJ, masked or not", () => {
+  const customers = [
+    { id: "a", name: "Café Novo", city: "Londrina", state: "PR", taxId: "12ABC34501DE35" },
+    { id: "b", name: "Padaria Antiga", city: "Cambé", state: "PR", taxId: "62835118000197" },
+  ];
+  assert.deepEqual(searchSignaEndCustomers(customers, "12.ABC.345").map((c) => c.id), ["a"]);
+  assert.deepEqual(searchSignaEndCustomers(customers, "12abc").map((c) => c.id), ["a"]);
+  assert.deepEqual(searchSignaEndCustomers(customers, "62.835").map((c) => c.id), ["b"]);
+});

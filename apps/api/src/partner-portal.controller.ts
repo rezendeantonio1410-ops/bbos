@@ -152,8 +152,8 @@ export class PartnerPortalController {
                 AND signa.active=true AND signa."portalAccessLevel"='DISTRIBUTOR'
                 AND LOWER(TRIM(signa.name))='signa coffee'
                 AND recipient."companyId"=signa."companyId" AND recipient.active=true
-                AND ((LOWER(TRIM(recipient.name))='signa coffee' AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
-                  OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas' AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11))
+                AND ((LOWER(TRIM(recipient.name))='signa coffee' AND length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=14)
+                  OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas' AND length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=11))
             )))
             OR (NOT $5::boolean AND so."createdByStorefrontPartnerId"=$1)
           )
@@ -183,9 +183,9 @@ export class PartnerPortalController {
         AND recipient."companyId"=signa."companyId" AND recipient.active=true
         AND (
           (LOWER(TRIM(recipient.name))='signa coffee'
-            AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+            AND length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=14)
           OR (LOWER(TRIM(recipient.name))='rodrigo lampert ribas'
-            AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11)
+            AND length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=11)
         )
     )`;
   }
@@ -939,7 +939,7 @@ export class PartnerPortalController {
       const duplicate = await this.database.$queryRawUnsafe<any[]>(
         `SELECT id FROM "Customer"
           WHERE "companyId"=$1
-            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$2
+            AND upper(regexp_replace(COALESCE("taxId",''),'[^0-9A-Za-z]','','g'))=$2
           LIMIT 1`,
         actor.companyId,
         taxId,
@@ -1170,8 +1170,8 @@ export class PartnerPortalController {
   private async findSignaBillingRecipients(companyId: string, partner: any) {
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT DISTINCT recipient.*,
-              CASE WHEN length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14 THEN 'CNPJ'
-                   WHEN length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11 THEN 'CPF'
+              CASE WHEN length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=14 THEN 'CNPJ'
+                   WHEN length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=11 THEN 'CPF'
                    ELSE 'INVALID' END AS "documentType",
               pricing.id AS "pricingCustomerId"
          FROM "StorefrontPartner" p
@@ -1184,13 +1184,13 @@ export class PartnerPortalController {
           AND p."portalAccessLevel"='DISTRIBUTOR'
           AND LOWER(TRIM(p.name))='signa coffee'
           AND LOWER(TRIM(pricing.name))='signa coffee'
-          AND regexp_replace(COALESCE(p."taxId",''),'[^0-9]','','g') =
-              regexp_replace(COALESCE(pricing."taxId",''),'[^0-9]','','g')
+          AND upper(regexp_replace(COALESCE(p."taxId",''),'[^0-9A-Za-z]','','g')) =
+              upper(regexp_replace(COALESCE(pricing."taxId",''),'[^0-9A-Za-z]','','g'))
           AND (
-            (recipient.id=pricing.id AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=14)
+            (recipient.id=pricing.id AND length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=14)
             OR
             (LOWER(TRIM(recipient.name))='rodrigo lampert ribas'
-             AND length(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9]','','g'))=11)
+             AND length(upper(regexp_replace(COALESCE(recipient."taxId",''),'[^0-9A-Za-z]','','g')))=11)
           )
         ORDER BY recipient.name`,
       partner.id,

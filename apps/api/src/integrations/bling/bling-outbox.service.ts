@@ -1,3 +1,4 @@
+import { normalizeTaxId } from "@bbos/shared";
 import { Injectable } from "@nestjs/common";
 import { prisma, UserRole } from "@bbos/database";
 import { createHash } from "node:crypto";
@@ -714,7 +715,7 @@ export class BlingOutboxService {
       String(customer?.countryCode ?? "BR").toUpperCase() !== "BR";
     const document = isForeign
       ? String(customer?.foreignTaxId ?? "").trim()
-      : String(customer?.cpf ?? customer?.taxId ?? "").replace(/\D/g, "");
+      : normalizeTaxId(String(customer?.cpf ?? customer?.taxId ?? ""));
     if (!document)
       throw new Error(
         isForeign
@@ -2679,7 +2680,7 @@ export class BlingOutboxService {
       }
     }
 
-    const document = String(row.taxId ?? "").replace(/\D/g, "");
+    const document = normalizeTaxId(String(row.taxId ?? ""));
     // Foreign recipients legitimately have no Brazilian CPF/CNPJ. In that case,
     // keep the existing Bling contact mapping and retry the fiscal document.
     if (document) {

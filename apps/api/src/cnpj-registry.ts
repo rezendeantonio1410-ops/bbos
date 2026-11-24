@@ -1,3 +1,4 @@
+import { normalizeCnpj } from "@bbos/shared";
 import { isValidCnpj, onlyDigits } from "./supplier-verification";
 
 /**
@@ -133,7 +134,7 @@ const text = (value: unknown, max = 160) => {
 };
 
 export function mapBrasilApiCnpj(raw: any): CnpjRegistryRecord {
-  const cnpj = onlyDigits(String(raw?.cnpj ?? ""));
+  const cnpj = normalizeCnpj(String(raw?.cnpj ?? ""));
   const legalName = text(raw?.razao_social, 200);
   if (cnpj.length !== 14 || !legalName)
     throw new CnpjLookupError("UNAVAILABLE", "Resposta do cadastro de CNPJ incompleta.");
@@ -192,7 +193,7 @@ export function suggestStateRegistration(
 /** publica.cnpj.ws (Receita Federal + state registrations) → BBOS record. */
 export function mapCnpjWs(raw: any): CnpjRegistryRecord {
   const e = raw?.estabelecimento ?? {};
-  const cnpj = onlyDigits(String(e?.cnpj ?? ""));
+  const cnpj = normalizeCnpj(String(e?.cnpj ?? ""));
   const legalName = text(raw?.razao_social, 200);
   if (cnpj.length !== 14 || !legalName)
     throw new CnpjLookupError("UNAVAILABLE", "Resposta do cadastro de CNPJ incompleta.");
@@ -263,7 +264,7 @@ export class CnpjRegistryClient {
   }
 
   async lookup(input: string): Promise<CnpjRegistryRecord> {
-    const cnpj = onlyDigits(input);
+    const cnpj = normalizeCnpj(input);
     if (!isValidCnpj(cnpj)) throw new CnpjLookupError("INVALID", "CNPJ inválido. Confira os dígitos.");
     const cached = this.cache.get(cnpj);
     if (cached && this.now() - cached.at < this.ttlMs) return cached.value;

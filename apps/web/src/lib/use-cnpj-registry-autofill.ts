@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeCnpj } from "@bbos/shared";
 import { useEffect, useRef, useState } from "react";
 import { cnpjRegistryStatusText, isValidCnpjDigits, lookupCnpjRegistry, type CnpjRegistryRecord } from "./cnpj-registry";
 
@@ -48,23 +49,23 @@ export function useCnpjRegistryAutofill({ cnpj, enabled = true, delayMs = 350, o
 
   /** Explicit one-click lookup: fetches again and fills every field. */
   const search = () => {
-    const digits = cnpj.replace(/\D/g, "");
+    const digits = normalizeCnpj(cnpj);
     if (digits.length !== 14 || !isValidCnpjDigits(digits)) {
-      setStatusText("Informe os 14 números do CNPJ para buscar.");
+      setStatusText("Informe os 14 caracteres do CNPJ para buscar.");
       setWarning(true);
       return;
     }
     void run(digits, true);
   };
   useEffect(() => {
-    const digits = cnpj.replace(/\D/g, "");
+    const digits = normalizeCnpj(cnpj);
     if (!enabled || digits.length !== 14) {
       requestRef.current += 1;
       setBusy(false);
       if (digits.length !== 14) { setStatusText(""); setWarning(false); setRecord(null); lastLookup.current = ""; }
       return;
     }
-    if (!isValidCnpjDigits(digits)) { setStatusText("CNPJ inválido. Confira os dígitos."); setWarning(true); return; }
+    if (!isValidCnpjDigits(digits)) { setStatusText("CNPJ inválido. Confira os 14 caracteres."); setWarning(true); return; }
     if (digits === lastLookup.current) return;
     const timer = window.setTimeout(() => void run(digits, false), delayMs);
     return () => window.clearTimeout(timer);

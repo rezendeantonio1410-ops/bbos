@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeTaxId } from "@bbos/shared";
+
 import Link from "next/link";
 import {
   brazilMobileDigits,
@@ -306,7 +308,7 @@ const customerFormErrors = (form: typeof emptyCustomer): CustomerFormErrors => {
   } catch {
     errors.phone = MOBILE_ERROR;
   }
-  const document = form.taxId.replace(/\D/g, "");
+  const document = normalizeTaxId(form.taxId);
   const isForeign = form.countryCode !== "BR";
   if (!form.name.trim()) errors.name = "Informe o nome usado pela equipe.";
   if (isForeign && !/^[A-Z]{2}$/.test(form.countryCode))
@@ -403,7 +405,7 @@ export default function CustomersPage() {
   // Typing the CNPJ fills every empty field; "Buscar na Receita" refills all.
   // Fields stay editable; what the user typed by hand is kept unless they click.
   const cnpjLookup = useCnpjRegistryAutofill({
-    cnpj: form.taxId.replace(/\D/g, "").length === 14 ? form.taxId : "",
+    cnpj: normalizeTaxId(form.taxId).length === 14 ? form.taxId : "",
     enabled: form.countryCode === "BR" && (showNew || Boolean(editCustomer)),
     onResolved: (record, context) =>
       setForm((current) => {
@@ -1102,7 +1104,9 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setForm({ ...form, taxId: e.target.value })
                     }
-                    placeholder="Somente números ou documento formatado"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    placeholder="CPF ou CNPJ (o CNPJ novo pode ter letras)"
                   />
                     <CnpjSearchButton onClick={cnpjLookup.search} busy={cnpjLookup.busy} />
                   </div>
@@ -1367,7 +1371,7 @@ export default function CustomersPage() {
                 />
               </Field>
               {form.countryCode === "BR" &&
-                form.taxId.replace(/\D/g, "").length === 14 && (
+                normalizeTaxId(form.taxId).length === 14 && (
                   <>
                     <Field
                       label="Situação da inscrição estadual *"
@@ -1826,7 +1830,7 @@ export default function CustomersPage() {
                 />
               </Field>
               {form.countryCode === "BR" &&
-                form.taxId.replace(/\D/g, "").length === 14 && (
+                normalizeTaxId(form.taxId).length === 14 && (
                   <>
                     <Field
                       label="Situação da inscrição estadual *"

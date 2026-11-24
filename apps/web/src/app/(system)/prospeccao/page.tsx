@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeCnpj } from "@bbos/shared";
+
 import { VisitsTabs } from "@/components/visits-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -333,7 +335,7 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
   const registry = useCnpjRegistryAutofill({
     cnpj: draft?.taxId ?? "",
     // A CNPJ already confirmed is not looked up again unless "Buscar" is tapped.
-    enabled: Boolean(draft) && (draft?.taxId ?? "").replace(/\D/g, "") !== (prospect?.taxId ?? ""),
+    enabled: Boolean(draft) && normalizeCnpj(draft?.taxId) !== (prospect?.taxId ?? ""),
     onResolved: (record: CnpjRegistryRecord) => {
       const filled: Partial<Draft> = {
         legalName: record.legalName,
@@ -428,7 +430,7 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
     const original = draftFrom(prospect);
     // Sends address fields only when changed (a change re-locates the place).
     for (const [field, next] of Object.entries(address)) if (next !== original[field as keyof Draft]) updates[field] = next;
-    if (draft.taxId.replace(/\D/g, "").length === 14) Object.assign(updates, { taxId: draft.taxId, legalName: draft.legalName, tradeName: draft.tradeName });
+    if (normalizeCnpj(draft.taxId).length === 14) Object.assign(updates, { taxId: draft.taxId, legalName: draft.legalName, tradeName: draft.tradeName });
     try {
       await api(`/api/prospects/${encodeURIComponent(prospect.id)}/visits`, {
         method: "POST",
@@ -458,7 +460,7 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
   if (!prospect || !draft)
     return <div className="rounded-3xl border border-stone-200 bg-white p-6 text-sm text-stone-500">{error || "Carregando..."}</div>;
 
-  const showSuggestion = !prospect.taxId && prospect.suggestedTaxId && draft.taxId.replace(/\D/g, "") !== prospect.suggestedTaxId;
+  const showSuggestion = !prospect.taxId && prospect.suggestedTaxId && normalizeCnpj(draft.taxId) !== prospect.suggestedTaxId;
   return (
     <article className="rounded-3xl border border-stone-200 bg-white shadow-sm">
       <header className="border-b border-stone-100 p-4 sm:p-5">
@@ -509,7 +511,7 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Field label="CNPJ" hint={registry.busy ? "Consultando a Receita..." : registry.statusText}>
               <div className="flex gap-2">
-                <input inputMode="numeric" value={draft.taxId} onChange={(event) => set("taxId", event.target.value)} placeholder="00.000.000/0000-00" />
+                <input autoCapitalize="characters" autoComplete="off" spellCheck={false} value={draft.taxId} onChange={(event) => set("taxId", event.target.value.toUpperCase())} placeholder="00.000.000/0000-00" />
                 <button type="button" onClick={registry.search} className="min-h-12 shrink-0 rounded-xl border border-stone-200 px-3 text-sm font-semibold">Buscar</button>
               </div>
             </Field>

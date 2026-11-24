@@ -721,7 +721,7 @@ export class CustomersController {
            FROM "Customer" c
           WHERE c."companyId"=$1 AND c.id<>$2 AND c.active=true
             AND c."taxIdVerificationStatus"::text IN ('VERIFIED_ACTIVE','CONFIRMED_INTERNAL')
-            AND NULLIF(regexp_replace(COALESCE(c."taxId",''),'[^0-9]','','g'),'') IS NOT NULL
+            AND NULLIF(upper(regexp_replace(COALESCE(c."taxId",''),'[^0-9A-Za-z]','','g')),'') IS NOT NULL
             AND ($3::text IS NULL OR EXISTS (
               SELECT 1 FROM "StorefrontPartnerCustomer" portfolio
                WHERE portfolio."customerId"=c.id AND portfolio."partnerId"=$3
@@ -747,7 +747,7 @@ export class CustomersController {
                  FROM "Supplier" s
                 WHERE s."companyId"=$1 AND s.active=true
                   AND s."taxIdVerificationStatus"::text IN ('VERIFIED_ACTIVE','CONFIRMED_INTERNAL')
-                  AND NULLIF(regexp_replace(COALESCE(s."taxId",''),'[^0-9]','','g'),'') IS NOT NULL
+                  AND NULLIF(upper(regexp_replace(COALESCE(s."taxId",''),'[^0-9A-Za-z]','','g')),'') IS NOT NULL
                 ORDER BY s.id
                 FOR UPDATE OF s`,
               actor.companyId,
@@ -1127,7 +1127,7 @@ export class CustomersController {
       const duplicate = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         `SELECT id FROM "Customer"
           WHERE "companyId"=$1 AND id<>$2
-            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$3
+            AND upper(regexp_replace(COALESCE("taxId",''),'[^0-9A-Za-z]','','g'))=$3
           LIMIT 1`,
         actor.companyId,
         id,
@@ -1293,7 +1293,7 @@ export class CustomersController {
       const duplicate = await this.db.$queryRawUnsafe<any[]>(
         `SELECT id FROM "Customer"
           WHERE "companyId"=$1
-            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$2
+            AND upper(regexp_replace(COALESCE("taxId",''),'[^0-9A-Za-z]','','g'))=$2
           LIMIT 1`,
         actor.companyId,
         taxId,
@@ -1553,7 +1553,7 @@ export class CustomersController {
       const duplicate = await this.db.$queryRawUnsafe<any[]>(
         `SELECT id FROM "Customer"
           WHERE "companyId"=$1 AND id<>$2
-            AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$3
+            AND upper(regexp_replace(COALESCE("taxId",''),'[^0-9A-Za-z]','','g'))=$3
           LIMIT 1`,
         actor.companyId,
         id,
@@ -1616,7 +1616,7 @@ export class CustomersController {
         const duplicate = await tx.$queryRawUnsafe<any[]>(
           `SELECT id FROM "Customer"
             WHERE "companyId"=$1 AND id<>$2
-              AND regexp_replace(COALESCE("taxId",''),'[^0-9]','','g')=$3
+              AND upper(regexp_replace(COALESCE("taxId",''),'[^0-9A-Za-z]','','g'))=$3
             LIMIT 1`,
           actor.companyId,
           id,

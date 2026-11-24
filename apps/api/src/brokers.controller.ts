@@ -11,6 +11,7 @@ import {
   Query,
   Req,
 } from "@nestjs/common";
+import { normalizeTaxId } from "@bbos/shared";
 import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
 import { salesPortfolioPartnerId } from "./sales-portfolio";
@@ -73,7 +74,7 @@ export class BrokersController {
     const actor = await this.actor(request);
     if (!body.name?.trim())
       throw new BadRequestException("Nome do corretor é obrigatório.");
-    const taxId = String(body.taxId ?? "").replace(/\D/g, "") || null;
+    const taxId = normalizeTaxId(String(body.taxId ?? "")) || null;
     return this.db.$transaction(async (transaction) => {
       let partner = taxId
         ? await transaction.storefrontPartner.findFirst({
@@ -171,7 +172,7 @@ export class BrokersController {
           taxId:
             data.taxId === undefined
               ? undefined
-              : String(data.taxId).replace(/\D/g, "") || null,
+              : normalizeTaxId(String(data.taxId)) || null,
           contactName: data.contactName,
           phone: data.phone,
           email: data.email,
