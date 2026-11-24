@@ -98,7 +98,7 @@ test("contabilidade recebe somente áreas de consulta fiscal e financeira", () =
   const routes = navigationForRole("ACCOUNTANT").flatMap((group) =>
     group.items.map((item) => item.href),
   );
-  // Order follows the work areas: Vendas, Suprimentos, Financeiro, Análises.
+  // Order follows the work areas: Vendas, Compras, Financeiro, Análises.
   assert.deepEqual(routes, [
     "/clientes",
     "/pedidos",

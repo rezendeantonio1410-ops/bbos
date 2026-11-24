@@ -176,17 +176,17 @@ export const bbosNavigation: BbosNavGroup[] = [
   },
   {
     id: "supply",
-    label: "Suprimentos",
-    description: "Compra de café verde e insumos",
+    label: "Compras",
+    description: "Café verde, fornecedores e entradas",
     tone: "amber",
     items: [
       {
         href: "/cafe-verde",
-        label: "Compras de café verde",
+        label: "Café verde",
         description: "Comprar, receber e liberar",
         icon: PackageOpen,
         roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
-        keywords: ["compra", "recebimento", "lote", "fornecedor"],
+        keywords: ["compra", "suprimentos", "recebimento", "lote", "fornecedor"],
       },
       {
         href: "/fornecedores",
