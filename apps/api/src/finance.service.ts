@@ -24,6 +24,13 @@ import {
   recurrenceCount,
 } from "./expense-policy";
 import { releaseSalesCommission } from "./sales-commission";
+import {
+  DEFAULT_TAX_RATES,
+  TAX_REGIMES,
+  estimateTaxes,
+  normalizeTaxRates,
+  type TaxRegime,
+} from "./finance-taxes";
 
 const RECEIPT_METHODS = new Set([
   "PIX",
@@ -104,6 +111,8 @@ export class FinanceService implements OnModuleDestroy {
       this.database.greenCoffeePurchaseInstallment.findMany({
         where: {
           status: { in: ["PLANNED", "COMMITTED"] },
+          // Installments with an account payable are already in the payables.
+          accountsPayableId: null,
           ...(companyId ? { purchase: { companyId } } : {}),
         },
         include: {
@@ -236,8 +245,120 @@ export class FinanceService implements OnModuleDestroy {
       receivableProjection,
       payableProjection,
       greenCoffeePurchaseProjection,
+      ...(companyId ? await this.planningExtras(companyId) : {}),
     };
   }
+
+  // ------------------------------------------------ settings and estimates
+
+  async getSettings(companyId: string) {
+    const rows: any[] = await (this.database as any).$queryRawUnsafe(
+      `SELECT "minimumCashBalance"::float AS "minimumCashBalance","monthlyRevenueTarget"::float AS "monthlyRevenueTarget",
+              "taxRegime","taxRates","taxRatesConfirmedAt","updatedByName","updatedAt"
+         FROM "FinanceSettings" WHERE "companyId"=$1`,
+      companyId,
+    );
+    const row = rows[0];
+    const taxRegime = (row?.taxRegime ?? "LUCRO_REAL") as TaxRegime;
+    return {
+      configured: Boolean(row),
+      minimumCashBalance: row?.minimumCashBalance ?? 0,
+      monthlyRevenueTarget: row?.monthlyRevenueTarget ?? null,
+      taxRegime,
+      taxRates: normalizeTaxRates(taxRegime, row?.taxRates ?? {}),
+      defaultTaxRates: DEFAULT_TAX_RATES[taxRegime],
+      taxRatesConfirmedAt: row?.taxRatesConfirmedAt ?? null,
+      updatedByName: row?.updatedByName ?? null,
+      updatedAt: row?.updatedAt ?? null,
+    };
+  }
+
+  async updateSettings(companyId: string, actorName: string, body: Record<string, unknown>) {
+    const current = await this.getSettings(companyId);
+    const money = (value: unknown, label: string, nullable: boolean) => {
+      if (nullable && (value === null || value === "")) return null;
+      const number = typeof value === "number" ? value : Number(String(value).replace(/\./g, "").replace(",", "."));
+      if (!Number.isFinite(number) || number < 0 || number > 1e11) throw new BadRequestException(`${label} inválido.`);
+      return Math.round(number * 100) / 100;
+    };
+    const regime = body.taxRegime === undefined ? current.taxRegime : String(body.taxRegime);
+    if (!(TAX_REGIMES as readonly string[]).includes(regime)) throw new BadRequestException("Regime tributário inválido.");
+    let rates;
+    try {
+      rates = normalizeTaxRates(regime as TaxRegime, body.taxRates === undefined && regime === current.taxRegime ? current.taxRates : body.taxRates ?? {});
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Alíquotas inválidas.");
+    }
+    const minimum = body.minimumCashBalance === undefined ? current.minimumCashBalance : money(body.minimumCashBalance, "Saldo mínimo", false);
+    const target = body.monthlyRevenueTarget === undefined ? current.monthlyRevenueTarget : money(body.monthlyRevenueTarget, "Meta de faturamento", true);
+    const confirmed = body.taxRatesConfirmed === true;
+    await (this.database as any).$executeRawUnsafe(
+      `INSERT INTO "FinanceSettings" ("companyId","minimumCashBalance","monthlyRevenueTarget","taxRegime","taxRates","taxRatesConfirmedAt","updatedByName","updatedAt")
+       VALUES ($1,$2,$3,$4,$5::jsonb,CASE WHEN $6 THEN NOW() ELSE NULL END,$7,NOW())
+       ON CONFLICT ("companyId") DO UPDATE SET "minimumCashBalance"=EXCLUDED."minimumCashBalance",
+         "monthlyRevenueTarget"=EXCLUDED."monthlyRevenueTarget","taxRegime"=EXCLUDED."taxRegime","taxRates"=EXCLUDED."taxRates",
+         "taxRatesConfirmedAt"=CASE WHEN $6 THEN NOW() ELSE "FinanceSettings"."taxRatesConfirmedAt" END,
+         "updatedByName"=EXCLUDED."updatedByName","updatedAt"=NOW()`,
+      companyId, minimum, target, regime, JSON.stringify(rates), confirmed, actorName,
+    );
+    return this.getSettings(companyId);
+  }
+
+  /**
+   * Revenue (authorized sales invoices) and creditable inputs (authorized
+   * purchase invoices) per month, São Paulo time. Samples and returns excluded.
+   */
+  async monthlyFiscalFigures(companyId: string, months = 3) {
+    const rows: Array<{ month: string; revenue: number; inputs: number }> = await (this.database as any).$queryRawUnsafe(
+      `SELECT to_char(date_trunc('month', (COALESCE("issueDate","createdAt") AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'),'YYYY-MM') AS month,
+              COALESCE(SUM("totalAmount") FILTER (WHERE direction='OUTBOUND'),0)::float AS revenue,
+              COALESCE(SUM(COALESCE("productsAmount","totalAmount")) FILTER (WHERE direction='INBOUND'),0)::float AS inputs
+         FROM "FiscalDocument"
+        WHERE "companyId"=$1 AND status='AUTHORIZED'
+          AND COALESCE("operationNature",'') !~* '(amostra|bonifica|devolu|remessa)'
+          AND COALESCE("issueDate","createdAt") >= date_trunc('month', NOW()) - ($2::int || ' months')::interval
+        GROUP BY 1 ORDER BY 1`,
+      companyId,
+      months,
+    );
+    return rows;
+  }
+
+  /** Extras for planning: settings, estimated taxes still to pay, data gaps. */
+  private async planningExtras(companyId: string) {
+    const [settings, months, coffeeWithoutPayable] = await Promise.all([
+      this.getSettings(companyId),
+      this.monthlyFiscalFigures(companyId, 2),
+      this.database.greenCoffeePurchase.findMany({
+        where: { companyId, approvalStatus: "APPROVED", installments: { some: { accountsPayableId: null, status: { in: ["PLANNED", "COMMITTED"] } } } },
+        select: { id: true, purchaseNumber: true, totalValue: true, supplier: { select: { name: true } } },
+        orderBy: { purchaseNumber: "asc" },
+      }),
+    ]);
+    const today = new Date().toISOString().slice(0, 10);
+    const taxProjection = estimateTaxes(settings.taxRegime, settings.taxRates, months).filter((line) => line.dueDate >= today);
+    return {
+      settings: {
+        minimumCashBalance: settings.minimumCashBalance,
+        monthlyRevenueTarget: settings.monthlyRevenueTarget,
+        taxRegime: settings.taxRegime,
+        configured: settings.configured,
+        taxRatesConfirmed: Boolean(settings.taxRatesConfirmedAt),
+        icmsEstimated: settings.taxRates.icms !== null,
+      },
+      monthlyRevenue: months,
+      taxProjection,
+      dataGaps: {
+        greenCoffeePurchasesWithoutPayable: coffeeWithoutPayable.map((purchase) => ({
+          id: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          supplier: purchase.supplier?.name ?? null,
+          totalValue: Number(purchase.totalValue),
+        })),
+      },
+    };
+  }
+
   listReceivables(companyId?: string) {
     return this.database.accountsReceivable.findMany({
       where: companyId ? { companyId } : undefined,

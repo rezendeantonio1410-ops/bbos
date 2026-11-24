@@ -7,22 +7,22 @@ import {
   ArrowLeft,
   ArrowUpRight,
   CalendarRange,
-  CircleCheck,
   CircleDollarSign,
   Landmark,
   ReceiptText,
 } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { CashFlowBreakdown, CashFlowVisual } from "@/components/cash-flow-visual";
 import {
   buildCashFlowLines,
-  buildCashFlowSeries,
   type CashFlowKind,
   type CashFlowLine,
-  type CashFlowPoint,
   type CashFlowProjectionSource,
   type CashFlowTransaction,
   type GreenCoffeeProjectionSource,
+  type TaxProjectionSource,
+  firstBelowMinimum,
 } from "@/lib/finance-cashflow";
 
 type Summary = {
@@ -37,6 +37,18 @@ type Summary = {
   receivableProjection?: CashFlowProjectionSource[];
   payableProjection?: CashFlowProjectionSource[];
   greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
+  taxProjection?: TaxProjectionSource[];
+  settings?: {
+    minimumCashBalance: number;
+    monthlyRevenueTarget: number | null;
+    taxRegime: string;
+    configured: boolean;
+    taxRatesConfirmed: boolean;
+    icmsEstimated: boolean;
+  };
+  dataGaps?: {
+    greenCoffeePurchasesWithoutPayable: Array<{ id: string; purchaseNumber: string; supplier: string | null; totalValue: number }>;
+  };
 };
 
 type Filter = "ALL" | CashFlowKind;
@@ -59,18 +71,13 @@ const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
-const shortMoney = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 const date = new Intl.DateTimeFormat("pt-BR");
 const filterOptions: Array<{ value: Filter; label: string }> = [
   { value: "ALL", label: "Todos" },
   { value: "RECEIVABLE", label: "A receber" },
   { value: "PAYABLE", label: "A pagar" },
   { value: "PURCHASE", label: "Compras previstas" },
+  { value: "TAX", label: "Impostos (estimados)" },
 ];
 
 export default function CashFlowPage() {
@@ -79,6 +86,8 @@ export default function CashFlowPage() {
     "loading",
   );
   const [filter, setFilter] = React.useState<Filter>("ALL");
+  const [reload, setReload] = React.useState(0);
+  const [showAll, setShowAll] = React.useState(false);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -106,7 +115,7 @@ export default function CashFlowPage() {
         setStatus("error");
       });
     return () => controller.abort();
-  }, []);
+  }, [reload]);
 
   const projection = React.useMemo(
     () =>
@@ -115,25 +124,43 @@ export default function CashFlowPage() {
         receivables: data.receivableProjection,
         payables: data.payableProjection,
         purchases: data.greenCoffeePurchaseProjection,
+        taxes: data.taxProjection,
       }),
     [data],
   );
-  const series = React.useMemo(
-    () =>
-      buildCashFlowSeries({
-        cash: data.cash,
-        transactions: data.transactions,
-        projection,
-      }),
-    [data.cash, data.transactions, projection],
-  );
+  const minimum = data.settings?.minimumCashBalance ?? 0;
+  const belowMinimum = React.useMemo(() => firstBelowMinimum(projection, minimum), [projection, minimum]);
+  const [gapBusy, setGapBusy] = React.useState<string | null>(null);
+  const [gapMessage, setGapMessage] = React.useState("");
+  const createCoffeePayables = async (purchaseId: string) => {
+    setGapBusy(purchaseId);
+    setGapMessage("");
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/green-coffee-purchases/${encodeURIComponent(purchaseId)}/financial-commitment`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message ?? "Não foi possível gerar as contas a pagar.");
+      setGapMessage(`${body.created} conta(s) a pagar criada(s). Se já foi pago, registre o pagamento em Pagar.`);
+      setReload((value) => value + 1);
+    } catch (error) {
+      setGapMessage(error instanceof Error ? error.message : "Não foi possível gerar as contas a pagar.");
+    } finally {
+      setGapBusy(null);
+    }
+  };
   const visibleLines = React.useMemo(
     () => projection.filter((item) => filter === "ALL" || item.kind === filter),
     [filter, projection],
   );
-  const projectedFromLines = projection.at(-1)?.balance ?? data.cash;
-  const reconciled =
-    Math.abs(projectedFromLines - data.projectedBalance) < 0.01;
+  const estimatedTaxes = projection.filter((line) => line.kind === "TAX").reduce((sum, line) => sum + line.amount, 0);
+  const totalIn = projection.filter((line) => line.signedAmount >= 0).reduce((sum, line) => sum + line.amount, 0);
+  const totalOut = projection.filter((line) => line.signedAmount < 0).reduce((sum, line) => sum + line.amount, 0);
+  const lowestPoint = projection.reduce<{ balance: number; date: string | null }>(
+    (low, line) => (line.balance < low.balance ? { balance: line.balance, date: line.dueDate } : low),
+    { balance: data.cash, date: null },
+  );
 
   return (
     <div className="mx-auto max-w-[1500px] pb-10">
@@ -156,39 +183,95 @@ export default function CashFlowPage() {
         <DataStatus status={status} />
       </header>
 
+      {status === "ready" && (
+        <div className="mt-4 grid gap-3">
+          {minimum > 0 && data.cash < minimum ? (
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <strong>O caixa de hoje ({money.format(data.cash)}) já está abaixo do saldo mínimo de {money.format(minimum)}.</strong>{" "}
+              Faltam {money.format(minimum - data.cash)}.{" "}
+              {(projection.at(-1)?.balance ?? data.cash) >= minimum
+                ? "Pela previsão, o saldo volta ao mínimo dentro do período."
+                : "Pela previsão, o saldo não volta ao mínimo dentro do período."}
+            </div>
+          ) : belowMinimum ? (
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <strong>O caixa previsto fica abaixo do saldo mínimo de {money.format(minimum)}</strong> em{" "}
+              {date.format(new Date(belowMinimum.dueDate))}, com {money.format(belowMinimum.balance)}, depois de “{belowMinimum.document}”.
+            </div>
+          ) : minimum > 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              O caixa previsto fica acima do saldo mínimo de {money.format(minimum)} em todo o período.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Defina o saldo mínimo e os impostos em{" "}
+              <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros</Link> para o sistema avisar antes de o caixa ficar curto.
+            </div>
+          )}
+          {data.settings && !data.settings.taxRatesConfirmed && (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Impostos calculados com as alíquotas padrão do {data.settings.taxRegime === "LUCRO_REAL" ? "Lucro Real" : "regime escolhido"}
+              {data.settings.icmsEstimated ? "" : ", sem ICMS"}. Confirme com o contador em{" "}
+              <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros</Link>.
+            </p>
+          )}
+          {!!data.dataGaps?.greenCoffeePurchasesWithoutPayable.length && (
+            <div className="rounded-2xl border border-amber-200 bg-white p-4 text-sm">
+              <p className="font-semibold text-amber-900">Compras de café aprovadas sem conta a pagar</p>
+              <p className="mt-1 text-stone-600">
+                Elas não aparecem nas saídas. Gere as contas a pagar; se já foram pagas, registre o pagamento em Pagar com a data e a conta usadas.
+              </p>
+              <ul className="mt-3 grid gap-2">
+                {data.dataGaps.greenCoffeePurchasesWithoutPayable.map((purchase) => (
+                  <li key={purchase.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-2">
+                    <span>
+                      <strong>{purchase.purchaseNumber}</strong> · {purchase.supplier ?? "fornecedor"} · {money.format(purchase.totalValue)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void createCoffeePayables(purchase.id)}
+                      disabled={gapBusy !== null}
+                      className="min-h-10 rounded-xl bg-stone-950 px-3 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {gapBusy === purchase.id ? "Gerando..." : "Gerar contas a pagar"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {gapMessage && <p role="status" className="mt-2 text-sm text-stone-700">{gapMessage}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
       <section className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Metric
-          label="Caixa atual"
+          label="Caixa hoje"
           value={money.format(data.cash)}
-          detail="Saldo realizado"
+          detail={minimum > 0 ? (data.cash >= minimum ? "Acima do mínimo" : `${money.format(minimum - data.cash)} abaixo do mínimo`) : "Saldo realizado"}
           icon={Landmark}
+          tone={minimum > 0 && data.cash < minimum ? "negative" : undefined}
         />
         <Metric
-          label="A receber"
-          value={money.format(data.receivables)}
-          detail={`${data.receivableProjection?.length ?? 0} título(s) em aberto`}
+          label="Menor saldo previsto"
+          value={money.format(lowestPoint.balance)}
+          detail={lowestPoint.date ? `em ${date.format(new Date(lowestPoint.date))}` : "Sem lançamentos previstos"}
+          icon={CircleDollarSign}
+          tone={lowestPoint.balance < Math.max(minimum, 0.01) ? "negative" : "positive"}
+        />
+        <Metric
+          label="Entradas previstas"
+          value={money.format(totalIn)}
+          detail={`${projection.filter((line) => line.signedAmount >= 0).length} lançamento(s)`}
           icon={ArrowDownLeft}
           tone="positive"
         />
         <Metric
-          label="A pagar"
-          value={money.format(data.payables + data.plannedPurchases)}
-          detail={
-            data.plannedPurchases > 0
-              ? `${money.format(data.plannedPurchases)} em compras previstas`
-              : "Compromissos em aberto"
-          }
+          label="Saídas previstas"
+          value={money.format(totalOut)}
+          detail={estimatedTaxes > 0 ? `inclui ${money.format(estimatedTaxes)} de impostos estimados` : `${projection.filter((line) => line.signedAmount < 0).length} lançamento(s)`}
           icon={ArrowUpRight}
           tone="negative"
-        />
-        <Metric
-          label="Saldo projetado"
-          value={money.format(data.projectedBalance)}
-          detail={
-            reconciled ? "Composição conferida" : "Composição em atualização"
-          }
-          icon={CircleDollarSign}
-          tone={data.projectedBalance >= 0 ? "positive" : "negative"}
         />
       </section>
 
@@ -199,78 +282,10 @@ export default function CashFlowPage() {
         </Card>
       ) : (
         <>
-          <section className="mt-4 grid gap-3 xl:grid-cols-[1.65fr_.75fr]">
-            <Card className="overflow-hidden p-0">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">
-                    Evolução do saldo
-                  </p>
-                  <h2 className="mt-0.5 text-base font-bold">
-                    Realizado e projetado
-                  </h2>
-                </div>
-                <div className="flex items-center gap-4 text-[10px] font-semibold text-stone-500">
-                  <Legend color="bg-forest-700" label="Realizado" />
-                  <Legend color="bg-amber-500" label="Projetado" dashed />
-                </div>
-              </div>
-              <div className="px-3 pb-2 pt-1 sm:px-4">
-                {status === "loading" ? (
-                  <div className="grid h-52 place-items-center text-sm text-stone-500">
-                    Carregando série real…
-                  </div>
-                ) : (
-                  <CashFlowChart
-                    actual={series.actual}
-                    projected={series.projected}
-                  />
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[.14em] text-forest-700">
-                Composição da projeção
-              </p>
-              <h2 className="mt-0.5 text-base font-bold">
-                De onde vem o saldo
-              </h2>
-              <div className="mt-4 space-y-2.5">
-                <Composition label="Caixa atual" value={data.cash} />
-                <Composition
-                  label="Contas a receber"
-                  value={data.receivables}
-                  positive
-                />
-                <Composition label="Contas a pagar" value={-data.payables} />
-                <Composition
-                  label="Compras previstas"
-                  value={-data.plannedPurchases}
-                />
-                <div className="mt-3 flex items-center justify-between border-t border-stone-200 pt-3">
-                  <strong className="text-xs">Saldo projetado</strong>
-                  <strong
-                    className={
-                      data.projectedBalance >= 0
-                        ? "text-emerald-800"
-                        : "text-red-700"
-                    }
-                  >
-                    {money.format(data.projectedBalance)}
-                  </strong>
-                </div>
-              </div>
-              <p
-                className={`mt-4 flex items-start gap-2 rounded-xl px-3 py-2 text-[11px] ${reconciled ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}
-              >
-                <CircleCheck size={14} className="mt-0.5 shrink-0" />
-                {reconciled
-                  ? "Todos os títulos abaixo fecham com o saldo projetado."
-                  : "Há uma atualização entre o resumo e as linhas. Recarregue antes de decidir."}
-              </p>
-            </Card>
-          </section>
+          <div className="mt-4 grid gap-4">
+            <CashFlowVisual lines={projection} cash={data.cash} minimum={minimum} />
+            <CashFlowBreakdown lines={projection} />
+          </div>
 
           <section className="mt-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -321,12 +336,23 @@ export default function CashFlowPage() {
                   </p>
                 </div>
               ) : (
-                visibleLines.map((line) => (
-                  <ProjectionRow key={line.id} line={line} />
-                ))
+                <>
+                  {(showAll ? visibleLines : visibleLines.slice(0, 15)).map((line) => (
+                    <ProjectionRow key={line.id} line={line} />
+                  ))}
+                  {visibleLines.length > 15 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAll((value) => !value)}
+                      className="min-h-11 w-full text-sm font-semibold text-stone-700 hover:bg-stone-50"
+                    >
+                      {showAll ? "Mostrar só os próximos 15" : `Ver todos os ${visibleLines.length} lançamentos`}
+                    </button>
+                  )}
+                </>
               )}
             </Card>
-            <p className="mt-2 text-[11px] leading-relaxed text-stone-500">
+            <p className="mt-2 text-xs leading-relaxed text-stone-500">
               O saldo após cada linha parte do caixa atual e respeita a ordem de
               vencimento. Títulos pagos e cancelados não entram na projeção.
             </p>
@@ -392,63 +418,22 @@ function Metric({
   );
 }
 
-function Legend({
-  color,
-  label,
-  dashed = false,
-}: {
-  color: string;
-  label: string;
-  dashed?: boolean;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`h-0.5 w-5 ${color} ${dashed ? "opacity-70" : ""}`} />{" "}
-      {label}
-    </span>
-  );
-}
-
-function Composition({
-  label,
-  value,
-  positive = false,
-}: {
-  label: string;
-  value: number;
-  positive?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 text-xs">
-      <span className="text-stone-500">{label}</span>
-      <strong
-        className={
-          positive
-            ? "text-emerald-700"
-            : value < 0
-              ? "text-rose-700"
-              : "text-stone-800"
-        }
-      >
-        {value > 0 && positive ? "+" : ""}
-        {money.format(value)}
-      </strong>
-    </div>
-  );
-}
-
 function ProjectionRow({ line }: { line: CashFlowLine }) {
   const incoming = line.kind === "RECEIVABLE";
   const typeLabel = incoming
     ? "A receber"
     : line.kind === "PAYABLE"
       ? "A pagar"
-      : "Compra prevista";
+      : line.kind === "TAX"
+        ? "Imposto estimado"
+        : "Compra prevista";
   const typeClass = incoming
     ? "bg-emerald-50 text-emerald-800"
     : line.kind === "PAYABLE"
       ? "bg-rose-50 text-rose-800"
-      : "bg-amber-50 text-amber-900";
+      : line.kind === "TAX"
+        ? "bg-violet-50 text-violet-800"
+        : "bg-amber-50 text-amber-900";
   const statusClass =
     line.status === "Vencido"
       ? "bg-red-50 text-red-700"
@@ -489,138 +474,6 @@ function ProjectionRow({ line }: { line: CashFlowLine }) {
         {money.format(line.amount)}
       </strong>
       <strong className="lg:text-right">{money.format(line.balance)}</strong>
-    </div>
-  );
-}
-
-function CashFlowChart({
-  actual,
-  projected,
-}: {
-  actual: CashFlowPoint[];
-  projected: CashFlowPoint[];
-}) {
-  const width = 860;
-  const height = 220;
-  const padding = { left: 58, right: 24, top: 24, bottom: 36 };
-  const values = [...actual, ...projected].map((point) => point.balance);
-  const rawMin = Math.min(...values, 0);
-  const rawMax = Math.max(...values, 0);
-  const spread = Math.max(rawMax - rawMin, 1);
-  const min = rawMin - spread * 0.12;
-  const max = rawMax + spread * 0.12;
-  const y = (value: number) =>
-    padding.top +
-    ((max - value) / (max - min)) * (height - padding.top - padding.bottom);
-  const actualWidth =
-    projected.length > 1 ? width * 0.46 : width - padding.right;
-  const actualX = (index: number) =>
-    actual.length === 1
-      ? actualWidth
-      : padding.left +
-        (index / Math.max(actual.length - 1, 1)) * (actualWidth - padding.left);
-  const projectedX = (index: number) =>
-    actualWidth +
-    (index / Math.max(projected.length - 1, 1)) *
-      (width - padding.right - actualWidth);
-  const actualPath = actual
-    .map(
-      (point, index) =>
-        `${index ? "L" : "M"}${actualX(index)},${y(point.balance)}`,
-    )
-    .join(" ");
-  const projectedPath = projected
-    .map(
-      (point, index) =>
-        `${index ? "L" : "M"}${projectedX(index)},${y(point.balance)}`,
-    )
-    .join(" ");
-  const ticks = [max, max - (max - min) / 2, min];
-  return (
-    <div
-      className="w-full overflow-hidden"
-      aria-label="Gráfico do fluxo de caixa realizado e projetado"
-    >
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-auto min-h-[180px] w-full"
-        role="img"
-      >
-        <title>Fluxo de caixa realizado e projetado</title>
-        {ticks.map((tick) => (
-          <g key={tick}>
-            <line
-              x1={padding.left}
-              x2={width - padding.right}
-              y1={y(tick)}
-              y2={y(tick)}
-              stroke="#e7e5e4"
-              strokeWidth="1"
-            />
-            <text
-              x={padding.left - 8}
-              y={y(tick) + 4}
-              textAnchor="end"
-              fill="#78716c"
-              fontSize="10"
-            >
-              {shortMoney.format(tick)}
-            </text>
-          </g>
-        ))}
-        <line
-          x1={actualWidth}
-          x2={actualWidth}
-          y1={padding.top}
-          y2={height - padding.bottom}
-          stroke="#d6d3d1"
-          strokeDasharray="4 5"
-        />
-        <path
-          d={actualPath}
-          fill="none"
-          stroke="#0f766e"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d={projectedPath}
-          fill="none"
-          stroke="#d97706"
-          strokeWidth="3"
-          strokeDasharray="7 6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle
-          cx={actualX(actual.length - 1)}
-          cy={y(actual.at(-1)?.balance ?? 0)}
-          r="4"
-          fill="#0f766e"
-        />
-        <circle
-          cx={projectedX(projected.length - 1)}
-          cy={y(projected.at(-1)?.balance ?? 0)}
-          r="4"
-          fill="#d97706"
-        />
-        <text x={padding.left} y={height - 10} fill="#78716c" fontSize="10">
-          Histórico
-        </text>
-        <text x={actualWidth + 8} y={height - 10} fill="#78716c" fontSize="10">
-          Hoje
-        </text>
-        <text
-          x={width - padding.right}
-          y={height - 10}
-          textAnchor="end"
-          fill="#78716c"
-          fontSize="10"
-        >
-          Último vencimento
-        </text>
-      </svg>
     </div>
   );
 }

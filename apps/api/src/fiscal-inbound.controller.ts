@@ -40,6 +40,12 @@ export class FiscalInboundController {
     return this.fiscal.matchPurchase(actor.companyId, actor, id, body.purchaseId);
   }
 
+  @Post(":id/payables")
+  async createPayables(@Req() request: Request, @Param("id") id: string, @Body() body: { category?: string; costCenterId?: string }) {
+    const actor = await requireSession(request, this.auth);
+    return this.fiscal.createPayables(actor.companyId, actor, id, body ?? {});
+  }
+
   @Post(":id/allocate-item")
   async allocateItem(@Req() request: Request, @Param("id") id: string, @Body() body: { itemId?: string; allocationType?: string; purchaseId?: string; costCenterId?: string; targetReferenceId?: string; category?: string; description?: string }) {
     const actor = await requireSession(request, this.auth);

@@ -9,6 +9,7 @@ const links = [
   ["/financeiro/fluxo-caixa", "Fluxo de caixa"],
   ["/financeiro/bancos-contas", "Bancos e contas"],
   ["/financeiro/conciliacao", "Conciliação"],
+  ["/financeiro/parametros", "Parâmetros"],
 ] as const;
 export default function FinanceLayout({ children }: { children: ReactNode }) {
   return (
@@ -21,7 +22,7 @@ export default function FinanceLayout({ children }: { children: ReactNode }) {
           <Link
             key={href}
             href={href}
-            className="min-h-9 shrink-0 rounded-xl px-3 py-2 text-xs font-semibold text-stone-600 transition hover:bg-emerald-50 hover:text-forest-800"
+            className="min-h-10 shrink-0 rounded-xl px-3 py-2 text-sm font-semibold text-stone-600 transition hover:bg-emerald-50 hover:text-forest-800"
           >
             {label}
           </Link>

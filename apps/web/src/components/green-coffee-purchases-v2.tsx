@@ -388,7 +388,7 @@ export default function GreenCoffeePurchasesV2() {
     <div className="mx-auto max-w-[1480px]">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">Suprimentos · Café verde</p>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--bbos-coffee-green)]">Compras · Café verde</p>
           <h1 className="mt-2 text-3xl font-bold">Compras de café verde</h1>
           <p className="mt-2 text-sm text-stone-500">Aquisição, governança, financeiro e rastreabilidade desde a origem.</p>
         </div>

@@ -97,6 +97,9 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   OrderPackagingController: OPERATIONS,
   BrokersController: COMMERCIAL,
   CustomersController: COMMERCIAL,
+  ProspectsController: CORE,
+  NearbyController: CORE,
+  VisitTextController: CORE,
   CuppingController: OPERATIONS,
   CuppingTrainingController: OPERATIONS,
   ProfessionalSamplesController: OPERATIONS,
@@ -123,6 +126,8 @@ const HANDLER_ROLE_POLICY: Readonly<
     stateShapes: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
   },
   FinanceController: {
+    settings: ACCOUNTING_READ,
+    updateSettings: ["ADMIN", "EXECUTIVE"],
     summary: ACCOUNTING_READ,
     receivables: ACCOUNTING_READ,
     payables: ACCOUNTING_READ,
@@ -168,6 +173,7 @@ const HANDLER_ROLE_POLICY: Readonly<
     sync: OPERATIONS_FINANCE,
     matchPurchase: OPERATIONS_FINANCE,
     allocateItem: OPERATIONS_FINANCE,
+    createPayables: ["ADMIN", "EXECUTIVE", "FINANCE"],
   },
   CostingController: {
     summary: [...OPERATIONS_FINANCE, "ACCOUNTANT"],
@@ -243,6 +249,9 @@ const HANDLER_ROLE_POLICY: Readonly<
   BrokersController: {
     create: COMMERCIAL_WITHOUT_SALES,
     update: COMMERCIAL_WITHOUT_SALES,
+  },
+  ProspectsController: {
+    import: LEADERSHIP,
   },
   CustomersController: {
     list: [...COMMERCIAL, "ACCOUNTANT"],
