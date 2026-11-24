@@ -144,7 +144,7 @@ jobs:
           # Fail on any new statement or SQLSTATE, including UNKNOWN.
           while IFS= read -r omission; do
             case "$omission" in
-              "migration=20260807143000_product_catalog_persistence_v1 statement=5 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=8 sqlstate=42701"|"migration=20260807230000_cost_engine_v1_traceability statement=12 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=13 sqlstate=42710"|"migration=20261012173000_roaster_operational_load_17kg statement=3 sqlstate=55P04"|"migration=20261015124500_storefront_payment_fiscal_recovery statement=1 sqlstate=42703"|"migration=20261015124500_storefront_payment_fiscal_recovery statement=5 sqlstate=42703"|"migration=20261015124500_storefront_payment_fiscal_recovery statement=6 sqlstate=42703")
+              "migration=20260807143000_product_catalog_persistence_v1 statement=5 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=8 sqlstate=42701"|"migration=20260807230000_cost_engine_v1_traceability statement=12 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=13 sqlstate=42710"|"migration=20261012173000_roaster_operational_load_17kg statement=3 sqlstate=55P04")
                 echo "::warning::Known historical omission (not release acceptance): $omission"
                 ;;
               *) echo "::error::Unexpected legacy omission: $omission"; exit 1 ;;
@@ -157,7 +157,7 @@ jobs:
             ('production_orders_empty', NOT EXISTS (SELECT 1 FROM public."ProductionOrder")),
             ('cost_events_empty', NOT EXISTS (SELECT 1 FROM public."CostEvent")),
             ('storefront_orders_empty', NOT EXISTS (SELECT 1 FROM public."StorefrontOrder")),
-            ('storefront_sales_order_column_present', EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='StorefrontOrder' AND column_name='salesOrderId')),
+            ('storefront_sales_order_column_present', EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='StorefrontOrder' AND column_name='salesOrderId' AND data_type='text' AND is_nullable='YES')),
             ('gas_enum_present', EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid=t.oid JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typname='CostType' AND e.enumlabel='GAS'))
           ) AS checks(check_name, passed) ORDER BY check_name;
           SQL
