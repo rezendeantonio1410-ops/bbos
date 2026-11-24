@@ -145,7 +145,21 @@ jobs:
                   if (request.isNavigationRequest() || (url.origin === origin && url.pathname.startsWith('/api/')))
                     console.log(mode+' request failed '+request.method()+' '+(url.origin === origin ? url.pathname : '[non-loopback blocked]'));
                 });
-                await page.goto(origin+'/parceiro');
+                // Check the real middleware redirect without following an absolute
+                // Location that Next may generate with a different loopback hostname.
+                // Keep all browser requests and cookies on one canonical origin.
+                const protectedResponse=await context.request.get(origin+'/parceiro',{maxRedirects:0});
+                assert.ok([302,303,307,308].includes(protectedResponse.status()),'unauthenticated portal must redirect');
+                const location=protectedResponse.headers()['location'];
+                assert.ok(location,'protected portal redirect missing Location');
+                const redirect=new URL(location,origin);
+                assert.ok(['127.0.0.1','localhost','[::1]'].includes(redirect.hostname) &&
+                  redirect.protocol==='http:' && redirect.port==='3100' && !redirect.username && !redirect.password,
+                  'unexpected redirect outside isolated web server');
+                assert.equal(redirect.pathname,'/login');
+                assert.equal(redirect.searchParams.get('returnTo'),'/parceiro');
+                console.log(mode+' protected portal redirect verified: '+protectedResponse.status()+' '+redirect.pathname);
+                await page.goto(origin+redirect.pathname+redirect.search);
                 await page.waitForURL(url=>url.origin===origin && url.pathname==='/login');
                 // SSR inputs can be visible before React installs the submit and
                 // change handlers. Do not trigger the native form submission.
