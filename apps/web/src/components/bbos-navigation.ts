@@ -16,11 +16,9 @@ import {
   PackageCheck,
   PackageOpen,
   FileInput,
-  PlugZap,
   Settings,
   Ship,
   ShoppingBag,
-  Smartphone,
   UsersRound,
   Warehouse,
 } from "lucide-react";
@@ -45,7 +43,15 @@ export type BbosNavItem = {
 };
 
 export type BbosNavGroup = {
-  id: "overview" | "commercial" | "international" | "operations" | "management";
+  id:
+    | "overview"
+    | "commercial"
+    | "supply"
+    | "quality"
+    | "roasting"
+    | "inventory"
+    | "finance"
+    | "analytics";
   label: string;
   description: string;
   alwaysOpen?: boolean;
@@ -69,11 +75,13 @@ const KNOWN_ROLES = new Set<BbosRole>([
   "MARKETPLACE_OPERATOR",
 ]);
 
+// Eight work areas in the order of the coffee (SAP Fiori spaces / Dynamics 365
+// modules). Settings (users, integrations, app) live in the user menu.
 export const bbosNavigation: BbosNavGroup[] = [
   {
     id: "overview",
-    label: "Visão geral",
-    description: "Decidir, priorizar e agir",
+    label: "Início",
+    description: "Alertas e próximas ações",
     alwaysOpen: true,
     tone: "green",
     items: [
@@ -85,36 +93,12 @@ export const bbosNavigation: BbosNavGroup[] = [
         roles: ALL,
         keywords: ["inicio", "hoje", "atenção"],
       },
-      {
-        href: "/aplicativo",
-        label: "Aplicativo",
-        description: "Alertas de provas e atenções no iPhone",
-        icon: Smartphone,
-        roles: LEADERSHIP,
-        keywords: ["iphone", "aplicativo", "notificacao", "push"],
-      },
-      {
-        href: "/dashboard",
-        label: "Executivo",
-        description: "Resultado, caixa, ROI e prioridades",
-        icon: LayoutDashboard,
-        roles: LEADERSHIP,
-        keywords: ["diretoria", "resultado", "roi"],
-      },
-      {
-        href: "/dashboard-industrial",
-        label: "Industrial",
-        description: "Produção, perdas, capacidade e estoque",
-        icon: Gauge,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
-        keywords: ["fabrica", "torra", "eficiencia"],
-      },
     ],
   },
   {
     id: "commercial",
-    label: "Comercial",
-    description: "Clientes, pedidos e receita",
+    label: "Vendas",
+    description: "Clientes, pedidos e canais",
     tone: "blue",
     items: [
       {
@@ -149,17 +133,9 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["pedido", "venda", "estoque"],
       },
       {
-        href: "/vendas",
-        label: "Vendas",
-        description: "Desempenho e carteira comercial",
-        icon: BarChart3,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
-        keywords: ["faturamento", "receita"],
-      },
-      {
         href: "/commerce",
-        label: "Commerce",
-        description: "Canais, preços e governança",
+        label: "Canais e preços",
+        description: "Loja, preços e campanhas",
         icon: Globe2,
         roles: ["ADMIN", "EXECUTIVE"],
         keywords: ["preco", "canal", "tabela"],
@@ -173,24 +149,8 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["mercado livre", "marketplace", "anuncio", "repasse"],
       },
       {
-        href: "/commerce/midia",
-        label: "Biblioteca da marca",
-        description: "Fundadores, provas, origem e vitrines",
-        icon: Images,
-        roles: ["ADMIN", "EXECUTIVE"],
-        keywords: ["foto", "imagem", "fundadores", "prova", "origem", "loja"],
-      },
-    ],
-  },
-  {
-    id: "international",
-    label: "Mercado internacional",
-    description: "Contratos, bookings e moedas",
-    tone: "violet",
-    items: [
-      {
         href: "/exportacoes",
-        label: "Central de exportações",
+        label: "Exportações",
         description: "Carteira, logística e documentos",
         icon: Ship,
         roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
@@ -204,70 +164,46 @@ export const bbosNavigation: BbosNavGroup[] = [
           "cambio",
         ],
       },
+      {
+        href: "/commerce/midia",
+        label: "Biblioteca da marca",
+        description: "Fundadores, provas, origem e vitrines",
+        icon: Images,
+        roles: ["ADMIN", "EXECUTIVE"],
+        keywords: ["foto", "imagem", "fundadores", "prova", "origem", "loja"],
+      },
     ],
   },
   {
-    id: "operations",
-    label: "Operação",
-    description: "Do café verde ao produto vendável",
+    id: "supply",
+    label: "Suprimentos",
+    description: "Compra de café verde e insumos",
     tone: "amber",
     items: [
       {
         href: "/cafe-verde",
-        label: "Café Verde",
-        description: "Compra, recebimento, lote e estoque",
+        label: "Compras de café verde",
+        description: "Comprar, receber e liberar",
         icon: PackageOpen,
         roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
         keywords: ["compra", "recebimento", "lote", "fornecedor"],
       },
       {
-        href: "/laboratorio",
-        label: "Laboratório",
-        description: "Amostras, cupping e liberação",
-        icon: FlaskConical,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
-        keywords: ["qualidade", "amostra", "cupping"],
+        href: "/fornecedores",
+        label: "Fornecedores",
+        description: "Produtores, cooperativas e contatos",
+        icon: UsersRound,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
+        keywords: ["produtor", "cooperativa", "fazenda", "corretor"],
       },
       {
-        href: "/producao",
-        label: "Produção",
-        description: "Reserva, torra, perdas e embalagem",
-        icon: Factory,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
-        keywords: ["op", "torra", "batch", "empacotamento"],
+        href: "/recebimento",
+        label: "Recebimento",
+        description: "Entregas, peso conferido e entrada de lote",
+        icon: PackageOpen,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"],
+        keywords: ["entrega", "chegada", "saca", "peso"],
       },
-      {
-        href: "/estoque",
-        label: "Estoque",
-        description: "Café verde, torrado e produto acabado",
-        icon: Warehouse,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
-        keywords: ["saldo", "torrado", "granel", "produto acabado"],
-      },
-      {
-        href: "/blends",
-        label: "Blends",
-        description: "Receitas e composição de lotes",
-        icon: Boxes,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
-        keywords: ["receita", "mistura"],
-      },
-      {
-        href: "/produtos",
-        label: "Produtos",
-        description: "SKU, apresentação, custo e disponibilidade",
-        icon: PackageCheck,
-        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
-        keywords: ["sku", "pacote", "acabado"],
-      },
-    ],
-  },
-  {
-    id: "management",
-    label: "Gestão",
-    description: "Financeiro, custos e governança",
-    tone: "violet",
-    items: [
       {
         href: "/notas-entrada",
         label: "Notas de entrada",
@@ -284,6 +220,78 @@ export const bbosNavigation: BbosNavGroup[] = [
           "gas",
         ],
       },
+    ],
+  },
+  {
+    id: "quality",
+    label: "Qualidade",
+    description: "Amostras, cupping e liberação",
+    tone: "amber",
+    items: [
+      {
+        href: "/laboratorio",
+        label: "Laboratório",
+        description: "Amostras, cupping e liberação",
+        icon: FlaskConical,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["qualidade", "amostra", "cupping"],
+      },
+    ],
+  },
+  {
+    id: "roasting",
+    label: "Torra",
+    description: "Ordens de torra e receitas",
+    tone: "amber",
+    items: [
+      {
+        href: "/producao",
+        label: "Ordens de torra",
+        description: "Planejar, torrar e embalar",
+        icon: Factory,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["op", "torra", "batch", "empacotamento"],
+      },
+      {
+        href: "/blends",
+        label: "Receitas (blends)",
+        description: "Receitas e composição de lotes",
+        icon: Boxes,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["receita", "mistura"],
+      },
+    ],
+  },
+  {
+    id: "inventory",
+    label: "Estoque",
+    description: "Lotes e produtos",
+    tone: "amber",
+    items: [
+      {
+        href: "/estoque",
+        label: "Estoque",
+        description: "Café verde, torrado e produto acabado",
+        icon: Warehouse,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["saldo", "torrado", "granel", "produto acabado"],
+      },
+      {
+        href: "/produtos",
+        label: "Produtos",
+        description: "SKU, apresentação, custo e disponibilidade",
+        icon: PackageCheck,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["sku", "pacote", "acabado"],
+      },
+    ],
+  },
+  {
+    id: "finance",
+    label: "Financeiro",
+    description: "Receber, pagar, caixa e custos",
+    tone: "violet",
+    items: [
       {
         href: "/financeiro",
         label: "Financeiro",
@@ -294,35 +302,43 @@ export const bbosNavigation: BbosNavGroup[] = [
       },
       {
         href: "/custos",
-        label: "Custos",
+        label: "Custos e margens",
         description: "Custo real, margem e retorno",
         icon: Calculator,
         roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL", "ACCOUNTANT"],
         keywords: ["margem", "roi", "custeio"],
       },
+    ],
+  },
+  {
+    id: "analytics",
+    label: "Análises",
+    description: "Painéis e relatórios",
+    tone: "green",
+    items: [
       {
-        href: "/integracoes",
-        label: "Integrações",
-        description: "Bling, marketplaces, pagamentos e fretes",
-        icon: PlugZap,
+        href: "/dashboard",
+        label: "Painel executivo",
+        description: "Resultado, caixa, ROI e prioridades",
+        icon: LayoutDashboard,
         roles: LEADERSHIP,
-        keywords: [
-          "bling",
-          "fiscal",
-          "nfe",
-          "webhook",
-          "mercado livre",
-          "melhor envio",
-          "mercado pago",
-        ],
+        keywords: ["diretoria", "resultado", "roi"],
       },
       {
-        href: "/usuarios",
-        label: "Usuários e acessos",
-        description: "Papéis, permissões e segurança",
-        icon: Settings,
-        roles: ["ADMIN"],
-        keywords: ["acesso", "perfil", "permissao"],
+        href: "/dashboard-industrial",
+        label: "Painel industrial",
+        description: "Produção, perdas, capacidade e estoque",
+        icon: Gauge,
+        roles: ["ADMIN", "EXECUTIVE", "INDUSTRIAL"],
+        keywords: ["fabrica", "torra", "eficiencia"],
+      },
+      {
+        href: "/vendas",
+        label: "Desempenho de vendas",
+        description: "Desempenho e carteira comercial",
+        icon: BarChart3,
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
+        keywords: ["faturamento", "receita"],
       },
       {
         href: "/bi",
