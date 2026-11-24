@@ -1,3 +1,4 @@
+import { normalizeTaxId } from "@bbos/shared";
 import {
   onlyDigits,
   validateStateRegistration,
@@ -36,7 +37,7 @@ const text = (value: unknown) => String(value ?? "").trim();
 export function normalizeCustomerFiscalData(input: CustomerFiscalInput) {
   const countryCode = text(input.countryCode).toUpperCase() || "BR";
   const isForeign = countryCode !== "BR";
-  const taxId = isForeign ? "" : onlyDigits(text(input.taxId));
+  const taxId = isForeign ? "" : normalizeTaxId(text(input.taxId));
   const documentType = isForeign ? "FOREIGN" : validateTaxId(taxId);
   const requestedRegistrationType = text(
     input.stateRegistrationType,

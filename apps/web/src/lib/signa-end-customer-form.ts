@@ -1,3 +1,4 @@
+import { isValidCnpj as isValidSharedCnpj, normalizeCnpj } from "@bbos/shared";
 /**
  * Commercial end-customer form rules for the Signa portal. Mirrors the API
  * validation (apps/api/src/partner-end-customer-input.ts); the API remains the
@@ -25,26 +26,19 @@ export const emptySignaEndCustomerForm: SignaEndCustomerForm = {
 const digits = (value: string) => value.replace(/\D/g, "");
 
 export function isValidCnpj(value: string): boolean {
-  const cnpj = digits(value);
-  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
-  const check = (length: number) => {
-    const weights = length === 12
-      ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-      : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const sum = weights.reduce((total, weight, index) => total + Number(cnpj[index]) * weight, 0);
-    const remainder = sum % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-  return check(12) === Number(cnpj[12]) && check(13) === Number(cnpj[13]);
+  return isValidSharedCnpj(value);
 }
 
+/** Progressive mask while typing; accepts letters of the new CNPJ format. */
 export function formatCnpj(value: string): string {
-  const d = digits(value).slice(0, 14);
-  return d
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2");
+  const c = normalizeCnpj(value).slice(0, 14);
+  const parts = [c.slice(0, 2), c.slice(2, 5), c.slice(5, 8), c.slice(8, 12), c.slice(12, 14)];
+  let out = parts[0] ?? "";
+  if (parts[1]) out += `.${parts[1]}`;
+  if (parts[2]) out += `.${parts[2]}`;
+  if (parts[3]) out += `/${parts[3]}`;
+  if (parts[4]) out += `-${parts[4]}`;
+  return out;
 }
 
 const brazilianStates = new Set([
@@ -64,7 +58,7 @@ export function validateSignaEndCustomerForm(
 ): { ok: true; payload: SignaEndCustomerForm } | { ok: false; error: string } {
   const payload: SignaEndCustomerForm = {
     name: form.name.trim(),
-    taxId: digits(form.taxId),
+    taxId: normalizeCnpj(form.taxId),
     postalCode: digits(form.postalCode),
     street: form.street.trim(),
     number: form.number.trim(),
@@ -75,7 +69,7 @@ export function validateSignaEndCustomerForm(
     stateRegistration: normalizeStateRegistration(form.stateRegistration ?? ""),
   };
   if (payload.name.length < 2) return { ok: false, error: "Informe o nome ou a razão social." };
-  if (!isValidCnpj(payload.taxId)) return { ok: false, error: "CNPJ inválido. Confira os 14 dígitos." };
+  if (!isValidCnpj(payload.taxId)) return { ok: false, error: "CNPJ inválido. Confira os 14 caracteres (números e, no formato novo, letras)." };
   if (payload.postalCode.length !== 8) return { ok: false, error: "Informe um CEP com 8 dígitos." };
   if (!payload.street) return { ok: false, error: "Informe a rua." };
   if (!payload.number) return { ok: false, error: "Informe o número (use S/N se não houver)." };

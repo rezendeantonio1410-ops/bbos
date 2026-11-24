@@ -40,3 +40,16 @@ test("cada campo obrigatório bloqueia o salvamento com mensagem própria", () =
   }
   assert.equal(validateSignaEndCustomerForm({ ...complete, state: "XX" }).ok, false);
 });
+
+test("Signa form accepts the new alphanumeric CNPJ (official example) and masks it", () => {
+  assert.equal(isValidCnpj("12.ABC.345/01DE-35"), true);
+  assert.equal(isValidCnpj("12ABC34501DE36"), false);
+  assert.equal(formatCnpj("12abc34501de35"), "12.ABC.345/01DE-35");
+  assert.equal(formatCnpj("12AB"), "12.AB");
+  const result = validateSignaEndCustomerForm({
+    name: "Cafeteria Teste", taxId: "12.abc.345/01de-35", postalCode: "86010-000", street: "Rua A", number: "10",
+    district: "Centro", complement: "", city: "Londrina", state: "PR", stateRegistration: "",
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.payload.taxId, "12ABC34501DE35");
+});

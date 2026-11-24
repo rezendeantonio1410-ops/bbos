@@ -10,6 +10,7 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
+import { normalizeTaxId } from "@bbos/shared";
 import { prisma, UserRole } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { AuthService, hashPassword } from "./auth.service";
@@ -448,7 +449,7 @@ export class StorefrontPartnersController {
     this.ensureAdministrator(actor);
     const name = String(body.name ?? "").trim();
     if (!name) throw new BadRequestException("Nome do parceiro é obrigatório.");
-    const taxId = String(body.taxId ?? "").replace(/\D/g, "") || null;
+    const taxId = normalizeTaxId(String(body.taxId ?? "")) || null;
     const roles = {
       isSalesPartner: body.isSalesPartner !== false,
       isSalesBroker: body.isSalesBroker === true,
@@ -504,7 +505,7 @@ export class StorefrontPartnersController {
     const value = { ...current, ...body };
     const name = String(value.name ?? "").trim();
     if (!name) throw new BadRequestException("Nome do parceiro é obrigatório.");
-    const taxId = String(value.taxId ?? "").replace(/\D/g, "") || null;
+    const taxId = normalizeTaxId(String(value.taxId ?? "")) || null;
     const roles = {
       isSalesPartner: value.isSalesPartner !== false,
       isSalesBroker: value.isSalesBroker === true,

@@ -1,3 +1,4 @@
+import { normalizeCnpj } from "@bbos/shared";
 export type ConfirmedTaxIdStatus = "VERIFIED_ACTIVE" | "CONFIRMED_INTERNAL";
 
 export type TaxIdSuggestionRejectionReason = "NONE_MATCH" | "MANUAL_ENTRY";
@@ -15,8 +16,8 @@ export type TaxIdConfirmationSnapshot = {
 
 export function canonicalCnpj(value: unknown) {
   if (typeof value !== "string") return "";
-  const digits = value.replace(/\D/g, "");
-  return digits.length === 14 ? digits : "";
+  const cnpj = normalizeCnpj(value);
+  return cnpj.length === 14 ? cnpj : "";
 }
 
 export function normalizeTaxIdStatus(status: unknown) {

@@ -1,5 +1,8 @@
 "use client";
 
+import { isValidCnpj, normalizeTaxId } from "@bbos/shared";
+import { formatCnpj as formatCnpjInput } from "@/lib/signa-end-customer-form";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
@@ -200,24 +203,9 @@ const validCpf = (value: string) => {
   };
   return check(9) === Number(digits[9]) && check(10) === Number(digits[10]);
 };
-const validCnpj = (value: string) => {
-  const digits = digitsOnly(value);
-  if (digits.length !== 14 || /^(\d)\1+$/.test(digits)) return false;
-  const check = (length: number) => {
-    const weights =
-      length === 12
-        ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-        : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const sum = weights.reduce(
-      (total, weight, index) => total + Number(digits[index]) * weight,
-      0,
-    );
-    const remainder = sum % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-  return check(12) === Number(digits[12]) && check(13) === Number(digits[13]);
-};
 const formatTaxId = (value: string) => {
+  // Letters mean the new alphanumeric CNPJ (Receita, from July 2026).
+  if (/[a-z]/i.test(value)) return formatCnpjInput(value);
   const digits = digitsOnly(value).slice(0, 14);
   if (digits.length <= 11)
     return digits
@@ -231,12 +219,13 @@ const formatTaxId = (value: string) => {
     .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
 };
 const taxIdMessage = (value: string) => {
-  const digits = digitsOnly(value);
-  if (!digits) return "";
-  if (digits.length < 11) return "CPF/CNPJ incompleto";
-  if (digits.length === 11) return validCpf(digits) ? "" : "CPF inválido";
-  if (digits.length < 14) return "CNPJ incompleto";
-  return validCnpj(digits) ? "" : "CNPJ inválido";
+  const taxId = normalizeTaxId(value);
+  if (!taxId) return "";
+  if (/[A-Z]/.test(taxId)) return taxId.length < 14 ? "CNPJ incompleto" : isValidCnpj(taxId) ? "" : "CNPJ inválido";
+  if (taxId.length < 11) return "CPF/CNPJ incompleto";
+  if (taxId.length === 11) return validCpf(taxId) ? "" : "CPF inválido";
+  if (taxId.length < 14) return "CNPJ incompleto";
+  return isValidCnpj(taxId) ? "" : "CNPJ inválido";
 };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -310,7 +299,7 @@ export default function SuppliersPage() {
   const pendingAddressRef = useRef<{ cep: string; address: string } | null>(null);
   // CNPJ first: the free Receita Federal registry fills the form; all editable.
   const supplierCnpjLookup = useCnpjRegistryAutofill({
-    cnpj: supplierTaxId.replace(/\D/g, "").length === 14 ? supplierTaxId : "",
+    cnpj: normalizeTaxId(supplierTaxId).length === 14 ? supplierTaxId : "",
     enabled: supplierOpen && !editingSupplier,
     onResolved: (record, context) => {
       const form = supplierFormRef.current;
@@ -479,7 +468,7 @@ export default function SuppliersPage() {
     const form = new FormData(event.currentTarget);
     const values: Record<string, unknown> = Object.fromEntries(form);
     values.active = form.get("active") === "true";
-    values.taxId = supplierTaxId.replace(/\D/g, "") || undefined;
+    values.taxId = normalizeTaxId(supplierTaxId) || undefined;
     values.stateRegistration =
       stateRegistrationType === "NUMBER"
         ? form.get("stateRegistration") || undefined
@@ -873,7 +862,7 @@ export default function SuppliersPage() {
                     }}
                     className={input}
                   />
-                  {supplierTaxId.replace(/\D/g, "").length >= 12 && (
+                  {normalizeTaxId(supplierTaxId).length >= 12 && (
                     <CnpjSearchButton onClick={supplierCnpjLookup.search} busy={supplierCnpjLookup.busy} className="mt-1" />
                   )}
                   </span>

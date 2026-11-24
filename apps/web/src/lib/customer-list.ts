@@ -1,3 +1,5 @@
+import { normalizeCnpj } from "@bbos/shared";
+
 /** Quick filters of the customer list (Fiori "filter bar" chips). */
 export type CustomerQuickFilter = "ALL" | "ATTENTION" | "CREDIT_REVIEW" | "FISCAL_PENDING" | "TAX_ID_CHECK";
 
@@ -13,7 +15,7 @@ type ListCustomer = {
 };
 
 export function taxIdNeedsCheck(customer: ListCustomer) {
-  const digits = (customer.taxId ?? "").replace(/\D/g, "");
+  const digits = normalizeCnpj(customer.taxId);
   const brazilian = (customer.countryCode ?? "BR") === "BR";
   const relevant = brazilian && (digits.length === 0 || digits.length === 14);
   const confirmed = ["VERIFIED_ACTIVE", "CONFIRMED_INTERNAL"].includes(customer.taxIdVerificationStatus ?? "");

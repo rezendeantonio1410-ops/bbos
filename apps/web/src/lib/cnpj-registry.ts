@@ -1,3 +1,4 @@
+import { isValidCnpj, normalizeCnpj } from "@bbos/shared";
 /**
  * CNPJ lookup in the public Receita Federal registry (served by the BBOS API
  * through BrasilAPI and cnpj.ws, both free). One lookup fills every field the
@@ -44,25 +45,17 @@ export type CnpjLookupOutcome =
   | { kind: "found"; record: CnpjRegistryRecord }
   | { kind: "not-found" | "invalid" | "error"; message: string };
 
-const digits = (value: string) => value.replace(/\D/g, "");
-
+/** Numeric and alphanumeric (new Receita format) CNPJs. */
 export function isValidCnpjDigits(value: string): boolean {
-  const cnpj = digits(value);
-  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
-  const check = (length: number) => {
-    const weights = length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const rest = weights.reduce((total, weight, index) => total + Number(cnpj[index]) * weight, 0) % 11;
-    return rest < 2 ? 0 : 11 - rest;
-  };
-  return check(12) === Number(cnpj[12]) && check(13) === Number(cnpj[13]);
+  return isValidCnpj(value);
 }
 
 export async function lookupCnpjRegistry(
   value: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<CnpjLookupOutcome> {
-  const cnpj = digits(value);
-  if (!isValidCnpjDigits(cnpj)) return { kind: "invalid", message: "CNPJ inválido. Confira os dígitos." };
+  const cnpj = normalizeCnpj(value);
+  if (!isValidCnpjDigits(cnpj)) return { kind: "invalid", message: "CNPJ inválido. Confira os 14 caracteres." };
   try {
     const response = await fetchImpl(`/api/company-registry/cnpj/${cnpj}`, {
       credentials: "include",

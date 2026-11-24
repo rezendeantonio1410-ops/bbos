@@ -1,3 +1,4 @@
+import { formatCnpj as formatSharedCnpj } from "@bbos/shared";
 /** Labels and formatting shared by "Prospecção" and "Por perto". */
 
 export const SEGMENT_LABEL: Record<string, string> = {
@@ -53,9 +54,7 @@ export const CONFIDENCE_LABEL: Record<string, string> = {
 };
 
 export function formatCnpj(value?: string | null) {
-  const digits = (value ?? "").replace(/\D/g, "");
-  if (digits.length !== 14) return value ?? "";
-  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+  return formatSharedCnpj(value);
 }
 
 export function formatPhone(value?: string | null) {
