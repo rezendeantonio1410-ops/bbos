@@ -19,8 +19,6 @@ import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 
 const SYNC_INTERVAL_MS = 60_000;
-/** After this many failed downloads the NF e-mail goes out with a link instead. */
-const ATTACHMENT_ATTEMPTS = 4;
 
 /** Picks the first valid address of a customer e-mail field ("a@x.com; b@y.com"). */
 export function primaryEmail(value: unknown): string {
@@ -162,17 +160,17 @@ export async function composeBillingEmail(
       const text = file?.toString("utf8") ?? "";
       if (looksLikeNfeXml(text)) xml = text;
     }
-    if ((!pdf || !xml) && Number(row.attempts ?? 1) < ATTACHMENT_ATTEMPTS)
-      throw new Error("Arquivos da NF-e ainda indisponíveis no Bling; nova tentativa em breve.");
+    if (!pdf || !xml)
+      throw new Error("NF-e autorizada, mas PDF e XML ainda não estão disponíveis no Bling; não enviar e-mail incompleto.");
 
     const nf = safeName(invoice.number || content.orderCode);
     const attachments: Attachment[] = [];
     if (pdf) attachments.push({ filename: `NF-${nf}.pdf`, content: pdf.toString("base64"), content_type: "application/pdf" });
     if (xml) attachments.push({ filename: `NF-${nf}.xml`, content: Buffer.from(xml, "utf8").toString("base64"), content_type: "application/xml" });
-    content.attachmentsMissing = !pdf || !xml;
 
     if (order.paymentType === "TERM" && order.orderType !== "SAMPLE") {
       const billing = await openBilling(database, order);
+      if (!billing) throw new Error("Cobrança de venda a prazo indisponível; não enviar NF-e sem o PDF de cobrança.");
       if (billing) {
         content.dueDate = billing.receivable.dueDate.toISOString();
         content.openCents = billing.openCents;
