@@ -27,7 +27,7 @@ echo "BACKUP: dump bytes=$(wc -c < "$DUMP") sha256=$(sha256sum "$DUMP" | cut -c1
 if ! diff -q /tmp/before.txt /tmp/after.txt > /dev/null; then
   echo "BACKUP: aviso - a origem mudou durante o dump (gravacoes concorrentes); a verificacao usa o estado do dump"
 fi
-pg_restore --no-owner --no-privileges --dbname="$DST" "$DUMP" || echo "BACKUP: pg_restore terminou com avisos (verificacao abaixo decide)"
+pg_restore --exit-on-error --single-transaction --no-owner --no-privileges --dbname="$DST" "$DUMP" || { echo "BACKUP: FALHA na restauracao"; exit 1; }
 # pg_dump uses a single snapshot; compare the copy against the source counts
 # taken right after the dump (identical when there were no writes meanwhile).
 counts "$DST" > /tmp/copy.txt
@@ -40,7 +40,7 @@ fi
 if [ -n "${REHEARSAL_DATABASE_NAME:-}" ]; then
   REH="${DST%/*}/${REHEARSAL_DATABASE_NAME}"
   psql "$DST" -X -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${REHEARSAL_DATABASE_NAME}\""
-  pg_restore --no-owner --no-privileges --dbname="$REH" "$DUMP" || true
+  pg_restore --exit-on-error --single-transaction --no-owner --no-privileges --dbname="$REH" "$DUMP" || { echo "REHEARSAL_COPY_FAILED"; exit 1; }
   counts "$REH" > /tmp/rehearsal.txt
   if diff -q /tmp/after.txt /tmp/rehearsal.txt > /dev/null; then echo "REHEARSAL_COPY_READY: ${REHEARSAL_DATABASE_NAME}"; else echo "REHEARSAL_COPY_MISMATCH"; exit 1; fi
 fi
