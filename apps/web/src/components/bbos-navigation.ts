@@ -60,6 +60,7 @@ export type BbosNavGroup = {
   id:
     | "overview"
     | "commercial"
+    | "export"
     | "prospecting"
     | "brand"
     | "supply"
@@ -118,7 +119,7 @@ export const bbosNavigation: BbosNavGroup[] = [
     id: "commercial",
     icon: ShoppingCart,
     label: "Vendas",
-    description: "Pedidos, clientes e exportações",
+    description: "Pedidos e clientes",
     tone: "blue",
     items: [
       {
@@ -144,6 +145,16 @@ export const bbosNavigation: BbosNavGroup[] = [
         roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
         keywords: ["cliente", "credito"],
       },
+    ],
+  },
+  {
+    // Own area: export carries documents, logistics, exchange and partners.
+    id: "export",
+    icon: Ship,
+    label: "Exportações",
+    description: "Carteira, logística, documentos e câmbio",
+    tone: "blue",
+    items: [
       {
         href: "/exportacoes",
         label: "Exportações",
