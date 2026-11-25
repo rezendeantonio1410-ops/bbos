@@ -149,12 +149,16 @@ await check("edição parcial preserva campos obrigatórios", async () => {
   const r = await signa(`/end-customers/${endCustomer.id}`, { method: "PATCH", body: { complement: "Sala 2" } });
   assert.equal(r.status, 200, `HTTP ${r.status} ${JSON.stringify(r.json)}`);
   assert.equal(r.json.complement, "Sala 2"); assert.equal(r.json.street, "Rua Homologação"); assert.equal(r.json.taxId, taxId);
-  const reopened = await client(await login("signa@homolog.test"))("/end-customers");
+  const freshCookie = await login("signa@homolog.test");
+  const fresh = client(freshCookie);
+  await assertFixture(fresh, freshCookie, "homolog-partner-signa", "homolog-user-signa");
+  const reopened = await fresh("/end-customers");
   assert.equal(reopened.status, 200);
   const saved = reopened.json.customers.find((item) => item.id === endCustomer.id);
   assert.ok(saved, "cliente ausente em nova sessão");
   assert.equal(saved.complement, "Sala 2");
   assert.equal(saved.taxId, taxId);
+  assert.equal(saved.name, `Cafeteria Teste ${run}`);
   for (const [field, value] of Object.entries(address)) {
     if (field !== "complement") assert.equal(saved[field], value, `edição alterou ${field}`);
   }
@@ -227,6 +231,33 @@ await check("outro distribuidor não cria pedido com cliente Signa", async () =>
   assert.ok([400, 403, 404].includes(r.status), `HTTP ${r.status}`);
   return `HTTP ${r.status}`;
 });
+// A competing request with different contents must never be accepted or
+// overwrite the committed order. Exercise only against disposable CI fixtures.
+if (local && process.env.CI === "true") {
+  await check("mesma chave com payloads divergentes em concorrência: um vencedor e um conflito", async () => {
+    assert.ok(results.every((r) => r.ok), "pré-condições falharam");
+    const submissionKey = randomUUID();
+    const common = { ...orderBody(), submissionKey, customerReference: `HOMOLOG-MIXED-${run}` };
+    const bodies = ["A", "B"].map((suffix) => ({ ...common, notes: `Concorrência fictícia ${suffix}` }));
+    const attempts = await Promise.all(bodies.map((body) => signa("/orders", { method: "POST", body })));
+    const accepted = attempts.map((r, i) => ({ r, i })).filter(({ r }) => [200, 201].includes(r.status));
+    assert.equal(accepted.length, 1, "exatamente um payload deve ser aceito");
+    const { r: winner, i } = accepted[0];
+    assert.equal(attempts[1 - i].status, 409);
+    const id = winner.json.id ?? winner.json.order?.id;
+    assert.ok(id);
+    const repeat = await signa("/orders", { method: "POST", body: bodies[i] });
+    assert.ok([200, 201].includes(repeat.status));
+    assert.equal(repeat.json.id ?? repeat.json.order?.id, id);
+    assert.equal(repeat.json.replayed, true);
+    const conflict = await signa("/orders", { method: "POST", body: bodies[1 - i] });
+    assert.equal(conflict.status, 409);
+    const detail = await signa(`/orders/${id}/detail`);
+    assert.equal(detail.status, 200);
+    return "1 aceito, 1 conflito; replay do vencedor preserva ID";
+  });
+}
+
 // Fiscal selection and DANFE access only on the disposable CI API.
 if (local && process.env.CI === "true") {
   await check("destinatário fiscal CNPJ/CPF separado do cliente comercial; DANFE indisponível sem autorização", async () => {
