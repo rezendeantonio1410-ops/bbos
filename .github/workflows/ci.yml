@@ -85,12 +85,17 @@ jobs:
         run: scripts/signa-db-integration.sh
 
   empty-database-bootstrap:
-    name: Empty database bootstrap through deploy path
+    name: Empty database bootstrap and upgrade (PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Render homologation uses PostgreSQL 18; retain 16 for regression coverage.
+        postgres: ['16', '18']
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: bbos_bootstrap_test
@@ -123,6 +128,14 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @bbos/database build
+
+      - name: Verify the selected PostgreSQL server major version
+        env:
+          EXPECTED_POSTGRES_MAJOR: ${{ matrix.postgres }}
+        run: |
+          actual=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          test "$actual" = "$EXPECTED_POSTGRES_MAJOR"
+          echo "PostgreSQL major verified: $actual"
 
       - name: Without the flag, an empty database still fails as before
         run: |
