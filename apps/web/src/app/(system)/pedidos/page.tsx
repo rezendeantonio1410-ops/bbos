@@ -2797,18 +2797,29 @@ function NewOrder({
                         <input
                           type="number"
                           min="1"
-                          value={line.quantity}
+                          inputMode="numeric"
+                          value={line.quantity || ""}
                           onChange={(event) =>
                             setLines((current) =>
                               current.map((item) =>
                                 item.id === line.id
                                   ? {
                                       ...item,
-                                      quantity: Math.max(
-                                        1,
-                                        Number(event.target.value),
-                                      ),
+                                      // Empty while typing; back to 1 on leaving the field.
+                                      quantity:
+                                        event.target.value === ""
+                                          ? 0
+                                          : Math.max(1, Number(event.target.value)),
                                     }
+                                  : item,
+                              ),
+                            )
+                          }
+                          onBlur={() =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.id === line.id && !item.quantity
+                                  ? { ...item, quantity: 1 }
                                   : item,
                               ),
                             )
