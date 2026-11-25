@@ -348,6 +348,7 @@ await check("pedido novo não simula pagamento e não aparece no financeiro de o
 await check("Pix de título existente: leitura repetida, acesso privado e ausência de baixa", async () => {
   // Fixed seed fixture in the isolated database only. Do not log QR/copyPaste:
   // the current static Pix key belongs to Bispo and must never be paid in tests.
+  // Only GitHub Actions loopback may exercise its payload; Render must deny it.
   const fixture = "/orders/homolog-order-pix/pix";
   const readTitle = async () => {
     const summary = await signa("/summary");
@@ -362,18 +363,29 @@ await check("Pix de título existente: leitura repetida, acesso privado e ausên
   assert.equal(titleBefore.open, 76.8);
   assert.equal(titleBefore.paidAt, null);
   const first = await signa(fixture);
-  assert.equal(first.status, 200, "Pix da fixture indisponível");
-  assert.match(first.headers.get("cache-control") ?? "", /no-store/);
-  assert.equal(first.json.orderCode, "H-PIX-0001");
-  assert.equal(first.json.amountCents, 7680);
-  assert.equal(first.json.openCents, 7680);
-  assert.match(first.json.dueDate, /^\d{4}-\d{2}-\d{2}$/);
-  assert.ok(typeof first.json.copyPaste === "string" && first.json.copyPaste.startsWith("000201"), "BR Code ausente");
-  assert.ok(typeof first.json.qrSvg === "string" && first.json.qrSvg.includes("<svg"), "QR ausente");
-  const again = await signa(fixture);
-  assert.equal(again.status, 200);
-  assert.equal(again.json.openCents, 7680, "consulta alterou saldo");
-  assert.equal(again.json.copyPaste === first.json.copyPaste, true, "consulta alterou BR Code");
+  const ciStaticPix = local && process.env.GITHUB_ACTIONS === "true" && !process.env.RENDER;
+  if (ciStaticPix) {
+    assert.equal(first.status, 200, "Pix da fixture indisponível");
+    assert.match(first.headers.get("cache-control") ?? "", /no-store/);
+    assert.equal(first.json.orderCode, "H-PIX-0001");
+    assert.equal(first.json.amountCents, 7680);
+    assert.equal(first.json.openCents, 7680);
+    assert.match(first.json.dueDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(typeof first.json.copyPaste === "string" && first.json.copyPaste.startsWith("000201"), "BR Code ausente");
+    assert.ok(typeof first.json.qrSvg === "string" && first.json.qrSvg.includes("<svg"), "QR ausente");
+    const again = await signa(fixture);
+    assert.equal(again.status, 200);
+    assert.equal(again.json.openCents, 7680, "consulta alterou saldo");
+    assert.equal(again.json.copyPaste === first.json.copyPaste, true, "consulta alterou BR Code");
+  } else {
+    // Outside disposable CI, a fictitious company must NEVER return a payable QR.
+    assert.equal(first.status, 400, "Pix real não pode estar disponível na homologação");
+    assert.match(String(first.json?.message ?? ""), /chave Pix desta empresa/i);
+    assert.ok(!first.json?.copyPaste && !first.json?.qrSvg, "payload Pix indevido");
+    const again = await signa(fixture);
+    assert.equal(again.status, 400, "Pix habilitado indevidamente em nova consulta");
+    assert.ok(!again.json?.copyPaste && !again.json?.qrSvg, "payload Pix indevido");
+  }
   const foreign = await other(fixture);
   assert.ok([403, 404].includes(foreign.status), "Pix de outro parceiro acessível");
   const id = order?.id ?? order?.order?.id;
