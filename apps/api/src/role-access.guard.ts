@@ -113,6 +113,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   FiscalInboundController: OPERATIONS_FINANCE,
   MarketplacesController: MARKETPLACE,
   AdminStorefrontMediaController: LEADERSHIP,
+  ExportsController: OPERATIONS_FINANCE,
 };
 
 const HANDLER_ROLE_POLICY: Readonly<
