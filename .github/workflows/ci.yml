@@ -183,6 +183,64 @@ jobs:
           pnpm db:migrate:deploy | tee deploy.log; grep -q "No pending migrations" deploy.log
           psql "$DATABASE_URL" -Atc "SELECT to_regclass('public.\"PartnerOrderDraft\"'), to_regclass('public.\"PartnerOrderSubmission\"'), to_regclass('public.\"PartnerEndCustomer_active_scoped_cnpj_unique\"')" | grep -qx '"PartnerOrderDraft"|"PartnerOrderSubmission"|"PartnerEndCustomer_active_scoped_cnpj_unique"'
 
+
+      - name: Rehearse homologation-to-release upgrade with synthetic records
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reconstruct the previous migration set on a fresh loopback database.
+          # Never run this against Render or any production database.
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@127.0.0.1:5432/bbos_bootstrap_test'
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE bbos_signa_upgrade_test'
+          export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/bbos_signa_upgrade_test
+          migrations=packages/database/prisma/migrations
+          held=$(mktemp -d)
+          names=(20261124120000_prospects_and_geolocation 20261124150000_finance_settings 20261124170000_finance_cash_start 20261124190000_cnpj_alphanumeric)
+          restore() {
+            for name in "${names[@]}"; do
+              if [[ -d "$held/$name" ]]; then mv "$held/$name" "$migrations/$name"; fi
+            done
+            rmdir "$held"
+          }
+          trap restore EXIT
+          for name in "${names[@]}"; do mv "$migrations/$name" "$held/"; done
+          BBOS_EMPTY_DATABASE_BOOTSTRAP=true pnpm db:migrate:deploy
+          password="Aa1$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          BBOS_HOMOLOG_SEED=true BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO "PartnerOrderDraft"(id,"companyId","partnerId","userId",status,version,payload,"updatedAt")
+          VALUES ('homolog-upgrade-draft','homolog-co','homolog-partner-signa','homolog-user-signa','DRAFT',3,'{"notes":"synthetic upgrade rehearsal"}'::jsonb,now());
+          SQL
+          snapshot() {
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At <<'SQL'
+          SELECT 'draft|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "PartnerOrderDraft" t WHERE id='homolog-upgrade-draft'
+          UNION ALL SELECT 'receivable|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "AccountsReceivable" t WHERE id='homolog-ar-pix'
+          UNION ALL SELECT 'order|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "SalesOrder" t WHERE id='homolog-order-pix'
+          UNION ALL SELECT 'price|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "CustomerProductPrice" t WHERE "companyId"='homolog-co'
+          UNION ALL SELECT 'fiscal|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "FiscalDocument" t WHERE id='homolog-nfe-pix'
+          ORDER BY 1;
+          SQL
+          }
+          snapshot > "$RUNNER_TEMP/signa-before-upgrade"
+          for check in draft receivable order fiscal; do grep -Eq "^${check}[|]1[|]" "$RUNNER_TEMP/signa-before-upgrade"; done
+          grep -Eq '^price[|]12[|]' "$RUNNER_TEMP/signa-before-upgrade"
+          restore
+          trap - EXIT
+          # Use the same strict migrate:deploy path as the live API; no empty reset flag.
+          BBOS_EMPTY_DATABASE_BOOTSTRAP=false pnpm db:migrate:deploy
+          snapshot > "$RUNNER_TEMP/signa-after-upgrade"
+          cmp -s "$RUNNER_TEMP/signa-before-upgrade" "$RUNNER_TEMP/signa-after-upgrade"
+          expected=$(ls -d "$migrations"/*/ | wc -l)
+          applied=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL")
+          test "$applied" = "$expected"
+          test "$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL")" = 0
+          BBOS_EMPTY_DATABASE_BOOTSTRAP=false pnpm db:migrate:deploy | tee "$RUNNER_TEMP/signa-upgrade-repeat.log"
+          grep -q "No pending migrations" "$RUNNER_TEMP/signa-upgrade-repeat.log"
+          snapshot > "$RUNNER_TEMP/signa-after-repeat"
+          cmp -s "$RUNNER_TEMP/signa-before-upgrade" "$RUNNER_TEMP/signa-after-repeat"
+          echo "PASS: synthetic draft, order, receivable, prices and fiscal marker unchanged through upgrade and repeat."
+
   signa-authenticated-e2e:
     name: Signa authenticated API on disposable PostgreSQL
     runs-on: ubuntu-latest
