@@ -7,7 +7,7 @@ import {
   renderPartnerOrderConfirmedEmail,
 } from "./customer-email-template";
 import { buildCustomerOrderPdf } from "./customer-order-pdf";
-import { isBillingEmailTemplate } from "./billing-emails";
+import { isBillingEmailTemplate, replacedByInvoiceEmail } from "./billing-emails";
 import { NotificationSkipped, composeBillingEmail } from "./billing-email.service";
 
 type TransactionalEmail = {
@@ -72,6 +72,8 @@ export class CustomerNotificationService {
 
   private async sendEmail(row: any) {
     const payload = row.payload || {};
+    if (replacedByInvoiceEmail(row))
+      throw new NotificationSkipped("Substituído pelo e-mail da NF com PDF e XML.");
     if (isBillingEmailTemplate(row.template)) {
       const email = await composeBillingEmail(this.database, row, {
         assets: this.emailAssets(),
@@ -146,7 +148,7 @@ export class CustomerNotificationService {
        UPDATE "CustomerNotificationOutbox" n
           SET status='PROCESSING',attempts=n.attempts+1,"lastError"=NULL,"updatedAt"=NOW()
          FROM candidate WHERE n.id=candidate.id
-       RETURNING n.id,n.channel,n.destination,n.template,n.payload,n.attempts`,
+       RETURNING n.id,n.channel,n.destination,n.template,n.payload,n.attempts,n."salesOrderId",n."createdAt"`,
       activationDate,
     );
     const row = rows[0];

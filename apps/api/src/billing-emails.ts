@@ -35,6 +35,23 @@ export function billingEmailsActivation(
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/**
+ * Once billing e-mails are on, a B2B order's invoice goes out as INVOICE_ISSUED
+ * (with PDF and XML). The plain "Nota fiscal emitida" status e-mail for the same
+ * order would be a second message about the same invoice, so it is skipped.
+ * Storefront orders (no salesOrderId) keep the status e-mail.
+ */
+export function replacedByInvoiceEmail(
+  row: { template?: unknown; salesOrderId?: unknown; createdAt?: unknown; payload?: unknown },
+  activation: Date | null = billingEmailsActivation(),
+): boolean {
+  if (!activation || row.template !== "ORDER_STATUS" || !row.salesOrderId) return false;
+  const payload = (row.payload ?? {}) as { eventType?: unknown };
+  if (payload.eventType !== "INVOICE_AUTHORIZED") return false;
+  const created = row.createdAt ? new Date(row.createdAt as string) : null;
+  return Boolean(created && !Number.isNaN(created.getTime()) && created >= activation);
+}
+
 function localParts(now: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TIME_ZONE,

@@ -4,6 +4,7 @@ import {
   billingEmailKeys,
   billingEmailSubject,
   billingEmailsActivation,
+  replacedByInvoiceEmail,
   formatDueDate,
   isTrustedFiscalUrl,
   reminderDueDate,
@@ -181,4 +182,15 @@ test("reminder is skipped when the due date changed after queueing", async () =>
     composeBillingEmail(fakeDatabase({ receivable: open, paymentType: "TERM" }), { template: "RECEIVABLE_REMINDER", payload: { receivableId: "ar1", dueDate: "2026-12-10" } }, { assets }),
     NotificationSkipped,
   );
+});
+
+test("NF status e-mail is skipped only when the invoice e-mail replaces it", () => {
+  const on = new Date("2026-11-26T11:00:00Z");
+  const nf = { template: "ORDER_STATUS", salesOrderId: "so-1", createdAt: "2026-11-26T12:00:00Z", payload: { eventType: "INVOICE_AUTHORIZED" } };
+  assert.equal(replacedByInvoiceEmail(nf, on), true);
+  assert.equal(replacedByInvoiceEmail(nf, null), false, "billing e-mails off: keep status e-mail");
+  assert.equal(replacedByInvoiceEmail({ ...nf, salesOrderId: null }, on), false, "storefront order keeps it");
+  assert.equal(replacedByInvoiceEmail({ ...nf, createdAt: "2026-11-25T12:00:00Z" }, on), false, "before activation");
+  assert.equal(replacedByInvoiceEmail({ ...nf, payload: { eventType: "SHIPPED" } }, on), false);
+  assert.equal(replacedByInvoiceEmail({ ...nf, template: "INVOICE_ISSUED" }, on), false);
 });
