@@ -10,11 +10,11 @@ import {
   useEffect,
   useState,
 } from "react";
-import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { resolveStorefrontProduct } from "@bbos/shared";
 import { freeShippingRegion } from "@/lib/storefront-checkout-validation";
 import styles from "./storefront-cart.module.css";
-import SensorySignature from "./SensorySignature";
+import sacola from "./sacola.module.css";
 import { storefrontCommerce } from "./storefront-catalog";
 
 export type StoreProductStory = {
@@ -58,6 +58,19 @@ const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     v / 100,
   );
+/** "sex, 5/dez" counting business days from today (weekends skipped). */
+const arrivalDate = (businessDays: number) => {
+  const date = new Date();
+  let left = Math.max(1, businessDays);
+  while (left > 0) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) left -= 1;
+  }
+  return date
+    .toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" })
+    .replace(/\./g, "");
+};
 const groundProductIds = new Set(["essencial", "intenso"]);
 const preparationFor = (product: Pick<StoreProduct, "id">): Preparation =>
   groundProductIds.has(product.id) ? "Moído" : "Grãos";
@@ -188,41 +201,6 @@ const cartRecommendationOrder: Record<string, string[]> = {
   raros: ["caramelo", "essencial", "sublime"],
 };
 
-function CartItemStory({ item }: { item: CartItem }) {
-  const story = item.story ?? cartProductStories[item.id];
-  if (!story) return null;
-
-  return (
-    <details className={styles.itemStory}>
-      <summary>
-        Conhecer este café <span>+</span>
-      </summary>
-      <div>
-        <p className={styles.storyPromise}>{story.promise}</p>
-        <div className={styles.storySensory}>
-          <SensorySignature
-            name={item.name}
-            notes={item.notes}
-            sensory={story.sensory}
-          />
-        </div>
-        <dl>
-          <div>
-            <dt>Combina com</dt>
-            <dd>{story.bestFor}</dd>
-          </div>
-          <div>
-            <dt>Para preparar</dt>
-            <dd>{story.brew}</dd>
-          </div>
-        </dl>
-        <blockquote>
-          “{story.founderNote}”<cite>Suzi e José · origem e prova</cite>
-        </blockquote>
-      </div>
-    </details>
-  );
-}
 
 export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -241,6 +219,7 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   } | null>(null);
   const [couponMessage, setCouponMessage] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+  const [couponOpen, setCouponOpen] = useState(false);
 
   useEffect(() => {
     // "Trocar CEP" on the checkout comes back here with ?sacola=1.
@@ -285,6 +264,22 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
       document.body.style.overflow = "";
     };
   }, [visible]);
+
+  // The CEP typed once is remembered; the freight is recalculated by itself
+  // whenever the bag opens or changes, so the customer never types it twice.
+  useEffect(() => {
+    if (cep) return;
+    try {
+      const saved = localStorage.getItem("bispo-cep");
+      if (saved) setCep(saved);
+    } catch {}
+  }, [cep]);
+  useEffect(() => {
+    if (!visible || !items.length || quote || loading || error) return;
+    if (cep.replace(/\D/g, "").length !== 8) return;
+    void calculate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, items, cep, quote]);
 
   const subtotal = items.reduce(
     (sum, item) => sum + item.priceCents * item.quantity,
@@ -346,8 +341,8 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     setQuotes([]);
     setCoupon(null);
   };
-  async function calculate(event: FormEvent) {
-    event.preventDefault();
+  async function calculate(event?: FormEvent) {
+    event?.preventDefault();
     setError("");
     if (cep.replace(/\D/g, "").length !== 8) {
       setError("Digite um CEP válido com 8 números.");
@@ -375,6 +370,9 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
         throw new Error("Nenhuma modalidade de entrega disponível.");
       setQuotes(options);
       setQuote(options[0]);
+      try {
+        localStorage.setItem("bispo-cep", cep);
+      } catch {}
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Não foi possível calcular.",
@@ -440,187 +438,54 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
             aria-label="Fechar sacola"
           />
           <aside
-            className={styles.drawer}
+            className={sacola.drawer}
             role="dialog"
             aria-modal="true"
             aria-labelledby="cart-title"
           >
-            <header>
-              <div>
-                <small>SUA ESCOLHA</small>
-                <h2 id="cart-title">Seu café está na sacola</h2>
-              </div>
+            <header className={sacola.header}>
+              <h2 id="cart-title">
+                Sua sacola{" "}
+                {count > 0 && (
+                  <span>
+                    · {count} {count === 1 ? "item" : "itens"}
+                  </span>
+                )}
+              </h2>
               <button
+                type="button"
                 onClick={() => setVisible(false)}
                 aria-label="Fechar sacola"
               >
                 <X />
               </button>
             </header>
-            <nav aria-label="Etapas">
-              <strong>1 Sua escolha</strong>
-              <span>2 Entrega</span>
-              <span>3 Pagamento</span>
-            </nav>
             {!items.length ? (
-              <div className={styles.empty}>
+              <div className={sacola.empty}>
                 <ShoppingBag />
                 <p>Sua sacola está vazia.</p>
-                <button onClick={() => setVisible(false)}>
+                <button type="button" onClick={() => setVisible(false)}>
                   Escolher um café
                 </button>
               </div>
             ) : (
               <>
-                <main>
-                  {items.map((item) => (
-                    <article key={item.id}>
-                      <div className={styles.photo}>
-                        {item.image ? (
-                          <Image
-                            src={item.image}
-                            alt=""
-                            width={70}
-                            height={78}
-                          />
-                        ) : (
-                          <span>BISPO</span>
-                        )}
-                      </div>
-                      <div>
-                        <small>{item.line}</small>
-                        <h3>{item.name}</h3>
-                        <p>{item.notes}</p>
-                        <p className={styles.productFacts}>
-                          {item.weightGrams} g <span aria-hidden="true">·</span>{" "}
-                          {item.grind === "Moído" ? "Moído" : "Em grãos"}{" "}
-                          <span aria-hidden="true">·</span> Torra média
-                        </p>
-                        <b>{money(item.priceCents)}</b>
-                      </div>
-                      <div className={styles.sensorySlot}>
-                        <SensorySignature
-                          compact
-                          name={item.name}
-                          notes={item.notes}
-                          sensory={item.story?.sensory}
-                        />
-                      </div>
-                      <div className={styles.qty}>
-                        <button
-                          onClick={() => quantity(item.id, item.quantity - 1)}
-                          aria-label={`Diminuir quantidade de ${item.name}`}
-                        >
-                          <Minus />
-                        </button>
-                        <span>{item.quantity}</span>
-                        <button
-                          onClick={() => quantity(item.id, item.quantity + 1)}
-                          aria-label={`Aumentar quantidade de ${item.name}`}
-                        >
-                          <Plus />
-                        </button>
-                      </div>
-                      <CartItemStory item={item} />
-                    </article>
-                  ))}
-                  {recommendations.length > 0 && (
-                    <section className={styles.recommendations}>
-                      <div className={styles.recommendationIntro}>
-                        <small>COMPLETE SUA SELEÇÃO</small>
-                        <h3>Dois perfis, mais possibilidades.</h3>
-                        <p>
-                          Acrescente uma xícara diferente para provar lado a
-                          lado ou alternar ao longo da semana.
-                        </p>
-                      </div>
-                      <div className={styles.recommendationGrid}>
-                        {recommendations.map((product) => (
-                          <button
-                            type="button"
-                            key={product.id}
-                            className={styles.recommendation}
-                            onClick={() => add(product)}
-                            aria-label={`Adicionar café ${product.name} à sacola por ${money(product.priceCents)}`}
-                          >
-                            <span className={styles.recommendationPhoto}>
-                              {product.image ? (
-                                <Image
-                                  src={product.image}
-                                  alt=""
-                                  width={52}
-                                  height={62}
-                                />
-                              ) : (
-                                <span>BISPO</span>
-                              )}
-                            </span>
-                            <span className={styles.recommendationCopy}>
-                              <small>{product.line}</small>
-                              <b>{product.name}</b>
-                              <em>{product.notes}</em>
-                            </span>
-                            <strong>+ {money(product.priceCents)}</strong>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                  <section className={styles.bispo}>
-                    <small>ESCOLHA BISPO</small>
-                    <h3>Uma escolha para querer outra xícara.</h3>
-                    <p>
-                      <Check /> Escolhido por Suzi e José, da origem à xícara.
-                    </p>
-                  </section>
-                  <section className={styles.choice}>
-                    <small>SUA PRÓXIMA ESCOLHA</small>
-                    <h3>Uma compra agora. A próxima, quando você quiser.</h3>
-                    <div>
-                      <button
-                        className={mode === "now" ? styles.active : ""}
-                        onClick={() => setMode("now")}
-                      >
-                        Somente esta compra
-                      </button>
-                      <button
-                        className={mode === "reminder" ? styles.active : ""}
-                        onClick={() => setMode("reminder")}
-                      >
-                        Receber regularmente
-                      </button>
-                    </div>
-                    {mode === "reminder" && (
-                      <div className={styles.rhythm}>
-                        <p>
-                          Escolha um intervalo de referência. Nada será cobrado
-                          ou enviado automaticamente.
-                        </p>
-                        {[15, 30, 45].map((days) => (
-                          <button
-                            className={rhythm === days ? styles.active : ""}
-                            key={days}
-                            onClick={() => setRhythm(days)}
-                          >
-                            Em {days} dias
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                  <section className={styles.progress}>
-                    <b>
-                      {freeShippingRegion(cep) === false
-                        ? "Frete grátis vale para Sul e Sudeste"
-                        : remaining
-                          ? "Faltam " + money(remaining) + " para o frete grátis"
-                          : freeShippingRegion(cep)
-                            ? "Frete grátis alcançado"
-                            : "Frete grátis no Sul e Sudeste — informe o CEP"}
-                    </b>
+                <main className={sacola.body}>
+                  <section className={sacola.freeShipping} aria-live="polite">
                     {freeShippingRegion(cep) === false ? (
-                      <small>Para o seu CEP o frete é calculado abaixo.</small>
+                      <p>Frete grátis vale só para Sul e Sudeste.</p>
+                    ) : remaining ? (
+                      <p>
+                        Faltam <b>{money(remaining)}</b> para o{" "}
+                        <b>frete grátis</b>
+                        <small> (Sul e Sudeste)</small>
+                      </p>
                     ) : (
+                      <p>
+                        <b>Frete grátis</b> garantido no Sul e Sudeste
+                      </p>
+                    )}
+                    {freeShippingRegion(cep) !== false && (
                       <div>
                         <span
                           style={{ width: Math.min(100, subtotal / 270) + "%" }}
@@ -628,53 +493,105 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                       </div>
                     )}
                   </section>
-                </main>
-                <footer>
-                  <section className={styles.shipping}>
-                    <div className={styles.shippingTitle}>
-                      <small>PASSO 2</small>
-                      <h3>Onde entregamos seu café?</h3>
-                    </div>
+
+                  <ul className={sacola.items}>
+                    {items.map((item) => (
+                      <li key={item.id}>
+                        <div className={sacola.photo}>
+                          {item.image ? (
+                            <Image src={item.image} alt="" width={64} height={76} />
+                          ) : (
+                            <span>BISPO</span>
+                          )}
+                        </div>
+                        <div className={sacola.itemInfo}>
+                          <h3>{item.name}</h3>
+                          <p>
+                            {item.weightGrams} g ·{" "}
+                            {item.grind === "Moído" ? "Moído" : "Em grãos"} ·{" "}
+                            {item.notes}
+                          </p>
+                          <div className={sacola.itemActions}>
+                            <div className={sacola.qty}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  quantity(item.id, item.quantity - 1)
+                                }
+                                aria-label={`Diminuir quantidade de ${item.name}`}
+                              >
+                                <Minus />
+                              </button>
+                              <span aria-live="polite">{item.quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  quantity(item.id, item.quantity + 1)
+                                }
+                                aria-label={`Aumentar quantidade de ${item.name}`}
+                              >
+                                <Plus />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              className={sacola.remove}
+                              onClick={() => quantity(item.id, 0)}
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+                        <b className={sacola.itemPrice}>
+                          {money(item.priceCents * item.quantity)}
+                        </b>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <section className={sacola.delivery}>
+                    <h3>Entrega</h3>
                     <form onSubmit={calculate}>
-                      <label htmlFor="cart-cep">CEP de entrega</label>
-                      <div>
-                        <input
-                          id="cart-cep"
-                          value={cep}
-                          onChange={(e) => {
-                            setQuote(null);
-                            setQuotes([]);
-                            setError("");
-                            setCep(
-                              e.target.value
-                                .replace(/\D/g, "")
-                                .slice(0, 8)
-                                .replace(/(\d{5})(\d)/, "$1-$2"),
-                            );
-                          }}
-                          inputMode="numeric"
-                          autoComplete="postal-code"
-                          placeholder="00000-000"
-                        />
-                        <button disabled={loading} type="submit">
-                          {loading ? "Calculando…" : "Calcular"}
-                        </button>
-                      </div>
+                      <label htmlFor="cart-cep" className={sacola.srOnly}>
+                        CEP de entrega
+                      </label>
+                      <input
+                        id="cart-cep"
+                        value={cep}
+                        onChange={(e) => {
+                          setQuote(null);
+                          setQuotes([]);
+                          setError("");
+                          setCep(
+                            e.target.value
+                              .replace(/\D/g, "")
+                              .slice(0, 8)
+                              .replace(/(\d{5})(\d)/, "$1-$2"),
+                          );
+                        }}
+                        inputMode="numeric"
+                        autoComplete="postal-code"
+                        placeholder="Seu CEP"
+                      />
+                      <button disabled={loading} type="submit">
+                        {loading ? "Calculando…" : "Calcular"}
+                      </button>
                     </form>
                     <div aria-live="polite">
-                      {error && <p className={styles.error}>{error}</p>}
+                      {error && <p className={sacola.error}>{error}</p>}
                       {quotes.map((option) => (
                         <button
                           type="button"
                           key={option.id}
-                          className={`${styles.quote} ${quote?.id === option.id ? styles.selectedQuote : ""}`}
+                          aria-pressed={quote?.id === option.id}
+                          className={sacola.quote}
                           onClick={() => setQuote(option)}
                         >
+                          <i aria-hidden="true" />
                           <span>
                             <b>{option.name}</b>
                             <small>
-                              {option.carrierName} · até {option.deliveryDays}{" "}
-                              dias úteis
+                              Chega até {arrivalDate(option.deliveryDays)}
                             </small>
                           </span>
                           <strong>
@@ -686,52 +603,149 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                       ))}
                     </div>
                   </section>
-                  <section className={styles.coupon}>
-                    <label htmlFor="cart-coupon">Cupom de benefício</label>
-                    <div>
+
+                  {recommendations.length > 0 && (
+                    <section className={sacola.suggestions}>
+                      <h3>Combina com o seu café</h3>
+                      <div>
+                        {recommendations.map((product) => (
+                          <button
+                            type="button"
+                            key={product.id}
+                            onClick={() => add(product)}
+                            aria-label={`Adicionar ${product.name} por ${money(product.priceCents)}`}
+                          >
+                            {product.image ? (
+                              <Image
+                                src={product.image}
+                                alt=""
+                                width={44}
+                                height={52}
+                              />
+                            ) : null}
+                            <span>
+                              <b>{product.name}</b>
+                              <small>{product.notes}</small>
+                              <em>{money(product.priceCents)}</em>
+                            </span>
+                            <Plus aria-hidden="true" />
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  <section className={sacola.extras}>
+                    <label className={sacola.reminder}>
                       <input
-                        id="cart-coupon"
-                        value={couponInput}
-                        onChange={(event) => {
-                          setCouponInput(event.target.value.toUpperCase());
-                          setCoupon(null);
-                          setCouponMessage("");
-                        }}
-                        placeholder="Digite seu cupom"
+                        type="checkbox"
+                        checked={mode === "reminder"}
+                        onChange={(e) =>
+                          setMode(e.target.checked ? "reminder" : "now")
+                        }
                       />
+                      <span>
+                        Me lembre de comprar de novo em{" "}
+                        <select
+                          value={rhythm}
+                          onChange={(e) => {
+                            setRhythm(Number(e.target.value));
+                            setMode("reminder");
+                          }}
+                          aria-label="Intervalo do lembrete"
+                        >
+                          {[15, 30, 45].map((days) => (
+                            <option key={days} value={days}>
+                              {days} dias
+                            </option>
+                          ))}
+                        </select>
+                        <small>Só um aviso. Nada é cobrado automaticamente.</small>
+                      </span>
+                    </label>
+                    {couponOpen || coupon ? (
+                      <div className={sacola.coupon}>
+                        <input
+                          id="cart-coupon"
+                          value={couponInput}
+                          onChange={(event) => {
+                            setCouponInput(event.target.value.toUpperCase());
+                            setCoupon(null);
+                            setCouponMessage("");
+                          }}
+                          placeholder="Código do cupom"
+                          aria-label="Código do cupom"
+                        />
+                        <button
+                          type="button"
+                          onClick={applyCoupon}
+                          disabled={couponLoading || !couponInput.trim()}
+                        >
+                          {couponLoading ? "…" : "Aplicar"}
+                        </button>
+                        {couponMessage && (
+                          <small className={coupon ? sacola.ok : sacola.error}>
+                            {couponMessage}
+                          </small>
+                        )}
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        onClick={applyCoupon}
-                        disabled={couponLoading || !couponInput.trim()}
+                        className={sacola.couponLink}
+                        onClick={() => setCouponOpen(true)}
                       >
-                        {couponLoading ? "Aplicando…" : "Aplicar"}
+                        Tem um cupom?
                       </button>
-                    </div>
-                    {couponMessage && (
-                      <small
-                        className={coupon ? styles.couponOk : styles.error}
-                      >
-                        {couponMessage}
-                      </small>
                     )}
                   </section>
-                  <div className={styles.total}>
-                    <span>Total</span>
-                    <b>
-                      {money(
-                        subtotal -
-                          (coupon?.discountCents || 0) +
-                          (quote?.priceCents || 0),
-                      )}
-                    </b>
-                  </div>
-                  <button disabled={!quote} onClick={continueToCheckout}>
-                    Finalizar minha escolha →
+                </main>
+                <footer className={sacola.footer}>
+                  <dl>
+                    <div>
+                      <dt>Produtos</dt>
+                      <dd>{money(subtotal)}</dd>
+                    </div>
+                    {coupon && (
+                      <div>
+                        <dt>Cupom {coupon.code}</dt>
+                        <dd>− {money(coupon.discountCents)}</dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>Frete</dt>
+                      <dd>
+                        {quote
+                          ? quote.priceCents
+                            ? money(quote.priceCents)
+                            : "Grátis"
+                          : "informe o CEP"}
+                      </dd>
+                    </div>
+                    <div className={sacola.grand}>
+                      <dt>Total</dt>
+                      <dd>
+                        {money(
+                          subtotal -
+                            (coupon?.discountCents || 0) +
+                            (quote?.priceCents || 0),
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                  <button
+                    type="button"
+                    className={sacola.cta}
+                    onClick={() =>
+                      quote
+                        ? continueToCheckout()
+                        : document.getElementById("cart-cep")?.focus()
+                    }
+                  >
+                    {quote ? "Continuar para pagamento →" : "Calcular o frete para continuar"}
                   </button>
-                  <small>
-                    {quote
-                      ? "Torra própria · Escolha acompanhada · Entrega calculada pelo CEP"
-                      : "Informe o CEP para continuar."}
+                  <small className={sacola.trust}>
+                    Pix ou cartão · pagamento pelo Mercado Pago · sem cadastro
                   </small>
                 </footer>
               </>

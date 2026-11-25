@@ -1,0 +1,450 @@
+/* Sacola v2: one scroll, everything to decide in view, total and button always visible. */
+.drawer {
+  --ink: #0e191d;
+  --muted: rgba(14, 25, 29, 0.62);
+  --line: rgba(13, 29, 23, 0.1);
+  --accent: #c8642a;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: min(480px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fbfaf7;
+  color: var(--ink);
+  box-shadow: -28px 0 80px #0004;
+  font-size: 14px;
+}
+
+.header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfaf7;
+}
+.header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.header h2 span {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 15px;
+}
+.header button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px 20px;
+}
+.body h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.freeShipping {
+  margin: 14px 0 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f3ede3;
+}
+.freeShipping p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.freeShipping p:only-child {
+  margin: 0;
+}
+.freeShipping small {
+  color: var(--muted);
+}
+.freeShipping div {
+  height: 6px;
+  border-radius: 99px;
+  background: #e2d9cb;
+  overflow: hidden;
+}
+.freeShipping div span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 300ms ease;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.items li {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+.photo {
+  width: 64px;
+  height: 76px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #efe9df;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 800;
+}
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.itemInfo h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.itemInfo p {
+  margin: 3px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.itemActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.qty {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(13, 29, 23, 0.22);
+  border-radius: 999px;
+  height: 40px;
+}
+.qty button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.qty button svg {
+  width: 16px;
+  height: 16px;
+}
+.qty span {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 700;
+}
+.remove {
+  border: 0;
+  background: none;
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.itemPrice {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.delivery {
+  padding: 18px 0 6px;
+}
+.delivery form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.delivery input {
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(13, 29, 23, 0.25);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 16px;
+  color: inherit;
+}
+.delivery form button {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.quote {
+  width: 100%;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: 1px solid rgba(13, 29, 23, 0.18);
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.quote i {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid rgba(13, 29, 23, 0.45);
+  border-radius: 50%;
+}
+.quote[aria-pressed="true"] {
+  border: 2px solid var(--ink);
+}
+.quote[aria-pressed="true"] i {
+  border: 5px solid var(--ink);
+}
+.quote span {
+  display: grid;
+  gap: 2px;
+}
+.quote small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.suggestions {
+  padding: 18px 0 4px;
+}
+.suggestions > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.suggestions button {
+  display: grid;
+  grid-template-columns: 36px 1fr 20px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.suggestions img {
+  width: 36px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.suggestions span {
+  display: grid;
+  min-width: 0;
+}
+.suggestions b {
+  font-size: 13px;
+}
+.suggestions small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 10px;
+}
+.suggestions em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+}
+.suggestions svg {
+  width: 18px;
+  height: 18px;
+}
+
+.extras {
+  display: grid;
+  gap: 12px;
+  padding: 18px 0 0;
+}
+.reminder {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: start;
+  font-size: 13px;
+  cursor: pointer;
+}
+.reminder input {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+}
+.reminder select {
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+}
+.reminder small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.couponLink {
+  justify-self: start;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  color: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.coupon {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.coupon input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(13, 29, 23, 0.25);
+  border-radius: 10px;
+  font-size: 16px;
+  text-transform: uppercase;
+}
+.coupon button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.coupon small {
+  grid-column: 1 / -1;
+}
+
+.footer {
+  flex: 0 0 auto;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 -10px 30px rgba(13, 29, 23, 0.06);
+}
+.footer dl {
+  margin: 0 0 10px;
+  display: grid;
+  gap: 3px;
+}
+.footer dl div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+.footer dt,
+.footer dd {
+  margin: 0;
+}
+.footer .grand {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+.cta {
+  width: 100%;
+  min-height: 54px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.trust {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: #a1261c;
+  font-size: 12px;
+}
+.ok {
+  color: #22663f;
+  font-size: 12px;
+}
+.empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  text-align: center;
+}
+.empty button {
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
