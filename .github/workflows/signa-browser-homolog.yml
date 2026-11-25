@@ -1,0 +1,261 @@
+name: Signa browser homologation
+
+on:
+  pull_request:
+    branches:
+      - test/signa-e2e-final-ui-reconcile-20261124
+      - release/bbos-rc1-consolidation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    name: Signa desktop and mobile browser smoke (isolated)
+    # Pin the runner to the Ubuntu LTS supported by Playwright 1.56.1.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bbos_signa_browser
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bbos_signa_browser
+      BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
+      BBOS_SCHEDULED_JOBS_DISABLED: "true"
+      BBOS_HOMOLOG_SEED: "true"
+      BBOS_API_INTERNAL_URL: http://127.0.0.1:3101/api
+      API_INTERNAL_URL: http://127.0.0.1:3101/api
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3101/api
+      NEXT_TELEMETRY_DISABLED: "1"
+      HOST: 127.0.0.1
+      PORT: "3101"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm db:migrate:deploy
+      - name: Seed synthetic accounts only
+        run: |
+          password="Aa1$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          echo "SIGNA_BROWSER_PASSWORD=$password" >> "$GITHUB_ENV"
+          BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+      - name: Install isolated browser runner
+        run: |
+          npm install --prefix "$RUNNER_TEMP/signa-browser" --no-save --package-lock=false playwright@1.56.1
+          "$RUNNER_TEMP/signa-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Run browser checks on loopback only
+        shell: bash
+        run: |
+          (cd apps/api && node dist/main.js) > "$RUNNER_TEMP/signa-browser-api.log" 2>&1 &
+          api_pid=$!
+          (cd apps/web && pnpm exec next start --hostname 127.0.0.1 --port 3100) > "$RUNNER_TEMP/signa-browser-web.log" 2>&1 &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            api_status=$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:3101/api/partner-portal/summary || true)
+            web_status=$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/login || true)
+            if [[ "$api_status" =~ ^(401|403)$ && "$web_status" == 200 ]]; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          mkdir -p "$RUNNER_TEMP/signa-browser/evidence"
+          cat > "$RUNNER_TEMP/signa-browser/smoke.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import { chromium, devices } from 'playwright';
+
+          const origin = 'http://127.0.0.1:3100';
+          const password = process.env.SIGNA_BROWSER_PASSWORD;
+          assert.ok(password);
+          const browser = await chromium.launch();
+          const address = { postalCode:'86010010', street:'Rua Fictícia de Teste', district:'Centro', city:'Londrina', state:'PR' };
+
+          async function value(locator, expected) {
+            await locator.waitFor({state:'visible'});
+            for (let attempt=0; attempt<60; attempt++) {
+              if (await locator.inputValue() === expected) return;
+              await new Promise(resolve=>setTimeout(resolve,100));
+            }
+            assert.equal(await locator.inputValue(), expected);
+          }
+          async function fieldsInOrder(name, cnpj, cep) {
+            for (const item of [name,cnpj,cep]) await item.waitFor({state:'visible'});
+            const sameOrder = await name.evaluate((node) => {
+              const form = node.closest('form');
+              const inputs = [...form.querySelectorAll('input')];
+              const i = inputs.indexOf(node);
+              return inputs[i+1]?.placeholder === '00.000.000/0000-00' &&
+                inputs[i+2]?.placeholder === '00000-000';
+            });
+            assert.equal(sameOrder,true,'Nome, CNPJ e CEP devem ser consecutivos');
+          }
+          async function insideViewport(locator) {
+            await locator.scrollIntoViewIfNeeded();
+            const rect = await locator.boundingBox();
+            assert.ok(rect && rect.width > 0 && rect.x >= -1);
+            assert.ok(rect.x + rect.width <= (await locator.page().evaluate(()=>innerWidth)) + 1, 'campo cortado horizontalmente');
+          }
+          try {
+            for (const [mode,options] of [
+              ['desktop',{viewport:{width:1440,height:900}}],
+              ['mobile',{...devices['Pixel 7']}],
+            ]) {
+              const context = await browser.newContext({...options,serviceWorkers:'block'});
+              try {
+                // Only loopback; fake postal lookup isolates the UI from public providers.
+                // No business mutations, external Pix, fiscal or production requests.
+                await context.route('**/*', async route=>{
+                  const url = new URL(route.request().url());
+                  if (url.origin !== origin) return route.abort();
+                  if (url.pathname === '/api/storefront/address/86010010')
+                    return route.fulfill({json:address});
+                  if (!['GET','HEAD','OPTIONS'].includes(route.request().method()) &&
+                      url.pathname !== '/api/auth/login') return route.abort();
+                  return route.continue();
+                });
+                const page = await context.newPage();
+                // Report only loopback paths/statuses, never URLs with query strings,
+                // credentials, cookies, headers or response bodies.
+                page.on('response', response => {
+                  const url = new URL(response.url());
+                  if (url.origin === origin && (response.request().isNavigationRequest() || url.pathname.startsWith('/api/')))
+                    console.log(mode+' HTTP '+response.status()+' '+url.pathname);
+                });
+                page.on('requestfailed', request => {
+                  const url = new URL(request.url());
+                  if (request.isNavigationRequest() || (url.origin === origin && url.pathname.startsWith('/api/')))
+                    console.log(mode+' request failed '+request.method()+' '+(url.origin === origin ? url.pathname : '[non-loopback blocked]'));
+                });
+                // Check the real middleware redirect without following an absolute
+                // Location that Next may generate with a different loopback hostname.
+                // Keep all browser requests and cookies on one canonical origin.
+                const protectedResponse=await context.request.get(origin+'/parceiro',{maxRedirects:0});
+                assert.ok([302,303,307,308].includes(protectedResponse.status()),'unauthenticated portal must redirect');
+                const location=protectedResponse.headers()['location'];
+                assert.ok(location,'protected portal redirect missing Location');
+                const redirect=new URL(location,origin);
+                assert.ok(['127.0.0.1','localhost','[::1]'].includes(redirect.hostname) &&
+                  redirect.protocol==='http:' && redirect.port==='3100' && !redirect.username && !redirect.password,
+                  'unexpected redirect outside isolated web server');
+                assert.equal(redirect.pathname,'/login');
+                assert.equal(redirect.searchParams.get('returnTo'),'/parceiro');
+                console.log(mode+' protected portal redirect verified: '+protectedResponse.status()+' '+redirect.pathname);
+                await page.goto(origin+redirect.pathname+redirect.search);
+                await page.waitForURL(url=>url.origin===origin && url.pathname==='/login');
+                // SSR inputs can be visible before React installs the submit and
+                // change handlers. Do not trigger the native form submission.
+                await page.waitForFunction(()=>{
+                  const form=document.querySelector('[data-bbos-login] form');
+                  if (!form) return false;
+                  const props=node=>node[Object.keys(node).find(key=>key.startsWith('__reactProps$'))];
+                  const email=form.querySelector('input[type=email]');
+                  const pass=form.querySelector('input[type=password]');
+                  return typeof props(form)?.onSubmit==='function' &&
+                    email && typeof props(email)?.onChange==='function' &&
+                    pass && typeof props(pass)?.onChange==='function';
+                });
+                await page.locator('input[type=email]').fill('signa@homolog.test');
+                await page.locator('input[type=password]').fill(password);
+                const loginResponsePromise=page.waitForResponse(response=>
+                  response.url()===origin+'/api/auth/login' &&
+                  response.request().method()==='POST',{timeout:45000});
+                await page.getByRole('button',{name:'Entrar no BBOS'}).click();
+                const loginResponse=await loginResponsePromise;
+                assert.ok(loginResponse.ok(),'real login HTTP '+loginResponse.status());
+                // The login client immediately navigates to the portal; Chromium
+                // may discard the POST body before Playwright can read it. Verify
+                // the authenticated identity via the real session endpoint instead.
+                await page.waitForURL(url=>url.origin===origin && url.pathname==='/parceiro',{timeout:45000});
+                assert.ok((await context.cookies(origin)).some(cookie=>cookie.name==='bbos_session' && cookie.httpOnly),'session cookie missing');
+                const sessionResponse=await context.request.get(origin+'/api/auth/me',{maxRedirects:0});
+                assert.equal(sessionResponse.status(),200);
+                const session=await sessionResponse.json();
+                assert.equal(session.user.id,'homolog-user-signa');
+                assert.equal(session.user.companyId,'homolog-co');
+                assert.equal(session.user.role,'PARTNER');
+
+                const payments=page.locator('#pagamentos-signa');
+                await payments.getByRole('heading',{name:'Pagamentos'}).waitFor();
+                await payments.getByRole('button',{name:'H-PIX-0001',exact:true}).waitFor();
+                assert.equal(await payments.getByRole('button',{name:/confirmar recebimento|dar baixa|conciliar/i}).count(),0);
+                await payments.scrollIntoViewIfNeeded();
+                await page.screenshot({path:'evidence/'+mode+'-payments.png'});
+
+                const customers=page.locator('#clientes-signa');
+                await customers.getByRole('button',{name:/Cadastrar cliente/}).click();
+                const name=customers.getByPlaceholder('Nome ou razão social');
+                const cnpj=customers.getByPlaceholder('00.000.000/0000-00');
+                const cep=customers.getByPlaceholder('00000-000');
+                await fieldsInOrder(name,cnpj,cep);
+                await cep.fill('86010010');
+                await value(customers.getByLabel('Rua *',{exact:true}),address.street);
+                await value(customers.getByLabel('Bairro *',{exact:true}),address.district);
+                await value(customers.getByLabel('Cidade *',{exact:true}),address.city);
+                await value(customers.getByLabel('UF *',{exact:true}),address.state);
+                const number=customers.getByLabel('Número *',{exact:true});
+                await value(number,'');
+                await number.fill('123');
+                await value(number,'123');
+                await insideViewport(cep);
+                await page.screenshot({path:'evidence/'+mode+'-customer.png'});
+                await customers.getByRole('button',{name:'Fechar cadastro'}).click();
+
+                const newOrder=mode==='mobile' ? page.getByRole('navigation',{name:'Atalhos'}).getByRole('button',{name:'Novo pedido'}) : page.locator('#inicio').getByRole('button',{name:'Novo pedido',exact:true});
+                await newOrder.click();
+                const dialog=page.getByRole('dialog',{name:'Novo pedido'});
+                await dialog.waitFor({state:'visible'});
+                const fiscal=dialog.locator('input[name=signa-billing-recipient]');
+                await fiscal.first().waitFor();
+                assert.equal(await fiscal.count(),2);
+                assert.equal(await dialog.locator('input[name=signa-billing-recipient]:checked').count(),0,'destinatário fiscal não pode vir pré-selecionado');
+                await dialog.getByText('Cadastrar novo cliente final',{exact:true}).click();
+                const orderName=dialog.getByLabel('Nome / Razão social do cliente final');
+                const orderCnpj=dialog.getByLabel('CNPJ do cliente final');
+                const orderCep=dialog.getByLabel('CEP do cliente final');
+                await fieldsInOrder(orderName,orderCnpj,orderCep);
+                await orderCep.fill('86010010');
+                for (const [label,expected] of [['Rua / Logradouro',address.street],['Bairro',address.district],['Cidade',address.city],['UF',address.state]])
+                  await value(dialog.getByLabel(label+' do cliente final',{exact:true}),expected);
+                const orderNumber=dialog.getByLabel('Número do cliente final',{exact:true});
+                await value(orderNumber,'');
+                await orderNumber.fill('456');
+                await value(orderNumber,'456');
+                await insideViewport(orderCep);
+                await page.screenshot({path:'evidence/'+mode+'-order-customer.png'});
+                await dialog.getByRole('button',{name:'Cancelar e fechar'}).click();
+                await dialog.waitFor({state:'hidden'});
+                console.log('PASS '+mode+': autenticação, pagamentos somente leitura, duas fichas, CEP simulado, número manual, destinatário fiscal sem seleção e fechamento.');
+              } finally { await context.close(); }
+            }
+          } finally { await browser.close(); }
+          JS
+          cd "$RUNNER_TEMP/signa-browser"
+          node --check smoke.mjs
+          node smoke.mjs
+      - name: Upload synthetic browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signa-browser-synthetic
+          path: ${{ runner.temp }}/signa-browser/evidence/*.png
+          if-no-files-found: ignore
+          retention-days: 7
