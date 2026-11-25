@@ -283,7 +283,7 @@ export function HomeCommandV3() {
       key: "fiscal",
       label: "Prontos para NF-e",
       value: String(home.orderFlow.fiscal),
-      href: "/pedidos",
+      href: home.orderFlow.fiscal ? "/pedidos?filtro=emitir-nf" : "/pedidos",
       tone: home.orderFlow.fiscal ? "ok" : "neutral",
       badge: home.orderFlow.fiscal ? "emitir" : undefined,
       art: <InvoiceArt />,
@@ -363,7 +363,7 @@ function CommandCenter({
           tone: "ok" as const,
           title: `${home.orderFlow.fiscal} ${home.orderFlow.fiscal === 1 ? "pedido pronto" : "pedidos prontos"} para NF-e`,
           detail: "Emitir libera a expedição e o e-mail com PDF e XML",
-          href: "/pedidos",
+          href: "/pedidos?filtro=emitir-nf",
           action: "Emitir NF-e",
         }]
       : []),
