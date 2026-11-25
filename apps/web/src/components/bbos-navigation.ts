@@ -15,6 +15,7 @@ import {
   Images,
   LayoutDashboard,
   LocateFixed,
+  Megaphone,
   MapPinned,
   PackageCheck,
   PackageOpen,
@@ -59,6 +60,8 @@ export type BbosNavGroup = {
   id:
     | "overview"
     | "commercial"
+    | "prospecting"
+    | "brand"
     | "supply"
     | "quality"
     | "roasting"
@@ -115,44 +118,9 @@ export const bbosNavigation: BbosNavGroup[] = [
     id: "commercial",
     icon: ShoppingCart,
     label: "Vendas",
-    description: "Clientes, pedidos e canais",
+    description: "Pedidos, clientes e exportações",
     tone: "blue",
     items: [
-      {
-        href: "/clientes",
-        label: "Clientes",
-        description: "Cadastro, crédito e relacionamento",
-        icon: UsersRound,
-        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
-        keywords: ["cliente", "credito"],
-      },
-      {
-        href: "/por-perto",
-        label: "Por perto",
-        description: "Clientes e pré-cadastros perto de você",
-        icon: LocateFixed,
-        roles: ALL,
-        keywords: ["perto", "mapa", "localizacao", "gps", "rota", "visita"],
-        subgroup: VISITS_SUBGROUP,
-      },
-      {
-        href: "/atendimento",
-        label: "Atendimento",
-        description: "Visitas, relatos e próximas ações",
-        icon: ClipboardList,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
-        keywords: ["visita", "relato", "vendedor", "follow-up"],
-        subgroup: VISITS_SUBGROUP,
-      },
-      {
-        href: "/prospeccao",
-        label: "Prospecção",
-        description: "Pré-cadastros para visitar e confirmar",
-        icon: MapPinned,
-        roles: ["ADMIN", "EXECUTIVE", "SALES"],
-        keywords: ["pre cadastro", "prospect", "lead", "visita", "cnpj"],
-        subgroup: VISITS_SUBGROUP,
-      },
       {
         href: "/pedidos",
         label: "Pedidos",
@@ -169,20 +137,12 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["pedido", "venda", "estoque"],
       },
       {
-        href: "/commerce",
-        label: "Canais e preços",
-        description: "Loja, preços e campanhas",
-        icon: Globe2,
-        roles: ["ADMIN", "EXECUTIVE"],
-        keywords: ["preco", "canal", "tabela"],
-      },
-      {
-        href: "/commerce/marketplaces",
-        label: "Marketplaces",
-        description: "Pedidos, anúncios e conciliação",
-        icon: Store,
-        roles: MARKETPLACE,
-        keywords: ["mercado livre", "marketplace", "anuncio", "repasse"],
+        href: "/clientes",
+        label: "Clientes",
+        description: "Cadastro, crédito e relacionamento",
+        icon: UsersRound,
+        roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
+        keywords: ["cliente", "credito"],
       },
       {
         href: "/exportacoes",
@@ -199,6 +159,66 @@ export const bbosNavigation: BbosNavGroup[] = [
           "proforma",
           "cambio",
         ],
+      },
+    ],
+  },
+  {
+    // Field work: new customers, visits and the map (CRM in SAP / Dynamics).
+    id: "prospecting",
+    icon: Route,
+    label: "Prospecção",
+    description: "Pré-cadastros, visitas e mapa",
+    tone: "blue",
+    items: [
+      {
+        href: "/prospeccao",
+        label: "Prospecção",
+        description: "Pré-cadastros para visitar e confirmar",
+        icon: MapPinned,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["pre cadastro", "prospect", "lead", "visita", "cnpj"],
+      },
+      {
+        href: "/atendimento",
+        label: "Visitas",
+        description: "Visitas, relatos e próximas ações",
+        icon: ClipboardList,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["visita", "relato", "vendedor", "follow-up"],
+      },
+      {
+        href: "/por-perto",
+        label: "Por perto",
+        description: "Clientes e pré-cadastros perto de você",
+        icon: LocateFixed,
+        roles: ALL,
+        keywords: ["perto", "mapa", "localizacao", "gps", "rota", "visita"],
+      },
+    ],
+  },
+  {
+    // Channels and brand (Marketing in SAP / Dynamics).
+    id: "brand",
+    icon: Megaphone,
+    label: "Loja e marca",
+    description: "Canais, preços, marketplaces e imagens",
+    tone: "violet",
+    items: [
+      {
+        href: "/commerce",
+        label: "Canais e preços",
+        description: "Loja, preços e campanhas",
+        icon: Globe2,
+        roles: ["ADMIN", "EXECUTIVE"],
+        keywords: ["preco", "canal", "tabela"],
+      },
+      {
+        href: "/commerce/marketplaces",
+        label: "Marketplaces",
+        description: "Pedidos, anúncios e conciliação",
+        icon: Store,
+        roles: MARKETPLACE,
+        keywords: ["mercado livre", "marketplace", "anuncio", "repasse"],
       },
       {
         href: "/commerce/midia",

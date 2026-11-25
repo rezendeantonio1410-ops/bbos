@@ -105,8 +105,8 @@ test("contabilidade recebe somente áreas de consulta fiscal e financeira", () =
   );
   // Order follows the work areas: Vendas, Compras, Financeiro, Análises.
   assert.deepEqual(routes, [
-    "/clientes",
     "/pedidos",
+    "/clientes",
     "/notas-entrada",
     "/financeiro",
     "/custos",
@@ -284,13 +284,15 @@ test("menu: cada área tem ícone próprio e contadores vêm das notificações 
     { href: "/commerce/marketplaces/x", readAt: null },
     { href: "/fora-do-menu", readAt: null },
   ]);
-  assert.deepEqual(counts, { commercial: 3 });
+  assert.deepEqual(counts, { commercial: 2, brand: 1 });
 });
 
-test("Por perto, Atendimento e Prospecção ficam juntos em Visitas", () => {
-  const sales = navigationForRole("SALES").flatMap((group) => group.items);
-  const visits = sales.filter((item) => item.subgroup?.id === "visitas").map((item) => item.href);
-  assert.deepEqual(visits, ["/por-perto", "/atendimento", "/prospeccao"]);
-  const firstIndex = sales.findIndex((item) => item.href === "/por-perto");
-  assert.deepEqual(sales.slice(firstIndex, firstIndex + 3).map((item) => item.href), visits);
+test("Vendas, Prospecção e Loja e marca são áreas separadas, com no máximo 4 itens", () => {
+  const area = (id: string) => bbosNavigation.find((group) => group.id === id)?.items.map((item) => item.href);
+  assert.deepEqual(area("commercial"), ["/pedidos", "/clientes", "/exportacoes"]);
+  assert.deepEqual(area("prospecting"), ["/prospeccao", "/atendimento", "/por-perto"]);
+  assert.deepEqual(area("brand"), ["/commerce", "/commerce/marketplaces", "/commerce/midia"]);
+  for (const group of bbosNavigation) assert.ok(group.items.length <= 5, group.label);
+  const sales = navigationForRole("SALES").map((group) => group.id);
+  assert.ok(sales.includes("prospecting") && !sales.includes("brand"));
 });
