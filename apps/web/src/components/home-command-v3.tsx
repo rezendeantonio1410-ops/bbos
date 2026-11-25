@@ -20,6 +20,7 @@ import {
   type SessionIdentity,
 } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { roastPace } from "@/lib/roast-pace";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -57,15 +58,6 @@ function InvoiceArt() {
 function TruckArt() {
   return (
     <svg aria-hidden width="34" height="34" viewBox="0 0 34 34"><path d="M4 12h16v11H4zM20 15h5l4 4v4h-9z" fill="#fff" stroke="#56615C" strokeWidth="1.5" /><circle cx="9" cy="24" r="2.5" fill="#56615C" /><circle cx="24" cy="24" r="2.5" fill="#56615C" /></svg>
-  );
-}
-function ProgressRing({ value }: { value: number }) {
-  const circumference = 2 * Math.PI * 19;
-  return (
-    <svg aria-hidden width="46" height="46" viewBox="0 0 46 46" className="shrink-0">
-      <circle cx="23" cy="23" r="19" fill="none" stroke="#E3E8E2" strokeWidth="6" />
-      <circle cx="23" cy="23" r="19" fill="none" stroke="#2F6B57" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(Math.max(0, Math.min(100, value)) / 100) * circumference} ${circumference}`} transform="rotate(-90 23 23)" />
-    </svg>
   );
 }
 
@@ -139,6 +131,7 @@ export function HomeCommandV3() {
   const [identity, setIdentity] = React.useState<SessionIdentity | null>(null);
   const [loaded, setLoaded] = React.useState(false);
   const [available, setAvailable] = React.useState(true);
+  const [finance, setFinance] = React.useState<FinanceSnapshot>(null);
 
   React.useEffect(() => {
     const apiRoot = getApiBaseUrl();
@@ -168,6 +161,22 @@ export function HomeCommandV3() {
       })
       .catch(() => setAvailable(false))
       .finally(() => setLoaded(true));
+    // Cash and overdue come from Finance; roles without access simply don't see them.
+    void Promise.all([
+      fetch(`${apiRoot}/finance/summary`, { credentials: "include", cache: "no-store" }),
+      fetch(`${apiRoot}/finance/settings`, { credentials: "include", cache: "no-store" }),
+    ])
+      .then(async ([summaryResponse, settingsResponse]) => {
+        if (!summaryResponse.ok) return;
+        const summary = await summaryResponse.json();
+        const settings = settingsResponse.ok ? await settingsResponse.json() : {};
+        setFinance({
+          cash: typeof summary?.cash === "number" ? summary.cash : null,
+          overdue: Number(summary?.delinquency ?? 0),
+          cashStarted: Boolean(settings?.cashStartDate),
+        });
+      })
+      .catch(() => undefined);
   }, []);
 
   const hour = new Date().getHours();
@@ -225,7 +234,6 @@ export function HomeCommandV3() {
 
   const plannedKg = home.productionPlannedKg;
   const roastPercent = plannedKg > 0 ? Math.min(100, (home.productionActualKg / plannedKg) * 100) : 0;
-  const sacks = greenAvailable / 60;
   const dateLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   // The coffee's path today (SAP Fiori process flow): each step opens its list.
   const coffeePath: Array<{
@@ -290,111 +298,189 @@ export function HomeCommandV3() {
       art: <TruckArt />,
     },
   ];
-  const toneRing = {
-    neutral: "bg-[var(--bbos-surface-subtle)] border-[var(--bbos-border)]",
-    ok: "bg-[var(--bbos-success-soft)] border-[#cfe6d8]",
-    attention: "bg-[var(--bbos-warning-soft)] border-[#f1d9a8]",
-    critical: "bg-[#fdecea] border-[#f3c1bb]",
-  } as const;
-  const toneBadge = {
-    neutral: "bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-secondary)]",
-    ok: "bg-[var(--bbos-success-soft)] text-[var(--bbos-success)]",
-    attention: "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]",
-    critical: "bg-[#fdecea] text-[var(--bbos-danger)]",
-  } as const;
   const decisions = home.alerts.filter((alert) => alert.tone === "CRÍTICO" || alert.tone === "ATENÇÃO");
+  return (
+    <CommandCenter
+      home={home}
+      greeting={greeting}
+      firstName={firstName}
+      dateLabel={dateLabel}
+      decisions={decisions}
+      state={state}
+      roastPercent={roastPercent}
+      greenAvailable={greenAvailable}
+      greenReserved={greenReserved}
+      finishedAvailable={finishedAvailable}
+      finance={finance}
+      coffeePath={coffeePath}
+    />
+  );
+}
+
+type CoffeeStep = {
+  key: string;
+  label: string;
+  value: string;
+  href: string;
+  tone: "neutral" | "ok" | "attention" | "critical";
+  badge?: string;
+  art: React.ReactNode;
+};
+type FinanceSnapshot = { cash: number | null; overdue: number; cashStarted: boolean } | null;
+type Task = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string };
+
+/**
+ * Command center (SAP Fiori overview page / Dynamics 365 workspace): what needs
+ * a decision first, then four numbers with a comparison, free stock and the
+ * coffee path. Each card says something no other card repeats.
+ */
+function CommandCenter({
+  home, greeting, firstName, dateLabel, decisions, state, roastPercent,
+  greenAvailable, greenReserved, finishedAvailable, finance, coffeePath,
+}: {
+  home: HomeData; greeting: string; firstName: string; dateLabel: string;
+  decisions: HomeData["alerts"]; state: EvidenceState; roastPercent: number;
+  greenAvailable: number; greenReserved: number; finishedAvailable: number;
+  finance: FinanceSnapshot; coffeePath: CoffeeStep[];
+}) {
+  const pace = roastPace(home.productionActualKg, home.productionPlannedKg);
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const greenFree = Math.max(0, greenAvailable - greenReserved);
+
+  const tasks: Task[] = [
+    ...decisions.map((alert) => ({
+      key: alert.title,
+      tone: alert.tone === "CRÍTICO" ? ("critical" as const) : ("attention" as const),
+      title: alert.title.replace(/\(s\)/g, ""),
+      detail: alert.impact,
+      href: alert.href,
+      action: alert.action,
+    })),
+    ...(home.orderFlow.fiscal > 0
+      ? [{
+          key: "nfe",
+          tone: "ok" as const,
+          title: `${home.orderFlow.fiscal} ${home.orderFlow.fiscal === 1 ? "pedido pronto" : "pedidos prontos"} para NF-e`,
+          detail: "Emitir libera a expedição e o e-mail com PDF e XML",
+          href: "/pedidos",
+          action: "Emitir NF-e",
+        }]
+      : []),
+    ...(pace.behindKg > 0
+      ? [{
+          key: "roast",
+          tone: "attention" as const,
+          title: `Torra ${kg.format(pace.behindKg)} kg atrás do plano`,
+          detail: pace.daysLeft > 0
+            ? `Faltam ${kg.format(pace.missingKg)} kg em ${pace.daysLeft} ${pace.daysLeft === 1 ? "dia útil" : "dias úteis"} → cerca de ${kg.format(pace.perDayKg)} kg por dia`
+            : `Faltam ${kg.format(pace.missingKg)} kg para fechar o plano do mês`,
+          href: "/producao",
+          action: "Programar torra",
+        }]
+      : []),
+  ];
   const summary =
     state === "loading"
       ? "Reunindo a operação de hoje…"
       : state === "unavailable"
         ? "A conexão com os dados está sendo retomada."
-        : decisions.length
-          ? `${decisions.length} ${decisions.length === 1 ? "coisa pede" : "coisas pedem"} você hoje. O resto está andando.`
-          : "Nada pede decisão agora. A operação está andando.";
+        : tasks.length
+          ? `${tasks.length} ${tasks.length === 1 ? "coisa pede" : "coisas pedem"} você`
+          : "Nada pede decisão agora";
+  const taskTone = {
+    critical: "bg-[#fdecea] text-[var(--bbos-danger)]",
+    attention: "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]",
+    ok: "bg-[var(--bbos-success-soft)] text-[var(--bbos-success)]",
+  } as const;
+  const stepTone = {
+    neutral: "",
+    ok: "border-[var(--bbos-success)] bg-[var(--bbos-success-soft)]",
+    attention: "",
+    critical: "border-[#f3c1bb] bg-[#fdecea]",
+  } as const;
+  const card = "rounded-2xl border border-[var(--bbos-border)] bg-white";
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-4 pb-6">
-      <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mx-auto w-full max-w-[1400px] space-y-4 pb-24 sm:pb-6">
+      <section className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[.12em] text-[var(--bbos-coffee-green)] first-letter:uppercase">
-            {dateLabel}
-          </p>
-          <h1 className="mt-1 text-[clamp(24px,2.4vw,32px)] font-semibold leading-tight tracking-[-.02em]">
-            {greeting}{firstName ? `, ${firstName}` : ""}.
+          <h1 className="text-[22px] font-semibold leading-tight tracking-[-.01em]">
+            {greeting}{firstName ? `, ${firstName}` : ""}
           </h1>
-          <p className="mt-1 text-sm text-[var(--bbos-text-secondary)]">{summary}</p>
+          <p className="mt-0.5 text-sm text-[var(--bbos-text-secondary)] first-letter:uppercase">
+            {dateLabel} · {summary}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={openAI}
-          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 self-start rounded-full border border-[var(--bbos-border)] bg-white px-4 text-xs font-semibold text-[var(--bbos-intelligence)] hover:bg-[var(--bbos-intelligence-soft)] sm:self-auto"
-        >
-          <Sparkles size={15} /> Perguntar ao BBOS
-        </button>
+        <NewMenu />
       </section>
 
-      <section aria-labelledby="coffee-path-title" className="rounded-2xl border bg-white p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 id="coffee-path-title" className="text-base font-semibold">O caminho do café hoje</h2>
-          <Link href="/pedidos" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--bbos-coffee-green)]">
-            Ver pedidos <ArrowRight size={13} />
-          </Link>
-        </div>
-        <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          {coffeePath.map((step, index) => (
-            <li key={step.key} className="relative">
-              {index < coffeePath.length - 1 && (
-                <span aria-hidden className="absolute left-[calc(50%+38px)] right-[-12px] top-[34px] hidden border-t-2 border-dashed border-[#c9d2cb] xl:block" />
-              )}
-              <Link
-                href={step.href}
-                className="group flex flex-col items-center rounded-xl px-2 py-2 text-center transition hover:bg-[var(--bbos-surface-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--bbos-focus-ring)]"
-              >
-                <span className={`grid size-[60px] place-items-center rounded-2xl border transition group-hover:-translate-y-0.5 ${toneRing[step.tone]}`}>
-                  {step.art}
-                </span>
-                <span className="mt-2 text-lg font-semibold tabular-nums leading-tight">{step.value}</span>
-                <span className="text-[12px] text-[var(--bbos-text-secondary)]">{step.label}</span>
-                {step.badge && (
-                  <span className={`mt-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${toneBadge[step.tone]}`}>
-                    {step.badge}
-                  </span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ol>
+      <section aria-label="Números do mês" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Link href="/vendas" className={`${card} p-4 hover:bg-[var(--bbos-surface-subtle)]`}>
+          <span className="block text-[11px] font-bold uppercase tracking-[.06em] text-[var(--bbos-text-secondary)]">Vendas no mês</span>
+          <span className="mt-1 block text-[clamp(20px,2vw,26px)] font-bold tabular-nums">{money.format(home.salesMonth).replace(/,\d\d$/, "")}</span>
+          <span className="block text-xs text-[var(--bbos-text-secondary)]">hoje {money.format(home.salesToday).replace(/,\d\d$/, "")} · dia {today.getDate()} de {daysInMonth}</span>
+        </Link>
+        <Link href="/financeiro" className={`${card} p-4 hover:bg-[var(--bbos-surface-subtle)]`}>
+          <span className="block text-[11px] font-bold uppercase tracking-[.06em] text-[var(--bbos-text-secondary)]">A receber vencido</span>
+          <span className={`mt-1 block text-[clamp(20px,2vw,26px)] font-bold tabular-nums ${finance && finance.overdue > 0 ? "text-[var(--bbos-danger)]" : ""}`}>
+            {finance ? money.format(finance.overdue).replace(/,\d\d$/, "") : "—"}
+          </span>
+          <span className="block text-xs text-[var(--bbos-text-secondary)]">{finance && finance.overdue > 0 ? "cobrar com Pix" : "nada vencido"}</span>
+        </Link>
+        <Link href={finance?.cashStarted ? "/financeiro" : "/financeiro/parametros"} className={`${card} p-4 hover:bg-[var(--bbos-surface-subtle)]`}>
+          <span className="block text-[11px] font-bold uppercase tracking-[.06em] text-[var(--bbos-text-secondary)]">Caixa</span>
+          <span className="mt-1 block text-[clamp(20px,2vw,26px)] font-bold tabular-nums">
+            {finance?.cashStarted && finance.cash !== null ? money.format(finance.cash).replace(/,\d\d$/, "") : "R$ —"}
+          </span>
+          <span className="block text-xs text-[var(--bbos-text-secondary)]">
+            {finance?.cashStarted ? "saldo em conta hoje" : "informe o saldo em Parâmetros"}
+          </span>
+        </Link>
+        <Link href="/producao" className={`${card} p-4 hover:bg-[var(--bbos-surface-subtle)]`}>
+          <span className="block text-[11px] font-bold uppercase tracking-[.06em] text-[var(--bbos-text-secondary)]">Torra do mês</span>
+          <span className={`mt-1 block text-[clamp(20px,2vw,26px)] font-bold tabular-nums ${pace.behindKg > 0 ? "text-[var(--bbos-warning)]" : ""}`}>
+            {kg.format(home.productionActualKg)}
+            {home.productionPlannedKg > 0 && <span className="text-sm font-semibold text-[var(--bbos-text-secondary)]"> / {kg.format(home.productionPlannedKg)} kg</span>}
+          </span>
+          <span className="block text-xs text-[var(--bbos-text-secondary)]">
+            {home.productionPlannedKg > 0 ? `esperado até hoje: ${kg.format(pace.expectedKg)} kg` : "sem plano no mês"}
+          </span>
+          {home.productionPlannedKg > 0 && (
+            <span aria-hidden className="relative mt-2.5 block h-1.5 rounded-full bg-[#eceee9]">
+              <span className={`absolute inset-y-0 left-0 rounded-full ${pace.behindKg > 0 ? "bg-[var(--bbos-warning)]" : "bg-[var(--bbos-success)]"}`} style={{ width: `${roastPercent}%` }} />
+              <span className="absolute -top-1 h-3.5 w-0.5 bg-[var(--bbos-text-primary,#14201b)]" style={{ left: `${Math.min(100, (pace.expectedKg / home.productionPlannedKg) * 100)}%` }} />
+            </span>
+          )}
+        </Link>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <section aria-labelledby="decisions-title" className="rounded-2xl border bg-white p-4">
-          <div className="mb-1 flex items-center justify-between">
-            <h2 id="decisions-title" className="text-base font-semibold">Para resolver agora</h2>
-            <span className="text-xs text-[var(--bbos-text-secondary)]">{decisions.length}</span>
-          </div>
-          {decisions.length === 0 ? (
-            <p className="py-6 text-center text-sm text-[var(--bbos-text-secondary)]">
+      <div className="grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+        <section aria-labelledby="decisions-title" className={`${card} p-4`}>
+          <h2 id="decisions-title" className="mb-1 flex items-center gap-2 text-base font-semibold">
+            Para resolver agora
+            {tasks.length > 0 && <span className="rounded-full bg-[var(--bbos-text-primary,#14201b)] px-2 text-xs font-semibold text-white">{tasks.length}</span>}
+          </h2>
+          {tasks.length === 0 ? (
+            <p className="py-4 text-sm text-[var(--bbos-text-secondary)]">
               {state === "loading" ? "Carregando…" : "Nada pendente. Bom trabalho."}
             </p>
           ) : (
             <ul className="divide-y divide-[#eef1ed]">
-              {decisions.map((alert) => (
-                <li key={alert.title} className="flex flex-wrap items-center gap-3 py-3">
-                  <span
-                    aria-hidden
-                    className={`grid size-9 shrink-0 place-items-center rounded-xl ${alert.tone === "CRÍTICO" ? "bg-[#fdecea] text-[var(--bbos-danger)]" : "bg-[var(--bbos-warning-soft)] text-[var(--bbos-warning)]"}`}
-                  >
-                    <ShieldAlert size={17} />
+              {tasks.map((task, index) => (
+                <li key={task.key} className="grid grid-cols-[36px_1fr] items-center gap-x-3 gap-y-2 py-3 sm:grid-cols-[36px_1fr_auto]">
+                  <span aria-hidden className={`grid size-9 place-items-center rounded-xl ${taskTone[task.tone]}`}>
+                    {task.tone === "ok" ? <ClipboardCheck size={17} /> : task.key === "roast" ? <Factory size={17} /> : <ShieldAlert size={17} />}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{alert.title}</p>
-                    <p className="text-xs text-[var(--bbos-text-secondary)]">{alert.impact}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{task.title}</p>
+                    <p className="text-xs text-[var(--bbos-text-secondary)]">{task.detail}</p>
                   </div>
                   <Link
-                    href={alert.href}
-                    className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-[var(--bbos-action-primary)] px-3 text-xs font-semibold text-white hover:bg-[var(--bbos-action-primary-hover)]"
+                    href={task.href}
+                    className={`col-start-2 inline-flex min-h-10 items-center justify-self-start whitespace-nowrap rounded-lg px-3 text-xs font-semibold sm:col-start-3 ${index === 0 ? "bg-[var(--bbos-action-primary)] text-white hover:bg-[var(--bbos-action-primary-hover)]" : "border border-[var(--bbos-border)] bg-white hover:bg-[var(--bbos-surface-subtle)]"}`}
                   >
-                    {alert.action} <ArrowRight size={13} />
+                    {task.action}
                   </Link>
                 </li>
               ))}
@@ -402,57 +488,108 @@ export function HomeCommandV3() {
           )}
         </section>
 
-        <section aria-labelledby="today-title" className="rounded-2xl border bg-white p-4">
-          <h2 id="today-title" className="mb-3 text-base font-semibold">Hoje</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/vendas" className="rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
-              <span className="block text-xs text-[var(--bbos-text-secondary)]">Vendas hoje</span>
-              <span className="mt-0.5 block text-lg font-semibold tabular-nums">{money.format(home.salesToday)}</span>
-              <span className="block text-[11px] text-[var(--bbos-text-secondary)]">mês: {money.format(home.salesMonth)}</span>
-            </Link>
-            <Link href="/producao" className="flex items-center gap-3 rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
-              <ProgressRing value={roastPercent} />
-              <span>
-                <span className="block text-xs text-[var(--bbos-text-secondary)]">Torra do mês</span>
-                <span className="block text-lg font-semibold tabular-nums">{plannedKg > 0 ? `${percent.format(roastPercent)}%` : "—"}</span>
-              </span>
-            </Link>
-            <Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
-              <span className="block text-xs text-[var(--bbos-text-secondary)]">Café torrado livre</span>
-              <span className="mt-0.5 block text-lg font-semibold tabular-nums">{kg.format(home.roastedStock.availableKg)} kg</span>
-              <span className="block text-[11px] text-[var(--bbos-text-secondary)]">{kg.format(home.roastedStock.reservedKg)} kg reservados</span>
-            </Link>
-            <Link href="/estoque" className="rounded-xl bg-[var(--bbos-surface-subtle)] p-3 hover:bg-[#eef3ee]">
-              <span className="block text-xs text-[var(--bbos-text-secondary)]">Café verde</span>
-              <span className="mt-0.5 block text-lg font-semibold tabular-nums">{kg.format(greenAvailable)} kg</span>
-              <span className="block text-[11px] text-[var(--bbos-text-secondary)]">
-                {sacks >= 1 ? `≈ ${percent.format(sacks)} sacas de 60 kg` : "menos de 1 saca"}
-                {greenReserved > 0 ? ` · ${kg.format(greenReserved)} kg reservados` : ""}
-              </span>
-            </Link>
+        <section aria-labelledby="stock-title" className={`${card} p-4`}>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 id="stock-title" className="text-base font-semibold">Estoque livre</h2>
+            <Link href="/estoque" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--bbos-coffee-green)]">Ver estoque <ArrowRight size={13} /></Link>
           </div>
+          <StockLine
+            label="Café verde"
+            value={`${kg.format(greenFree)} kg`}
+            share={greenAvailable > 0 ? greenFree / greenAvailable : 0}
+            note={`${kg.format(greenAvailable)} kg no total · ${kg.format(greenReserved)} kg reservados · ${greenFree >= 60 ? `≈ ${percent.format(greenFree / 60)} sacas livres` : "menos de 1 saca livre"}`}
+          />
+          <StockLine
+            label="Café torrado"
+            value={`${kg.format(home.roastedStock.availableKg)} kg`}
+            share={home.roastedStock.physicalKg > 0 ? home.roastedStock.availableKg / home.roastedStock.physicalKg : 0}
+            note={home.roastedStock.reservedKg > 0 ? `${kg.format(home.roastedStock.reservedKg)} kg reservados` : "nada reservado"}
+          />
+          <StockLine
+            label="Produto embalado"
+            value={`${kg.format(finishedAvailable)} un.`}
+            share={home.finishedGoodsUnits > 0 ? finishedAvailable / home.finishedGoodsUnits : 0}
+            note={home.finishedGoodsReserved > 0 ? `${kg.format(home.finishedGoodsReserved)} un. reservadas` : "pronto para vender"}
+          />
         </section>
       </div>
 
-      <nav aria-label="Ações rápidas" className="flex flex-wrap gap-2">
-        {[
-          { href: "/pedidos?novo=1", label: "Novo pedido", icon: Plus },
-          { href: "/clientes?novo=1", label: "Novo cliente", icon: UsersRound },
-          { href: "/producao", label: "Programar torra", icon: Factory },
-          { href: "/recebimento", label: "Registrar recebimento", icon: Sprout },
-        ].map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--bbos-border)] bg-white px-4 text-xs font-semibold hover:bg-[var(--bbos-surface-subtle)]"
-          >
-            <Icon size={15} /> {label}
-          </Link>
-        ))}
-      </nav>
+      <section aria-labelledby="coffee-path-title" className={`${card} p-4`}>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="coffee-path-title" className="text-base font-semibold">O caminho do café</h2>
+          <Link href="/pedidos" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--bbos-coffee-green)]">Ver pedidos <ArrowRight size={13} /></Link>
+        </div>
+        <ol className="grid grid-cols-3 gap-2 xl:grid-cols-6">
+          {coffeePath.map((step) => {
+            const zero = /^0( |$)/.test(step.value);
+            return (
+              <li key={step.key}>
+                <Link
+                  href={step.href}
+                  className={`block h-full rounded-xl border border-[var(--bbos-border)] p-3 transition hover:bg-[var(--bbos-surface-subtle)] ${zero ? "opacity-50" : stepTone[step.tone]}`}
+                >
+                  <span className="block text-lg font-bold tabular-nums leading-tight">{step.value}</span>
+                  <span className="block text-xs text-[var(--bbos-text-secondary)]">{step.label}</span>
+                  {!zero && step.tone === "ok" && step.badge && (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-[var(--bbos-success)]">{step.badge} <ArrowRight size={11} /></span>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
     </div>
   );
 }
+
+function StockLine({ label, value, share, note }: { label: string; value: string; share: number; note: string }) {
+  return (
+    <div className="py-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-semibold">{label}</span>
+        <span className="text-lg font-bold tabular-nums">{value}</span>
+      </div>
+      <span aria-hidden className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-[#dfe6df]">
+        <span className="bg-[var(--bbos-success)]" style={{ width: `${Math.max(0, Math.min(1, share)) * 100}%` }} />
+      </span>
+      <span className="mt-1 block text-xs text-[var(--bbos-text-secondary)]">{note}</span>
+    </div>
+  );
+}
+
+/** The four quick actions in one "+ Novo" menu, top right (SAP / Dynamics). */
+function NewMenu() {
+  const [open, setOpen] = React.useState(false);
+  const items = [
+    { href: "/pedidos?novo=1", label: "Novo pedido", icon: Plus },
+    { href: "/clientes?novo=1", label: "Novo cliente", icon: UsersRound },
+    { href: "/producao", label: "Programar torra", icon: Factory },
+    { href: "/recebimento", label: "Registrar recebimento", icon: Sprout },
+  ];
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[var(--bbos-action-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--bbos-action-primary-hover)]"
+      >
+        <Plus size={16} /> Novo
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-xl border border-[var(--bbos-border)] bg-white py-1 shadow-lg">
+          {items.map(({ href, label, icon: Icon }) => (
+            <Link key={href} role="menuitem" href={href} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-2 px-3 text-sm hover:bg-[var(--bbos-surface-subtle)]">
+              <Icon size={15} /> {label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function SalesHome({
   greeting,

@@ -209,7 +209,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
         })
         .then((payload) => {
           if (cancelled) return;
-          setNotifications(payload.items);
+          setNotifications(Array.isArray(payload?.items) ? payload.items : []);
           setNotificationsAvailable(true);
         })
         .catch(() => {
