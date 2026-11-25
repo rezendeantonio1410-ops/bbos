@@ -479,13 +479,54 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
               </button>
             </header>
             {!items.length ? (
-              <div className={sacola.empty}>
-                <ShoppingBag />
-                <p>Sua sacola está vazia.</p>
-                <button type="button" onClick={() => setVisible(false)}>
-                  Escolher um café
+              <main className={sacola.body}>
+                <div className={sacola.emptyIntro}>
+                  <ShoppingBag aria-hidden="true" />
+                  <p>
+                    <b>Sua sacola está vazia.</b>
+                    <span>Escolha um café e toque em Adicionar.</span>
+                  </p>
+                </div>
+                <ul className={sacola.shelf}>
+                  {Object.values(cartRecommendationProducts).map((product) => (
+                    <li key={product.id}>
+                      <div className={sacola.photo}>
+                        {product.image ? (
+                          <Image src={product.image} alt="" width={64} height={76} />
+                        ) : (
+                          <span>BISPO</span>
+                        )}
+                      </div>
+                      <div className={sacola.itemInfo}>
+                        <h3>{product.name}</h3>
+                        <p>{product.notes}</p>
+                        <b>
+                          {money(product.priceCents)}{" "}
+                          <small>· {product.weightGrams} g</small>
+                        </b>
+                      </div>
+                      <button
+                        type="button"
+                        className={sacola.addButton}
+                        onClick={() => add(product)}
+                        aria-label={`Adicionar ${product.name} por ${money(product.priceCents)}`}
+                      >
+                        <Plus aria-hidden="true" /> Adicionar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className={sacola.couponLink}
+                  onClick={() => {
+                    setVisible(false);
+                    document.getElementById("cafes")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                >
+                  Ver todos os cafés na loja →
                 </button>
-              </div>
+              </main>
             ) : (
               <>
                 <main className={sacola.body}>
