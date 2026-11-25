@@ -645,6 +645,9 @@ export default function OrdersPage() {
   const [stage, setStage] = useState("ALL");
   const [onlyExceptions, setOnlyExceptions] = useState(false);
   const [onlySamples, setOnlySamples] = useState(false);
+  // Central "Emitir NF-e": show orders ready for NF-e and open the order when only one waits.
+  const [onlyReadyToInvoice, setOnlyReadyToInvoice] = useState(false);
+  const openReadyToInvoice = useRef(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: OrderSortKey; dir: "asc" | "desc" }>({ key: "orderedAt", dir: "desc" });
   const [busy, setBusy] = useState("");
@@ -721,6 +724,10 @@ export default function OrdersPage() {
     if (searchParams.get("filtro") === "atrasados") {
       setOnlyExceptions(true);
     }
+    if (searchParams.get("filtro") === "emitir-nf") {
+      setOnlyReadyToInvoice(true);
+      openReadyToInvoice.current = true;
+    }
     void fetch(`${getApiBaseUrl()}/auth/me`, {
       credentials: "include",
       cache: "no-store",
@@ -771,6 +778,7 @@ export default function OrdersPage() {
     const list = orders.filter((item) => {
       if (stageDef && !stageDef.statuses.includes(displayStatus(item))) return false;
       if (onlyExceptions && !orderException(item)) return false;
+      if (onlyReadyToInvoice && item.status !== "READY_TO_SHIP") return false;
       if (onlySamples && item.orderType !== "SAMPLE") return false;
       if (!term) return true;
       return [item.orderNumber ?? item.code, item.customer.name, statusLabel[displayStatus(item)] ?? ""]
@@ -795,7 +803,21 @@ export default function OrdersPage() {
           : String(x).localeCompare(String(y), "pt-BR");
       return sort.dir === "asc" ? result : -result;
     });
-  }, [orders, stage, onlyExceptions, onlySamples, search, sort]);
+  }, [orders, stage, onlyExceptions, onlyReadyToInvoice, onlySamples, search, sort]);
+
+  useEffect(() => {
+    if (!openReadyToInvoice.current || !orders.length) return;
+    openReadyToInvoice.current = false;
+    const ready = orders.filter((item) => item.status === "READY_TO_SHIP");
+    if (ready.length !== 1) return;
+    setSelected(ready[0]!);
+    // Bring the "Solicitar faturamento" action into view once the panel has loaded.
+    for (const delay of [400, 1200]) {
+      window.setTimeout(() => {
+        document.getElementById("proxima-acao")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, delay);
+    }
+  }, [orders]);
   const exceptionCount = orders.filter((item) => orderException(item)).length;
   const sortBy = (key: OrderSortKey) =>
     setSort((current) =>
@@ -934,6 +956,16 @@ export default function OrdersPage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {onlyReadyToInvoice && (
+              <button
+                type="button"
+                aria-pressed="true"
+                onClick={() => setOnlyReadyToInvoice(false)}
+                className="min-h-9 rounded-lg border border-forest-200 bg-forest-50 px-3 text-xs font-semibold text-forest-900"
+              >
+                Prontos para NF-e ✕
+              </button>
+            )}
             <button
               type="button"
               aria-pressed={onlyExceptions}
@@ -5149,7 +5181,7 @@ function OrderDrawer({
               "INVOICED",
               "SHIPPED",
             ].includes(order.status) && (
-              <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
+              <section id="proxima-acao" className="mt-5 scroll-mt-24 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold text-stone-900">

@@ -313,3 +313,12 @@ test("Vendas, Prospecção e Loja e marca são áreas separadas, com no máximo 
   const sales = navigationForRole("SALES").map((group) => group.id);
   assert.ok(sales.includes("prospecting") && !sales.includes("brand"));
 });
+
+test("Emitir NF-e na Central abre os pedidos prontos e o pedido quando só há um", () => {
+  const central = readFileSync(join(__dirname, "../components/home-command-v3.tsx"), "utf8");
+  const orders = readFileSync(join(__dirname, "../app/(system)/pedidos/page.tsx"), "utf8");
+  assert.match(central, /\/pedidos\?filtro=emitir-nf/);
+  assert.match(orders, /get\("filtro"\) === "emitir-nf"/);
+  assert.match(orders, /ready\.length !== 1/);
+  assert.match(orders, /id="proxima-acao"/);
+});
