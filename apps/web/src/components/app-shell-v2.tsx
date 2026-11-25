@@ -433,8 +433,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
   };
 
+  // A parent page (e.g. /exportacoes) is not active when a more specific menu
+  // item (e.g. /exportacoes/amostras) matches the current page.
+  const allNavHrefs = navGroups.flatMap((group) => group.items.map((item) => item.href));
   const isRouteActive = (href: string) =>
-    pathname === href || (href !== "/home" && pathname.startsWith(`${href}/`));
+    pathname === href ||
+    (href !== "/home" &&
+      pathname.startsWith(`${href}/`) &&
+      !allNavHrefs.some(
+        (other) => other !== href && other.startsWith(`${href}/`) && (pathname === other || pathname.startsWith(`${other}/`)),
+      ));
   const pendingFor = (href: string) =>
     notifications.filter(
       (item) => !item.readAt && (item.href.split(/[?#]/)[0] === href || item.href.startsWith(`${href}/`)),

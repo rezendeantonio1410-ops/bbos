@@ -289,7 +289,8 @@ test("menu: cada área tem ícone próprio e contadores vêm das notificações 
 
 test("Vendas, Prospecção e Loja e marca são áreas separadas, com no máximo 4 itens", () => {
   const area = (id: string) => bbosNavigation.find((group) => group.id === id)?.items.map((item) => item.href);
-  assert.deepEqual(area("commercial"), ["/pedidos", "/clientes", "/exportacoes"]);
+  assert.deepEqual(area("commercial"), ["/pedidos", "/clientes"]);
+  assert.deepEqual(area("export"), ["/exportacoes", "/exportacoes/clientes", "/exportacoes/amostras", "/exportacoes/contratos"]);
   assert.deepEqual(area("prospecting"), ["/prospeccao", "/atendimento", "/por-perto"]);
   assert.deepEqual(area("brand"), ["/commerce", "/commerce/marketplaces", "/commerce/midia"]);
   for (const group of bbosNavigation) assert.ok(group.items.length <= 5, group.label);

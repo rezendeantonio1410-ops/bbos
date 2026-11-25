@@ -60,6 +60,7 @@ export type BbosNavGroup = {
   id:
     | "overview"
     | "commercial"
+    | "export"
     | "prospecting"
     | "brand"
     | "supply"
@@ -118,7 +119,7 @@ export const bbosNavigation: BbosNavGroup[] = [
     id: "commercial",
     icon: ShoppingCart,
     label: "Vendas",
-    description: "Pedidos, clientes e exportações",
+    description: "Pedidos e clientes",
     tone: "blue",
     items: [
       {
@@ -144,9 +145,19 @@ export const bbosNavigation: BbosNavGroup[] = [
         roles: ["ADMIN", "EXECUTIVE", "SALES", "FINANCE", "ACCOUNTANT"],
         keywords: ["cliente", "credito"],
       },
+    ],
+  },
+  {
+    // Own area: export carries documents, logistics, exchange and partners.
+    id: "export",
+    icon: Ship,
+    label: "Exportações",
+    description: "Carteira, logística, documentos e câmbio",
+    tone: "blue",
+    items: [
       {
         href: "/exportacoes",
-        label: "Exportações",
+        label: "Visão geral",
         description: "Carteira, logística e documentos",
         icon: Ship,
         roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
@@ -159,6 +170,30 @@ export const bbosNavigation: BbosNavGroup[] = [
           "proforma",
           "cambio",
         ],
+      },
+      {
+        href: "/exportacoes/clientes",
+        label: "Clientes externos",
+        description: "Importadores e torrefações do exterior",
+        icon: Globe2,
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        keywords: ["importador", "comprador", "exterior", "buyer"],
+      },
+      {
+        href: "/exportacoes/amostras",
+        label: "Amostras",
+        description: "Envio, rastreio e resposta do comprador",
+        icon: PackageCheck,
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        keywords: ["amostra", "sample", "rastreio", "dhl", "fedex", "ups"],
+      },
+      {
+        href: "/exportacoes/contratos",
+        label: "Contratos",
+        description: "Do aprovado ao embarque",
+        icon: ClipboardList,
+        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        keywords: ["contrato", "embarque", "incoterm", "fob"],
       },
     ],
   },
