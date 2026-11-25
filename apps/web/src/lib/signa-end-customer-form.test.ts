@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   emptySignaEndCustomerForm,
   formatCnpj,
@@ -52,4 +53,14 @@ test("Signa form accepts the new alphanumeric CNPJ (official example) and masks 
   });
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.payload.taxId, "12ABC34501DE35");
+});
+
+test("cadastro comercial: nome, CNPJ e CEP consecutivos nas duas fichas", () => {
+  for (const file of ["SignaEnterpriseDashboard.tsx", "PartnerOrderWorkspace.tsx"]) {
+    const source = readFileSync(new URL("../app/parceiro/" + file, import.meta.url), "utf8");
+    const labels = [...source.matchAll(/<label[^>]*>(Nome \/ Razão social \*|CNPJ \*|CEP \*)</g)].map(match => match[1]);
+    const start = labels.indexOf("Nome / Razão social *");
+    assert.ok(start >= 0, file + ": nome comercial ausente");
+    assert.deepEqual(labels.slice(start, start + 3), ["Nome / Razão social *", "CNPJ *", "CEP *"], file);
+  }
 });
