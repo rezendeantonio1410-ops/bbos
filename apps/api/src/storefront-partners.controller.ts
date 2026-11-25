@@ -247,7 +247,7 @@ export class StorefrontPartnersController {
     }
     await this.database.$transaction(async (transaction) => {
       await transaction.$queryRawUnsafe(
-        `SELECT pg_advisory_xact_lock(hashtext($1))`,
+        `SELECT pg_advisory_xact_lock(hashtext($1)) IS NULL AS locked`,
         `${actor.companyId}:customer-tax-id-suggestions`,
       );
       await transaction.$executeRawUnsafe(

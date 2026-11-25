@@ -228,7 +228,7 @@ export class CustomersController {
     db: RawQueryClient,
   ) {
     await db.$queryRawUnsafe(
-      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      `SELECT pg_advisory_xact_lock(hashtext($1)) IS NULL AS locked`,
       `${actor.companyId}:customer-tax-id-suggestions`,
     );
   }
@@ -1121,7 +1121,7 @@ export class CustomersController {
       );
 
       await tx.$queryRawUnsafe(
-        `SELECT pg_advisory_xact_lock(hashtext($1))`,
+        `SELECT pg_advisory_xact_lock(hashtext($1)) IS NULL AS locked`,
         `${actor.companyId}:${canonicalCnpj}`,
       );
       const duplicate = await tx.$queryRawUnsafe<Array<{ id: string }>>(
@@ -1610,7 +1610,7 @@ export class CustomersController {
 
       if (taxId && taxIdChanged) {
         await tx.$queryRawUnsafe(
-          `SELECT pg_advisory_xact_lock(hashtext($1))`,
+          `SELECT pg_advisory_xact_lock(hashtext($1)) IS NULL AS locked`,
           `${actor.companyId}:${taxId}`,
         );
         const duplicate = await tx.$queryRawUnsafe<any[]>(
