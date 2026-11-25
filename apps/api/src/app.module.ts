@@ -53,6 +53,7 @@ import { BrokersController } from "./brokers.controller";
 import { CustomersController } from "./customers.controller";
 import { ProspectsController } from "./prospects.controller";
 import { ExportsController } from "./exports.controller";
+import { SampleTrackingService } from "./sample-tracking.service";
 import { NearbyController } from "./nearby.controller";
 import { VisitTextController } from "./visit-text.controller";
 import { VisitTextPolishService } from "./visit-text-polish";
@@ -159,6 +160,7 @@ import { BillingEmailService } from "./billing-email.service";
     PublicStorefrontMediaController,
   ],
   providers: [
+    SampleTrackingService,
     DashboardService,
     IntelligenceService,
     ProductsService,

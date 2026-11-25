@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ExternalLink, Plus } from "lucide-react";
+import { ExternalLink, Plus, RefreshCw } from "lucide-react";
 import {
   CARRIER_LABEL,
   RESULT_LABEL,
@@ -24,9 +24,10 @@ type Sample = {
   status: string; sentAt: string | null; deliveredAt: string | null; responseDueAt: string | null; responseDays: number;
   result: string | null; buyerScore: number | null; feedback: string | null; contractId: string | null; contractCode: string | null;
   notes: string | null; alert: { kind: string; days: number } | null;
+  trackingSyncedAt?: string | null; trackingStatusText?: string | null; trackingProblem?: string | null; syncMessage?: string | null;
   events?: Array<{ id: string; status: string; note: string | null; occurredAt: string; recordedByName: string | null; source: string }>;
 };
-type Overview = { inTransit: number; awaitingAnswer: number; approvalRate: number | null; evaluated: number; becameContract: number };
+type Overview = { trackingEnabled?: boolean; inTransit: number; awaitingAnswer: number; approvalRate: number | null; evaluated: number; becameContract: number };
 
 const FILTERS: Array<[string, string, (s: Sample) => boolean]> = [
   ["all", "Todas", () => true],
@@ -77,6 +78,21 @@ export default function ExportSamplesPage() {
   }, []);
   React.useEffect(() => { void load(); }, [load]);
 
+  const [syncing, setSyncing] = React.useState(false);
+  const [syncNote, setSyncNote] = React.useState("");
+  async function syncAll() {
+    setSyncing(true);
+    try {
+      const result = await exportsApi<{ synced: number; changed: number; message: string | null }>("/samples/tracking-sync", { method: "POST", body: {} });
+      setSyncNote(result.message ?? (result.synced ? `${result.synced} consultada(s), ${result.changed} com etapa nova.` : "Nenhuma amostra a caminho com código de rastreio."));
+      await load();
+    } catch (reason) {
+      setSyncNote(reason instanceof Error ? reason.message : "Não foi possível consultar agora.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const active = FILTERS.find(([key]) => key === filter) ?? FILTERS[0]!;
   const visible = samples.filter(active[2]);
 
@@ -87,10 +103,25 @@ export default function ExportSamplesPage() {
           <h1 className="text-[22px] font-semibold">Amostras de exportação</h1>
           <p className="text-sm text-[var(--bbos-text-secondary)]">Do envio à resposta do comprador, com rastreio em cada etapa</p>
         </div>
-        <button type="button" className={primaryClass} onClick={() => setCreating(true)} disabled={!buyers.length && !loading}>
-          <Plus size={16} /> Nova amostra
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {overview?.trackingEnabled && (
+            <button type="button" className={buttonClass} disabled={syncing} onClick={() => void syncAll()}>
+              <RefreshCw size={15} className={syncing ? "animate-spin" : ""} /> {syncing ? "Consultando…" : "Atualizar rastreios"}
+            </button>
+          )}
+          <button type="button" className={primaryClass} onClick={() => setCreating(true)} disabled={!buyers.length && !loading}>
+            <Plus size={16} /> Nova amostra
+          </button>
+        </div>
       </section>
+      {overview && (
+        <p className="text-xs text-[var(--bbos-text-secondary)]">
+          {overview.trackingEnabled
+            ? "Rastreio automático ligado: o BBOS consulta a transportadora a cada 6 horas e registra cada etapa sozinho."
+            : "Rastreio automático desligado: registre as etapas à mão ou ligue a conexão com o 17TRACK."}
+          {syncNote ? ` ${syncNote}` : ""}
+        </p>
+      )}
       {!loading && !buyers.length && (
         <p className="rounded-xl bg-[var(--bbos-warning-soft)] px-3 py-2 text-sm">
           Cadastre primeiro um <Link className="font-semibold underline" href="/exportacoes/clientes">cliente externo</Link> para enviar amostras.
@@ -286,6 +317,20 @@ function SampleSheet({ id, onClose, onChanged }: { id: string; onClose: () => vo
               Ver no site da {CARRIER_LABEL[sample.carrier ?? "OTHER"]} <ExternalLink size={13} />
             </a>
           )}
+          {sample.trackingCode && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--bbos-surface-subtle)] px-3 py-2">
+              <p className="text-xs text-[var(--bbos-text-secondary)]">
+                {sample.trackingStatusText
+                  ? <><b className="text-[var(--bbos-text-primary,#1f2a22)]">{sample.trackingStatusText}</b> · consultado {dateTime(sample.trackingSyncedAt)}</>
+                  : "Ainda não consultado na transportadora."}
+              </p>
+              <button type="button" className={buttonClass} disabled={busy} onClick={() => run(`/samples/${id}/tracking-sync`, {})}>
+                <RefreshCw size={14} /> Atualizar agora
+              </button>
+            </div>
+          )}
+          {sample.trackingProblem && <p className="mt-2 rounded-xl bg-[#fdecea] px-3 py-2 text-sm text-[var(--bbos-danger)]">{sample.trackingProblem}</p>}
+          {sample.syncMessage && <p className="mt-2 text-xs text-[var(--bbos-text-secondary)]">{sample.syncMessage}</p>}
         </section>
 
         {!evaluated && (
@@ -331,7 +376,9 @@ function SampleSheet({ id, onClose, onChanged }: { id: string; onClose: () => vo
             {(sample.events ?? []).map((event) => (
               <li key={event.id} className="grid grid-cols-[92px_1fr] gap-2 border-t border-dashed border-[var(--bbos-border)] py-2 text-sm">
                 <span className="text-xs text-[var(--bbos-text-secondary)]">{dateTime(event.occurredAt)}</span>
-                <span><b>{SAMPLE_STATUS_LABEL[event.status] ?? event.status}</b>{event.note ? ` · ${event.note}` : ""}{event.recordedByName ? <span className="text-xs text-[var(--bbos-text-secondary)]"> — {event.recordedByName}</span> : null}</span>
+                <span><b>{SAMPLE_STATUS_LABEL[event.status] ?? event.status}</b>{event.note ? ` · ${event.note}` : ""}{event.source === "TRACKING"
+                  ? <span className="ml-1 rounded bg-[#e8f0fb] px-1.5 py-0.5 text-[10px] font-bold text-[#1d4f91]">transportadora</span>
+                  : event.recordedByName ? <span className="text-xs text-[var(--bbos-text-secondary)]"> — {event.recordedByName}</span> : null}</span>
               </li>
             ))}
           </ol>
