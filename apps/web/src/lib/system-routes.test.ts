@@ -6,6 +6,7 @@ import {
   mobileNavigationForRole,
   navigationForRole,
   bbosNavigation,
+  exportOperatorAllowed,
   pendingCountByGroup,
 } from "../components/bbos-navigation";
 import { normalizeHostname, resolveDomainRedirect } from "./domain-routing";
@@ -64,6 +65,21 @@ test("marketplace operators only see their dedicated marketplace area", () => {
     group.items.map((item) => item.href),
   );
   assert.deepEqual(routes, ["/commerce/marketplaces"]);
+});
+
+test("operadores de exportação veem somente a área de Exportações", () => {
+  const groups = navigationForRole("EXPORT_OPERATOR");
+  assert.deepEqual(groups.map((group) => group.id), ["export"]);
+  assert.deepEqual(
+    groups.flatMap((group) => group.items.map((item) => item.href)),
+    ["/exportacoes", "/exportacoes/clientes", "/exportacoes/amostras", "/exportacoes/contratos"],
+  );
+  assert.equal(mobileNavigationForRole("EXPORT_OPERATOR")[0]?.href, "/exportacoes");
+  assert.ok(exportOperatorAllowed("/exportacoes/amostras"));
+  assert.ok(exportOperatorAllowed("/perfil"));
+  for (const blocked of ["/home", "/pedidos", "/clientes", "/financeiro", "/exportacoesx"]) {
+    assert.equal(exportOperatorAllowed(blocked), false, blocked);
+  }
 });
 
 test("o perfil de vendedor recebe cadastro e atendimento sem acesso financeiro", () => {

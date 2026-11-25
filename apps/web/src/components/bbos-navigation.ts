@@ -38,7 +38,8 @@ export type BbosRole =
   | "FINANCE"
   | "ACCOUNTANT"
   | "SALES"
-  | "MARKETPLACE_OPERATOR";
+  | "MARKETPLACE_OPERATOR"
+  | "EXPORT_OPERATOR";
 
 export type BbosNavItem = {
   href: string;
@@ -92,7 +93,9 @@ const KNOWN_ROLES = new Set<BbosRole>([
   ...ALL,
   "ACCOUNTANT",
   "MARKETPLACE_OPERATOR",
+  "EXPORT_OPERATOR",
 ]);
+const EXPORT: BbosRole[] = ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL", "EXPORT_OPERATOR"];
 
 // Eight work areas in the order of the coffee (SAP Fiori spaces / Dynamics 365
 // modules). Settings (users, integrations, app) live in the user menu.
@@ -160,7 +163,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Visão geral",
         description: "Carteira, logística e documentos",
         icon: Ship,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        roles: EXPORT,
         keywords: [
           "exportacao",
           "internacional",
@@ -176,7 +179,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Clientes externos",
         description: "Importadores e torrefações do exterior",
         icon: Globe2,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        roles: EXPORT,
         keywords: ["importador", "comprador", "exterior", "buyer"],
       },
       {
@@ -184,7 +187,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Amostras",
         description: "Envio, rastreio e resposta do comprador",
         icon: PackageCheck,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        roles: EXPORT,
         keywords: ["amostra", "sample", "rastreio", "dhl", "fedex", "ups"],
       },
       {
@@ -192,7 +195,7 @@ export const bbosNavigation: BbosNavGroup[] = [
         label: "Contratos",
         description: "Do aprovado ao embarque",
         icon: ClipboardList,
-        roles: ["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"],
+        roles: EXPORT,
         keywords: ["contrato", "embarque", "incoterm", "fob"],
       },
     ],
@@ -468,7 +471,18 @@ const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
   ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
   SALES: ["/home", "/por-perto", "/pedidos", "/clientes"],
   MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
+  EXPORT_OPERATOR: ["/exportacoes", "/exportacoes/amostras", "/exportacoes/clientes", "/exportacoes/contratos"],
 };
+
+/** Export operators work only in the export area (plus their own profile). */
+export function exportOperatorAllowed(pathname: string) {
+  return (
+    pathname === "/exportacoes" ||
+    pathname.startsWith("/exportacoes/") ||
+    pathname === "/perfil" ||
+    pathname.startsWith("/perfil/")
+  );
+}
 
 export function mobileNavigationForRole(role?: string | null) {
   if (!role || !KNOWN_ROLES.has(role as BbosRole)) return [];

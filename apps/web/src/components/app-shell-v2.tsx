@@ -27,6 +27,7 @@ import { UserAvatar } from "./user-avatar";
 import {
   mobileNavigationForRole,
   navigationForRole,
+  exportOperatorAllowed,
   pendingCountByGroup,
   toneClasses,
   type BbosNavGroup,
@@ -69,6 +70,7 @@ const corporateTitleByRole: Record<string, string> = {
   ACCOUNTANT: "Contabilidade",
   INDUSTRIAL: "Industrial",
   MARKETPLACE_OPERATOR: "Operador de marketplace",
+  EXPORT_OPERATOR: "Operador de exportação",
 };
 
 /** Pages reached through in-page tabs (not in the side menu). */
@@ -240,7 +242,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     const defaultLanding =
       sessionUser?.role === "ACCOUNTANT"
         ? (mobileQuickLinks[0]?.href ?? "/financeiro")
-        : "/home";
+        : sessionUser?.role === "EXPORT_OPERATOR"
+          ? "/exportacoes"
+          : "/home";
     if (pathname === defaultLanding) return null;
 
     const parentRoute = navGroups
@@ -334,6 +338,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
       !accountantAllowedPrefixes.some((prefix) => pathname.startsWith(prefix))
     )
       router.replace("/financeiro");
+  }, [pathname, router, sessionState, sessionUser?.role]);
+
+  useEffect(() => {
+    if (
+      sessionState !== "authenticated" ||
+      sessionUser?.role !== "EXPORT_OPERATOR" ||
+      pathname === "/login"
+    )
+      return;
+    if (!exportOperatorAllowed(pathname)) router.replace("/exportacoes");
   }, [pathname, router, sessionState, sessionUser?.role]);
 
   useEffect(() => {

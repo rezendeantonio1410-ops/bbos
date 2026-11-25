@@ -630,3 +630,32 @@ test("every registered non-public controller has an explicit access policy", () 
   );
   assert.deepEqual(missing, []);
 });
+
+test("export operators reach only the export area", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  const can = (controller: string, handler?: string) => {
+    try {
+      return guard.canActivate(
+        executionContext({ controller, handler, role: "EXPORT_OPERATOR" }),
+      );
+    } catch (error) {
+      if (error instanceof ForbiddenException) return false;
+      throw error;
+    }
+  };
+  assert.equal(can("ExportsController"), true);
+  assert.equal(can("SalesOrdersController", "exportOverview"), true);
+  assert.equal(can("NotificationsController"), true);
+  for (const controller of [
+    "DashboardController",
+    "FinanceController",
+    "CustomersController",
+    "ProspectsController",
+    "InventoryController",
+    "AdminUsersController",
+  ]) {
+    assert.equal(can(controller), false, controller);
+  }
+  assert.equal(can("SalesOrdersController", "list"), false);
+  assert.equal(can("SalesOrdersController", "create"), false);
+});
