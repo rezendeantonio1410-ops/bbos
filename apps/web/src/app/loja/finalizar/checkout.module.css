@@ -268,3 +268,16 @@
 }
 
 .privacyNote{margin:0;color:rgba(14,25,29,.62);font-size:9px;line-height:1.45}.privacyNote a{color:inherit;text-underline-offset:2px}@media(max-width:780px){.privacyNote{font-size:10px}}
+.fieldError{display:block;margin-top:6px;color:#a1261c;font-size:12px;font-style:normal;font-weight:600;line-height:1.35;letter-spacing:0;text-transform:none}
+.fieldHint{display:block;margin-top:6px;color:rgba(14,25,29,.58);font-size:11px;font-weight:500;letter-spacing:0;text-transform:none}
+a.fieldHint{color:#0e191d;text-decoration:underline;text-underline-offset:2px}
+.fields input[aria-invalid="true"]{border-color:#a1261c!important;background:#fff6f5}
+.page form button.noNumber{display:inline-flex;width:auto;min-width:0;box-shadow:none;justify-content:flex-start;align-items:center;gap:8px;margin-top:8px;min-height:36px;padding:0;border:0;background:none;color:inherit;font:inherit;font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;cursor:pointer}
+.page form button.noNumber span{width:20px;height:20px;display:grid;place-items:center;border:1.5px solid #0e191d;border-radius:5px;font-size:13px;line-height:1}
+.page form button.noNumber[aria-checked="true"] span{background:#0e191d;color:#fff}
+.optional{font-weight:400;opacity:.55;text-transform:none;letter-spacing:0}
+.cepNotice{margin:0;padding:10px 12px;border-radius:10px;background:#fff4e0;color:#6b4300;font-size:13px}
+.deliveryCheck{margin-top:18px;padding:16px 18px;border:1.5px solid #0e191d;border-radius:14px;background:#fff;display:grid;gap:4px}
+.deliveryCheck small{font-size:10px;font-weight:800;letter-spacing:.12em;color:#6b6f63}
+.deliveryCheck b{font-size:16px}
+.deliveryCheck span{font-size:13px;color:rgba(14,25,29,.72)}

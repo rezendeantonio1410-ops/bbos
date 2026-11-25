@@ -317,6 +317,11 @@
     height: 62px !important;
   }
 
+  /* the logo was touching the screen edge on phones */
+  .header :global(a[aria-label="Bispo Coffees — início"]) {
+    margin-left: 16px !important;
+  }
+
   .actions {
     gap: 0 !important;
   }

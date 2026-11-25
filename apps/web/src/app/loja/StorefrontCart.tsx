@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { resolveStorefrontProduct } from "@bbos/shared";
+import { freeShippingRegion } from "@/lib/storefront-checkout-validation";
 import styles from "./storefront-cart.module.css";
 import SensorySignature from "./SensorySignature";
 import { storefrontCommerce } from "./storefront-catalog";
@@ -240,6 +241,14 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
   } | null>(null);
   const [couponMessage, setCouponMessage] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+
+  useEffect(() => {
+    // "Trocar CEP" on the checkout comes back here with ?sacola=1.
+    if (new URLSearchParams(window.location.search).get("sacola") === "1") {
+      setVisible(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -601,16 +610,23 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
                   </section>
                   <section className={styles.progress}>
                     <b>
-                      {remaining
-                        ? "Faltam " + money(remaining) + " para o frete grátis"
-                        : "Frete grátis alcançado"}
+                      {freeShippingRegion(cep) === false
+                        ? "Frete grátis vale para Sul e Sudeste"
+                        : remaining
+                          ? "Faltam " + money(remaining) + " para o frete grátis"
+                          : freeShippingRegion(cep)
+                            ? "Frete grátis alcançado"
+                            : "Frete grátis no Sul e Sudeste — informe o CEP"}
                     </b>
-                    <div>
-                      <span
-                        style={{ width: Math.min(100, subtotal / 270) + "%" }}
-                      />
-                    </div>
-                    <small>Sul e Sudeste</small>
+                    {freeShippingRegion(cep) === false ? (
+                      <small>Para o seu CEP o frete é calculado abaixo.</small>
+                    ) : (
+                      <div>
+                        <span
+                          style={{ width: Math.min(100, subtotal / 270) + "%" }}
+                        />
+                      </div>
+                    )}
                   </section>
                 </main>
                 <footer>

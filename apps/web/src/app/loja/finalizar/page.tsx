@@ -4,6 +4,12 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, LoaderCircle, LockKeyhole } from "lucide-react";
 import styles from "./checkout.module.css";
+import {
+  NO_NUMBER,
+  checkoutErrors,
+  deliverySummary,
+  type CheckoutErrors,
+} from "@/lib/storefront-checkout-validation";
 
 type CheckoutItem = {
   id: string;
@@ -69,17 +75,6 @@ const cpfMask = (value: string) =>
     .replace(/(\d{3})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-function validCpf(value: string) {
-  const cpf = digits(value);
-  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
-  for (let size = 9; size <= 10; size += 1) {
-    let sum = 0;
-    for (let index = 0; index < size; index += 1)
-      sum += Number(cpf[index]) * (size + 1 - index);
-    if (((sum * 10) % 11) % 10 !== Number(cpf[size])) return false;
-  }
-  return true;
-}
 
 export default function CheckoutPage() {
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
@@ -97,6 +92,8 @@ export default function CheckoutPage() {
     state: "",
   });
   const [loadingAddress, setLoadingAddress] = useState(false);
+  const [errors, setErrors] = useState<CheckoutErrors>({});
+  const [genericCep, setGenericCep] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CARD">("PIX");
@@ -193,6 +190,8 @@ export default function CheckoutPage() {
       .then(async (response) => {
         const body = await response.json();
         if (!response.ok) throw new Error(body.message);
+        // Small towns share one CEP: then the street is typed by the customer.
+        setGenericCep(!body.street);
         setData((current) => ({
           ...current,
           street: body.street,
@@ -287,8 +286,24 @@ export default function CheckoutPage() {
   const discountCents = checkout?.discountCents || 0;
   const netSubtotal = Math.max(0, (checkout?.subtotal || 0) - discountCents);
   const paymentPending = order?.status === "AWAITING_PAYMENT";
-  const change = (field: keyof FormData, value: string) =>
+  const change = (field: keyof FormData, value: string) => {
     setData((current) => ({ ...current, [field]: value }));
+    setErrors((current) =>
+      current[field] ? { ...current, [field]: undefined } : current,
+    );
+  };
+  const noNumber = data.number === NO_NUMBER;
+  const summary = deliverySummary(data);
+  const fieldError = (field: keyof FormData) =>
+    errors[field] ? (
+      <em className={styles.fieldError} id={`erro-${field}`}>
+        {errors[field]}
+      </em>
+    ) : null;
+  const invalid = (field: keyof FormData) =>
+    errors[field]
+      ? { "aria-invalid": true as const, "aria-describedby": `erro-${field}` }
+      : {};
 
   async function copyPix() {
     const code = order?.pix?.qrCode;
@@ -348,12 +363,14 @@ export default function CheckoutPage() {
     event.preventDefault();
     setMessage("");
     if (!checkout) return;
-    if (!validCpf(data.cpf)) {
-      setMessage("Confira o CPF informado.");
-      return;
-    }
-    if (digits(data.phone).length < 10) {
-      setMessage("Confira o telefone informado.");
+    const found = checkoutErrors(data);
+    setErrors(found);
+    const first = Object.keys(found)[0];
+    if (first) {
+      setMessage("Faltam dados para a entrega. Confira os campos marcados em vermelho.");
+      document
+        .querySelector<HTMLInputElement>(`[name="${first}"]`)
+        ?.focus();
       return;
     }
     setSubmitting(true);
@@ -480,55 +497,75 @@ export default function CheckoutPage() {
       </header>
 
       <div className={styles.layout}>
-        <form onSubmit={submit}>
+        <form noValidate onSubmit={submit}>
           <section>
             <small>1 · SEUS DADOS</small>
             <h2>Quem recebe?</h2>
             <div className={styles.fields}>
               <label className={styles.wide}>
-                Nome completo
+                Nome e sobrenome
                 <input
                   required
+                  name="name"
                   autoComplete="name"
+                  autoCapitalize="words"
                   value={data.name}
                   onChange={(e) => change("name", e.target.value)}
+                  {...invalid("name")}
                 />
+                {fieldError("name")}
               </label>
               <label>
                 E-mail
                 <input
                   required
+                  name="email"
                   type="email"
                   autoComplete="email"
                   value={data.email}
-                  onChange={(e) => change("email", e.target.value)}
+                  onChange={(e) => change("email", e.target.value.trim())}
+                  {...invalid("email")}
                 />
+                {fieldError("email")}
               </label>
               <label>
-                Telefone
+                Celular com DDD
                 <input
                   required
+                  name="phone"
+                  type="tel"
                   inputMode="tel"
-                  autoComplete="tel"
+                  autoComplete="tel-national"
                   placeholder="(43) 99999-9999"
                   value={data.phone}
                   onChange={(e) => change("phone", phoneMask(e.target.value))}
+                  {...invalid("phone")}
                 />
+                {fieldError("phone") ?? (
+                  <small className={styles.fieldHint}>
+                    A transportadora liga se precisar.
+                  </small>
+                )}
               </label>
               <label>
                 CPF
                 <input
                   required
+                  name="cpf"
                   inputMode="numeric"
                   placeholder="000.000.000-00"
                   value={data.cpf}
                   onChange={(e) => change("cpf", cpfMask(e.target.value))}
+                  {...invalid("cpf")}
                 />
+                {fieldError("cpf") ?? (
+                  <small className={styles.fieldHint}>Vai na nota fiscal.</small>
+                )}
               </label>
             </div>
           </section>
 
-          <section>
+          <section id="entrega">
             <small>2 · ENTREGA</small>
             <h2>Para onde enviamos?</h2>
             <div className={styles.fields}>
@@ -537,29 +574,66 @@ export default function CheckoutPage() {
                 <span className={styles.inputStatus}>
                   {loadingAddress && <LoaderCircle />}
                 </span>
-                <input required value={data.postalCode} readOnly />
-              </label>
-              <label className={styles.wide}>
-                Endereço
                 <input
                   required
-                  autoComplete="street-address"
+                  name="postalCode"
+                  autoComplete="postal-code"
+                  value={data.postalCode}
+                  readOnly
+                />
+                <Link className={styles.fieldHint} href="/loja?sacola=1">
+                  Trocar CEP (recalcula o frete)
+                </Link>
+              </label>
+              {genericCep && (
+                <p className={`${styles.wide} ${styles.cepNotice}`}>
+                  Este CEP vale para a cidade inteira. Digite a rua e o bairro.
+                </p>
+              )}
+              <label className={styles.wide}>
+                Rua
+                <input
+                  required
+                  name="street"
+                  autoComplete="address-line1"
                   value={data.street}
                   onChange={(e) => change("street", e.target.value)}
+                  {...invalid("street")}
                 />
+                {fieldError("street")}
               </label>
               <label>
                 Número
                 <input
                   required
-                  inputMode="numeric"
-                  value={data.number}
-                  onChange={(e) => change("number", e.target.value)}
+                  name="number"
+                  autoComplete="address-line2"
+                  placeholder="Ex.: 120"
+                  value={noNumber ? "Sem número" : data.number}
+                  disabled={noNumber}
+                  onChange={(e) => change("number", e.target.value.toUpperCase())}
+                  {...invalid("number")}
                 />
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={noNumber}
+                  className={styles.noNumber}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    change("number", noNumber ? "" : NO_NUMBER);
+                  }}
+                >
+                  <span aria-hidden="true">{noNumber ? "✓" : ""}</span>
+                  Sem número
+                </button>
+                {fieldError("number")}
               </label>
               <label>
-                Complemento
+                Complemento <span className={styles.optional}>opcional</span>
                 <input
+                  name="complement"
+                  placeholder="Apto, bloco, casa 2…"
                   value={data.complement}
                   onChange={(e) => change("complement", e.target.value)}
                 />
@@ -568,30 +642,55 @@ export default function CheckoutPage() {
                 Bairro
                 <input
                   required
+                  name="district"
                   value={data.district}
                   onChange={(e) => change("district", e.target.value)}
+                  {...invalid("district")}
                 />
+                {fieldError("district")}
               </label>
               <label>
                 Cidade
                 <input
                   required
+                  name="city"
+                  autoComplete="address-level2"
                   value={data.city}
                   onChange={(e) => change("city", e.target.value)}
+                  {...invalid("city")}
                 />
+                {fieldError("city")}
               </label>
               <label>
-                Estado
+                Estado (UF)
                 <input
                   required
+                  name="state"
+                  autoComplete="address-level1"
                   maxLength={2}
                   value={data.state}
                   onChange={(e) =>
                     change("state", e.target.value.toUpperCase())
                   }
+                  {...invalid("state")}
                 />
+                {fieldError("state")}
               </label>
             </div>
+            {summary.line1 && data.number && data.district && (
+              <div className={styles.deliveryCheck} aria-live="polite">
+                <small>CONFIRA A ENTREGA</small>
+                <b>{summary.line1}</b>
+                <span>
+                  {summary.line2} · CEP {summary.cep}
+                </span>
+                {data.name && data.phone && (
+                  <span>
+                    Para {data.name} · {data.phone}
+                  </span>
+                )}
+              </div>
+            )}
           </section>
 
           <section className={styles.paymentSection}>
