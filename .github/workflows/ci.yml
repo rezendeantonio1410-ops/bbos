@@ -267,13 +267,19 @@ jobs:
           echo "PASS: synthetic draft, order, receivable, prices and fiscal marker unchanged through upgrade and repeat."
 
   signa-authenticated-e2e:
-    name: Signa authenticated API on disposable PostgreSQL ${{ matrix.postgres }}
+    name: Signa authenticated API on disposable PostgreSQL ${{ matrix.postgres }} (${{ matrix.pix_mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        postgres: ['16', '18']
+        include:
+          - postgres: '16'
+            pix_mode: ci-static
+          - postgres: '18'
+            pix_mode: ci-static
+          - postgres: '18'
+            pix_mode: render-denied
     services:
       postgres:
         image: postgres:${{ matrix.postgres }}
@@ -327,7 +333,12 @@ jobs:
           password="Aa1$(openssl rand -hex 24)"
           echo "::add-mask::$password"
           echo "SIGNA_E2E_PASSWORD=$password" >> "$GITHUB_ENV"
-          BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          # Simulate the non-GitHub seed mode only inside the disposable DB.
+          if [[ "${{ matrix.pix_mode }}" == "render-denied" ]]; then
+            env GITHUB_ACTIONS=false BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          else
+            BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          fi
       - name: Start local API and run authenticated checks
         shell: bash
         run: |
@@ -343,4 +354,8 @@ jobs:
           done
           if [ "$ready" -ne 1 ]; then echo "Local API not ready"; exit 1; fi
           node --check scripts/signa-homolog-e2e.mjs
-          node scripts/signa-homolog-e2e.mjs
+          if [[ "${{ matrix.pix_mode }}" == "render-denied" ]]; then
+            env GITHUB_ACTIONS=false node scripts/signa-homolog-e2e.mjs
+          else
+            node scripts/signa-homolog-e2e.mjs
+          fi
