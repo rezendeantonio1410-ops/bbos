@@ -151,6 +151,7 @@ export default function LoginPage() {
       );
       const isPartner = payload?.user?.role === "PARTNER";
       const isAccountant = payload?.user?.role === "ACCOUNTANT";
+      const isExportOperator = payload?.user?.role === "EXPORT_OPERATOR";
       const safeReturnTo =
         requestedReturnTo &&
         requestedReturnTo.startsWith("/") &&
@@ -163,7 +164,11 @@ export default function LoginPage() {
         ? "/parceiro"
         : isAccountant
           ? "/financeiro"
-          : safeReturnTo && !safeReturnTo.startsWith("/parceiro")
+          : isExportOperator
+            ? safeReturnTo?.startsWith("/exportacoes")
+              ? safeReturnTo
+              : "/exportacoes"
+            : safeReturnTo && !safeReturnTo.startsWith("/parceiro")
             ? safeReturnTo
             : "/home";
       // A full navigation is intentional here. Samsung Internet and installed

@@ -119,6 +119,7 @@ const internalRoleLabel: Record<string, string> = {
   FINANCE: "Financeiro",
   INDUSTRIAL: "Industrial",
   MARKETPLACE_OPERATOR: "Operador de marketplace",
+  EXPORT_OPERATOR: "Operador de exportação",
 };
 
 const money = new Intl.NumberFormat("pt-BR", {

@@ -15,6 +15,7 @@ export type BbosRole =
   | "ACCOUNTANT"
   | "SALES"
   | "MARKETPLACE_OPERATOR"
+  | "EXPORT_OPERATOR"
   | "PARTNER";
 
 const ALL: readonly BbosRole[] = [
@@ -25,10 +26,14 @@ const ALL: readonly BbosRole[] = [
   "ACCOUNTANT",
   "SALES",
   "MARKETPLACE_OPERATOR",
+  "EXPORT_OPERATOR",
 ];
 const AUTHENTICATED: readonly BbosRole[] = [...ALL, "PARTNER"];
 const CORE: readonly BbosRole[] = ALL.filter(
-  (role) => role !== "MARKETPLACE_OPERATOR" && role !== "ACCOUNTANT",
+  (role) =>
+    role !== "MARKETPLACE_OPERATOR" &&
+    role !== "ACCOUNTANT" &&
+    role !== "EXPORT_OPERATOR",
 );
 const CORE_WITHOUT_SALES: readonly BbosRole[] = CORE.filter(
   (role) => role !== "SALES",
@@ -113,7 +118,8 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   FiscalInboundController: OPERATIONS_FINANCE,
   MarketplacesController: MARKETPLACE,
   AdminStorefrontMediaController: LEADERSHIP,
-  ExportsController: OPERATIONS_FINANCE,
+  // Export operators see only the export area (clients abroad, samples, contracts).
+  ExportsController: [...OPERATIONS_FINANCE, "EXPORT_OPERATOR"],
 };
 
 const HANDLER_ROLE_POLICY: Readonly<
@@ -218,7 +224,7 @@ const HANDLER_ROLE_POLICY: Readonly<
   SalesOrdersController: {
     list: [...CORE, "ACCOUNTANT"],
     options: [...CORE, "ACCOUNTANT"],
-    exportOverview: [...CORE_WITHOUT_SALES, "ACCOUNTANT"],
+    exportOverview: [...CORE_WITHOUT_SALES, "ACCOUNTANT", "EXPORT_OPERATOR"],
     fulfillment: [...CORE, "ACCOUNTANT"],
     get: [...CORE, "ACCOUNTANT"],
     pdf: [...CORE, "ACCOUNTANT"],

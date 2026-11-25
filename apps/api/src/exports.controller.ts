@@ -31,7 +31,7 @@ import {
 const weightLabel = (grams: number) =>
   grams >= 1000 ? `${(grams / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} kg` : `${grams} g`;
 
-const EXPORT_ROLES = new Set(["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL"]);
+const EXPORT_ROLES = new Set(["ADMIN", "EXECUTIVE", "FINANCE", "INDUSTRIAL", "EXPORT_OPERATOR"]);
 
 const BUYER_COLUMNS = `b.id,b.name,b.country,b.city,b."legalRepresentative",b."contactName",b.email,b.phone,b.messenger,b.language,b.currency,b.incoterm,
   b."taxId",b.address,b.status,b.notes,b."createdAt",b."updatedAt"`;

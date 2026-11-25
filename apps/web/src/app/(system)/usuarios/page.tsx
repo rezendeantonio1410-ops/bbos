@@ -30,6 +30,7 @@ const roleLabel: Record<string, string> = {
   SALES: "Vendedor / Comercial",
   INDUSTRIAL: "Produção",
   MARKETPLACE_OPERATOR: "Operador de marketplace",
+  EXPORT_OPERATOR: "Operador de exportação",
 };
 
 export default function UsersPage() {
@@ -358,6 +359,9 @@ export default function UsersPage() {
                 </option>
                 <option value="SALES">Vendedor / Comercial</option>
                 <option value="INDUSTRIAL">Produção</option>
+                <option value="EXPORT_OPERATOR">
+                  Operador de exportação (só Exportações)
+                </option>
                 <option value="MARKETPLACE_OPERATOR">
                   Operador externo de marketplace
                 </option>

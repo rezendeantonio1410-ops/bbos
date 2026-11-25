@@ -10,7 +10,8 @@ export type CurrentUser = {
     | "FINANCE"
     | "ACCOUNTANT"
     | "SALES"
-    | "MARKETPLACE_OPERATOR";
+    | "MARKETPLACE_OPERATOR"
+    | "EXPORT_OPERATOR";
 };
 
 /** Mock de sessão única; a autenticação real poderá substituí-lo sem alterar os componentes. */
