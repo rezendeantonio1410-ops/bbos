@@ -141,19 +141,14 @@ test("NF e-mail attaches the PDF and XML downloaded from Bling", async () => {
   assert.equal(email.subject, "Sua nota fiscal 1234 · pedido B-2026-000150");
 });
 
-test("NF e-mail retries while Bling files are unavailable, then sends a link", async () => {
+test("NF e-mail never sends without both Bling documents, even after multiple retries", async () => {
   const failing = (async () => new Response("erro", { status: 503 })) as unknown as typeof fetch;
-  await assert.rejects(
-    composeBillingEmail(fakeDatabase(), { template: "INVOICE_ISSUED", payload: { fiscalDocumentId: "fd1" }, attempts: 1 }, { assets, fetch: failing }),
-    /nova tentativa/,
-  );
-  const email = await composeBillingEmail(
-    fakeDatabase(),
-    { template: "INVOICE_ISSUED", payload: { fiscalDocumentId: "fd1" }, attempts: 4 },
-    { assets, fetch: failing },
-  );
-  assert.equal(email.attachments?.length, 0);
-  assert.match(email.html, /Abra a nota fiscal aqui/);
+  for (const attempts of [1, 4, 12]) {
+    await assert.rejects(
+      composeBillingEmail(fakeDatabase(), { template: "INVOICE_ISSUED", payload: { fiscalDocumentId: "fd1" }, attempts }, { assets, fetch: failing }),
+      /não enviar e-mail incompleto/,
+    );
+  }
 });
 
 test("cancelled NF and paid receivables are skipped, not sent", async () => {
