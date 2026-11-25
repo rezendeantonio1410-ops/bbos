@@ -119,7 +119,12 @@ await check("cadastro comercial com CNPJ e CEP grava no banco", async () => {
   endCustomer = r.json;
   const list = await signa("/end-customers");
   const found = (list.json.customers ?? []).find((c) => c.id === endCustomer.id);
-  assert.ok(found, "não listado"); assert.equal(found.postalCode, "86010010"); assert.equal(found.city, "Londrina");
+  assert.ok(found, "não listado");
+  assert.equal(found.name, `Cafeteria Teste ${run}`);
+  assert.equal(found.taxId, taxId);
+  for (const [field, value] of Object.entries(address)) {
+    if (field !== "complement") assert.equal(found[field], value, `campo comercial ${field} não persistido`);
+  }
   return endCustomer.id;
 });
 await check("CNPJ inválido é recusado", async () => {
@@ -144,6 +149,15 @@ await check("edição parcial preserva campos obrigatórios", async () => {
   const r = await signa(`/end-customers/${endCustomer.id}`, { method: "PATCH", body: { complement: "Sala 2" } });
   assert.equal(r.status, 200, `HTTP ${r.status} ${JSON.stringify(r.json)}`);
   assert.equal(r.json.complement, "Sala 2"); assert.equal(r.json.street, "Rua Homologação"); assert.equal(r.json.taxId, taxId);
+  const reopened = await client(await login("signa@homolog.test"))("/end-customers");
+  assert.equal(reopened.status, 200);
+  const saved = reopened.json.customers.find((item) => item.id === endCustomer.id);
+  assert.ok(saved, "cliente ausente em nova sessão");
+  assert.equal(saved.complement, "Sala 2");
+  assert.equal(saved.taxId, taxId);
+  for (const [field, value] of Object.entries(address)) {
+    if (field !== "complement") assert.equal(saved[field], value, `edição alterou ${field}`);
+  }
 });
 await check("outro distribuidor não lê nem edita o cliente Signa", async () => {
   const list = await other("/end-customers");
