@@ -13,6 +13,7 @@ import {
 import { Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { resolveStorefrontProduct } from "@bbos/shared";
 import { freeShippingRegion } from "@/lib/storefront-checkout-validation";
+import { track } from "@/lib/storefront-analytics";
 import styles from "./storefront-cart.module.css";
 import sacola from "./sacola.module.css";
 import { storefrontCommerce } from "./storefront-catalog";
@@ -328,6 +329,14 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
     setQuotes([]);
     setCoupon(null);
     setVisible(true);
+    track("add_to_cart", [
+      {
+        id: normalizedProduct.id,
+        name: normalizedProduct.name,
+        priceCents: normalizedProduct.priceCents,
+        quantity: 1,
+      },
+    ]);
   };
   const quantity = (id: string, next: number) => {
     setItems((current) =>
@@ -411,6 +420,15 @@ export function StorefrontCartProvider({ children }: { children: ReactNode }) {
 
   function continueToCheckout() {
     if (!quote) return;
+    track(
+      "begin_checkout",
+      items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        priceCents: item.priceCents,
+        quantity: item.quantity,
+      })),
+    );
     localStorage.setItem(
       "bispo-checkout-v1",
       JSON.stringify({

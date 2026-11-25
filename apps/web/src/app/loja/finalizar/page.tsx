@@ -10,6 +10,10 @@ import {
   deliverySummary,
   type CheckoutErrors,
 } from "@/lib/storefront-checkout-validation";
+import {
+  rememberPendingPurchase,
+  trackPurchaseOnce,
+} from "@/lib/storefront-analytics";
 
 type CheckoutItem = {
   id: string;
@@ -243,6 +247,7 @@ export default function CheckoutPage() {
         return;
       }
       if (current.status !== "PAID") return;
+      trackPurchaseOnce(order.id);
       localStorage.removeItem("bispo-cart-v2");
       localStorage.removeItem("bispo-checkout-v1");
       sessionStorage.removeItem("bispo-checkout-idempotency");
@@ -439,7 +444,22 @@ export default function CheckoutPage() {
           pix: result.pix ?? null,
         }),
       );
+      if (checkout) {
+        rememberPendingPurchase(
+          result.id,
+          checkout.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            priceCents: item.priceCents,
+            quantity: item.quantity,
+          })),
+          checkout.subtotal -
+            (checkout.discountCents || 0) +
+            checkout.quote.priceCents,
+        );
+      }
       if (result.status === "PAID") {
+        trackPurchaseOnce(result.id);
         localStorage.removeItem("bispo-cart-v2");
         localStorage.removeItem("bispo-checkout-v1");
         sessionStorage.removeItem("bispo-checkout-idempotency");

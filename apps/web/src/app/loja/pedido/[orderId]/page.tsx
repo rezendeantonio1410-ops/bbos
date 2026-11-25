@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Check, Circle, Coffee, PackageCheck, Truck } from "lucide-react";
 import { useEffect, useState } from "react";
 import styles from "./tracking.module.css";
+import { trackPurchaseOnce } from "@/lib/storefront-analytics";
 
 type OrderStatus = {
   id: string;
@@ -78,6 +79,9 @@ export default function StorefrontOrderTrackingPage() {
         );
       setOrder(body);
       setError("");
+      // Card payments come back here from Mercado Pago: count the sale once.
+      if (["PAID", "PREPARING", "SHIPPED", "DELIVERED"].includes(body.status))
+        trackPurchaseOnce(body.id ?? params.orderId);
     };
     void load().catch((reason) => setError(reason.message));
     const timer = window.setInterval(
