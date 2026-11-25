@@ -144,6 +144,47 @@ const PRISMA_MIGRATIONS_TABLE = `CREATE TABLE "_prisma_migrations" (
   "applied_steps_count" INTEGER NOT NULL DEFAULT 0
 )`;
 
+// Narrow, audited exceptions for the EMPTY replay only. The SQL below
+// reads catalog metadata or checks absence of source rows; it never changes
+// production records or modifies historical migration files.
+const KNOWN_LEGACY_OMISSIONS = new Map([
+  ["migration=20260807143000_product_catalog_persistence_v1 statement=5 sqlstate=42P07",
+    `SELECT EXISTS (SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
+      WHERE i.indrelid='public."ProductVariant"'::regclass
+      AND c.relname='ProductVariant_productId_netWeightGrams_key'
+      AND i.indisunique AND i.indisvalid AND i.indisready
+      AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnatts=2 AND i.indnkeyatts=2
+      AND pg_get_indexdef(i.indexrelid,1,true)='"productId"'
+      AND pg_get_indexdef(i.indexrelid,2,true)='"netWeightGrams"') AS ok`],
+  ["migration=20260807230000_cost_engine_v1_traceability statement=8 sqlstate=42701",
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='CostEvent'
+      AND column_name='productVariantId' AND data_type='text'
+      AND is_nullable='YES' AND column_default IS NULL) AS ok`],
+  ["migration=20260807230000_cost_engine_v1_traceability statement=12 sqlstate=42P07",
+    `SELECT EXISTS (SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
+      WHERE i.indrelid='public."CostEvent"'::regclass
+      AND c.relname='CostEvent_productVariantId_occurredAt_idx'
+      AND NOT i.indisunique AND i.indisvalid AND i.indisready
+      AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnatts=2 AND i.indnkeyatts=2
+      AND pg_get_indexdef(i.indexrelid,1,true)='"productVariantId"'
+      AND pg_get_indexdef(i.indexrelid,2,true)='"occurredAt"') AS ok`],
+  ["migration=20260807230000_cost_engine_v1_traceability statement=13 sqlstate=42710",
+    `SELECT EXISTS (SELECT 1 FROM pg_constraint c
+      JOIN pg_attribute src ON src.attrelid=c.conrelid AND src.attnum=c.conkey[1]
+      JOIN pg_attribute dst ON dst.attrelid=c.confrelid AND dst.attnum=c.confkey[1]
+      WHERE c.conrelid='public."CostEvent"'::regclass
+      AND c.confrelid='public."ProductVariant"'::regclass
+      AND c.conname='CostEvent_productVariantId_fkey' AND c.contype='f'
+      AND cardinality(c.conkey)=1 AND cardinality(c.confkey)=1
+      AND src.attname='productVariantId' AND dst.attname='id'
+      AND c.confupdtype='c' AND c.confdeltype='r' AND c.confmatchtype='s'
+      AND c.convalidated AND NOT c.condeferrable) AS ok`],
+  ["migration=20261012173000_roaster_operational_load_17kg statement=3 sqlstate=55P04",
+    `SELECT NOT EXISTS (SELECT 1 FROM public."ProductionOrder")
+      AND NOT EXISTS (SELECT 1 FROM public."CostEvent") AS ok`],
+]);
+
 export async function bootstrapEmptyDatabase() {
   if (process.env.BBOS_EMPTY_DATABASE_BOOTSTRAP !== "true")
     throw new Error("Recusado: defina BBOS_EMPTY_DATABASE_BOOTSTRAP=true somente em bancos isolados.");
@@ -190,13 +231,28 @@ export async function bootstrapEmptyDatabase() {
             await tx.$executeRawUnsafe("RELEASE SAVEPOINT bbos_bootstrap");
           } catch (error) {
             await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT bbos_bootstrap");
-            ignored += 1;
-            // Diagnostic only: never print SQL, parameters or raw error messages.
-            // Preserve legacy behavior until each skipped statement is reviewed.
+            await tx.$executeRawUnsafe("RELEASE SAVEPOINT bbos_bootstrap");
+            // Fail closed inside the transaction rather than recording a new
+            // historical failure as applied and relying on CI to catch it later.
+            // Never print SQL, parameters or raw error messages.
             const rawCode = error?.meta?.code;
             const sqlState = typeof rawCode === "string" && /^[0-9A-Z]{5}$/.test(rawCode)
               ? rawCode : "UNKNOWN";
-            console.warn(`Bootstrap: legacy statement skipped migration=${name} statement=${statementIndex + 1} sqlstate=${sqlState}`);
+            const diagnostic = `migration=${name} statement=${statementIndex + 1} sqlstate=${sqlState}`;
+            const known = KNOWN_LEGACY_OMISSIONS.get(diagnostic);
+            if (!known) {
+              throw new Error(`Bootstrap: unexpected legacy statement failure: ${diagnostic}`);
+            }
+            // An existing object is not sufficient: prove the expected
+            // column, index or foreign key is present and equivalent.
+            // The enum error is tolerable ONLY when the historical cost
+            // adjustment cannot produce rows in this isolated empty database.
+            const [verification] = await tx.$queryRawUnsafe(known);
+            if (verification?.ok !== true) {
+              throw new Error(`Bootstrap: legacy omission prerequisite failed: ${diagnostic}`);
+            }
+            ignored += 1;
+            console.warn(`Bootstrap: legacy statement skipped ${diagnostic}`);
           }
         }
       }
