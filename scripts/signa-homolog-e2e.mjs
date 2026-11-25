@@ -187,10 +187,16 @@ await check("rascunho na conta: criar, versão otimista e privacidade", async ()
   assert.equal(stale.status, 409, `versão antiga HTTP ${stale.status}`);
   const foreign = await other(`/order-drafts/${draft.id}`);
   assert.ok([403, 404].includes(foreign.status), `outro parceiro HTTP ${foreign.status}`);
+  const foreignPatch = await other(`/order-drafts/${draft.id}`, { method: "PATCH", body: { version: updated.json.version, payload: { ...payload, notes: "Alteração indevida CI" } } });
+  assert.ok([403, 404, 409].includes(foreignPatch.status), `PATCH outro parceiro HTTP ${foreignPatch.status}`);
   const staleDelete = await signa(`/order-drafts/${draft.id}`, { method: "DELETE", body: { version: draft.version } });
   assert.equal(staleDelete.status, 409, `DELETE versão antiga HTTP ${staleDelete.status}`);
   const foreignDelete = await other(`/order-drafts/${draft.id}`, { method: "DELETE", body: { version: updated.json.version } });
   assert.ok([403, 404, 409].includes(foreignDelete.status), `DELETE outro parceiro HTTP ${foreignDelete.status}`);
+  const preserved = await signa(`/order-drafts/${draft.id}`);
+  assert.equal(preserved.status, 200);
+  assert.equal(preserved.json.version, updated.json.version, "tentativa rejeitada não pode incrementar a versão");
+  assert.deepEqual(preserved.json.payload, updated.json.payload, "tentativa rejeitada não pode alterar o conteúdo");
   const removed = await signa(`/order-drafts/${draft.id}`, { method: "DELETE", body: { version: updated.json.version } });
   assert.ok([200, 204].includes(removed.status), `DELETE HTTP ${removed.status}`);
   return `versão ${updated.json.version}`;
