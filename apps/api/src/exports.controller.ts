@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { AuthService } from "./auth.service";
+import { SampleTrackingService } from "./sample-tracking.service";
 import {
   CONTRACT_STATUS,
   ExportInputError,
@@ -40,7 +41,7 @@ const SAMPLE_COLUMNS = `s.id,s."buyerId",b.name AS "buyerName",b.country AS "buy
   s."declaredCurrency",s."shippedByName",s."coffeeType",s."lotReference",s."weightGrams",s."scaScore"::float AS "scaScore",
   s.carrier,s."trackingCode",s."shippingCost"::float AS "shippingCost",s.status,s."sentAt",s."deliveredAt",
   s."responseDueAt",s."responseDays",s.result,s."buyerScore"::float AS "buyerScore",s.feedback,s."contractId",
-  c.code AS "contractCode",s.notes,s."createdAt",s."updatedAt",
+  c.code AS "contractCode",s.notes,s."trackingSyncedAt",s."trackingStatusText",s."trackingProblem",s."createdAt",s."updatedAt",
   (SELECT MAX(e."occurredAt") FROM "ExportSampleEvent" e WHERE e."sampleId"=s.id) AS "lastEventAt"`;
 const CONTRACT_COLUMNS = `c.id,c."buyerId",b.name AS "buyerName",b.country AS "buyerCountry",c.code,c.product,
   c."quantityKg"::float AS "quantityKg",c."unitPrice"::float AS "unitPrice",c."priceUnit",c.currency,c.incoterm,
@@ -55,7 +56,10 @@ const CONTRACT_COLUMNS = `c.id,c."buyerId",b.name AS "buyerName",b.country AS "b
 export class ExportsController {
   private readonly db: any = prisma;
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly tracking: SampleTrackingService,
+  ) {}
 
   private async actor(request: any) {
     const actor = await this.auth.resolve(this.auth.readToken(request));
@@ -121,6 +125,7 @@ export class ExportsController {
     const contracts = await this.db.$queryRawUnsafe(
       `SELECT status, COUNT(*)::int n FROM "ExportContract" WHERE "companyId"=$1 GROUP BY status`, actor.companyId);
     return {
+      trackingEnabled: this.tracking.enabled(),
       inTransit: samples.filter((s: any) => ["SENT", "IN_TRANSIT", "CUSTOMS"].includes(s.status)).length,
       awaitingAnswer: samples.filter((s: any) => s.status === "DELIVERED").length,
       approvalRate: evaluated.length ? evaluated.filter((s: any) => s.result === "APPROVED").length / evaluated.length : null,
@@ -222,6 +227,21 @@ export class ExportsController {
       s.shippingCost, s.responseDays, s.notes, s.coffeeType, s.reference, s.proformaNumber, s.declaredValue,
       s.declaredCurrency, s.shippedByName).catch((error: any) => this.uniqueReference(error));
     return this.sampleDetail(id, request);
+  }
+
+  /** Asks the carrier (via 17TRACK) for news on every sample on the way. */
+  @Post("samples/tracking-sync")
+  async syncTracking(@Req() request: any) {
+    const actor = await this.actor(request);
+    return this.tracking.sync({ companyId: actor.companyId });
+  }
+
+  @Post("samples/:id/tracking-sync")
+  async syncSampleTracking(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    await this.sample(actor.companyId, id);
+    const result = await this.tracking.sync({ companyId: actor.companyId, sampleId: id });
+    return { ...(await this.sampleDetail(id, request)), syncMessage: result.message };
   }
 
   /** A new step of the journey: sent, in transit, customs, delivered… */
