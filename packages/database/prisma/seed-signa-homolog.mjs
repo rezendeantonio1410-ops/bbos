@@ -42,6 +42,15 @@ export function fictitiousCpf(seed) {
   return base;
 }
 
+// Only disposable GitHub Actions runs exercise the static Pix payload.
+// Render and local homologation must use a fictitious company document so
+// the portal cannot offer a payable QR code for the real Bispo account.
+export function homologCompanyTaxId(env = process.env) {
+  return env.GITHUB_ACTIONS === "true" && !env.RENDER
+    ? "13008726000112"
+    : fictitiousCnpj(90000003);
+}
+
 const CATALOG = [
   { line: "GOURMET", lineName: "Gourmet", display: "Clássicos", code: "GOU", items: [[250, "GOU-WLE-250", 19.5], [500, "GOU-ESS-500", 37], [1000, "GOU-ESS-1000", 72]] },
   { line: "CLASSICOS", lineName: "Clássicos", display: "Caramelo", code: "CLA", items: [[250, "CLA-WLC-250", 22], [500, "CLA-CAR-500", 42], [1000, "CLA-CAR-1000", 82]] },
@@ -61,10 +70,9 @@ export async function seedSignaHomolog(prisma = new PrismaClient()) {
   const otherCnpj = fictitiousCnpj(90000002);
   await prisma.$transaction(async (tx) => {
     const exec = (sql, ...params) => tx.$executeRawUnsafe(sql, ...params);
-    // The static Pix is only generated when the company CNPJ is the Bispo Pix
-    // key, so homologation uses Bispo's public CNPJ to exercise that flow.
-    // NOTE: a QR generated here is a real Pix to Bispo's account.
-    await exec(`INSERT INTO "Company"(id,name,"tradeName","taxId","updatedAt") VALUES ($1,'Bispo Coffees (Homologação)','Bispo Homologação',$2,NOW()) ON CONFLICT (id) DO UPDATE SET "taxId"=EXCLUDED."taxId"`, CO, "13008726000112");
+    // Static Pix is tested on disposable CI only. Render must not expose
+    // a payable QR for a synthetic order; reseeding also corrects legacy fixtures.
+    await exec(`INSERT INTO "Company"(id,name,"tradeName","taxId","updatedAt") VALUES ($1,'Bispo Coffees (Homologação)','Bispo Homologação',$2,NOW()) ON CONFLICT (id) DO UPDATE SET "taxId"=EXCLUDED."taxId"`, CO, homologCompanyTaxId());
     await exec(`INSERT INTO "SalesChannel"(id,"companyId",code,name,type,active,"updatedAt") VALUES ('homolog-ch-dist',$1,'DISTRIBUIDOR','Distribuidores','DISTRIBUIDOR',true,NOW()) ON CONFLICT (id) DO NOTHING`, CO);
     let sort = 0;
     for (const group of CATALOG) {
