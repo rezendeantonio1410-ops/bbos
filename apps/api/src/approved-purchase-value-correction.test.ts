@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   approvedPurchaseCorrectionEligible,
   approvedPurchaseFiscalCorrectionEligible,
+  approvedPurchaseOpenPayableEligible,
   parseApprovedPurchaseValueCorrection,
 } from "./approved-purchase-value-correction";
 
@@ -70,5 +71,27 @@ test("correcting to the authorized linked NF-e amount keeps the invoice unchange
     ["totalAmount", 9300],
   ] as const) {
     assert.equal(approvedPurchaseFiscalCorrectionEligible([{ ...invoice, [field]: value }], 9100), false, field);
+  }
+});
+
+test("approved correction can carry an unpaid, fully open payable", () => {
+  const payable = {
+    status: "OPEN",
+    amount: 4400,
+    openAmount: 4400,
+    paymentDate: null,
+    paymentCount: 0,
+  };
+  assert.equal(approvedPurchaseOpenPayableEligible(payable, 4400), true);
+  for (const change of [
+    { status: "PAID" },
+    { status: "PARTIALLY_PAID" },
+    { status: "OVERDUE" },
+    { amount: 4300 },
+    { openAmount: 4000 },
+    { paymentDate: new Date("2026-11-26T12:00:00Z") },
+    { paymentCount: 1 },
+  ]) {
+    assert.equal(approvedPurchaseOpenPayableEligible({ ...payable, ...change }, 4400), false);
   }
 });
