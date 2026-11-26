@@ -22,7 +22,9 @@ import {
 import { getApiBaseUrl } from "@/lib/api-url";
 import { roastPace } from "@/lib/roast-pace";
 import { buildCashFlowLines, type CashFlowLine } from "@/lib/finance-cashflow";
-import { greenStock, payableSnapshot, type SalesGeo } from "@/lib/command-center";
+import { buildBrief, greenCoverageDays, greenStock, payableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
+import { buildForecast, cashBufferDays, type RecurringExpense } from "@/lib/cash-forecast";
+import type { CashView, TimelineItem } from "./command-center-v4";
 import { CommandCenterV4 } from "./command-center-v4";
 
 const money = new Intl.NumberFormat("pt-BR", {
@@ -104,6 +106,7 @@ export function HomeCommandV3() {
   const [available, setAvailable] = React.useState(true);
   const [finance, setFinance] = React.useState<FinanceSnapshot>(null);
   const [geo, setGeo] = React.useState<SalesGeo | null>(null);
+  const [samples, setSamples] = React.useState<ExportSample[]>([]);
 
   React.useEffect(() => {
     const apiRoot = getApiBaseUrl();
@@ -137,15 +140,25 @@ export function HomeCommandV3() {
     void Promise.all([
       fetch(`${apiRoot}/finance/summary`, { credentials: "include", cache: "no-store" }),
       fetch(`${apiRoot}/finance/settings`, { credentials: "include", cache: "no-store" }),
+      fetch(`${apiRoot}/finance/recurring-expenses`, { credentials: "include", cache: "no-store" }).catch(() => null),
     ])
-      .then(async ([summaryResponse, settingsResponse]) => {
+      .then(async ([summaryResponse, settingsResponse, recurringResponse]) => {
         if (!summaryResponse.ok) return;
         const summary = await summaryResponse.json();
         const settings = settingsResponse.ok ? await settingsResponse.json() : {};
+        const recurring: RecurringExpense[] = recurringResponse?.ok ? (await recurringResponse.json()).map((r: RecurringExpense) => ({ ...r, amount: Number(r.amount) })) : [];
+        const from = Date.now() - 30 * 86_400_000;
+        const paid30 = (summary?.transactions ?? [])
+          .filter((t: { type: string; occurredAt: string }) => (t.type === "PAYMENT" || t.type === "TRANSFER_OUT") && Date.parse(t.occurredAt) >= from)
+          .reduce((sum: number, t: { amount: number }) => sum + Number(t.amount), 0);
         setFinance({
           cash: typeof summary?.cash === "number" ? summary.cash : null,
           overdue: Number(summary?.delinquency ?? 0),
           cashStarted: Boolean(settings?.cashStartDate),
+          cashStartDate: settings?.cashStartDate ?? null,
+          minimum: Number(settings?.minimumCashBalance) || 5000,
+          recurring,
+          paid30,
           lines: buildCashFlowLines({
             cash: Number(summary?.cash ?? 0),
             receivables: summary?.receivableProjection,
@@ -160,6 +173,11 @@ export function HomeCommandV3() {
     void fetch(`${apiRoot}/dashboard/sales-geography?period=month`, { credentials: "include", cache: "no-store" })
       .then(async (response) => (response.ok ? ((await response.json()) as SalesGeo) : null))
       .then((data) => setGeo(data && typeof data.revenue === "number" ? data : null))
+      .catch(() => undefined);
+    // Amostras de exportação com problema na transportadora (quem não tem acesso não vê).
+    void fetch(`${apiRoot}/exports/samples`, { credentials: "include", cache: "no-store" })
+      .then(async (response) => (response.ok ? ((await response.json()) as ExportSample[]) : []))
+      .then((list) => setSamples(Array.isArray(list) ? list : []))
       .catch(() => undefined);
   }, []);
 
@@ -222,12 +240,24 @@ export function HomeCommandV3() {
       green={green}
       finance={finance}
       geo={geo}
+      samples={samples}
     />
   );
 }
 
-type FinanceSnapshot = { cash: number | null; overdue: number; cashStarted: boolean; lines: CashFlowLine[] } | null;
-type Task = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string };
+type ExportSample = { id: string; buyerCountry?: string | null; buyerName?: string | null; carrier?: string | null; status: string; trackingProblem?: string | null; lastEventAt?: string | null };
+type FinanceSnapshot = {
+  cash: number | null; overdue: number; cashStarted: boolean; lines: CashFlowLine[];
+  cashStartDate?: string | null; minimum?: number; recurring?: RecurringExpense[]; paid30?: number;
+} | null;
+type Task = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string; why?: string };
+
+const CAUSE: Record<string, string> = {
+  Aluguel: "o aluguel", Seguros: "o seguro", "Energia elétrica": "a conta de luz", Água: "a conta de água",
+  "Internet / telefonia": "a conta de telefone", "Site / sistemas": "o site", "Funcionários / salários": "a folha", Contabilidade: "a contabilidade",
+};
+const dayMonth = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const brlTaskShort = (value: number) => brlTask.format(value);
 
 /**
  * Contas a pagar que pedem ação hoje (Salesforce/Dynamics "next best action"):
@@ -257,16 +287,79 @@ const brlTask = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "B
  */
 function CommandCenter({
   home, greeting, firstName, decisions, state,
-  green, finance, geo,
+  green, finance, geo, samples,
 }: {
   home: HomeData; greeting: string; firstName: string;
   decisions: HomeData["alerts"]; state: EvidenceState;
   green: { total: number; reserved: number; free: number };
-  finance: FinanceSnapshot; geo: SalesGeo | null;
+  finance: FinanceSnapshot; geo: SalesGeo | null; samples: ExportSample[];
 }) {
   const pace = roastPace(home.productionActualKg, home.productionPlannedKg);
+  const minimum = finance?.minimum ?? 5000;
+  // Previsão do caixa (mesma do Fluxo de caixa): saldo + títulos + despesas fixas.
+  const forecast = finance
+    ? buildForecast({ startBalance: finance.cashStarted ? finance.cash ?? 0 : 0, lines: finance.lines, recurring: finance.recurring ?? [], horizonDays: 30, minimum })
+    : null;
+  const known = Boolean(finance?.cashStarted && forecast);
+  const worstCauseEvent = forecast ? [...forecast.worst.events].sort((a, b) => a.amount - b.amount)[0] : undefined;
+  const worstCause = worstCauseEvent && worstCauseEvent.amount < 0
+    ? (worstCauseEvent.kind === "previsto" ? CAUSE[worstCauseEvent.detail] : undefined) ?? `o pagamento a ${worstCauseEvent.label}`
+    : undefined;
+  const cashView: CashView | null = finance && forecast ? {
+    known,
+    balance: finance.cash ?? 0,
+    bufferDays: known ? cashBufferDays(finance.cash ?? 0, finance.paid30 ?? 0) : null,
+    worst: known ? { date: forecast.worst.date, balance: forecast.worst.balance } : null,
+    minimum,
+  } : null;
+  const brief = buildBrief({
+    projection: salesPace(home.salesMonth).projection,
+    revenue: geo?.revenue ?? home.salesMonth,
+    previousRevenue: geo?.previousRevenue ?? 0,
+    worst: known && forecast ? { date: forecast.worst.date, balance: forecast.worst.balance, cause: worstCause } : null,
+    minimum,
+    overdue: forecast?.overdueReceivable ?? 0,
+    coverageDays: greenCoverageDays(green.free, home.productionPlannedKg),
+  });
+
+  // Decidir hoje: cada item diz por que importa; ordem por impacto.
+  const overdueTask: Task[] = forecast && forecast.overdueReceivable > 0 ? [{
+    key: "overdue",
+    tone: "critical",
+    title: `Cobrar ${brlTaskShort(forecast.overdueReceivable)} vencidos`,
+    detail: forecast.overdueIn.slice(0, 3).map((line) => `${line.counterparty} ${brlTaskShort(line.amount)}`).join(" · "),
+    why: known && forecast.worst.balance < minimum && forecast.worst.date > forecast.today
+      ? `Evita o caixa abaixo do mínimo no dia ${dayMonth(forecast.worst.date)}`
+      : undefined,
+    href: "/financeiro/receber",
+    action: "Cobrar com Pix ou boleto",
+  }] : [];
+  const statementAge = finance?.cashStartDate ? Math.floor((Date.now() - Date.parse(`${finance.cashStartDate}T12:00:00Z`)) / 86_400_000) : null;
+  const statementTask: Task[] = finance && (!finance.cashStarted || (statementAge !== null && statementAge > 7)) ? [{
+    key: "statement",
+    tone: "attention",
+    title: finance.cashStarted ? "Atualizar o extrato do Itaú" : "Importar o extrato do Itaú",
+    detail: finance.cashStarted ? `O último saldo é de ${dayMonth(finance.cashStartDate!)}` : "O saldo do banco, as baixas e as despesas fixas vêm dele",
+    why: finance.cashStarted ? "Pagamentos feitos no banco aparecem em aberto até lá" : undefined,
+    href: "/financeiro/conciliacao/importar",
+    action: "Importar extrato",
+  }] : [];
+  const stuck = samples.filter((sample) => sample.trackingProblem && !["DELIVERED", "EVALUATED", "LOST", "RETURNED"].includes(sample.status));
+  const sampleTask: Task[] = stuck.length ? [{
+    key: "samples",
+    tone: "attention",
+    title: `Amostra ${stuck[0]!.buyerCountry ? `para ${stuck[0]!.buyerCountry} ` : ""}com problema no envio`,
+    detail: `${stuck[0]!.carrier ?? "Transportadora"} · ${stuck[0]!.trackingProblem!.replace(/^Ocorrência no envio: /, "")}`.slice(0, 140),
+    why: stuck.length > 1 ? `Mais ${stuck.length - 1} ${stuck.length === 2 ? "amostra" : "amostras"} com problema` : undefined,
+    href: "/exportacoes/amostras",
+    action: "Ver amostras",
+  }] : [];
   const tasks: Task[] = [
-    ...decisions.map((alert) => ({
+    ...overdueTask,
+    ...statementTask,
+    ...decisions
+      .filter((alert) => !(overdueTask.length && alert.href.startsWith("/financeiro/receber")))
+      .map((alert) => ({
       key: alert.title,
       tone: alert.tone === "CRÍTICO" ? ("critical" as const) : ("attention" as const),
       title: alert.title.replace(/\(s\)/g, Number.parseInt(alert.title, 10) > 1 ? "s" : ""),
@@ -285,7 +378,8 @@ function CommandCenter({
           action: "Emitir NF-e",
         }]
       : []),
-    ...(pace.behindKg > 0
+    ...sampleTask,
+    ...(pace.behindKg >= 10
       ? [{
           key: "roast",
           tone: "attention" as const,
@@ -298,6 +392,29 @@ function CommandCenter({
         }]
       : []),
   ];
+  const order = { critical: 0, attention: 1, ok: 2 } as const;
+  tasks.sort((a, b) => order[a.tone] - order[b.tone]);
+  tasks.splice(5);
+
+  // Próximos 7 dias: dinheiro (previsão) e operação; o pior dia entra em destaque.
+  const timeline: TimelineItem[] = [];
+  if (forecast) {
+    for (const day of forecast.days.slice(0, 8)) {
+      const launched = day.events.filter((e) => e.kind === "lancado");
+      const planned = day.events.filter((e) => e.kind === "previsto");
+      for (const e of launched) timeline.push({ key: e.id, date: day.date, label: e.amount > 0 ? `${e.label} paga` : e.label, amount: e.amount });
+      if (planned.length)
+        timeline.push({ key: `p${day.date}`, date: day.date, label: planned.map((e) => e.detail).join(", "), note: "previsto", amount: planned.reduce((sum, e) => sum + e.amount, 0) });
+    }
+    const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+    const lastIso = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
+    if (lastIso <= forecast.days[Math.min(7, forecast.days.length - 1)]!.date && home.productionPlannedKg > 0)
+      timeline.push({ key: "close", date: lastIso, label: "Fechamento do mês", note: pace.missingKg > 0 ? `faltam ${kg.format(pace.missingKg)} kg de torra` : "meta de torra batida", amount: null });
+    if (known && forecast.worst.balance < minimum && forecast.worst.date > forecast.days[7]!.date)
+      timeline.push({ key: "worst", date: forecast.worst.date, label: worstCause ? worstCause.charAt(0).toUpperCase() + worstCause.slice(1) : "Pior dia do caixa", note: `saldo cai para ${brlTaskShort(forecast.worst.balance)}`, amount: worstCauseEvent?.amount ?? null, alert: true });
+    timeline.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   const summary =
     state === "loading"
       ? "Reunindo a operação de hoje…"
@@ -317,9 +434,10 @@ function CommandCenter({
       greenReserved={green.reserved}
       greenFree={green.free}
       cashLines={finance?.lines ?? []}
-      cash={finance?.cash ?? null}
-      cashStarted={Boolean(finance?.cashStarted)}
       financeReady={Boolean(finance)}
+      brief={brief}
+      cashView={cashView}
+      timeline={timeline}
       geo={geo}
       newMenu={<NewMenu />}
     />

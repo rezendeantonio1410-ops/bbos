@@ -124,3 +124,60 @@ export function greenStock(lots: Array<{ currentKg: number; reservedKg: number; 
   const free = lots.filter((lot) => lot.status === "APPROVED").reduce((sum, lot) => sum + Math.max(0, lot.currentKg), 0);
   return { total, reserved, free };
 }
+
+export type BriefPart = { text: string; tone?: "strong" | "red" };
+
+const thousand = (value: number) =>
+  value >= 1000 ? `R$ ${(value / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : brl(value);
+
+/**
+ * Resumo do dia em uma frase (Dynamics 365 / Salesforce): vendas do mês, o
+ * ponto de atenção do caixa com a causa e a saída, e a cobertura de café.
+ */
+export function buildBrief(input: {
+  projection: number;
+  revenue: number;
+  previousRevenue: number;
+  today?: Date;
+  worst?: { date: string; balance: number; cause?: string } | null;
+  minimum: number;
+  overdue: number;
+  coverageDays: number | null;
+}): BriefPart[] {
+  const today = input.today ?? new Date();
+  const parts: BriefPart[] = [];
+  const month = capitalize(monthName(today));
+  const previous = monthName(today, -1);
+  if (input.revenue > 0) {
+    parts.push({ text: `${month} deve fechar em ` }, { text: thousand(input.projection), tone: "strong" });
+    if (input.previousRevenue > 0) {
+      const ratio = input.revenue / input.previousRevenue;
+      const versus = ratio >= 1.5
+        ? `${ratio.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}× ${previous}`
+        : ratio >= 1 ? `${Math.round((ratio - 1) * 100)}% acima de ${previous}` : `${Math.round((1 - ratio) * 100)}% abaixo de ${previous}`;
+      parts.push({ text: ", " }, { text: versus, tone: ratio >= 1 ? "strong" : "red" });
+    }
+    parts.push({ text: ". " });
+  }
+  const worst = input.worst;
+  const todayIso = today.toISOString().slice(0, 10);
+  if (worst && worst.balance < input.minimum && worst.date > todayIso) {
+    const day = `${worst.date.slice(8, 10)}/${worst.date.slice(5, 7)}`;
+    parts.push(
+      { text: "O ponto de atenção é o caixa: no " },
+      { text: `dia ${day}${worst.cause ? ` ${worst.cause} derruba o saldo` : " o saldo cai"} para ${thousand(Math.max(0, worst.balance))}`, tone: "red" },
+      { text: ". " },
+    );
+    if (input.overdue > 0)
+      parts.push(
+        { text: "Cobrar os " },
+        { text: `${thousand(input.overdue)} vencidos`, tone: "strong" },
+        { text: worst.balance + input.overdue >= input.minimum ? " resolve. " : " ajuda. " },
+      );
+  } else if (input.overdue > 0) {
+    parts.push({ text: "Há " }, { text: `${thousand(input.overdue)} vencidos`, tone: "strong" }, { text: " para cobrar. " });
+  }
+  if (input.coverageDays !== null)
+    parts.push({ text: "Café verde dá para " }, { text: `~${Math.max(0, Math.round(input.coverageDays))} dias`, tone: input.coverageDays < 10 ? "red" : "strong" }, { text: " de torra." });
+  return parts;
+}

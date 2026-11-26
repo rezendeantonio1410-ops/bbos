@@ -87,3 +87,14 @@ test("payables: overdue apart, due today listed (26/11: CP-2026-000005 and old c
   assert.equal(snap.dueToday, 5000);
   assert.equal(cashNext14(list, now).outflow, 5000);
 });
+
+test("brief of 26/11: sales, the rent on the 10th and the overdue that solves it", async () => {
+  const { buildBrief } = await import("./command-center");
+  const parts = buildBrief({ projection: 27656, revenue: 23969, previousRevenue: 9478, today: new Date("2026-11-26T15:00:00Z"),
+    worst: { date: "2026-12-10", balance: 2259.72, cause: "o aluguel" }, minimum: 5000, overdue: 2790, coverageDays: 31 });
+  const text = parts.map((p) => p.text).join("");
+  assert.equal(text.replace(/\s/g, " "), "Novembro deve fechar em R$ 27,7 mil, 2,5× outubro. O ponto de atenção é o caixa: no dia 10/12 o aluguel derruba o saldo para R$ 2,3 mil. Cobrar os R$ 2,8 mil vencidos resolve. Café verde dá para ~31 dias de torra.");
+  assert.equal(parts.find((p) => p.text.startsWith("dia 10/12"))!.tone, "red");
+  const calm = buildBrief({ projection: 1000, revenue: 0, previousRevenue: 0, worst: null, minimum: 5000, overdue: 0, coverageDays: null });
+  assert.deepEqual(calm, []);
+});
