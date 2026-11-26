@@ -91,6 +91,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   FinanceController: ACCOUNTING_WRITE,
   FinanceSalesScheduleController: ACCOUNTING_WRITE,
   FinanceAssistedReconciliationController: ACCOUNTING_WRITE,
+  ReceivableBoletoController: ACCOUNTING_WRITE,
   ReconciliationController: ACCOUNTING_WRITE,
   CommerceController: ["ADMIN", "EXECUTIVE"],
   AdminCoffeeReferenceController: LEADERSHIP,
@@ -150,6 +151,12 @@ const HANDLER_ROLE_POLICY: Readonly<
   FinanceSalesScheduleController: {
     list: ACCOUNTING_READ,
     order: ACCOUNTING_READ,
+  },
+  ReceivableBoletoController: {
+    list: ACCOUNTING_READ,
+    issue: ACCOUNTING_WRITE,
+    simulatePayment: ACCOUNTING_WRITE,
+    cancel: ACCOUNTING_WRITE,
   },
   FinanceAssistedReconciliationController: {
     candidates: ACCOUNTING_READ,

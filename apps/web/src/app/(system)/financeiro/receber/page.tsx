@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, CheckCircle2, CircleDollarSign, ReceiptText, X } from "lucide-react";
+import { ArrowLeft, Barcode, CalendarClock, CheckCircle2, CircleDollarSign, Copy, Printer, ReceiptText, X } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { HORIZONS, agendaDays, horizonTotals, type HorizonKey } from "@/lib/receivable-agenda";
+import { formatDigitableLine, itfBars } from "@/lib/boleto-barcode";
 
 type Payment = {
   id: string;
@@ -34,6 +36,22 @@ type FinancialAccount = {
   currency: string;
   financialInstitution?: { name?: string | null } | null;
 };
+
+type Boleto = {
+  id: string;
+  accountsReceivableId: string;
+  mode: "teste" | "sandbox" | "producao";
+  status: "ISSUED" | "PAID" | "CANCELLED";
+  ourNumber: string;
+  digitableLine: string;
+  barcode: string;
+  pixCopyPaste: string | null;
+  amount: string;
+  dueDate: string;
+  issuedByName: string | null;
+  paidAt: string | null;
+};
+type BoletoMode = Boleto["mode"];
 
 type Filter = "Todas" | "A vencer" | "Vencidos" | "Parcial" | "Pagos";
 
@@ -70,6 +88,9 @@ export default function ReceivablesPage() {
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [selected, setSelected] = React.useState<Receivable | null>(null);
   const [notice, setNotice] = React.useState("");
+  const [boletos, setBoletos] = React.useState<Boleto[]>([]);
+  const [boletoMode, setBoletoMode] = React.useState<BoletoMode>("teste");
+  const [boletoFor, setBoletoFor] = React.useState<Receivable | null>(null);
 
   const load = React.useCallback(async () => {
     setStatus("loading");
@@ -81,6 +102,10 @@ export default function ReceivablesPage() {
       setRows(Array.isArray(nextRows) ? nextRows : []);
       setAccounts(Array.isArray(nextAccounts) ? nextAccounts : []);
       setStatus("ready");
+      // Boletos are optional: the page works the same if this call fails.
+      request<{ mode: BoletoMode; boletos: Boleto[] }>(`${API}/boletos`)
+        .then((result) => { setBoletos(result.boletos ?? []); setBoletoMode(result.mode ?? "teste"); })
+        .catch(() => setBoletos([]));
     } catch {
       setRows([]);
       setAccounts([]);
@@ -143,6 +168,7 @@ export default function ReceivablesPage() {
         ) : visibleRows.map((row) => {
           const label = displayStatus(row);
           const canReceive = !["Pago", "Cancelado"].includes(label) && Number(row.openAmount) > 0;
+          const boleto = boletos.find((item) => item.accountsReceivableId === row.id && item.status !== "CANCELLED");
           return (
             <div key={row.id} className="grid gap-3 border-b border-stone-100 p-4 text-xs lg:grid-cols-[1.3fr_1fr_.8fr_.8fr_.8fr_.8fr_.7fr_1fr] lg:items-center">
               <span className="font-semibold">{row.customer?.name ?? "Cliente não identificado"}</span>
@@ -154,9 +180,14 @@ export default function ReceivablesPage() {
               <div><Badge tone={label === "Vencido" ? "danger" : label === "Parcial" ? "warning" : label === "Pago" ? "success" : "neutral"}>{label}</Badge></div>
               <div>
                 {canReceive ? (
-                  <button data-bbos-write-action onClick={() => { setNotice(""); setSelected(row); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 font-bold text-emerald-800 transition hover:bg-emerald-100">
-                    <CircleDollarSign size={15} /> Marcar como pago
-                  </button>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button data-bbos-write-action onClick={() => { setNotice(""); setSelected(row); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 font-bold text-emerald-800 transition hover:bg-emerald-100">
+                      <CircleDollarSign size={15} /> Marcar como pago
+                    </button>
+                    <button data-bbos-write-action onClick={() => { setNotice(""); setBoletoFor(row); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 font-bold text-stone-700 transition hover:bg-stone-50">
+                      <Barcode size={15} /> {boleto ? (boleto.status === "PAID" ? "Boleto pago" : "Ver boleto") : "Gerar boleto"}
+                    </button>
+                  </div>
                 ) : row.payments?.length ? (
                   <span className="text-[10px] font-semibold text-stone-500">{row.payments.length} baixa{row.payments.length === 1 ? "" : "s"} registrada{row.payments.length === 1 ? "" : "s"}</span>
                 ) : <span className="text-stone-400">—</span>}
@@ -166,6 +197,20 @@ export default function ReceivablesPage() {
         })}
       </Card>
       {status === "ready" && <p className="mt-4 flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 size={14} />Somente registros persistidos no PostgreSQL.</p>}
+
+      {boletoFor && (
+        <BoletoDialog
+          receivable={boletoFor}
+          mode={boletoMode}
+          boleto={boletos.find((item) => item.accountsReceivableId === boletoFor.id && item.status !== "CANCELLED") ?? null}
+          onClose={() => setBoletoFor(null)}
+          onChanged={(next, message) => {
+            setBoletos((list) => [next, ...list.filter((item) => item.id !== next.id)]);
+            if (message) setNotice(message);
+          }}
+          onCancelled={(id) => { setBoletos((list) => list.filter((item) => item.id !== id)); setBoletoFor(null); setNotice("Boleto de teste cancelado."); }}
+        />
+      )}
 
       {selected && (
         <ReceiptDialog
@@ -368,5 +413,149 @@ function ReceiptDialog({ receivable, accounts, onClose, onDone }: { receivable: 
         </form>
       </Card>
     </div>
+  );
+}
+
+const MODE_TEXT: Record<BoletoMode, string> = {
+  teste: "Modo teste: nada é enviado ao Itaú e nenhuma conta é baixada.",
+  sandbox: "Ambiente de testes do Itaú (sandbox): o boleto não vale para pagamento.",
+  producao: "Boleto real, registrado no Itaú.",
+};
+
+function dateInput(value: string) {
+  const due = new Date(value);
+  const today = localDate();
+  const iso = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+  return iso < today ? today : iso;
+}
+
+function BarcodeSvg({ digits }: { digits: string }) {
+  const { bars, width } = itfBars(digits);
+  return (
+    <svg viewBox={`0 0 ${width} 50`} preserveAspectRatio="none" className="h-14 w-full max-w-[520px]" role="img" aria-label="Código de barras do boleto">
+      {bars.map(([x, w], index) => <rect key={index} x={x} y={0} width={w} height={50} fill="#111" />)}
+    </svg>
+  );
+}
+
+/** Gera, mostra e imprime o boleto com Pix de uma conta a receber. */
+function BoletoDialog({ receivable, mode, boleto, onClose, onChanged, onCancelled }: {
+  receivable: Receivable;
+  mode: BoletoMode;
+  boleto: Boleto | null;
+  onClose: () => void;
+  onChanged: (boleto: Boleto, message?: string) => void;
+  onCancelled: (id: string) => void;
+}) {
+  const [dueDate, setDueDate] = React.useState(dateInput(receivable.dueDate));
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [copied, setCopied] = React.useState("");
+  const shown = boleto;
+  const isTest = (shown?.mode ?? mode) !== "producao";
+  const customer = receivable.customer?.name ?? "Cliente";
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try { await action(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível concluir."); } finally { setBusy(false); }
+  };
+  const issue = () => run(async () => {
+    const result = await request<{ boleto: Boleto }>(`${API}/boletos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ receivableId: receivable.id, dueDate }) });
+    onChanged(result.boleto, `Boleto ${result.boleto.mode === "producao" ? "emitido" : "de teste gerado"} para ${customer}.`);
+  });
+  const simulate = () => run(async () => {
+    if (!shown) return;
+    const result = await request<{ boleto: Boleto; message: string }>(`${API}/boletos/${shown.id}/simulate-payment`, { method: "POST" });
+    onChanged(result.boleto, result.message);
+  });
+  const cancel = () => run(async () => {
+    if (!shown) return;
+    await request(`${API}/boletos/${shown.id}/cancel`, { method: "POST" });
+    onCancelled(shown.id);
+  });
+  const copy = async (text: string, what: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(what); } catch { setCopied(""); }
+  };
+
+  if (typeof document === "undefined") return null;
+  // Portal: the page sits in a stacking context below the mobile dock.
+  return createPortal(
+    <div className="fixed inset-0 z-[90] grid place-items-end bg-stone-950/40 p-0 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="boleto-dialog-title">
+      <style>{"@media print{body *{visibility:hidden}.boleto-print,.boleto-print *{visibility:visible}.boleto-print{position:absolute;inset:0 auto auto 0;max-height:none!important;overflow:visible!important;box-shadow:none!important}}"}</style>
+      <div className="boleto-print max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 print:hidden">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-forest-700">{customer}</p>
+            <h2 id="boleto-dialog-title" className="mt-1 text-lg font-bold">{shown ? "Boleto com Pix" : "Gerar boleto com Pix"}</h2>
+          </div>
+          <button type="button" aria-label="Fechar" onClick={onClose} disabled={busy} className="grid size-11 place-items-center rounded-xl border text-stone-500"><X size={17} /></button>
+        </div>
+
+        {isTest && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">{MODE_TEXT[shown?.mode ?? mode]}</p>}
+
+        {!shown ? (
+          <div className="mt-4 space-y-4">
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div><dt className="text-xs text-stone-500">Valor em aberto</dt><dd className="text-lg font-bold">{money.format(Number(receivable.openAmount))}</dd></div>
+              <div><dt className="text-xs text-stone-500">Pedido / NF</dt><dd className="font-semibold">{receivable.salesOrder?.orderNumber ?? receivable.salesOrder?.code ?? receivable.invoiceId ?? "—"}</dd></div>
+            </dl>
+            <label className="block text-xs font-bold text-stone-600">Vencimento do boleto
+              <input type="date" min={localDate()} value={dueDate} onChange={(event) => setDueDate(event.target.value)} className={field} />
+            </label>
+            <p className="text-sm text-stone-700">Emitir boleto de <b>{money.format(Number(receivable.openAmount))}</b> para <b>{customer}</b>, vencimento <b>{date.format(new Date(`${dueDate}T12:00:00`))}</b>?</p>
+            <p className="text-xs text-stone-500">O cliente precisa ter CPF/CNPJ, endereço, cidade, UF e CEP no cadastro.</p>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-stone-200 p-4 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-stone-100 pb-3">
+              <span className="text-base font-bold">Itaú <span className="font-mono text-stone-500">341-7</span></span>
+              <span className="font-mono text-[13px] font-semibold tracking-tight">{formatDigitableLine(shown.digitableLine)}</span>
+            </div>
+            {isTest && <p className="mt-2 text-center text-xs font-black uppercase tracking-[.3em] text-amber-700">Boleto de teste · não pagar</p>}
+            <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div><dt className="text-[11px] text-stone-500">Beneficiário</dt><dd className="font-semibold">Bispo Coffees Ltda</dd></div>
+              <div><dt className="text-[11px] text-stone-500">Pagador</dt><dd className="font-semibold">{customer}</dd></div>
+              <div><dt className="text-[11px] text-stone-500">Vencimento</dt><dd className="font-semibold">{date.format(new Date(shown.dueDate))}</dd></div>
+              <div><dt className="text-[11px] text-stone-500">Valor</dt><dd className="font-bold">{money.format(Number(shown.amount))}</dd></div>
+              <div><dt className="text-[11px] text-stone-500">Nosso número</dt><dd className="font-mono">109/{shown.ourNumber}</dd></div>
+              <div><dt className="text-[11px] text-stone-500">Situação</dt><dd>{shown.status === "PAID" ? <Badge tone="success">Pago{shown.paidAt ? ` em ${date.format(new Date(shown.paidAt))}` : ""}</Badge> : <Badge tone="neutral">Em aberto</Badge>}</dd></div>
+            </dl>
+            <div className="mt-4"><BarcodeSvg digits={shown.barcode} /></div>
+            {shown.pixCopyPaste && (
+              <div className="mt-3 rounded-lg bg-stone-50 p-3">
+                <p className="text-[11px] font-bold text-stone-500">Pix copia e cola</p>
+                <p className="mt-1 break-all font-mono text-[11px]">{shown.pixCopyPaste}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-800" role="alert">{error}</p>}
+        {copied && <p className="mt-3 text-xs font-semibold text-emerald-700" role="status">{copied} copiada.</p>}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2 print:hidden">
+          {!shown ? (
+            <>
+              <button type="button" onClick={onClose} disabled={busy} className="min-h-11 rounded-xl border px-4 text-sm font-bold text-stone-700">Cancelar</button>
+              <button data-bbos-write-action type="button" onClick={issue} disabled={busy || !dueDate} className="min-h-11 rounded-xl bg-forest-900 px-5 text-sm font-bold text-white disabled:bg-stone-200 disabled:text-stone-500">{busy ? "Gerando…" : mode === "producao" ? "Emitir boleto" : "Gerar boleto de teste"}</button>
+            </>
+          ) : (
+            <>
+              {shown.status === "ISSUED" && shown.mode === "teste" && (
+                <>
+                  <button data-bbos-write-action type="button" onClick={cancel} disabled={busy} className="min-h-11 rounded-xl border px-4 text-sm font-bold text-stone-700">Cancelar boleto</button>
+                  <button data-bbos-write-action type="button" onClick={simulate} disabled={busy} className="min-h-11 rounded-xl border border-amber-300 bg-amber-50 px-4 text-sm font-bold text-amber-900">Simular pagamento</button>
+                </>
+              )}
+              {shown.pixCopyPaste && <button type="button" onClick={() => copy(shown.pixCopyPaste!, "Chave Pix")} className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold text-stone-700"><Copy size={15} /> Copiar Pix</button>}
+              <button type="button" onClick={() => copy(shown.digitableLine, "Linha digitável")} className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold text-stone-700"><Copy size={15} /> Copiar linha</button>
+              <button type="button" onClick={() => window.print()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-bold text-white"><Printer size={15} /> Imprimir / PDF</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
