@@ -348,7 +348,36 @@ export class DashboardService implements OnModuleDestroy {
       hasConfirmedDemand &&
       finishedAvailableUnits <= 0 &&
       greenAvailableKg <= 0;
+    // Pedido com Melhor Envio, NF autorizada, sem etiqueta há mais de 3 dias
+    // (auditoria 26/11: um pedido ficou 2 meses assim sem ninguém perceber).
+    const withoutLabel = excludePlatformOrders
+      ? []
+      : await this.db
+          .$queryRawUnsafe<Array<{ orderNumber: string | null; customerName: string | null; total: number }>>(
+            `SELECT COALESCE(so."orderNumber",so.code) AS "orderNumber",c.name AS "customerName",
+                    count(*) OVER ()::int AS total
+               FROM "SalesOrder" so
+               JOIN "Customer" c ON c.id=so."customerId"
+              WHERE so."companyId"=$1 AND so."shippingProvider"='MELHOR_ENVIO'
+                AND so.status::text IN ('INVOICED','READY_TO_SHIP')
+                AND so."updatedAt" < NOW() - INTERVAL '3 days'
+                AND NOT EXISTS (SELECT 1 FROM "Shipment" sh WHERE sh."salesOrderId"=so.id AND sh."labelUrl" IS NOT NULL)
+              ORDER BY so."updatedAt" ASC LIMIT 1`,
+            companyId,
+          )
+          .catch(() => []);
     const alerts = [
+      ...(withoutLabel[0]
+        ? [
+            {
+              tone: "ATENÇÃO",
+              title: `${withoutLabel[0].total} pedido(s) sem etiqueta há mais de 3 dias`,
+              impact: `${withoutLabel[0].orderNumber ?? "Pedido"}${withoutLabel[0].customerName ? ` · ${withoutLabel[0].customerName}` : ""}: gere a etiqueta ou registre que foi entregue por outro meio.`,
+              href: "/pedidos",
+              action: "Ver pedidos",
+            },
+          ]
+        : []),
       ...(deliveryExceptions.length
         ? [
             {

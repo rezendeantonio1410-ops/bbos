@@ -5292,6 +5292,24 @@ function OrderDrawer({
                         {busy ? "Processando…" : "Confirmar expedição"}
                       </button>
                     )}
+                  {/* Melhor Envio sem etiqueta: pedido entregue por outro meio (ex.: em mãos). */}
+                  {fulfillment?.fiscalStatus === "AUTHORIZED" &&
+                    (order.status === "INVOICED" || order.status === "READY_TO_SHIP") &&
+                    !isPickup &&
+                    order.shippingProvider === "MELHOR_ENVIO" &&
+                    !fulfillment?.labelUrl && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          if (!window.confirm("Este pedido foi entregue ao cliente por outro meio, sem etiqueta do Melhor Envio? O BBOS registrará a entrega e não comprará etiqueta. O frete previsto continua em Contas a pagar para você baixar.")) return;
+                          await operationalAction("deliver", { method: "MANUAL_DELIVERY" });
+                        }}
+                        className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-[11px] font-bold text-stone-800 disabled:opacity-50"
+                      >
+                        Entregue por outro meio
+                      </button>
+                    )}
                   {canFinalizeDelivery && (
                     <button
                       type="button"
