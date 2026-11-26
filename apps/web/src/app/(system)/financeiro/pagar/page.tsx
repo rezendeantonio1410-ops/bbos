@@ -284,7 +284,8 @@ export default function PayablesPage() {
     setPayable(row);
     setPayment({
       amount: String(Number(row.openAmount || 0).toFixed(2)).replace(".", ","),
-      financialAccountId: options?.accounts[0]?.id ?? "",
+      // Conta do banco primeiro, não a primeira da lista em ordem alfabética.
+      financialAccountId: (options?.accounts.find((a) => a.type === "BANK") ?? options?.accounts[0])?.id ?? "",
       method: "PIX",
       paidAt: today(),
       notes: "",

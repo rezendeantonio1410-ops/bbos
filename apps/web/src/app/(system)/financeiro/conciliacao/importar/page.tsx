@@ -17,7 +17,7 @@ type Line = { externalId: string; date: string; description: string; counterpart
 type Plan = {
   line: Line;
   group: "ALREADY" | "SETTLE" | "EXPENSE" | "INCOME";
-  matchedPayment?: { id: string; name: string; differentPayer: boolean };
+  matchedPayment?: { id: string; name: string; differentPayer: boolean; otherAccount?: string };
   settlement?: Settlement;
   suggestion?: { category: string; sure: boolean; note?: string };
   alreadyApplied: boolean;
@@ -229,7 +229,12 @@ export default function ImportStatementPage() {
           </div>
 
           <Group title="1 · Já está no BBOS" hint="Mesmo valor e data de um recebimento ou pagamento já registrado" plans={groups.ALREADY} choices={choices} onToggle={(id, on) => set(id, { on })}
-            render={(p) => <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${p.matchedPayment?.differentPayer ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>= {p.matchedPayment?.name}{p.matchedPayment?.differentPayer ? " · pagador diferente" : ""}</span>} />
+            render={(p) => (
+              <div>
+                <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${p.matchedPayment?.differentPayer ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>= {p.matchedPayment?.name}{p.matchedPayment?.differentPayer ? " · pagador diferente" : ""}</span>
+                {p.matchedPayment?.otherAccount && <div className="mt-1 text-xs font-semibold text-amber-800">Baixado em “{p.matchedPayment.otherAccount}” · ao aplicar, passa para esta conta</div>}
+              </div>
+            )} />
 
           <Group title="2 · Dar baixa em contas que estão abertas" hint="O banco mostra que foi pago; no BBOS ainda está em aberto" plans={groups.SETTLE} choices={choices} onToggle={(id, on) => {
             // Pix somados para a mesma conta andam juntos.

@@ -105,3 +105,39 @@ test("category hints for common Brazilian billers", () => {
   assert.equal(out("ITAU UNIBANCO S A", "TAR PIXQR LIQ MAQUININHA"), "Tarifas bancárias");
   assert.equal(suggestIncome({ externalId: "x", date: "", amount: 1, counterparty: "", taxId: "", description: "RENDIMENTOS REND PAGO APLIC AUT MAIS" }, { companyTaxId: "", ownerNames: [] }).category, "Rendimentos");
 });
+
+test("open receivables are settled, payments in another account are recognized, known customers and common billers are suggested", () => {
+  const lines = [
+    L("dual", "2026-11-26", 2070, "CLIENTE A ASSISTENCIA EM MAQUINAS", "44444444000144", "RECEBIMENTOS"),
+    L("open", "2026-11-27", 1020, "CLIENTE C ASSOCIACAO", "55555555000155"),
+    L("other", "2026-10-02", 1561.05, "PESSOA EXEMPLO MARTINS", "12345678901"),
+    L("known", "2026-10-05", 420, "BARBEARIA EXEMPLO LTDA", "66666666000166"),
+    L("tax", "2026-10-08", -69.7, "RECEITA FEDERAL", "00394460000141", "PAGAMENTOS"),
+    L("box", "2026-10-06", -2880, "EASYPACK", "77777777000177"),
+    L("early", "2026-10-01", -56, "CORRETOR EXEMPLO", "11122233344"),
+  ];
+  const plans = planStatement(lines, {
+    payments: [{ id: "p1", direction: "IN", amount: 1561.05, date: "2026-09-25", name: "Pessoa Exemplo Martins", accountId: "frete", accountName: "Fretes recebidos" }],
+    payables: [{ id: "c6", label: "B-2026-000097 · comissão", amount: 148, dueDate: "2026-10-13", taxId: "11122233344", name: "Corretor", commission: true }],
+    installments: [],
+    receivables: [
+      { id: "r1", label: "B-2026-000019 · Cliente A", amount: 2070, dueDate: "2026-11-23", taxId: "", name: "Cliente A Assitência em Manutenção" },
+      { id: "r2", label: "B-2026-000024 · Cliente C", amount: 1020, dueDate: "2026-11-27", taxId: "55555555000155", name: "Cliente C" },
+    ],
+    customers: [{ name: "BARBEARIA EXEMPLO", taxId: "" }],
+    accountId: "itau",
+    companyTaxId: "77777777000100",
+    ownerNames: [],
+    learned: new Map(),
+  });
+  const by = Object.fromEntries(plans.map((p) => [p.line.externalId, p]));
+  assert.deepEqual(by.dual!.settlement!.allocations.map((a) => [a.kind, a.id]), [["RECEIVABLE", "r1"]]);
+  assert.deepEqual(by.open!.settlement!.allocations.map((a) => a.id), ["r2"]);
+  assert.equal(by.other!.group, "ALREADY");
+  assert.equal(by.other!.matchedPayment!.otherAccount, "Fretes recebidos");
+  assert.equal(by.known!.suggestion!.category, "Venda sem pedido no BBOS");
+  assert.equal(by.tax!.suggestion!.category, "Impostos e taxas");
+  assert.equal(by.box!.suggestion!.category, "Embalagens");
+  // Comissão criada só em 13/10 não recebe um Pix de 01/10.
+  assert.equal(by.early!.group, "EXPENSE");
+});
