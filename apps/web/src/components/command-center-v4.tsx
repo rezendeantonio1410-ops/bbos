@@ -52,14 +52,13 @@ export type CenterHome = {
 export type CenterTask = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string };
 
 export function CommandCenterV4({
-  home, greeting, firstName, summary, tasks, greenTotal, greenReserved, cashLines, cash, cashStarted, financeReady, geo, newMenu,
+  home, greeting, firstName, summary, tasks, greenTotal, greenReserved, greenFree, cashLines, cash, cashStarted, financeReady, geo, newMenu,
 }: {
   home: CenterHome; greeting: string; firstName: string; summary: string; tasks: CenterTask[];
-  greenTotal: number; greenReserved: number; cashLines: CashFlowLine[]; cash: number | null; cashStarted: boolean;
+  greenTotal: number; greenReserved: number; greenFree: number; cashLines: CashFlowLine[]; cash: number | null; cashStarted: boolean;
   financeReady: boolean; geo: SalesGeo | null; newMenu: React.ReactNode;
 }) {
   const today = new Date();
-  const greenFree = Math.max(0, greenTotal - greenReserved);
   const headlines = buildHeadlines({ geo, greenFreeKg: greenFree, plannedKg: home.productionPlannedKg, today });
   const pace = salesPace(home.salesMonth, today);
   const roast = roastPace(home.productionActualKg, home.productionPlannedKg);
