@@ -24,6 +24,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Record tested release merge identity
+        if: github.event_name == 'pull_request' && github.base_ref == 'release/bbos-rc1-consolidation'
+        shell: bash
+        env:
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          tested=$(git rev-parse HEAD)
+          mapfile -t parents < <(git cat-file -p HEAD | sed -n '/^$/q; s/^parent //p')
+          test "${#parents[@]}" -eq 2
+          test "${parents[0]}" = "$EXPECTED_BASE"
+          test "${parents[1]}" = "$EXPECTED_HEAD"
+          migration_digest=$(git ls-tree -r HEAD -- packages/database/prisma/migrations | sha256sum | cut -d ' ' -f 1)
+          {
+            echo '### Release validation identity'
+            printf 'Base: `%s`\n\nHead: `%s`\n\nTested merge: `%s`\n\nMigration tree SHA-256: `%s`\n' "$EXPECTED_BASE" "$EXPECTED_HEAD" "$tested" "$migration_digest"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
