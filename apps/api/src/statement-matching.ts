@@ -64,7 +64,7 @@ const INCOME_RULES: Array<[RegExp, string]> = [
 ];
 
 const tokens = (value: string) =>
-  new Set(value.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter((t) => t.length > 2 && !["LTDA", "S/A", "EIRELI", "COM", "DOS", "DAS"].includes(t)));
+  new Set(value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter((t) => t.length > 2 && !["LTDA", "S/A", "EIRELI", "COM", "DOS", "DAS"].includes(t)));
 export const sameName = (a: string, b: string) => {
   const ta = tokens(a);
   return [...tokens(b)].some((t) => ta.has(t));

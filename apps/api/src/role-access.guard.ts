@@ -92,6 +92,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   FinanceSalesScheduleController: ACCOUNTING_WRITE,
   FinanceAssistedReconciliationController: ACCOUNTING_WRITE,
   BankStatementImportController: ACCOUNTING_WRITE,
+  RecurringExpenseController: ACCOUNTING_WRITE,
   ReceivableBoletoController: ACCOUNTING_WRITE,
   ReconciliationController: ACCOUNTING_WRITE,
   CommerceController: ["ADMIN", "EXECUTIVE"],
@@ -158,6 +159,11 @@ const HANDLER_ROLE_POLICY: Readonly<
     issue: ACCOUNTING_WRITE,
     simulatePayment: ACCOUNTING_WRITE,
     cancel: ACCOUNTING_WRITE,
+  },
+  RecurringExpenseController: {
+    list: ACCOUNTING_READ,
+    create: ACCOUNTING_WRITE,
+    update: ACCOUNTING_WRITE,
   },
   BankStatementImportController: {
     preview: ACCOUNTING_WRITE,

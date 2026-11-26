@@ -40,6 +40,7 @@ type FinanceSummary = {
   receivableProjection?: CashFlowProjectionSource[];
   payableProjection?: CashFlowProjectionSource[];
   greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
+  settings?: { cashStartDate?: string | null };
 };
 
 const emptySummary: FinanceSummary = {
@@ -92,10 +93,12 @@ export default function FinancePage() {
     return () => controller.abort();
   }, []);
 
+  // Sem saldo do banco, somar recebimentos desde o início dá um caixa falso.
+  const cashKnown = Boolean(data.settings?.cashStartDate);
   const cards = [
     [
       "Caixa atual",
-      money.format(data.cash),
+      cashKnown ? money.format(data.cash) : "Informe o saldo",
       "/financeiro/fluxo-caixa",
       Banknote,
     ],
@@ -119,7 +122,7 @@ export default function FinancePage() {
     ],
     [
       "Saldo projetado",
-      money.format(data.projectedBalance),
+      cashKnown ? money.format(data.projectedBalance) : "—",
       "/financeiro/fluxo-caixa",
       CircleDollarSign,
     ],

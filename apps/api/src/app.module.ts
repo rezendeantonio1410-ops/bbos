@@ -23,6 +23,7 @@ import { FinanceController } from "./finance.controller";
 import { FinanceSalesScheduleController } from "./finance-sales-schedule.controller";
 import { FinanceAssistedReconciliationController } from "./finance-assisted-reconciliation.controller";
 import { BankStatementImportController } from "./bank-statement-import.controller";
+import { RecurringExpenseController } from "./recurring-expense.controller";
 import { ReceivableBoletoController } from "./receivable-boleto.controller";
 import { FinanceService } from "./finance.service";
 import { ReconciliationController } from "./reconciliation.controller";
@@ -127,6 +128,7 @@ import { BillingEmailService } from "./billing-email.service";
     FinanceSalesScheduleController,
     FinanceAssistedReconciliationController,
     BankStatementImportController,
+    RecurringExpenseController,
     ReceivableBoletoController,
     ReconciliationController,
     CommerceController,
