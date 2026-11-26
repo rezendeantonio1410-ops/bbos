@@ -112,6 +112,7 @@ export default function PurchaseFormV2Page() {
   const [brokers, setBrokers] = useState<Broker[]>([]);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
   const [supplierId, setSupplierId] = useState("");
+  const [supplierState, setSupplierState] = useState("");
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [advancedQuality, setAdvancedQuality] = useState(false);
   const [originUnitId, setOriginUnitId] = useState("");
@@ -180,7 +181,11 @@ export default function PurchaseFormV2Page() {
 
   useEffect(() => {
     if (!approvedSample || !references) return;
-    if (approvedSample.supplierId && references.suppliers.some((item) => item.id === approvedSample.supplierId)) setSupplierId(approvedSample.supplierId);
+    const sampleSupplier = references.suppliers.find((item) => item.id === approvedSample.supplierId);
+    if (sampleSupplier?.state) {
+      setSupplierState(sampleSupplier.state.trim().toUpperCase());
+      setSupplierId(sampleSupplier.id);
+    }
     setOriginUnitId(approvedSample.originUnitId ?? "");
     setSpeciesCode(approvedSample.species ?? "");
     if (approvedSample.harvest) setHarvest(approvedSample.harvest);
@@ -242,7 +247,9 @@ export default function PurchaseFormV2Page() {
     if (paymentTermType === "CASH") setInstallmentCount(1);
   }, [paymentTermType]);
 
-  const supplier = references?.suppliers.find((item) => item.id === supplierId);
+  const supplierStates = Array.from(new Set((references?.suppliers ?? []).map((item) => item.state?.trim().toUpperCase()).filter((state): state is string => Boolean(state)))).sort();
+  const suppliersInState = (references?.suppliers ?? []).filter((item) => item.state?.trim().toUpperCase() === supplierState);
+  const supplier = suppliersInState.find((item) => item.id === supplierId);
   const originUnits = supplier?.originUnits ?? [];
   const originUnit = originUnits.find((item) => item.id === originUnitId);
   const unitProductions = originUnit?.productions ?? [];
@@ -276,7 +283,7 @@ export default function PurchaseFormV2Page() {
     if (submitting || submittedNumber) return;
     setError("");
     setMessage("");
-    if (!supplier || !species) { setWizardStep(1); return setError("Selecione o fornecedor comercial e a espécie do café."); }
+    if (!supplierState || !supplier || !species) { setWizardStep(1); return setError("Selecione a UF, o fornecedor comercial desse estado e a espécie do café."); }
     if (totalWeight <= 0 || totalValue <= 0) { setWizardStep(2); return setError("Informe quantidade e preço válidos."); }
     const form = new FormData(event.currentTarget);
     const quality = String(form.get("qualityCategory") || "");
@@ -369,8 +376,8 @@ export default function PurchaseFormV2Page() {
         <fieldset disabled={Boolean(submittedNumber)} className="contents">
         <div className={wizardStep === 1 ? "block" : "hidden"} aria-hidden={wizardStep !== 1}>
         <Section title="1 · Fornecedor e origem produtiva" tone="origin" icon={MapPinned}>
-          <Field label="UF de produção"><input readOnly className={input} value={originUnit?.state ?? "Origem não informada"} /></Field>
-          <Field label="Fornecedor comercial / fiscal"><select required className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label="UF do fornecedor"><select required className={input} value={supplierState} onChange={(e) => { setSupplierState(e.target.value); setSupplierId(""); setOriginUnitId(""); setSpeciesCode(""); setCultivarId(""); setSupplierContacts([]); setSelectedContactId(""); }}><option value="">Selecione o estado</option>{supplierStates.map((state) => <option key={state} value={state}>{state}</option>)}</select></Field>
+          <Field label="Fornecedor comercial / fiscal"><select required className={input} disabled={!supplierState} value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setOriginUnitId(""); setSpeciesCode(""); setCultivarId(""); }}><option value="">{supplierState ? "Selecione o fornecedor" : "Primeiro selecione a UF"}</option>{suppliersInState.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label={supplier?.supplierType === "RURAL_PERSON" ? "Fazenda de origem do café" : "Origem produtiva (quando conhecida)"}><select className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Não informada — não vincular fazenda</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Safra"><select required className={input} value={harvest} onChange={(e) => setHarvest(e.target.value)}>{harvestOptions().map((item) => <option key={item}>{item}</option>)}</select></Field>
           {supplier && <div className="rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2 text-xs text-[var(--bbos-text-secondary)] sm:col-span-2 lg:col-span-4">
@@ -379,6 +386,7 @@ export default function PurchaseFormV2Page() {
               ? "Um mesmo CPF pode ter várias fazendas. Selecione a propriedade efetiva deste lote, sem associar automaticamente a primeira fazenda."
               : "A empresa fornecedora não é necessariamente a fazenda produtora. Origem não informada não gera propriedade fictícia."}
           </div>}
+          <Field label="UF de produção"><input readOnly className={input} value={originUnit?.state ?? "Origem não informada"} /></Field>
           <Field label="Região cafeeira"><input readOnly className={input} value={originUnit?.coffeeRegion?.name ?? "Origem não informada"} /></Field>
           <Field label="Município de produção"><input readOnly className={input} value={originUnit?.municipality ?? "Origem não informada"} /></Field>
           <Field label="Espécie"><select required className={input} disabled={!supplierId} value={speciesCode} onChange={(e) => { setSpeciesCode(e.target.value); setCultivarId(""); }}><option value="">Selecione</option>{availableSpecies.map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}</select></Field>
@@ -462,7 +470,7 @@ export default function PurchaseFormV2Page() {
           <span className="text-xs text-[var(--bbos-text-secondary)]">Etapa {wizardStep} de 3 · Salvo somente após a confirmação</span>
           <div className="flex flex-wrap justify-end gap-2">
           {wizardStep > 1 && <button type="button" onClick={() => setWizardStep((v) => (v === 3 ? 2 : 1))} className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Voltar</button>}
-          {wizardStep < 3 && <button type="button" onClick={() => { if (wizardStep === 1 && !supplier) { setError("Selecione o fornecedor comercial antes de continuar."); return; } if (wizardStep === 2 && (!species || totalWeight <= 0 || totalValue <= 0)) { setError("Informe espécie, quantidade e preço antes de continuar."); return; } setError(""); setWizardStep((v) => (v === 1 ? 2 : 3)); }} className="min-h-11 rounded-xl bg-[var(--bbos-coffee-green)] px-4 text-sm font-bold text-white">Próximo</button>}
+          {wizardStep < 3 && <button type="button" onClick={() => { if (wizardStep === 1 && (!supplierState || !supplier)) { setError("Selecione a UF e um fornecedor cadastrado nesse estado antes de continuar."); return; } if (wizardStep === 2 && (!species || totalWeight <= 0 || totalValue <= 0)) { setError("Informe espécie, quantidade e preço antes de continuar."); return; } setError(""); setWizardStep((v) => (v === 1 ? 2 : 3)); }} className="min-h-11 rounded-xl bg-[var(--bbos-coffee-green)] px-4 text-sm font-bold text-white">Próximo</button>}
           {wizardStep === 3 && <>
 
           <Link href="/compras-cafe-verde" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Cancelar</Link>
