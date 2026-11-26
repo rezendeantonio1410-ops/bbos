@@ -78,3 +78,20 @@ export function approvedPurchaseFiscalCorrectionEligible(
     Number.isFinite(invoice.totalAmount) &&
     Math.round(invoice.totalAmount * 100) === Math.round(correctedTotal * 100);
 }
+
+/**
+ * Committed installments now create their payable right away (Financeiro).
+ * That payable may follow the correction only while it is untouched: open,
+ * nothing paid, full amount still open and equal to the old purchase value.
+ */
+export function linkedPayableCorrectable(
+  payable: { status: string; amount: unknown; openAmount: unknown; payments: number } | null,
+  previousTotal: number,
+): boolean {
+  if (!payable) return true;
+  const cents = (value: unknown) => Math.round(Number(value) * 100);
+  return payable.status === "OPEN" &&
+    payable.payments === 0 &&
+    cents(payable.amount) === cents(previousTotal) &&
+    cents(payable.openAmount) === cents(previousTotal);
+}
