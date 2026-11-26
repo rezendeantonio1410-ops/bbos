@@ -61,3 +61,16 @@ test("receivables and the next 14 days of cash", () => {
   assert.deepEqual(receivableSnapshot(lines, clock), { total: 7096, overdue: 2790, overdueCount: 2, next14: 3970, oldestOverdueDays: 3 });
   assert.deepEqual(cashNext14(lines, clock), { inflow: 3970, outflow: 500, net: 3470 });
 });
+
+test("green coffee: current weight is already net of reservations (real lots of 26/11)", async () => {
+  const { greenStock } = await import("./command-center");
+  const lots = [
+    { currentKg: 300, reservedKg: 60, status: "APPROVED" },
+    { currentKg: 76, reservedKg: 104, status: "APPROVED" },
+    { currentKg: 0, reservedKg: 120, status: "APPROVED" },
+    { currentKg: 0, reservedKg: 40, status: "APPROVED" },
+  ];
+  assert.deepEqual(greenStock(lots), { total: 700, reserved: 324, free: 376 });
+  assert.equal(greenStock([{ currentKg: 200, reservedKg: 0, status: "QUALITY_REVIEW" }]).free, 0);
+  assert.equal(Math.round(greenCoverageDays(376, 359, new Date(2026, 10, 26))!), 31);
+});

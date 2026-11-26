@@ -100,3 +100,15 @@ export function cashNext14(lines: CashFlowLine[], today: Date = new Date()) {
 function capitalize(text: string) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/**
+ * Green coffee by lot: the stored current weight is already net of what
+ * orders reserved (physical = current + reserved). Only approved lots are
+ * free for roasting.
+ */
+export function greenStock(lots: Array<{ currentKg: number; reservedKg: number; status: string }>) {
+  const reserved = lots.reduce((sum, lot) => sum + Math.max(0, lot.reservedKg), 0);
+  const total = lots.reduce((sum, lot) => sum + Math.max(0, lot.currentKg) + Math.max(0, lot.reservedKg), 0);
+  const free = lots.filter((lot) => lot.status === "APPROVED").reduce((sum, lot) => sum + Math.max(0, lot.currentKg), 0);
+  return { total, reserved, free };
+}

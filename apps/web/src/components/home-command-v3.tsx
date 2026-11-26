@@ -22,7 +22,7 @@ import {
 import { getApiBaseUrl } from "@/lib/api-url";
 import { roastPace } from "@/lib/roast-pace";
 import { buildCashFlowLines, type CashFlowLine } from "@/lib/finance-cashflow";
-import type { SalesGeo } from "@/lib/command-center";
+import { greenStock, type SalesGeo } from "@/lib/command-center";
 import { CommandCenterV4 } from "./command-center-v4";
 
 const money = new Intl.NumberFormat("pt-BR", {
@@ -169,8 +169,7 @@ export function HomeCommandV3() {
   const isSales = identity?.role === "SALES";
   const critical = home.alerts.filter((i) => i.tone === "CRÍTICO").length;
   const attention = home.alerts.filter((i) => i.tone === "ATENÇÃO").length;
-  const greenAvailable = home.greenLots.reduce((s, l) => s + l.currentKg, 0);
-  const greenReserved = home.greenLots.reduce((s, l) => s + l.reservedKg, 0);
+  const green = greenStock(home.greenLots);
   const hasEvidence =
     home.salesToday > 0 ||
     home.salesMonth > 0 ||
@@ -219,8 +218,7 @@ export function HomeCommandV3() {
       firstName={firstName}
       decisions={decisions}
       state={state}
-      greenAvailable={greenAvailable}
-      greenReserved={greenReserved}
+      green={green}
       finance={finance}
       geo={geo}
     />
@@ -237,11 +235,11 @@ type Task = { key: string; tone: "critical" | "attention" | "ok"; title: string;
  */
 function CommandCenter({
   home, greeting, firstName, decisions, state,
-  greenAvailable, greenReserved, finance, geo,
+  green, finance, geo,
 }: {
   home: HomeData; greeting: string; firstName: string;
   decisions: HomeData["alerts"]; state: EvidenceState;
-  greenAvailable: number; greenReserved: number;
+  green: { total: number; reserved: number; free: number };
   finance: FinanceSnapshot; geo: SalesGeo | null;
 }) {
   const pace = roastPace(home.productionActualKg, home.productionPlannedKg);
@@ -292,8 +290,9 @@ function CommandCenter({
       firstName={firstName}
       summary={summary}
       tasks={tasks}
-      greenTotal={greenAvailable}
-      greenReserved={greenReserved}
+      greenTotal={green.total}
+      greenReserved={green.reserved}
+      greenFree={green.free}
       cashLines={finance?.lines ?? []}
       cash={finance?.cash ?? null}
       cashStarted={Boolean(finance?.cashStarted)}

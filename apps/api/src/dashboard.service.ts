@@ -1,3 +1,4 @@
+import { productionAvailableWeight } from "./inventory-availability";
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { prisma, type Prisma } from "@bbos/database";
 import type {
@@ -316,17 +317,11 @@ export class DashboardService implements OnModuleDestroy {
         ["INVOICED", "SHIPPED"].includes(order.status),
       ).length,
     };
-    const greenAvailableKg = lots.reduce((sum, lot) => {
-      if (!["RECEIVED", "QUALITY_REVIEW", "APPROVED"].includes(lot.status))
-        return sum;
-      return (
-        sum +
-        Math.max(
-          0,
-          toNumber(lot.currentWeightKg) - toNumber(lot.reservedWeightKg),
-        )
-      );
-    }, 0);
+    // currentWeightKg is already net of reservations (physical = current + reserved).
+    const greenAvailableKg = lots.reduce(
+      (sum, lot) => sum + productionAvailableWeight(lot.status, toNumber(lot.currentWeightKg)),
+      0,
+    );
     const finishedAvailableUnits = Math.max(
       0,
       toNumber(products._sum.quantityOnHand) -
@@ -476,13 +471,9 @@ export class DashboardService implements OnModuleDestroy {
     const availableLots = lots.filter((lot) =>
       ["RECEIVED", "QUALITY_REVIEW", "APPROVED"].includes(lot.status),
     );
+    // currentWeightKg is already net of reservations (physical = current + reserved).
     const greenAvailableKg = availableLots.reduce(
-      (sum, lot) =>
-        sum +
-        Math.max(
-          0,
-          toNumber(lot.currentWeightKg) - toNumber(lot.reservedWeightKg),
-        ),
+      (sum, lot) => sum + Math.max(0, toNumber(lot.currentWeightKg)),
       0,
     );
     const greenReservedKg = availableLots.reduce(
