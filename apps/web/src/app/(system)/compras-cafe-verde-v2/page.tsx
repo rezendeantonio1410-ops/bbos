@@ -276,8 +276,11 @@ export default function PurchaseFormV2Page() {
     if (submitting || submittedNumber) return;
     setError("");
     setMessage("");
-    if (!supplier || !species) return setError("Selecione o fornecedor comercial e a espécie do café.");
+    if (!supplier || !species) { setWizardStep(1); return setError("Selecione o fornecedor comercial e a espécie do café."); }
+    if (totalWeight <= 0 || totalValue <= 0) { setWizardStep(2); return setError("Informe quantidade e preço válidos."); }
     const form = new FormData(event.currentTarget);
+    const quality = String(form.get("qualityCategory") || "");
+    if (["Especial", "Gourmet"].includes(quality) && !form.get("screenClassificationId")) { setWizardStep(2); return setError("Informe a peneira contratada para café especial/gourmet."); }
     setSubmitting(true);
     try {
       const result = await req<{ id: string; purchaseNumber: string; status?: string; approvalStatus?: string }>(API, {
@@ -362,7 +365,7 @@ export default function PurchaseFormV2Page() {
         })}
       </nav>
 
-      <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} className="mt-3 space-y-2.5">
+      <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} noValidate className="mt-3 space-y-2.5">
         <fieldset disabled={Boolean(submittedNumber)} className="contents">
         <div className={wizardStep === 1 ? "block" : "hidden"} aria-hidden={wizardStep !== 1}>
         <Section title="1 · Fornecedor e origem produtiva" tone="origin" icon={MapPinned}>
@@ -394,11 +397,11 @@ export default function PurchaseFormV2Page() {
         <Section title="B · Especificação contratada" tone="quality" icon={Bean}>
           <Field label="Processo"><select name="process" defaultValue={approvedSample?.process ?? "Natural"} className={input}>{["Natural", "Cereja Descascado", "Honey", "Lavado", "Fermentado", "Outro"].map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Qualidade"><select name="qualityCategory" className={input}>{["Especial", "Gourmet", "Fine Cup", "Good Cup", "Comercial", "Outra"].map((value) => <option key={value}>{value}</option>)}</select></Field>
-          {advancedQuality && <><Field label="Peneira"><select name="screenClassificationId" className={input} defaultValue=""><option value="" disabled>Selecione</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-          <Field label="Máx. defeitos"><input name="maxDefects" type="number" min="0" defaultValue={approvedSample?.informedDefects ?? undefined} className={input} /></Field>
+          <Field label="Peneira contratada"><select name="screenClassificationId" className={input} defaultValue=""><option value="">Selecione quando aplicável</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Umidade máxima (%)"><select name="maxMoisturePercent" defaultValue={approvedSample?.informedMoisture?.toString() ?? "12.0"} className={input}>{Array.from({ length: 26 }, (_, index) => (10 + index / 10).toFixed(1)).map((value) => <option key={value} value={value}>{value.replace(".", ",")} %</option>)}</select></Field>
+          {advancedQuality && <><Field label="Máx. defeitos"><input name="maxDefects" type="number" min="0" defaultValue={approvedSample?.informedDefects ?? undefined} className={input} /></Field>
           <Field label="Pontuação mínima"><input name="minimumScore" type="number" step=".25" defaultValue={approvedSample?.evaluations?.[0]?.score ?? undefined} className={input} /></Field></>}
-          <div className="sm:col-span-2 lg:col-span-4"><button type="button" onClick={() => setAdvancedQuality((v) => !v)} className="text-xs font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">{advancedQuality ? "Ocultar especificações avançadas" : "Mostrar peneira, defeitos, umidade e pontuação"}</button></div>
+          <div className="sm:col-span-2 lg:col-span-4"><button type="button" onClick={() => setAdvancedQuality((v) => !v)} className="text-xs font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">{advancedQuality ? "Ocultar especificações avançadas" : "Mostrar defeitos e pontuação"}</button></div>
         </Section>
 
         <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
