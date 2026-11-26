@@ -359,3 +359,81 @@ jobs:
           else
             node scripts/signa-homolog-e2e.mjs
           fi
+
+  signa-rehearsal-guard:
+    name: Signa migration rehearsal fail-closed regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise rehearsal with isolated command stubs
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/rehearse-migrations.sh
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir "$tmp/bin"
+          cat > "$tmp/bin/psql" <<'STUB'
+          #!/usr/bin/env bash
+          set -eu
+          case "${*: -1}" in
+            *current_database*)
+              if [ "$SCENARIO" = wrong_database ]; then echo production; else echo rehearsal_ci; fi ;;
+            *"SELECT CASE WHEN"*)
+              case "$SCENARIO" in
+                missing_objects) echo missing ;;
+                object_query_error) exit 3 ;;
+                *) echo ok ;;
+              esac ;;
+            *) echo synthetic ;;
+          esac
+          STUB
+          cat > "$tmp/bin/pnpm" <<'STUB'
+          #!/usr/bin/env bash
+          set -eu
+          case " $* " in
+            *" migrate status "*)
+              [ "$SCENARIO" != status_error ] || exit 4
+              echo synthetic_status ;;
+            *" migrate:deploy "*)
+              count=$(cat "$CALL_COUNT")
+              count=$((count + 1))
+              echo "$count" > "$CALL_COUNT"
+              if [ "$count" = 1 ]; then
+                [ "$SCENARIO" != first_deploy_error ] || exit 5
+                echo synthetic_first_deploy
+              else
+                if [ "$SCENARIO" = second_no_marker ]; then echo unexpected_output; else echo 'No pending migrations'; fi
+                [ "$SCENARIO" != second_deploy_error ] || exit 6
+              fi ;;
+            *) exit 99 ;;
+          esac
+          STUB
+          chmod +x "$tmp/bin/psql" "$tmp/bin/pnpm"
+          export PATH="$tmp/bin:$PATH"
+          export REHEARSAL_DATABASE_URL=postgresql://synthetic@invalid.invalid/rehearsal_ci
+          export CALL_COUNT="$tmp/count"
+          for scenario in success wrong_database first_deploy_error status_error missing_objects object_query_error second_deploy_error second_no_marker; do
+            export SCENARIO="$scenario"
+            echo 0 > "$CALL_COUNT"
+            rc=0
+            bash scripts/rehearse-migrations.sh > "$tmp/output" 2>&1 || rc=$?
+            if [ "$scenario" = success ]; then
+              test "$rc" = 0
+              grep -q '^REHEARSAL_OK:' "$tmp/output"
+              test "$(cat "$CALL_COUNT")" = 2
+            else
+              if [ "$rc" = 0 ] || grep -q '^REHEARSAL_OK:' "$tmp/output"; then
+                cat "$tmp/output"
+                echo "Unexpected success: $scenario"
+                exit 1
+              fi
+              if [ "$scenario" = wrong_database ]; then test "$(cat "$CALL_COUNT")" = 0; fi
+              case "$scenario" in
+                first_deploy_error|status_error|missing_objects|object_query_error) test "$(cat "$CALL_COUNT")" = 1 ;;
+                second_deploy_error|second_no_marker) test "$(cat "$CALL_COUNT")" = 2 ;;
+              esac
+            fi
+            echo "PASS: $scenario"
+          done
