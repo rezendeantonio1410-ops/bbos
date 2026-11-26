@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Plus } from "lucide-react";
-import { BUYER_STATUS_LABEL, COUNTRIES, CURRENCIES, INCOTERMS, countryName, exportsApi, flag } from "@/lib/exports";
+import { BUYER_PREFILL_FIELDS, BUYER_STATUS_LABEL, COUNTRIES, CURRENCIES, INCOTERMS, countryName, exportsApi, flag, prefillFromQuery } from "@/lib/exports";
 import { ErrorNote, Field, Sheet, buttonClass, cardClass, inputClass, primaryClass } from "@/components/exports-ui";
 
 type Buyer = {
@@ -31,6 +31,11 @@ export default function ExportBuyersPage() {
     }
   }, []);
   React.useEffect(() => { void load(); }, [load]);
+  // A ready-made link (?novo=1&name=…) opens the form already filled.
+  React.useEffect(() => {
+    const prefill = prefillFromQuery(window.location.search, BUYER_PREFILL_FIELDS);
+    if (prefill) setEditing({ currency: "USD", status: "PROSPECT", ...prefill });
+  }, []);
 
   const q = search.trim().toLowerCase();
   const visible = buyers.filter((b) => !q || `${b.name} ${b.city ?? ""} ${countryName(b.country)} ${b.contactName ?? ""}`.toLowerCase().includes(q));

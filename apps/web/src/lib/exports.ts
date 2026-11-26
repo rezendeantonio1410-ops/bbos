@@ -109,3 +109,22 @@ export async function exportsApi<T>(path: string, init?: { method?: string; body
   if (!response.ok) throw new Error(typeof data?.message === "string" ? data.message : "Não foi possível concluir. Tente de novo.");
   return data as T;
 }
+
+/**
+ * Form values from a link (?novo=1&name=…): lets a ready-made link open the
+ * "new" form already filled, so the user only checks and saves. Only the
+ * listed fields are read; values are trimmed and capped.
+ */
+export function prefillFromQuery(search: string, allowed: readonly string[]) {
+  const params = new URLSearchParams(search);
+  if (params.get("novo") !== "1") return null;
+  const values: Record<string, string> = {};
+  for (const key of allowed) {
+    const value = params.get(key)?.trim();
+    if (value) values[key] = value.slice(0, 500);
+  }
+  return values;
+}
+
+export const BUYER_PREFILL_FIELDS = ["name", "country", "city", "contactName", "email", "phone", "messenger", "legalRepresentative", "language", "currency", "incoterm", "taxId", "status", "address", "notes"] as const;
+export const SAMPLE_PREFILL_FIELDS = ["cliente", "lotReference", "coffeeType", "weightKg", "reference", "proformaNumber", "declaredValue", "declaredCurrency", "shippedByName", "scaScore", "responseDays", "carrier", "trackingCode", "shippingCost", "notes"] as const;

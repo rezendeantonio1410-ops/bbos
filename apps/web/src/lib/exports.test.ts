@@ -20,3 +20,10 @@ test("texto dos alertas", () => {
   assert.equal(alertText({ kind: "FOLLOW_UP", days: 0 }), "Cobrar resposta hoje");
   assert.equal(alertText(null), null);
 });
+
+test("links can open the new forms already filled, only with known fields", async () => {
+  const { prefillFromQuery, SAMPLE_PREFILL_FIELDS } = await import("./exports");
+  assert.equal(prefillFromQuery("?reference=BC-BR-0001", SAMPLE_PREFILL_FIELDS), null);
+  const values = prefillFromQuery("?novo=1&reference=BC-BR-0001&trackingCode=879951396830&carrier=FEDEX&evil=1&weightKg=%2015%20", SAMPLE_PREFILL_FIELDS);
+  assert.deepEqual(values, { reference: "BC-BR-0001", trackingCode: "879951396830", carrier: "FEDEX", weightKg: "15" });
+});

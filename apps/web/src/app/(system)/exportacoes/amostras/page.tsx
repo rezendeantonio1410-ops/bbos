@@ -10,6 +10,8 @@ import {
   alertText,
   dateTime,
   exportsApi,
+  prefillFromQuery,
+  SAMPLE_PREFILL_FIELDS,
   flag,
   shortDate,
 } from "@/lib/exports";
@@ -57,6 +59,12 @@ export default function ExportSamplesPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [creating, setCreating] = React.useState(false);
+  const [prefill, setPrefill] = React.useState<Record<string, string> | null>(null);
+  // A ready-made link (?novo=1&reference=…) opens "Nova amostra" already filled.
+  React.useEffect(() => {
+    const values = prefillFromQuery(window.location.search, SAMPLE_PREFILL_FIELDS);
+    if (values) { setPrefill(values); setCreating(true); }
+  }, []);
   const [openId, setOpenId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -188,14 +196,21 @@ export default function ExportSamplesPage() {
         )}
       </section>
 
-      {creating && <NewSample buyers={buyers} onClose={() => setCreating(false)} onSaved={(id) => { setCreating(false); void load(); setOpenId(id); }} />}
+      {creating && <NewSample buyers={buyers} prefill={prefill} onClose={() => { setCreating(false); setPrefill(null); }} onSaved={(id) => { setCreating(false); void load(); setOpenId(id); }} />}
       {openId && <SampleSheet id={openId} onClose={() => setOpenId(null)} onChanged={() => void load()} />}
     </div>
   );
 }
 
-function NewSample({ buyers, onClose, onSaved }: { buyers: Buyer[]; onClose: () => void; onSaved: (id: string) => void }) {
-  const [form, setForm] = React.useState<Record<string, string>>({ buyerId: buyers[0]?.id ?? "", coffeeType: "GREEN", weightKg: "", responseDays: "7", carrier: "", declaredCurrency: "USD" });
+function NewSample({ buyers, prefill, onClose, onSaved }: { buyers: Buyer[]; prefill?: Record<string, string> | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const { cliente, ...prefilled } = prefill ?? {};
+  const named = cliente ? buyers.find((b) => b.name.toLowerCase().includes(cliente.toLowerCase())) : undefined;
+  const [form, setForm] = React.useState<Record<string, string>>({ buyerId: named?.id ?? buyers[0]?.id ?? "", coffeeType: "GREEN", weightKg: "", responseDays: "7", carrier: "", declaredCurrency: "USD", ...prefilled });
+  // Buyers arrive after the link opened the form: select the named one then.
+  React.useEffect(() => {
+    if (named && !form.buyerId) setForm((f) => ({ ...f, buyerId: named.id }));
+    else if (!form.buyerId && buyers[0]) setForm((f) => ({ ...f, buyerId: buyers[0]!.id }));
+  }, [named, buyers, form.buyerId]);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const set = (key: string) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [key]: event.target.value }));
