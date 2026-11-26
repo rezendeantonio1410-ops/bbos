@@ -7,6 +7,7 @@ export const BILLING_EMAIL_TEMPLATES = [
   "INVOICE_ISSUED",
   "RECEIVABLE_REMINDER",
   "RECEIVABLE_PAID",
+  "BOLETO_ISSUED",
 ] as const;
 export type BillingEmailTemplate = (typeof BILLING_EMAIL_TEMPLATES)[number];
 
@@ -84,6 +85,7 @@ export const billingEmailKeys = {
     `notify:email:receivable:${receivableId}:reminder:${dueDate}`,
   paid: (receivableId: string) =>
     `notify:email:receivable:${receivableId}:paid`,
+  boleto: (boletoId: string) => `notify:email:boleto:${boletoId}:issued`,
 };
 
 /** Only Bling's own HTTPS links are downloaded (no arbitrary URLs). */
@@ -123,6 +125,8 @@ export type BillingEmailContent = {
   openCents?: number;
   paidCents?: number;
   pixCode?: string | null;
+  /** Boleto registrado no Itaú: quando existe, substitui o Pix avulso. */
+  boleto?: { digitableLine: string; pixCopyPaste?: string | null } | null;
   danfeUrl?: string | null;
   attachmentsMissing?: boolean;
 };
@@ -179,6 +183,25 @@ function itemsTable(items: BillingEmailItem[]) {
     .join("")}</table></td></tr>`;
 }
 
+function boletoBlock(boleto: { digitableLine: string; pixCopyPaste?: string | null }) {
+  const pix = boleto.pixCopyPaste
+    ? `<div style="padding-top:12px;font:13px/20px Arial,sans-serif;color:#0E191D">Ou pague com Pix (copia e cola):</div><div style="margin-top:8px;padding:10px;background:#FFFFFF;font:11px/16px 'Courier New',monospace;color:#0E191D;word-break:break-all">${escapeHtml(boleto.pixCopyPaste)}</div>`
+    : "";
+  return `<tr><td style="padding:0 42px 26px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#E0EAE9;border-left:3px solid #087568"><tr><td style="padding:18px 20px">${label("Pague com boleto")}<div style="padding-top:8px;font:13px/20px Arial,sans-serif;color:#0E191D">O boleto em PDF está em anexo. Linha digitável:</div><div style="margin-top:10px;padding:10px;background:#FFFFFF;font:bold 13px/18px 'Courier New',monospace;color:#0E191D;word-break:break-all">${escapeHtml(formatLine(boleto.digitableLine))}</div>${pix}</td></tr></table></td></tr>`;
+}
+
+function formatLine(line: string) {
+  const d = line.replace(/\D/g, "");
+  if (d.length !== 47) return line;
+  return `${d.slice(0, 5)}.${d.slice(5, 10)} ${d.slice(10, 15)}.${d.slice(15, 21)} ${d.slice(21, 26)}.${d.slice(26, 32)} ${d[32]} ${d.slice(33)}`;
+}
+
+/** Boleto quando houver; senão, o Pix da cobrança. */
+function paymentBlock(content: BillingEmailContent) {
+  if (content.boleto) return boletoBlock(content.boleto);
+  return content.pixCode ? pixBlock(content.pixCode) : "";
+}
+
 function pixBlock(pixCode: string) {
   return `<tr><td style="padding:0 42px 26px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#E0EAE9;border-left:3px solid #087568"><tr><td style="padding:18px 20px">${label("Pague com Pix")}<div style="padding-top:8px;font:13px/20px Arial,sans-serif;color:#0E191D">O QR Code está no PDF da cobrança em anexo. Se preferir, use o Pix copia e cola:</div><div style="margin-top:10px;padding:10px;background:#FFFFFF;font:11px/16px 'Courier New',monospace;color:#0E191D;word-break:break-all">${escapeHtml(pixCode)}</div></td></tr></table></td></tr>`;
 }
@@ -208,7 +231,7 @@ export function renderInvoiceIssuedEmail(
   const withBilling = Boolean(content.dueDate && content.openCents);
   const hello = greeting(content.customerName);
   const intro = withBilling
-    ? `${hello} Seu pedido ${content.orderCode} foi faturado. Seguem a nota fiscal e a cobrança, com vencimento em ${formatDueDate(content.dueDate)}.`
+    ? `${hello} Seu pedido ${content.orderCode} foi faturado. Seguem a nota fiscal e ${content.boleto ? "o boleto" : "a cobrança"}, com vencimento em ${formatDueDate(content.dueDate)}.`
     : `${hello} Seu pedido ${content.orderCode} foi faturado. Seguem em anexo o PDF e o XML da nota fiscal.`;
   const facts = factsTable([
     ["Pedido", content.orderCode],
@@ -218,13 +241,15 @@ export function renderInvoiceIssuedEmail(
     ["Valor a pagar", withBilling ? formatMoney(content.openCents) : ""],
   ]);
   const attachments = withBilling
-    ? "Em anexo: PDF e XML da nota fiscal e o PDF da cobrança com o QR Code Pix."
+    ? content.boleto
+      ? "Em anexo: PDF e XML da nota fiscal e o boleto em PDF."
+      : "Em anexo: PDF e XML da nota fiscal e o PDF da cobrança com o QR Code Pix."
     : "Em anexo: PDF e XML da nota fiscal.";
   const missing =
     content.attachmentsMissing && content.danfeUrl
       ? `<tr><td style="padding:0 42px 22px;font:13px/20px Arial,sans-serif;color:#0E191D">Não conseguimos anexar os arquivos da nota desta vez. <a href="${escapeHtml(content.danfeUrl)}" style="color:#087568">Abra a nota fiscal aqui</a>.</td></tr>`
       : "";
-  const body = `<tr><td style="padding:0 42px 26px">${facts}</td></tr>${itemsTable(content.items ?? [])}${withBilling && content.pixCode ? pixBlock(content.pixCode) : ""}<tr><td style="padding:0 42px 22px;font:13px/20px Arial,sans-serif;color:#626B69">${escapeHtml(content.attachmentsMissing ? "" : attachments)}</td></tr>${missing}`;
+  const body = `<tr><td style="padding:0 42px 26px">${facts}</td></tr>${itemsTable(content.items ?? [])}${withBilling ? paymentBlock(content) : ""}<tr><td style="padding:0 42px 22px;font:13px/20px Arial,sans-serif;color:#626B69">${escapeHtml(content.attachmentsMissing ? "" : attachments)}</td></tr>${missing}`;
   return shell({
     assets,
     preheader: intro,
@@ -249,7 +274,7 @@ export function renderReceivableReminderEmail(
     ["Nota fiscal", content.invoiceNumber ? `nº ${content.invoiceNumber}` : ""],
     ["Vencimento", due],
     ["Valor", formatMoney(content.openCents)],
-  ])}</td></tr>${content.pixCode ? pixBlock(content.pixCode) : ""}`;
+  ])}</td></tr>${paymentBlock(content)}`;
   return shell({
     assets,
     preheader: `Sua fatura vence em ${REMINDER_DAYS_BEFORE_DUE} dias (${due}).`,
@@ -281,6 +306,29 @@ export function renderReceivablePaidEmail(
   });
 }
 
+export function renderBoletoIssuedEmail(
+  content: BillingEmailContent,
+  assets: Assets,
+) {
+  const hello = greeting(content.customerName);
+  const due = formatDueDate(content.dueDate);
+  const intro = `${hello} Segue o boleto da fatura do pedido ${content.orderCode}${content.invoiceNumber ? `, nota fiscal nº ${content.invoiceNumber}` : ""}, com vencimento em ${due}.`;
+  const body = `<tr><td style="padding:0 42px 26px">${factsTable([
+    ["Pedido", content.orderCode],
+    ["Nota fiscal", content.invoiceNumber ? `nº ${content.invoiceNumber}` : ""],
+    ["Vencimento", due],
+    ["Valor", formatMoney(content.openCents)],
+  ])}</td></tr>${content.boleto ? boletoBlock(content.boleto) : ""}`;
+  return shell({
+    assets,
+    preheader: `Boleto do pedido ${content.orderCode}, vencimento ${due}.`,
+    eyebrow: "Seu boleto",
+    headline: "Seu boleto chegou.",
+    intro,
+    body,
+  });
+}
+
 export function billingEmailSubject(
   template: BillingEmailTemplate,
   content: BillingEmailContent,
@@ -290,6 +338,8 @@ export function billingEmailSubject(
     return content.dueDate && content.openCents
       ? `Nota fiscal${nf} e cobrança · pedido ${content.orderCode}`
       : `Sua nota fiscal${nf} · pedido ${content.orderCode}`;
+  if (template === "BOLETO_ISSUED")
+    return `Boleto${nf ? ` da NF${nf}` : ""} · pedido ${content.orderCode}`;
   if (template === "RECEIVABLE_REMINDER")
     return `Sua fatura vence em ${REMINDER_DAYS_BEFORE_DUE} dias · pedido ${content.orderCode}`;
   return `Fatura recebida, obrigado! · pedido ${content.orderCode}`;
