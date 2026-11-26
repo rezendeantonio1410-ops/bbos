@@ -545,6 +545,9 @@ if (local && process.env.CI === "true") {
     const probes = [
       ["GET", "/finance/receivables"],
       ["GET", "/finance/reconciliation/summary"],
+      // Statement import is internal: even preview must not expose bank data.
+      ["POST", "/finance/statement-import/preview", { financialAccountId: "homolog-denied-account", fileName: "denied.ofx", contentBase64: "T0ZY" }],
+      ["POST", "/finance/statement-import/apply", { financialAccountId: "homolog-denied-account", fileName: "denied.ofx", contentBase64: "T0ZY", decisions: [] }],
       // The release adds Itaú boleto endpoints. Partners must never access them.
       ["GET", "/finance/boletos"],
       ["POST", "/finance/boletos", { receivableId: "homolog-denied-boleto-receivable" }],
