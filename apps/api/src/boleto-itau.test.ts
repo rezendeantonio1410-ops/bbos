@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   beneficiaryAccount,
+  boletoYourNumber,
   boletoMode,
   digitableLine,
   dueFactor,
@@ -86,4 +87,10 @@ test("boleto endpoints: policy, test mode never settles a receivable, lock colum
   assert.match(controller, /pg_advisory_xact_lock\(hashtext\(\$1\)\) IS NULL AS locked/);
   const migration = readFileSync(join(__dirname, "../../../packages/database/prisma/migrations/20261127090000_receivable_boleto/migration.sql"), "utf8");
   assert.doesNotMatch(migration, /^\s*(ALTER|DROP|DELETE|UPDATE|TRUNCATE)\b/im);
+});
+
+test("seu número is the NF-e number, else the order number (max 10)", () => {
+  assert.equal(boletoYourNumber("000001234", "PV-000041"), "1234");
+  assert.equal(boletoYourNumber(null, "PV-000041"), "PV-000041");
+  assert.equal(boletoYourNumber("", null, "cm123456789xyz"), "3456789xyz");
 });

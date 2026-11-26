@@ -119,6 +119,17 @@ export function boletoDueDate(requested: string | undefined, receivableDue: Date
   return new Date(day + 12 * 3_600_000);
 }
 
+/**
+ * "Seu número" do boleto (até 10 caracteres): o número da NF-e, que é o que o
+ * cliente procura no financeiro dele; sem NF, o número do pedido.
+ */
+export function boletoYourNumber(invoiceNumber?: string | null, orderNumber?: string | null, fallback = "") {
+  const nf = String(invoiceNumber ?? "").replace(/\s/g, "");
+  if (nf) return nf.replace(/^0+(?=\d)/, "").slice(-10);
+  const order = String(orderNumber ?? "").replace(/\s/g, "");
+  return (order || fallback).slice(-10);
+}
+
 // ---------------------------------------------------------------- Pagador
 
 export type BoletoPayer = {

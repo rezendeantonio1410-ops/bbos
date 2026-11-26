@@ -518,6 +518,7 @@ function BoletoDialog({ receivable, mode, boleto, onClose, onChanged, onCancelle
               <div><dt className="text-[11px] text-stone-500">Pagador</dt><dd className="font-semibold">{customer}</dd></div>
               <div><dt className="text-[11px] text-stone-500">Vencimento</dt><dd className="font-semibold">{date.format(new Date(shown.dueDate))}</dd></div>
               <div><dt className="text-[11px] text-stone-500">Valor</dt><dd className="font-bold">{money.format(Number(shown.amount))}</dd></div>
+              <div><dt className="text-[11px] text-stone-500">{receivable.invoiceId ? "NF-e" : "Pedido"}</dt><dd className="font-semibold">{receivable.invoiceId ? `nº ${receivable.invoiceId.replace(/^0+(?=\d)/, "")}` : receivable.salesOrder?.orderNumber ?? receivable.salesOrder?.code ?? "—"}</dd></div>
               <div><dt className="text-[11px] text-stone-500">Nosso número</dt><dd className="font-mono">109/{shown.ourNumber}</dd></div>
               <div><dt className="text-[11px] text-stone-500">Situação</dt><dd>{shown.status === "PAID" ? <Badge tone="success">Pago{shown.paidAt ? ` em ${date.format(new Date(shown.paidAt))}` : ""}</Badge> : <Badge tone="neutral">Em aberto</Badge>}</dd></div>
             </dl>

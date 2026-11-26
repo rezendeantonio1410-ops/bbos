@@ -17,6 +17,7 @@ import { BISPO_PIX_KEY } from "./billing-pix";
 import {
   beneficiaryAccount,
   boletoDueDate,
+  boletoYourNumber,
   BoletoUnavailable,
   boletoMode,
   digitableLine,
@@ -130,7 +131,7 @@ export class ReceivableBoletoController {
               mode,
               ...bank,
               ourNumber,
-              yourNumber: receivable.salesOrder?.orderNumber ?? receivable.salesOrder?.code ?? receivable.id.slice(-10),
+              yourNumber: boletoYourNumber(receivable.invoiceId, receivable.salesOrder?.orderNumber ?? receivable.salesOrder?.code, receivable.id),
               issueDate: new Date(),
               due,
               amountCents,
