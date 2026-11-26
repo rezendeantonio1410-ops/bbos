@@ -78,3 +78,24 @@ export function approvedPurchaseFiscalCorrectionEligible(
     Number.isFinite(invoice.totalAmount) &&
     Math.round(invoice.totalAmount * 100) === Math.round(correctedTotal * 100);
 }
+
+/**
+ * A purchase may be adjusted alongside its already-created payable only if
+ * the payable is still entirely open and has no settlement history.
+ * The controller checks the database link and Payment rows under the same
+ * serializable transaction before calling this predicate.
+ */
+export function approvedPurchaseOpenPayableEligible(payable: {
+  status: string;
+  amount: number;
+  openAmount: number;
+  paymentDate: Date | string | null;
+  paymentCount: number;
+}, previousTotal: number): boolean {
+  const cents = (value: number) => Number.isFinite(value) ? Math.round(value * 100) : NaN;
+  return payable.status === "OPEN" &&
+    payable.paymentDate == null &&
+    payable.paymentCount === 0 &&
+    cents(payable.amount) === cents(previousTotal) &&
+    cents(payable.openAmount) === cents(previousTotal);
+}

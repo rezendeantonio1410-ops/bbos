@@ -46,7 +46,7 @@ import {
   validateTaxId,
 } from "./supplier-verification";
 import { buildPurchaseConfirmationPdf } from "./purchase-confirmation-pdf";
-import { approvedPurchaseCorrectionEligible, approvedPurchaseFiscalCorrectionEligible, parseApprovedPurchaseValueCorrection } from "./approved-purchase-value-correction";
+import { approvedPurchaseCorrectionEligible, approvedPurchaseFiscalCorrectionEligible, approvedPurchaseOpenPayableEligible, parseApprovedPurchaseValueCorrection } from "./approved-purchase-value-correction";
 
 type Actor = {
   userId: string;
@@ -833,14 +833,52 @@ export class GreenCoffeePurchasesController {
       if (purchase.installments.length !== 1 ||
           installment?.status !== PurchaseInstallmentStatus.COMMITTED ||
           Number(installment.percentage) !== 100 ||
-          installment.accountsPayableId !== null ||
           installment.paidAt !== null ||
           Math.round(Number(installment.amount) * 100) !== Math.round(previous * 100)) {
         throw new BadRequestException("As parcelas não estão elegíveis para correção automática.");
       }
-      const [receipts, payables, documents, acceptances, fiscal] = await Promise.all([
+      // Lock every linked payable alongside the purchase: a payment must not
+      // appear between eligibility verification and the amount update.
+      const payableRows = await tx.$queryRawUnsafe<Array<{
+        id: string;
+        companyId: string;
+        purchaseId: string | null;
+        supplierId: string | null;
+        status: string;
+        amount: number;
+        openAmount: number;
+        paymentDate: Date | null;
+      }>>(
+        `SELECT id, "companyId", "purchaseId", "supplierId", status::text,
+                amount::float AS amount, "openAmount"::float AS "openAmount", "paymentDate"
+           FROM "AccountsPayable"
+          WHERE "purchaseId"=$1 AND "companyId"=$2
+          FOR UPDATE`,
+        id, actor.companyId,
+      );
+      const linkedPayable = payableRows.length === 1 ? payableRows[0] : null;
+      if (payableRows.length > 1 ||
+          (installment.accountsPayableId && linkedPayable?.id !== installment.accountsPayableId) ||
+          (!installment.accountsPayableId && payableRows.length > 0)) {
+        throw new BadRequestException("A vinculação das contas a pagar está inconsistente. Corrija o vínculo antes de alterar a compra.");
+      }
+      if (linkedPayable) {
+        const paymentCount = await tx.payment.count({ where: { accountsPayableId: linkedPayable.id } });
+        if (linkedPayable.supplierId !== purchase.supplierId ||
+            !approvedPurchaseOpenPayableEligible({
+              status: linkedPayable.status,
+              amount: linkedPayable.amount,
+              openAmount: linkedPayable.openAmount,
+              paymentDate: linkedPayable.paymentDate,
+              paymentCount,
+            }, previous)) {
+          throw new BadRequestException(
+            "A conta a pagar já foi paga, parcialmente baixada ou diverge da compra. Correção automática bloqueada.",
+          );
+        }
+      }
+      const [receipts, documents, acceptances, fiscal] = await Promise.all([
         tx.greenCoffeeReceipt.count({ where: { purchaseId: id } }),
-        tx.accountsPayable.count({ where: { purchaseId: id } }),
         tx.purchaseConfirmationDocumentVersion.count({ where: { purchaseId: id } }),
         tx.greenCoffeePurchaseAcceptance.count({ where: { purchaseId: id } }),
         tx.$queryRawUnsafe<Array<{
@@ -859,8 +897,8 @@ export class GreenCoffeePurchasesController {
           id, actor.companyId,
         ),
       ]);
-      if (receipts || payables || documents || acceptances) {
-        throw new BadRequestException("A compra já possui aceite, pagamento, recebimento ou documento contratual.");
+      if (receipts || documents || acceptances) {
+        throw new BadRequestException("A compra já possui aceite, recebimento ou documento contratual.");
       }
       if (!approvedPurchaseFiscalCorrectionEligible(fiscal, correction.totalValue)) {
         throw new BadRequestException(
@@ -880,6 +918,15 @@ export class GreenCoffeePurchasesController {
         where: { id: installment.id },
         data: { amount: correction.totalValue },
       });
+      if (linkedPayable) {
+        await tx.accountsPayable.update({
+          where: { id: linkedPayable.id },
+          data: {
+            amount: correction.totalValue,
+            openAmount: correction.totalValue,
+          },
+        });
+      }
       await tx.greenCoffeeAuditEvent.create({
         data: {
           companyId: actor.companyId,
@@ -895,6 +942,9 @@ export class GreenCoffeePurchasesController {
             contractedWeightKg: contractedKg,
             reason: correction.reason,
             installmentId: installment.id,
+            accountsPayableId: linkedPayable?.id ?? null,
+            previousPayableAmount: linkedPayable?.amount ?? null,
+            correctedPayableAmount: linkedPayable ? correction.totalValue : null,
             linkedFiscalDocument: fiscal.length === 1,
             fiscalReconciliationMustBeReviewed: fiscal.length === 1,
           },
