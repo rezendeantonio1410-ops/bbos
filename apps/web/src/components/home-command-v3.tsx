@@ -22,7 +22,7 @@ import {
 import { getApiBaseUrl } from "@/lib/api-url";
 import { roastPace } from "@/lib/roast-pace";
 import { buildCashFlowLines, type CashFlowLine } from "@/lib/finance-cashflow";
-import { greenStock, type SalesGeo } from "@/lib/command-center";
+import { greenStock, payableSnapshot, type SalesGeo } from "@/lib/command-center";
 import { CommandCenterV4 } from "./command-center-v4";
 
 const money = new Intl.NumberFormat("pt-BR", {
@@ -47,6 +47,7 @@ type HomeData = {
   productionPlannedKg: number;
   pendingLab: number;
   openPurchases: number;
+  greenInboundKg?: number;
   finishedGoodsUnits: number;
   finishedGoodsReserved: number;
   roastedStock: {
@@ -229,6 +230,27 @@ type FinanceSnapshot = { cash: number | null; overdue: number; cashStarted: bool
 type Task = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string };
 
 /**
+ * Contas a pagar que pedem ação hoje (Salesforce/Dynamics "next best action"):
+ * o que vence hoje e o que ficou vencido para trás. O pagamento continua sendo
+ * aprovado no app do banco; aqui só se confere e se dá baixa.
+ */
+function payableTasks(finance: FinanceSnapshot): Task[] {
+  if (!finance) return [];
+  const snap = payableSnapshot(finance.lines);
+  const list: Task[] = [];
+  if (snap.dueToday > 0) {
+    const first = snap.dueTodayLines[0]!;
+    const who = snap.dueTodayLines.length === 1 ? `${first.document} · ${first.counterparty}` : `${snap.dueTodayLines.length} contas`;
+    list.push({ key: "pay-today", tone: "critical", title: `${brlTask.format(snap.dueToday)} a pagar hoje`, detail: `${who} · aprovar no app do Itaú e dar baixa aqui`, href: "/financeiro/pagar", action: "Ver contas a pagar" });
+  }
+  if (snap.overdueCount > 0)
+    list.push({ key: "pay-overdue", tone: "attention", title: `${snap.overdueCount} ${snap.overdueCount === 1 ? "conta a pagar vencida" : "contas a pagar vencidas"}`, detail: `${brlTask.format(snap.overdue)} · confira se já foram pagas e dê baixa`, href: "/financeiro/pagar", action: "Revisar" });
+  return list;
+}
+
+const brlTask = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+/**
  * Command center (SAP Fiori overview page / Dynamics 365 workspace): what needs
  * a decision first, then four numbers with a comparison, free stock and the
  * coffee path. Each card says something no other card repeats.
@@ -252,6 +274,7 @@ function CommandCenter({
       href: alert.href,
       action: alert.action,
     })),
+    ...payableTasks(finance),
     ...(home.orderFlow.fiscal > 0
       ? [{
           key: "nfe",

@@ -425,6 +425,16 @@ export class DashboardService implements OnModuleDestroy {
         : toNumber(production._sum.plannedWeightKg),
       pendingLab: excludePlatformOrders ? 0 : pendingLab,
       openPurchases: excludePlatformOrders ? 0 : openPurchases,
+      // Green coffee bought and approved, not yet received (SAP "in transit").
+      greenInboundKg: excludePlatformOrders
+        ? 0
+        : await this.db.greenCoffeePurchase
+            .aggregate({
+              where: { companyId, approvalStatus: "APPROVED", operationalStatus: "AWAITING_DELIVERY" },
+              _sum: { contractedWeightKg: true },
+            })
+            .then((row) => toNumber(row._sum.contractedWeightKg))
+            .catch(() => 0),
       finishedGoodsUnits: portfolioPartnerId
         ? 0
         : toNumber(products._sum.quantityOnHand),

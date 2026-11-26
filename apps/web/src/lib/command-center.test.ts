@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CashFlowLine } from "./finance-cashflow";
-import { buildHeadlines, cashNext14, greenCoverageDays, receivableSnapshot, salesPace, type SalesGeo } from "./command-center";
+import { buildHeadlines, cashNext14, payableSnapshot, greenCoverageDays, receivableSnapshot, salesPace, type SalesGeo } from "./command-center";
 
 // 26/11/2026 14:00 in São Paulo (local test clock may differ; dates built from it).
 const today = new Date(2026, 10, 26, 14, 0, 0);
@@ -73,4 +73,17 @@ test("green coffee: current weight is already net of reservations (real lots of 
   assert.deepEqual(greenStock(lots), { total: 700, reserved: 324, free: 376 });
   assert.equal(greenStock([{ currentKg: 200, reservedKg: 0, status: "QUALITY_REVIEW" }]).free, 0);
   assert.equal(Math.round(greenCoverageDays(376, 359, new Date(2026, 10, 26))!), 31);
+});
+
+test("payables: overdue apart, due today listed (26/11: CP-2026-000005 and old commissions)", () => {
+  const now = new Date("2026-11-26T17:00:00Z");
+  const list = [
+    line("PAYABLE", "2026-11-26T12:00:00Z", 5000), line("PAYABLE", "2026-10-13T15:00:00Z", 148),
+    line("PAYABLE", "2026-11-23T15:00:00Z", 24), line("RECEIVABLE", "2026-11-25T12:00:00Z", 720),
+  ];
+  const snap = payableSnapshot(list, now);
+  assert.equal(snap.overdue, 172);
+  assert.equal(snap.overdueCount, 2);
+  assert.equal(snap.dueToday, 5000);
+  assert.equal(cashNext14(list, now).outflow, 5000);
 });
