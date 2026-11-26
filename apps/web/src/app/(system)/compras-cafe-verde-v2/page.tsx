@@ -50,6 +50,7 @@ type Supplier = {
   name: string;
   legalName?: string;
   taxId?: string;
+  supplierType?: "RURAL_PERSON" | "COMPANY" | "COOPERATIVE" | "ASSOCIATION" | "EXPORTER" | "OTHER";
   city?: string;
   state?: string;
   country?: string;
@@ -361,8 +362,14 @@ export default function PurchaseFormV2Page() {
         <Section title="A · Origem" tone="origin" icon={MapPinned}>
           <Field label="UF de produção"><input readOnly className={input} value={originUnit?.state ?? "Origem não informada"} /></Field>
           <Field label="Fornecedor comercial / fiscal"><select required className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-          <Field label="Origem produtiva (quando conhecida)"><select className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Não informada — não vincular fazenda</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label={supplier?.supplierType === "RURAL_PERSON" ? "Fazenda de origem do café" : "Origem produtiva (quando conhecida)"}><select className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Não informada — não vincular fazenda</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Safra"><select required className={input} value={harvest} onChange={(e) => setHarvest(e.target.value)}>{harvestOptions().map((item) => <option key={item}>{item}</option>)}</select></Field>
+          {supplier && <div className="rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2 text-xs text-[var(--bbos-text-secondary)] sm:col-span-2 lg:col-span-4">
+            <b className="text-[var(--bbos-text-primary)]">{supplier.supplierType === "RURAL_PERSON" ? "Produtor rural pessoa física" : supplier.supplierType === "COOPERATIVE" ? "Cooperativa" : "Fornecedor comercial / fiscal"}</b>
+            {" · "}{supplier.supplierType === "RURAL_PERSON"
+              ? "Um mesmo CPF pode ter várias fazendas. Selecione a propriedade efetiva deste lote, sem associar automaticamente a primeira fazenda."
+              : "A empresa fornecedora não é necessariamente a fazenda produtora. Origem não informada não gera propriedade fictícia."}
+          </div>}
           <Field label="Região cafeeira"><input readOnly className={input} value={originUnit?.coffeeRegion?.name ?? "Origem não informada"} /></Field>
           <Field label="Município de produção"><input readOnly className={input} value={originUnit?.municipality ?? "Origem não informada"} /></Field>
           <Field label="Espécie"><select required className={input} disabled={!supplierId} value={speciesCode} onChange={(e) => { setSpeciesCode(e.target.value); setCultivarId(""); }}><option value="">Selecione</option>{availableSpecies.map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}</select></Field>
