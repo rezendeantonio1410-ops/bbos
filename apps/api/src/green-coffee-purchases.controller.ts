@@ -1730,11 +1730,12 @@ export class GreenCoffeePurchasesController {
             approverName: body.approverName,
             species: body.species,
             speciesId: references.speciesId,
-            originRegion: body.originRegion,
-            municipality: body.municipality,
-            state: body.state,
-            country: body.country ?? "Brasil",
-            farmName: body.farmName,
+            // Missing agricultural provenance must remain unknown, not the supplier address.
+            originRegion: body.originUnitId ? (body.originRegion || "") : "",
+            municipality: body.originUnitId ? body.municipality : undefined,
+            state: body.originUnitId ? body.state : undefined,
+            country: body.originUnitId ? (body.country ?? "Brasil") : "Brasil",
+            farmName: body.originUnitId ? body.farmName : undefined,
             harvest: body.harvest,
             variety: body.variety,
             cultivarId: references.cultivarId,
@@ -2310,7 +2311,6 @@ export class GreenCoffeePurchasesController {
       !body.supplierId ||
       !body.buyerId ||
       !body.harvest ||
-      !body.originRegion ||
       !body.species ||
       !body.qualityCategory ||
       body.contractedWeightKg <= 0 ||
