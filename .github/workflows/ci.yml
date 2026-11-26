@@ -354,6 +354,7 @@ jobs:
           done
           if [ "$ready" -ne 1 ]; then echo "Local API not ready"; exit 1; fi
           node --check scripts/signa-homolog-e2e.mjs
+          node scripts/signa-homolog-e2e.mjs --test-target-guard
           if [[ "${{ matrix.pix_mode }}" == "render-denied" ]]; then
             env GITHUB_ACTIONS=false node scripts/signa-homolog-e2e.mjs
           else
