@@ -89,6 +89,18 @@ export function receivableSnapshot(lines: CashFlowLine[], today: Date = new Date
   };
 }
 
+/**
+ * Payables split like receivables (Oracle Cash Management): overdue apart
+ * from what falls due, and what is due today for the task list.
+ */
+export function payableSnapshot(lines: CashFlowLine[], today: Date = new Date()) {
+  const payables = lines.filter((line) => line.kind === "PAYABLE" || line.kind === "PURCHASE");
+  const overdue = payables.filter((line) => daysUntil(line.dueDate, today) < 0);
+  const dueToday = payables.filter((line) => daysUntil(line.dueDate, today) === 0);
+  const sum = (list: CashFlowLine[]) => list.reduce((total, line) => total + line.amount, 0);
+  return { overdue: sum(overdue), overdueCount: overdue.length, dueToday: sum(dueToday), dueTodayLines: dueToday };
+}
+
 /** What comes in and goes out from today to 14 days ahead (overdue left out). */
 export function cashNext14(lines: CashFlowLine[], today: Date = new Date()) {
   const window = lines.filter((line) => { const d = daysUntil(line.dueDate, today); return d >= 0 && d <= 14; });

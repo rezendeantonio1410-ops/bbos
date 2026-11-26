@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { CashFlowLine } from "@/lib/finance-cashflow";
-import { buildHeadlines, cashNext14, greenCoverageDays, monthName, receivableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
+import { buildHeadlines, cashNext14, greenCoverageDays, monthName, payableSnapshot, receivableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
 import { roastPace } from "@/lib/roast-pace";
 
 /**
@@ -47,6 +47,7 @@ export type CenterHome = {
   finishedGoodsUnits: number;
   finishedGoodsReserved: number;
   roastedStock: { physicalKg: number; reservedKg: number; availableKg: number };
+  greenInboundKg?: number;
 };
 
 export type CenterTask = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string };
@@ -64,12 +65,14 @@ export function CommandCenterV4({
   const roast = roastPace(home.productionActualKg, home.productionPlannedKg);
   const receivable = receivableSnapshot(cashLines);
   const next14 = cashNext14(cashLines);
+  const payable = payableSnapshot(cashLines);
+  const inboundKg = Math.max(0, home.greenInboundKg ?? 0);
   const coverage = greenCoverageDays(greenFree, home.productionPlannedKg, today);
   const finishedFree = Math.max(0, home.finishedGoodsUnits - home.finishedGoodsReserved);
   const dateLabel = today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-4 pb-24 sm:pb-6">
+    <div className="mx-auto w-full max-w-[1400px] space-y-4 pb-24 sm:pb-20">
       <section className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-[22px] font-semibold leading-tight tracking-[-.01em]">{greeting}{firstName ? `, ${firstName}` : ""}</h1>
@@ -137,17 +140,24 @@ export function CommandCenterV4({
               </div>
             </>
           )}
-          <Link href="/financeiro/receber" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">{receivable.overdue > 0 ? "Cobrar vencidos com Pix →" : "Ver a receber →"}</Link>
+          <Link href="/financeiro/receber" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">{receivable.overdue > 0 ? "Cobrar vencidos →" : "Ver a receber →"}</Link>
         </div>
 
         <div className={`${card} p-4`}>
           <p className={label}>Caixa · próximos 14 dias</p>
-          <p className={`mt-1.5 whitespace-nowrap text-[26px] font-bold tabular-nums ${cashStarted && cash !== null ? "" : "text-[#9aa3a0]"}`}>
-            {cashStarted && cash !== null ? brl.format(cash + next14.net) : "R$ —"}
-          </p>
+          {cashStarted && cash !== null ? (
+            <p className="mt-1.5 whitespace-nowrap text-[26px] font-bold tabular-nums">{brl.format(cash + next14.net)}</p>
+          ) : (
+            // Without the opening balance the card still answers "how do the next 14 days end?" (SAP Fiori KPI).
+            <p className="mt-1.5 flex items-baseline gap-2 whitespace-nowrap">
+              <span className="text-[26px] font-bold tabular-nums" style={next14.net < 0 ? { color: RED } : undefined}>{next14.net >= 0 ? "+" : "−"}{brl.format(Math.abs(next14.net))}</span>
+              <span className="text-[12.5px] text-[var(--bbos-text-secondary)]">líquido</span>
+            </p>
+          )}
           <p className="mt-2 text-[12.5px] text-[var(--bbos-text-secondary)]">
-            Entra <b style={{ color: GREEN }}>+{brl.format(next14.inflow)}</b> · sai <b className="text-[var(--bbos-text-primary)]">{brl.format(next14.outflow)}</b> em contas a pagar
-            {cashStarted && cash !== null ? <><br />Saldo hoje {brl.format(cash)}</> : <><br />Falta o saldo inicial do Itaú para mostrar o saldo projetado.</>}
+            Entra <b style={{ color: GREEN }}>+{brl.format(next14.inflow)}</b> · sai <b className="text-[var(--bbos-text-primary)]">{brl.format(next14.outflow)}</b> a vencer
+            {payable.overdue > 0 && <><br /><span style={{ color: RED }}>{brl.format(payable.overdue)} em {payable.overdueCount} {payable.overdueCount === 1 ? "conta a pagar vencida" : "contas a pagar vencidas"}</span></>}
+            {cashStarted && cash !== null ? <><br />Saldo hoje {brl.format(cash)}</> : <><br />Com o saldo do Itaú, aqui aparece o saldo projetado.</>}
           </p>
           <Link href={cashStarted ? "/financeiro/fluxo-caixa" : "/financeiro/parametros"} className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">{cashStarted ? "Ver fluxo de caixa →" : "Informar saldo →"}</Link>
         </div>
@@ -209,7 +219,7 @@ export function CommandCenterV4({
           </div>
           <StockBar name="Café verde" value={`${num.format(greenFree)} kg`} free={greenFree} total={greenTotal}
             pill={coverage !== null && coverage < 10 ? `~${Math.max(0, Math.round(coverage))} dias de torra` : undefined}
-            note={`${num.format(greenTotal)} kg no total · ${num.format(greenReserved)} kg reservados para pedidos`} />
+            note={`${num.format(greenTotal)} kg no total · ${num.format(greenReserved)} kg reservados${inboundKg > 0 ? ` · +${num.format(inboundKg)} kg a caminho` : ""}`} />
           <StockBar name="Café torrado" value={`${num.format(home.roastedStock.availableKg)} kg`} free={home.roastedStock.availableKg} total={home.roastedStock.physicalKg}
             note={home.roastedStock.reservedKg > 0 ? `${num.format(home.roastedStock.reservedKg)} kg reservados` : "nada reservado · todo livre para vender"} />
           <StockBar name="Produto embalado" value={`${num.format(finishedFree)} un.`} free={finishedFree} total={home.finishedGoodsUnits}
@@ -268,7 +278,7 @@ function StockBar({ name, value, free, total, note, pill }: { name: string; valu
 
 function CoffeePath({ home, finishedFree, behind }: { home: CenterHome; finishedFree: number; behind: boolean }) {
   const steps: Array<{ key: string; name: string; sub: string; badge: string; href: string; icon: LucideIcon; state: "off" | "plain" | "warn" | "next"; go?: string }> = [
-    { key: "purchase", name: "Compras", sub: "a receber", badge: num.format(home.openPurchases), href: "/cafe-verde", icon: Truck, state: home.openPurchases ? "plain" : "off" },
+    { key: "purchase", name: "Compras", sub: "a receber", badge: (home.greenInboundKg ?? 0) > 0 ? `${num.format(home.greenInboundKg ?? 0)} kg` : num.format(home.openPurchases), href: "/cafe-verde", icon: Truck, state: (home.greenInboundKg ?? 0) > 0 || home.openPurchases ? "plain" : "off" },
     { key: "lab", name: "Laboratório", sub: "em análise", badge: num.format(home.pendingLab), href: "/laboratorio", icon: FlaskConical, state: home.pendingLab ? "warn" : "off" },
     { key: "roast", name: "Torra", sub: home.productionPlannedKg > 0 ? `de ${num.format(home.productionPlannedKg)} kg` : "no mês", badge: `${num.format(home.productionActualKg)} kg`, href: "/producao", icon: Flame, state: behind ? "warn" : "plain", go: behind ? "atrasada" : undefined },
     { key: "packed", name: "Embalado", sub: "un. livres", badge: num.format(finishedFree), href: "/estoque", icon: Box, state: finishedFree ? "plain" : "off" },
