@@ -7,6 +7,8 @@ export type SignaRegionRow = {
   kilograms: number;
   orderValue: number;
   customers?: number;
+  /** Pedido sem cliente final: aparece na cidade de entrega. */
+  deliveryOnly?: boolean;
 };
 
 const UFS = new Set([

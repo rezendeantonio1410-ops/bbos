@@ -26,7 +26,7 @@ export type SignaOrderSummary = {
 type CommercialReport = {
   monthly: Array<{month:string;orders:number;kilograms:number;orderValue:number}>;
   products: Array<{sku:string;product:string;units:number;kilograms:number;orderValue:number}>;
-  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number;customers?:number}>;
+  regions: Array<{state:string|null;city:string|null;orders:number;kilograms:number;orderValue:number;customers?:number;deliveryOnly?:boolean}>;
   notice:string;
   availableYears:string[];
   selectedYear:number|null;
@@ -82,9 +82,9 @@ function SignaReports() {
       <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Ver evolução mensal em tabela</summary><div className="overflow-x-auto px-4 pb-4"><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Mês</th><th>Pedidos</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{months.map(m=><tr key={m.month} className="border-b"><td className="py-2">{m.month}</td><td>{m.orders}</td><td>{Number(m.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(m.orderValue)}</td></tr>)}</tbody></table></div></details>
       <div className="overflow-x-auto"><h4 className="mb-2 text-sm font-semibold">Produtos · histórico completo</h4><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">Produto</th><th>SKU</th><th>Unidades</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.products.map(p=><tr key={p.sku} className="border-b"><td className="py-2">{p.product}</td><td>{p.sku}</td><td>{p.units}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div>
       <div id="mapa-signa" className="scroll-mt-24">
-        <SignaPurchasesMap states={signaStatePurchases(data.regions)}/>
+        <SignaPurchasesMap states={signaStatePurchases(data.regions)} deliveryOnly={data.regions.some((r)=>r.deliveryOnly)}/>
       </div>
-      <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Ver dados do mapa em tabela</summary><div className="overflow-x-auto px-4 pb-4"><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">UF</th><th>Cidade</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.regions.map((p,i)=><tr key={i} className="border-b"><td className="py-2">{p.state||"—"}</td><td>{p.city||"Não informada"}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div></details>
+      <details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Ver dados do mapa em tabela</summary><div className="overflow-x-auto px-4 pb-4"><table className="w-full min-w-[440px] text-left text-sm"><thead><tr className="border-b"><th className="py-2">UF</th><th>Cidade</th><th>Kg</th><th>Valor</th></tr></thead><tbody>{data.regions.map((p,i)=><tr key={i} className="border-b"><td className="py-2">{p.state||"—"}</td><td>{p.city||"Não informada"}{p.deliveryOnly?" (entrega · sem cliente final)":""}</td><td>{Number(p.kilograms).toLocaleString("pt-BR",{maximumFractionDigits:2})}</td><td>{currency.format(p.orderValue)}</td></tr>)}</tbody></table></div></details>
       <p className="text-xs text-slate-500">{data.notice}</p>
     </div>}
   </section>;

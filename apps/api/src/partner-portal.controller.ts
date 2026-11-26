@@ -1367,20 +1367,26 @@ export class PartnerPortalController {
         actor.companyId, partner.id, start, end,
       ),
       this.database.$queryRawUnsafe<any[]>(
-        `SELECT ec.state,ec.city,count(DISTINCT so.id)::int AS orders,
+        // Cliente final quando informado; sem ele, o pedido aparece na
+        // cidade de entrega (o cadastro do destinatário, ex.: a própria Signa).
+        `SELECT COALESCE(NULLIF(TRIM(ec.state),''),recipient.state) AS state,
+                COALESCE(NULLIF(TRIM(ec.city),''),recipient.city) AS city,
+                (ec.id IS NULL) AS "deliveryOnly",
+                count(DISTINCT so.id)::int AS orders,
                 count(DISTINCT ec.id)::int AS customers,
                 COALESCE(sum(item.quantity * variant."netWeightGrams") / 1000.0,0)::float AS kilograms,
                 COALESCE(sum(item."totalAmount"),0)::float AS "orderValue"
            FROM "SalesOrder" so
-           JOIN "PartnerEndCustomer" ec ON ec.id=so."partnerEndCustomerId"
+           LEFT JOIN "PartnerEndCustomer" ec ON ec.id=so."partnerEndCustomerId"
              AND ec."partnerId"=$2 AND ec."companyId"=$1
+           JOIN "Customer" recipient ON recipient.id=so."customerId" AND recipient."companyId"=so."companyId"
            JOIN "SalesOrderItem" item ON item."salesOrderId"=so.id AND item."companyId"=so."companyId"
            JOIN "ProductVariant" variant ON variant.id=item."productVariantId"
           WHERE so."companyId"=$1 AND (so."createdByStorefrontPartnerId"=$2 OR ${this.signaHistoricalOrderScope()})
             AND so.status::text NOT IN ('CANCELLED')
             AND ($3::timestamp IS NULL OR so."createdAt" >= $3::timestamp)
             AND ($4::timestamp IS NULL OR so."createdAt" < $4::timestamp)
-          GROUP BY ec.state,ec.city ORDER BY "orderValue" DESC LIMIT 100`,
+          GROUP BY 1,2,3 ORDER BY "orderValue" DESC LIMIT 100`,
         actor.companyId, partner.id, start, end,
       ),
       this.database.$queryRawUnsafe<Array<{ year: number }>>(
