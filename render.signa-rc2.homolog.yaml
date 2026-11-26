@@ -23,7 +23,12 @@ services:
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/database build && pnpm --filter @bbos/shared build && pnpm --filter @bbos/api build
     # Empty database: bootstrap reproducing production history, then the
     # fictitious seed. Both refuse to run against a database with real data.
-    startCommand: pnpm --filter @bbos/database migrate:deploy && pnpm --filter @bbos/database exec node prisma/seed-signa-homolog.mjs && node apps/api/dist/main.js
+    # Fail before migration or seed if the isolated database or password is misconfigured.
+    startCommand: >-
+      node -e 'let u; try { u = new URL(process.env.DATABASE_URL || ""); } catch { throw new Error("URL de banco de homologacao invalida"); } if (!(["postgres:","postgresql:"].includes(u.protocol) && u.pathname === "/bbos_homolog" && u.hostname && !u.searchParams.has("dbname") && !u.searchParams.has("database"))) throw new Error("Banco de homologacao invalido"); const p = process.env.BBOS_HOMOLOG_PASSWORD || ""; if (p.length < 12 || !/[a-z]/.test(p) || !/[A-Z]/.test(p) || !/\d/.test(p)) throw new Error("Senha de homologacao ausente ou fraca");'
+      && pnpm --filter @bbos/database migrate:deploy
+      && pnpm --filter @bbos/database exec node prisma/seed-signa-homolog.mjs
+      && node apps/api/dist/main.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
