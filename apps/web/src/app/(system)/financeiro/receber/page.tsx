@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, CircleDollarSign, ReceiptText, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, CheckCircle2, CircleDollarSign, ReceiptText, X } from "lucide-react";
 import { Badge, Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { HORIZONS, agendaDays, horizonTotals, type HorizonKey } from "@/lib/receivable-agenda";
 
 type Payment = {
   id: string;
@@ -113,6 +114,10 @@ export default function ReceivablesPage() {
 
       {notice && <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">{notice}</p>}
 
+      {status === "ready" && (
+        <DueAgenda rows={rows} onReceive={(row) => { setNotice(""); setSelected(row); }} />
+      )}
+
       <div className="mt-6 flex flex-wrap gap-2">
         {filters.map((item) => (
           <button key={item} onClick={() => setFilter(item)} className={`min-h-11 rounded-xl border px-3 text-xs font-semibold ${filter === item ? "border-forest-900 bg-forest-900 text-white" : "border-stone-200 bg-white text-stone-600"}`}>
@@ -175,6 +180,86 @@ export default function ReceivablesPage() {
         />
       )}
     </div>
+  );
+}
+
+const HORIZON_TONE: Record<HorizonKey, { bar: string; text: string; ring: string }> = {
+  overdue: { bar: "bg-red-600", text: "text-red-700", ring: "ring-red-300" },
+  week: { bar: "bg-amber-500", text: "text-amber-800", ring: "ring-amber-300" },
+  fortnight: { bar: "bg-teal-700", text: "text-teal-800", ring: "ring-teal-300" },
+  month: { bar: "bg-emerald-500", text: "text-emerald-800", ring: "ring-emerald-300" },
+  later: { bar: "bg-stone-400", text: "text-stone-700", ring: "ring-stone-300" },
+};
+
+/** Future due dates at a glance: horizons on one bar, then a day-by-day agenda. */
+function DueAgenda({ rows, onReceive }: { rows: Receivable[]; onReceive: (row: Receivable) => void }) {
+  const [horizon, setHorizon] = React.useState<HorizonKey | "next30">("next30");
+  const totals = horizonTotals(rows);
+  const grand = HORIZONS.reduce((sum, h) => sum + totals[h.key].amount, 0);
+  const days = agendaDays(rows, horizon);
+  if (!grand) return null;
+  return (
+    <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-lg font-bold"><CalendarClock size={18} className="text-teal-700" /> Próximos vencimentos</h2>
+        <span className="text-sm text-stone-500">Em aberto: <b className="text-stone-900">{money.format(grand)}</b></span>
+      </div>
+      <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-stone-100" aria-hidden>
+        {HORIZONS.map((h) => totals[h.key].amount > 0 && (
+          <span key={h.key} className={HORIZON_TONE[h.key].bar} style={{ width: `${(totals[h.key].amount / grand) * 100}%` }} />
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {HORIZONS.map((h) => {
+          const active = horizon === h.key;
+          const t = totals[h.key];
+          return (
+            <button
+              key={h.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setHorizon(active ? "next30" : h.key)}
+              className={`rounded-xl border border-stone-200 p-3 text-left transition hover:bg-stone-50 ${active ? `ring-2 ${HORIZON_TONE[h.key].ring}` : ""} ${t.count ? "" : "opacity-50"}`}
+            >
+              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-500"><i className={`inline-block size-2.5 rounded-sm ${HORIZON_TONE[h.key].bar}`} />{h.label}</span>
+              <span className={`mt-1 block text-lg font-bold tabular-nums ${HORIZON_TONE[h.key].text}`}>{money.format(t.amount)}</span>
+              <span className="text-xs text-stone-500">{t.count} título{t.count === 1 ? "" : "s"}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-4 text-xs font-semibold text-stone-500">
+        {horizon === "next30" ? "Vencidos e próximos 30 dias, dia a dia" : `${HORIZONS.find((h) => h.key === horizon)!.label}, dia a dia`}
+        {horizon !== "next30" && <button type="button" className="ml-2 font-bold text-forest-700 underline" onClick={() => setHorizon("next30")}>ver próximos 30 dias</button>}
+      </p>
+      <ol className="mt-2 divide-y divide-stone-100">
+        {days.map((day) => (
+          <li key={day.key} className="py-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className={`text-sm font-bold ${day.days < 0 ? "text-red-700" : day.days <= 1 ? "text-amber-800" : "text-stone-900"}`}>
+                {day.label}{day.days < 0 ? ` · vencido há ${-day.days} dia${day.days === -1 ? "" : "s"}` : day.days > 1 ? ` · em ${day.days} dias` : ""}
+              </span>
+              <span className="text-sm font-bold tabular-nums">{money.format(day.total)}</span>
+            </div>
+            <ul className="mt-1.5 space-y-1.5">
+              {day.rows.map((row) => (
+                <li key={row.id} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 rounded-xl bg-stone-50 px-3 py-2 sm:grid-cols-[1fr_auto_auto]">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">{row.customer?.name ?? "Cliente não identificado"}</span>
+                    <span className="text-xs text-stone-500">{row.salesOrder?.orderNumber ?? row.salesOrder?.code ?? row.invoiceId ?? "—"}{row.status === "PARTIALLY_PAID" ? " · parcial" : ""}</span>
+                  </span>
+                  <span className="text-sm font-bold tabular-nums">{money.format(Number(row.openAmount))}</span>
+                  <button data-bbos-write-action type="button" onClick={() => onReceive(row)} className="col-span-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-50 sm:col-span-1">
+                    <CircleDollarSign size={14} /> Recebido
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+        {!days.length && <li className="py-6 text-center text-sm text-stone-500">Nenhum vencimento neste período.</li>}
+      </ol>
+    </section>
   );
 }
 
