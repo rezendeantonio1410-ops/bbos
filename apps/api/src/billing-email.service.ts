@@ -14,7 +14,10 @@ import {
   renderInvoiceIssuedEmail,
   renderReceivablePaidEmail,
   renderReceivableReminderEmail,
+  renderBoletoIssuedEmail,
 } from "./billing-emails";
+import { beneficiaryAccount } from "./boleto-itau";
+import { buildBoletoPdf } from "./boleto-pdf";
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 
@@ -113,6 +116,63 @@ function billingAttachment(data: NonNullable<Awaited<ReturnType<typeof openBilli
   };
 }
 
+type OpenBoleto = {
+  id: string;
+  digitableLine: string;
+  barcode: string;
+  pixCopyPaste: string | null;
+  ourNumber: string;
+  amount: string;
+  dueDate: Date;
+  createdAt: Date;
+};
+
+/**
+ * Only a boleto registered at the bank goes to customers: test and sandbox
+ * boletos are not valid for payment.
+ */
+export async function openProductionBoleto(database: any, receivableId: string): Promise<OpenBoleto | null> {
+  try {
+    const rows = await database.$queryRawUnsafe(
+      `SELECT id,"digitableLine",barcode,"pixCopyPaste","ourNumber","amount"::text AS amount,"dueDate","createdAt"
+         FROM "ReceivableBoleto"
+        WHERE "accountsReceivableId"=$1 AND status='ISSUED' AND mode='producao'
+        ORDER BY "createdAt" DESC LIMIT 1`,
+      receivableId,
+    );
+    const row = rows?.[0];
+    const valid = row && typeof row.digitableLine === "string" && /^\d{47}$/.test(row.digitableLine) &&
+      !Number.isNaN(new Date(row.dueDate).getTime());
+    return valid ? row : null;
+  } catch {
+    return null;
+  }
+}
+
+function boletoAttachment(boleto: OpenBoleto, order: any, _receivable: unknown, invoiceNumber: string | null): Attachment {
+  const customer = order.customer ?? {};
+  const bank = beneficiaryAccount();
+  const pdf = buildBoletoPdf({
+    digitableLine: boleto.digitableLine,
+    barcode: boleto.barcode,
+    ourNumber: boleto.ourNumber,
+    wallet: bank.wallet,
+    agency: bank.agency,
+    account: bank.account,
+    amountCents: Math.round(Number(boleto.amount) * 100),
+    dueDate: boleto.dueDate,
+    issueDate: boleto.createdAt,
+    yourNumber: invoiceNumber || String(order.orderNumber ?? order.code),
+    payer: {
+      name: customer.legalName || customer.name || "",
+      taxId: customer.taxId || "",
+      address: [customer.address, customer.addressNumber, customer.district, customer.city, customer.state, customer.postalCode].filter(Boolean).join(" - "),
+    },
+    pixCopyPaste: boleto.pixCopyPaste,
+  });
+  return { filename: `Boleto-${safeName(invoiceNumber || order.orderNumber || order.code)}.pdf`, content: pdf.toString("base64"), content_type: "application/pdf" };
+}
+
 /**
  * Builds the e-mail for a queued billing notification from current data, so a
  * reminder never goes out for a receivable that was paid in the meantime.
@@ -176,8 +236,15 @@ export async function composeBillingEmail(
       if (billing) {
         content.dueDate = billing.receivable.dueDate.toISOString();
         content.openCents = billing.openCents;
-        content.pixCode = billing.pix;
-        attachments.push(billingAttachment(billing, content.orderCode));
+        const boleto = await openProductionBoleto(database, billing.receivable.id);
+        if (boleto) {
+          content.dueDate = new Date(boleto.dueDate).toISOString();
+          content.boleto = { digitableLine: boleto.digitableLine, pixCopyPaste: boleto.pixCopyPaste };
+          attachments.push(boletoAttachment(boleto, order, billing.receivable, invoice.number));
+        } else {
+          content.pixCode = billing.pix;
+          attachments.push(billingAttachment(billing, content.orderCode));
+        }
       }
     }
     return {
@@ -200,13 +267,41 @@ export async function composeBillingEmail(
     dueDate: receivable.dueDate?.toISOString?.() ?? null,
   };
 
+  if (row.template === "BOLETO_ISSUED") {
+    if (["PAID", "CANCELLED"].includes(receivable.status) || Number(receivable.openAmount) <= 0)
+      throw new NotificationSkipped("Título já quitado.");
+    const boleto = await openProductionBoleto(database, receivable.id);
+    if (!boleto || boleto.id !== payload.boletoId)
+      throw new NotificationSkipped("O boleto não está mais em aberto.");
+    content.dueDate = new Date(boleto.dueDate).toISOString();
+    content.openCents = Math.round(Number(boleto.amount) * 100);
+    content.boleto = { digitableLine: boleto.digitableLine, pixCopyPaste: boleto.pixCopyPaste };
+    return {
+      subject: billingEmailSubject("BOLETO_ISSUED", content),
+      html: renderBoletoIssuedEmail(content, deps.assets),
+      attachments: [boletoAttachment(boleto, order, receivable, content.invoiceNumber ?? null)],
+    };
+  }
+
   if (row.template === "RECEIVABLE_REMINDER") {
     if (["PAID", "CANCELLED"].includes(receivable.status) || Number(receivable.openAmount) <= 0)
       throw new NotificationSkipped("Título já quitado.");
-    if (content.dueDate?.slice(0, 10) !== payload.dueDate)
+    const boleto = await openProductionBoleto(database, receivable.id);
+    // The reminder follows the boleto's due date when one was issued.
+    const due = boleto ? new Date(boleto.dueDate).toISOString() : content.dueDate;
+    if (due?.slice(0, 10) !== payload.dueDate)
       throw new NotificationSkipped("O vencimento foi alterado.");
+    content.dueDate = due;
     const billing = await openBilling(database, order);
     content.openCents = billing?.openCents ?? Math.round(Number(receivable.openAmount) * 100);
+    if (boleto) {
+      content.boleto = { digitableLine: boleto.digitableLine, pixCopyPaste: boleto.pixCopyPaste };
+      return {
+        subject: billingEmailSubject("RECEIVABLE_REMINDER", content),
+        html: renderReceivableReminderEmail(content, deps.assets),
+        attachments: [boletoAttachment(boleto, order, receivable, content.invoiceNumber ?? null)],
+      };
+    }
     content.pixCode = billing?.pix ?? null;
     return {
       subject: billingEmailSubject("RECEIVABLE_REMINDER", content),
@@ -271,7 +366,11 @@ export class BillingEmailService {
            JOIN "Customer" c ON c.id=ar."customerId"
           WHERE ar.status IN ('OPEN','PARTIALLY_PAID') AND ar."openAmount">0
             AND so."paymentType"='TERM' AND so."orderType"<>'SAMPLE' AND so.status<>'CANCELLED'
-            AND ar."dueDate"::date=$1::date
+            AND COALESCE(
+                  (SELECT b."dueDate" FROM "ReceivableBoleto" b
+                    WHERE b."accountsReceivableId"=ar.id AND b.status='ISSUED' AND b.mode='producao'
+                    ORDER BY b."createdAt" DESC LIMIT 1),
+                  ar."dueDate")::date=$1::date
           LIMIT 200`,
         dueDate,
       );
@@ -281,6 +380,29 @@ export class BillingEmailService {
           dueDate,
         });
     }
+
+    // A boleto issued after the NF e-mail went out gets its own e-mail. When
+    // the NF e-mail is still queued, that e-mail already carries the boleto.
+    const boletos = await this.database.$queryRawUnsafe(
+      `SELECT b.id AS "boletoId",ar.id,ar."companyId",ar."salesOrderId",c.email
+         FROM "ReceivableBoleto" b
+         JOIN "AccountsReceivable" ar ON ar.id=b."accountsReceivableId"
+         JOIN "SalesOrder" so ON so.id=ar."salesOrderId" AND so."companyId"=ar."companyId"
+         JOIN "Customer" c ON c.id=ar."customerId"
+        WHERE b.status='ISSUED' AND b.mode='producao' AND b."createdAt" >= $1::timestamptz
+          AND ar.status IN ('OPEN','PARTIALLY_PAID','OVERDUE') AND so.status<>'CANCELLED'
+          AND NOT EXISTS (
+            SELECT 1 FROM "CustomerNotificationOutbox" n
+             WHERE n."salesOrderId"=ar."salesOrderId" AND n.template='INVOICE_ISSUED'
+               AND (n.status IN ('PENDING','FAILED','PROCESSING') OR n."sentAt" >= b."createdAt"))
+        LIMIT 100`,
+      activation,
+    ).catch(() => []);
+    for (const item of boletos)
+      queued += await this.enqueue(item, "BOLETO_ISSUED", billingEmailKeys.boleto(item.boletoId), {
+        receivableId: item.id,
+        boletoId: item.boletoId,
+      });
 
     const paid = await this.database.$queryRawUnsafe(
       `SELECT ar.id,ar."companyId",ar."salesOrderId",c.email
