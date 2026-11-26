@@ -7,17 +7,151 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
-const api = (process.env.SIGNA_E2E_API ?? "").replace(/\/$/, "");
-const password = process.env.SIGNA_E2E_PASSWORD ?? "";
-if (!api || !password) { console.error("Defina SIGNA_E2E_API e SIGNA_E2E_PASSWORD."); process.exit(2); }
-// Deny by default: a production alias/custom domain must never be accepted.
-let endpoint;
-try { endpoint = new URL(api); } catch { console.error("Recusado: URL inválida."); process.exit(2); }
-const local = ["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname) && ["http:", "https:"].includes(endpoint.protocol);
-const renderHomolog = endpoint.origin === "https://bbos-api-homolog-8w8f.onrender.com";
-if ((!local && !renderHomolog) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || !["", "/", "/api"].includes(endpoint.pathname)) {
-  console.error("Recusado: use exclusivamente a API isolada de homologação ou loopback."); process.exit(2);
+// Remote tests require the exact RC2 origin from the reviewed Render service.
+// Example: SIGNA_E2E_RENDER_ORIGIN=https://bbos-api-signa-rc2-XXXX.onrender.com
+// SIGNA_E2E_API must be that origin plus /api. Never use production or RC1.
+function classifyTarget(api, expectedOrigin) {
+  const local = /^(?:http|https):\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::([0-9]{1,5}))?\/api\/?$/.exec(api);
+  if (local && (!local[1] || (Number(local[1]) > 0 && Number(local[1]) <= 65535))) return "local";
+  if (/^https:\/\/bbos-api-signa-rc2-[a-z0-9]+\.onrender\.com$/.test(expectedOrigin) &&
+      (api === expectedOrigin + "/api" || api === expectedOrigin + "/api/")) return "render";
+  return null;
 }
+function target(api, expectedOrigin) {
+  if (/\s/.test(api) || /\s/.test(expectedOrigin)) return null;
+  return classifyTarget(api, expectedOrigin);
+}
+
+if (process.argv.includes("--test-target-guard")) {
+  const cases = [
+  [
+    "http://127.0.0.1:3101/api",
+    "",
+    "local"
+  ],
+  [
+    "http://localhost:3101/api/",
+    "",
+    "local"
+  ],
+  [
+    "http://[::1]:3101/api",
+    "",
+    "local"
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "render"
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api/",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "render"
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api",
+    "",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-other.onrender.com/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://bbos-api-homolog-8w8f.onrender.com/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://bbos-api-rc1.onrender.com/api",
+    "https://bbos-api-rc1.onrender.com",
+    null
+  ],
+  [
+    "https://api.bispocoffees.com.br/api",
+    "https://api.bispocoffees.com.br",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api?x=1",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api#fragment",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com:443/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "http://bbos-api-signa-rc2-test123.onrender.com/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://user@bbos-api-signa-rc2-test123.onrender.com/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com.evil.example/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api/../api",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "http://127.0.0.1:0/api",
+    "",
+    null
+  ],
+  [
+    "http://localhost:65536/api",
+    "",
+    null
+  ],
+  [
+    "http://127.0.0.1.evil.example/api",
+    "",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/api",
+    "https://bbos-api-signa-rc2-test123.onrender.com/",
+    null
+  ],
+  [
+    "https://bbos-api-signa-rc2-test123.onrender.com/",
+    "https://bbos-api-signa-rc2-test123.onrender.com",
+    null
+  ],
+  [
+    "http://localhost:3101/api\n",
+    "",
+    null
+  ]
+];
+  for (const [api, expectedOrigin, expected] of cases) assert.equal(target(api, expectedOrigin), expected, api);
+  console.log(`PASS ${cases.length}/${cases.length} target guard cases (no network)`);
+  process.exit(0);
+}
+
+const rawApi = process.env.SIGNA_E2E_API ?? "";
+const password = process.env.SIGNA_E2E_PASSWORD ?? "";
+if (!rawApi || !password) { console.error("Defina SIGNA_E2E_API e SIGNA_E2E_PASSWORD."); process.exit(2); }
+const kind = target(rawApi, process.env.SIGNA_E2E_RENDER_ORIGIN ?? "");
+if (!kind) { console.error("Recusado: use loopback ou a origem RC2 exata aprovada no Render, com /api."); process.exit(2); }
+const local = kind === "local";
+const api = rawApi.replace(/\/$/, "");
 
 const results = [];
 async function check(name, fn) {
