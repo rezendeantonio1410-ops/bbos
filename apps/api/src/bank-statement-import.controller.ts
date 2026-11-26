@@ -18,6 +18,7 @@ import {
   planStatement,
   type OpenInstallment,
   type OpenPayable,
+  type OpenReceivable,
   type RecordedPayment,
 } from "./statement-matching";
 import { recurringCandidates, recurringKey, statementStartBalance, type PaidExpense } from "./recurring-expenses";
@@ -78,11 +79,12 @@ export class BankStatementImportController {
 
   private async context(companyId: string, financialAccountId: string, statement: ParsedStatement) {
     const from = new Date(`${statement.from ?? "2000-01-01"}T00:00:00Z`);
-    from.setUTCDate(from.getUTCDate() - 5);
-    const [payments, payables, installments, company, users, learnedPayables, learnedIncome, imported] = await Promise.all([
+    from.setUTCDate(from.getUTCDate() - 10);
+    const [payments, payables, installments, company, users, learnedPayables, learnedIncome, imported, receivables, customers] = await Promise.all([
+      // Todas as contas da empresa: pagamento baixado na conta errada também é reconhecido.
       prisma.payment.findMany({
-        where: { companyId, financialAccountId, paidAt: { gte: from } },
-        include: { accountsReceivable: { include: { customer: true } }, accountsPayable: { include: { supplier: true } } },
+        where: { companyId, paidAt: { gte: from } },
+        include: { accountsReceivable: { include: { customer: true } }, accountsPayable: { include: { supplier: true } }, financialAccount: { select: { id: true, name: true } } },
       }),
       prisma.accountsPayable.findMany({
         where: { companyId, status: { in: ["OPEN", "PARTIALLY_PAID", "OVERDUE"] as any }, openAmount: { gt: 0 } },
@@ -110,14 +112,23 @@ export class BankStatementImportController {
         where: { financialAccountId, externalId: { in: statement.lines.map((l) => l.externalId) } },
         include: { reconciliationItem: true },
       }),
+      prisma.accountsReceivable.findMany({
+        where: { companyId, status: { in: ["OPEN", "PARTIALLY_PAID", "OVERDUE"] as any }, openAmount: { gt: 0 } },
+        include: { customer: true, salesOrder: { select: { orderNumber: true, code: true } } },
+      }),
+      prisma.customer.findMany({ where: { companyId, active: true }, select: { name: true, legalName: true, taxId: true } }),
     ]);
     const recorded: RecordedPayment[] = payments.map((p) => ({
       id: p.id,
-      direction: p.accountsReceivableId ? "IN" : "OUT",
+      direction: (p.accountsReceivableId ? "IN" : "OUT") as "IN" | "OUT",
       amount: Number(p.amount),
       date: p.paidAt.toISOString().slice(0, 10),
       name: p.accountsReceivable?.customer?.name ?? p.accountsPayable?.supplier?.name ?? p.accountsPayable?.description ?? "",
-    }));
+      accountId: p.financialAccountId,
+      accountName: p.financialAccount?.name,
+    }))
+      // Pagamentos da própria conta primeiro.
+      .sort((a, b) => Number(b.accountId === financialAccountId) - Number(a.accountId === financialAccountId));
     const open: OpenPayable[] = payables.map((p) => ({
       id: p.id,
       label: p.description,
@@ -134,6 +145,14 @@ export class BankStatementImportController {
       taxId: cleanTaxId(i.purchase.supplier?.taxId ?? ""),
       name: i.purchase.supplier?.name ?? "",
     }));
+    const openReceivables: OpenReceivable[] = receivables.map((r) => ({
+      id: r.id,
+      label: `${r.salesOrder?.orderNumber ?? r.salesOrder?.code ?? r.invoiceId ?? "Título"} · ${r.customer.name}`,
+      amount: Number(r.openAmount),
+      dueDate: r.dueDate.toISOString().slice(0, 10),
+      taxId: cleanTaxId(r.customer.taxId ?? ""),
+      name: [r.customer.name, r.customer.legalName, r.customer.tradeName].filter(Boolean).join(" "),
+    }));
     // "O BBOS lembra": a última categoria usada para o mesmo CNPJ/CPF.
     const learned = new Map<string, string>();
     for (const row of learnedPayables) {
@@ -148,6 +167,9 @@ export class BankStatementImportController {
       payments: recorded,
       payables: open,
       installments: openInstallments,
+      receivables: openReceivables,
+      customers: customers.flatMap((c) => [c.name, c.legalName].filter(Boolean).map((name) => ({ name: String(name), taxId: cleanTaxId(c.taxId ?? "") }))),
+      accountId: financialAccountId,
       companyTaxId: cleanTaxId(company?.taxId ?? ""),
       ownerNames: users.map((u) => u.name ?? "").filter(Boolean),
       learned,
@@ -224,8 +246,15 @@ export class BankStatementImportController {
         if (decision.action === "ALREADY") {
           if (plan.group !== "ALREADY" || plan.matchedPayment?.id !== decision.paymentId) throw new Error("O registro correspondente mudou. Gere a prévia de novo.");
           const payment = await prisma.payment.findFirst({ where: { id: decision.paymentId, companyId: actor.companyId }, include: { transaction: { include: { reconciliationItem: true } } } });
+          if (payment && payment.financialAccountId !== account.id) {
+            // O dinheiro entrou no banco do extrato: a baixa passa para esta conta.
+            await prisma.$transaction([
+              prisma.payment.update({ where: { id: payment.id }, data: { financialAccountId: account.id, notes: `${payment.notes ?? ""} · conta corrigida pelo extrato`.trim().slice(0, 500) } }),
+              ...(payment.transaction ? [prisma.financialTransaction.update({ where: { id: payment.transaction.id }, data: { financialAccountId: account.id } })] : []),
+            ]);
+          }
           if (payment?.transaction && !payment.transaction.reconciliationItem) transactionId = payment.transaction.id;
-          note = "Já registrado no BBOS";
+          note = payment && payment.financialAccountId !== account.id ? "Já registrado no BBOS · conta corrigida" : "Já registrado no BBOS";
         } else if (decision.action === "SETTLE") {
           const settlement = plan.settlement;
           if (plan.group !== "SETTLE" || !settlement) throw new Error("Não há conta em aberto para esta linha. Gere a prévia de novo.");
@@ -233,6 +262,18 @@ export class BankStatementImportController {
           if (!settled.has(settlement)) {
             settled.add(settlement);
             for (const allocation of settlement.allocations) {
+              if (allocation.kind === "RECEIVABLE") {
+                await this.finance.receive(allocation.id, {
+                  financialAccountId: account.id,
+                  amount: allocation.amount,
+                  paidAt: `${line.date}T12:00:00Z`,
+                  method: /PIX/i.test(line.description) ? "PIX" : "BANK_TRANSFER",
+                  notes: `Baixa pelo extrato ${statement.bank} de ${line.date.split("-").reverse().join("/")}`,
+                  idempotencyKey: `${key}:${allocation.id}`,
+                  recordedBy: actor.name,
+                }, actor.companyId);
+                continue;
+              }
               let payableId = allocation.id;
               if (allocation.kind === "INSTALLMENT") payableId = await this.payableForInstallment(allocation.id, actor.companyId);
               await this.finance.pay(payableId, {
