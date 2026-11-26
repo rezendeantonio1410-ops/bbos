@@ -544,6 +544,10 @@ if (local && process.env.CI === "true") {
     assert.equal(before.status, "OPEN");
     const probes = [
       ["GET", "/finance/receivables"],
+      // Recurring expense forecasts are internal, including read-only access.
+      ["GET", "/finance/recurring-expenses"],
+      ["POST", "/finance/recurring-expenses", { label: "DENIED-CI-ONLY", category: "TEST", amount: 1, dayOfMonth: 1 }],
+      ["PATCH", "/finance/recurring-expenses/homolog-denied-expense", { active: false }],
       ["GET", "/finance/reconciliation/summary"],
       // Statement import is internal: even preview must not expose bank data.
       ["POST", "/finance/statement-import/preview", { financialAccountId: "homolog-denied-account", fileName: "denied.ofx", contentBase64: "T0ZY" }],
