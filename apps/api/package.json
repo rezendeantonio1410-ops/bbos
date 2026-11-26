@@ -29,7 +29,7 @@
     "test:sales-orders-company-scope": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/sales-orders-company-scope.test.ts",
     "test:intelligence": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/intelligence.service.test.ts",
     "test:role-access": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/role-access.guard.test.ts",
-    "test:finance-receivable-payment": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/finance-receivable-payment.test.ts ../../apps/api/src/finance-taxes.test.ts ../../apps/api/src/inbound-payables.test.ts",
+    "test:finance-receivable-payment": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/finance-receivable-payment.test.ts ../../apps/api/src/finance-taxes.test.ts ../../apps/api/src/inbound-payables.test.ts ../../apps/api/src/bank-statement-import.test.ts",
     "test:expense-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/expense-policy.test.ts ../../apps/api/src/finance-expense-flow.test.ts",
     "test:sales-order-manual-pix": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-manual-pix.test.ts",
     "test:sales-order-manual-delivery": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-manual-delivery.test.ts",
@@ -71,6 +71,7 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "unpdf": "2.1.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
