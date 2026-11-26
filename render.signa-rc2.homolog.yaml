@@ -25,7 +25,7 @@ services:
     # fictitious seed. Both refuse to run against a database with real data.
     # Fail before migration or seed if the isolated database or password is misconfigured.
     startCommand: >-
-      node -e 'let u; try { u = new URL(process.env.DATABASE_URL || ""); } catch { throw new Error("URL de banco de homologacao invalida"); } if (!(["postgres:","postgresql:"].includes(u.protocol) && u.pathname === "/bbos_homolog" && u.hostname && !u.searchParams.has("dbname") && !u.searchParams.has("database"))) throw new Error("Banco de homologacao invalido"); const p = process.env.BBOS_HOMOLOG_PASSWORD || ""; if (p.length < 12 || !/[a-z]/.test(p) || !/[A-Z]/.test(p) || !/\d/.test(p)) throw new Error("Senha de homologacao ausente ou fraca");'
+      node -e 'let u; try { u = new URL(process.env.DATABASE_URL || ""); } catch { throw new Error("URL de banco de homologacao invalida"); } const h = process.env.BBOS_HOMOLOG_DB_HOST; const n = process.env.BBOS_HOMOLOG_DB_USER; const port = process.env.BBOS_HOMOLOG_DB_PORT; if (!(["postgres:","postgresql:"].includes(u.protocol) && h && n && port && u.hostname === h && u.username === n && u.port === port && u.pathname === "/bbos_homolog" && !u.search && !u.hash)) throw new Error("Banco de homologacao invalido"); const p = process.env.BBOS_HOMOLOG_PASSWORD || ""; if (p.length < 12 || !/[a-z]/.test(p) || !/[A-Z]/.test(p) || !/\d/.test(p)) throw new Error("Senha de homologacao ausente ou fraca");'
       && pnpm --filter @bbos/database migrate:deploy
       && pnpm --filter @bbos/database exec node prisma/seed-signa-homolog.mjs
       && node apps/api/dist/main.js
@@ -37,6 +37,20 @@ services:
         fromDatabase:
           name: bbos-postgres-signa-rc2
           property: connectionString
+      # Independent references prevent a same-named database on another server
+      # from passing the migration guard. No manual values or secrets added.
+      - key: BBOS_HOMOLOG_DB_HOST
+        fromDatabase:
+          name: bbos-postgres-signa-rc2
+          property: host
+      - key: BBOS_HOMOLOG_DB_USER
+        fromDatabase:
+          name: bbos-postgres-signa-rc2
+          property: user
+      - key: BBOS_HOMOLOG_DB_PORT
+        fromDatabase:
+          name: bbos-postgres-signa-rc2
+          property: port
       - key: BBOS_EMPTY_DATABASE_BOOTSTRAP
         value: "true"
       # Only this database name may be recreated after an INCOMPLETE bootstrap.
