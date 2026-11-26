@@ -88,11 +88,25 @@ export class SampleTrackingService implements OnModuleInit, OnModuleDestroy {
       if (!registered.length) return { synced: 0, changed: 0, message: "A transportadora ainda não reconheceu o código. Tente de novo mais tarde." };
       const info = await track17("gettrackinfo", registered.map((s) => this.item(s)));
       let changed = 0;
+      const answered = new Set<string>();
       for (const entry of info.accepted ?? []) {
         const sample = registered.find((s) => s.trackingCode === String(entry?.number));
-        if (sample && (await this.apply(sample, entry))) changed += 1;
+        if (!sample) continue;
+        answered.add(sample.id);
+        if (await this.apply(sample, entry)) changed += 1;
       }
-      return { synced: registered.length, changed, message: null };
+      // Codes the carrier has not answered yet (just registered, or refused):
+      // show that they were consulted, and keep the reason in the logs.
+      const rejected = new Map<string, any>((info.rejected ?? []).map((r: any) => [String(r?.number), r]));
+      for (const sample of registered.filter((s) => !answered.has(s.id))) {
+        const reason = rejected.get(sample.trackingCode)?.error;
+        if (reason) this.logger.warn(`17TRACK sem dados para ${sample.carrier} ${sample.trackingCode}: ${reason.code} ${reason.message ?? ""}`);
+        await this.db.$executeRawUnsafe(
+          `UPDATE "ExportSample" SET "trackingSyncedAt"=NOW(),"trackingStatusText"=COALESCE("trackingStatusText",$2) WHERE id=$1`,
+          sample.id, "Aguardando dados da transportadora",
+        );
+      }
+      return { synced: registered.length, changed, message: answered.size < registered.length ? "A transportadora ainda não enviou os passos de algum código. O BBOS tenta de novo sozinho." : null };
     } catch (error) {
       if (error instanceof TrackingUnavailable) return { synced: 0, changed: 0, message: error.message };
       this.logger.warn(`Sample tracking failed: ${error instanceof Error ? error.message : String(error)}`);
