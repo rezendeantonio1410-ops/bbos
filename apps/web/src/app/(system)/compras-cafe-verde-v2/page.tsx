@@ -12,7 +12,6 @@ const ROOT = getApiBaseUrl();
 const API = `${ROOT}/green-coffee-purchases`;
 const input = "w-full rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-elevated)] px-3 py-2 text-sm text-[var(--bbos-text-primary)] outline-none transition focus:border-[var(--bbos-focus-ring)] focus:ring-2 focus:ring-[var(--bbos-focus-ring)]/15 disabled:cursor-not-allowed disabled:bg-[var(--bbos-surface-subtle)] disabled:opacity-60";
 
-const states = ["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"];
 const packagingWeights: Record<string, number | null> = {
   BAG_30_KG: 30,
   BAG_60_KG: 60,
@@ -51,6 +50,7 @@ type Supplier = {
   name: string;
   legalName?: string;
   taxId?: string;
+  supplierType?: "RURAL_PERSON" | "COMPANY" | "COOPERATIVE" | "ASSOCIATION" | "EXPORTER" | "OTHER";
   city?: string;
   state?: string;
   country?: string;
@@ -111,7 +111,6 @@ export default function PurchaseFormV2Page() {
   const [options, setOptions] = useState<Options | null>(null);
   const [brokers, setBrokers] = useState<Broker[]>([]);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
-  const [purchaseState, setPurchaseState] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [originUnitId, setOriginUnitId] = useState("");
   const [speciesCode, setSpeciesCode] = useState("");
@@ -165,16 +164,8 @@ export default function PurchaseFormV2Page() {
   }, [sampleId]);
 
   useEffect(() => {
-    if (approvedSample?.state) setPurchaseState(approvedSample.state);
-  }, [approvedSample]);
-
-  useEffect(() => {
-    if (!purchaseState) {
-      setReferences(null);
-      setSupplierId("");
-      return;
-    }
-    void req<ReferenceData>(`${API}/references?state=${encodeURIComponent(purchaseState)}`)
+    // Commercial suppliers are not restricted to the state where coffee was grown.
+    void req<ReferenceData>(`${API}/references`)
       .then((data) => {
         setReferences(data);
         setSupplierId("");
@@ -183,7 +174,7 @@ export default function PurchaseFormV2Page() {
         setCultivarId("");
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar origem."));
-  }, [purchaseState]);
+  }, []);
 
   useEffect(() => {
     if (!approvedSample || !references) return;
@@ -200,9 +191,8 @@ export default function PurchaseFormV2Page() {
       setOriginUnitId("");
       return;
     }
-    const selected = references?.suppliers.find((item) => item.id === supplierId);
-    const units = selected?.originUnits ?? [];
-    setOriginUnitId(units.length === 1 ? units[0]!.id : "");
+    // A unique registered unit is not necessarily the agricultural origin of this lot.
+    setOriginUnitId("");
     void req<Contact[]>(`${API}/suppliers/${supplierId}/contacts`)
       .then((contacts) => {
         const active = contacts.filter((item) => item.active);
@@ -252,7 +242,7 @@ export default function PurchaseFormV2Page() {
 
   const supplier = references?.suppliers.find((item) => item.id === supplierId);
   const originUnits = supplier?.originUnits ?? [];
-  const originUnit = originUnits.find((item) => item.id === originUnitId) ?? (originUnits.length === 1 ? originUnits[0] : undefined);
+  const originUnit = originUnits.find((item) => item.id === originUnitId);
   const unitProductions = originUnit?.productions ?? [];
   const availableSpecies = references?.species.filter((item) => !unitProductions.length || unitProductions.some((production) => production.speciesId === item.id)) ?? [];
   const species = availableSpecies.find((item) => item.code === speciesCode);
@@ -284,7 +274,7 @@ export default function PurchaseFormV2Page() {
     if (submitting || submittedNumber) return;
     setError("");
     setMessage("");
-    if (!supplier || !originUnit || !species || !cultivar) return setError("Complete origem, espécie e cultivar.");
+    if (!supplier || !species) return setError("Selecione o fornecedor comercial e a espécie do café.");
     const form = new FormData(event.currentTarget);
     setSubmitting(true);
     try {
@@ -294,7 +284,7 @@ export default function PurchaseFormV2Page() {
         body: JSON.stringify({
           supplierId,
           professionalSampleId: approvedSample?.id,
-          originUnitId: originUnit.id,
+          originUnitId: originUnit?.id || undefined,
           idempotencyKey: crypto.randomUUID(),
           action,
           department: "COMPRAS",
@@ -302,19 +292,20 @@ export default function PurchaseFormV2Page() {
           purchasedAt: new Date().toISOString(),
           species: species.code,
           speciesId: species.id,
-          originRegion: originUnit.coffeeRegion?.name ?? "",
-          municipality: originUnit.municipality ?? supplier.city,
-          state: originUnit.state,
-          country: originUnit.country ?? supplier.country ?? "Brasil",
-          farmName: originUnit.name,
+          // Never infer coffee-growing origin from the invoice supplier address.
+          originRegion: originUnit?.coffeeRegion?.name ?? "",
+          municipality: originUnit?.municipality ?? undefined,
+          state: originUnit?.state ?? undefined,
+          country: originUnit?.country ?? "Brasil",
+          farmName: originUnit?.name ?? undefined,
           harvest,
-          variety: cultivar.code,
-          cultivarId: cultivar.id,
+          variety: cultivar?.code ?? undefined,
+          cultivarId: cultivar?.id ?? undefined,
           process: form.get("process"),
           qualityCategory: form.get("qualityCategory"),
           contractedScreen: references?.screenClassifications.find((item) => item.id === form.get("screenClassificationId"))?.name,
           screenClassificationId: form.get("screenClassificationId"),
-          coffeeRegionId: originUnit.coffeeRegionId,
+          coffeeRegionId: originUnit?.coffeeRegionId ?? undefined,
           maxDefects: Number(form.get("maxDefects")) || undefined,
           maxMoisturePercent: Number(form.get("maxMoisturePercent")) || undefined,
           minimumScore: form.get("minimumScore") ? Number(form.get("minimumScore")) : undefined,
@@ -363,20 +354,26 @@ export default function PurchaseFormV2Page() {
       {error && <p className="mt-3 rounded-xl border border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-critical)]" role="alert">{error}</p>}
 
       <nav className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2" aria-label="Progresso da ficha">
-        {([["Origem", Boolean(supplier && originUnit), MapPinned], ["Especificação", Boolean(species && cultivar), Bean], ["Quantidade", totalWeight > 0, Package], ["Comercial", priceKg > 0, Handshake], ["Governança", Boolean(selectedContact?.canConfirmBusiness), ShieldCheck]] as const).map(([label, complete, Icon], index, items) => <span key={label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--bbos-text-secondary)]"><span className={`grid size-5 place-items-center rounded-full border ${complete ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`}><Icon size={11} aria-hidden="true" /></span>{label}{index < items.length - 1 && <span className="ml-0.5 text-[var(--bbos-text-muted)]" aria-hidden="true">→</span>}</span>)}
+        {([["Fornecedor", Boolean(supplier), MapPinned], ["Especificação", Boolean(species && cultivar), Bean], ["Quantidade", totalWeight > 0, Package], ["Comercial", priceKg > 0, Handshake], ["Governança", Boolean(selectedContact?.canConfirmBusiness), ShieldCheck]] as const).map(([label, complete, Icon], index, items) => <span key={label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--bbos-text-secondary)]"><span className={`grid size-5 place-items-center rounded-full border ${complete ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`}><Icon size={11} aria-hidden="true" /></span>{label}{index < items.length - 1 && <span className="ml-0.5 text-[var(--bbos-text-muted)]" aria-hidden="true">→</span>}</span>)}
       </nav>
 
       <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} className="mt-3 space-y-2.5">
         <fieldset disabled={Boolean(submittedNumber)} className="contents">
         <Section title="A · Origem" tone="origin" icon={MapPinned}>
-          <Field label="Estado"><select required className={input} value={purchaseState} onChange={(e) => setPurchaseState(e.target.value)}><option value="">Selecione</option>{states.map((value) => <option key={value}>{value}</option>)}</select></Field>
-          <Field label="Fornecedor"><select required className={input} disabled={!purchaseState} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-          <Field label="Unidade / Fazenda"><select required className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Selecione</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label="UF de produção"><input readOnly className={input} value={originUnit?.state ?? "Origem não informada"} /></Field>
+          <Field label="Fornecedor comercial / fiscal"><select required className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label={supplier?.supplierType === "RURAL_PERSON" ? "Fazenda de origem do café" : "Origem produtiva (quando conhecida)"}><select className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Não informada — não vincular fazenda</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Safra"><select required className={input} value={harvest} onChange={(e) => setHarvest(e.target.value)}>{harvestOptions().map((item) => <option key={item}>{item}</option>)}</select></Field>
-          <Field label="Região cafeeira"><input readOnly className={input} value={originUnit?.coffeeRegion?.name ?? "—"} /></Field>
-          <Field label="Município"><input readOnly className={input} value={originUnit?.municipality ?? "—"} /></Field>
-          <Field label="Espécie"><select required className={input} disabled={!originUnitId} value={speciesCode} onChange={(e) => { setSpeciesCode(e.target.value); setCultivarId(""); }}><option value="">Selecione</option>{availableSpecies.map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}</select></Field>
-          <Field label="Cultivar"><select required className={input} disabled={!speciesCode} value={cultivarId} onChange={(e) => setCultivarId(e.target.value)}><option value="">Selecione</option>{availableCultivars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          {supplier && <div className="rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2 text-xs text-[var(--bbos-text-secondary)] sm:col-span-2 lg:col-span-4">
+            <b className="text-[var(--bbos-text-primary)]">{supplier.supplierType === "RURAL_PERSON" ? "Produtor rural pessoa física" : supplier.supplierType === "COOPERATIVE" ? "Cooperativa" : "Fornecedor comercial / fiscal"}</b>
+            {" · "}{supplier.supplierType === "RURAL_PERSON"
+              ? "Um mesmo CPF pode ter várias fazendas. Selecione a propriedade efetiva deste lote, sem associar automaticamente a primeira fazenda."
+              : "A empresa fornecedora não é necessariamente a fazenda produtora. Origem não informada não gera propriedade fictícia."}
+          </div>}
+          <Field label="Região cafeeira"><input readOnly className={input} value={originUnit?.coffeeRegion?.name ?? "Origem não informada"} /></Field>
+          <Field label="Município de produção"><input readOnly className={input} value={originUnit?.municipality ?? "Origem não informada"} /></Field>
+          <Field label="Espécie"><select required className={input} disabled={!supplierId} value={speciesCode} onChange={(e) => { setSpeciesCode(e.target.value); setCultivarId(""); }}><option value="">Selecione</option>{availableSpecies.map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}</select></Field>
+          <Field label="Cultivar (quando conhecida)"><select className={input} disabled={!speciesCode} value={cultivarId} onChange={(e) => setCultivarId(e.target.value)}><option value="">Selecione</option>{availableCultivars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <div className="rounded-xl border bg-stone-50 p-4 sm:col-span-2 lg:col-span-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-xs font-bold uppercase text-stone-500">Contato comercial</p><b className="mt-1 block text-sm">{selectedContact?.name ?? "Nenhum contato autorizado selecionado"}</b><p className="text-xs text-stone-500">{selectedContact?.role ?? ""}{selectedContact?.whatsapp ? ` · ${selectedContact.whatsapp}` : selectedContact?.email ? ` · ${selectedContact.email}` : ""}</p></div>
@@ -429,8 +426,8 @@ export default function PurchaseFormV2Page() {
         <Card data-purchase-id={submittedPurchaseId ?? undefined} className="border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3">
           <p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--bbos-state-success)]">Confirmação da negociação</p>
           <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Summary label="Origem" value={`${originUnit?.name ?? "—"} · ${harvest}`} />
-            <Summary label="Café" value={`${species?.name ?? "—"} · ${cultivar?.name ?? "—"}`} />
+            <Summary label="Origem produtiva" value={`${originUnit?.name ?? "Não informada"} · Safra ${harvest}`} />
+            <Summary label="Café" value={`${species?.name ?? "—"}${cultivar ? ` · ${cultivar.name}` : ""}`} />
             <Summary label="Quantidade" value={`${volumes} × ${unitWeight} kg = ${totalWeight} kg`} />
             <Summary label="Comercial" value={`${brl(pricePerBag)}/saca · ${brl(priceKg)}/kg · ${brl(totalValue)}`} />
             <Summary label="Corretagem" value={selectedBroker ? `${selectedBroker.name} · ${brokerCommissionPercent.toFixed(2)}% · ${brl(brokerCommissionAmount)}` : "Sem corretor"} />

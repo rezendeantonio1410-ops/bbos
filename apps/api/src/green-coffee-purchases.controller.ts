@@ -33,6 +33,7 @@ import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { publicAppUrl } from "./public-app-url";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
+import { purchaseOriginSnapshot } from "./purchase-origin-policy";
 import {
   calculateBrokerCommission,
   ensureBrokerCommissionPayable,
@@ -1730,11 +1731,7 @@ export class GreenCoffeePurchasesController {
             approverName: body.approverName,
             species: body.species,
             speciesId: references.speciesId,
-            originRegion: body.originRegion,
-            municipality: body.municipality,
-            state: body.state,
-            country: body.country ?? "Brasil",
-            farmName: body.farmName,
+            ...purchaseOriginSnapshot(body),
             harvest: body.harvest,
             variety: body.variety,
             cultivarId: references.cultivarId,
@@ -2310,7 +2307,6 @@ export class GreenCoffeePurchasesController {
       !body.supplierId ||
       !body.buyerId ||
       !body.harvest ||
-      !body.originRegion ||
       !body.species ||
       !body.qualityCategory ||
       body.contractedWeightKg <= 0 ||
