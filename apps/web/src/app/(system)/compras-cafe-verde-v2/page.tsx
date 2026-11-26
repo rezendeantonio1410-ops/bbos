@@ -12,7 +12,6 @@ const ROOT = getApiBaseUrl();
 const API = `${ROOT}/green-coffee-purchases`;
 const input = "w-full rounded-lg border border-[var(--bbos-border)] bg-[var(--bbos-surface-elevated)] px-3 py-2 text-sm text-[var(--bbos-text-primary)] outline-none transition focus:border-[var(--bbos-focus-ring)] focus:ring-2 focus:ring-[var(--bbos-focus-ring)]/15 disabled:cursor-not-allowed disabled:bg-[var(--bbos-surface-subtle)] disabled:opacity-60";
 
-const states = ["PR", "SP", "MG", "ES", "BA", "RJ", "RO", "GO"];
 const packagingWeights: Record<string, number | null> = {
   BAG_30_KG: 30,
   BAG_60_KG: 60,
@@ -111,7 +110,6 @@ export default function PurchaseFormV2Page() {
   const [options, setOptions] = useState<Options | null>(null);
   const [brokers, setBrokers] = useState<Broker[]>([]);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
-  const [purchaseState, setPurchaseState] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [originUnitId, setOriginUnitId] = useState("");
   const [speciesCode, setSpeciesCode] = useState("");
@@ -165,16 +163,8 @@ export default function PurchaseFormV2Page() {
   }, [sampleId]);
 
   useEffect(() => {
-    if (approvedSample?.state) setPurchaseState(approvedSample.state);
-  }, [approvedSample]);
-
-  useEffect(() => {
-    if (!purchaseState) {
-      setReferences(null);
-      setSupplierId("");
-      return;
-    }
-    void req<ReferenceData>(`${API}/references?state=${encodeURIComponent(purchaseState)}`)
+    // Commercial suppliers are not restricted to the state where coffee was grown.
+    void req<ReferenceData>(`${API}/references`)
       .then((data) => {
         setReferences(data);
         setSupplierId("");
@@ -183,7 +173,7 @@ export default function PurchaseFormV2Page() {
         setCultivarId("");
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar origem."));
-  }, [purchaseState]);
+  }, []);
 
   useEffect(() => {
     if (!approvedSample || !references) return;
@@ -369,8 +359,8 @@ export default function PurchaseFormV2Page() {
       <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} className="mt-3 space-y-2.5">
         <fieldset disabled={Boolean(submittedNumber)} className="contents">
         <Section title="A · Origem" tone="origin" icon={MapPinned}>
-          <Field label="Estado"><select required className={input} value={purchaseState} onChange={(e) => setPurchaseState(e.target.value)}><option value="">Selecione</option>{states.map((value) => <option key={value}>{value}</option>)}</select></Field>
-          <Field label="Fornecedor comercial / fiscal"><select required className={input} disabled={!purchaseState} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label="UF de produção"><input readOnly className={input} value={originUnit?.state ?? "Origem não informada"} /></Field>
+          <Field label="Fornecedor comercial / fiscal"><select required className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Origem produtiva (quando conhecida)"><select className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Não informada — não vincular fazenda</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Safra"><select required className={input} value={harvest} onChange={(e) => setHarvest(e.target.value)}>{harvestOptions().map((item) => <option key={item}>{item}</option>)}</select></Field>
           <Field label="Região cafeeira"><input readOnly className={input} value={originUnit?.coffeeRegion?.name ?? "Origem não informada"} /></Field>
