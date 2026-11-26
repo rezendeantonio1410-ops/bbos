@@ -63,8 +63,13 @@ services:
     region: virginia
     branch: test/signa-release-reconcile-20261125-rc2
     autoDeployTrigger: off
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/shared build && pnpm --filter @bbos/ui build && pnpm --filter @bbos/web build
-    startCommand: pnpm --filter @bbos/web start
+    # Fail closed before build and start: no legacy/staging/production fallback.
+    buildCommand: >-
+      node -e 'const u = (process.env.BBOS_API_INTERNAL_URL || "").trim(); if (!/^https:\/\/bbos-api-signa-rc2-[a-z0-9]+\.onrender\.com(?:\/api)?\/?$/.test(u) || [process.env.API_INTERNAL_URL, process.env.NEXT_PUBLIC_API_URL].some(v => v && v.trim())) throw new Error("API exclusiva de homologacao invalida");'
+      && pnpm install --frozen-lockfile && pnpm --filter @bbos/shared build && pnpm --filter @bbos/ui build && pnpm --filter @bbos/web build
+    startCommand: >-
+      node -e 'const u = (process.env.BBOS_API_INTERNAL_URL || "").trim(); if (!/^https:\/\/bbos-api-signa-rc2-[a-z0-9]+\.onrender\.com(?:\/api)?\/?$/.test(u) || [process.env.API_INTERNAL_URL, process.env.NEXT_PUBLIC_API_URL].some(v => v && v.trim())) throw new Error("API exclusiva de homologacao invalida");'
+      && pnpm --filter @bbos/web start
     envVars:
       - key: NODE_ENV
         value: production
