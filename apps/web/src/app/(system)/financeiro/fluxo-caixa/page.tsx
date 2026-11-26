@@ -3,17 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  ArrowDownLeft,
   ArrowLeft,
-  ArrowUpRight,
   CalendarRange,
-  CircleDollarSign,
-  Landmark,
   ReceiptText,
 } from "lucide-react";
 import { Card } from "@bbos/ui";
 import { getApiBaseUrl } from "@/lib/api-url";
-import { CashFlowBreakdown, CashFlowVisual } from "@/components/cash-flow-visual";
+import { CashBridge, CashChart, CashNumbers, NextCashDays, RealizedMonths, SegmentedControl } from "@/components/cash-flow-overview";
+import { cashPeriods, realizedMonths, withinHorizon } from "@/lib/cash-flow-view";
 import {
   buildCashFlowLines,
   type CashFlowKind,
@@ -90,6 +87,8 @@ export default function CashFlowPage() {
   const [filter, setFilter] = React.useState<Filter>("ALL");
   const [reload, setReload] = React.useState(0);
   const [showAll, setShowAll] = React.useState(false);
+  const [horizon, setHorizon] = React.useState<30 | 60 | 90>(30);
+  const [step, setStep] = React.useState<7 | 1>(7);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -152,18 +151,20 @@ export default function CashFlowPage() {
       setGapBusy(null);
     }
   };
+  const horizonLines = React.useMemo(() => withinHorizon(projection, horizon), [projection, horizon]);
+  const periods = React.useMemo(
+    () => cashPeriods(horizonLines, { days: horizon, step, cash: data.cash }),
+    [horizonLines, horizon, step, data.cash],
+  );
+  const startKnown = Boolean(data.settings?.cashStartDate);
+  const monthsRealized = React.useMemo(() => realizedMonths(data.transactions ?? []), [data.transactions]);
+  const thisMonth = monthsRealized.at(-1);
+  // Expenses are barely recorded when the month paid out under 5% of what came in.
+  const expensesMissing = Boolean(thisMonth && thisMonth.inflow > 0 && thisMonth.outflow < thisMonth.inflow * 0.05);
   const visibleLines = React.useMemo(
-    () => projection.filter((item) => filter === "ALL" || item.kind === filter),
-    [filter, projection],
+    () => horizonLines.filter((item) => filter === "ALL" || item.kind === filter),
+    [filter, horizonLines],
   );
-  const estimatedTaxes = projection.filter((line) => line.kind === "TAX").reduce((sum, line) => sum + line.amount, 0);
-  const totalIn = projection.filter((line) => line.signedAmount >= 0).reduce((sum, line) => sum + line.amount, 0);
-  const totalOut = projection.filter((line) => line.signedAmount < 0).reduce((sum, line) => sum + line.amount, 0);
-  const lowestPoint = projection.reduce<{ balance: number; date: string | null }>(
-    (low, line) => (line.balance < low.balance ? { balance: line.balance, date: line.dueDate } : low),
-    { balance: data.cash, date: null },
-  );
-
   return (
     <div className="mx-auto max-w-[1500px] pb-10">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -182,8 +183,19 @@ export default function CashFlowPage() {
             Realizado, projeção e cada título que forma o saldo.
           </p>
         </div>
-        <DataStatus status={status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl label="Período" value={horizon} onChange={setHorizon} options={[[30, "30 dias"], [60, "60 dias"], [90, "90 dias"]]} />
+          <SegmentedControl label="Agrupar" value={step} onChange={setStep} options={[[7, "Semanal"], [1, "Diário"]]} />
+          <DataStatus status={status} />
+        </div>
       </header>
+
+      {status === "ready" && (
+        <div className="mt-4 grid gap-4">
+          <CashChart periods={periods} minimum={minimum} startKnown={startKnown} daily={step === 1} />
+          <CashNumbers lines={horizonLines} cash={data.cash} startKnown={startKnown} days={horizon} minimum={minimum} />
+        </div>
+      )}
 
       {status === "ready" && (
         <div className="mt-4 grid gap-3">
@@ -208,6 +220,15 @@ export default function CashFlowPage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               Defina o saldo mínimo e os impostos em{" "}
               <Link href="/financeiro/parametros" className="font-semibold underline">Parâmetros</Link> para o sistema avisar antes de o caixa ficar curto.
+            </div>
+          )}
+          {expensesMissing && thisMonth && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white p-4 text-sm">
+              <p className="min-w-0 flex-1">
+                <strong className="text-amber-900">Saídas quase vazias.</strong>{" "}
+                <span className="text-stone-600">Só {money.format(thisMonth.outflow)} de despesas pagas neste mês, contra {money.format(thisMonth.inflow)} recebidos. Lance aluguel, folha, energia, embalagens e compras de café para a previsão ficar real.</span>
+              </p>
+              <Link href="/financeiro/pagar" className="inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 font-semibold">Lançar despesas</Link>
             </div>
           )}
           {data.settings && !data.settings.cashStartDate && (
@@ -253,40 +274,6 @@ export default function CashFlowPage() {
         </div>
       )}
 
-      <section className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Metric
-          label="Caixa hoje"
-          value={money.format(data.cash)}
-          detail={[
-            data.settings?.cashStartDate ? `desde ${date.format(new Date(`${data.settings.cashStartDate}T12:00:00`))}` : "",
-            minimum > 0 ? (data.cash >= minimum ? "acima do mínimo" : `${money.format(minimum - data.cash)} abaixo do mínimo`) : "",
-          ].filter(Boolean).join(" · ") || "Saldo realizado"}
-          icon={Landmark}
-          tone={minimum > 0 && data.cash < minimum ? "negative" : undefined}
-        />
-        <Metric
-          label="Menor saldo previsto"
-          value={money.format(lowestPoint.balance)}
-          detail={lowestPoint.date ? `em ${date.format(new Date(lowestPoint.date))}` : "Sem lançamentos previstos"}
-          icon={CircleDollarSign}
-          tone={lowestPoint.balance < Math.max(minimum, 0.01) ? "negative" : "positive"}
-        />
-        <Metric
-          label="Entradas previstas"
-          value={money.format(totalIn)}
-          detail={`${projection.filter((line) => line.signedAmount >= 0).length} lançamento(s)`}
-          icon={ArrowDownLeft}
-          tone="positive"
-        />
-        <Metric
-          label="Saídas previstas"
-          value={money.format(totalOut)}
-          detail={estimatedTaxes > 0 ? `inclui ${money.format(estimatedTaxes)} de impostos estimados` : `${projection.filter((line) => line.signedAmount < 0).length} lançamento(s)`}
-          icon={ArrowUpRight}
-          tone="negative"
-        />
-      </section>
-
       {status === "error" ? (
         <Card className="mt-4 p-8 text-center text-sm text-red-700">
           Não foi possível confirmar o fluxo no banco. Nenhum número fictício
@@ -294,10 +281,15 @@ export default function CashFlowPage() {
         </Card>
       ) : (
         <>
-          <div className="mt-4 grid gap-4">
-            <CashFlowVisual lines={projection} cash={data.cash} minimum={minimum} />
-            <CashFlowBreakdown lines={projection} />
-          </div>
+          {status === "ready" && (
+            <div className="mt-4 grid gap-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <CashBridge lines={horizonLines} startKnown={startKnown} cash={data.cash} days={horizon} taxesConfigured={Boolean(data.settings?.configured)} />
+                <RealizedMonths transactions={data.transactions ?? []} />
+              </div>
+              <NextCashDays lines={projection} />
+            </div>
+          )}
 
           <section className="mt-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -386,47 +378,6 @@ function DataStatus({ status }: { status: "loading" | "ready" | "error" }) {
           ? "Falha ao carregar"
           : "Carregando…"}
     </span>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: typeof Landmark;
-  tone?: "neutral" | "positive" | "negative";
-}) {
-  const iconTone =
-    tone === "positive"
-      ? "bg-emerald-50 text-emerald-700"
-      : tone === "negative"
-        ? "bg-rose-50 text-rose-700"
-        : "bg-stone-100 text-stone-600";
-  return (
-    <Card className="min-w-0 p-3.5 sm:p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
-            {label}
-          </p>
-          <p className="mt-1.5 truncate text-lg font-bold sm:text-xl">
-            {value}
-          </p>
-        </div>
-        <span
-          className={`grid size-8 shrink-0 place-items-center rounded-lg ${iconTone}`}
-        >
-          <Icon size={15} />
-        </span>
-      </div>
-      <p className="mt-2 line-clamp-2 text-[10px] text-stone-500">{detail}</p>
-    </Card>
   );
 }
 
