@@ -309,7 +309,8 @@ export default function PayablesPage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(payment),
+          // Envia o valor já convertido ("15,10" → 15.1); o texto com vírgula virava NaN na API.
+          body: JSON.stringify({ ...payment, amount }),
         },
       );
       const body = await response.json().catch(() => ({}));
