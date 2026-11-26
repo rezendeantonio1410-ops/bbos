@@ -128,3 +128,13 @@ export function prefillFromQuery(search: string, allowed: readonly string[]) {
 
 export const BUYER_PREFILL_FIELDS = ["name", "country", "city", "contactName", "email", "phone", "messenger", "legalRepresentative", "language", "currency", "incoterm", "taxId", "status", "address", "notes"] as const;
 export const SAMPLE_PREFILL_FIELDS = ["cliente", "lotReference", "coffeeType", "weightKg", "reference", "proformaNumber", "declaredValue", "declaredCurrency", "shippedByName", "scaScore", "responseDays", "carrier", "trackingCode", "shippingCost", "notes"] as const;
+
+/** Contract value in its own currency (price per lb, kg, 60 kg bag or total). */
+export function contractValue(contract: { quantityKg: number | string; unitPrice: number | string; priceUnit: string }) {
+  const q = Number(contract.quantityKg) || 0;
+  const p = Number(contract.unitPrice) || 0;
+  if (contract.priceUnit === "PER_LB") return q * 2.20462 * p;
+  if (contract.priceUnit === "PER_BAG_60KG") return (q / 60) * p;
+  if (contract.priceUnit === "TOTAL") return p;
+  return q * p;
+}

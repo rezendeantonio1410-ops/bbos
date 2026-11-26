@@ -27,3 +27,11 @@ test("links can open the new forms already filled, only with known fields", asyn
   const values = prefillFromQuery("?novo=1&reference=BC-BR-0001&trackingCode=879951396830&carrier=FEDEX&evil=1&weightKg=%2015%20", SAMPLE_PREFILL_FIELDS);
   assert.deepEqual(values, { reference: "BC-BR-0001", trackingCode: "879951396830", carrier: "FEDEX", weightKg: "15" });
 });
+
+test("contract value follows the price unit", async () => {
+  const { contractValue } = await import("./exports");
+  assert.equal(Math.round(contractValue({ quantityKg: 1200, unitPrice: 3.5, priceUnit: "PER_LB" })), 9259);
+  assert.equal(contractValue({ quantityKg: 600, unitPrice: 300, priceUnit: "PER_BAG_60KG" }), 3000);
+  assert.equal(contractValue({ quantityKg: 100, unitPrice: 8, priceUnit: "PER_KG" }), 800);
+  assert.equal(contractValue({ quantityKg: 100, unitPrice: 5000, priceUnit: "TOTAL" }), 5000);
+});
