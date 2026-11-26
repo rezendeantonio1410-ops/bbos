@@ -27,11 +27,13 @@ type Preview = {
   statement: { bank: string; agency: string | null; account: string | null; from: string | null; to: string | null; openingBalance: number | null; closingBalance: number | null };
   balance: { inflow: number; outflow: number; computed: number | null; ok: boolean | null; difference: number | null };
   categories: { expense: string[]; income: string[] };
+  cashStart?: { date: string | null; balance: number | null };
+  canSetBalance?: boolean;
   lines: Plan[];
 };
 type Account = { id: string; name: string; financialInstitution?: { name?: string | null } | null };
 type Choice = { on: boolean; category: string; extraCategory?: string };
-type Result = { applied: number; skipped: number; errors: number; results: Array<{ externalId: string; status: string; message: string }> };
+type Result = { balanceUpdated?: { date: string; balance: number } | null; learnedRecurring?: number; applied: number; skipped: number; errors: number; results: Array<{ externalId: string; status: string; message: string }> };
 
 const API = `${getApiBaseUrl()}/finance`;
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -65,6 +67,7 @@ export default function ImportStatementPage() {
   const [busy, setBusy] = React.useState<"" | "reading" | "applying">("");
   const [error, setError] = React.useState("");
   const [result, setResult] = React.useState<Result | null>(null);
+  const [useBalance, setUseBalance] = React.useState(true);
 
   React.useEffect(() => {
     void request<Account[]>(`${API}/accounts`).then((list) => {
@@ -135,7 +138,7 @@ export default function ImportStatementPage() {
       const data = await request<Result>(`${API}/statement-import/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ financialAccountId: accountId, fileName: file.name, contentBase64: file.content, decisions }),
+        body: JSON.stringify({ financialAccountId: accountId, fileName: file.name, contentBase64: file.content, decisions, useClosingBalance: balanceOffer && useBalance }),
       });
       setResult(data);
       // Recarrega a prévia: o que foi aplicado aparece como feito.
@@ -154,6 +157,9 @@ export default function ImportStatementPage() {
   };
 
   const total = preview?.lines.length ?? 0;
+  // O saldo final do extrato vira o saldo do caixa (só se for mais novo que o atual).
+  const balanceOffer = Boolean(preview?.canSetBalance && preview.statement.closingBalance !== null && preview.statement.to &&
+    (!preview.cashStart?.date || preview.cashStart.date <= preview.statement.to));
   const bar = [
     ["ALREADY", "var(--bbos-success, #1f6b4f)", "já conciliado"],
     ["SETTLE", "#3f8f6c", "dar baixa em conta aberta"],
@@ -196,6 +202,8 @@ export default function ImportStatementPage() {
       {result && (
         <p className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800" role="status">
           <CheckCircle2 size={15} /> {result.applied} aplicado(s){result.skipped ? ` · ${result.skipped} já estavam feitos` : ""}{result.errors ? ` · ${result.errors} com erro (veja abaixo)` : ""}.
+          {result.balanceUpdated ? ` Saldo do caixa: ${brl.format(result.balanceUpdated.balance)} em ${fullDay(result.balanceUpdated.date)}.` : ""}
+          {result.learnedRecurring ? ` ${result.learnedRecurring} despesa(s) fixa(s) entraram na previsão do caixa.` : ""}
         </p>
       )}
       {result?.errors ? (
@@ -245,8 +253,16 @@ export default function ImportStatementPage() {
             render={(p) => <CategorySelect options={preview.categories.income} value={choices[p.line.externalId]?.category ?? ""} note={p.suggestion?.note} onChange={(category) => set(p.line.externalId, { category, on: Boolean(category) })} />} />
 
           <div className={`${card} sticky bottom-3 mt-4 flex flex-wrap items-center justify-between gap-3 p-3 pr-3 shadow-lg sm:mr-24`}>
+            <div className="grid gap-1">
+            {balanceOffer && (
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" className="size-4 accent-[var(--bbos-coffee-green,#1f6b4f)]" checked={useBalance} onChange={(e) => setUseBalance(e.target.checked)} />
+                Usar o saldo do extrato como saldo do caixa: <b>{brl.format(preview.statement.closingBalance ?? 0)}</b> em {fullDay(preview.statement.to)}
+              </label>
+            )}
             <span className="text-sm"><b>{selected.length} selecionados</b>{settleTotal ? ` · baixas ${brl.format(settleTotal)}` : ""}{expenseTotal ? ` · despesas ${brl.format(expenseTotal)}` : ""}{missingCategory.length ? <span className="text-amber-800"> · {missingCategory.length} sem categoria</span> : null}</span>
-            <button data-bbos-write-action type="button" onClick={apply} disabled={!selected.length || busy !== ""} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-bold text-white disabled:bg-stone-200 disabled:text-stone-500">
+            </div>
+            <button data-bbos-write-action type="button" onClick={apply} disabled={(!selected.length && !(balanceOffer && useBalance)) || busy !== ""} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-bold text-white disabled:bg-stone-200 disabled:text-stone-500">
               {busy === "applying" && <Loader2 size={15} className="animate-spin" />}{busy === "applying" ? "Aplicando…" : "Aplicar selecionados"}
             </button>
           </div>
