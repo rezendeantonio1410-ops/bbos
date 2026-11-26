@@ -44,6 +44,7 @@ import {
   hasInvalidSelectedOrderDraftLine,
   isCompleteOrderDraftLine,
 } from "@/lib/order-draft-lines";
+import { orderPaymentDue } from "@/lib/order-payment-due";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", {
@@ -283,6 +284,7 @@ type Order = {
     amountCents: number;
     expiresAt?: string | null;
     paidAt?: string | null;
+    dueDate?: string | null;
   } | null;
 };
 
@@ -1036,6 +1038,7 @@ export default function OrdersPage() {
                 const exception = orderException(order);
                 const paymentDate = formatPaymentDate(order.payment?.paidAt);
                 const paymentConfirmed = order.payment?.status === "PAID" && Boolean(paymentDate);
+                const paymentDue = paymentConfirmed ? null : orderPaymentDue(order.payment?.dueDate);
                 return (
                   <tr
                     key={order.id}
@@ -1073,6 +1076,13 @@ export default function OrdersPage() {
                     <td className="px-3 py-2 text-xs text-stone-600">
                       {paymentConfirmed ? (
                         <span className="inline-flex items-center gap-1 whitespace-nowrap text-emerald-800"><Check size={12} strokeWidth={3} /> Pago {paymentDate}</span>
+                      ) : paymentDue ? (
+                        <span
+                          className={`whitespace-nowrap ${paymentDue.tone === "upcoming" ? "text-amber-800" : "font-semibold text-red-700"}`}
+                          title="Conta a receber em aberto"
+                        >
+                          {paymentDue.label}
+                        </span>
                       ) : (
                         <span className="text-stone-400">—</span>
                       )}

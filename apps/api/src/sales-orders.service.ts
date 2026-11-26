@@ -101,6 +101,7 @@ type SalesOrderPaymentSummary = {
   amountCents: number;
   expiresAt: Date | null;
   paidAt: Date | null;
+  dueDate?: Date | null;
 };
 
 @Injectable()
@@ -881,7 +882,8 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                 COALESCE(payment.method,attempt.method) AS method,
                 ROUND(COALESCE(receivable.amount,orders."totalAmount")*100)::int AS "amountCents",
                 attempt."expiresAt",
-                COALESCE(receivable."paymentDate",attempt."paidAt") AS "paidAt"
+                COALESCE(receivable."paymentDate",attempt."paidAt") AS "paidAt",
+                CASE WHEN receivable.status::text IN ('OPEN','PARTIALLY_PAID','OVERDUE') THEN receivable."dueDate" END AS "dueDate"
            FROM "SalesOrder" orders
            LEFT JOIN "AccountsReceivable" receivable ON receivable."salesOrderId"=orders.id
            LEFT JOIN LATERAL (
@@ -953,7 +955,8 @@ export class SalesOrdersService implements OnModuleInit, OnModuleDestroy {
                 COALESCE(payment.method,attempt.method) AS method,
                 ROUND(COALESCE(receivable.amount,orders."totalAmount")*100)::int AS "amountCents",
                 attempt."expiresAt",
-                COALESCE(receivable."paymentDate",attempt."paidAt") AS "paidAt"
+                COALESCE(receivable."paymentDate",attempt."paidAt") AS "paidAt",
+                CASE WHEN receivable.status::text IN ('OPEN','PARTIALLY_PAID','OVERDUE') THEN receivable."dueDate" END AS "dueDate"
            FROM "SalesOrder" orders
            LEFT JOIN "AccountsReceivable" receivable ON receivable."salesOrderId"=orders.id
            LEFT JOIN LATERAL (
