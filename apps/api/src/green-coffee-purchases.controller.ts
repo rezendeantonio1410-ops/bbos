@@ -46,7 +46,7 @@ import {
   validateTaxId,
 } from "./supplier-verification";
 import { buildPurchaseConfirmationPdf } from "./purchase-confirmation-pdf";
-import { approvedPurchaseCorrectionEligible, approvedPurchaseFiscalCorrectionEligible, parseApprovedPurchaseValueCorrection } from "./approved-purchase-value-correction";
+import { approvedPurchaseCorrectionEligible, approvedPurchaseFiscalCorrectionEligible, parseApprovedPurchaseValueCorrection, linkedPayableCorrectable } from "./approved-purchase-value-correction";
 
 type Actor = {
   userId: string;
@@ -833,14 +833,28 @@ export class GreenCoffeePurchasesController {
       if (purchase.installments.length !== 1 ||
           installment?.status !== PurchaseInstallmentStatus.COMMITTED ||
           Number(installment.percentage) !== 100 ||
-          installment.accountsPayableId !== null ||
           installment.paidAt !== null ||
           Math.round(Number(installment.amount) * 100) !== Math.round(previous * 100)) {
         throw new BadRequestException("As parcelas não estão elegíveis para correção automática.");
       }
+      const linkedPayable = installment.accountsPayableId
+        ? await tx.accountsPayable.findFirst({
+            where: { id: installment.accountsPayableId, companyId: actor.companyId },
+            select: { id: true, status: true, amount: true, openAmount: true, _count: { select: { payments: true } } },
+          })
+        : null;
+      if (installment.accountsPayableId && !linkedPayable) {
+        throw new BadRequestException("A conta a pagar da parcela não foi encontrada.");
+      }
+      if (!linkedPayableCorrectable(
+        linkedPayable && { status: linkedPayable.status, amount: linkedPayable.amount, openAmount: linkedPayable.openAmount, payments: linkedPayable._count.payments },
+        previous,
+      )) {
+        throw new BadRequestException("A conta a pagar desta compra já teve pagamento ou alteração. Corrija pelo Financeiro.");
+      }
       const [receipts, payables, documents, acceptances, fiscal] = await Promise.all([
         tx.greenCoffeeReceipt.count({ where: { purchaseId: id } }),
-        tx.accountsPayable.count({ where: { purchaseId: id } }),
+        tx.accountsPayable.count({ where: { purchaseId: id, ...(linkedPayable ? { id: { not: linkedPayable.id } } : {}) } }),
         tx.purchaseConfirmationDocumentVersion.count({ where: { purchaseId: id } }),
         tx.greenCoffeePurchaseAcceptance.count({ where: { purchaseId: id } }),
         tx.$queryRawUnsafe<Array<{
@@ -880,6 +894,12 @@ export class GreenCoffeePurchasesController {
         where: { id: installment.id },
         data: { amount: correction.totalValue },
       });
+      if (linkedPayable) {
+        await tx.accountsPayable.update({
+          where: { id: linkedPayable.id },
+          data: { amount: correction.totalValue, openAmount: correction.totalValue },
+        });
+      }
       await tx.greenCoffeeAuditEvent.create({
         data: {
           companyId: actor.companyId,
@@ -895,6 +915,7 @@ export class GreenCoffeePurchasesController {
             contractedWeightKg: contractedKg,
             reason: correction.reason,
             installmentId: installment.id,
+            accountsPayableId: linkedPayable?.id ?? null,
             linkedFiscalDocument: fiscal.length === 1,
             fiscalReconciliationMustBeReviewed: fiscal.length === 1,
           },

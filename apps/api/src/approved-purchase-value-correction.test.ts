@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   approvedPurchaseCorrectionEligible,
   approvedPurchaseFiscalCorrectionEligible,
+  linkedPayableCorrectable,
   parseApprovedPurchaseValueCorrection,
 } from "./approved-purchase-value-correction";
 
@@ -71,4 +72,12 @@ test("correcting to the authorized linked NF-e amount keeps the invoice unchange
   ] as const) {
     assert.equal(approvedPurchaseFiscalCorrectionEligible([{ ...invoice, [field]: value }], 9100), false, field);
   }
+});
+
+test("the payable created with the purchase follows the correction only while untouched (CP-2026-000005)", () => {
+  assert.equal(linkedPayableCorrectable(null, 4400), true);
+  assert.equal(linkedPayableCorrectable({ status: "OPEN", amount: 4400, openAmount: "4400.00", payments: 0 }, 4400), true);
+  assert.equal(linkedPayableCorrectable({ status: "OPEN", amount: 4400, openAmount: 4400, payments: 1 }, 4400), false);
+  assert.equal(linkedPayableCorrectable({ status: "PARTIALLY_PAID", amount: 4400, openAmount: 2000, payments: 0 }, 4400), false);
+  assert.equal(linkedPayableCorrectable({ status: "OPEN", amount: 4500, openAmount: 4500, payments: 0 }, 4400), false);
 });
