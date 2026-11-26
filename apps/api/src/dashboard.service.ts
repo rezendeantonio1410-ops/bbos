@@ -157,10 +157,23 @@ export class DashboardService implements OnModuleDestroy {
         },
         _sum: { totalAmount: true },
       }),
-      this.db.productionOrder.aggregate({
-        where: { companyId, plannedAt: { gte: month } },
-        _sum: { actualOutputKg: true, plannedWeightKg: true },
-      }),
+      // Roasted this month = roast batches finished this month. Orders in the
+      // bulk flow stay "roasted" and never get an output on the order itself.
+      Promise.all([
+        this.db.productionOrder.aggregate({
+          where: { companyId, plannedAt: { gte: month } },
+          _sum: { plannedWeightKg: true },
+        }),
+        this.db.productionBatch.aggregate({
+          where: { companyId, completedAt: { gte: month } },
+          _sum: { roastedOutputKg: true },
+        }),
+      ]).then(([orders, batches]) => ({
+        _sum: {
+          plannedWeightKg: orders._sum.plannedWeightKg,
+          actualOutputKg: batches._sum.roastedOutputKg,
+        },
+      })),
       this.db.greenCoffeeLabSample.count({
         where: { receipt: { companyId }, status: "PENDING" },
       }),

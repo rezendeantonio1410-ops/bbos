@@ -27,6 +27,7 @@ import {
   type RealProductionCostInput,
 } from "@bbos/shared";
 import { ProductionService } from "./production.service";
+import { greenConsumptionPortions } from "./production-consumption";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
 import {
@@ -755,7 +756,7 @@ export class ProductionController {
       async (transaction) => {
         const order = await transaction.productionOrder.findFirst({
           where: { id, companyId: actor.companyId },
-          include: { consumptions: true },
+          include: { consumptions: { include: { coffeeLot: true } } },
         });
         if (!order)
           throw new NotFoundException("Ordem de produção não encontrada.");
@@ -809,15 +810,48 @@ export class ProductionController {
             notes: body.notes,
           },
         });
+        // Set, not increment: the columns start NULL and NULL + x stays NULL.
         await transaction.productionOrder.update({
           where: { id },
           data: {
             status: ProductionStatus.ROASTED,
-            actualInputKg: { increment: body.greenInputKg },
-            actualOutputKg: { increment: body.roastedOutputKg },
+            actualInputKg: new Prisma.Decimal(
+              (Number(order.actualInputKg ?? 0) + body.greenInputKg).toFixed(3),
+            ),
+            actualOutputKg: new Prisma.Decimal(
+              (Number(order.actualOutputKg ?? 0) + body.roastedOutputKg).toFixed(3),
+            ),
             startedAt: order.startedAt ?? new Date(body.startedAt),
           },
         });
+        // The green coffee leaves the lot when it is roasted. In the bulk
+        // flow the order often never reaches "completed", so waiting for it
+        // kept roasted coffee counted as reserved green stock.
+        for (const portion of greenConsumptionPortions(consumptionIds, body.greenInputKg)) {
+          await transaction.coffeeLot.update({
+            where: { id: portion.coffeeLotId },
+            data: { reservedWeightKg: { decrement: portion.quantityKg } },
+          });
+          await transaction.productionConsumption.update({
+            where: { id: portion.consumptionId },
+            data: { consumedKg: { increment: portion.quantityKg } },
+          });
+          await transaction.industrialEvent.create({
+            data: {
+              companyId: order.companyId,
+              productionOrderId: id,
+              coffeeLotId: portion.coffeeLotId,
+              warehouseId: portion.warehouseId,
+              type: EventType.TRANSFER,
+              quantityKg: portion.quantityKg,
+              metadata: {
+                movementType: "production-consumption",
+                orderCode: order.code,
+                batchId: batch.id,
+              },
+            },
+          });
+        }
         await transaction.productionConsumption.updateMany({
           where: {
             id: { in: consumptionIds.map((item) => item.id) },
@@ -1089,16 +1123,19 @@ export class ProductionController {
           sourceCostEventIds: order.costEvents.map((item) => item.id),
         });
         for (const consumption of order.consumptions) {
-          if (
-            Number(consumption.coffeeLot.reservedWeightKg) <
-            Number(consumption.reservedKg)
-          )
+          // Roasting already took what it used out of the lot; only the rest
+          // of the reservation is consumed now.
+          const remainingKg = Number(
+            Math.max(0, Number(consumption.reservedKg) - Number(consumption.consumedKg ?? 0)).toFixed(3),
+          );
+          if (remainingKg <= 0) continue;
+          if (Number(consumption.coffeeLot.reservedWeightKg) + 0.0005 < remainingKg)
             throw new BadRequestException(
               `Reserva inconsistente no lote ${consumption.coffeeLot.code}.`,
             );
           await transaction.coffeeLot.update({
             where: { id: consumption.coffeeLotId },
-            data: { reservedWeightKg: { decrement: consumption.reservedKg } },
+            data: { reservedWeightKg: { decrement: remainingKg } },
           });
           await transaction.productionConsumption.update({
             where: { id: consumption.id },
@@ -1111,7 +1148,7 @@ export class ProductionController {
               coffeeLotId: consumption.coffeeLotId,
               warehouseId: consumption.coffeeLot.warehouseId,
               type: EventType.TRANSFER,
-              quantityKg: consumption.reservedKg,
+              quantityKg: remainingKg,
               metadata: {
                 movementType: "production-consumption",
                 orderCode: order.code,
