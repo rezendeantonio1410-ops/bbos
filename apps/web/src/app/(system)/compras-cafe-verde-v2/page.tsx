@@ -112,6 +112,8 @@ export default function PurchaseFormV2Page() {
   const [brokers, setBrokers] = useState<Broker[]>([]);
   const [sessionUser, setSessionUser] = useState<SessionIdentity | null>(null);
   const [supplierId, setSupplierId] = useState("");
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [advancedQuality, setAdvancedQuality] = useState(false);
   const [originUnitId, setOriginUnitId] = useState("");
   const [speciesCode, setSpeciesCode] = useState("");
   const [cultivarId, setCultivarId] = useState("");
@@ -274,8 +276,11 @@ export default function PurchaseFormV2Page() {
     if (submitting || submittedNumber) return;
     setError("");
     setMessage("");
-    if (!supplier || !species) return setError("Selecione o fornecedor comercial e a espécie do café.");
+    if (!supplier || !species) { setWizardStep(1); return setError("Selecione o fornecedor comercial e a espécie do café."); }
+    if (totalWeight <= 0 || totalValue <= 0) { setWizardStep(2); return setError("Informe quantidade e preço válidos."); }
     const form = new FormData(event.currentTarget);
+    const quality = String(form.get("qualityCategory") || "");
+    if (["Especial", "Gourmet"].includes(quality) && !form.get("screenClassificationId")) { setWizardStep(2); return setError("Informe a peneira contratada para café especial/gourmet."); }
     setSubmitting(true);
     try {
       const result = await req<{ id: string; purchaseNumber: string; status?: string; approvalStatus?: string }>(API, {
@@ -346,20 +351,24 @@ export default function PurchaseFormV2Page() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[.15em] text-forest-700">Ficha de compra V2 · checkpoint</p>
           <h1 className="mt-2 text-3xl font-bold">Nova compra de café verde</h1>
-          <p className="mt-2 text-sm text-stone-500">Fluxo progressivo: origem → especificação → quantidade → comercial → governança.</p>
+          <p className="mt-2 text-sm text-stone-500">Fornecedor e origem · Café e negociação · Conferência e aprovação.</p>
         </div>
       </div>
       {approvedSample && <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Dados da amostra aprovada <b>{approvedSample.code}</b> carregados para esta compra. Revise os campos comerciais antes de enviar.</div>}
       {message && <p className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-success)]"><Check size={15} aria-hidden="true" />{message}</p>}
       {error && <p className="mt-3 rounded-xl border border-[var(--bbos-danger-border)] bg-[var(--bbos-danger-soft)] p-3 text-sm font-semibold text-[var(--bbos-state-critical)]" role="alert">{error}</p>}
 
-      <nav className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] px-3 py-2" aria-label="Progresso da ficha">
-        {([["Fornecedor", Boolean(supplier), MapPinned], ["Especificação", Boolean(species && cultivar), Bean], ["Quantidade", totalWeight > 0, Package], ["Comercial", priceKg > 0, Handshake], ["Governança", Boolean(selectedContact?.canConfirmBusiness), ShieldCheck]] as const).map(([label, complete, Icon], index, items) => <span key={label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--bbos-text-secondary)]"><span className={`grid size-5 place-items-center rounded-full border ${complete ? "border-[var(--bbos-success-border)] bg-[var(--bbos-success-soft)] text-[var(--bbos-state-success)]" : "border-[var(--bbos-warning-border)] bg-[var(--bbos-warning-soft)] text-[var(--bbos-state-attention)]"}`}><Icon size={11} aria-hidden="true" /></span>{label}{index < items.length - 1 && <span className="ml-0.5 text-[var(--bbos-text-muted)]" aria-hidden="true">→</span>}</span>)}
+      <nav className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-[var(--bbos-border)] bg-[var(--bbos-surface-subtle)] p-2" aria-label="Etapas da compra">
+        {(["Fornecedor e origem", "Café e negociação", "Conferir e confirmar"] as const).map((label, index) => {
+          const step = (index + 1) as 1 | 2 | 3;
+          return <button key={label} type="button" onClick={() => setWizardStep(step)} aria-current={wizardStep === step ? "step" : undefined} className={`rounded-lg px-2 py-3 text-left text-xs font-semibold transition ${wizardStep === step ? "bg-[var(--bbos-surface-elevated)] text-[var(--bbos-coffee-green)] shadow-sm ring-1 ring-[var(--bbos-border)]" : "text-[var(--bbos-text-secondary)] hover:bg-[var(--bbos-surface-elevated)]"}`}><span className="mr-2 rounded-full border px-2 py-1">{step}</span>{label}</button>;
+        })}
       </nav>
 
-      <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} className="mt-3 space-y-2.5">
+      <form key={approvedSample?.id ?? "new-purchase"} onSubmit={submit} noValidate className="mt-3 space-y-2.5">
         <fieldset disabled={Boolean(submittedNumber)} className="contents">
-        <Section title="A · Origem" tone="origin" icon={MapPinned}>
+        <div className={wizardStep === 1 ? "block" : "hidden"} aria-hidden={wizardStep !== 1}>
+        <Section title="1 · Fornecedor e origem produtiva" tone="origin" icon={MapPinned}>
           <Field label="UF de produção"><input readOnly className={input} value={originUnit?.state ?? "Origem não informada"} /></Field>
           <Field label="Fornecedor comercial / fiscal"><select required className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Selecione</option>{references?.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label={supplier?.supplierType === "RURAL_PERSON" ? "Fazenda de origem do café" : "Origem produtiva (quando conhecida)"}><select className={input} disabled={!supplierId} value={originUnitId} onChange={(e) => { setOriginUnitId(e.target.value); setSpeciesCode(""); setCultivarId(""); }}><option value="">Não informada — não vincular fazenda</option>{originUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
@@ -382,14 +391,17 @@ export default function PurchaseFormV2Page() {
             {showNewContact && <div className="mt-3 grid gap-2 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Nome *"><input className={input} value={newContactName} onChange={(e) => setNewContactName(e.target.value)} /></Field><Field label="Função"><input className={input} value={newContactRole} onChange={(e) => setNewContactRole(e.target.value)} /></Field><Field label="WhatsApp"><input className={input} value={newContactWhatsapp} onChange={(e) => setNewContactWhatsapp(e.target.value)} /></Field><Field label="E-mail"><input type="email" className={input} value={newContactEmail} onChange={(e) => setNewContactEmail(e.target.value)} /></Field><div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2"><button type="button" onClick={() => setShowNewContact(false)} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">Cancelar</button><button type="button" disabled={!newContactName.trim() || savingContact} onClick={() => void createContact()} className="rounded-lg bg-forest-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{savingContact ? "Salvando..." : "Salvar e selecionar"}</button></div></div>}
           </div>
         </Section>
+        </div>
 
+        <div className={wizardStep === 2 ? "space-y-2.5" : "hidden"} aria-hidden={wizardStep !== 2}>
         <Section title="B · Especificação contratada" tone="quality" icon={Bean}>
           <Field label="Processo"><select name="process" defaultValue={approvedSample?.process ?? "Natural"} className={input}>{["Natural", "Cereja Descascado", "Honey", "Lavado", "Fermentado", "Outro"].map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Qualidade"><select name="qualityCategory" className={input}>{["Especial", "Gourmet", "Fine Cup", "Good Cup", "Comercial", "Outra"].map((value) => <option key={value}>{value}</option>)}</select></Field>
-          <Field label="Peneira"><select required name="screenClassificationId" className={input} defaultValue=""><option value="" disabled>Selecione</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-          <Field label="Máx. defeitos"><input name="maxDefects" type="number" min="0" defaultValue={approvedSample?.informedDefects ?? undefined} className={input} /></Field>
+          <Field label="Peneira contratada"><select name="screenClassificationId" className={input} defaultValue=""><option value="">Selecione quando aplicável</option>{references?.screenClassifications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           <Field label="Umidade máxima (%)"><select name="maxMoisturePercent" defaultValue={approvedSample?.informedMoisture?.toString() ?? "12.0"} className={input}>{Array.from({ length: 26 }, (_, index) => (10 + index / 10).toFixed(1)).map((value) => <option key={value} value={value}>{value.replace(".", ",")} %</option>)}</select></Field>
-          <Field label="Pontuação mínima"><input name="minimumScore" type="number" step=".25" defaultValue={approvedSample?.evaluations?.[0]?.score ?? undefined} className={input} /></Field>
+          {advancedQuality && <><Field label="Máx. defeitos"><input name="maxDefects" type="number" min="0" defaultValue={approvedSample?.informedDefects ?? undefined} className={input} /></Field>
+          <Field label="Pontuação mínima"><input name="minimumScore" type="number" step=".25" defaultValue={approvedSample?.evaluations?.[0]?.score ?? undefined} className={input} /></Field></>}
+          <div className="sm:col-span-2 lg:col-span-4"><button type="button" onClick={() => setAdvancedQuality((v) => !v)} className="text-xs font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">{advancedQuality ? "Ocultar especificações avançadas" : "Mostrar defeitos e pontuação"}</button></div>
         </Section>
 
         <Section title="C · Quantidade / embalagem" tone="quantity" icon={Scale}>
@@ -417,6 +429,9 @@ export default function PurchaseFormV2Page() {
           </div>
         </Section>
 
+        </div>
+
+        <div className={wizardStep === 3 ? "space-y-2.5" : "hidden"} aria-hidden={wizardStep !== 3}>
         <Section title="E · Governança" tone="governance" icon={ShieldCheck}>
           <div className="rounded-lg bg-[var(--bbos-surface-subtle)] px-3 py-2"><p className="text-[11px] text-[var(--bbos-text-secondary)]">Comprador</p><b className="ml-1 text-sm">{sessionUser?.name ?? "—"} ✓</b></div>
           <Field label="Diretor aprovador"><select name="approverName" className={input} defaultValue=""><option value="">Seleção automática / próximo disponível</option>{currentApprovers.map((user) => <option key={user.id} value={user.name}>{user.name} · {user.role}</option>)}</select></Field>
@@ -439,12 +454,21 @@ export default function PurchaseFormV2Page() {
             <Summary label="Aprovação" value={submittedStatus ? "AGUARDANDO APROVAÇÃO" : sessionUser && ["ADMIN", "EXECUTIVE"].includes(sessionUser.role) ? "Usuário possui alçada" : "Enviar para aprovação"} />
           </div>
         </Card>
+        </div>
 
         </fieldset>
 
-        <div className="flex flex-wrap justify-end gap-2 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <span className="text-xs text-[var(--bbos-text-secondary)]">Etapa {wizardStep} de 3 · Salvo somente após a confirmação</span>
+          <div className="flex flex-wrap justify-end gap-2">
+          {wizardStep > 1 && <button type="button" onClick={() => setWizardStep((v) => (v === 3 ? 2 : 1))} className="min-h-11 rounded-xl border px-4 text-sm font-semibold">Voltar</button>}
+          {wizardStep < 3 && <button type="button" onClick={() => { if (wizardStep === 1 && !supplier) { setError("Selecione o fornecedor comercial antes de continuar."); return; } if (wizardStep === 2 && (!species || totalWeight <= 0 || totalValue <= 0)) { setError("Informe espécie, quantidade e preço antes de continuar."); return; } setError(""); setWizardStep((v) => (v === 1 ? 2 : 3)); }} className="min-h-11 rounded-xl bg-[var(--bbos-coffee-green)] px-4 text-sm font-bold text-white">Próximo</button>}
+          {wizardStep === 3 && <>
+
           <Link href="/compras-cafe-verde" className="inline-flex min-h-11 items-center rounded-xl border bg-white px-4 text-sm font-bold">Cancelar</Link>
           <button type="button" disabled={submitting || Boolean(submittedNumber)} onClick={(event) => { const form = event.currentTarget.closest("form"); if (form) void submit({ preventDefault: () => undefined, currentTarget: form } as unknown as React.FormEvent<HTMLFormElement>, "APPROVE"); }} className="min-h-11 rounded-xl border border-forest-800 bg-white px-4 text-sm font-bold text-forest-900 disabled:opacity-50">{submitting ? "Registrando..." : "Compra já realizada · Tenho NF"}</button>\n          <Button type="submit" disabled={submitting || Boolean(submittedNumber)} aria-disabled={submitting || Boolean(submittedNumber)}>{submitting ? "Enviando..." : submittedNumber ? "✓ Registrada" : "Enviar para aprovação"}</Button>
+          </>}
+          </div>
         </div>
       </form>
     </div>
