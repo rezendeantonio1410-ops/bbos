@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { tokenNeedsRefresh } from "./melhor-envio-flow";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -18,6 +19,8 @@ const DEFAULT_SCOPES = [
 @Injectable()
 export class MelhorEnvioAuthService {
   private readonly database = prisma;
+  /** Uma renovação por empresa de cada vez: o Melhor Envio troca o refresh token a cada uso. */
+  private readonly refreshing = new Map<string, Promise<string>>();
 
   readiness() {
     const required = {
@@ -178,14 +181,47 @@ export class MelhorEnvioAuthService {
     if (!integration?.accessTokenCiphertext || !integration?.refreshTokenCiphertext) {
       throw new Error("Melhor Envio ainda não foi autorizado no BBOS.");
     }
-    if (new Date(integration.tokenExpiresAt || 0).getTime() > Date.now() + 86_400_000) {
+    if (!tokenNeedsRefresh(integration.tokenExpiresAt)) {
       return this.decrypt(integration.accessTokenCiphertext);
     }
-    const token = await this.exchange({
-      grant_type: "refresh_token",
-      refresh_token: this.decrypt(integration.refreshTokenCiphertext),
-    });
-    await this.persist(companyId, token);
-    return token.access_token;
+    return this.refresh(companyId, integration.refreshTokenCiphertext);
+  }
+
+  private refresh(companyId: string, refreshCiphertext: string) {
+    const running = this.refreshing.get(companyId);
+    if (running) return running;
+    const task = (async () => {
+      try {
+        const token = await this.exchange({ grant_type: "refresh_token", refresh_token: this.decrypt(refreshCiphertext) });
+        await this.persist(companyId, token);
+        return token.access_token;
+      } catch (error) {
+        await this.database.$executeRawUnsafe(
+          `UPDATE "ExternalIntegration" SET "lastError"=$2,"updatedAt"=NOW() WHERE "companyId"=$1 AND provider='MELHOR_ENVIO'`,
+          companyId,
+          error instanceof Error ? error.message.slice(0, 300) : "Falha ao renovar a chave do Melhor Envio.",
+        ).catch(() => undefined);
+        throw error;
+      } finally {
+        this.refreshing.delete(companyId);
+      }
+    })();
+    this.refreshing.set(companyId, task);
+    return task;
+  }
+
+  /** Renova chaves que vencem em até 10 dias, mesmo sem envios no período. */
+  async keepAlive() {
+    if (process.env.MELHOR_ENVIO_ACCESS_TOKEN?.trim()) return 0;
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT "companyId","refreshTokenCiphertext","tokenExpiresAt" FROM "ExternalIntegration"
+        WHERE provider='MELHOR_ENVIO' AND status='CONNECTED' AND "refreshTokenCiphertext" IS NOT NULL`,
+    );
+    let renewed = 0;
+    for (const row of rows) {
+      if (!tokenNeedsRefresh(row.tokenExpiresAt, Date.now(), 10)) continue;
+      await this.refresh(row.companyId, row.refreshTokenCiphertext).then(() => (renewed += 1)).catch(() => undefined);
+    }
+    return renewed;
   }
 }

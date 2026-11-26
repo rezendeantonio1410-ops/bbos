@@ -30,7 +30,7 @@ const formatMetric = (metric: Metric, value: number) =>
  * with top cities and a ranking. Respects prefers-reduced-motion.
  * State outlines: svg-maps by Victor Cazanave (CC BY 4.0).
  */
-export function SignaPurchasesMap({ states }: { states: SignaStatePurchase[] }) {
+export function SignaPurchasesMap({ states, deliveryOnly = false }: { states: SignaStatePurchase[]; deliveryOnly?: boolean }) {
   const [metric, setMetric] = useState<Metric>("revenue");
   const [active, setActive] = useState<string | null>(null);
   const [centers, setCenters] = useState<Record<string, { x: number; y: number }>>({});
@@ -73,6 +73,7 @@ export function SignaPurchasesMap({ states }: { states: SignaStatePurchase[] }) 
           <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.16em] text-[#25734c]"><MapPinned size={14} aria-hidden /> Mapa de compras</p>
           <h4 className="mt-1 text-lg font-semibold text-[#0E191D]">Onde estão os clientes da Signa</h4>
           <p className="text-xs text-slate-500">Por UF dos clientes finais informados · toque em um estado para ver os detalhes</p>
+          {deliveryOnly && <p className="mt-1 text-xs font-semibold text-[#9a5b00]">Pedidos sem cliente final aparecem na cidade de entrega (a própria Signa). Informe o cliente final no pedido para o mapa mostrar onde o café chega.</p>}
         </div>
         <div role="group" aria-label="Medida do mapa" className="flex rounded-full bg-[#e3eee8] p-1 text-xs font-semibold">
           {([["revenue", "Valor"], ["volumeKg", "Volume (kg)"]] as const).map(([value, label]) => (
@@ -83,7 +84,7 @@ export function SignaPurchasesMap({ states }: { states: SignaStatePurchase[] }) 
       </div>
 
       {states.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">Ainda não há compras com cidade/UF do cliente final. Cadastre o CEP dos clientes finais para vê-los no mapa.</p>
+        <p className="p-6 text-sm text-slate-500">Ainda não há pedidos com cidade/UF de entrega neste período.</p>
       ) : (
         <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,1fr)]">
           <div className="relative">

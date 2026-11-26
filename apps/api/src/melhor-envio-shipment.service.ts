@@ -1,3 +1,4 @@
+import { checkoutDecision, ME_GENERATED, readRemoteOrder, retryable, transientStatus } from "./melhor-envio-flow";
 import {
   BadRequestException,
   Injectable,
@@ -134,6 +135,7 @@ export class MelhorEnvioShipmentService
 {
   private readonly database = prisma;
   private trackingTimer?: NodeJS.Timeout;
+  private tokenTimer?: NodeJS.Timeout;
   private reconcilingTracking = false;
 
   constructor(
@@ -155,10 +157,15 @@ export class MelhorEnvioShipmentService
       300_000,
     );
     this.trackingTimer.unref?.();
+    // A chave do Melhor Envio é renovada antes de vencer, mesmo sem envios.
+    void this.melhorEnvioAuth.keepAlive().catch(() => undefined);
+    this.tokenTimer = setInterval(() => void this.melhorEnvioAuth.keepAlive().catch(() => undefined), 86_400_000);
+    this.tokenTimer.unref?.();
   }
 
   async onModuleDestroy() {
     if (this.trackingTimer) clearInterval(this.trackingTimer);
+    if (this.tokenTimer) clearInterval(this.tokenTimer);
   }
 
   private async auditRecentDeliveredShipments() {
@@ -312,6 +319,13 @@ export class MelhorEnvioShipmentService
           WHERE sh.provider='MELHOR_ENVIO'
             AND sh."externalId" IS NOT NULL
             AND sh.status IN ('LABEL_READY','PURCHASED','IN_TRANSIT','OUT_FOR_DELIVERY','EXCEPTION')
+            -- Envio substituído por uma reexpedição já entregue não é mais acompanhado.
+            AND NOT EXISTS (
+              SELECT 1 FROM "Shipment" newer
+               WHERE newer.provider='MELHOR_ENVIO' AND newer.id<>sh.id AND newer.status='DELIVERED'
+                 AND newer."createdAt">sh."createdAt"
+                 AND ((sh."salesOrderId" IS NOT NULL AND newer."salesOrderId"=sh."salesOrderId")
+                   OR (sh."storefrontOrderId" IS NOT NULL AND newer."storefrontOrderId"=sh."storefrontOrderId")))
           ORDER BY sh."updatedAt" ASC
           LIMIT 100`,
       );
@@ -440,8 +454,32 @@ export class MelhorEnvioShipmentService
 
   private async request(companyId: string, path: string, init?: RequestInit) {
     const token = await this.melhorEnvioAuth.accessToken(companyId);
-    const response = await fetch(`${this.base()}${path}`, {
+    // Limite de 20 s por chamada; leituras repetem até 2 vezes se o Melhor
+    // Envio estiver lento ou fora do ar (compras e pagamentos nunca repetem).
+    const canRetry = retryable(String(init?.method ?? "GET"), path);
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < (canRetry ? 3 : 1); attempt += 1) {
+      try {
+        response = await this.fetchOnce(path, token, init);
+        if (!canRetry || !transientStatus(response.status)) break;
+      } catch (error) {
+        if (!canRetry || attempt === 2)
+          throw new ServiceUnavailableException(
+            error instanceof Error && error.name === "TimeoutError"
+              ? "O Melhor Envio não respondeu em 20 segundos. Tente novamente em instantes."
+              : "Não foi possível falar com o Melhor Envio agora.",
+          );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+    }
+    if (!response) throw new ServiceUnavailableException("Não foi possível falar com o Melhor Envio agora.");
+    return this.readResponse(path, response);
+  }
+
+  private fetchOnce(path: string, token: string, init?: RequestInit) {
+    return fetch(`${this.base()}${path}`, {
       ...init,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         accept: "application/json",
         authorization: `Bearer ${token}`,
@@ -451,6 +489,9 @@ export class MelhorEnvioShipmentService
         ...(init?.headers || {}),
       },
     });
+  }
+
+  private async readResponse(path: string, response: Response) {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       const providerMessage = String(
@@ -471,6 +512,41 @@ export class MelhorEnvioShipmentService
       );
     }
     return body;
+  }
+
+  /**
+   * Paga a etiqueta só se ainda não foi paga e se o preço é o cotado.
+   * Retomar depois de uma falha não paga duas vezes nem aceita preço novo.
+   */
+  private async payIfNeeded(companyId: string, externalId: string, shipmentId: string, expectedCents: number | null) {
+    const remote = readRemoteOrder(
+      await this.request(companyId, `/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => null),
+    );
+    const decision = checkoutDecision(remote, expectedCents);
+    if (decision === "PRICE_CHANGED") {
+      await this.database.$executeRawUnsafe(
+        `UPDATE "Shipment" SET status='EXCEPTION',metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb,"updatedAt"=NOW() WHERE id=$1`,
+        shipmentId,
+        JSON.stringify({ priceChanged: { expectedCents, remoteCents: remote?.priceCents, checkedAt: new Date().toISOString() } }),
+      );
+      throw new BadRequestException("O valor da transportadora mudou após a cotação. Pedido enviado para conferência.");
+    }
+    if (decision === "CHECKOUT")
+      await this.request(companyId, "/me/shipment/checkout", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
+    return remote;
+  }
+
+  /** Gera a etiqueta; se já estava gerada (retomada), segue para o PDF. */
+  private async generateIfNeeded(companyId: string, externalId: string, remote: { status: string } | null) {
+    if (remote && ME_GENERATED.has(remote.status)) return;
+    try {
+      await this.request(companyId, "/me/shipment/generate", { method: "POST", body: JSON.stringify({ orders: [externalId] }) });
+    } catch (error) {
+      const again = readRemoteOrder(
+        await this.request(companyId, `/me/orders/${encodeURIComponent(externalId)}`, { method: "GET" }).catch(() => null),
+      );
+      if (!again || !ME_GENERATED.has(again.status)) throw error;
+    }
   }
 
   private required(name: string) {
@@ -705,10 +781,7 @@ export class MelhorEnvioShipmentService
       externalId,
     );
 
-    await this.request(order.companyId, "/me/shipment/checkout", {
-      method: "POST",
-      body: JSON.stringify({ orders: [externalId] }),
-    });
+    const remoteState = await this.payIfNeeded(order.companyId, externalId, shipmentId, Number(order.providerPriceCents) || null);
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
       shipmentId,
@@ -728,10 +801,7 @@ export class MelhorEnvioShipmentService
         externalId,
       }),
     );
-    await this.request(order.companyId, "/me/shipment/generate", {
-      method: "POST",
-      body: JSON.stringify({ orders: [externalId] }),
-    });
+    await this.generateIfNeeded(order.companyId, externalId, remoteState);
     const labelUrl = await this.printWhenReady(order.companyId, externalId);
     const details = await this.request(
       order.companyId,
@@ -1292,10 +1362,7 @@ export class MelhorEnvioShipmentService
       shipmentId,
       externalId,
     );
-    await this.request(order.companyId, "/me/shipment/checkout", {
-      method: "POST",
-      body: JSON.stringify({ orders: [externalId] }),
-    });
+    const remoteState = await this.payIfNeeded(order.companyId, externalId, shipmentId, Number(order.providerPriceCents) || null);
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
       shipmentId,
@@ -1315,10 +1382,7 @@ export class MelhorEnvioShipmentService
         }),
       );
     }
-    await this.request(order.companyId, "/me/shipment/generate", {
-      method: "POST",
-      body: JSON.stringify({ orders: [externalId] }),
-    });
+    await this.generateIfNeeded(order.companyId, externalId, remoteState);
     const labelUrl = await this.printWhenReady(order.companyId, externalId);
     const details = await this.request(
       order.companyId,
@@ -1521,10 +1585,7 @@ export class MelhorEnvioShipmentService
       );
     }
 
-    await this.request(reexpedition.companyId, "/me/shipment/checkout", {
-      method: "POST",
-      body: JSON.stringify({ orders: [externalId] }),
-    });
+    const remoteState = await this.payIfNeeded(reexpedition.companyId, externalId, shipmentId, null);
     await this.database.$executeRawUnsafe(
       `UPDATE "Shipment" SET status='PURCHASED',"updatedAt"=NOW() WHERE id=$1`,
       shipmentId,
@@ -1542,10 +1603,7 @@ export class MelhorEnvioShipmentService
         externalId,
       }),
     );
-    await this.request(reexpedition.companyId, "/me/shipment/generate", {
-      method: "POST",
-      body: JSON.stringify({ orders: [externalId] }),
-    });
+    await this.generateIfNeeded(reexpedition.companyId, externalId, remoteState);
     const labelUrl = await this.printWhenReady(
       reexpedition.companyId,
       externalId,

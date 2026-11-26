@@ -20,6 +20,8 @@ import {
   type OpenPayable,
   type RecordedPayment,
 } from "./statement-matching";
+import { recurringCandidates, recurringKey, statementStartBalance, type PaidExpense } from "./recurring-expenses";
+import { upsertRecurring } from "./recurring-expense.controller";
 
 const MAX_BYTES = 1_400_000;
 const LEARN_PREFIX = "Extrato bancário";
@@ -164,6 +166,8 @@ export class BankStatementImportController {
       account: { id: account.id, name: account.name, bank: account.financialInstitution?.name ?? statement.bank },
       statement: { bank: statement.bank, agency: statement.agency, account: statement.account, from: statement.from, to: statement.to, openingBalance: statement.openingBalance, closingBalance: statement.closingBalance },
       balance: balanceCheck(statement),
+      cashStart: await this.finance.getSettings(actor.companyId).then((s) => ({ date: s.cashStartDate, balance: s.cashStartBalance })),
+      canSetBalance: ["ADMIN", "EXECUTIVE"].includes(String((actor as any).role)),
       categories: { expense: EXPENSE_CATEGORIES, income: INCOME_CATEGORIES },
       lines: plans.map((plan) => {
         const done = ctx.imported.get(plan.line.externalId)?.reconciliationItem;
@@ -173,7 +177,7 @@ export class BankStatementImportController {
   }
 
   @Post("apply")
-  async apply(@Body() body: { financialAccountId?: string; fileName?: string; contentBase64?: string; decisions?: Decision[] }, @Req() req: Request) {
+  async apply(@Body() body: { financialAccountId?: string; fileName?: string; contentBase64?: string; decisions?: Decision[]; useClosingBalance?: boolean }, @Req() req: Request) {
     const actor = await this.actor(req);
     const account = await this.account(actor.companyId, body?.financialAccountId ?? "");
     const statement = await readStatement(String(body?.fileName ?? "extrato"), String(body?.contentBase64 ?? ""));
@@ -297,7 +301,34 @@ export class BankStatementImportController {
         results.push({ externalId: line.externalId, status: "ERROR", message: error instanceof Error ? error.message : "Falha ao aplicar." });
       }
     }
+    // Despesas fixas aprendidas (aluguel, água, luz...) para a previsão do caixa.
+    const paid: PaidExpense[] = decisions
+      .filter((d) => d.action === "EXPENSE" && results.some((r) => r.externalId === d.externalId && r.status !== "ERROR"))
+      .map((d) => ({ plan: plans.get(d.externalId)!, category: String((d as any).category ?? "") }))
+      .filter(({ plan }) => plan && plan.line.amount < 0)
+      .map(({ plan, category }) => ({
+        key: recurringKey(plan.line.taxId, plan.line.counterparty || plan.line.description),
+        label: plan.line.counterparty || plan.line.description,
+        category,
+        amount: -plan.line.amount,
+        date: plan.line.date,
+      }));
+    const learned = recurringCandidates(paid);
+    if (learned.length) await upsertRecurring(actor.companyId, learned, actor.name).catch(() => undefined);
+
+    // Saldo do banco: o extrato vira o ponto de partida do caixa (só gestores).
+    let balanceUpdated: { date: string; balance: number } | null = null;
+    if (body?.useClosingBalance && statement.closingBalance !== null && statement.to && ["ADMIN", "EXECUTIVE"].includes(String((actor as any).role))) {
+      const current = await this.finance.getSettings(actor.companyId);
+      if (!current.cashStartDate || current.cashStartDate <= statement.to) {
+        const balance = statementStartBalance(statement.closingBalance, statement.lines, statement.to);
+        await this.finance.updateSettings(actor.companyId, actor.name, { cashStartDate: statement.to, cashStartBalance: balance });
+        balanceUpdated = { date: statement.to, balance: statement.closingBalance };
+      }
+    }
     return {
+      balanceUpdated,
+      learnedRecurring: learned.length,
       applied: results.filter((r) => r.status === "OK").length,
       skipped: results.filter((r) => r.status === "SKIPPED").length,
       errors: results.filter((r) => r.status === "ERROR").length,
