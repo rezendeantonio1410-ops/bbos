@@ -34,9 +34,15 @@ jobs:
           set -euo pipefail
           tested=$(git rev-parse HEAD)
           mapfile -t parents < <(git cat-file -p HEAD | sed -n '/^$/q; s/^parent //p')
-          test "${#parents[@]}" -eq 2
-          test "${parents[0]}" = "$EXPECTED_BASE"
-          test "${parents[1]}" = "$EXPECTED_HEAD"
+          if [[ "${#parents[@]}" -ne 2 || "${parents[0]:-}" != "$EXPECTED_BASE" || "${parents[1]:-}" != "$EXPECTED_HEAD" ]]; then
+            {
+              echo '### Release validation rejected: merge identity mismatch'
+              printf 'Expected base: `%s`\n\nActual base: `%s`\n\nExpected head: `%s`\n\nActual head: `%s`\n\nChecked-out commit: `%s`\n' "$EXPECTED_BASE" "${parents[0]:-missing}" "$EXPECTED_HEAD" "${parents[1]:-missing}" "$tested"
+              echo 'Do not use any results from this stale or unexpected merge for release approval.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Merge identity mismatch; refresh the candidate against the current release and run fresh CI. Do not bypass this guard."
+            exit 1
+          fi
           migration_digest=$(git ls-tree -r HEAD -- packages/database/prisma/migrations | sha256sum | cut -d ' ' -f 1)
           {
             echo '### Release validation identity'
