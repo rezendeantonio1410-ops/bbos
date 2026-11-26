@@ -33,6 +33,7 @@ import { join } from "node:path";
 import { AuthService } from "./auth.service";
 import { publicAppUrl } from "./public-app-url";
 import { missingPurchaseApprovalFields } from "./purchase-validation";
+import { purchaseOriginSnapshot } from "./purchase-origin-policy";
 import {
   calculateBrokerCommission,
   ensureBrokerCommissionPayable,
@@ -1730,12 +1731,7 @@ export class GreenCoffeePurchasesController {
             approverName: body.approverName,
             species: body.species,
             speciesId: references.speciesId,
-            // Missing agricultural provenance must remain unknown, not the supplier address.
-            originRegion: body.originUnitId ? (body.originRegion || "") : "",
-            municipality: body.originUnitId ? body.municipality : undefined,
-            state: body.originUnitId ? body.state : undefined,
-            country: body.originUnitId ? (body.country ?? "Brasil") : "Brasil",
-            farmName: body.originUnitId ? body.farmName : undefined,
+            ...purchaseOriginSnapshot(body),
             harvest: body.harvest,
             variety: body.variety,
             cultivarId: references.cultivarId,
