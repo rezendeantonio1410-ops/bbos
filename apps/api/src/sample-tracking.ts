@@ -50,7 +50,10 @@ function date(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-const isCustoms = (text: string | null | undefined) => /custom|alf[aâ]ndega|clearance|海关|import/i.test(text ?? "");
+const TROUBLE = /exception|on hold|held|missing|paperwork|clearance delay|incorrect address|refused|retid|pend[eê]ncia/i;
+const RESOLVED = /released|cleared|liberad/i;
+
+const isCustoms =(text: string | null | undefined) => /custom|alf[aâ]ndega|clearance|海关|import/i.test(text ?? "");
 
 /** Reads one entry of gettrackinfo's data.accepted[]. */
 export function readTrackInfo(entry: any): TrackingReading {
@@ -81,10 +84,17 @@ export function readTrackInfo(entry: any): TrackingReading {
   else if (status === "InfoReceived" || events.length) step = "SENT";
 
   const deliveredAt = status === "Delivered" ? (latest?.at ?? null) : null;
+  // Carriers often keep the overall status "in transit" and only write the
+  // trouble in the latest event (FedEx: "Shipment exception, … paperwork").
+  const latestTrouble = !!latest && status !== "Delivered" && TROUBLE.test(latest.description) && !RESOLVED.test(latest.description);
+  const troubleEvent = latestTrouble ? latest : [...events].reverse().find((event) => TROUBLE.test(event.description));
+  const stillHeld = !!troubleEvent && status !== "Delivered" && !!latest && (latestTrouble || (latest.at.getTime() - troubleEvent.at.getTime() < 3 * 86_400_000 && /facility|unidade|terminal/i.test(latest.description)));
   const problem =
     status === "Exception" || status === "DeliveryFailure"
       ? `${STATUS_TEXT[status]}${latest ? `: ${latest.description}` : ""}`
-      : null;
+      : stillHeld
+        ? `Ocorrência no envio: ${troubleEvent!.description}${troubleEvent!.location ? ` (${troubleEvent!.location})` : ""}`
+        : null;
   return { step, statusText: STATUS_TEXT[status] ?? status, events, deliveredAt, problem };
 }
 

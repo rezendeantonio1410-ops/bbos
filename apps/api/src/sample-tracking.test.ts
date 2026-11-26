@@ -76,3 +76,25 @@ test("the key goes in the 17token header and carrier codes are sent", async () =
   assert.equal((seen!.init.headers as Record<string, string>)["17token"], "test-key");
   assert.deepEqual(JSON.parse(String(seen!.init.body)), [{ number: "879951396830", carrier: 100003 }]);
 });
+
+test("a carrier exception written only in the events is flagged (real FedEx and DHL of 26/11)", () => {
+  const fedex = readTrackInfo(entry("InTransit", [
+    ["2026-11-12T12:00:00Z", "Picked up", "LONDRINA, PR, BR"],
+    ["2026-11-13T12:06:00Z", "On the way", "CAMPINAS, SP, BR"],
+    ["2026-11-25T18:00:00Z", "Shipment exception, Improper or missing international paperwork, contact Customer Service", "CAMPINAS, SP, BR"],
+    ["2026-11-25T18:14:00Z", "At local FedEx facility", "CAMPINAS, SP, BR"],
+  ]));
+  assert.match(fedex.problem ?? "", /^Ocorrência no envio: Shipment exception, Improper or missing international paperwork/);
+  assert.equal(fedex.step, "IN_TRANSIT");
+  const dhl = readTrackInfo(entry("InTransit", [
+    ["2026-11-25T19:41:00Z", "Shipment Accepted", "CURITIBA - BRAZIL"],
+    ["2026-11-25T20:18:00Z", "Shipment is on hold", "CURITIBA - BRAZIL"],
+  ]));
+  assert.match(dhl.problem ?? "", /Shipment is on hold/);
+  const moving = readTrackInfo(entry("InTransit", [
+    ["2026-11-20T10:00:00Z", "Shipment is on hold", "CURITIBA - BRAZIL"],
+    ["2026-11-21T10:00:00Z", "Clearance event, released by customs", "CURITIBA - BRAZIL"],
+    ["2026-11-26T10:00:00Z", "Departed facility", "LEIPZIG - GERMANY"],
+  ]));
+  assert.equal(moving.problem, null);
+});
