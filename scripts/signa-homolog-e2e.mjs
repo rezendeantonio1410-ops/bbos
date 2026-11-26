@@ -545,6 +545,11 @@ if (local && process.env.CI === "true") {
     const probes = [
       ["GET", "/finance/receivables"],
       ["GET", "/finance/reconciliation/summary"],
+      // The release adds Itaú boleto endpoints. Partners must never access them.
+      ["GET", "/finance/boletos"],
+      ["POST", "/finance/boletos", { receivableId: "homolog-denied-boleto-receivable" }],
+      ["POST", "/finance/boletos/homolog-denied-boleto/simulate-payment", {}],
+      ["POST", "/finance/boletos/homolog-denied-boleto/cancel", {}],
       ["GET", "/sales-orders/homolog-order-pix/manual-pix"],
       ["POST", "/finance/receivables/homolog-ar-pix/payments", { financialAccountId: "homolog-denied-account", amount: 76.8, method: "PIX", idempotencyKey: randomUUID() }],
       ["POST", "/sales-orders/homolog-order-pix/manual-pix/confirm", { financialAccountId: "homolog-denied-account", reference: "DENIED-CI-ONLY" }],
@@ -563,7 +568,7 @@ if (local && process.env.CI === "true") {
       }
     }
     assert.deepEqual(await snapshot(), before, "tentativa de baixa alterou título fictício");
-    return "14 acessos negados; título preservado";
+    return `${probes.length * 2} acessos negados; título preservado`;
   });
 }
 
