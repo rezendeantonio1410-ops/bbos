@@ -130,7 +130,7 @@ INSERT INTO "SalesOrder"(id,"companyId","customerId",code,quantity,"unitPrice","
 VALUES ('it-so-1','it-co-a','it-cust','P-IT-000001',1,38,38,NOW(),'it-signa'),
        ('it-so-2','it-co-a','it-cust','P-IT-000002',1,38,38,NOW(),'it-signa');
 DO $$
-DECLARE n int; h text := repeat('a',64);
+DECLARE n int; h text := repeat('a',64); blocked_constraint text;
 BEGIN
   INSERT INTO "PartnerOrderSubmission"(id,"companyId","partnerId","userId","submissionKey","requestHash",status,"createdAt","updatedAt")
   VALUES ('it-sub-1','it-co-a','it-signa','it-user-1','key-0000000000000001',h,'CLAIMED',NOW(),NOW())
@@ -164,7 +164,14 @@ BEGIN
   BEGIN
     DELETE FROM "SalesOrder" WHERE id='it-so-1';
     RAISE EXCEPTION 'order with submission must not be deletable';
-  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+  EXCEPTION WHEN foreign_key_violation OR SQLSTATE '23001' THEN
+    -- PostgreSQL 18 reports ON DELETE RESTRICT as 23001 instead of 23503.
+    -- Require the exact FK, not just any integrity error.
+    GET STACKED DIAGNOSTICS blocked_constraint = CONSTRAINT_NAME;
+    IF blocked_constraint IS DISTINCT FROM 'PartnerOrderSubmission_salesOrderId_fkey' THEN
+      RAISE;
+    END IF;
+  END;
   -- replay lookup used by the API
   SELECT count(*) INTO n FROM "PartnerOrderSubmission" s JOIN "SalesOrder" so ON so.id=s."salesOrderId"
    WHERE s."companyId"='it-co-a' AND s."partnerId"='it-signa' AND s."userId"='it-user-1'
