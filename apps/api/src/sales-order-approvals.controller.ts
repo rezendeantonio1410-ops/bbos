@@ -20,6 +20,7 @@ import { SalesOrderCustomerLifecycleService } from "./sales-order-customer-lifec
 import { SalesOrderPaymentsService } from "./sales-order-payments.service";
 import { resolveSalesOrderPaymentPolicy } from "./sales-order-payment-policy";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
+import { MANUAL_CHANNEL_LABEL, validateManualConfirmation } from "./manual-order-confirmation";
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -259,6 +260,136 @@ export class SalesOrderApprovalsController {
       verificationRequired,
       confirmationCode,
     };
+  }
+
+  /**
+   * O vendedor confirma o pedido em nome do cliente quando o cliente aprovou
+   * por telefone, WhatsApp, pessoalmente ou e-mail. Mesmas regras do link
+   * (desconto pendente, venda a prazo, crédito); pedido à vista ou sem crédito
+   * continua exigindo o link, porque o cliente paga o Pix por ele. Fica
+   * registrado quem confirmou, por qual canal e quem aprovou do lado do cliente.
+   */
+  @Post(":orderId/manual-confirm")
+  async manualConfirm(
+    @Param("orderId") orderId: string,
+    @Req() request: any,
+    @Body() body: { channel?: string; customerContact?: string; note?: string },
+  ) {
+    const actor = await this.actor(request);
+    await this.assertOrderVisibleToActor(actor, orderId);
+    let confirmation: ReturnType<typeof validateManualConfirmation>;
+    try {
+      confirmation = validateManualConfirmation(body);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Dados inválidos.");
+    }
+    const snapshot = await this.snapshot(orderId);
+    if (snapshot.companyId !== actor.companyId)
+      throw new UnauthorizedException("Pedido fora da empresa do usuário.");
+    if (snapshot.orderType === "SAMPLE")
+      throw new BadRequestException("Pedido de amostra é confirmado internamente.");
+    if (snapshot.status !== "DRAFT")
+      throw new BadRequestException("Este pedido não está mais em rascunho.");
+
+    const result = await this.salesOrders.database.$transaction(
+      async (tx) => {
+        const locked = await tx.$queryRawUnsafe<any[]>(
+          `SELECT so.id,so.status,so."paymentType",so."totalAmount",
+                  c.id AS "customerId",c.active,c."paymentTerms",c."creditStatus",c."creditLimit"
+             FROM "SalesOrder" so JOIN "Customer" c ON c.id=so."customerId"
+            WHERE so.id=$1 AND so."companyId"=$2 FOR UPDATE OF so`,
+          orderId,
+          actor.companyId,
+        );
+        const order = locked[0];
+        if (!order) throw new BadRequestException("Pedido não encontrado.");
+        if (order.status !== "DRAFT")
+          throw new BadRequestException("Este pedido não está mais em rascunho.");
+        const pending = await tx.$queryRawUnsafe<any[]>(
+          `SELECT COUNT(*)::int AS count FROM "SalesDiscountRequest" WHERE "salesOrderId"=$1 AND status='PENDING'`,
+          orderId,
+        );
+        if (Number(pending[0]?.count ?? 0) > 0)
+          throw new BadRequestException("Resolva o pedido de desconto pendente antes de confirmar.");
+        await this.termApprovals.assertApproved(tx, actor.companyId, orderId);
+        const exposure = await tx.$queryRawUnsafe<any[]>(
+          `SELECT (
+                  COALESCE((SELECT SUM(ar."openAmount") FROM "AccountsReceivable" ar
+                             WHERE ar."customerId"=$1 AND ar.status NOT IN ('PAID','CANCELLED')),0)
+                  + COALESCE((SELECT SUM(p."totalAmount") FROM "SalesOrder" p
+                               WHERE p."customerId"=$1 AND p."paymentType"='TERM'
+                                 AND p.status IN ('CONFIRMED','RESERVED','PICKING','READY_TO_SHIP','INVOICED','IN_PRODUCTION','SHIPPED')
+                                 AND NOT EXISTS (SELECT 1 FROM "AccountsReceivable" ar2 WHERE ar2."salesOrderId"=p.id)),0)
+                )::numeric AS total`,
+          order.customerId,
+        );
+        const paymentType =
+          order.paymentType === "LEGACY" ? (isCashTerm(order.paymentTerms) ? "CASH" : "TERM") : order.paymentType;
+        const policy = resolveSalesOrderPaymentPolicy({
+          paymentType,
+          customerActive: Boolean(order.active),
+          creditStatus: order.creditStatus,
+          creditLimit: order.creditLimit,
+          openReceivables: exposure[0]?.total,
+          orderTotal: order.totalAmount,
+        });
+        if (policy.mode === "BLOCKED")
+          throw new BadRequestException("Cliente inativo. O pedido não pode ser confirmado.");
+        if (policy.mode === "PIX")
+          throw new BadRequestException(
+            "Este pedido precisa de pagamento por Pix (à vista ou acima do crédito do cliente). Envie o link para o cliente confirmar e pagar.",
+          );
+
+        const acceptedAt = new Date();
+        const publicSnapshot = { ...snapshot } as any;
+        delete publicSnapshot.companyId;
+        delete publicSnapshot.customerPhone;
+        const snapshotJson = JSON.stringify(publicSnapshot);
+        await tx.$executeRawUnsafe(
+          `UPDATE "SalesOrderCustomerApproval" SET status='REVOKED',"revokedAt"=NOW(),"updatedAt"=NOW()
+            WHERE "salesOrderId"=$1 AND status IN ('PENDING','VIEWED')`,
+          orderId,
+        );
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "SalesOrderCustomerApproval"
+            (id,"companyId","salesOrderId","tokenHash",snapshot,"snapshotHash",status,"expiresAt",
+             "createdById","createdByName","createdAt","updatedAt","acceptedByName","acceptedAt","customerNote",
+             "verificationRequired","termsVersion","termsText")
+           VALUES ($1,$2,$3,$4,$5::jsonb,$6,'APPROVED',$7,$8,$9,NOW(),NOW(),$10,$7,$11,false,$12,$13)`,
+          randomUUID(),
+          actor.companyId,
+          orderId,
+          sha256(`manual:${randomBytes(24).toString("base64url")}`),
+          snapshotJson,
+          sha256(snapshotJson),
+          acceptedAt,
+          actor.id,
+          actor.name,
+          `${confirmation.customerContact} · por ${MANUAL_CHANNEL_LABEL[confirmation.channel]} (confirmado por ${actor.name})`.slice(0, 200),
+          confirmation.note,
+          TERMS_VERSION,
+          termsTextFor(snapshot.freightResponsibility),
+        );
+        await tx.$executeRawUnsafe(
+          `UPDATE "SalesOrder" SET status='CONFIRMED'::"SalesOrderStatus","updatedAt"=NOW() WHERE id=$1 AND status='DRAFT'`,
+          orderId,
+        );
+        return { acceptedAt };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    await this.salesOrders.confirm(actor.companyId, orderId);
+    await this.customerLifecycle.record(
+      orderId,
+      "ORDER_CONFIRMED",
+      "Pedido confirmado",
+      `Confirmado por ${MANUAL_CHANNEL_LABEL[confirmation.channel]} com ${confirmation.customerContact}. Havendo café torrado disponível, o BBOS prepara e reserva as embalagens do pedido; a emissão da NF-e permanece manual.`,
+      "BBOS",
+      `sales-order:confirmed:${orderId}`,
+      { acceptedByName: confirmation.customerContact, channel: confirmation.channel, confirmedBy: actor.name },
+    );
+    return { ok: true, status: "APPROVED", orderStatus: "CONFIRMED", acceptedAt: result.acceptedAt };
   }
 
   @Get(":orderId/history")
