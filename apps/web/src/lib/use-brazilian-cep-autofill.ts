@@ -76,7 +76,13 @@ export function useBrazilianCepAutofill({
       return;
     }
     const timer = window.setTimeout(() => void lookup(), delayMs);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      // Invalidate the in-flight lookup immediately when the CEP changes,
+      // including the debounce window before the next lookup starts.
+      // Also discard results after closing or unmounting the form.
+      requestRef.current += 1;
+    };
   }, [delayMs, enabled, lookup, postalCode]);
 
   return {
