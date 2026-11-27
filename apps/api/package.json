@@ -32,7 +32,7 @@
     "test:finance-receivable-payment": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/finance-receivable-payment.test.ts ../../apps/api/src/finance-taxes.test.ts ../../apps/api/src/inbound-payables.test.ts ../../apps/api/src/bank-statement-import.test.ts ../../apps/api/src/recurring-expenses.test.ts",
     "test:expense-policy": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/expense-policy.test.ts ../../apps/api/src/finance-expense-flow.test.ts",
     "test:sales-order-manual-pix": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-manual-pix.test.ts",
-    "test:sales-order-manual-delivery": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-manual-delivery.test.ts",
+    "test:sales-order-manual-delivery": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-manual-delivery.test.ts ../../apps/api/src/direct-shipment.test.ts",
     "test:storefront-operations-scope": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/storefront-operations-company-scope.test.ts",
     "test:storefront-shipping-selection": "corepack pnpm --filter @bbos/database exec tsx --test ../../apps/api/src/storefront-shipping-selection.test.ts",
     "test:storefront-shipping-finance": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/storefront-shipping-finance.test.ts",

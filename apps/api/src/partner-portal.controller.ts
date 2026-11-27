@@ -11,10 +11,16 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { DirectShipmentService } from "./direct-shipment.service";
+import { DIRECT_SHIPMENT_MAX_FILE_BYTES, type DirectShipmentInput } from "./direct-shipment";
 import { Prisma, prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
 import { SalesOrdersService, type CreateSalesOrderInput } from "./sales-orders.service";
@@ -63,6 +69,7 @@ export class PartnerPortalController {
     private readonly salesOrders: SalesOrdersService,
     private readonly termApprovals: SalesOrderTermApprovalService,
     private readonly customerLifecycle: SalesOrderCustomerLifecycleService,
+    private readonly directShipments: DirectShipmentService = new DirectShipmentService(),
   ) {}
 
   private async context(request: { user?: PartnerActor }) {
@@ -850,6 +857,88 @@ export class PartnerPortalController {
       actor.companyId,
     );
     return { order: order ?? null, items };
+  }
+
+  /**
+   * Envio direto: o distribuidor informa o cliente final, a etiqueta que ele
+   * comprou e o rastreio; a Bispo imprime, cola e posta. Mesmo escopo dos PDFs.
+   */
+  @Get("orders/:orderId/direct-shipment")
+  @Header("Cache-Control", "private, no-store")
+  async directShipment(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    return { shipment: await this.directShipments.get(actor.companyId, orderId) };
+  }
+
+  @Put("orders/:orderId/direct-shipment")
+  async saveDirectShipment(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Body() body: DirectShipmentInput,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Envio direto disponível apenas para distribuidores.");
+    }
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const actorName = String(actor.name ?? partner.contactName ?? partner.name);
+    return { shipment: await this.directShipments.save(actor.companyId, orderId, partner.id, body, actorName) };
+  }
+
+  @Post("orders/:orderId/direct-shipment/documents")
+  @UseInterceptors(
+    FileInterceptor("file", { limits: { fileSize: DIRECT_SHIPMENT_MAX_FILE_BYTES, files: 1 } }),
+  )
+  async addDirectShipmentDocument(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @UploadedFile() file: { originalname: string; mimetype: string; buffer: Buffer } | undefined,
+    @Body() body: { kind?: string },
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Envio direto disponível apenas para distribuidores.");
+    }
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const actorName = String(actor.name ?? partner.contactName ?? partner.name);
+    return { shipment: await this.directShipments.addDocument(actor.companyId, orderId, body?.kind, file, actorName) };
+  }
+
+  @Delete("orders/:orderId/direct-shipment/documents/:documentId")
+  async removeDirectShipmentDocument(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Param("documentId") documentId: string,
+  ) {
+    const { actor, partner } = await this.context(request);
+    if (partner.portalAccessLevel !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Envio direto disponível apenas para distribuidores.");
+    }
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    return { shipment: await this.directShipments.removeDocument(actor.companyId, orderId, documentId) };
+  }
+
+  @Get("orders/:orderId/direct-shipment/documents/:documentId")
+  async directShipmentDocument(
+    @Req() request: { user?: PartnerActor },
+    @Param("orderId") orderId: string,
+    @Param("documentId") documentId: string,
+    @Res() response: any,
+  ) {
+    const { actor, partner } = await this.context(request);
+    await this.assertPartnerOrder(partner, actor.companyId, orderId);
+    const document = await this.directShipments.document(actor.companyId, orderId, documentId);
+    response.set({
+      "Content-Type": document.mimeType,
+      "Content-Disposition": `inline; filename="${document.fileName}"`,
+      "Content-Length": document.data.length,
+      "Cache-Control": "private, no-store",
+    });
+    response.send(document.data);
   }
 
   @Get("orders/:orderId/pix")

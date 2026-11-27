@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FileText, X } from "lucide-react";
 import { SignaPixButton } from "@/components/signa-pix-dialog";
+import { SignaDirectShipment } from "@/components/signa-direct-shipment";
 
 export type PanelOrder = {
   id: string; code: string; status: string; totalAmount: number | string; orderedAt: string;
@@ -28,7 +29,7 @@ export function paymentLabel(status?: string | null) {
   return status === "PAID" ? "Pago" : status === "PARTIALLY_PAID" ? "Parcialmente pago" : status === "OVERDUE" ? "Vencido" : status === "OPEN" ? "Em aberto" : "Aguardando faturamento";
 }
 
-/** Side panel ("object page") with the full picture of one order. Read-only. */
+/** Side panel ("object page") with the full picture of one order. Only the direct-shipment block is editable. */
 export function SignaOrderPanel({ order, stageLabel, events, onClose }: { order: PanelOrder; stageLabel: string; events: TimelineEvent[]; onClose: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
@@ -116,6 +117,8 @@ export function SignaOrderPanel({ order, stageLabel, events, onClose }: { order:
             </div>
             {order.pixAvailable && <SignaPixButton orderId={order.id} orderCode={order.code} />}
           </section>
+
+          <SignaDirectShipment orderId={order.id} orderStatus={order.status} />
 
           <section aria-label="Linha do tempo">
             <h3 className="mb-2 font-display text-sm font-semibold">Linha do tempo</h3>

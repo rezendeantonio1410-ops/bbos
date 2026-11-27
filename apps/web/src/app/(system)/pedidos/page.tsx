@@ -45,6 +45,8 @@ import {
   isCompleteOrderDraftLine,
 } from "@/lib/order-draft-lines";
 import { orderPaymentDue } from "@/lib/order-payment-due";
+import { DirectShipmentCard } from "@/components/direct-shipment-card";
+import { directShipmentStatus, type DirectShipmentSummary } from "@/lib/direct-shipment";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
 const money = new Intl.NumberFormat("pt-BR", {
@@ -631,6 +633,7 @@ const displayStatus = (order: Order) => {
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [directShipments, setDirectShipments] = useState<Map<string, DirectShipmentSummary>>(new Map());
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<StockOption[]>([]);
   const [brokers, setBrokers] = useState<Broker[]>([]);
@@ -698,6 +701,18 @@ export default function OrdersPage() {
     ]);
 
     if (ordersResponse.ok) setOrders(await ordersResponse.json());
+    void loadDirectShipments();
+  };
+
+  const loadDirectShipments = async () => {
+    try {
+      const response = await fetch("/api/direct-shipments", { credentials: "include", cache: "no-store" });
+      if (!response.ok) return;
+      const rows = (await response.json()) as DirectShipmentSummary[];
+      setDirectShipments(new Map(rows.map((row) => [row.salesOrderId, row])));
+    } catch {
+      /* o selo é complementar; a lista funciona sem ele */
+    }
   };
 
   const openNewOrder = (type: "COMMERCIAL" | "SAMPLE") => {
@@ -1058,6 +1073,11 @@ export default function OrdersPage() {
                       </button>
                       {order.orderType === "SAMPLE" && <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">Amostra</span>}
                       {order.createdByStorefrontPartner?.portalAccessLevel === "DISTRIBUTOR" && <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-violet-800">Encomenda</span>}
+                      {directShipments.get(order.id) && (() => {
+                        const direct = directShipments.get(order.id)!;
+                        const state = directShipmentStatus(direct);
+                        return <span title={`Envio direto ${direct.partnerName} para ${direct.city}/${direct.state} · ${state.label}`} className={`ml-1.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${state.tone === "done" ? "bg-emerald-50 text-emerald-800" : state.tone === "ready" ? "bg-sky-50 text-sky-800" : "bg-amber-50 text-amber-900"}`}>Envio direto · {direct.state}</span>;
+                      })()}
                     </td>
                     <td className="max-w-[15rem] px-3 py-2" title={order.customer.name}>
                       <span className="block truncate text-stone-800">{order.customer.name}</span>
@@ -5181,6 +5201,10 @@ function OrderDrawer({
                 </div>
               ))}
             </div>
+
+            {order.createdByStorefrontPartner && (
+              <DirectShipmentCard orderId={order.id} canOperate={canOperate} />
+            )}
 
             {[
               "CONFIRMED",

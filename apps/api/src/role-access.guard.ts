@@ -86,6 +86,8 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   CostingController: OPERATIONS_FINANCE,
   SalesOrderCatalogOptionsController: CORE,
   SalesOrdersController: CORE,
+  // Envio direto do distribuidor (etiqueta do parceiro, postagem pela Bispo).
+  DirectShipmentController: CORE,
   SalesOrderApprovalsController: CORE,
   SalesOrderManualPaymentsController: ["ADMIN"],
   FinanceController: ACCOUNTING_WRITE,
@@ -238,6 +240,12 @@ const HANDLER_ROLE_POLICY: Readonly<
     getRules: OPERATIONS,
     getRulesForLine: OPERATIONS,
     validateSku: OPERATIONS,
+  },
+  DirectShipmentController: {
+    list: [...CORE, "ACCOUNTANT"],
+    get: [...CORE, "ACCOUNTANT"],
+    document: [...CORE, "ACCOUNTANT"],
+    posted: CORE_WITHOUT_SALES,
   },
   SalesOrdersController: {
     list: [...CORE, "ACCOUNTANT"],
