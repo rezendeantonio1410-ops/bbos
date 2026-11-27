@@ -25,6 +25,7 @@ import { FinanceAssistedReconciliationController } from "./finance-assisted-reco
 import { BankStatementImportController } from "./bank-statement-import.controller";
 import { RecurringExpenseController } from "./recurring-expense.controller";
 import { DirectShipmentController } from "./direct-shipment.controller";
+import { CommandCenterController } from "./command-center.controller";
 import { DirectShipmentService } from "./direct-shipment.service";
 import { ReceivableBoletoController } from "./receivable-boleto.controller";
 import { FinanceService } from "./finance.service";
@@ -132,6 +133,7 @@ import { BillingEmailService } from "./billing-email.service";
     BankStatementImportController,
     RecurringExpenseController,
     DirectShipmentController,
+    CommandCenterController,
     ReceivableBoletoController,
     ReconciliationController,
     CommerceController,
