@@ -158,7 +158,7 @@ export function CommandCenterV4({
           <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">{goal ? "Metas e margem →" : "Definir meta →"}</span>
         </Link>
 
-        <div className={`${card} p-4`}>
+        <Link href="/financeiro/receber" aria-label="A receber: abrir contas a receber" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
           <p className={label}>A receber</p>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
             <span className="whitespace-nowrap text-[26px] font-bold tabular-nums">{financeReady ? brl.format(receivable.total) : "—"}</span>
@@ -178,10 +178,10 @@ export function CommandCenterV4({
               </div>
             </>
           )}
-          <Link href="/financeiro/receber" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">{receivable.overdue > 0 ? "Cobrar vencidos →" : "Ver a receber →"}</Link>
-        </div>
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">{receivable.overdue > 0 ? "Cobrar vencidos →" : "Ver a receber →"}</span>
+        </Link>
 
-        <div className={`${card} p-4`}>
+        <Link href="/producao" aria-label="Torra do mês: abrir produção" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
           <p className={label}>Torra do mês</p>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
             <span className="whitespace-nowrap text-[26px] font-bold tabular-nums" style={roast.behindKg > 0 ? { color: AMBER } : undefined}>
@@ -198,8 +198,8 @@ export function CommandCenterV4({
               <div className="mt-1 flex justify-between text-[11px] text-[var(--bbos-text-secondary)]"><span>0</span><span>▲ esperado hoje {num.format(roast.expectedKg)}</span><span>meta {num.format(home.productionPlannedKg)}</span></div>
             </>
           ) : <p className="mt-2 text-[12.5px] text-[var(--bbos-text-secondary)]">sem plano de torra no mês</p>}
-          <Link href="/producao" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Programar torra →</Link>
-        </div>
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">Programar torra →</span>
+        </Link>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
@@ -388,7 +388,7 @@ function CashCard({ view }: { view: CashView | null }) {
   const share = (value: number) => `${Math.max(2, Math.min(100, (value / Math.max(view.minimum * 2, view.balance, 1)) * 100))}%`;
   const day = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
   return (
-    <div className={`${card} p-4 transition hover:shadow-sm`}>
+    <Link href={view.known ? "/financeiro/fluxo-caixa" : "/financeiro/conciliacao/importar"} aria-label="Caixa: abrir fluxo de caixa" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
       <p className={label}>Caixa · Itaú</p>
       {view.known ? (
         <>
@@ -402,16 +402,16 @@ function CashCard({ view }: { view: CashView | null }) {
             <span className="absolute -inset-y-1 w-[2.5px] rounded" style={{ left: share(view.minimum), background: RED }} />
           </div>
           <p className="mt-1 text-[11px] text-[var(--bbos-text-secondary)]">pior dia × mínimo de {brl.format(view.minimum)}</p>
-          <Link href="/financeiro/fluxo-caixa" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Fluxo de caixa →</Link>
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">Fluxo de caixa →</span>
         </>
       ) : (
         <>
           <p className="mt-1.5 text-[22px] font-bold text-[#9aa3a0]">Falta o extrato</p>
           <p className="mt-1 text-[12.5px] text-[var(--bbos-text-secondary)]">O saldo do banco e as despesas fixas vêm do extrato do Itaú.</p>
-          <Link href="/financeiro/conciliacao/importar" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Importar extrato →</Link>
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">Importar extrato →</span>
         </>
       )}
-    </div>
+    </Link>
   );
 }
 
