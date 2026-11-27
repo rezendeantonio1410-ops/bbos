@@ -48,6 +48,35 @@ jobs:
           CREATE TABLE fixture.extra (id integer PRIMARY KEY);
           INSERT INTO fixture.extra VALUES (3);
           SQL
+      - name: Reject ambiguous rehearsal configuration before database access
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/backup_ci
+        run: |
+          set -eu
+          STUBS="$(mktemp -d)"
+          trap 'rm -rf "$STUBS"' 0
+          for cmd in psql pg_dump pg_restore; do
+            printf '#!/bin/sh\necho "UNEXPECTED DATABASE ACCESS"\nexit 99\n' > "$STUBS/$cmd"
+            chmod +x "$STUBS/$cmd"
+          done
+          refuse() {
+            status=0
+            PATH="$STUBS:$PATH" REHEARSAL_DATABASE_NAME="$1" BACKUP_DATABASE_URL="$2" \
+              sh infra/db-backup/backup-and-verify.sh > "$STUBS/result" 2>&1 || status=$?
+            cat "$STUBS/result"
+            test "$status" = 2
+            grep -q "$3" "$STUBS/result"
+            if grep -q 'UNEXPECTED DATABASE ACCESS' "$STUBS/result"; then exit 1; fi
+          }
+          refuse 'invalid/name' "$BACKUP_DATABASE_URL" 'nome de ensaio invalido'
+          refuse 'bad"name' "$BACKUP_DATABASE_URL" 'nome de ensaio invalido'
+          refuse 'backup_ci' "$BACKUP_DATABASE_URL" 'ensaio deve usar banco distinto'
+          refuse 'rehearsal_ci' "$BACKUP_DATABASE_URL?dbname=source_ci" 'URI de ensaio ambigua'
+          refuse 'rehearsal_ci' "$BACKUP_DATABASE_URL/extra" 'URI de ensaio ambigua'
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d backup_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+
       - name: Successful backup and rehearsal preserve data and constraints
         shell: sh
         env:
