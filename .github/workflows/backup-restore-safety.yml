@@ -55,8 +55,13 @@ jobs:
           REHEARSAL_DATABASE_NAME: rehearsal_ci
         run: |
           set -eu
+          export TMPDIR="$(mktemp -d)"
+          printf 'keep' > "$TMPDIR/sentinel"
           sh infra/db-backup/backup-and-verify.sh > /tmp/success.log 2>&1 || { cat /tmp/success.log; exit 1; }
           cat /tmp/success.log
+          test "$(cat "$TMPDIR/sentinel")" = keep
+          test -z "$(find "$TMPDIR" -mindepth 1 ! -name sentinel -print -quit)"
+          rm -rf "$TMPDIR"
           grep -q '^BACKUP_VERIFIED:' /tmp/success.log
           grep -q '^REHEARSAL_COPY_READY:' /tmp/success.log
           # The non-public fixture must participate in the verification, not just restore.
@@ -104,12 +109,15 @@ jobs:
           psql "$SOURCE_DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'INSERT INTO fixture.extra VALUES (4)' >/dev/null
           SH
           chmod +x /tmp/signa-dump-test/pg_dump
+          export TMPDIR="$(mktemp -d)"
           if PATH="/tmp/signa-dump-test:$PATH" sh infra/db-backup/backup-and-verify.sh > /tmp/changed.log 2>&1; then
             cat /tmp/changed.log
             echo 'Unexpected verification of changing source'
             exit 1
           fi
           cat /tmp/changed.log
+          test -z "$(find "$TMPDIR" -mindepth 1 -print -quit)"
+          rmdir "$TMPDIR"
           grep -q 'contagens da origem mudaram durante o dump' /tmp/changed.log
           if grep -q '^BACKUP_VERIFIED:' /tmp/changed.log; then exit 1; fi
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d changed_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
