@@ -35,6 +35,8 @@ jobs:
           CREATE DATABASE source_ci;
           CREATE DATABASE backup_ci;
           CREATE DATABASE broken_ci;
+          CREATE DATABASE changed_ci;
+          CREATE DATABASE occupied_ci;
           SQL
           psql -X -v ON_ERROR_STOP=1 -d source_ci <<'SQL'
           CREATE SCHEMA fixture;
@@ -46,6 +48,35 @@ jobs:
           CREATE TABLE fixture.extra (id integer PRIMARY KEY);
           INSERT INTO fixture.extra VALUES (3);
           SQL
+      - name: Reject ambiguous rehearsal configuration before database access
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/backup_ci
+        run: |
+          set -eu
+          STUBS="$(mktemp -d)"
+          trap 'rm -rf "$STUBS"' 0
+          for cmd in psql pg_dump pg_restore; do
+            printf '#!/bin/sh\necho "UNEXPECTED DATABASE ACCESS"\nexit 99\n' > "$STUBS/$cmd"
+            chmod +x "$STUBS/$cmd"
+          done
+          refuse() {
+            status=0
+            PATH="$STUBS:$PATH" REHEARSAL_DATABASE_NAME="$1" BACKUP_DATABASE_URL="$2" \
+              sh infra/db-backup/backup-and-verify.sh > "$STUBS/result" 2>&1 || status=$?
+            cat "$STUBS/result"
+            test "$status" = 2
+            grep -q "$3" "$STUBS/result"
+            if grep -q 'UNEXPECTED DATABASE ACCESS' "$STUBS/result"; then exit 1; fi
+          }
+          refuse 'invalid/name' "$BACKUP_DATABASE_URL" 'nome de ensaio invalido'
+          refuse 'bad"name' "$BACKUP_DATABASE_URL" 'nome de ensaio invalido'
+          refuse 'backup_ci' "$BACKUP_DATABASE_URL" 'ensaio deve usar banco distinto'
+          refuse 'rehearsal_ci' "$BACKUP_DATABASE_URL?dbname=source_ci" 'URI de ensaio ambigua'
+          refuse 'rehearsal_ci' "$BACKUP_DATABASE_URL/extra" 'URI de ensaio ambigua'
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d backup_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+
       - name: Successful backup and rehearsal preserve data and constraints
         shell: sh
         env:
@@ -54,10 +85,17 @@ jobs:
           REHEARSAL_DATABASE_NAME: rehearsal_ci
         run: |
           set -eu
+          export TMPDIR="$(mktemp -d)"
+          printf 'keep' > "$TMPDIR/sentinel"
           sh infra/db-backup/backup-and-verify.sh > /tmp/success.log 2>&1 || { cat /tmp/success.log; exit 1; }
           cat /tmp/success.log
+          test "$(cat "$TMPDIR/sentinel")" = keep
+          test -z "$(find "$TMPDIR" -mindepth 1 ! -name sentinel -print -quit)"
+          rm -rf "$TMPDIR"
           grep -q '^BACKUP_VERIFIED:' /tmp/success.log
           grep -q '^REHEARSAL_COPY_READY:' /tmp/success.log
+          # The non-public fixture must participate in the verification, not just restore.
+          grep -q 'tabelas origem=3 copia=3 linhas origem=3 copia=3' /tmp/success.log
           for db in backup_ci rehearsal_ci; do
             test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c 'SELECT count(*) FROM public.child WHERE id=2 AND parent_id=1')" = 1
             test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c 'SELECT count(*) FROM fixture.extra WHERE id=3')" = 1
@@ -82,3 +120,57 @@ jobs:
           if grep -q '^BACKUP_VERIFIED:' /tmp/failure.log; then exit 1; fi
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d broken_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d source_ci -c 'SELECT count(*) FROM public.child')" = 1
+
+      - name: Occupied non-public destination must refuse before dump or restore
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/occupied_ci
+        run: |
+          set -eu
+          psql -X -v ON_ERROR_STOP=1 -d occupied_ci <<'SQL'
+          CREATE SCHEMA unrelated;
+          CREATE TABLE unrelated.sentinel (id integer PRIMARY KEY);
+          INSERT INTO unrelated.sentinel VALUES (42);
+          SQL
+          status=0
+          sh infra/db-backup/backup-and-verify.sh > /tmp/occupied.log 2>&1 || status=$?
+          cat /tmp/occupied.log
+          test "$status" = 2
+          grep -q 'RECUSADO - o banco de destino nao esta vazio' /tmp/occupied.log
+          if grep -Eq '^(BACKUP_VERIFIED:|BACKUP: dump bytes=)' /tmp/occupied.log; then exit 1; fi
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d occupied_ci -c 'SELECT id FROM unrelated.sentinel')" = 42
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d occupied_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d occupied_ci -c "SELECT to_regclass('fixture.extra') IS NULL")" = t
+
+      - name: Source count change during dump must refuse verification
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/changed_ci
+        run: |
+          set -eu
+          REAL_PG_DUMP="$(command -v pg_dump)"
+          export REAL_PG_DUMP
+          mkdir -p /tmp/signa-dump-test
+          cat > /tmp/signa-dump-test/pg_dump <<'SH'
+          #!/bin/sh
+          set -eu
+          "$REAL_PG_DUMP" "$@"
+          # Synthetic CI fixture only: simulate a concurrent write after the dump.
+          psql "$SOURCE_DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'INSERT INTO fixture.extra VALUES (4)' >/dev/null
+          SH
+          chmod +x /tmp/signa-dump-test/pg_dump
+          export TMPDIR="$(mktemp -d)"
+          if PATH="/tmp/signa-dump-test:$PATH" sh infra/db-backup/backup-and-verify.sh > /tmp/changed.log 2>&1; then
+            cat /tmp/changed.log
+            echo 'Unexpected verification of changing source'
+            exit 1
+          fi
+          cat /tmp/changed.log
+          test -z "$(find "$TMPDIR" -mindepth 1 -print -quit)"
+          rmdir "$TMPDIR"
+          grep -q 'contagens da origem mudaram durante o dump' /tmp/changed.log
+          if grep -q '^BACKUP_VERIFIED:' /tmp/changed.log; then exit 1; fi
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d changed_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d source_ci -c 'SELECT count(*) FROM fixture.extra')" = 2

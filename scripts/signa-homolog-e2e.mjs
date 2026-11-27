@@ -7,19 +7,37 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
-// Remote tests require the exact RC2 origin from the reviewed Render service.
-// Example: SIGNA_E2E_RENDER_ORIGIN=https://bbos-api-signa-rc2-XXXX.onrender.com
+// Remote tests require the exact RC3 origin from the reviewed Render service.
+// Example: SIGNA_E2E_RENDER_ORIGIN=https://bbos-api-signa-rc3-XXXX.onrender.com
+// Existing service: https://bbos-api-homolog-8w8f.onrender.com (only AFTER verifying the RC3 deploy SHA, isolated DB and disabled integrations in Render).
 // SIGNA_E2E_API must be that origin plus /api. Never use production or RC1.
+// SIGNA_E2E_RENDER_COMMIT must be the full 40-character CI-approved deploy SHA.
+// The public health endpoint reports the first 12 characters; verify this before login.
+// This is an additional check, not a substitute for checking the full deploy SHA and isolation in Render.
 function classifyTarget(api, expectedOrigin) {
   const local = /^(?:http|https):\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::([0-9]{1,5}))?\/api\/?$/.exec(api);
   if (local && (!local[1] || (Number(local[1]) > 0 && Number(local[1]) <= 65535))) return "local";
-  if (/^https:\/\/bbos-api-signa-rc2-[a-z0-9]+\.onrender\.com$/.test(expectedOrigin) &&
+  // Existing isolated homolog service retains its original Render hostname when RC3 is deployed.
+  // Still require the exact explicitly approved origin; never accept arbitrary homolog hostnames.
+  const approvedRenderOrigin = expectedOrigin === "https://bbos-api-homolog-8w8f.onrender.com" ||
+    /^https:\/\/bbos-api-signa-rc3-[a-z0-9]+\.onrender\.com$/.test(expectedOrigin);
+  if (approvedRenderOrigin &&
       (api === expectedOrigin + "/api" || api === expectedOrigin + "/api/")) return "render";
   return null;
 }
 function target(api, expectedOrigin) {
   if (/\s/.test(api) || /\s/.test(expectedOrigin)) return null;
   return classifyTarget(api, expectedOrigin);
+}
+
+function validRenderCommit(commit) {
+  return /^[0-9a-f]{40}$/.test(commit) && commit.length === 40;
+}
+function matchesRenderRelease(health, commit) {
+  return validRenderCommit(commit) &&
+    health?.status === "ok" &&
+    health?.scope === "coffee-operating-system" &&
+    health?.release === commit.slice(0, 12);
 }
 
 if (process.argv.includes("--test-target-guard")) {
@@ -40,28 +58,28 @@ if (process.argv.includes("--test-target-guard")) {
     "local"
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     "render"
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api/",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api/",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     "render"
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api",
     "",
     null
   ],
   [
-    "https://bbos-api-signa-rc2-other.onrender.com/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-other.onrender.com/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
     "https://bbos-api-homolog-8w8f.onrender.com/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
@@ -75,38 +93,38 @@ if (process.argv.includes("--test-target-guard")) {
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api?x=1",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api?x=1",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api#fragment",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api#fragment",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com:443/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com:443/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
-    "http://bbos-api-signa-rc2-test123.onrender.com/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "http://bbos-api-signa-rc3-test123.onrender.com/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
-    "https://user@bbos-api-signa-rc2-test123.onrender.com/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://user@bbos-api-signa-rc3-test123.onrender.com/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com.evil.example/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com.evil.example/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api/../api",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api/../api",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
@@ -125,13 +143,13 @@ if (process.argv.includes("--test-target-guard")) {
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/api",
-    "https://bbos-api-signa-rc2-test123.onrender.com/",
+    "https://bbos-api-signa-rc3-test123.onrender.com/api",
+    "https://bbos-api-signa-rc3-test123.onrender.com/",
     null
   ],
   [
-    "https://bbos-api-signa-rc2-test123.onrender.com/",
-    "https://bbos-api-signa-rc2-test123.onrender.com",
+    "https://bbos-api-signa-rc3-test123.onrender.com/",
+    "https://bbos-api-signa-rc3-test123.onrender.com",
     null
   ],
   [
@@ -140,8 +158,34 @@ if (process.argv.includes("--test-target-guard")) {
     null
   ]
 ];
+  cases.push(
+    ["https://bbos-api-signa-rc2-test123.onrender.com/api", "https://bbos-api-signa-rc2-test123.onrender.com", null],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api", "https://bbos-api-homolog-8w8f.onrender.com", "render"],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api/", "https://bbos-api-homolog-8w8f.onrender.com", "render"],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api", "", null],
+    ["https://bbos-api-homolog-other.onrender.com/api", "https://bbos-api-homolog-other.onrender.com", null],
+    ["https://bbos-api-rc1.onrender.com/api", "https://bbos-api-homolog-8w8f.onrender.com", null],
+    ["https://bbos-api-homolog-8w8f.onrender.com.evil.example/api", "https://bbos-api-homolog-8w8f.onrender.com.evil.example", null],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api?x=1", "https://bbos-api-homolog-8w8f.onrender.com", null]
+  );
   for (const [api, expectedOrigin, expected] of cases) assert.equal(target(api, expectedOrigin), expected, api);
   console.log(`PASS ${cases.length}/${cases.length} target guard cases (no network)`);
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const health = { status: "ok", scope: "coffee-operating-system", release: commit.slice(0, 12) };
+  const releaseCases = [
+    [health, commit, true],
+    [health, "", false],
+    [health, commit.slice(0, 12), false],
+    [health, commit + "\n", false],
+    [health, "g".repeat(40), false],
+    [{ ...health, release: "signa-homolog" }, commit, false],
+    [{ ...health, release: "fedcba987654" }, commit, false],
+    [{ ...health, status: "error" }, commit, false],
+    [{ ...health, scope: "other" }, commit, false],
+    [null, commit, false]
+  ];
+  for (const [payload, sha, expected] of releaseCases) assert.equal(matchesRenderRelease(payload, sha), expected);
+  console.log(`PASS ${releaseCases.length}/${releaseCases.length} remote release guard cases (no network)`);
   process.exit(0);
 }
 
@@ -149,9 +193,27 @@ const rawApi = process.env.SIGNA_E2E_API ?? "";
 const password = process.env.SIGNA_E2E_PASSWORD ?? "";
 if (!rawApi || !password) { console.error("Defina SIGNA_E2E_API e SIGNA_E2E_PASSWORD."); process.exit(2); }
 const kind = target(rawApi, process.env.SIGNA_E2E_RENDER_ORIGIN ?? "");
-if (!kind) { console.error("Recusado: use loopback ou a origem RC2 exata aprovada no Render, com /api."); process.exit(2); }
+if (!kind) { console.error("Recusado: use loopback ou a origem RC3 exata aprovada no Render, com /api."); process.exit(2); }
 const local = kind === "local";
 const api = rawApi.replace(/\/$/, "");
+
+if (!local) {
+  const expectedCommit = process.env.SIGNA_E2E_RENDER_COMMIT ?? "";
+  if (!validRenderCommit(expectedCommit)) {
+    console.error("Recusado: informe o SHA completo aprovado em SIGNA_E2E_RENDER_COMMIT.");
+    process.exit(2);
+  }
+  try {
+    const response = await fetch(`${api}/health`, { redirect: "error", cache: "no-store", signal: AbortSignal.timeout(30000) });
+    if (response.status !== 200 || !matchesRenderRelease(await response.json(), expectedCommit)) {
+      throw new Error("release incompatível");
+    }
+  } catch {
+    console.error("Recusado: não foi possível confirmar a release esperada no health da API. Nenhum login executado.");
+    process.exit(2);
+  }
+  console.log("PASS release remota compatível com o SHA esperado (prefixo de 12 caracteres)");
+}
 
 const results = [];
 async function check(name, fn) {

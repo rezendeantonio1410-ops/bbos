@@ -4,45 +4,90 @@
 # - BACKUP_DATABASE_URL: EMPTY database that receives the restore (refused if not empty).
 # - REHEARSAL_DATABASE_NAME (optional): extra database created in the backup
 #   instance with the same restore, for rehearsing migrations on real data.
-# Prints BACKUP_VERIFIED only when every table has the same exact row count.
+# Prints BACKUP_VERIFIED only when counts match across non-system schemas.
+# Counts are not a content checksum; retry if concurrent writes change them.
 # Connection strings are never printed.
 set -eu
 : "${SOURCE_DATABASE_URL:?}" "${BACKUP_DATABASE_URL:?}"
 SRC="$SOURCE_DATABASE_URL"; DST="$BACKUP_DATABASE_URL"
-DUMP=/tmp/source.dump
-COUNT_SQL="SELECT table_name || '|' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1"
+# The optional rehearsal URL is derived from a simple PostgreSQL URI. Refuse
+# ambiguous connection strings before touching either database; a query string
+# can override the database or host, and arbitrary names are unsafe SQL/URI input.
+if [ -n "${REHEARSAL_DATABASE_NAME:-}" ]; then
+  case "$REHEARSAL_DATABASE_NAME" in
+    [a-z_]*) ;;
+    *) echo "BACKUP: RECUSADO - nome de ensaio invalido"; exit 2 ;;
+  esac
+  case "$REHEARSAL_DATABASE_NAME" in
+    *[!a-z0-9_]*) echo "BACKUP: RECUSADO - nome de ensaio invalido"; exit 2 ;;
+  esac
+  if [ "${#REHEARSAL_DATABASE_NAME}" -gt 63 ]; then
+    echo "BACKUP: RECUSADO - nome de ensaio invalido"; exit 2
+  fi
+  case "$DST" in
+    *\?*|*\#*) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+    postgres://*|postgresql://*) ;;
+    *) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+  esac
+  # Require one explicit database path, not a missing database or nested path.
+  dst_path="${DST#*://}"
+  case "$dst_path" in
+    */*) ;;
+    *) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+  esac
+  dst_db="${dst_path#*/}"
+  case "$dst_db" in
+    ''|*[!a-zA-Z0-9_-]*) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+  esac
+  if [ "$dst_db" = "$REHEARSAL_DATABASE_NAME" ]; then
+    echo "BACKUP: RECUSADO - ensaio deve usar banco distinto"; exit 2
+  fi
+fi
+# Private per-run storage: concurrent jobs must never share a dump or counts.
+umask 077
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/bbos-backup.XXXXXXXX")"
+trap 'rm -rf -- "$WORK"' 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+DUMP="$WORK/source.dump"
+COUNT_SQL="SELECT format('%I.%I', table_schema, table_name) || '|' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_schema <> 'information_schema' AND left(table_schema, 3) <> 'pg_' AND table_type = 'BASE TABLE' ORDER BY 1"
 
 counts() { psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$COUNT_SQL"; }
 total() { awk -F'|' '{ s += $2 } END { print s + 0 }' "$1"; }
 
 echo "BACKUP: inicio $(date -u +%FT%TZ)"
-if [ "$(psql "$DST" -X -A -t -c "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'")" != "0" ]; then
+# Refuse existing user relations in ANY schema, even if public is empty.
+# A failed catalog query must not be interpreted as an empty target.
+if ! existing="$(psql "$DST" -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname <> 'information_schema' AND left(n.nspname, 3) <> 'pg_' AND c.relkind IN ('r','p','v','m','S','f')")"; then
+  echo "BACKUP: RECUSADO - falha ao verificar o banco de destino"; exit 2
+fi
+if [ "$existing" != "0" ]; then
   echo "BACKUP: RECUSADO - o banco de destino nao esta vazio"; exit 2
 fi
 psql "$SRC" -X -A -t -c "SELECT 'BACKUP: origem ' || current_database() || ', ' || pg_size_pretty(pg_database_size(current_database())) || ', postgres ' || current_setting('server_version')"
-counts "$SRC" > /tmp/before.txt
+counts "$SRC" > "$WORK/before.txt"
 pg_dump --format=custom --no-owner --no-privileges --dbname="$SRC" --file="$DUMP"
-counts "$SRC" > /tmp/after.txt
+counts "$SRC" > "$WORK/after.txt"
 echo "BACKUP: dump bytes=$(wc -c < "$DUMP") sha256=$(sha256sum "$DUMP" | cut -c1-64)"
-if ! diff -q /tmp/before.txt /tmp/after.txt > /dev/null; then
-  echo "BACKUP: aviso - a origem mudou durante o dump (gravacoes concorrentes); a verificacao usa o estado do dump"
+if ! diff -q "$WORK/before.txt" "$WORK/after.txt" > /dev/null; then
+  echo "BACKUP: RECUSADO - contagens da origem mudaram durante o dump; repetir em janela estavel"; exit 1
 fi
 pg_restore --exit-on-error --single-transaction --no-owner --no-privileges --dbname="$DST" "$DUMP" || { echo "BACKUP: FALHA na restauracao"; exit 1; }
-# pg_dump uses a single snapshot; compare the copy against the source counts
-# taken right after the dump (identical when there were no writes meanwhile).
-counts "$DST" > /tmp/copy.txt
-echo "BACKUP: tabelas origem=$(wc -l < /tmp/after.txt) copia=$(wc -l < /tmp/copy.txt) linhas origem=$(total /tmp/after.txt) copia=$(total /tmp/copy.txt)"
-if diff /tmp/after.txt /tmp/copy.txt > /tmp/diff.txt; then
+# Compare the restored counts against stable before/after source counts.
+# This verifies row counts, not content equality or a shared snapshot.
+counts "$DST" > "$WORK/copy.txt"
+echo "BACKUP: tabelas origem=$(wc -l < "$WORK/after.txt") copia=$(wc -l < "$WORK/copy.txt") linhas origem=$(total "$WORK/after.txt") copia=$(total "$WORK/copy.txt")"
+if diff "$WORK/after.txt" "$WORK/copy.txt" > "$WORK/diff.txt"; then
   echo "BACKUP_VERIFIED: contagem exata de linhas identica em todas as tabelas"
 else
-  echo "BACKUP_MISMATCH:"; head -20 /tmp/diff.txt; exit 1
+  echo "BACKUP_MISMATCH:"; head -20 "$WORK/diff.txt"; exit 1
 fi
 if [ -n "${REHEARSAL_DATABASE_NAME:-}" ]; then
   REH="${DST%/*}/${REHEARSAL_DATABASE_NAME}"
   psql "$DST" -X -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${REHEARSAL_DATABASE_NAME}\""
   pg_restore --exit-on-error --single-transaction --no-owner --no-privileges --dbname="$REH" "$DUMP" || { echo "REHEARSAL_COPY_FAILED"; exit 1; }
-  counts "$REH" > /tmp/rehearsal.txt
-  if diff -q /tmp/after.txt /tmp/rehearsal.txt > /dev/null; then echo "REHEARSAL_COPY_READY: ${REHEARSAL_DATABASE_NAME}"; else echo "REHEARSAL_COPY_MISMATCH"; exit 1; fi
+  counts "$REH" > "$WORK/rehearsal.txt"
+  if diff -q "$WORK/after.txt" "$WORK/rehearsal.txt" > /dev/null; then echo "REHEARSAL_COPY_READY: ${REHEARSAL_DATABASE_NAME}"; else echo "REHEARSAL_COPY_MISMATCH"; exit 1; fi
 fi
-rm -f "$DUMP"
 echo "BACKUP: fim $(date -u +%FT%TZ)"
