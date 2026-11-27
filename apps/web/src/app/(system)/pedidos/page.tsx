@@ -637,6 +637,8 @@ export default function OrdersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [variants, setVariants] = useState<StockOption[]>([]);
   const [brokers, setBrokers] = useState<Broker[]>([]);
+  // Cliente já escolhido ao abrir "Novo pedido" pela carteira do vendedor (?cliente=).
+  const [newOrderCustomerId, setNewOrderCustomerId] = useState("");
   const [creating, setCreating] = useState<"COMMERCIAL" | "SAMPLE" | null>(
     null,
   );
@@ -722,9 +724,11 @@ export default function OrdersPage() {
 
   const closeNewOrder = () => {
     setCreating(null);
+    setNewOrderCustomerId("");
     const url = new URL(window.location.href);
     if (!url.searchParams.has("novo")) return;
     url.searchParams.delete("novo");
+    url.searchParams.delete("cliente");
     window.history.replaceState(
       {},
       "",
@@ -736,6 +740,7 @@ export default function OrdersPage() {
     void refresh();
     const searchParams = new URLSearchParams(window.location.search);
     if (searchParams.get("novo") === "1") {
+      setNewOrderCustomerId(searchParams.get("cliente") ?? "");
       setCreating("COMMERCIAL");
     }
     if (searchParams.get("filtro") === "atrasados") {
@@ -1177,6 +1182,7 @@ export default function OrdersPage() {
           customers={customers}
           variants={variants}
           brokers={brokers}
+          initialCustomerId={newOrderCustomerId}
           onClose={closeNewOrder}
           onCreated={async () => {
             closeNewOrder();
@@ -1635,6 +1641,7 @@ function NewOrder({
   customers,
   variants,
   brokers,
+  initialCustomerId,
   onClose,
   onCreated,
 }: {
@@ -1643,6 +1650,7 @@ function NewOrder({
   customers: Customer[];
   variants: StockOption[];
   brokers: Broker[];
+  initialCustomerId?: string;
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -2048,6 +2056,17 @@ function NewOrder({
       })
       .catch(() => setOrderNumber("—"));
   }, []);
+
+  // Vindo da carteira do vendedor: escolhe o cliente uma vez, quando a lista chega.
+  const appliedInitialCustomer = useRef(false);
+  useEffect(() => {
+    if (appliedInitialCustomer.current || !initialCustomerId || customerId) return;
+    const chosen = customers.find((candidate) => candidate.id === initialCustomerId);
+    if (!chosen) return;
+    appliedInitialCustomer.current = true;
+    chooseCustomer(chosen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCustomerId, customers, customerId]);
 
   useEffect(() => {
     if (

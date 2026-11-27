@@ -39,6 +39,7 @@ import {
   type TodaySales,
 } from "@/lib/command-center-v6";
 import { CommandCenterV4 } from "./command-center-v4";
+import { SellerPortfolio } from "./seller-portfolio";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -702,6 +703,8 @@ function SalesHome({
           tone="amber"
         />
       </section>
+
+      <SellerPortfolio />
 
       <section className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
         <div className="rounded-[20px] border border-stone-200 bg-white p-5 shadow-[0_4px_18px_rgba(18,37,33,.035)]">
