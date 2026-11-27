@@ -34,3 +34,13 @@ test("partner writes keep the compatibility broker profile synchronized", () => 
   assert.match(partners, /businessPartnerId:\s*partner\.id/);
   assert.match(partners, /broker\.id AS "brokerId"/);
 });
+
+test("vendedor com regra 'Sem comissão' registra pedido sem corretor nem comissão", () => {
+  const orders = readFileSync(join(__dirname, "sales-orders.controller.ts"), "utf8");
+  const partners = readFileSync(join(__dirname, "storefront-partners.controller.ts"), "utf8");
+  assert.match(partners, /\["PERCENTAGE", "PER_PACKAGE", "NONE"\]/);
+  assert.match(orders, /representative && mode === "NONE"/);
+  assert.match(orders, /brokerId = undefined;/);
+  // Sem regra nenhuma continua bloqueando.
+  assert.match(orders, /A comissão deste representante ainda não foi configurada/);
+});

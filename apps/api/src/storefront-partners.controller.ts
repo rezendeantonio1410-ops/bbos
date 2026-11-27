@@ -35,7 +35,8 @@ const salesCommissionPolicy = (value: Record<string, any>) => {
   const mode = String(value.salesCommissionMode ?? "")
     .trim()
     .toUpperCase();
-  if (mode && !["PERCENTAGE", "PER_PACKAGE"].includes(mode)) {
+  // NONE = vende sem comissão (decisão explícita da liderança; não bloqueia a venda).
+  if (mode && !["PERCENTAGE", "PER_PACKAGE", "NONE"].includes(mode)) {
     throw new BadRequestException("Modalidade de comissão inválida.");
   }
   const percent =

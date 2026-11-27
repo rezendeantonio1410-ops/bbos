@@ -29,7 +29,7 @@ type Partner = {
   isSalesPartner: boolean;
   isSalesBroker: boolean;
   isGreenCoffeeBroker: boolean;
-  salesCommissionMode?: "PERCENTAGE" | "PER_PACKAGE" | null;
+  salesCommissionMode?: "PERCENTAGE" | "PER_PACKAGE" | "NONE" | null;
   salesCommissionPercent?: string | number | null;
   salesCommissionPerPackage?: string | number | null;
   portalUserId?: string | null;
@@ -302,11 +302,17 @@ export default function StorefrontPartnersPage() {
             </div>
             {partner.salesCommissionMode && (
               <p className="mt-3 rounded-lg bg-violet-50 px-3 py-2 text-[11px] font-semibold text-violet-800">
-                Comissão de venda:{" "}
-                {partner.salesCommissionMode === "PER_PACKAGE"
-                  ? `${Number(partner.salesCommissionPerPackage ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por pacote`
-                  : `${Number(partner.salesCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`}
-                . Liberação após a quitação; pagamento no dia 02.
+                {partner.salesCommissionMode === "NONE" ? (
+                  "Vende sem comissão."
+                ) : (
+                  <>
+                    Comissão de venda:{" "}
+                    {partner.salesCommissionMode === "PER_PACKAGE"
+                      ? `${Number(partner.salesCommissionPerPackage ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por pacote`
+                      : `${Number(partner.salesCommissionPercent ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`}
+                    . Liberação após a quitação; pagamento no dia 02.
+                  </>
+                )}
               </p>
             )}
             {partner.portalUserId && (
@@ -489,7 +495,8 @@ export default function StorefrontPartnersPage() {
                       name="salesCommissionMode"
                       defaultValue={selected?.salesCommissionMode ?? ""}
                     >
-                      <option value="">Sem comissão configurada</option>
+                      <option value="">Não configurada (bloqueia vendas)</option>
+                      <option value="NONE">Sem comissão (vende normalmente)</option>
                       <option value="PERCENTAGE">Percentual da venda</option>
                       <option value="PER_PACKAGE">Valor por pacote</option>
                     </select>

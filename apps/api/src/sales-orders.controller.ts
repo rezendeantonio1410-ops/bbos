@@ -1160,19 +1160,28 @@ export class SalesOrdersController {
       ).toUpperCase();
       const percent = Number(representative?.salesCommissionPercent ?? 0);
       const perPackage = Number(representative?.salesCommissionPerPackage ?? 0);
-      const policyIsValid =
-        representative?.brokerProfile?.active === true &&
-        ((mode === "PERCENTAGE" && percent > 0 && percent <= 100) ||
-          (mode === "PER_PACKAGE" && perPackage > 0));
-      if (!policyIsValid) {
-        throw new BadRequestException(
-          "A comissão deste representante ainda não foi configurada. Solicite a José ou Suzi a definição da regra antes de registrar o pedido.",
-        );
+      // "Sem comissão" (NONE): a liderança liberou o vendedor a vender sem
+      // comissão; o pedido é registrado sem corretor e sem comissão.
+      if (representative && mode === "NONE") {
+        brokerId = undefined;
+        brokerCommissionMode = undefined;
+        brokerCommissionPercent = 0;
+        brokerCommissionPerPackage = 0;
+      } else {
+        const policyIsValid =
+          representative?.brokerProfile?.active === true &&
+          ((mode === "PERCENTAGE" && percent > 0 && percent <= 100) ||
+            (mode === "PER_PACKAGE" && perPackage > 0));
+        if (!policyIsValid) {
+          throw new BadRequestException(
+            "A comissão deste representante ainda não foi configurada. Solicite a José ou Suzi a definição da regra (ou \"Sem comissão\") antes de registrar o pedido.",
+          );
+        }
+        brokerId = representative!.brokerProfile!.id;
+        brokerCommissionMode = mode;
+        brokerCommissionPercent = mode === "PERCENTAGE" ? percent : 0;
+        brokerCommissionPerPackage = mode === "PER_PACKAGE" ? perPackage : 0;
       }
-      brokerId = representative.brokerProfile!.id;
-      brokerCommissionMode = mode;
-      brokerCommissionPercent = mode === "PERCENTAGE" ? percent : 0;
-      brokerCommissionPerPackage = mode === "PER_PACKAGE" ? perPackage : 0;
     }
 
     if (
