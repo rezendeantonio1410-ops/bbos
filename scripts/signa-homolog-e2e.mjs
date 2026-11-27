@@ -9,11 +9,16 @@ import { randomUUID } from "node:crypto";
 
 // Remote tests require the exact RC2 origin from the reviewed Render service.
 // Example: SIGNA_E2E_RENDER_ORIGIN=https://bbos-api-signa-rc2-XXXX.onrender.com
+// Existing service: https://bbos-api-homolog-8w8f.onrender.com (only AFTER verifying the RC2 deploy SHA, isolated DB and disabled integrations in Render).
 // SIGNA_E2E_API must be that origin plus /api. Never use production or RC1.
 function classifyTarget(api, expectedOrigin) {
   const local = /^(?:http|https):\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::([0-9]{1,5}))?\/api\/?$/.exec(api);
   if (local && (!local[1] || (Number(local[1]) > 0 && Number(local[1]) <= 65535))) return "local";
-  if (/^https:\/\/bbos-api-signa-rc2-[a-z0-9]+\.onrender\.com$/.test(expectedOrigin) &&
+  // Existing isolated homolog service retains its original Render hostname when RC2 is deployed.
+  // Still require the exact explicitly approved origin; never accept arbitrary homolog hostnames.
+  const approvedRenderOrigin = expectedOrigin === "https://bbos-api-homolog-8w8f.onrender.com" ||
+    /^https:\/\/bbos-api-signa-rc2-[a-z0-9]+\.onrender\.com$/.test(expectedOrigin);
+  if (approvedRenderOrigin &&
       (api === expectedOrigin + "/api" || api === expectedOrigin + "/api/")) return "render";
   return null;
 }
@@ -140,6 +145,15 @@ if (process.argv.includes("--test-target-guard")) {
     null
   ]
 ];
+  cases.push(
+    ["https://bbos-api-homolog-8w8f.onrender.com/api", "https://bbos-api-homolog-8w8f.onrender.com", "render"],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api/", "https://bbos-api-homolog-8w8f.onrender.com", "render"],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api", "", null],
+    ["https://bbos-api-homolog-other.onrender.com/api", "https://bbos-api-homolog-other.onrender.com", null],
+    ["https://bbos-api-rc1.onrender.com/api", "https://bbos-api-homolog-8w8f.onrender.com", null],
+    ["https://bbos-api-homolog-8w8f.onrender.com.evil.example/api", "https://bbos-api-homolog-8w8f.onrender.com.evil.example", null],
+    ["https://bbos-api-homolog-8w8f.onrender.com/api?x=1", "https://bbos-api-homolog-8w8f.onrender.com", null]
+  );
   for (const [api, expectedOrigin, expected] of cases) assert.equal(target(api, expectedOrigin), expected, api);
   console.log(`PASS ${cases.length}/${cases.length} target guard cases (no network)`);
   process.exit(0);
