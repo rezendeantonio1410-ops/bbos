@@ -85,7 +85,8 @@ export class NotificationsController {
       .filter(
         (item) =>
           item.type.startsWith("CREDIT_") ||
-          item.type.startsWith("SALES_RECEIVABLE_OVERDUE:"),
+          item.type.startsWith("SALES_RECEIVABLE_OVERDUE:") ||
+          item.type.startsWith("SALES_PORTFOLIO_"),
       )
       .map((item) => item.type.split(":")[1])
       .filter(Boolean);
@@ -135,7 +136,8 @@ export class NotificationsController {
       }
       if (
         item.type.startsWith("CREDIT_") ||
-        item.type.startsWith("SALES_RECEIVABLE_OVERDUE:")
+        item.type.startsWith("SALES_RECEIVABLE_OVERDUE:") ||
+        item.type.startsWith("SALES_PORTFOLIO_")
       ) {
         return visibleCustomerIds.has(item.type.split(":")[1]);
       }

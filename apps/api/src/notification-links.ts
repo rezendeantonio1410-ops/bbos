@@ -27,6 +27,8 @@ export function keepOpenDeliveryExceptions<T extends { type: string }>(
 }
 
 export function notificationHref(type: string, purchaseId: string | null) {
+  // Avisos da carteira do vendedor abrem a tela "Minha carteira" (início).
+  if (type.startsWith("SALES_PORTFOLIO_")) return "/home#carteira";
   if (type.startsWith("SALES_RECEIVABLE_OVERDUE")) {
     const customerId = type.split(":")[1];
     return customerId
