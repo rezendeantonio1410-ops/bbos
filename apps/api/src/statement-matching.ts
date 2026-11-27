@@ -42,7 +42,7 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export const INCOME_CATEGORIES = [
-  "Venda sem pedido no BBOS", "Vendas no cartão", "Exportação · amostra", "Exportação · contrato",
+  "Venda sem pedido no BBOS", "Repasse Mercado Pago (Mercado Livre e loja)", "Vendas no cartão", "Exportação · amostra", "Exportação · contrato",
   "Aporte do sócio", "Transferência entre contas", "Rendimentos", "Outras entradas",
 ] as const;
 
@@ -64,7 +64,9 @@ const EXPENSE_RULES: Array<[RegExp, string]> = [
 
 const INCOME_RULES: Array<[RegExp, string]> = [
   [/REND|APLIC/i, "Rendimentos"],
-  [/REDECARD|REDE (VISA|MAST|ELO)|CIELO|STONE|GETNET|PAGSEGURO|MERCADO ?PAGO/i, "Vendas no cartão"],
+  // Transferência do Mercado Pago para o Itaú: dinheiro do Mercado Livre e da loja online.
+  [/MERCADO ?PAGO|MERCADOPAGO|MERCADO ?LIVRE|MERCADOLIVRE/i, "Repasse Mercado Pago (Mercado Livre e loja)"],
+  [/REDECARD|REDE (VISA|MAST|ELO)|CIELO|STONE|GETNET|PAGSEGURO/i, "Vendas no cartão"],
 ];
 
 const tokens = (value: string) =>

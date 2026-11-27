@@ -141,3 +141,11 @@ test("open receivables are settled, payments in another account are recognized, 
   // Comissão criada só em 13/10 não recebe um Pix de 01/10.
   assert.equal(by.early!.group, "EXPENSE");
 });
+
+test("transferência do Mercado Pago vira repasse do Mercado Livre e da loja, não venda no cartão", async () => {
+  const { suggestIncome } = await import("./statement-matching");
+  const line = { description: "PIX RECEBIDO", counterparty: "MERCADO PAGO INSTITUICAO DE PAGAMENTO", taxId: "10573521000191", amount: 1200, date: "2026-12-12" } as never;
+  assert.equal(suggestIncome(line, { companyTaxId: "11222333000181", ownerNames: [] }).category, "Repasse Mercado Pago (Mercado Livre e loja)");
+  const card = { description: "REDE VISA CREDITO", counterparty: "REDECARD", taxId: "", amount: 300, date: "2026-12-12" } as never;
+  assert.equal(suggestIncome(card, { companyTaxId: "11222333000181", ownerNames: [] }).category, "Vendas no cartão");
+});
