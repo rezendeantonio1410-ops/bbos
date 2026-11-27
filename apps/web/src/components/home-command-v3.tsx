@@ -212,6 +212,7 @@ export function HomeCommandV3() {
             payables: summary?.payableProjection,
             purchases: summary?.greenCoffeePurchaseProjection,
             taxes: summary?.taxProjection,
+            marketplace: summary?.marketplaceProjection,
           }),
         });
       })

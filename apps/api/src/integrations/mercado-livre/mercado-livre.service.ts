@@ -367,13 +367,23 @@ export class MercadoLivreService {
       ? new Date(payload.date_created)
       : null;
     const grossAmount = Number(payload.total_amount ?? 0);
-    const feeAmount = Array.isArray(payload.payments)
+    // A tarifa do Mercado Livre vem por item (sale_fee × quantidade); o campo
+    // marketplace_fee do pagamento costuma vir vazio.
+    const paymentFee = Array.isArray(payload.payments)
       ? payload.payments.reduce(
           (sum: number, payment: any) =>
             sum + Number(payment.marketplace_fee ?? 0),
           0,
         )
       : 0;
+    const itemFee = Array.isArray(payload.order_items)
+      ? payload.order_items.reduce(
+          (sum: number, item: any) =>
+            sum + Number(item?.sale_fee ?? 0) * (Number(item?.quantity ?? 1) || 1),
+          0,
+        )
+      : 0;
+    const feeAmount = Math.round(Math.max(paymentFee, itemFee) * 100) / 100;
     const inserted = await this.database.$queryRawUnsafe<any[]>(
       `INSERT INTO "MarketplaceOrderInbox"
         (id,"companyId","salesChannelId",provider,"externalOrderId","externalStatus",

@@ -59,7 +59,7 @@
     "test:sales-order-billing": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-order-billing.test.ts ../../apps/api/src/sales-order-receivable.test.ts",
     "test:sales-map": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-map.test.ts",
     "test:signa-reserva": "corepack pnpm --filter @bbos/database exec tsx --tsconfig ../../apps/api/tsconfig.json --test ../../apps/api/src/partner-portal-signa-reserva.test.ts",
-    "test:sales-summary": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-summary.test.ts ../../apps/api/src/municipality-shapes.test.ts ../../apps/api/src/marketplace-geo.test.ts"
+    "test:sales-summary": "corepack pnpm --filter @bbos/database exec node --import tsx --test ../../apps/api/src/sales-summary.test.ts ../../apps/api/src/municipality-shapes.test.ts ../../apps/api/src/marketplace-geo.test.ts ../../apps/api/src/marketplace-cash.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",

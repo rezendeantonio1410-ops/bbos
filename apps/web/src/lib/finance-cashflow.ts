@@ -1,4 +1,4 @@
-export type CashFlowKind = "RECEIVABLE" | "PAYABLE" | "PURCHASE" | "TAX";
+export type CashFlowKind = "RECEIVABLE" | "PAYABLE" | "PURCHASE" | "TAX" | "MARKETPLACE";
 
 /** Estimated tax payment (management estimate, from the finance settings). */
 export type TaxProjectionSource = {
@@ -94,6 +94,8 @@ export function buildCashFlowLines(input: {
   payables?: CashFlowProjectionSource[];
   purchases?: GreenCoffeeProjectionSource[];
   taxes?: TaxProjectionSource[];
+  /** Marketplace a liberar (líquido, estimado). */
+  marketplace?: CashFlowProjectionSource[];
 }) {
   const receivables = (input.receivables ?? [])
     .filter(
@@ -167,7 +169,22 @@ export function buildCashFlowLines(input: {
       };
     });
 
-  const ordered = [...receivables, ...payables, ...purchases, ...taxes].sort(
+  const marketplace = (input.marketplace ?? [])
+    .filter((item) => amount(item.amount) > 0)
+    .map((item) => ({
+      id: `marketplace-${item.id}`,
+      kind: "MARKETPLACE" as const,
+      dueDate: item.dueDate,
+      document: item.document || "Vendas",
+      counterparty: item.counterparty || "Marketplace · a liberar",
+      description: item.description || "Valor líquido a liberar",
+      status: "Estimado",
+      group: "Marketplace",
+      amount: amount(item.amount),
+      signedAmount: amount(item.amount),
+    }));
+
+  const ordered = [...receivables, ...payables, ...purchases, ...taxes, ...marketplace].sort(
     (left, right) => {
       const byDate =
         new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime();

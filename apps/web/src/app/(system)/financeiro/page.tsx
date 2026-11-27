@@ -39,6 +39,7 @@ type FinanceSummary = {
   transactions?: unknown[];
   receivableProjection?: CashFlowProjectionSource[];
   payableProjection?: CashFlowProjectionSource[];
+  marketplaceProjection?: CashFlowProjectionSource[];
   greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
   settings?: { cashStartDate?: string | null };
 };
@@ -140,6 +141,7 @@ export default function FinancePage() {
         receivables: data.receivableProjection,
         payables: data.payableProjection,
         purchases: data.greenCoffeePurchaseProjection,
+        marketplace: data.marketplaceProjection,
       }),
     [data],
   );

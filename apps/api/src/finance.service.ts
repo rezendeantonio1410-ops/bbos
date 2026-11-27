@@ -1,3 +1,4 @@
+import { MARKETPLACE_RELEASE_DAYS, marketplaceReleases } from "./marketplace-cash";
 import {
   BadRequestException,
   Injectable,
@@ -89,6 +90,29 @@ export class FinanceService implements OnModuleDestroy {
       return Number(result?._sum?.amount ?? 0);
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Vendas de marketplace ainda não importadas e ainda não liberadas: entram no
+   * fluxo de caixa como "a liberar" (líquido, ~15 dias após a venda).
+   */
+  private async marketplaceProjection(companyId?: string) {
+    if (!companyId) return [];
+    try {
+      const rows = await this.database.$queryRawUnsafe<any[]>(
+        `SELECT COALESCE(moi."orderedAt",moi."firstSeenAt") AS "orderedAt",
+                COALESCE(moi."grossAmount",0)::float AS gross,COALESCE(NULLIF(moi."feeAmount",0),(SELECT SUM(COALESCE((oi->>'sale_fee')::numeric,0)*COALESCE((oi->>'quantity')::numeric,1)) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(moi.payload->'order_items')='array' THEN moi.payload->'order_items' ELSE '[]'::jsonb END) oi),0)::float AS fee,ch.name AS channel
+           FROM "MarketplaceOrderInbox" moi
+           JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+          WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
+            AND LOWER(COALESCE(moi."externalStatus",'')) NOT IN ('cancelled','canceled','cancelado')
+            AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=NOW()-INTERVAL '${MARKETPLACE_RELEASE_DAYS + 1} days'`,
+        companyId,
+      );
+      return marketplaceReleases(rows);
+    } catch {
+      return [];
     }
   }
 
@@ -270,6 +294,7 @@ export class FinanceService implements OnModuleDestroy {
       accounts,
       transactions,
       paidLast30Days: await this.paidLast30Days(companyId),
+      marketplaceProjection: await this.marketplaceProjection(companyId),
       receivableProjection,
       payableProjection,
       greenCoffeePurchaseProjection,

@@ -144,3 +144,14 @@ test("weekly buckets, overdue in the first week, and group totals", () => {
   assert.equal(payableGroup("Frete / logística · Melhor Envio"), "Frete / logística");
   assert.equal(payableGroup("ALUGUEL"), "Aluguel");
 });
+
+test("marketplace a liberar entra como entrada estimada no fluxo", () => {
+  const lines = buildCashFlowLines({
+    cash: 1000,
+    marketplace: [{ id: "ml-2026-12-12", document: "2 vendas", counterparty: "Mercado Livre · a liberar", dueDate: "2026-12-12", amount: 134.6, status: "OPEN" }],
+  });
+  const line = lines.find((item) => item.kind === "MARKETPLACE");
+  assert.equal(line?.signedAmount, 134.6);
+  assert.equal(line?.status, "Estimado");
+  assert.equal(line?.counterparty, "Mercado Livre · a liberar");
+});

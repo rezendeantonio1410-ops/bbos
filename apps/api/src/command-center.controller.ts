@@ -274,7 +274,7 @@ export class CommandCenterController {
     const since = key === "today" ? today : key === "7d" ? new Date(today.getTime() - 6 * 86_400_000) : saoPauloMonth(now).start;
     const rows = await this.database.$queryRawUnsafe<any[]>(
       `SELECT moi.id,moi."externalOrderId",moi."externalStatus",COALESCE(moi."orderedAt",moi."firstSeenAt") AS "orderedAt",
-              COALESCE(moi."grossAmount",0)::float AS gross,COALESCE(moi."feeAmount",0)::float AS fee,
+              COALESCE(moi."grossAmount",0)::float AS gross,COALESCE(NULLIF(moi."feeAmount",0),(SELECT SUM(COALESCE((oi->>'sale_fee')::numeric,0)*COALESCE((oi->>'quantity')::numeric,1)) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(moi.payload->'order_items')='array' THEN moi.payload->'order_items' ELSE '[]'::jsonb END) oi),0)::float AS fee,
               COALESCE(moi."freightAmount",0)::float AS freight,moi."importStatus",moi."salesOrderId",
               ch.name AS channel,ch."platformCode" AS platform,d.city,d.state,
               moi.payload->'order_items' AS items
