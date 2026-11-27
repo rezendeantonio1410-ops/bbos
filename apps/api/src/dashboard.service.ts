@@ -1,4 +1,5 @@
 import { productionAvailableWeight } from "./inventory-availability";
+import { marketplaceSummaryOrders } from "./marketplace-geo";
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { prisma, type Prisma } from "@bbos/database";
 import type {
@@ -971,13 +972,46 @@ export class DashboardService implements OnModuleDestroy {
     }
     if (portfolioPartnerId) visibility.push(salesOrderPortfolioWhere(portfolioPartnerId));
     const base = { companyId, orderType: "COMMERCIAL" as const, status: { not: "CANCELLED" as const }, ...(visibility.length ? { AND: visibility } : {}) };
-    const [orders, previous] = await Promise.all([
+    const [orders, previous, marketplace] = await Promise.all([
       this.db.salesOrder.findMany({ where: { ...base, orderedAt: { gte: start } }, select: salesMapOrderSelect }),
       this.db.salesOrder.findMany({
         where: { ...base, orderedAt: { gte: previousWindow.start, lt: previousWindow.end } },
         select: salesMapOrderSelect,
       }),
+      // Marketplace ainda só na caixa de entrada (sem pedido no BBOS): entra no
+      // mapa com a cidade de entrega. Não vale para visões restritas a parceiros.
+      excludePlatformOrders || portfolioPartnerId
+        ? Promise.resolve({ current: [], previous: [] })
+        : this.marketplaceGeoOrders(companyId, previousWindow.start, start),
     ]);
-    return buildSalesSummary(orders, previous, { start, now, previousStart: previousWindow.start });
+    return buildSalesSummary([...orders, ...marketplace.current], [...previous, ...marketplace.previous], { start, now, previousStart: previousWindow.start });
+  }
+
+  private async marketplaceGeoOrders(companyId: string, previousStart: Date, start: Date) {
+    try {
+      const rows = await this.db.$queryRawUnsafe<any[]>(
+        `SELECT moi.id,ch.name AS "channelName",COALESCE(moi."orderedAt",moi."firstSeenAt") AS "orderedAt",
+                moi."grossAmount",d.city,d.state,moi.payload
+           FROM "MarketplaceOrderInbox" moi
+           JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+           LEFT JOIN "MarketplaceOrderDestination" d ON d."inboxId"=moi.id
+          WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
+            AND LOWER(COALESCE(moi."externalStatus",'')) NOT IN ('cancelled','canceled','cancelado')
+            AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2`,
+        companyId,
+        previousStart,
+      );
+      const skus = await this.db.$queryRawUnsafe<Array<{ sku: string; grams: number }>>(
+        `SELECT UPPER(sku) AS sku,"netWeightGrams" AS grams FROM "ProductVariant" WHERE "netWeightGrams">0 AND sku IS NOT NULL`,
+      );
+      const grams = new Map(skus.map((row) => [row.sku, Number(row.grams)]));
+      const orders = marketplaceSummaryOrders(rows, grams);
+      return {
+        current: orders.filter((order) => new Date(order.orderedAt) >= start),
+        previous: orders.filter((order) => new Date(order.orderedAt) < start),
+      };
+    } catch {
+      return { current: [], previous: [] };
+    }
   }
 }
