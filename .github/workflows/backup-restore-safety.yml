@@ -36,6 +36,7 @@ jobs:
           CREATE DATABASE backup_ci;
           CREATE DATABASE broken_ci;
           CREATE DATABASE changed_ci;
+          CREATE DATABASE occupied_ci;
           SQL
           psql -X -v ON_ERROR_STOP=1 -d source_ci <<'SQL'
           CREATE SCHEMA fixture;
@@ -90,6 +91,28 @@ jobs:
           if grep -q '^BACKUP_VERIFIED:' /tmp/failure.log; then exit 1; fi
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d broken_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d source_ci -c 'SELECT count(*) FROM public.child')" = 1
+
+      - name: Occupied non-public destination must refuse before dump or restore
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/occupied_ci
+        run: |
+          set -eu
+          psql -X -v ON_ERROR_STOP=1 -d occupied_ci <<'SQL'
+          CREATE SCHEMA unrelated;
+          CREATE TABLE unrelated.sentinel (id integer PRIMARY KEY);
+          INSERT INTO unrelated.sentinel VALUES (42);
+          SQL
+          status=0
+          sh infra/db-backup/backup-and-verify.sh > /tmp/occupied.log 2>&1 || status=$?
+          cat /tmp/occupied.log
+          test "$status" = 2
+          grep -q 'RECUSADO - o banco de destino nao esta vazio' /tmp/occupied.log
+          if grep -Eq '^(BACKUP_VERIFIED:|BACKUP: dump bytes=)' /tmp/occupied.log; then exit 1; fi
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d occupied_ci -c 'SELECT id FROM unrelated.sentinel')" = 42
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d occupied_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d occupied_ci -c "SELECT to_regclass('fixture.extra') IS NULL")" = t
 
       - name: Source count change during dump must refuse verification
         shell: sh
