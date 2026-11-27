@@ -284,7 +284,8 @@ export default function PayablesPage() {
     setPayable(row);
     setPayment({
       amount: String(Number(row.openAmount || 0).toFixed(2)).replace(".", ","),
-      financialAccountId: options?.accounts[0]?.id ?? "",
+      // Conta do banco primeiro, não a primeira da lista em ordem alfabética.
+      financialAccountId: (options?.accounts.find((a) => a.type === "BANK") ?? options?.accounts[0])?.id ?? "",
       method: "PIX",
       paidAt: today(),
       notes: "",
@@ -308,7 +309,8 @@ export default function PayablesPage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(payment),
+          // Envia o valor já convertido ("15,10" → 15.1); o texto com vírgula virava NaN na API.
+          body: JSON.stringify({ ...payment, amount }),
         },
       );
       const body = await response.json().catch(() => ({}));

@@ -309,7 +309,12 @@ function DueAgenda({ rows, onReceive }: { rows: Receivable[]; onReceive: (row: R
 }
 
 function ReceiptDialog({ receivable, accounts, onClose, onDone }: { receivable: Receivable; accounts: FinancialAccount[]; onClose: () => void; onDone: (message: string) => Promise<void> }) {
-  const [accountId, setAccountId] = React.useState(accounts[0]?.id ?? "");
+  // Conta do banco primeiro (a ordem alfabética punha uma conta digital como padrão).
+  const [accountId, setAccountId] = React.useState(
+    (accounts.find((a) => /ita[uú]|banco|bank/i.test(`${a.name} ${a.financialInstitution?.name ?? ""}`)) ??
+      accounts.find((a) => !/frete|melhor envio|mercado pago/i.test(a.name)) ??
+      accounts[0])?.id ?? "",
+  );
   const [amount, setAmount] = React.useState(Number(receivable.openAmount).toFixed(2));
   const [paidAt, setPaidAt] = React.useState(localDate());
   const [method, setMethod] = React.useState("PIX");
