@@ -9,9 +9,13 @@ import {
 import { buildCustomerOrderPdf } from "./customer-order-pdf";
 import { isBillingEmailTemplate, replacedByInvoiceEmail } from "./billing-emails";
 import { NotificationSkipped, composeBillingEmail } from "./billing-email.service";
+import { partnerFromAddress, renderDirectShipmentEmail } from "./direct-shipment";
 
 type TransactionalEmail = {
   destination: string;
+  /** Nome exibido no remetente (envio em nome do parceiro); o endereço continua o verificado. */
+  fromName?: string;
+  replyTo?: string | null;
   subject: string;
   html: string;
   attachments?: Array<{
@@ -42,7 +46,7 @@ export class CustomerNotificationService {
   ) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     const from = process.env.STOREFRONT_FROM_EMAIL?.trim();
-    const replyTo = process.env.STOREFRONT_REPLY_TO?.trim();
+    const replyTo = message.replyTo?.trim() || process.env.STOREFRONT_REPLY_TO?.trim();
     if (!apiKey || !from) {
       if (options.allowUnconfigured) return "";
       throw new Error("RESEND_API_KEY/STOREFRONT_FROM_EMAIL não configurados.");
@@ -54,7 +58,7 @@ export class CustomerNotificationService {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        from,
+        from: message.fromName ? partnerFromAddress(message.fromName, from) : from,
         to: [message.destination],
         ...(replyTo ? { reply_to: replyTo } : {}),
         subject: message.subject,
@@ -80,6 +84,15 @@ export class CustomerNotificationService {
       });
       return this.sendTransactionalEmail({
         destination: row.destination,
+        ...email,
+      });
+    }
+    if (row.template === "PARTNER_DIRECT_SHIPMENT") {
+      const email = renderDirectShipmentEmail(payload);
+      return this.sendTransactionalEmail({
+        destination: row.destination,
+        fromName: String(payload.partnerName || ""),
+        replyTo: payload.partnerReplyTo ? String(payload.partnerReplyTo) : null,
         ...email,
       });
     }
