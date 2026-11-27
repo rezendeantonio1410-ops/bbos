@@ -35,6 +35,7 @@ jobs:
           CREATE DATABASE source_ci;
           CREATE DATABASE backup_ci;
           CREATE DATABASE broken_ci;
+          CREATE DATABASE changed_ci;
           SQL
           psql -X -v ON_ERROR_STOP=1 -d source_ci <<'SQL'
           CREATE SCHEMA fixture;
@@ -84,3 +85,32 @@ jobs:
           if grep -q '^BACKUP_VERIFIED:' /tmp/failure.log; then exit 1; fi
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d broken_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
           test "$(psql -XAt -v ON_ERROR_STOP=1 -d source_ci -c 'SELECT count(*) FROM public.child')" = 1
+
+      - name: Source count change during dump must refuse verification
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/changed_ci
+        run: |
+          set -eu
+          REAL_PG_DUMP="$(command -v pg_dump)"
+          export REAL_PG_DUMP
+          mkdir -p /tmp/signa-dump-test
+          cat > /tmp/signa-dump-test/pg_dump <<'SH'
+          #!/bin/sh
+          set -eu
+          "$REAL_PG_DUMP" "$@"
+          # Synthetic CI fixture only: simulate a concurrent write after the dump.
+          psql "$SOURCE_DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'INSERT INTO fixture.extra VALUES (4)' >/dev/null
+          SH
+          chmod +x /tmp/signa-dump-test/pg_dump
+          if PATH="/tmp/signa-dump-test:$PATH" sh infra/db-backup/backup-and-verify.sh > /tmp/changed.log 2>&1; then
+            cat /tmp/changed.log
+            echo 'Unexpected verification of changing source'
+            exit 1
+          fi
+          cat /tmp/changed.log
+          grep -q 'contagens da origem mudaram durante o dump' /tmp/changed.log
+          if grep -q '^BACKUP_VERIFIED:' /tmp/changed.log; then exit 1; fi
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d changed_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d source_ci -c 'SELECT count(*) FROM fixture.extra')" = 2
