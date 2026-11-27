@@ -30,6 +30,7 @@ import {
   type InternalCnpjCandidateInput,
 } from "./internal-cnpj-suggestion";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
+import { parsePaymentWeekday } from "./customer-payment-weekday";
 import {
   assertCustomerInSalesPortfolio,
   salesPortfolioPartnerId,
@@ -1710,6 +1711,45 @@ export class CustomersController {
     });
     const financial = (await this.health(actor.companyId, id))[0];
     return this.decorate(rows[0], financial);
+  }
+
+  @Get(":id/payment-weekday")
+  async paymentWeekday(@Param("id") id: string, @Req() request: any) {
+    const actor = await this.actor(request);
+    const rows = await this.db.$queryRawUnsafe<Array<{ paymentWeekday: number | null }>>(
+      `SELECT "paymentWeekday" FROM "Customer" WHERE id=$1 AND "companyId"=$2`,
+      id,
+      actor.companyId,
+    );
+    if (!rows[0]) throw new NotFoundException("Cliente não encontrado.");
+    return { weekday: rows[0].paymentWeekday === null ? null : Number(rows[0].paymentWeekday) };
+  }
+
+  /** Dia fixo de pagamento (ex.: só às quintas). Só José ou Suzi. */
+  @Patch(":id/payment-weekday")
+  async setPaymentWeekday(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: unknown,
+  ) {
+    const actor = await this.actor(request);
+    if (!isDesignatedTermCreditApprover(actor)) {
+      throw new UnauthorizedException("Somente José ou Suzi podem definir o dia de pagamento do cliente.");
+    }
+    let weekday: number | null;
+    try { weekday = parsePaymentWeekday(body); }
+    catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Dia de pagamento inválido.");
+    }
+    const rows = await this.db.$queryRawUnsafe<Array<{ id: string }>>(
+      `UPDATE "Customer" SET "paymentWeekday"=$3
+        WHERE id=$1 AND "companyId"=$2 RETURNING id`,
+      id,
+      actor.companyId,
+      weekday,
+    );
+    if (!rows[0]) throw new NotFoundException("Cliente não encontrado.");
+    return { ok: true, weekday };
   }
 
   @Patch(":id/credit")
