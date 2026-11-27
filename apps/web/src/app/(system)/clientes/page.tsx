@@ -34,6 +34,7 @@ import { applyCnpjRecord } from "@/lib/cnpj-registry";
 import { CnpjRegistryPanel, CnpjSearchButton } from "@/components/cnpj-registry-panel";
 import { useBrazilianCepAutofill } from "@/lib/use-brazilian-cep-autofill";
 import { CustomerTaxIdSuggestionWorkflow } from "@/components/customer-tax-id-suggestion-workflow";
+import { CustomerPaymentWeekday } from "@/components/customer-payment-weekday";
 
 type Health = {
   health: "HEALTHY" | "INFO" | "ATTENTION" | "BLOCKED";
@@ -1929,6 +1930,7 @@ export default function CustomersPage() {
                   ))}
                 </select>
               </Field>
+              <CustomerPaymentWeekday customerId={editCustomer.id} />
               <Field label="Status do cadastro" wide>
                 <select
                   value={editCustomer.active ? "ACTIVE" : "INACTIVE"}

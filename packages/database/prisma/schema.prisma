@@ -795,6 +795,7 @@ model Customer {
   stateRegistration       String?
   stateRegistrationType   String                      @default("NOT_DECLARED")
   paymentTerms            String?
+  paymentWeekday          Int?                        @db.SmallInt
   active                  Boolean                     @default(true)
   creditStatus            String                      @default("NOT_ANALYZED")
   creditLimit             Decimal                     @default(0) @db.Decimal(14, 2)
