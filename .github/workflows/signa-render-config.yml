@@ -32,6 +32,9 @@ jobs:
                         db['databaseName'] == 'bbos_homolog' &&
                         db['user'] == 'bbos_homolog' &&
                         db['ipAllowList'] == [], 'database identity or external access')
+            assert.call(db.keys.sort == %w[databaseName ipAllowList name plan postgresMajorVersion region user].sort &&
+                        db['plan'] == 'free' && db['region'] == 'virginia' &&
+                        db['postgresMajorVersion'] == '18', 'unexpected database provisioning')
             services = doc.fetch('services')
             assert.call(services.map { |s| s['name'] }.sort ==
                         %w[bbos-api-homolog bbos-app-homolog], 'unexpected services')
@@ -40,6 +43,19 @@ jobs:
                           s['autoDeployTrigger'] == 'off' && !s.key?('autoDeploy'),
                           'branch, service type or automatic deploy')
               assert.call(!s.key?('envVarGroups') && !s.key?('preDeployCommand'), 'unexpected inherited configuration')
+              expected_keys = %w[type name runtime plan region branch autoDeployTrigger buildCommand startCommand envVars]
+              assert.call(s['runtime'] == 'node' && s['plan'] == 'free' && s['region'] == 'virginia',
+                          'unexpected service runtime or provisioning')
+              if s['name'] == 'bbos-api-homolog'
+                expected_keys << 'healthCheckPath'
+                assert.call(s['buildCommand'] == 'pnpm install --frozen-lockfile && pnpm --filter @bbos/database build && pnpm --filter @bbos/shared build && pnpm --filter @bbos/api build' &&
+                            s['startCommand'] == 'pnpm --filter @bbos/database migrate:deploy && pnpm --filter @bbos/database exec node prisma/seed-signa-homolog.mjs && node apps/api/dist/main.js' &&
+                            s['healthCheckPath'] == '/api/health', 'unexpected API commands or health check')
+              else
+                assert.call(s['buildCommand'] == 'pnpm install --frozen-lockfile && pnpm --filter @bbos/shared build && pnpm --filter @bbos/ui build && pnpm --filter @bbos/web build' &&
+                            s['startCommand'] == 'pnpm --filter @bbos/web start', 'unexpected app commands')
+              end
+              assert.call(s.keys.sort == expected_keys.sort, 'unexpected service configuration keys')
               rows = s.fetch('envVars')
               keys = rows.map { |e| e.fetch('key') }
               assert.call(keys.uniq.size == keys.size, 'duplicate environment keys')
@@ -75,6 +91,11 @@ jobs:
             'external database access' => ->(d) { d['databases'][0]['ipAllowList'] = [{'source' => '0.0.0.0/0'}] },
             'background jobs' => ->(d) { d['services'][0]['envVars'].find { |e| e['key'] == 'BBOS_BACKGROUND_JOBS_ENABLED' }['value'] = 'true' },
             'integration credentials' => ->(d) { d['services'][0]['envVars'] << {'key' => 'BLING_TOKEN', 'sync' => false} },
+            'alternate repository' => ->(d) { d['services'][0]['repo'] = 'https://example.invalid/other' },
+            'altered API startup' => ->(d) { d['services'][0]['startCommand'] = 'echo skip' },
+            'altered app build' => ->(d) { d['services'][1]['buildCommand'] = 'echo skip' },
+            'unexpected database version' => ->(d) { d['databases'][0]['postgresMajorVersion'] = '16' },
+            'unexpected service domain' => ->(d) { d['services'][1]['domains'] = ['example.invalid'] },
             'hardcoded upstream' => ->(d) { d['services'][1]['envVars'].find { |e| e['key'] == 'BBOS_API_INTERNAL_URL' }.replace({'key' => 'BBOS_API_INTERNAL_URL', 'value' => 'https://production.invalid'}) }
           }
           mutations.each do |name, mutate|
