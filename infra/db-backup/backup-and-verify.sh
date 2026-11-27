@@ -24,7 +24,12 @@ counts() { psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$COUNT_SQL"; }
 total() { awk -F'|' '{ s += $2 } END { print s + 0 }' "$1"; }
 
 echo "BACKUP: inicio $(date -u +%FT%TZ)"
-if [ "$(psql "$DST" -X -A -t -c "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'")" != "0" ]; then
+# Refuse existing user relations in ANY schema, even if public is empty.
+# A failed catalog query must not be interpreted as an empty target.
+if ! existing="$(psql "$DST" -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname <> 'information_schema' AND left(n.nspname, 3) <> 'pg_' AND c.relkind IN ('r','p','v','m','S','f')")"; then
+  echo "BACKUP: RECUSADO - falha ao verificar o banco de destino"; exit 2
+fi
+if [ "$existing" != "0" ]; then
   echo "BACKUP: RECUSADO - o banco de destino nao esta vazio"; exit 2
 fi
 psql "$SRC" -X -A -t -c "SELECT 'BACKUP: origem ' || current_database() || ', ' || pg_size_pretty(pg_database_size(current_database())) || ', postgres ' || current_setting('server_version')"
