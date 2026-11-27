@@ -104,7 +104,7 @@ export class DashboardService implements OnModuleDestroy {
           { salesChannelId: null },
           {
             salesChannel: {
-              is: { type: { not: "ECOMMERCE" }, platformCode: null },
+              is: { OR: [{ type: { not: "ECOMMERCE" }, platformCode: null }, { platformCode: "BISPO_STORE" }] },
             },
           },
         ],
@@ -966,7 +966,7 @@ export class DashboardService implements OnModuleDestroy {
         importedAt: null,
         OR: [
           { salesChannelId: null },
-          { salesChannel: { is: { type: { not: "ECOMMERCE" }, platformCode: null } } },
+          { salesChannel: { is: { OR: [{ type: { not: "ECOMMERCE" }, platformCode: null }, { platformCode: "BISPO_STORE" }] } } },
         ],
       });
     }

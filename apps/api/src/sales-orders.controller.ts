@@ -110,6 +110,9 @@ export class SalesOrdersController {
     return actor;
   }
 
+  // O vendedor não vê pedidos da loja online nem de marketplace (esses têm
+  // externalOrderId/importedAt). Pedido lançado no BBOS com a tabela de preço
+  // "Consumidor final" (canal BISPO_STORE) é dele e fica visível.
   private async assertOrderVisibleToActor(actor: any, id: string) {
     if (actor.role !== UserRole.SALES) return;
     const partnerId = salesPortfolioPartnerId(actor)!;
@@ -125,7 +128,7 @@ export class SalesOrdersController {
               { salesChannelId: null },
               {
                 salesChannel: {
-                  is: { type: { not: "ECOMMERCE" }, platformCode: null },
+                  is: { OR: [{ type: { not: "ECOMMERCE" }, platformCode: null }, { platformCode: "BISPO_STORE" }] },
                 },
               },
             ],
