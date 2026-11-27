@@ -27,6 +27,7 @@ import { Badge, Card } from "@bbos/ui";
 import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
+import { OrderDueDateChange } from "@/components/order-due-date-change";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import {
   buildCustomerOrderInsights,
@@ -47,7 +48,6 @@ import {
 import { orderPaymentDue } from "@/lib/order-payment-due";
 import { deliveryDaysLate, formatDeliveryDate } from "@/lib/delivery-date";
 import { DirectShipmentCard } from "@/components/direct-shipment-card";
-import { OrderDueDateChange } from "@/components/order-due-date-change";
 import { directShipmentStatus, type DirectShipmentSummary } from "@/lib/direct-shipment";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
