@@ -40,7 +40,7 @@ test("sales order list and detail are isolated by company", async () => {
   });
 });
 
-test("sales role list excludes ecommerce and platform orders", async () => {
+test("sales role list excludes store and marketplace orders, but keeps BBOS orders priced on the Consumidor final table", async () => {
   let where: Record<string, unknown> | undefined;
   const service = new SalesOrdersService({} as never);
   Object.defineProperty(service, "database", {
@@ -65,7 +65,7 @@ test("sales role list excludes ecommerce and platform orders", async () => {
       { salesChannelId: null },
       {
         salesChannel: {
-          is: { type: { not: "ECOMMERCE" }, platformCode: null },
+          is: { OR: [{ type: { not: "ECOMMERCE" }, platformCode: null }, { platformCode: "BISPO_STORE" }] },
         },
       },
     ],

@@ -102,7 +102,7 @@ export class NotificationsController {
           AND so.id IS NOT NULL
           AND so."externalOrderId" IS NULL
           AND so."importedAt" IS NULL
-          AND (channel.id IS NULL OR (channel.type::text<>'ECOMMERCE' AND channel."platformCode" IS NULL))
+          AND (channel.id IS NULL OR (channel.type::text<>'ECOMMERCE' AND channel."platformCode" IS NULL) OR channel."platformCode"='BISPO_STORE')
           AND (
             so."createdByStorefrontPartnerId"=$3
             OR EXISTS (

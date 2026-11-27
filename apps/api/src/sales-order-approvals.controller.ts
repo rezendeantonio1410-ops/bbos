@@ -80,7 +80,7 @@ export class SalesOrderApprovalsController {
           { salesChannelId: null },
           {
             salesChannel: {
-              is: { type: { not: "ECOMMERCE" }, platformCode: null },
+              is: { OR: [{ type: { not: "ECOMMERCE" }, platformCode: null }, { platformCode: "BISPO_STORE" }] },
             },
           },
         ],
