@@ -62,7 +62,7 @@ export type TimelineItem = { key: string; date: string; label: string; amount: n
 
 export function CommandCenterV4({
   home, greeting, firstName, summary, tasks, greenTotal, greenReserved, greenFree, cashLines, financeReady, geo, newMenu, brief, cashView, timeline,
-  onSnooze, onUndoSnooze, insights, onSaveGoal, freshness, today: todaySales, freshIds,
+  onSnooze, onUndoSnooze, insights, freshness, today: todaySales, freshIds,
 }: {
   home: CenterHome; greeting: string; firstName: string; summary: string; tasks: CenterTask[];
   greenTotal: number; greenReserved: number; greenFree: number; cashLines: CashFlowLine[];
@@ -128,11 +128,10 @@ export function CommandCenterV4({
         </section>
       )}
 
-      <TodayStrip sales={todaySales ?? null} freshIds={freshIds ?? new Set()} />
-
-      <section aria-label="Números do mês" className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1360px]:grid-cols-4">
+      <section aria-label="Números do dia e do mês" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1360px]:grid-cols-5">
+        <TodayCard sales={todaySales ?? null} freshIds={freshIds ?? new Set()} />
         <CashCard view={cashView} />
-        <div className={`${card} p-4`}>
+        <Link href="/vendas/metas" aria-label="Vendas no mês: abrir metas e margem" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
           <p className={label}>Vendas no mês</p>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
             <span className="whitespace-nowrap text-[26px] font-bold tabular-nums">{brl.format(home.salesMonth)}</span>
@@ -144,18 +143,20 @@ export function CommandCenterV4({
           </div>
           <Sparkline points={(geo?.cumulative ?? []).map((point) => point.current)} />
           <p className="mt-2 text-[12.5px] text-[var(--bbos-text-secondary)]">
-            {geo && geo.previousRevenue > 0 ? `vs. ${brl.format(geo.previousRevenue)} em ${monthName(today, -1).slice(0, 3)}. até o dia ${pace.day} · ` : `hoje ${brl.format(home.salesToday)} · `}
-            ritmo {brl.format(pace.perDay)}/dia → <b className="text-[var(--bbos-text-primary)]">projeção {brl.format(pace.projection)}</b>
+            <b className="text-[var(--bbos-text-primary)]">projeção {brl.format(pace.projection)}</b>
+            {geo && geo.previousRevenue > 0 ? ` · ${monthName(today, -1).slice(0, 3)}. ${brl.format(geo.previousRevenue)}` : ""}
           </p>
           {todaySales && todaySales.marketplaceMonth.amount > 0 && (
-            <p className="mt-1 text-[12px] text-[var(--bbos-text-secondary)]">
-              inclui {todaySales.marketplaceMonth.byChannel.map((row) => `${row.channel} ${brl.format(row.amount)}`).join(" · ")}
-              {" "}<Link href="/commerce/marketplaces" className="font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">{todaySales.marketplaceMonth.orders} {todaySales.marketplaceMonth.orders === 1 ? "pedido a importar" : "pedidos a importar"}</Link>
-            </p>
+            <p className="text-[12px] text-[var(--bbos-text-secondary)]">inclui {todaySales.marketplaceMonth.byChannel.map((row) => `${row.channel} ${brl.format(row.amount)}`).join(" · ")}</p>
           )}
-          <SalesGoal goal={goal} insights={insights ?? null} onSave={onSaveGoal} />
-          <Link href="/vendas" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Ver vendas →</Link>
-        </div>
+          {goal && (
+            <div className="mt-2" aria-label={`${goal.percent}% da meta de ${brl.format(goal.target)}`}>
+              <div aria-hidden className="h-2 rounded bg-[var(--bbos-surface-subtle)]"><span className="block h-full rounded transition-[width] duration-700 ease-out" style={{ width: `${goal.percent}%`, background: goal.reached || goal.onTrack ? GREEN : AMBER }} /></div>
+              <p className="mt-1 text-[11.5px] text-[var(--bbos-text-secondary)]">{goal.reached ? "meta batida" : `${goal.percent}% da meta · faltam ${brl.format(goal.missing)}`}</p>
+            </div>
+          )}
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">{goal ? "Metas e margem →" : "Definir meta →"}</span>
+        </Link>
 
         <div className={`${card} p-4`}>
           <p className={label}>A receber</p>
@@ -220,7 +221,7 @@ export function CommandCenterV4({
                 const Icon = task.key === "roast" ? Flame : task.tone === "ok" ? ReceiptText : Banknote;
                 const stripe = task.tone === "critical" ? RED : task.tone === "attention" ? AMBER : GREEN;
                 return (
-                  <li key={task.key} className="grid grid-cols-[5px_38px_1fr] items-center gap-x-3 gap-y-2 py-3 transition-colors hover:bg-stone-50/60 sm:grid-cols-[5px_38px_1fr_auto]">
+                  <li key={task.key} className="group grid grid-cols-[5px_38px_1fr] items-center gap-x-3 gap-y-2 py-3 transition-colors hover:bg-stone-50/60 sm:grid-cols-[5px_38px_1fr_auto]">
                     <span aria-hidden className="self-stretch rounded" style={{ background: stripe }} />
                     <span aria-hidden className="grid size-[38px] place-items-center rounded-xl bg-[var(--bbos-surface-subtle)] text-[var(--bbos-text-secondary)]"><Icon size={18} /></span>
                     <div className="min-w-0">
@@ -234,7 +235,7 @@ export function CommandCenterV4({
                         {task.action}
                       </Link>
                       {onSnooze && (
-                        <span className="inline-flex overflow-hidden rounded-xl border border-[var(--bbos-border)] text-[12px] font-semibold text-[var(--bbos-text-secondary)]">
+                        <span className="inline-flex overflow-hidden rounded-xl border border-[var(--bbos-border)] text-[12px] font-semibold text-[var(--bbos-text-secondary)] transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                           <button type="button" onClick={() => act(task, "DONE")} title="Já resolvi: some por 30 dias (volta se a situação mudar)" className="inline-flex min-h-9 items-center gap-1 px-2.5 hover:bg-[var(--bbos-surface-subtle)]"><Check size={13} aria-hidden />Feito</button>
                           <button type="button" onClick={() => act(task, "TOMORROW")} title="Lembrar amanhã às 6h" className="min-h-9 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">Amanhã</button>
                           <button type="button" onClick={() => act(task, "WEEK")} title="Adiar 7 dias" className="min-h-9 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">7 dias</button>
@@ -443,7 +444,7 @@ function Timeline({ items }: { items: TimelineItem[] }) {
 
 
 /** Meta do mês e margem, dentro do card de vendas (Locke e Latham; efeito reta final). */
-function SalesGoal({ goal, insights, onSave }: { goal: ReturnType<typeof goalProgress>; insights: CommandInsights | null; onSave?: (month: string, salesTarget: number | null) => Promise<string | null> }) {
+export function SalesGoal({ goal, insights, onSave }: { goal: ReturnType<typeof goalProgress>; insights: CommandInsights | null; onSave?: (month: string, salesTarget: number | null) => Promise<string | null> }) {
   const [editing, setEditing] = React.useState<string | null>(null);
   const [value, setValue] = React.useState("");
   const [error, setError] = React.useState("");
@@ -556,44 +557,36 @@ function GrowthRow({ insights }: { insights: CommandInsights }) {
 }
 
 
-/** Vendas de hoje, ao vivo: BBOS + marketplaces, por canal e os últimos pedidos. */
-function TodayStrip({ sales, freshIds }: { sales: TodaySales | null; freshIds: Set<string> }) {
-  if (!sales) return null;
-  const money2 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+/** Vendas de hoje, ao vivo e compacto: total, canais e os 3 últimos pedidos. */
+function TodayCard({ sales, freshIds }: { sales: TodaySales | null; freshIds: Set<string> }) {
   return (
-    <section aria-label="Vendas de hoje" aria-live="polite" className={`${card} grid gap-3 p-4 lg:grid-cols-[minmax(220px,auto)_1fr] lg:items-center`}>
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="relative flex size-2.5"><span className="absolute inline-flex size-full rounded-full bg-[var(--bbos-success)] opacity-60 motion-safe:animate-ping" /><span className="relative inline-flex size-2.5 rounded-full bg-[var(--bbos-success)]" /></span>
-        <div>
-          <p className={label}>Vendas de hoje</p>
-          <p className="text-[24px] font-bold leading-tight tabular-nums">{money2.format(sales.total)}<span className="ml-2 text-[13px] font-semibold text-[var(--bbos-text-secondary)]">{sales.orders} {sales.orders === 1 ? "pedido" : "pedidos"}</span></p>
-          <p className="text-[11px] text-[var(--bbos-text-secondary)]">atualiza a cada minuto · {saleTime(sales.generatedAt)}</p>
-        </div>
-      </div>
-      {sales.orders === 0 ? (
-        <p className="text-[13px] text-[var(--bbos-text-secondary)]">Nenhuma venda ainda hoje. Pedidos do BBOS, da loja e dos marketplaces aparecem aqui assim que chegam.</p>
-      ) : (
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap gap-1.5">
-            {sales.byChannel.map((row) => (
-              <span key={row.channel} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold ${row.marketplace ? "bg-[#fff4d6] text-[#7a5200]" : "bg-[var(--bbos-success-soft,#e6f1ec)] text-[var(--bbos-success,#1f6b4f)]"}`}>
-                {row.channel} <b className="tabular-nums">{brl.format(row.amount)}</b><span className="font-normal opacity-80">· {row.orders}</span>
-              </span>
-            ))}
-          </div>
-          <ul className="flex gap-2 overflow-x-auto pb-1">
-            {sales.feed.map((sale) => (
-              <li key={sale.id} className={`shrink-0 rounded-xl border px-3 py-1.5 text-[12.5px] transition-colors ${freshIds.has(sale.id) ? "border-[var(--bbos-success)] bg-[var(--bbos-success-soft,#e6f1ec)] motion-safe:animate-[fadeIn_.5s_ease]" : "border-[var(--bbos-border)]"}`}>
-                <span className="font-bold tabular-nums">{saleTime(sale.at)}</span>
-                <span className="mx-1.5 text-[var(--bbos-text-secondary)]">{sale.channel}</span>
-                <span className="max-w-[14rem] truncate align-bottom">{sale.customer ?? `#${sale.code}`}</span>
-                <b className="ml-1.5 tabular-nums">{brl.format(sale.amount)}</b>
-                {freshIds.has(sale.id) && <span className="ml-1.5 rounded bg-[var(--bbos-success)] px-1 text-[10px] font-bold uppercase text-white">novo</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
+    <Link href="/pedidos" aria-label="Vendas de hoje: abrir pedidos" aria-live="polite" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
+      <p className={`${label} flex items-center gap-2`}>
+        Vendas de hoje
+        <span aria-hidden className="relative flex size-2"><span className="absolute inline-flex size-full rounded-full bg-[var(--bbos-success)] opacity-60 motion-safe:animate-ping" /><span className="relative inline-flex size-2 rounded-full bg-[var(--bbos-success)]" /></span>
+      </p>
+      {!sales ? <p className="mt-1.5 text-[26px] font-bold text-[#9aa3a0]">—</p> : (
+        <>
+          <p className="mt-1.5 whitespace-nowrap text-[26px] font-bold tabular-nums">{brl.format(sales.total)}<span className="ml-2 text-[13px] font-semibold text-[var(--bbos-text-secondary)]">{sales.orders} {sales.orders === 1 ? "pedido" : "pedidos"}</span></p>
+          {sales.orders === 0 ? (
+            <p className="mt-1 text-[12.5px] text-[var(--bbos-text-secondary)]">Nenhuma venda ainda hoje. Loja, BBOS e marketplaces aparecem aqui.</p>
+          ) : (
+            <>
+              <p className="text-[12.5px] text-[var(--bbos-text-secondary)]">{sales.byChannel.slice(0, 2).map((row) => `${row.channel} ${brl.format(row.amount)}`).join(" · ")}{sales.byChannel.length > 2 ? ` · +${sales.byChannel.length - 2}` : ""}</p>
+              <ul className="mt-2 space-y-1">
+                {sales.feed.slice(0, 3).map((sale) => (
+                  <li key={sale.id} className={`flex items-center gap-2 rounded-md px-1.5 py-0.5 text-[12px] ${freshIds.has(sale.id) ? "bg-[var(--bbos-success-soft,#e6f1ec)] motion-safe:animate-[fadeIn_.5s_ease]" : ""}`}>
+                    <span className="font-bold tabular-nums">{saleTime(sale.at)}</span>
+                    <span className="min-w-0 flex-1 truncate text-[var(--bbos-text-secondary)]">{sale.customer ?? sale.channel}</span>
+                    <b className="tabular-nums">{brl.format(sale.amount)}</b>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">Ver pedidos →</span>
+        </>
       )}
-    </section>
+    </Link>
   );
 }
