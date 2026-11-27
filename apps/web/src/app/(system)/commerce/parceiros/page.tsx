@@ -495,7 +495,7 @@ export default function StorefrontPartnersPage() {
                       name="salesCommissionMode"
                       defaultValue={selected?.salesCommissionMode ?? ""}
                     >
-                      <option value="">Não configurada (bloqueia vendas)</option>
+                      <option value="">Não configurada (vende sem comissão)</option>
                       <option value="NONE">Sem comissão (vende normalmente)</option>
                       <option value="PERCENTAGE">Percentual da venda</option>
                       <option value="PER_PACKAGE">Valor por pacote</option>

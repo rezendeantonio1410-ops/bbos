@@ -39,8 +39,8 @@ test("vendedor com regra 'Sem comissão' registra pedido sem corretor nem comiss
   const orders = readFileSync(join(__dirname, "sales-orders.controller.ts"), "utf8");
   const partners = readFileSync(join(__dirname, "storefront-partners.controller.ts"), "utf8");
   assert.match(partners, /\["PERCENTAGE", "PER_PACKAGE", "NONE"\]/);
-  assert.match(orders, /representative && mode === "NONE"/);
+  assert.match(orders, /mode === "NONE" \|\| \(!percentPolicy && !packagePolicy\)/);
   assert.match(orders, /brokerId = undefined;/);
-  // Sem regra nenhuma continua bloqueando.
-  assert.match(orders, /A comissão deste representante ainda não foi configurada/);
+  // Sem regra configurada não bloqueia mais a venda: vende sem comissão.
+  assert.doesNotMatch(orders, /A comissão deste representante ainda não foi configurada/);
 });
