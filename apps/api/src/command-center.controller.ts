@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Post, Put, Req, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Post, Put, Query, Req, UnauthorizedException } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import type { Request } from "express";
 import { AuthService } from "./auth.service";
 import {
+  marketplaceOrderList,
   monthMargin,
   salesOfTheDay,
   payerDelays,
@@ -254,6 +255,47 @@ export class CommandCenterController {
         orders: inboxMonth.reduce((sum, row) => sum + Number(row.orders), 0),
         byChannel: inboxMonth.map((row) => ({ channel: row.channel, amount: Number(row.amount), orders: Number(row.orders) })),
       },
+    };
+  }
+
+  /**
+   * Pedidos de marketplace (ex.: Mercado Livre) de hoje, 7 dias ou do mês, para
+   * a página aberta pelo card "Vendas de hoje". Mostra o que foi vendido, a
+   * cidade de entrega e a situação; não expõe dados pessoais do comprador.
+   */
+  @Get("marketplace-orders")
+  @Header("Cache-Control", "private, no-store")
+  async marketplaceOrders(@Req() req: Request, @Query("period") period?: string, @Query("channel") channel?: string) {
+    const { companyId } = await this.actor(req);
+    const now = new Date();
+    const local = new Date(now.getTime() - 3 * 3_600_000);
+    const today = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 3, 0, 0));
+    const key = period === "7d" || period === "month" ? period : "today";
+    const since = key === "today" ? today : key === "7d" ? new Date(today.getTime() - 6 * 86_400_000) : saoPauloMonth(now).start;
+    const rows = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT moi.id,moi."externalOrderId",moi."externalStatus",COALESCE(moi."orderedAt",moi."firstSeenAt") AS "orderedAt",
+              COALESCE(moi."grossAmount",0)::float AS gross,COALESCE(moi."feeAmount",0)::float AS fee,
+              COALESCE(moi."freightAmount",0)::float AS freight,moi."importStatus",moi."salesOrderId",
+              ch.name AS channel,ch."platformCode" AS platform,d.city,d.state,
+              moi.payload->'order_items' AS items
+         FROM "MarketplaceOrderInbox" moi
+         JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+         LEFT JOIN "MarketplaceOrderDestination" d ON d."inboxId"=moi.id
+        WHERE moi."companyId"=$1 AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2
+          AND ($3::text IS NULL OR ch.name=$3)
+        ORDER BY 4 DESC LIMIT 500`,
+      companyId, since, channel?.trim() || null,
+    ).catch(() => []);
+    const channels = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT DISTINCT ch.name FROM "MarketplaceOrderInbox" moi JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+        WHERE moi."companyId"=$1 ORDER BY 1`,
+      companyId,
+    ).catch(() => []);
+    return {
+      period: key,
+      since: since.toISOString(),
+      channels: channels.map((row) => row.name as string),
+      ...marketplaceOrderList(rows),
     };
   }
 

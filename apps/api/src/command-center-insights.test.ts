@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { monthMargin, salesOfTheDay, payerDelays, repurchaseHealth, snoozeUntil, validateGoal, validateTaskKey } from "./command-center-insights";
+import { marketplaceOrderList, monthMargin, salesOfTheDay, payerDelays, repurchaseHealth, snoozeUntil, validateGoal, validateTaskKey } from "./command-center-insights";
 
 const now = new Date("2026-11-27T12:00:00Z");
 const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
@@ -72,4 +72,17 @@ test("vendas do dia somam BBOS e marketplace, por canal e mais recentes primeiro
   assert.equal(day.orders, 3);
   assert.deepEqual(day.byChannel.map((c) => [c.channel, c.orders]), [["Consumidor final", 1], ["Mercado Livre", 2]]);
   assert.deepEqual(day.feed.map((s) => s.code), ["200002", "B-1", "200001"]);
+});
+
+test("lista do marketplace: itens, situação e totais sem cancelados", () => {
+  const base = { externalStatus: "paid", orderedAt: "2026-11-27T17:32:00Z", fee: 10, freight: 0, importStatus: "RECEIVED", salesOrderId: null, channel: "Mercado Livre", platform: "MERCADO_LIVRE", city: "Cidade Exemplo", state: "SP" };
+  const list = marketplaceOrderList([
+    { ...base, id: "1", externalOrderId: "2001", gross: 77, items: [{ item: { title: "Café Exemplo 250 g", seller_sku: "C-250" }, quantity: 2, unit_price: 38.5 }] },
+    { ...base, id: "2", externalOrderId: "2002", gross: 50, externalStatus: "cancelled", items: [] },
+    { ...base, id: "3", externalOrderId: "2003", gross: 84, salesOrderId: "so-1", city: null, items: null },
+  ]);
+  assert.deepEqual(list.orders.map((o) => o.status), ["TO_IMPORT", "CANCELLED", "IMPORTED"]);
+  assert.equal(list.orders[0]!.destination, "Cidade Exemplo/SP");
+  assert.equal(list.orders[2]!.destination, null);
+  assert.deepEqual(list.totals, { orders: 2, cancelled: 1, gross: 161, fees: 20, net: 141, averageTicket: 80.5, units: 2 });
 });

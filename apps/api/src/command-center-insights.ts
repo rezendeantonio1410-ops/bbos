@@ -138,3 +138,51 @@ export function salesOfTheDay(orders: DaySale[], marketplaceInbox: DaySale[]) {
     feed: all.slice(0, 8),
   };
 }
+
+
+const CANCELLED = new Set(["cancelled", "canceled", "cancelado"]);
+
+/** Lista de pedidos de marketplace com itens resumidos e totais (cancelados fora dos totais). */
+export function marketplaceOrderList(rows: Array<{
+  id: string; externalOrderId: string; externalStatus: string | null; orderedAt: Date | string;
+  gross: number; fee: number; freight: number; importStatus: string; salesOrderId: string | null;
+  channel: string; platform: string | null; city: string | null; state: string | null; items: any;
+}>) {
+  const orders = rows.map((row) => {
+    const items = (Array.isArray(row.items) ? row.items : []).map((entry: any) => ({
+      title: String(entry?.item?.title ?? "Item").slice(0, 120),
+      sku: entry?.item?.seller_sku ? String(entry.item.seller_sku) : null,
+      quantity: Number(entry?.quantity ?? 0) || 0,
+      unitPrice: Number(entry?.unit_price ?? 0) || 0,
+    }));
+    const cancelled = CANCELLED.has(String(row.externalStatus ?? "").toLowerCase());
+    return {
+      id: row.id,
+      number: row.externalOrderId,
+      at: new Date(row.orderedAt).toISOString(),
+      channel: row.channel,
+      platform: row.platform,
+      status: cancelled ? "CANCELLED" : row.salesOrderId || row.importStatus === "IMPORTED" ? "IMPORTED" : "TO_IMPORT",
+      gross: Number(row.gross) || 0,
+      fee: Number(row.fee) || 0,
+      destination: row.city && row.state ? `${row.city}/${row.state}` : null,
+      items,
+      units: items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
+    };
+  });
+  const valid = orders.filter((order) => order.status !== "CANCELLED");
+  const gross = valid.reduce((sum, order) => sum + order.gross, 0);
+  const fees = valid.reduce((sum, order) => sum + order.fee, 0);
+  return {
+    totals: {
+      orders: valid.length,
+      cancelled: orders.length - valid.length,
+      gross: Math.round(gross * 100) / 100,
+      fees: Math.round(fees * 100) / 100,
+      net: Math.round((gross - fees) * 100) / 100,
+      averageTicket: valid.length ? Math.round((gross / valid.length) * 100) / 100 : 0,
+      units: valid.reduce((sum, order) => sum + order.units, 0),
+    },
+    orders,
+  };
+}
