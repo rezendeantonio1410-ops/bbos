@@ -3,6 +3,7 @@
 import { normalizeCnpj } from "@bbos/shared";
 
 import { VisitsTabs } from "@/components/visits-tabs";
+import { ProspectToCustomer } from "@/components/prospect-to-customer";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -71,6 +72,7 @@ type Prospect = {
   suggestedTaxIdReason: string | null;
   lastVisitAt?: string | null;
   lastVisitBy?: string | null;
+  customerId?: string | null;
   visitCount?: number;
   visits?: Array<{ id: string; recordedByName: string; visitAt: string; outcome: string; facts: string; nextAction: string | null }>;
 };
@@ -484,6 +486,17 @@ function VisitSheet({ id, onBack, onSaved }: { id: string; onBack: () => void; o
             <a href={directionsUrl(prospect.latitude, prospect.longitude)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-stone-200 px-3 text-sm font-semibold"><Navigation size={16} /> Rota</a>
           )}
           {prospect.phone && <a href={`tel:${prospect.phone}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-stone-200 px-3 text-sm font-semibold"><Phone size={16} /> {formatPhone(prospect.phone)}</a>}
+          {prospect.stage !== "SEM_INTERESSE" && (
+            <ProspectToCustomer
+              prospectId={prospect.id}
+              prospect={prospect}
+              customerId={prospect.customerId}
+              onConverted={(customerId) => {
+                setProspect((current) => (current ? { ...current, customerId, stage: "CLIENTE" } : current));
+                onSaved(`${prospect.name} agora é cliente.`);
+              }}
+            />
+          )}
           <button type="button" onClick={pinHere} disabled={locating} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-stone-200 px-3 text-sm font-semibold disabled:opacity-60">
             <Crosshair size={16} /> {locating ? "Gravando..." : prospect.geocodeSource === "GPS" ? "Local gravado (GPS) · regravar" : "Estou aqui"}
           </button>
