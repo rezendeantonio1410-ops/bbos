@@ -40,6 +40,7 @@ import {
 import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { fourteenDayDueDate, parseTermCorrection } from "./sales-order-term-correction";
+import { parseDueDateChange, RESCHEDULABLE_RECEIVABLE } from "./receivable-due-date-change";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 import {
@@ -862,6 +863,70 @@ export class SalesOrdersController {
       );
       return { ok: true, orderId: id, paymentType: "TERM", paymentTerms: "14 dias",
         dueDate, amount: Number(receivable.amount), status: "OPEN" };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  /**
+   * Nova data de vencimento renegociada com o cliente. Só José ou Suzi.
+   * Muda apenas a data do título em aberto; valor, NF-e, entrega e
+   * pagamentos ficam iguais. Fica no histórico com motivo e data anterior.
+   */
+  @Patch(":id/due-date")
+  async changeDueDate(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: unknown,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!isDesignatedTermCreditApprover(actor)) {
+      throw new ForbiddenException("Somente José ou Suzi podem alterar a data de pagamento.");
+    }
+    let change: ReturnType<typeof parseDueDateChange>;
+    try { change = parseDueDateChange(body); }
+    catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Data inválida.");
+    }
+    return this.salesOrders.database.$transaction(async tx => {
+      const locked = await tx.$queryRawUnsafe<Array<{ id: string; status: string; dueDate: Date; openAmount: unknown; amount: unknown }>>(
+        `SELECT ar.id,ar.status::text AS status,ar."dueDate",ar."openAmount",ar.amount
+           FROM "AccountsReceivable" ar
+           JOIN "SalesOrder" so ON so.id=ar."salesOrderId"
+          WHERE ar."salesOrderId"=$1 AND ar."companyId"=$2 AND so."companyId"=$2
+          FOR UPDATE OF ar`,
+        id, actor.companyId,
+      );
+      const receivable = locked[0];
+      if (!receivable) throw new BadRequestException("Este pedido não tem cobrança em aberto.");
+      if (!(RESCHEDULABLE_RECEIVABLE as readonly string[]).includes(receivable.status) || Number(receivable.openAmount) <= 0) {
+        throw new BadRequestException("A cobrança deste pedido já foi paga ou cancelada.");
+      }
+      const previous = new Date(receivable.dueDate);
+      if (previous.toISOString().slice(0, 10) === change.dueDate.toISOString().slice(0, 10)) {
+        throw new BadRequestException("A nova data é igual ao vencimento atual.");
+      }
+      const boletos = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM "ReceivableBoleto" WHERE "accountsReceivableId"=$1 AND status='ISSUED' LIMIT 1`,
+        receivable.id,
+      );
+      if (boletos.length) {
+        throw new BadRequestException("Há um boleto emitido com o vencimento antigo. Cancele o boleto em Contas a receber, altere a data e gere um novo.");
+      }
+      const nextStatus = receivable.status === "OVERDUE" ? "OPEN" : receivable.status;
+      await tx.$executeRawUnsafe(
+        `UPDATE "AccountsReceivable" SET "dueDate"=$2,status=$3::"ReceivableStatus","updatedAt"=NOW() WHERE id=$1`,
+        receivable.id, change.dueDate, nextStatus,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "SalesOrderEditAudit"
+        (id,"companyId","salesOrderId","actorId","actorName","actorRole",reason,
+         "beforeSnapshot","afterSnapshot","createdAt")
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,NOW())`,
+        randomUUID(), actor.companyId, id, actor.id, actor.name, actor.role,
+        `Nova data de pagamento: ${change.reason}`,
+        JSON.stringify({ dueDate: previous, status: receivable.status }),
+        JSON.stringify({ dueDate: change.dueDate, status: nextStatus }),
+      );
+      return { ok: true, orderId: id, dueDate: change.dueDate, previousDueDate: previous, status: nextStatus };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 

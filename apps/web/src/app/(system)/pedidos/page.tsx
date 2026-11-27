@@ -47,6 +47,7 @@ import {
 import { orderPaymentDue } from "@/lib/order-payment-due";
 import { deliveryDaysLate, formatDeliveryDate } from "@/lib/delivery-date";
 import { DirectShipmentCard } from "@/components/direct-shipment-card";
+import { OrderDueDateChange } from "@/components/order-due-date-change";
 import { directShipmentStatus, type DirectShipmentSummary } from "@/lib/direct-shipment";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
@@ -5191,6 +5192,16 @@ function OrderDrawer({
                   <div className="mt-3">
                     <OrderBillingPdfButton orderId={order.id} orderNumber={order.orderNumber ?? order.code} />
                   </div>
+                  {canOperate && (
+                    <OrderDueDateChange
+                      orderId={order.id}
+                      currentDueDate={billingSummary.dueDate ?? null}
+                      onDone={async () => {
+                        await loadBillingSummary();
+                        await onChanged();
+                      }}
+                    />
+                  )}
                 </section>
               )}
             <div className="mt-5 space-y-2 sm:mt-6">
