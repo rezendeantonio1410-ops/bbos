@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
-import { buildPortfolio, portfolioAlerts, type PortfolioCustomerRow } from "./seller-portfolio";
+import { buildPortfolio, coachMessage, pathToGoal, portfolioAlerts, sellerMonth, validateSellerGoal, type PortfolioCustomerRow } from "./seller-portfolio";
 
 /**
  * Carteira do vendedor (clientes ligados ao parceiro de vendas dele) e os
@@ -47,7 +47,13 @@ export class SellerPortfolioService implements OnModuleInit, OnModuleDestroy {
               (SELECT MIN(r."dueDate") FROM "AccountsReceivable" r
                  WHERE r."customerId"=c.id AND r."companyId"=c."companyId"
                    AND r.status::text IN ('OPEN','OVERDUE','PARTIALLY_PAID') AND r."dueDate"<date_trunc('day',NOW())) AS "overdueSince",
-              (SELECT MAX(v."visitAt") FROM "CustomerVisit" v WHERE v."customerId"=c.id) AS "lastVisitAt"
+              (SELECT MAX(v."visitAt") FROM "CustomerVisit" v WHERE v."customerId"=c.id) AS "lastVisitAt",
+              (SELECT AVG(o."totalAmount")::float FROM "SalesOrder" o
+                 WHERE o."customerId"=c.id AND o."companyId"=c."companyId" AND o."orderType"='COMMERCIAL'
+                   AND o.status::text NOT IN ('CANCELLED','DRAFT') AND o."orderedAt">=NOW()-INTERVAL '365 days') AS "avgTicket",
+              COALESCE((SELECT SUM(o."totalAmount") FROM "SalesOrder" o
+                 WHERE o."customerId"=c.id AND o."companyId"=c."companyId" AND o."orderType"='COMMERCIAL'
+                   AND o.status::text='DRAFT'),0)::float AS "pendingAmount"
          FROM "StorefrontPartnerCustomer" link
          JOIN "Customer" c ON c.id=link."customerId"
         WHERE link."partnerId"=$1 AND c."companyId"=$2 AND c.active=true`,
@@ -57,8 +63,82 @@ export class SellerPortfolioService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => ({ ...row, orderDates: Array.isArray(row.orderDates) ? row.orderDates : [] }));
   }
 
-  async portfolio(companyId: string, partnerId: string) {
-    return buildPortfolio(await this.rows(companyId, partnerId));
+  async portfolio(companyId: string, partnerId: string, firstName = "") {
+    const [rows, month] = await Promise.all([this.rows(companyId, partnerId), this.month(companyId, partnerId)]);
+    const portfolio = buildPortfolio(rows);
+    const path = pathToGoal(portfolio, month);
+    return { ...portfolio, month, path, coach: coachMessage(firstName, portfolio, month, path) };
+  }
+
+  /** Vendido no mês pela carteira (R$ e kg) contra a meta definida pela liderança. */
+  async month(companyId: string, partnerId: string, now = new Date()) {
+    const local = new Date(now.getTime() - 3 * 3_600_000);
+    const key = local.toISOString().slice(0, 7);
+    const start = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1, 3, 0, 0));
+    const [sales, goals] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*)::int AS orders,
+                COALESCE(SUM(o."totalAmount"),0)::float AS revenue,
+                COALESCE(SUM((SELECT SUM(i.quantity*COALESCE(v."netWeightGrams",0))
+                                FROM "SalesOrderItem" i LEFT JOIN "ProductVariant" v ON v.id=i."productVariantId"
+                               WHERE i."salesOrderId"=o.id)),0)::float/1000.0 AS kg
+           FROM "SalesOrder" o
+          WHERE o."companyId"=$1 AND o."orderType"='COMMERCIAL'
+            AND o.status::text NOT IN ('CANCELLED','DRAFT') AND o."orderedAt">=$3
+            AND (o."createdByStorefrontPartnerId"=$2 OR EXISTS (
+              SELECT 1 FROM "StorefrontPartnerCustomer" l WHERE l."partnerId"=$2 AND l."customerId"=o."customerId"))`,
+        companyId, partnerId, start,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT "salesTarget"::float AS "salesTarget","kgTarget"::float AS "kgTarget"
+           FROM "SellerGoal" WHERE "companyId"=$1 AND "partnerId"=$2 AND month=$3`,
+        companyId, partnerId, key,
+      ).catch(() => []),
+    ]);
+    return sellerMonth({
+      revenue: Number(sales[0]?.revenue ?? 0),
+      kg: Number(sales[0]?.kg ?? 0),
+      orders: Number(sales[0]?.orders ?? 0),
+      salesTarget: goals[0]?.salesTarget ?? null,
+      kgTarget: goals[0]?.kgTarget ?? null,
+      now,
+    });
+  }
+
+  /** Metas de todos os vendedores para um mês (tela de Parceiros). */
+  async goals(companyId: string, month: string) {
+    return this.database.$queryRawUnsafe<any[]>(
+      `SELECT "partnerId",month,"salesTarget"::float AS "salesTarget","kgTarget"::float AS "kgTarget","updatedByName","updatedAt"
+         FROM "SellerGoal" WHERE "companyId"=$1 AND month=$2`,
+      companyId, month,
+    );
+  }
+
+  async saveGoal(companyId: string, body: Record<string, unknown>, actorName: string) {
+    const goal = validateSellerGoal(body);
+    const partner = await this.database.$queryRawUnsafe<any[]>(
+      `SELECT id FROM "StorefrontPartner" WHERE id=$1 AND "companyId"=$2 LIMIT 1`,
+      goal.partnerId, companyId,
+    );
+    if (!partner[0]) throw new Error("Vendedor não encontrado.");
+    if (goal.salesTarget === null && goal.kgTarget === null) {
+      await this.database.$executeRawUnsafe(
+        `DELETE FROM "SellerGoal" WHERE "companyId"=$1 AND "partnerId"=$2 AND month=$3`,
+        companyId, goal.partnerId, goal.month,
+      );
+      return goal;
+    }
+    await this.database.$executeRawUnsafe(
+      `INSERT INTO "SellerGoal" ("companyId","partnerId",month,"salesTarget","kgTarget","updatedByName","updatedAt")
+       VALUES ($1,$2,$3,$4::numeric,$5::numeric,$6,NOW())
+       ON CONFLICT ("companyId","partnerId",month) DO UPDATE SET "salesTarget"=EXCLUDED."salesTarget",
+         "kgTarget"=EXCLUDED."kgTarget","updatedByName"=EXCLUDED."updatedByName","updatedAt"=NOW()`,
+      companyId, goal.partnerId, goal.month,
+      goal.salesTarget === null ? null : goal.salesTarget.toFixed(2),
+      goal.kgTarget === null ? null : goal.kgTarget.toFixed(3),
+      actorName.slice(0, 120),
+    );
+    return goal;
   }
 
   /** Avisos do sino para todos os vendedores com carteira. */

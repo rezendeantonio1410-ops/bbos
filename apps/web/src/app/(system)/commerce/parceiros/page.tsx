@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SellerGoalEditor } from "@/components/seller-goal-editor";
 import { FormEvent, useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -337,6 +338,9 @@ export default function StorefrontPartnersPage() {
                   ? ` · ${partner.customerCount === 1 ? "cadastro próprio vinculado" : "vínculo pendente"}`
                   : ` · ${partner.customerCount ?? 0} cliente(s) liberado(s)`}
             </p>
+            {["ADMIN", "EXECUTIVE"].includes(actorRole) && partner.isSalesPartner && partner.portalAccessLevel === "SELLER" && (
+              <SellerGoalEditor partnerId={partner.id} partnerName={partner.name} />
+            )}
             <div className="mt-4 flex flex-wrap gap-4">
               {actorRole === "ADMIN" && (
                 <button
