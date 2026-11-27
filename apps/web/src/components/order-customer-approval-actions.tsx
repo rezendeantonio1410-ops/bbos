@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Copy, Eye, MessageCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { CheckCircle2, Copy, Eye, MessageCircle, PhoneCall, RefreshCw, ShieldCheck } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
 
 type ApprovalHistory = {
@@ -30,6 +30,10 @@ export function OrderCustomerApprovalActions({ orderId, onAccepted }: { orderId:
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [generated, setGenerated] = useState<GeneratedLink | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [channel, setChannel] = useState("WHATSAPP");
+  const [contact, setContact] = useState("");
+  const [note, setNote] = useState("");
   const acceptedNotified = useRef(false);
   const base = `${getApiBaseUrl()}/sales-order-approvals`;
 
@@ -101,6 +105,29 @@ export function OrderCustomerApprovalActions({ orderId, onAccepted }: { orderId:
     }
   };
 
+  const confirmManually = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`${base}/${orderId}/manual-confirm`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ channel, customerContact: contact, note }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível confirmar o pedido.");
+      setManualOpen(false);
+      setMessage("Pedido confirmado. A aprovação do cliente ficou registrada no histórico.");
+      await load();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Não foi possível confirmar o pedido.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const latest = history[0];
   const approved = latest?.status === "APPROVED";
   const viewed = latest?.status === "VIEWED";
@@ -117,6 +144,28 @@ export function OrderCustomerApprovalActions({ orderId, onAccepted }: { orderId:
         <button disabled={busy} onClick={() => void sendWhatsApp()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#075E54] px-4 py-3 text-xs font-bold text-white disabled:opacity-50">{busy ? <RefreshCw size={14} className="animate-spin"/> : <MessageCircle size={15}/>} Enviar pelo WhatsApp</button>
         <button disabled={busy} onClick={() => void copyLink()} className="inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-3 text-xs font-bold text-stone-700 disabled:opacity-50"><Copy size={14}/> Copiar link</button>
       </div>}
+
+      {!approved && !manualOpen && <button type="button" disabled={busy} onClick={() => setManualOpen(true)} className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 py-3 text-xs font-bold text-violet-800 disabled:opacity-50"><PhoneCall size={14}/> Cliente já aprovou por telefone ou WhatsApp</button>}
+
+      {!approved && manualOpen && <form onSubmit={(event) => void confirmManually(event)} className="mt-3 space-y-3 rounded-xl border border-violet-200 bg-white p-3">
+        <p className="text-xs font-bold text-stone-800">Confirmar em nome do cliente</p>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Como o cliente aprovou">
+          {[["WHATSAPP", "WhatsApp"], ["PHONE", "Telefone"], ["IN_PERSON", "Pessoalmente"], ["EMAIL", "E-mail"]].map(([value, label]) => (
+            <button key={value} type="button" role="radio" aria-checked={channel === value} onClick={() => setChannel(value!)} className={`rounded-full px-3 py-2 text-xs font-bold ${channel === value ? "bg-violet-700 text-white" : "bg-stone-100 text-stone-700"}`}>{label}</button>
+          ))}
+        </div>
+        <label className="block text-[11px] font-semibold text-stone-600">Quem aprovou pelo cliente
+          <input required minLength={2} maxLength={120} value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Ex.: Ana, compradora" className="mt-1 block w-full rounded-lg border border-stone-200 px-3 py-2.5 text-sm" />
+        </label>
+        <label className="block text-[11px] font-semibold text-stone-600">Observação (opcional)
+          <input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: aprovou por áudio às 10h" className="mt-1 block w-full rounded-lg border border-stone-200 px-3 py-2.5 text-sm" />
+        </label>
+        <p className="text-[10px] text-stone-500">Fica registrado no histórico com seu nome, a data e a hora. As regras de crédito, desconto e Pix continuam valendo.</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={() => setManualOpen(false)} className="rounded-xl border px-4 py-3 text-xs font-bold text-stone-600">Cancelar</button>
+          <button type="submit" disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-xs font-bold text-white disabled:opacity-50">{busy ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle2 size={14}/>} Confirmar pedido</button>
+        </div>
+      </form>}
 
       {generated?.verificationRequired && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[10px] text-amber-800">Por ser um pedido de R$ 10.000 ou mais, a mensagem inclui um código de seis dígitos.</p>}
       {message && <p className="mt-2 text-[10px] text-stone-600">{message}</p>}
