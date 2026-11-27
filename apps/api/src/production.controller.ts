@@ -8,6 +8,7 @@ import {
   Post,
   Req,
 } from "@nestjs/common";
+import { buildPackagingPlan, type PackagingItemRow, type PackagingOpRow } from "./order-packaging-plan";
 import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import {
@@ -525,6 +526,53 @@ export class ProductionController {
       actor.companyId,
       order.productVariant.productId,
     );
+  }
+
+  /** Plano de embalagem de um pedido de venda (só leitura). */
+  @Get("sales-orders/:id/packaging-plan")
+  async salesOrderPackagingPlan(@Param("id") id: string, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    const items = await this.production.database.$queryRawUnsafe<PackagingItemRow[]>(
+      `SELECT soi.id AS "salesOrderItemId",soi."productVariantId",soi."productName",soi.sku,soi.quantity::int AS quantity,
+              pv."netWeightGrams"::int AS "packageWeightG",
+              COALESCE(product."baseCoffeeProductId",pv."productId") AS "coffeeProductId",
+              base.name AS "coffeeName",line.name AS "lineName",
+              COALESCE((SELECT SUM(r.quantity) FROM "InventoryReservation" r
+                         WHERE r."salesOrderItemId"=soi.id AND r.status='ACTIVE'),0)::int AS "reservedUnits",
+              GREATEST(0,COALESCE((SELECT MAX(fp."quantityOnHand"-fp."reservedQuantity") FROM "FinishedProduct" fp
+                         WHERE fp."companyId"=$1 AND fp."productVariantId"=soi."productVariantId"),0))::int AS "finishedAvailable"
+         FROM "SalesOrderItem" soi
+         JOIN "SalesOrder" so ON so.id=soi."salesOrderId"
+         JOIN "ProductVariant" pv ON pv.id=soi."productVariantId"
+         JOIN "Product" product ON product.id=pv."productId"
+         JOIN "Product" base ON base.id=COALESCE(product."baseCoffeeProductId",pv."productId")
+         JOIN "ProductLine" line ON line.id=base."productLineId"
+        WHERE so.id=$2 AND so."companyId"=$1 AND line.code::text<>'GREEN_COFFEE'
+        ORDER BY soi.id`,
+      actor.companyId,
+      id,
+    );
+    if (!items.length) return { items: [] };
+    const ops = await this.production.database.$queryRawUnsafe<PackagingOpRow[]>(
+      `SELECT po.id,po.code,po.status::text AS status,pv."productId" AS "coffeeProductId",
+              po."plannedWeightKg"::float AS "plannedKg",
+              COALESCE((SELECT SUM(b."greenInputKg") FROM "ProductionBatch" b WHERE b."productionOrderId"=po.id),0)::float AS "greenInputKg",
+              COALESCE((SELECT SUM(c."reservedKg") FROM "ProductionConsumption" c WHERE c."productionOrderId"=po.id),0)::float AS "reservedGreenKg",
+              COALESCE((SELECT SUM(b."roastedOutputKg") FROM "ProductionBatch" b WHERE b."productionOrderId"=po.id),0)::float AS "roastedKg",
+              COALESCE((SELECT SUM(m."totalWeightKg") FROM "FinishedGoodsMovement" m
+                         WHERE m."productionOrderId"=po.id AND m.type::text='PRODUCTION_IN'),0)::float AS "packedKg",
+              COALESCE((SELECT SUM(l."availableKg") FROM "RoastedWipLot" l
+                         WHERE l."productionOrderId"=po.id AND l.status::text IN ('AVAILABLE','PARTIALLY_PACKED')),0)::float AS "wipKg"
+         FROM "ProductionOrder" po
+         JOIN "ProductVariant" pv ON pv.id=po."productVariantId"
+        WHERE po."companyId"=$1 AND pv."productId"=ANY($2::text[])
+          AND po.status::text IN ('PLANNED','RESERVED','IN_PROGRESS','ROASTED','PACKAGING','COMPLETED')
+        ORDER BY po."plannedAt" DESC
+        LIMIT 200`,
+      actor.companyId,
+      [...new Set(items.map((item) => item.coffeeProductId))],
+    );
+    return { items: buildPackagingPlan(items, ops) };
   }
 
   @Get("orders/:id")
