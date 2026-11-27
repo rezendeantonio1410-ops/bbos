@@ -86,7 +86,8 @@ export function inflowAging(lines: CashFlowLine[], today: Date = new Date()) {
 export function cashBridge(lines: CashFlowLine[], today: Date = new Date()) {
   const sum = (filter: (line: CashFlowLine) => boolean) => lines.filter(filter).reduce((total, line) => total + line.amount, 0);
   const lateIn = sum((line) => line.kind === "RECEIVABLE" && daysUntil(line.dueDate, today) < 0);
-  const onTimeIn = sum((line) => line.kind === "RECEIVABLE" && daysUntil(line.dueDate, today) >= 0);
+  // Marketplace a liberar conta como entrada no prazo (estimativa).
+  const onTimeIn = sum((line) => (line.kind === "RECEIVABLE" || line.kind === "MARKETPLACE") && daysUntil(line.dueDate, today) >= 0);
   const payables = sum((line) => line.kind === "PAYABLE");
   const purchases = sum((line) => line.kind === "PURCHASE");
   const taxes = sum((line) => line.kind === "TAX");

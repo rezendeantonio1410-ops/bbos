@@ -20,6 +20,7 @@ export function plannedLabel(events: Array<Pick<ForecastEvent, "title" | "detail
 export function plannedTitle(line: { kind: string; document?: string | null; counterparty?: string | null }) {
   if (line.kind === "TAX") return String(line.document ?? "Imposto").replace(/\s*\(estimativa[^)]*\)/i, "").replace(/\s+\d{2}\/\d{4}$/, "").trim() || "Imposto";
   if (line.kind === "PURCHASE") return `Café verde · ${line.counterparty ?? "fornecedor"}`;
+  if (line.kind === "MARKETPLACE") return line.counterparty ?? "Marketplace · a liberar";
   return undefined;
 }
 export type ForecastDay = { date: string; balance: number; events: ForecastEvent[]; inflow: number; outflow: number };
@@ -74,8 +75,8 @@ export function buildForecast(input: {
       detail: line.kind === "RECEIVABLE" ? line.document : line.description,
       amount: line.signedAmount,
       // Impostos e compras ainda sem conta a pagar são estimativas.
-      kind: line.kind === "TAX" || line.kind === "PURCHASE" ? "previsto" : "lancado",
-      href: line.kind === "RECEIVABLE" ? "/financeiro/receber" : line.kind === "TAX" ? "/financeiro/parametros" : "/financeiro/pagar",
+      kind: line.kind === "TAX" || line.kind === "PURCHASE" || line.kind === "MARKETPLACE" ? "previsto" : "lancado",
+      href: line.kind === "RECEIVABLE" ? "/financeiro/receber" : line.kind === "TAX" ? "/financeiro/parametros" : line.kind === "MARKETPLACE" ? "/vendas/marketplace?periodo=month" : "/financeiro/pagar",
       title: plannedTitle(line),
     });
   }

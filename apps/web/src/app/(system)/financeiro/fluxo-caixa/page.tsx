@@ -25,6 +25,7 @@ type Summary = {
   cash: number;
   transactions?: CashFlowTransaction[];
   paidLast30Days?: number | null;
+  marketplaceProjection?: CashFlowProjectionSource[];
   receivableProjection?: CashFlowProjectionSource[];
   payableProjection?: CashFlowProjectionSource[];
   greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
@@ -85,6 +86,7 @@ export default function CashFlowPage() {
       payables: summary.payableProjection,
       purchases: summary.greenCoffeePurchaseProjection,
       taxes: summary.taxProjection,
+            marketplace: summary?.marketplaceProjection,
     });
     return buildForecast({ startBalance: cashKnown ? summary.cash : 0, lines, recurring, horizonDays: horizon, minimum });
   }, [summary, recurring, horizon, minimum, cashKnown]);
