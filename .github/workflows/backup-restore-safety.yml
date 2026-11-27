@@ -1,0 +1,84 @@
+name: Backup restore safety (disposable PostgreSQL 18)
+on:
+  pull_request:
+    paths:
+      - 'infra/db-backup/**'
+      - '.github/workflows/backup-restore-safety.yml'
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: postgres:18
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: synthetic-ci-only
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: synthetic-ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seed disposable source and empty targets
+        shell: sh
+        run: |
+          set -eu
+          psql -X -v ON_ERROR_STOP=1 -d postgres <<'SQL'
+          CREATE DATABASE source_ci;
+          CREATE DATABASE backup_ci;
+          CREATE DATABASE broken_ci;
+          SQL
+          psql -X -v ON_ERROR_STOP=1 -d source_ci <<'SQL'
+          CREATE SCHEMA fixture;
+          CREATE TABLE public.parent (id integer PRIMARY KEY);
+          CREATE TABLE public.child (id integer PRIMARY KEY, parent_id integer NOT NULL REFERENCES public.parent(id));
+          CREATE INDEX child_parent_idx ON public.child(parent_id);
+          INSERT INTO public.parent VALUES (1);
+          INSERT INTO public.child VALUES (2,1);
+          CREATE TABLE fixture.extra (id integer PRIMARY KEY);
+          INSERT INTO fixture.extra VALUES (3);
+          SQL
+      - name: Successful backup and rehearsal preserve data and constraints
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/backup_ci
+          REHEARSAL_DATABASE_NAME: rehearsal_ci
+        run: |
+          set -eu
+          sh infra/db-backup/backup-and-verify.sh > /tmp/success.log 2>&1 || { cat /tmp/success.log; exit 1; }
+          cat /tmp/success.log
+          grep -q '^BACKUP_VERIFIED:' /tmp/success.log
+          grep -q '^REHEARSAL_COPY_READY:' /tmp/success.log
+          for db in backup_ci rehearsal_ci; do
+            test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c 'SELECT count(*) FROM public.child WHERE id=2 AND parent_id=1')" = 1
+            test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c 'SELECT count(*) FROM fixture.extra WHERE id=3')" = 1
+            test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c "SELECT count(*) FROM pg_constraint WHERE conrelid='public.child'::regclass AND contype='f'")" = 1
+            test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c "SELECT to_regclass('public.child_parent_idx') IS NOT NULL")" = t
+          done
+      - name: Restore conflict must fail closed without partial public tables
+        shell: sh
+        env:
+          SOURCE_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/source_ci
+          BACKUP_DATABASE_URL: postgresql://postgres:synthetic-ci-only@postgres/broken_ci
+        run: |
+          set -eu
+          psql -X -v ON_ERROR_STOP=1 -d broken_ci -c 'CREATE SCHEMA fixture'
+          if sh infra/db-backup/backup-and-verify.sh > /tmp/failure.log 2>&1; then
+            cat /tmp/failure.log
+            echo 'Unexpected successful restore'
+            exit 1
+          fi
+          cat /tmp/failure.log
+          grep -q 'BACKUP: FALHA na restauracao' /tmp/failure.log
+          if grep -q '^BACKUP_VERIFIED:' /tmp/failure.log; then exit 1; fi
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d broken_ci -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")" = 0
+          test "$(psql -XAt -v ON_ERROR_STOP=1 -d source_ci -c 'SELECT count(*) FROM public.child')" = 1

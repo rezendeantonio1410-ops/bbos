@@ -24,6 +24,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Record tested release merge identity
+        if: github.event_name == 'pull_request' && github.base_ref == 'release/bbos-rc1-consolidation'
+        shell: bash
+        env:
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          tested=$(git rev-parse HEAD)
+          mapfile -t parents < <(git cat-file -p HEAD | sed -n '/^$/q; s/^parent //p')
+          if [[ "${#parents[@]}" -ne 2 || "${parents[0]:-}" != "$EXPECTED_BASE" || "${parents[1]:-}" != "$EXPECTED_HEAD" ]]; then
+            {
+              echo '### Release validation rejected: merge identity mismatch'
+              printf 'Expected base: `%s`\n\nActual base: `%s`\n\nExpected head: `%s`\n\nActual head: `%s`\n\nChecked-out commit: `%s`\n' "$EXPECTED_BASE" "${parents[0]:-missing}" "$EXPECTED_HEAD" "${parents[1]:-missing}" "$tested"
+              echo 'Do not use any results from this stale or unexpected merge for release approval.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Merge identity mismatch; refresh the candidate against the current release and run fresh CI. Do not bypass this guard."
+            exit 1
+          fi
+          migration_digest=$(git ls-tree -r HEAD -- packages/database/prisma/migrations | sha256sum | cut -d ' ' -f 1)
+          {
+            echo '### Release validation identity'
+            printf 'Base: `%s`\n\nHead: `%s`\n\nTested merge: `%s`\n\nMigration tree SHA-256: `%s`\n' "$EXPECTED_BASE" "$EXPECTED_HEAD" "$tested" "$migration_digest"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -56,12 +81,16 @@ jobs:
         run: pnpm build
 
   signa-database:
-    name: Signa database migrations and concurrency
+    name: Signa database migrations and concurrency (PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '18']
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: bbos_signa_test
@@ -78,6 +107,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify database server major version
+        env:
+          EXPECTED_POSTGRES_MAJOR: ${{ matrix.postgres }}
+        run: |
+          actual=$(psql "$SIGNA_TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          test "$actual" = "$EXPECTED_POSTGRES_MAJOR"
+          echo "PostgreSQL major verified: $actual"
+
       - name: Apply migrations to disposable database
         run: scripts/signa-db-prepare.sh
 
@@ -85,12 +122,17 @@ jobs:
         run: scripts/signa-db-integration.sh
 
   empty-database-bootstrap:
-    name: Empty database bootstrap through deploy path
+    name: Empty database bootstrap and upgrade (PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Render homologation uses PostgreSQL 18; retain 16 for regression coverage.
+        postgres: ['16', '18']
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: bbos_bootstrap_test
@@ -124,6 +166,14 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @bbos/database build
 
+      - name: Verify the selected PostgreSQL server major version
+        env:
+          EXPECTED_POSTGRES_MAJOR: ${{ matrix.postgres }}
+        run: |
+          actual=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          test "$actual" = "$EXPECTED_POSTGRES_MAJOR"
+          echo "PostgreSQL major verified: $actual"
+
       - name: Without the flag, an empty database still fails as before
         run: |
           if pnpm db:migrate:deploy; then echo "expected legacy failure without flag" >&2; exit 1; fi
@@ -132,7 +182,46 @@ jobs:
       - name: Bootstrap the empty database (flag set)
         env:
           BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
-        run: pnpm db:migrate:deploy
+        run: |
+          set -o pipefail
+          pnpm db:migrate:deploy 2>&1 | tee "$RUNNER_TEMP/bbos-bootstrap.log"
+
+      - name: Detect new legacy omissions and verify empty-bootstrap prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Diagnostic baseline only; known historical omissions remain release blockers.
+          # Fail on any new statement or SQLSTATE, including UNKNOWN.
+          while IFS= read -r omission; do
+            case "$omission" in
+              "migration=20260807143000_product_catalog_persistence_v1 statement=5 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=8 sqlstate=42701"|"migration=20260807230000_cost_engine_v1_traceability statement=12 sqlstate=42P07"|"migration=20260807230000_cost_engine_v1_traceability statement=13 sqlstate=42710"|"migration=20261012173000_roaster_operational_load_17kg statement=3 sqlstate=55P04")
+                echo "::warning::Known historical omission (not release acceptance): $omission"
+                ;;
+              *) echo "::error::Unexpected legacy omission: $omission"; exit 1 ;;
+            esac
+          done < <(sed -n 's/^.*Bootstrap: legacy statement skipped //p' "$RUNNER_TEMP/bbos-bootstrap.log")
+          # Data-recovery statements are relevant to populated databases; this gate
+          # proves only the empty rehearsal has no source orders or cost events.
+          checks=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At -F '|' <<'SQL'
+          SELECT check_name, passed FROM (VALUES
+            ('production_orders_empty', NOT EXISTS (SELECT 1 FROM public."ProductionOrder")),
+            ('cost_events_empty', NOT EXISTS (SELECT 1 FROM public."CostEvent")),
+            ('storefront_orders_empty', NOT EXISTS (SELECT 1 FROM public."StorefrontOrder")),
+            ('storefront_sales_order_column_present', EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='StorefrontOrder' AND column_name='salesOrderId' AND data_type='text' AND is_nullable='YES')),
+            ('gas_enum_present', EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid=t.oid JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typname='CostType' AND e.enumlabel='GAS'))
+          ) AS checks(check_name, passed) ORDER BY check_name;
+          SQL
+          )
+          # Emit only fixed check names and booleans, never row contents.
+          printf '%s\n' "$checks"
+          failed=0
+          for check in production_orders_empty cost_events_empty storefront_orders_empty storefront_sales_order_column_present gas_enum_present; do
+            if ! grep -Fxq "$check|t" <<< "$checks"; then
+              echo "::error::Bootstrap prerequisite failed: $check"
+              failed=1
+            fi
+          done
+          test "$failed" -eq 0
 
       - name: History complete and second deploy is a no-op
         env:
@@ -143,3 +232,234 @@ jobs:
           echo "applied=$applied expected=$expected"; test "$applied" = "$expected"
           pnpm db:migrate:deploy | tee deploy.log; grep -q "No pending migrations" deploy.log
           psql "$DATABASE_URL" -Atc "SELECT to_regclass('public.\"PartnerOrderDraft\"'), to_regclass('public.\"PartnerOrderSubmission\"'), to_regclass('public.\"PartnerEndCustomer_active_scoped_cnpj_unique\"')" | grep -qx '"PartnerOrderDraft"|"PartnerOrderSubmission"|"PartnerEndCustomer_active_scoped_cnpj_unique"'
+
+
+      - name: Rehearse homologation-to-release upgrade with synthetic records
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reconstruct the previous migration set on a fresh loopback database.
+          # Never run this against Render or any production database.
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@127.0.0.1:5432/bbos_bootstrap_test'
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE bbos_signa_upgrade_test'
+          export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/bbos_signa_upgrade_test
+          migrations=packages/database/prisma/migrations
+          held=$(mktemp -d)
+          names=(20261124120000_prospects_and_geolocation 20261124150000_finance_settings 20261124170000_finance_cash_start 20261124190000_cnpj_alphanumeric)
+          restore() {
+            for name in "${names[@]}"; do
+              if [[ -d "$held/$name" ]]; then mv "$held/$name" "$migrations/$name"; fi
+            done
+            rmdir "$held"
+          }
+          trap restore EXIT
+          for name in "${names[@]}"; do mv "$migrations/$name" "$held/"; done
+          BBOS_EMPTY_DATABASE_BOOTSTRAP=true pnpm db:migrate:deploy
+          password="Aa1$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          BBOS_HOMOLOG_SEED=true BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO "PartnerOrderDraft"(id,"companyId","partnerId","userId",status,version,payload,"updatedAt")
+          VALUES ('homolog-upgrade-draft','homolog-co','homolog-partner-signa','homolog-user-signa','DRAFT',3,'{"notes":"synthetic upgrade rehearsal"}'::jsonb,now());
+          SQL
+          snapshot() {
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At <<'SQL'
+          SELECT 'draft|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "PartnerOrderDraft" t WHERE id='homolog-upgrade-draft'
+          UNION ALL SELECT 'receivable|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "AccountsReceivable" t WHERE id='homolog-ar-pix'
+          UNION ALL SELECT 'order|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "SalesOrder" t WHERE id='homolog-order-pix'
+          UNION ALL SELECT 'price|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "CustomerProductPrice" t WHERE "companyId"='homolog-co'
+          UNION ALL SELECT 'fiscal|' || count(*) || '|' || md5(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY id), '')) FROM "FiscalDocument" t WHERE id='homolog-nfe-pix'
+          ORDER BY 1;
+          SQL
+          }
+          snapshot > "$RUNNER_TEMP/signa-before-upgrade"
+          for check in draft receivable order fiscal; do grep -Eq "^${check}[|]1[|]" "$RUNNER_TEMP/signa-before-upgrade"; done
+          grep -Eq '^price[|]12[|]' "$RUNNER_TEMP/signa-before-upgrade"
+          restore
+          trap - EXIT
+          # Use the same strict migrate:deploy path as the live API; no empty reset flag.
+          BBOS_EMPTY_DATABASE_BOOTSTRAP=false pnpm db:migrate:deploy
+          snapshot > "$RUNNER_TEMP/signa-after-upgrade"
+          cmp -s "$RUNNER_TEMP/signa-before-upgrade" "$RUNNER_TEMP/signa-after-upgrade"
+          expected=$(ls -d "$migrations"/*/ | wc -l)
+          applied=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL")
+          test "$applied" = "$expected"
+          test "$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL")" = 0
+          BBOS_EMPTY_DATABASE_BOOTSTRAP=false pnpm db:migrate:deploy | tee "$RUNNER_TEMP/signa-upgrade-repeat.log"
+          grep -q "No pending migrations" "$RUNNER_TEMP/signa-upgrade-repeat.log"
+          snapshot > "$RUNNER_TEMP/signa-after-repeat"
+          cmp -s "$RUNNER_TEMP/signa-before-upgrade" "$RUNNER_TEMP/signa-after-repeat"
+          echo "PASS: synthetic draft, order, receivable, prices and fiscal marker unchanged through upgrade and repeat."
+
+  signa-authenticated-e2e:
+    name: Signa authenticated API on disposable PostgreSQL ${{ matrix.postgres }} (${{ matrix.pix_mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - postgres: '16'
+            pix_mode: ci-static
+          - postgres: '18'
+            pix_mode: ci-static
+          - postgres: '18'
+            pix_mode: render-denied
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bbos_signa_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bbos_signa_e2e
+      BBOS_EMPTY_DATABASE_BOOTSTRAP: "true"
+      BBOS_SCHEDULED_JOBS_DISABLED: "true"
+      BBOS_HOMOLOG_SEED: "true"
+      SIGNA_E2E_API: http://127.0.0.1:3101/api
+      HOST: 127.0.0.1
+      PORT: "3101"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build API
+        run: pnpm --filter @bbos/api build
+      - name: Verify database server major version
+        env:
+          EXPECTED_POSTGRES_MAJOR: ${{ matrix.postgres }}
+        run: |
+          actual=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          test "$actual" = "$EXPECTED_POSTGRES_MAJOR"
+          echo "PostgreSQL major verified: $actual"
+
+      - name: Migrate empty database
+        run: pnpm db:migrate:deploy
+      - name: Seed synthetic accounts only
+        shell: bash
+        run: |
+          password="Aa1$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          echo "SIGNA_E2E_PASSWORD=$password" >> "$GITHUB_ENV"
+          # Simulate the non-GitHub seed mode only inside the disposable DB.
+          if [[ "${{ matrix.pix_mode }}" == "render-denied" ]]; then
+            env GITHUB_ACTIONS=false BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          else
+            BBOS_HOMOLOG_PASSWORD="$password" node packages/database/prisma/seed-signa-homolog.mjs
+          fi
+      - name: Start local API and run authenticated checks
+        shell: bash
+        run: |
+          (cd apps/api && node dist/main.js) > "$RUNNER_TEMP/signa-api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            status=$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' "$SIGNA_E2E_API/partner-portal/summary" || true)
+            case "$status" in 401|403) ready=1; break;; esac
+            if ! kill -0 "$api_pid" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo "Local API not ready"; exit 1; fi
+          node --check scripts/signa-homolog-e2e.mjs
+          node scripts/signa-homolog-e2e.mjs --test-target-guard
+          if [[ "${{ matrix.pix_mode }}" == "render-denied" ]]; then
+            env GITHUB_ACTIONS=false node scripts/signa-homolog-e2e.mjs
+          else
+            node scripts/signa-homolog-e2e.mjs
+          fi
+
+  signa-rehearsal-guard:
+    name: Signa migration rehearsal fail-closed regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise rehearsal with isolated command stubs
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/rehearse-migrations.sh
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir "$tmp/bin"
+          cat > "$tmp/bin/psql" <<'STUB'
+          #!/usr/bin/env bash
+          set -eu
+          case "${*: -1}" in
+            *current_database*)
+              if [ "$SCENARIO" = wrong_database ]; then echo production; else echo rehearsal_ci; fi ;;
+            *"SELECT CASE WHEN"*)
+              case "$SCENARIO" in
+                missing_objects) echo missing ;;
+                object_query_error) exit 3 ;;
+                *) echo ok ;;
+              esac ;;
+            *) echo synthetic ;;
+          esac
+          STUB
+          cat > "$tmp/bin/pnpm" <<'STUB'
+          #!/usr/bin/env bash
+          set -eu
+          case " $* " in
+            *" migrate status "*)
+              [ "$SCENARIO" != status_error ] || exit 4
+              echo synthetic_status ;;
+            *" migrate:deploy "*)
+              count=$(cat "$CALL_COUNT")
+              count=$((count + 1))
+              echo "$count" > "$CALL_COUNT"
+              if [ "$count" = 1 ]; then
+                [ "$SCENARIO" != first_deploy_error ] || exit 5
+                echo synthetic_first_deploy
+              else
+                if [ "$SCENARIO" = second_no_marker ]; then echo unexpected_output; else echo 'No pending migrations'; fi
+                [ "$SCENARIO" != second_deploy_error ] || exit 6
+              fi ;;
+            *) exit 99 ;;
+          esac
+          STUB
+          chmod +x "$tmp/bin/psql" "$tmp/bin/pnpm"
+          export PATH="$tmp/bin:$PATH"
+          export REHEARSAL_DATABASE_URL=postgresql://synthetic@invalid.invalid/rehearsal_ci
+          export CALL_COUNT="$tmp/count"
+          for scenario in success wrong_database first_deploy_error status_error missing_objects object_query_error second_deploy_error second_no_marker; do
+            export SCENARIO="$scenario"
+            echo 0 > "$CALL_COUNT"
+            rc=0
+            bash scripts/rehearse-migrations.sh > "$tmp/output" 2>&1 || rc=$?
+            if [ "$scenario" = success ]; then
+              test "$rc" = 0
+              grep -q '^REHEARSAL_OK:' "$tmp/output"
+              test "$(cat "$CALL_COUNT")" = 2
+            else
+              if [ "$rc" = 0 ] || grep -q '^REHEARSAL_OK:' "$tmp/output"; then
+                cat "$tmp/output"
+                echo "Unexpected success: $scenario"
+                exit 1
+              fi
+              if [ "$scenario" = wrong_database ]; then test "$(cat "$CALL_COUNT")" = 0; fi
+              case "$scenario" in
+                first_deploy_error|status_error|missing_objects|object_query_error) test "$(cat "$CALL_COUNT")" = 1 ;;
+                second_deploy_error|second_no_marker) test "$(cat "$CALL_COUNT")" = 2 ;;
+              esac
+            fi
+            echo "PASS: $scenario"
+          done
