@@ -72,6 +72,26 @@ export class FinanceService implements OnModuleDestroy {
     return this.database.$disconnect();
   }
 
+  /**
+   * Saídas pagas nos últimos 30 dias, independentemente da data de início do
+   * caixa: base dos "dias de caixa" (a lista de movimentos começa no extrato).
+   */
+  private async paidLast30Days(companyId?: string) {
+    try {
+      const result = await this.database.financialTransaction.aggregate({
+        where: {
+          ...(companyId ? { companyId } : {}),
+          type: { in: ["PAYMENT", "TRANSFER_OUT"] },
+          occurredAt: { gte: new Date(Date.now() - 30 * 86_400_000) },
+        },
+        _sum: { amount: true },
+      });
+      return Number(result?._sum?.amount ?? 0);
+    } catch {
+      return null;
+    }
+  }
+
   async summary(companyId?: string) {
     const start = companyId ? await this.getSettings(companyId) : null;
     // With a cash starting point, earlier movements are already in that balance.
@@ -249,6 +269,7 @@ export class FinanceService implements OnModuleDestroy {
       delinquency: overdueReceivables,
       accounts,
       transactions,
+      paidLast30Days: await this.paidLast30Days(companyId),
       receivableProjection,
       payableProjection,
       greenCoffeePurchaseProjection,

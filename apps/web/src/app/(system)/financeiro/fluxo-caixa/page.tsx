@@ -12,7 +12,7 @@ import {
   type GreenCoffeeProjectionSource,
   type TaxProjectionSource,
 } from "@/lib/finance-cashflow";
-import { buildForecast, cashBufferDays, type ForecastDay, type RecurringExpense } from "@/lib/cash-forecast";
+import { buildForecast, cashBufferDays, paidLast30Days, type ForecastDay, type RecurringExpense } from "@/lib/cash-forecast";
 
 /**
  * Fluxo de caixa (rascunho aprovado em 26/11): quanto tem no banco hoje, o que
@@ -24,6 +24,7 @@ import { buildForecast, cashBufferDays, type ForecastDay, type RecurringExpense 
 type Summary = {
   cash: number;
   transactions?: CashFlowTransaction[];
+  paidLast30Days?: number | null;
   receivableProjection?: CashFlowProjectionSource[];
   payableProjection?: CashFlowProjectionSource[];
   greenCoffeePurchaseProjection?: GreenCoffeeProjectionSource[];
@@ -91,10 +92,7 @@ export default function CashFlowPage() {
   // Dias de caixa: saldo ÷ média de saídas pagas nos últimos 30 dias.
   const bufferDays = React.useMemo(() => {
     if (!summary || !cashKnown) return null;
-    const from = Date.now() - 30 * 86_400_000;
-    const paid = (summary.transactions ?? [])
-      .filter((t) => (t.type === "PAYMENT" || t.type === "TRANSFER_OUT") && Date.parse(t.occurredAt) >= from)
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+    const paid = paidLast30Days(summary);
     return cashBufferDays(summary.cash, paid);
   }, [summary, cashKnown]);
 

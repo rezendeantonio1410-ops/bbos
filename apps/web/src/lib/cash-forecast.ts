@@ -8,7 +8,20 @@ import { daysUntil, spDay } from "./receivable-agenda";
  */
 
 export type RecurringExpense = { id: string; label: string; category: string; amount: number; dayOfMonth: number; active: boolean };
-export type ForecastEvent = { id: string; date: string; label: string; detail: string; amount: number; kind: "lancado" | "previsto"; href: string };
+export type ForecastEvent = { id: string; date: string; label: string; detail: string; amount: number; kind: "lancado" | "previsto"; href: string; title?: string };
+
+/** Rótulo de um dia com vários previstos: "IRPJ e CSLL", "Aluguel, Internet e Energia". */
+export function plannedLabel(events: Array<Pick<ForecastEvent, "title" | "detail">>) {
+  const names = [...new Set(events.map((e) => e.title ?? e.detail).filter(Boolean))];
+  return names.length <= 1 ? names[0] ?? "Previsto" : `${names.slice(0, -1).join(", ")} e ${names.at(-1)}`;
+}
+
+/** Nome curto de uma linha prevista ("IRPJ", "CSLL"), sem a fórmula do cálculo. */
+export function plannedTitle(line: { kind: string; document?: string | null; counterparty?: string | null }) {
+  if (line.kind === "TAX") return String(line.document ?? "Imposto").replace(/\s*\(estimativa[^)]*\)/i, "").replace(/\s+\d{2}\/\d{4}$/, "").trim() || "Imposto";
+  if (line.kind === "PURCHASE") return `Café verde · ${line.counterparty ?? "fornecedor"}`;
+  return undefined;
+}
 export type ForecastDay = { date: string; balance: number; events: ForecastEvent[]; inflow: number; outflow: number };
 export type ForecastWeek = { from: string; to: string; start: number; inflow: number; outflow: number; end: number; events: ForecastEvent[]; low: boolean };
 export type ForecastAlert = { key: string; tone: "red" | "amber" | "info"; title: string; detail: string; action: string; href: string };
@@ -63,6 +76,7 @@ export function buildForecast(input: {
       // Impostos e compras ainda sem conta a pagar são estimativas.
       kind: line.kind === "TAX" || line.kind === "PURCHASE" ? "previsto" : "lancado",
       href: line.kind === "RECEIVABLE" ? "/financeiro/receber" : line.kind === "TAX" ? "/financeiro/parametros" : "/financeiro/pagar",
+      title: plannedTitle(line),
     });
   }
   for (const expense of input.recurring)
@@ -173,6 +187,18 @@ export function buildForecast(input: {
 }
 
 /** Dias que o caixa aguenta sem entradas, pela média de saídas dos últimos 30 dias (JPMorgan Chase Institute). */
+/**
+ * Saídas dos últimos 30 dias. Usa o total calculado pela API (que olha antes da
+ * data do extrato); a lista de movimentos só começa no extrato e subestimava.
+ */
+export function paidLast30Days(summary: { paidLast30Days?: number | null; transactions?: Array<{ type: string; occurredAt: string; amount: number | string }> } | null | undefined, now = Date.now()) {
+  if (typeof summary?.paidLast30Days === "number") return summary.paidLast30Days;
+  const from = now - 30 * 86_400_000;
+  return (summary?.transactions ?? [])
+    .filter((t) => (t.type === "PAYMENT" || t.type === "TRANSFER_OUT") && Date.parse(t.occurredAt) >= from)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+}
+
 export function cashBufferDays(balance: number, paidLast30Days: number) {
   const perDay = paidLast30Days / 30;
   return perDay > 0 ? Math.max(0, Math.round(balance / perDay)) : null;

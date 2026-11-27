@@ -23,7 +23,7 @@ import { getApiBaseUrl } from "@/lib/api-url";
 import { roastPace } from "@/lib/roast-pace";
 import { buildCashFlowLines, type CashFlowLine } from "@/lib/finance-cashflow";
 import { buildBrief, greenCoverageDays, greenStock, payableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
-import { buildForecast, cashBufferDays, type RecurringExpense } from "@/lib/cash-forecast";
+import { buildForecast, cashBufferDays, paidLast30Days, plannedLabel, type RecurringExpense } from "@/lib/cash-forecast";
 import type { CashView, TimelineItem } from "./command-center-v4";
 import { CommandCenterV4 } from "./command-center-v4";
 
@@ -147,10 +147,7 @@ export function HomeCommandV3() {
         const summary = await summaryResponse.json();
         const settings = settingsResponse.ok ? await settingsResponse.json() : {};
         const recurring: RecurringExpense[] = recurringResponse?.ok ? (await recurringResponse.json()).map((r: RecurringExpense) => ({ ...r, amount: Number(r.amount) })) : [];
-        const from = Date.now() - 30 * 86_400_000;
-        const paid30 = (summary?.transactions ?? [])
-          .filter((t: { type: string; occurredAt: string }) => (t.type === "PAYMENT" || t.type === "TRANSFER_OUT") && Date.parse(t.occurredAt) >= from)
-          .reduce((sum: number, t: { amount: number }) => sum + Number(t.amount), 0);
+        const paid30 = paidLast30Days(summary);
         setFinance({
           cash: typeof summary?.cash === "number" ? summary.cash : null,
           overdue: Number(summary?.delinquency ?? 0),
@@ -404,7 +401,7 @@ function CommandCenter({
       const planned = day.events.filter((e) => e.kind === "previsto");
       for (const e of launched) timeline.push({ key: e.id, date: day.date, label: e.amount > 0 ? `${e.label} paga` : e.label, amount: e.amount });
       if (planned.length)
-        timeline.push({ key: `p${day.date}`, date: day.date, label: planned.map((e) => e.detail).join(", "), note: "previsto", amount: planned.reduce((sum, e) => sum + e.amount, 0) });
+        timeline.push({ key: `p${day.date}`, date: day.date, label: plannedLabel(planned), note: planned.every((e) => e.id.startsWith("tax-")) ? "imposto estimado" : "previsto", amount: planned.reduce((sum, e) => sum + e.amount, 0) });
     }
     const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
     const lastIso = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
