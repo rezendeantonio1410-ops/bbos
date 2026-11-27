@@ -206,8 +206,47 @@ jobs:
                 const cnpj=customers.getByPlaceholder('00.000.000/0000-00');
                 const cep=customers.getByPlaceholder('00000-000');
                 await fieldsInOrder(name,cnpj,cep);
-                await cep.fill('86010010');
-                await value(customers.getByLabel('Rua *',{exact:true}),address.street);
+                // A late response for a previous complete CEP must never populate
+                // the form while the newly typed CEP is still being looked up.
+                const streetField=customers.getByLabel('Rua *',{exact:true});
+                const initialStreet=await streetField.inputValue();
+                const obsoleteUrl=origin+'/api/storefront/address/86010011';
+                const currentUrl=origin+'/api/storefront/address/86010010';
+                let releaseObsolete,releaseCurrent;
+                const obsoleteGate=new Promise(resolve=>{releaseObsolete=resolve;});
+                const currentGate=new Promise(resolve=>{releaseCurrent=resolve;});
+                await context.route(obsoleteUrl,async route=>{
+                  await obsoleteGate;
+                  await route.fulfill({json:{...address,postalCode:'86010011',street:'Rua Obsoleta Fictícia'}});
+                });
+                const holdCurrent=async route=>{
+                  await currentGate;
+                  await route.fulfill({json:address});
+                };
+                await context.route(currentUrl,holdCurrent);
+                try {
+                  const obsoleteRequest=page.waitForRequest(request=>request.url()===obsoleteUrl);
+                  await cep.fill('86010011');
+                  await obsoleteRequest;
+                  const currentRequest=page.waitForRequest(request=>request.url()===currentUrl);
+                  await cep.fill('86010010');
+                  const obsoleteResponse=page.waitForResponse(response=>response.url()===obsoleteUrl);
+                  releaseObsolete();
+                  await obsoleteResponse;
+                  await currentRequest;
+                  // Allow the obsolete response's JSON and React updates to settle
+                  // while the correct response is intentionally still held back.
+                  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+                  assert.equal(await streetField.inputValue(),initialStreet,'CEP anterior não pode preencher a ficha');
+                  releaseCurrent();
+                  await value(streetField,address.street);
+                  console.log('PASS '+mode+': resposta de CEP obsoleta descartada durante nova consulta');
+                } finally {
+                  releaseObsolete();
+                  releaseCurrent();
+                  await context.unroute(obsoleteUrl);
+                  await context.unroute(currentUrl,holdCurrent);
+                }
                 await value(customers.getByLabel('Bairro *',{exact:true}),address.district);
                 await value(customers.getByLabel('Cidade *',{exact:true}),address.city);
                 await value(customers.getByLabel('UF *',{exact:true}),address.state);
